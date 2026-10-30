@@ -11348,10 +11348,10 @@ final class CanonicalToBytecodeLowerer {
                 builder.emitLoadLocal(experimentalCompactLocal(lookup.name()));
             }
         } else if (expression instanceof CanonicalMember member) {
-            // I115-H8: reuse the already specialized root-level read.
-            builder.beginReadMemberAtRoot(member.name());
+            // I115: GraalPy-shaped typed GetAttribute in compact roots.
+            builder.beginExperimentalGetAttribute(member.name());
             emitExperimentalCompactValue(builder, member.receiver());
-            builder.endReadMemberAtRoot();
+            builder.endExperimentalGetAttribute();
         } else if (expression instanceof CanonicalAssign assign
                 && assign.target().isPresent()) {
             // I115-H8: GraalPy-shaped SetAttribute.

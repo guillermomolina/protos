@@ -89,8 +89,10 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
 
         java.util.Map<?, ?> bindings =
                 (java.util.Map<?, ?>) privateField(lexicalAuthority(object), "bindings");
-        assertSame(unread, bindings.get("unread"));
-        assertSame(selected, bindings.get("selected"));
+        assertNull(bindings.get("unread"));
+        assertNull(bindings.get("selected"));
+        assertSame(unread, object.readLocalSlot("unread").orElseThrow());
+        assertSame(selected, object.readLocalSlot("selected").orElseThrow());
 
         var guarded =
                 ProtosValueLookup.lookupGuardedSlotSelection(
@@ -100,7 +102,7 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
                 guarded.nonClosureContinuity() != null
                         && guarded.nonClosureContinuity().isValid());
         assertSame(bindings, privateField(lexicalAuthority(object), "bindings"));
-        assertSame(unread, bindings.get("unread"));
+        assertNull(bindings.get("unread"));
         assertInstanceOf(
                 ProtosMapBackedLexicalBindingAuthority.SlotCell.class,
                 bindings.get("selected"));

@@ -19,6 +19,7 @@ package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.object.DynamicObject;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
@@ -640,6 +641,15 @@ public class ProtosObjectValue implements TruffleObject {
             Object value) {
         invalidateValueLookupDependencies(name);
         location.replace(value);
+    }
+
+    final void experimentalAssignSelectedLocation(
+            String name,
+            ProtosMapBackedLexicalBindingAuthority.SlotCell location,
+            Object value,
+            DynamicObject.PutNode putNode) {
+        invalidateValueLookupDependencies(name);
+        location.replace(value, putNode);
     }
 
     public Object removeLocalSlot(String name) {

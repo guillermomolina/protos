@@ -103,9 +103,9 @@ final class ProtosPrimitiveSlotWriteRegressionTest {
             assertEquals(
                     1L,
                     instructions.stream()
-                            .filter("c.ReadMemberAtRoot"::equals)
+                            .filter("c.ExperimentalGetAttribute"::equals)
                             .count(),
-                    "Read must use the existing compact member PIC");
+                    "Read must use the experimental typed GetAttribute");
 
             for (String forbidden : List.of(
                     "MutateLocalSlot",
@@ -155,6 +155,73 @@ final class ProtosPrimitiveSlotWriteRegressionTest {
 
             System.out.println("I115_H8_COMPACT_WRITE=PASS");
             System.out.println("I115_H8_EXPECTED_RESULT=2");
+        }
+    }
+
+
+    /**
+     * I115: isolated read uses the same compact attribute
+     * operation as the read following an experimental write.
+     */
+    @Test
+    void isolatedObjectSlotReadUsesCompactGetAttribute()
+            throws Exception {
+        Path directory = Path.of("target", "i115-attribute-read");
+        Files.createDirectories(directory);
+
+        Path source = directory.resolve("primitive-object-slot-read.protos");
+        Files.writeString(source, """
+                holder: {
+                    value: 1
+                }
+
+                run: () => {
+                    holder.value
+                }
+                """, StandardCharsets.UTF_8);
+
+        try (ProtosStandaloneHostedSession session =
+                ProtosStandaloneHostedSession.open(
+                        Path.of("protos", "lib", "core"), source)) {
+
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    session.initialOutcome().state());
+
+            ProtosStandaloneHostedSession.PreparedTopLevel prepared =
+                    session.prepareTopLevel("run");
+
+            ProtosBytecodeRootNode root = assertInstanceOf(
+                    ProtosBytecodeRootNode.class,
+                    prepared.hostExecutableForTesting()
+                            .target.getRootNode());
+
+            List<String> instructions =
+                    root.getBytecodeNode()
+                            .getInstructionsAsList()
+                            .stream()
+                            .map(ProtosInstructionNames::of)
+                            .map(name -> {
+                                int index = name.indexOf('$');
+                                return index < 0
+                                        ? name
+                                        : name.substring(0, index);
+                            })
+                            .toList();
+
+            assertEquals(
+                    1L,
+                    instructions.stream()
+                            .filter("c.ExperimentalGetAttribute"::equals)
+                            .count());
+
+            for (int iteration = 0; iteration < 48; iteration++) {
+                assertEquals(
+                        1L,
+                        prepared.executable().execute().asLong());
+            }
+
+            System.out.println("I115_GET_ATTRIBUTE_READ=PASS");
         }
     }
 

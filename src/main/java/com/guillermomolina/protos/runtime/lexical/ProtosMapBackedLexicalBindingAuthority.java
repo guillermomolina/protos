@@ -19,6 +19,9 @@ package com.guillermomolina.protos.runtime;
 
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.object.DynamicObject;
+import com.oracle.truffle.api.object.PropertyGetter;
+import com.oracle.truffle.api.object.Shape;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -44,94 +47,106 @@ import java.util.Optional;
  * cell can be reached only through a selection that the owning object has
  * already invalidated. Bindings no PIC selects never pay for a cell.
  */
+/**
+ * I115 experimental Shape-backed authoritative local-slot storage.
+ *
+ * The ordered LinkedHashMap is ONLY an index of the names plus optional PIC
+ * cells; no guest value is duplicated there. All values live in one
+ * DynamicObject, with identical physical locations for generic read/write,
+ * guarded read, and experimental GetAttribute/SetAttribute.
+ */
 final class ProtosMapBackedLexicalBindingAuthority
         implements ProtosLexicalBindingAuthority {
-    /** Stable physical location of one promoted binding. */
-    static final class SlotCell {
-        private Object value;
+    private static final Shape INITIAL_SHAPE = Shape.newBuilder().build();
 
-        /*
-         * Allocated only if a guarded read selects a non-Closure value.
-         * It is one-way: once a Closure is stored, the token is invalidated
-         * before publication and never renewed for this cell.
-         */
+    static final class Store extends DynamicObject {
+        Store() {
+            super(INITIAL_SHAPE);
+        }
+    }
+
+    static final class SlotCell {
+        private final Store store;
+        private final String key;
         private Assumption nonClosureContinuity;
 
-        private SlotCell(Object value) {
-            this.value = value;
+        SlotCell(Store store, String key) {
+            this.store = Objects.requireNonNull(store);
+            this.key = Objects.requireNonNull(key);
         }
 
         Object value() {
-            return value;
+            return DynamicObject.GetNode.getUncached().execute(store, key, null);
+        }
+
+        Store storage() {
+            return store;
+        }
+
+        String key() {
+            return key;
+        }
+
+        PropertyGetter getter() {
+            return store.getShape().makePropertyGetter(key);
         }
 
         Assumption nonClosureContinuityForGuardedRead() {
-            if (value instanceof ProtosClosureValue) {
+            if (value() instanceof ProtosClosureValue) {
                 return null;
             }
             Assumption token = nonClosureContinuity;
             if (token == null) {
-                token = Truffle.getRuntime()
-                        .createAssumption("Protos selected slot stays non-Closure");
+                token = Truffle.getRuntime().createAssumption(
+                        "Protos selected slot stays non-Closure");
                 nonClosureContinuity = token;
             }
             return token.isValid() ? token : null;
         }
 
         void replace(Object replacement) {
+            replace(replacement, DynamicObject.PutNode.getUncached());
+        }
+
+        void replace(Object replacement, DynamicObject.PutNode put) {
             Assumption token = nonClosureContinuity;
-            if (token != null
-                    && replacement instanceof ProtosClosureValue) {
-                // Deoptimize compiled plain reads before publishing Closure.
+            if (token != null && replacement instanceof ProtosClosureValue) {
                 token.invalidate();
             }
-            value = replacement;
+            put.execute(store, key, replacement);
+        }
+
+        /** I115-only admission: represent existing signed-32 guest integers as
+         * the same primitive storage form as compact SetAttribute writes. */
+        void normalizeExperimentalInt() {
+            Object value = value();
+            if (value instanceof ProtosIntegerValue integer) {
+                long raw = integer.longValue();
+                if (raw >= Integer.MIN_VALUE && raw <= Integer.MAX_VALUE) {
+                    replace(Integer.valueOf((int) raw));
+                }
+            }
         }
     }
 
-    /*
-     * Null is the physical representation of no bindings. LinkedHashMap
-     * insertion order already carries the exact create/remove/recreate order
-     * required by this backend-private authority, so no parallel order list is
-     * needed. A value is either the binding's value or its SlotCell.
-     */
-    private LinkedHashMap<String, Object> bindings;
-
-    /*
-     * I115-A derived structural index: true exactly while {@link #bindings}
-     * contains the key "call". The map stays the single semantic store; this
-     * bit only lets direct Closure admission test local {@code call}
-     * presence without a map probe. Not compilation-final: guest mutations
-     * change it, and it is maintained only by putBinding/removeBinding.
-     * Value replacement and SlotCell promotion do not change presence.
-     */
+    /* A name index, NOT a second value store. Null = unselected PIC location. */
+    private LinkedHashMap<String, SlotCell> bindings;
+    private final Store store = new Store();
     private boolean localCallPresent;
 
-    private static Object unwrap(Object stored) {
-        return stored instanceof SlotCell cell ? cell.value : stored;
-    }
-
-    /**
-     * Returns the stable location of the existing binding {@code name},
-     * promoting it in place on first request, or {@code null} when absent.
-     * Promotion replaces the value of an existing key, so insertion order is
-     * unchanged. Specialization-time only.
-     */
     SlotCell slotCellFor(String name) {
         Objects.requireNonNull(name, "name");
         if (bindings == null || !bindings.containsKey(name)) {
             return null;
         }
-        Object stored = bindings.get(name);
-        if (stored instanceof SlotCell cell) {
-            return cell;
+        SlotCell selected = bindings.get(name);
+        if (selected == null) {
+            selected = new SlotCell(store, name.intern());
+            bindings.put(name, selected);
         }
-        SlotCell cell = new SlotCell(stored);
-        bindings.put(name, cell);
-        return cell;
+        return selected;
     }
 
-    /** I115-A: whether a local {@code call} binding currently exists. */
     boolean hasLocalCallBindingForRuntime() {
         return localCallPresent;
     }
@@ -145,10 +160,12 @@ final class ProtosMapBackedLexicalBindingAuthority
     @Override
     public Optional<Object> readBinding(String name) {
         Objects.requireNonNull(name, "name");
-        if (bindings == null || !bindings.containsKey(name)) {
+        if (!containsBinding(name)) {
             return Optional.empty();
         }
-        return Optional.of(unwrap(bindings.get(name)));
+        // DynamicObject property keys compare by identity. Canonicalize keys.
+        return Optional.of(DynamicObject.GetNode.getUncached()
+                .execute(store, name.intern(), null));
     }
 
     @Override
@@ -162,8 +179,9 @@ final class ProtosMapBackedLexicalBindingAuthority
             return Collections.emptyMap();
         }
         LinkedHashMap<String, Object> snapshot = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> binding : bindings.entrySet()) {
-            snapshot.put(binding.getKey(), unwrap(binding.getValue()));
+        for (String name : bindings.keySet()) {
+            snapshot.put(name, DynamicObject.GetNode.getUncached()
+                    .execute(store, name.intern(), null));
         }
         return Collections.unmodifiableMap(snapshot);
     }
@@ -174,12 +192,12 @@ final class ProtosMapBackedLexicalBindingAuthority
             java.util.ArrayList<Object> values) {
         Objects.requireNonNull(names, "names");
         Objects.requireNonNull(values, "values");
-        if (bindings == null) {
-            return;
-        }
-        for (Map.Entry<String, Object> binding : bindings.entrySet()) {
-            names.add(binding.getKey());
-            values.add(unwrap(binding.getValue()));
+        if (bindings != null) {
+            for (String name : bindings.keySet()) {
+                names.add(name);
+                values.add(DynamicObject.GetNode.getUncached()
+                        .execute(store, name.intern(), null));
+            }
         }
     }
 
@@ -189,11 +207,17 @@ final class ProtosMapBackedLexicalBindingAuthority
         Objects.requireNonNull(value, "value");
         if (bindings == null) {
             bindings = new LinkedHashMap<>();
-        } else if (bindings.get(name) instanceof SlotCell cell) {
-            cell.replace(value);
-            return;
         }
-        bindings.put(name, value);
+        if (!bindings.containsKey(name)) {
+            bindings.put(name, null);
+        }
+        SlotCell cell = bindings.get(name);
+        if (cell != null) {
+            cell.replace(value);
+        } else {
+            DynamicObject.PutNode.getUncached().execute(
+                    store, name.intern(), value);
+        }
         if ("call".equals(name)) {
             localCallPresent = true;
         }
@@ -202,16 +226,19 @@ final class ProtosMapBackedLexicalBindingAuthority
     @Override
     public Object removeBinding(String name) {
         Objects.requireNonNull(name, "name");
-        if (bindings == null) {
+        if (!containsBinding(name)) {
             return null;
         }
-        Object previous = bindings.remove(name);
+        Object previous = DynamicObject.GetNode.getUncached()
+                .execute(store, name.intern(), null);
+        DynamicObject.RemoveKeyNode.getUncached().execute(store, name.intern());
+        bindings.remove(name);
         if ("call".equals(name)) {
             localCallPresent = false;
         }
         if (bindings.isEmpty()) {
             bindings = null;
         }
-        return unwrap(previous);
+        return previous;
     }
 }

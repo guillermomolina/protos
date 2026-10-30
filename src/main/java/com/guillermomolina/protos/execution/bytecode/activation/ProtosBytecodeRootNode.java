@@ -106,6 +106,9 @@ import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.nodes.UnexpectedResultException;
+import com.oracle.truffle.api.object.DynamicObject;
+import com.oracle.truffle.api.object.PropertyGetter;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.profiles.InlinedBranchProfile;
 import com.oracle.truffle.api.source.Source;
@@ -2652,6 +2655,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     @ConstantOperand(type = String.class, name = "name")
     public static final class ExperimentalSetAttribute {
+        /*
+         * I115: primitive-int SetAttribute, following GraalPy's
+         * physical specialization strategy. The same selected
+         * storage and invalidation contract remains authoritative.
+         */
         @Specialization(
                 guards = {
                     "receiver == cachedReceiver",
@@ -2659,15 +2667,37 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 },
                 assumptions = "cachedSelection.stability()",
                 limit = "3")
+        public static int directInt(
+                String name,
+                Object receiver,
+                int value,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("writableSelection(receiver, name)")
+                        ProtosValueLookup.GuardedSlotSelection cachedSelection,
+                @Cached DynamicObject.PutNode putNode) {
+            ProtosValueLookup.experimentalWriteSelected(
+                    cachedSelection, name, value, putNode);
+            return value;
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "cachedSelection != null"
+                },
+                assumptions = "cachedSelection.stability()",
+                replaces = "directInt",
+                limit = "3")
         public static Object direct(
                 String name,
                 Object receiver,
                 Object value,
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("writableSelection(receiver, name)")
-                        ProtosValueLookup.GuardedSlotSelection cachedSelection) {
+                        ProtosValueLookup.GuardedSlotSelection cachedSelection,
+                @Cached DynamicObject.PutNode putNode) {
             return ProtosValueLookup.experimentalWriteSelected(
-                    cachedSelection, name, value);
+                    cachedSelection, name, value, putNode);
         }
 
         @Specialization(replaces = "direct")
@@ -2709,6 +2739,81 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class DiscardValue {
         @Specialization
         public static void perform(Object ignored) {
+        }
+    }
+
+
+    /**
+     * I115 experimental compact GetAttribute.
+     * Primitive-int read with Object fallback, sharing the
+     * existing authoritative selected SlotCell.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "name")
+    public static final class ExperimentalGetAttribute {
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "cachedLookup != null",
+                    "cachedLookup.nonClosureContinuity() != null",
+                    "cachedGetter != null",
+                    "cachedGetter.accepts(cachedLookup.storage())"
+                },
+                assumptions = {
+                    "cachedLookup.stability()",
+                    "cachedLookup.nonClosureContinuity()"
+                },
+                rewriteOn = UnexpectedResultException.class,
+                limit = "3")
+        public static int doInt(
+                String name,
+                Object receiver,
+                @Bind VirtualFrame frame,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("createGuardedLookup(receiver, name, frame.getArguments())")
+                        ProtosValueLookup.GuardedSlotSelection cachedLookup,
+                @Cached("cachedLookup.propertyGetter()") PropertyGetter cachedGetter)
+                throws UnexpectedResultException {
+            return cachedGetter.getInt(cachedLookup.storage());
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "cachedLookup != null",
+                    "cachedLookup.nonClosureContinuity() != null",
+                    "cachedGetter != null",
+                    "cachedGetter.accepts(cachedLookup.storage())"
+                },
+                assumptions = {
+                    "cachedLookup.stability()",
+                    "cachedLookup.nonClosureContinuity()"
+                },
+                replaces = "doInt",
+                limit = "3")
+        public static Object doObjectCached(
+                String name,
+                Object receiver,
+                @Bind VirtualFrame frame,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("createGuardedLookup(receiver, name, frame.getArguments())")
+                        ProtosValueLookup.GuardedSlotSelection cachedLookup,
+                @Cached("cachedLookup.propertyGetter()") PropertyGetter cachedGetter) {
+            return cachedGetter.get(cachedLookup.storage());
+        }
+
+        @Specialization(replaces = {"doInt", "doObjectCached"})
+        public static Object doGeneric(
+                String name,
+                Object receiver,
+                @Bind VirtualFrame frame) {
+            return ReadMemberAtRoot.perform(name, receiver, frame);
+        }
+
+        static ProtosValueLookup.GuardedSlotSelection createGuardedLookup(
+                Object receiver, String name, Object[] arguments) {
+            return ProtosValueLookup.experimentalPrimitiveReadableSelection(
+                    receiver, name, ProtosFrameArguments.preludeOrNull(arguments));
         }
     }
 
@@ -2775,6 +2880,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * path. Truffle invalidates this specialization before a selected
          * slot can transition from data to Closure.
          */
+        /*
+         * I115: primitive-int GetAttribute. Read the current
+         * selected location on each execution; never cache
+         * the value itself. A change of representation falls
+         * back to the existing object specialization.
+         */
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "cachedLookup != null",
+                    "cachedLookup.nonClosureContinuity() != null",
+                    "selectedInt(cachedLookup)"
+                },
+                assumptions = {
+                    "cachedLookup.stability()",
+                    "cachedLookup.nonClosureContinuity()"
+                },
+                limit = "3")
+        public static int guardedExactReceiverInt(
+                String name,
+                Object receiver,
+                @Bind VirtualFrame frame,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("createGuardedLookup(receiver, name, frame.getArguments())")
+                        ProtosValueLookup.GuardedSlotSelection cachedLookup) {
+            return ((Integer) cachedLookup.currentValue()).intValue();
+        }
+
         @Specialization(
                 guards = {
                     "receiver == cachedReceiver",
@@ -2785,6 +2918,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     "cachedLookup.stability()",
                     "cachedLookup.nonClosureContinuity()"
                 },
+                replaces = "guardedExactReceiverInt",
                 limit = "3")
         public static Object guardedExactReceiverPlain(
                 String name,
@@ -2844,6 +2978,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosValueLookup.SharedInheritedSlotSelection cachedLookup) {
             return ReadMember.matchesSharedInheritedLookup(
                     receiver, name, cachedLookup);
+        }
+
+        static boolean selectedInt(
+                ProtosValueLookup.GuardedSlotSelection selection) {
+            return selection.currentValue() instanceof Integer;
         }
 
         static ProtosValueLookup.GuardedSlotSelection createGuardedLookup(

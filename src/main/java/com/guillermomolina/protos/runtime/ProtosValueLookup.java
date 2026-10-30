@@ -23,6 +23,8 @@ import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.object.DynamicObject;
+import com.oracle.truffle.api.object.PropertyGetter;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.profiles.InlinedBranchProfile;
 import java.util.Objects;
@@ -98,6 +100,18 @@ public final class ProtosValueLookup {
         public Object currentValue() {
             return location.value();
         }
+
+        public DynamicObject storage() {
+            return location.storage();
+        }
+
+        public Object propertyKey() {
+            return location.key();
+        }
+
+        public PropertyGetter propertyGetter() {
+            return location.getter();
+        }
     }
 
     /**
@@ -159,6 +173,28 @@ public final class ProtosValueLookup {
         selection.home().experimentalAssignSelectedLocation(
                 name, selection.location(), value);
         return value;
+    }
+
+    public static Object experimentalWriteSelected(
+            GuardedSlotSelection selection,
+            String name,
+            Object value,
+            DynamicObject.PutNode putNode) {
+        selection.home().experimentalAssignSelectedLocation(
+                name, selection.location(), value, putNode);
+        return value;
+    }
+
+    /** The compact GetAttribute PIC selects the same authoritative storage
+     * as SetAttribute, normalizing its initial guest integer only once. */
+    public static GuardedSlotSelection experimentalPrimitiveReadableSelection(
+            Object receiver, String name, ProtosPrelude prelude) {
+        GuardedSlotSelection selected =
+                lookupGuardedSlotSelection(receiver, name, prelude);
+        if (selected != null && selected.home() == receiver) {
+            selected.location().normalizeExperimentalInt();
+        }
+        return selected;
     }
 
     public static GuardedSlotSelection lookupGuardedSlotSelection(
