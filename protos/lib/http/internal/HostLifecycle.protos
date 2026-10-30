@@ -68,9 +68,11 @@ settleAll: (futures) => {
 /// object. config is the captured HostConfig snapshot and acceptors holds one
 /// TcpAcceptor per Worker; listener custody is held from here on.
 /// spawnWorker(acceptor, connectionQuota, pendingQuota) creates one Worker
-/// and answers its ActorRef. facility is the private asynchronous bridge of
-/// std:http/Host.
-start: (facility, HostError, listener, acceptors, spawnWorker, config) => {
+/// and answers its ActorRef. serveArguments are the arguments of each
+/// Worker's "serve" request: none for Host.owning, the application
+/// initialization for Host.owningWithFactory (HTTP.md §15.13). facility is
+/// the private asynchronous bridge of std:http/Host.
+start: (facility, HostError, listener, acceptors, spawnWorker, config, serveArguments) => {
     // STARTING, RUNNING, DRAINING, ABORTING or TERMINATED; never a host slot.
     state: "STARTING"
     // Whether the host ever entered RUNNING.
@@ -199,7 +201,8 @@ start: (facility, HostError, listener, acceptors, spawnWorker, config) => {
     // Listener custody is held from here on: a synchronous failure while
     // creating the Workers is a startup failure observed through the hosting
     // Futures (HTTP.md §15.2), whose abort cleanup reaches every Worker
-    // already created. Each Worker is recorded as soon as it exists.
+    // already created. Each Worker is recorded as soon as it exists, so a
+    // NonTransferableValue of its "serve" request still stops it.
     workerCount: config.workers
     Error.handle(
         () => {
@@ -214,8 +217,9 @@ start: (facility, HostError, listener, acceptors, spawnWorker, config) => {
                 stopRequested = Array(...stopRequested, false)
                 terminationWatchers = Array(...terminationWatchers, watchTermination(worker, index))
                 // Same-sender FIFO: "ready" is dispatched once "serve" has
-                // entered the acceptance service and suspended.
-                service: worker.request("serve")
+                // entered the acceptance service and suspended; a factory
+                // Worker's "ready" first waits for its construction.
+                service: worker.request("serve", ...serveArguments)
                 services = Array(...services, service)
                 readiness = Array(...readiness, worker.request("ready"))
                 serviceWatchers = Array(...serviceWatchers, watchService(service))

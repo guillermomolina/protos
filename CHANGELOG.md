@@ -7,6 +7,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.422-SNAPSHOT
+
+- `I133` (#995, D225-A): explicit Worker-local handler factory for
+  `std:http/Host` (spec 0.1.481).
+  - New `Host.owningWithFactory(listener, factoryModule, factoryBinding,
+    initialization, options)`. `Host.owning` is unchanged, and the module
+    still exports only `Host` and `HostError`.
+  - Protos-first, with no runtime change. Each Worker receives
+    `initialization` as the argument of its ordinary `"serve"` request, never
+    as an `Actor.spawn` argument. A caller-supplied `TcpAcceptor`, Closure,
+    Future, `Network` or Resolver is therefore rejected by the existing
+    transfer rules. That rejection is a `HostError` `"startup"` with the D216
+    mandatory cleanup.
+  - Each Worker calls its factory at most once in its lifetime and requires a
+    callable result. A Future result is not adopted. The Worker answers
+    `ready` with true only once it has entered its acceptance service after a
+    successful construction, so the host reaches `RUNNING` only after every
+    Worker has done so. A repeated `"serve"` does nothing.
+    `abort` during construction cancels a suspended factory, and no
+    acceptance starts after the shutdown cutover.
+  - `HostLifecycle.start` gains the `"serve"` arguments; `HostWorker` gains
+    `startWithFactory`.
+  - New `ProtosHttpHostFactoryIntegrationTest` (real Actors over loopback TCP)
+    and new suite-native construction and lifecycle cases.
+
 ## 0.3.421-SNAPSHOT
 
 - `I132-A` (#990, D223-A1): explicit hostname-to-`IpAddress` resolution

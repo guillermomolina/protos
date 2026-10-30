@@ -2,21 +2,24 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-10-27
+Last updated: 2026-10-30
 
 This document is the primary normative owner of the Standard Library HTTP/1.1
 single-request origin-server facility `std:http/Server` selected by D215
 (D215-F3–F8: Option A, A3-minimal, Q0, F3 = M1, F4 = H1, F5 = B1, F6 = L1,
 F7 = W1, F8 = S1), of the separate optional continuous-hosting facility
-`std:http/Host` selected by D216, and of the separate optional single-exchange
-client facility `std:http/Client` selected by D218-B. It therefore owns three
-independent Standard Library facilities:
+`std:http/Host` selected by D216 and extended by D225-A, and of the separate
+optional single-exchange client facility `std:http/Client` selected by D218-B.
+It therefore owns three independent Standard Library facilities:
 
 - `std:http/Server` — D215, §§1–13;
-- `std:http/Host` — D216, §15; and
+- `std:http/Host` — D216, §15, with the Worker-local handler factory of
+  D225-A in §15.13; and
 - `std:http/Client` — D218-B, §16.
 
-D216 does not revise D215. D218-B revises none of D215, D216 or D217.
+D216 does not revise D215. D218-B revises none of D215, D216 or D217. D225-A
+adds one `Host` construction operation and revises no other D215, D216 or
+D218-B rule.
 
 HTTP is an optional Standard Library built entirely on existing capabilities.
 Byte reading/writing, Future commitment, cancellation, and half-close semantics
@@ -1072,11 +1075,19 @@ operations are:
 
 ```text
 Host.owning(listener, handlerModule, handlerBinding, options) -> host
+Host.owningWithFactory(listener, factoryModule, factoryBinding,
+                       initialization, options)          -> host
 host.ready()                                            -> Future<host>
 host.shutdown("drain")                                  -> Future<host>
 host.shutdown("abort")                                  -> Future<host>
 host.termination()                                      -> Future<host>
 ```
+
+`Host.owningWithFactory` is the D225-A construction variant of §15.13; except
+where §15.13 says otherwise, every rule of this section stated for
+`Host.owning` applies to it, with `factoryModule` and `factoryBinding` in
+place of `handlerModule` and `handlerBinding`. `Host` has exactly these two
+construction operations.
 
 `Host.owning` is a synchronous construction operation. The returned `host` is
 an ordinary Actor-local hosting control object with identity and the methods
@@ -1151,8 +1162,10 @@ to the same Process by the supplied `TcpAcceptor`. Their bootstrap code lives
 in the Standard Library; each Worker resolves `handlerModule` and
 `handlerBinding` within its own Actor-local module instance. A missing
 module, missing local binding or non-callable binding is a startup failure.
-Neither the handler Closure, a mutable module instance, the listener, nor
-an accepted `TcpConnection` crosses an Actor boundary.
+Under `Host.owningWithFactory` each Worker instead builds its handler with its
+own factory binding as §15.13 specifies. Neither the handler Closure, a
+mutable module instance, the listener, nor an accepted `TcpConnection`
+crosses an Actor boundary.
 
 Workers independently issue `acceptor.accept()` and run one owning HTTP
 service Task per accepted connection. Multiple connections within one Worker
@@ -1324,9 +1337,12 @@ Actor. Each Worker, its `TcpAcceptor` representation, accepted connections,
 handler module instance and session Tasks remain confined to that Worker.
 Only transferable control data and `ActorRef` values traverse ordinary
 Actor communication; `TcpAcceptor` traverses only permitted same-Process
-`Actor.spawn` initialization. Completion coordination may observe
-`ActorRef.termination()`, but creation genealogy does not grant a new
-failure-authority API or implicit Actor lifetime ownership.
+`Actor.spawn` initialization, and only as the acceptor derived by the host.
+Under §15.13 each Worker's copy of the application initialization, and the
+handler built from it, likewise remain confined to that Worker. Completion
+coordination may observe `ActorRef.termination()`, but creation genealogy
+does not grant a new failure-authority API or implicit Actor lifetime
+ownership.
 
 One Worker is useful on a single CPU (C). Multiple Workers may execute on
 separate CPU cores in the same Process (A), without one mandatory
@@ -1358,6 +1374,125 @@ an indefinitely slow admitted client may indefinitely occupy its quota
 and delay drain. Importing neither `std:http/Host` nor `std:http/Server`
 creates no hosting Workers, listening authority, global state, or runtime
 cost.
+
+### 15.13 Worker-local handler factory (D225-A)
+
+`Host.owningWithFactory(listener, factoryModule, factoryBinding,
+initialization, options)` is the second construction operation of `Host`. It
+differs from `Host.owning` only in how each Worker obtains its handler.
+Everything else in §§15.1–15.12 applies unchanged, including listener
+custody, Worker count and placement, quotas and admission, connection
+custody, `ready()`, `shutdown("drain")`, `shutdown("abort")`,
+`termination()`, cancellation, failure classification and precedence, and
+the use of `Server.serveOne.owning` for every admitted connection.
+`Host.owning` is unaffected by this section.
+
+**Construction.** `listener`, `factoryModule`, `factoryBinding` and
+`options` are validated exactly as the corresponding arguments of
+`Host.owning` (§15.2): `factoryModule` and `factoryBinding` must be semantic
+Strings, and an invalid argument signals a fresh `InvalidIOArgument`
+synchronously, without listener custody, Workers or I/O. `initialization`
+may be any value. It is not a structural argument and is not examined before
+valid construction has acquired listener custody.
+
+**Initialization transfer.** For each Worker, `initialization` crosses into
+that Worker under the ordinary Actor pass-by-value rules
+(`../concurrency/ACTORS.md` §16), exactly as an argument of `ActorRef.send` or
+`ActorRef.request` crosses:
+
+- each Worker receives its own independent destination-local copy; no
+  mutable object is shared between the constructing Actor and a Worker or
+  between two Workers, and aliases and cycles inside `initialization` are
+  preserved within each copy;
+- the copy is formed during construction, so a mutation made by the caller
+  after `Host.owningWithFactory` returns is never observed by a Worker;
+- an `ActorRef` keeps its destination identity and its existing
+  communication and stop authority, without attenuation; any other value
+  with an explicit Actor-transfer contract keeps that contract; and
+- every value that is non-transferable at an ordinary Actor boundary is
+  rejected, including a Closure, a Future, `Network`, a Resolver, a
+  `TcpListener`, a `TcpConnection` and a `TcpAcceptor`.
+
+The `Actor.spawn`-only `TcpAcceptor` delegation (`../concurrency/ACTORS.md`
+§8, `NETWORK.md` §11) is used solely for the acceptor the host itself derives
+(§15.3). It never applies to `initialization`: a caller-supplied
+`TcpAcceptor` anywhere in it is non-transferable. A non-transferable
+`initialization` is a synchronous failure while creating the Workers (§15.2):
+`Host.owningWithFactory` still returns `host`, no Worker receives any part of
+`initialization`, no factory is invoked, and the hosting Futures report a
+`HostError` of kind `"startup"` after the mandatory cleanup of §§15.7 and
+15.10.
+
+`initialization` is delivered to a Worker after that Worker Actor has been
+created, not as an `Actor.spawn` initialization argument. A Worker Actor may
+therefore complete its Actor bootstrap and reach Actor `READY`
+(`../concurrency/ACTORS.md` §9) before it receives `initialization`, and a
+rejected transfer may occur after the bootstrap of a Worker already created.
+Such a Worker is an ordinary Worker of the host: the mandatory cleanup aborts,
+stops and awaits it like any other.
+
+**Worker construction.** Inside each Worker, before it enters its acceptance
+service:
+
+1. it imports its own instance of `factoryModule` and resolves its own local
+   binding `factoryBinding`, under exactly the rules §15.4 states for a
+   handler binding;
+2. it invokes that factory exactly once as `factory(localInitialization)`,
+   with its own copy as the only argument; and
+3. it requires the result to be callable under `../semantics/CALLABLES.md`,
+   "Callability inspection".
+
+That result is the Worker's handler. Every session the Worker admits invokes
+it as `handler(request)` exactly as §2.2 specifies. The factory is invoked at
+most once during the whole lifetime of a Worker incarnation: no later message
+to the Worker invokes it again or starts a second acceptance service. It is not
+invoked per request, in the constructing Actor, or with any other argument,
+and the caller never supplies a Closure or module instance. The result is neither
+awaited nor adopted: a Future is subject to the same callability check as any
+other value. A missing module, a missing local binding, a non-callable binding,
+an Error escaping the factory invocation, and a non-callable result are each a
+startup failure (§15.10).
+
+**Readiness boundary.** The readiness this section constrains is hosting
+readiness, not Actor `READY`. For `Host.owningWithFactory`, a Worker has
+"successfully initialized" in the sense of §15.7 only when its factory
+invocation has returned and its result has passed the callability check. A
+Worker enters its acceptance service only after that, and the host enters
+`RUNNING`, and `ready()` resolves, only after every Worker has done so. A
+Worker Actor that is already `READY` but still constructing its handler is in
+hosting state `STARTING`. This section does not change the Actor lifecycle of
+`../concurrency/ACTORS.md`.
+
+**Shutdown during construction.** A shutdown request made while the host is
+`STARTING` (§§15.7, 15.8) also reaches Workers that are still constructing
+their handler. From that cutover on, such a Worker never enters its acceptance
+service and never invokes its factory if it has not done so yet. `abort`
+requests cooperative cancellation of a factory invocation still in progress
+(`../concurrency/FUTURES_AND_TASKS.md` §23). That cancellation is part of the
+requested shutdown, not a startup failure, and the shutdown completes as §15.8
+specifies once the Worker has stopped. As for handler code (§15.8), a factory
+invocation that never reaches a cancellation boundary still runs to its end
+first.
+
+**Authority and independent services.** The factory module is an ordinary
+module instance of the Worker. It receives no ambient authority, and the
+factory receives no value other than its copy of `initialization`. A host
+does not own, stop, monitor or supervise an Actor denoted by an `ActorRef` in
+`initialization`, and that Actor's lifetime is not tied to any host. Its
+termination does not by itself fail or terminate a host. A handler that
+communicates with it observes the ordinary Actor communication outcomes
+inside its own session, where failures are retired as handler failures under
+§15.10. Shutting down a host neither stops such an Actor nor adds any retry,
+timeout, cancellation propagation or rollback to the Actor communication
+rules. A reply that arrives after its session or Worker ended has no effect
+on the host lifecycle. Several hosts may hold references to the same Actor
+and remain independently controllable.
+
+D225-A defines no mechanism for creating such service Actors or for granting
+them `Network` or Resolver authority. It also defines no dependency container
+or service locator, no factory invocation per request or per connection, no
+module instance shared between Actors, no Closure transfer, and no capability
+attenuation.
 
 ## 16. Single-exchange HTTP/1.1 Client (D218-B)
 

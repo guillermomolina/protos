@@ -17,12 +17,25 @@
 //! 15.6). This module is an unpublished implementation artifact, not an
 //! approved Standard Library API.
 //!
-//! `start` is the `Actor.spawn` bootstrap binding. Its only initialization
-//! arguments are the delegated TcpAcceptor, the handler module specifier and
-//! binding name, the Worker's fixed quotas and the captured limits; no
-//! listener, connection, Closure, Future or module instance crosses into the
-//! Worker. The handler module is resolved inside this Actor, which owns its
-//! own instance of it.
+//! `start` is the `Actor.spawn` bootstrap binding of `Host.owning`. Its only
+//! initialization arguments are the delegated TcpAcceptor, the handler module
+//! specifier and binding name, the Worker's fixed quotas and the captured
+//! limits; no listener, connection, Closure, Future or module instance crosses
+//! into the Worker. The handler module is resolved inside this Actor, which
+//! owns its own instance of it.
+//!
+//! `startWithFactory` is the bootstrap binding of `Host.owningWithFactory`
+//! (D225-A, HTTP.md §15.13). It receives the same arguments with a factory
+//! module and binding in place of the handler ones and resolves the factory
+//! exactly like a handler. The application initialization is not a spawn
+//! argument: it arrives as the argument of the host's "serve" request, so it
+//! crosses under the ordinary Actor transfer rules, never under the
+//! spawn-only TcpAcceptor delegation. The Worker calls the factory exactly
+//! once in its lifetime with its own copy; the result, which must itself be
+//! callable, is the handler of every session of this Worker. The Worker Actor
+//! is READY before it receives the initialization; it enters its acceptance
+//! service, and answers "ready" with true, only after that construction
+//! succeeded and before any shutdown cutover.
 //!
 //! The Worker accepts by itself and services each accepted connection exactly
 //! once through `Server.serveOne.owning`, inside this Actor, with custody kept
@@ -241,25 +254,161 @@ acceptance: (acceptor, connectionQuota, pendingQuota, admitConnection) => {
     service
 }
 
-/// Worker bootstrap: answers the Worker behavior. A missing handler module,
-/// missing own binding, or non-invokable binding signals, failing this Actor's
-/// initialization (HTTP.md §15.4). The handler module is imported by this
-/// module, so a specifier is resolved relative to it (MODULES.md).
-start: ((facility) => {
-    (acceptor, handlerModule, handlerBinding, connectionQuota, pendingQuota, limits) => {
-        module: import(handlerModule)
-        if(!module.hasSlot(handlerBinding)) {
-            Error().signal()
-        }
-        handler: module.slotValue(handlerBinding)
-        if(!facility.provides(handler, "call")) {
-            Error().signal()
-        }
-        acceptance(acceptor, connectionQuota, pendingQuota, (connection) => {
-            HostConnection.admit(Server, connection, handler, limits)
-        })
+// Answers whether value is callable (CALLABLES.md, "Callability
+// inspection"); nothing is invoked.
+callable: ((facility) => {
+    (value) => {
+        facility.provides(value, "call")
     }
 })(_httpAsyncFacility)
+
+// Answers a gate: its future stays pending until open() and then answers
+// null; opening twice is a no-op. The blocker waits for this Actor's own
+// termination, which cancels it at the latest, so the gate never outlives
+// the Actor and no polling is involved.
+gate: () => {
+    blocker: (() => {
+        Actor.current().termination().value()
+    }).future()
+    opened: (() => {
+        settle(blocker)
+        null
+    }).future()
+    result: {
+        future: opened
+        open: () => {
+            blocker.cancel()
+        }
+    }
+    result
+}
+
+// Answers the callable own top-level binding bindingName of this Actor's
+// instance of moduleSpecifier. A missing module, missing own binding, or
+// non-invokable binding signals, failing this Actor's initialization (HTTP.md
+// §15.4). The module is imported by this module, so a specifier is resolved
+// relative to it (MODULES.md).
+ownCallable: (moduleSpecifier, bindingName) => {
+    module: import(moduleSpecifier)
+    if(!module.hasSlot(bindingName)) {
+        Error().signal()
+    }
+    binding: module.slotValue(bindingName)
+    if(!callable(binding)) {
+        Error().signal()
+    }
+    binding
+}
+
+/// Worker bootstrap of `Host.owning`: answers the acceptance service as the
+/// Worker behavior, serving every admitted session with the binding
+/// handlerBinding of handlerModule.
+start: (acceptor, handlerModule, handlerBinding, connectionQuota, pendingQuota, limits) => {
+    handler: ownCallable(handlerModule, handlerBinding)
+    acceptance(acceptor, connectionQuota, pendingQuota, (connection) => {
+        HostConnection.admit(Server, connection, handler, limits)
+    })
+}
+
+/// Worker bootstrap of `Host.owningWithFactory` (HTTP.md §15.13): resolves
+/// the binding factoryBinding of factoryModule and answers the Worker
+/// behavior. This Actor is READY before it holds any initialization; the
+/// handler is built later, by the first "serve" request, and readiness is
+/// the hosting readiness of HTTP.md §15.7, not Actor READY.
+///
+/// `serve(initialization)` receives this Worker's own copy through the
+/// ordinary request transfer, calls the factory at most once in this
+/// Worker's lifetime, and only then enters the acceptance service, serving
+/// every admitted session with the factory result. `ready` answers true only
+/// once that handler is built and validated and no shutdown has reached this
+/// Worker. `drain` and `abort` are those of the acceptance service; both are
+/// also a cutover after which acceptance is never entered, and `abort`
+/// requests cooperative cancellation of a construction still in progress.
+startWithFactory: (acceptor, factoryModule, factoryBinding, connectionQuota, pendingQuota, limits) => {
+    factory: ownCallable(factoryModule, factoryBinding)
+    handler: null
+    // Opened once "serve" has entered the acceptance service or ended
+    // without entering it. "ready" waits for it rather than for the
+    // construction: two waiters of one Future resume in no specified order,
+    // so "ready" could otherwise answer before "serve" entered.
+    entered: gate()
+    // Set by "drain" or "abort": acceptance is never entered afterwards.
+    cutover: false
+    // The Future of the one construction. It is set synchronously by the
+    // first "serve", before any suspension, so it also guards against a
+    // second construction or acceptance.
+    construction: null
+    service: acceptance(acceptor, connectionQuota, pendingQuota, (connection) => {
+        HostConnection.admit(Server, connection, handler, limits)
+    })
+    behavior: {
+        // A factory Error or a non-callable result escapes this turn and is
+        // fatal to the Worker, which the host classifies as a startup
+        // failure. The construction Task answers null, so a Future result is
+        // never adopted: it is checked like any other value. A cancellation
+        // requested by "abort" is the ordinary end of a construction; any
+        // other cancellation of it is fatal. Every later "serve" answers null
+        // at once and changes nothing.
+        serve: (initialization) => {
+            outcome: null
+            if(construction === null) {
+                (() => {
+                    construction = (() => {
+                        if(!cutover) {
+                            built: factory(initialization)
+                            if(!callable(built)) {
+                                Error().signal()
+                            }
+                            handler = built
+                        }
+                        null
+                    }).future()
+                    Cancelled.handle(
+                        () => {
+                            construction.value()
+                        },
+                        (cancelled) => {
+                            if(!cutover) {
+                                Error().signal()
+                            }
+                            cancelled
+                        }
+                    )
+                    outcome = "drained"
+                    if(!cutover) {
+                        // Turns are not preempted (ACTORS.md §24D): "ready"
+                        // resumes only after this turn suspends, which happens
+                        // inside the acceptance service, after it was entered.
+                        entered.open()
+                        outcome = service.serve()
+                    }
+                }).ensure(() => {
+                    entered.open()
+                })
+            }
+            outcome
+        }
+        // Same-sender FIFO: "ready" is dispatched only after "serve" started.
+        // It answers true only once "serve" has entered the acceptance
+        // service after a successful construction and no cutover happened.
+        ready: () => {
+            settle(entered.future)
+            service.ready() && !cutover
+        }
+        drain: () => {
+            cutover = true
+            service.drain()
+        }
+        abort: () => {
+            cutover = true
+            if(construction !== null) {
+                construction.cancel()
+            }
+            service.abort()
+        }
+    }
+    behavior
+}
 
 // The runtime-provisioned facility is captured privately above; it is not
 // module surface.

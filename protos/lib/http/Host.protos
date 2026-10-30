@@ -24,6 +24,16 @@
 //! once with `Server.serveOne.owning`. Admission is bounded by the fixed
 //! per-Worker quotas of `maxConnections` and `maxPendingAccepts`.
 //!
+//! `Host.owningWithFactory(listener, factoryModule, factoryBinding,
+//! initialization, options)` hosts exactly the same way (D225-A, HTTP.md
+//! §15.13), except that each Worker builds its own handler: it receives its
+//! own Actor-boundary copy of `initialization`, resolves its own binding
+//! `factoryBinding` of `factoryModule`, and calls it exactly once with that
+//! copy before it becomes ready. `initialization` may carry ordinary
+//! transferable data and `ActorRef` values; live resources, Closures, Futures
+//! and every other non-transferable value, including a `TcpAcceptor`, are
+//! rejected as at any ordinary Actor boundary.
+//!
 //! The returned host is an Actor-local control object: `ready()`,
 //! `shutdown("drain")`, `shutdown("abort")` and `termination()` answer fresh
 //! local Futures resolving to that host. Cancelling such a Future abandons
@@ -42,10 +52,11 @@ Host: ((facility) => {
 
     // HTTP.md §15.2: every construction argument is validated before any
     // effect. An invalid call signals a fresh InvalidIOArgument without
-    // listener custody, Workers or I/O.
-    owning: (listener, handlerModule, handlerBinding, options) => {
+    // listener custody, Workers or I/O. Answers the captured configuration
+    // and one TcpAcceptor per Worker.
+    admit: (listener, moduleSpecifier, bindingName, options) => {
         config: HostConfig.capture(facility, options)
-        valid: (config !== null) && String.recognizes(handlerModule) && String.recognizes(handlerBinding)
+        valid: (config !== null) && String.recognizes(moduleSpecifier) && String.recognizes(bindingName)
         acceptors: null
         if(valid) {
             acceptors = HostConfig.acceptors(facility, listener, config.workers)
@@ -55,6 +66,16 @@ Host: ((facility) => {
             invalid: InvalidIOArgument {}
             invalid.signal()
         }
+        admitted: {
+            config: config
+            acceptors: acceptors
+        }
+        admitted
+    }
+
+    owning: (listener, handlerModule, handlerBinding, options) => {
+        admitted: admit(listener, handlerModule, handlerBinding, options)
+        config: admitted.config
         // Only the acceptor, the handler Strings, the quotas and the
         // captured limits cross into a Worker (HTTP.md §15.4).
         spawnWorker: (acceptor, connectionQuota, pendingQuota) => {
@@ -69,11 +90,38 @@ Host: ((facility) => {
                 config.limits
             )
         }
-        HostLifecycle.start(facility, HostError, listener, acceptors, spawnWorker, config)
+        HostLifecycle.start(facility, HostError, listener, admitted.acceptors, spawnWorker, config, [])
+    }
+
+    // HTTP.md §15.13: initialization is not a structural argument and is
+    // never an Actor.spawn argument, whose TcpAcceptor delegation stays
+    // reserved for the acceptor derived here. Each Worker receives it as the
+    // argument of its "serve" request, an ordinary Actor transfer: one
+    // independent copy per Worker, and a non-transferable value, including a
+    // caller-supplied TcpAcceptor, signals NonTransferableValue while the
+    // Workers are created, which HostLifecycle reports as a startup failure
+    // with its mandatory cleanup.
+    owningWithFactory: (listener, factoryModule, factoryBinding, initialization, options) => {
+        admitted: admit(listener, factoryModule, factoryBinding, options)
+        config: admitted.config
+        spawnWorker: (acceptor, connectionQuota, pendingQuota) => {
+            Actor.spawn(
+                "std:http/internal/HostWorker",
+                "startWithFactory",
+                acceptor,
+                factoryModule,
+                factoryBinding,
+                connectionQuota,
+                pendingQuota,
+                config.limits
+            )
+        }
+        HostLifecycle.start(facility, HostError, listener, admitted.acceptors, spawnWorker, config, [initialization])
     }
 
     host: {
         owning: owning
+        owningWithFactory: owningWithFactory
     }
     host
 })(_httpAsyncFacility)

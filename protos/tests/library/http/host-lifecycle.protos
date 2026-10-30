@@ -60,20 +60,28 @@ latch: () => {
 }
 
 // An in-memory Worker. Its acceptance service answers outcome once "drain"
-// or "abort" arrives, or at once when immediate; stop() terminates it.
+// or "abort" arrives, or at once when immediate; stop() terminates it. Its
+// "serve" request records the one argument it received; after rejectServe()
+// that request signals synchronously, as a NonTransferableValue would.
 workerOf: (outcome, immediate) => {
     serving: latch()
     terminated: latch()
     aborts: 0
     drains: 0
     stops: 0
+    serveArguments: []
+    rejecting: false
     if(immediate) {
         serving.open()
     }
     worker: {
-        request: (selector) => {
+        request: (selector, initialization: null) => {
             answer: null
             if(selector == "serve") {
+                if(rejecting) {
+                    Error().signal()
+                }
+                serveArguments = Array(...serveArguments, initialization)
                 answer = (() => {
                     serving.future.value()
                     outcome
@@ -108,6 +116,12 @@ workerOf: (outcome, immediate) => {
         }
         stopCount: () => {
             stops
+        }
+        rejectServe: () => {
+            rejecting = true
+        }
+        servedWith: () => {
+            serveArguments
         }
     }
     worker
@@ -144,6 +158,10 @@ configOf: (workers) => {
 }
 
 startWith: (listener, workers) => {
+    startServing(listener, workers, [])
+}
+
+startServing: (listener, workers, serveArguments) => {
     spawned: 0
     HostLifecycle.start(bridge, HostError, listener, Array(...workers), (acceptor, connectionQuota, pendingQuota) => {
         worker: workers[spawned]
@@ -152,7 +170,7 @@ startWith: (listener, workers) => {
             Error().signal()
         }
         worker
-    }, configOf(workers.size()))
+    }, configOf(workers.size()), serveArguments)
 }
 
 // Answers the HostError that observing future signals; any other outcome
@@ -188,6 +206,41 @@ tests: [
         // Later requests only observe the established result.
         Assertions.require(hostErrorOf(host.shutdown("abort")).kind == "startup")
         Assertions.require((first.abortCount() == 1) && (first.stopCount() == 1) && (listener.closeCount() == 1))
+    }),
+    Test("serve arguments reach the serve request of every Worker", () => {
+        initialization: {
+            label: "shared"
+        }
+        first: workerOf("drained", false)
+        second: workerOf("drained", false)
+        listener: listenerOf(null)
+        host: startServing(listener, [first, second], [initialization])
+        Assertions.require(host.ready().value() === host)
+        Assertions.require((first.servedWith().size() == 1) && (first.servedWith()[0] === initialization))
+        Assertions.require((second.servedWith().size() == 1) && (second.servedWith()[0] === initialization))
+        Assertions.require(host.shutdown("drain").value() === host)
+        // Host.owning sends no serve argument at all.
+        plain: workerOf("drained", false)
+        plainHost: startWith(listenerOf(null), [plain])
+        Assertions.require(plainHost.ready().value() === plainHost)
+        Assertions.require((plain.servedWith().size() == 1) && (plain.servedWith()[0] === null))
+        Assertions.require(plainHost.shutdown("abort").value() === plainHost)
+    }),
+    Test("M: a rejected serve request after the Worker exists still cleans it up", () => {
+        first: workerOf("drained", false)
+        rejecting: workerOf("drained", false)
+        rejecting.rejectServe()
+        listener: listenerOf(null)
+        host: startServing(listener, [first, rejecting], [null])
+        notReady: hostErrorOf(host.ready())
+        Assertions.require(notReady.kind == "startup")
+        Assertions.require(hostErrorOf(host.termination()).kind == "startup")
+        // Both recorded Workers were aborted and stopped exactly once; the
+        // listener was closed exactly once.
+        Assertions.require((first.abortCount() == 1) && (first.stopCount() == 1))
+        Assertions.require((rejecting.abortCount() == 1) && (rejecting.stopCount() == 1))
+        Assertions.require(rejecting.servedWith().size() == 0)
+        Assertions.require(listener.closeCount() == 1)
     }),
     Test("S: a failed listener close fails a drain with kind shutdown", () => {
         worker: workerOf("drained", false)

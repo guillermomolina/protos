@@ -23,6 +23,29 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.481] - 2026-10-30
+
+### D225-A — Explicit HTTP Host Worker factory (I133)
+- `spec/io/HTTP.md` §15.13 (new): `Host.owningWithFactory(listener,
+  factoryModule, factoryBinding, initialization, options)`.
+  - Structural arguments are validated as for `Host.owning`.
+  - `initialization` crosses into each Worker under the ordinary Actor
+    pass-by-value rules: one independent copy per Worker, with `ActorRef`
+    identity and authority kept.
+  - Every value that is non-transferable at an ordinary boundary is rejected.
+    This includes a caller-supplied `TcpAcceptor`: the spawn-only delegation
+    is reserved for host-derived acceptors. A rejection is a `HostError`
+    `"startup"` with mandatory cleanup.
+  - The factory is invoked at most once per Worker incarnation, inside the
+    Worker. Its result must pass the callability check and is never adopted.
+  - The readiness boundary is hosting readiness (§15.7), not Actor `READY`. A
+    Worker may be Actor `READY`, and a transfer may be rejected after its
+    bootstrap, before construction.
+  - A shutdown during construction prevents acceptance, and `abort`
+    cooperatively cancels a factory invocation.
+  - Hosts neither own nor stop the service Actors they reference.
+- §§1, 15.1, 15.4 and 15.11: cross-references only. `ACTORS.md` is unchanged.
+
 ## [0.1.480] - 2026-10-29
 
 ### D223-A1 — Explicit Resolver authority and hostname resolution (I132-A)

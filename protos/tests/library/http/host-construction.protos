@@ -28,6 +28,14 @@ construct: (listener, options) => {
     })
 }
 
+// HTTP.md §15.13: the factory variant validates the same structural
+// arguments, before custody, and never examines initialization first.
+constructWithFactory: (listener, factoryModule, factoryBinding, initialization, options) => {
+    Assertions.signals(InvalidIOArgument, () => {
+        http.Host.owningWithFactory(listener, factoryModule, factoryBinding, initialization, options)
+    })
+}
+
 invalidOptions: [
     { workers: 0 },
     { workers: -1 },
@@ -61,10 +69,11 @@ tests: [
     Test("HostError delegates directly to Error", () => {
         Assertions.require(http.HostError.parent() === Error)
     }),
-    Test("the host facility exposes only owning and no serve variant", () => {
+    Test("the host facility exposes only owning, owningWithFactory and no serve variant", () => {
         names: http.Host.slotNames()
-        Assertions.require(names.size() == 1)
+        Assertions.require(names.size() == 2)
         Assertions.require(names[0] == "owning")
+        Assertions.require(names[1] == "owningWithFactory")
         Assertions.require(!http.Host.hasSlot("borrowing"))
         server: import("std:http/Server").Server
         Assertions.require(!server.hasSlot("serve"))
@@ -123,6 +132,47 @@ tests: [
         }
         construct(fake, null)
         Assertions.require(!invoked)
+    }),
+    Test("owningWithFactory rejects invalid options before the listener is examined", () => {
+        invalidOptions.each((options) => {
+            constructWithFactory(null, handlerModule, "Server", null, options)
+        })
+        null
+    }),
+    Test("owningWithFactory requires factory module and binding Strings", () => {
+        constructWithFactory(null, () => { 1 }, "Server", null, null)
+        constructWithFactory(null, handlerModule, 1, null, null)
+        constructWithFactory(null, null, "Server", null, null)
+        constructWithFactory(null, handlerModule, null, null, null)
+    }),
+    Test("owningWithFactory acquires no listener implicitly and never invokes a fake one", () => {
+        invoked: false
+        fake: {
+            acceptCapability: () => {
+                invoked = true
+                null
+            }
+            close: () => {
+                invoked = true
+                null
+            }
+        }
+        [null, {}, 42, "127.0.0.1:8080", fake].each((listener) => {
+            constructWithFactory(listener, handlerModule, "Server", null, null)
+        })
+        Assertions.require(!invoked)
+    }),
+    Test("a structural rejection precedes any examination of initialization", () => {
+        // A non-transferable initialization is not a structural argument: an
+        // invalid listener, option or String is still an InvalidIOArgument.
+        hostile: {
+            run: () => { 1 }
+            pending: (() => { 1 }).future()
+        }
+        constructWithFactory(null, handlerModule, "Server", hostile, null)
+        constructWithFactory(null, handlerModule, "Server", hostile, { workers: 0 })
+        constructWithFactory(null, handlerModule, 1, hostile, null)
+        hostile.pending.value()
     }),
     Test("every rejection is a fresh InvalidIOArgument", () => {
         first: construct(null, null)

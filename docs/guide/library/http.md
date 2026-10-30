@@ -4,8 +4,8 @@ The Standard Library ships three independent HTTP/1.1 modules. Each one is
 written in Protos over existing byte I/O, Futures, Tasks, and Actors. None of
 them grants authority: they work on the duplexes and listeners you give them.
 The normative contract is [`spec/io/HTTP.md`](../../../spec/io/HTTP.md)
-(D215 for the server, D216 for hosting, and D218-B for the client). If this
-guide and the specification disagree, the specification wins.
+(D215 for the server, D216 and D225-A for hosting, and D218-B for the
+client). If this guide and the specification disagree, the specification wins.
 
 ## Choosing a module
 
@@ -222,6 +222,8 @@ No extra Task is created per read or per chunk.
 
 ```text
 Host.owning(listener, handlerModule, handlerBinding, options) -> host
+Host.owningWithFactory(listener, factoryModule, factoryBinding,
+                       initialization, options)          -> host
 host.ready()              -> Future<host>
 host.shutdown("drain")    -> Future<host>
 host.shutdown("abort")    -> Future<host>
@@ -253,8 +255,69 @@ such as an [`app:` module](../embedding/application-modules.md) supplied by the
 embedding host. A missing module or binding is not a construction error; it
 fails `ready()` with a `HostError` of kind `"startup"`.
 
-**The host owns the listener.** After a valid `Host.owning`, do not accept from
-or close the listener yourself. The host closes it exactly once on every path.
+**Building each Worker's handler from data you pass.** When the handler needs
+configuration or a reference to one of your own service Actors, use
+`Host.owningWithFactory`. Instead of naming the handler, you name a *factory*
+binding and pass an `initialization` value:
+
+```protos
+// app:site-handler
+make: (dependencies) => {
+    projects: dependencies.projects
+    (request) => {
+        names: projects.request("publicProjects").value()
+        response: {
+            status: 200
+            headers: []
+            body: Encoding.UTF8.encode(names)
+        }
+        response
+    }
+}
+```
+
+```protos
+// projectsService is an ActorRef of a service Actor your program created.
+host: Host.owningWithFactory(
+    listener,
+    "app:site-handler",
+    "make",
+    { projects: projectsService },
+    { workers: 4 }
+)
+host.ready().value()
+```
+
+Each Worker gets its own copy of `initialization`, made by the ordinary
+[Actor pass-by-value rules](../10-actors-actorrefs-and-groups.md). It calls
+`make` exactly once in its lifetime with that copy, before it accepts anything,
+and then uses the returned callable for every request: `handler(request)`,
+exactly as with `Host.owning`. The factory is never called per request, and
+its result is never awaited. `ready()` resolves only once every Worker has
+built and validated its handler. The Worker Actors themselves already exist
+while their factories run. `shutdown("abort")` during that time cancels a
+suspended factory cooperatively, and no Worker starts accepting afterwards. An `ActorRef` in `initialization` still denotes the same
+Actor in every Worker. Mutable objects are copied, so later changes made by you
+or by another Worker are not seen.
+
+`initialization` cannot carry live resources: a Closure, a Future, `network`,
+a Resolver, a listener, a connection, or a `TcpAcceptor` is rejected exactly
+as at any Actor boundary. Like a failing factory, a non-callable result, or a
+missing module or binding, a rejected `initialization` is not a construction
+error; it fails `ready()` with a `HostError` of kind `"startup"`, and the host
+still closes the listener. Invalid `listener`, `options`, or non-String module
+and binding arguments signal `InvalidIOArgument` synchronously, as for
+`Host.owning`.
+
+The host does not own the service Actors you reference. Shutting a host down
+does not stop them. A service that stops makes only the requests that use it
+fail, each as an ordinary handler failure. Several hosts may share one
+service. Creating a service with outbound `network` or Resolver authority is
+your program's business; `Host` provides no mechanism for it.
+
+**The host owns the listener.** After a valid `Host.owning` or
+`Host.owningWithFactory`, do not accept from or close the listener yourself.
+The host closes it exactly once on every path.
 Each Worker accepts by itself and serves each accepted connection with
 `Server.serveOne.owning`.
 
@@ -389,8 +452,8 @@ catalog. More exhaustive behavior is exercised by the
 
 ## Normative references
 
-- [`spec/io/HTTP.md`](../../../spec/io/HTTP.md): §§1–13 Server, §15 Host, §16
-  Client.
+- [`spec/io/HTTP.md`](../../../spec/io/HTTP.md): §§1–13 Server, §15 Host
+  (§15.13 for `owningWithFactory`), §16 Client.
 - [`spec/io/NETWORK.md`](../../../spec/io/NETWORK.md): TCP, listeners, and
   `network` authority.
 - [`spec/io/IO_CORE.md`](../../../spec/io/IO_CORE.md) and
