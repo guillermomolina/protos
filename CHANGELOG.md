@@ -8,6 +8,39 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.27-SNAPSHOT
+
+- **I115-H9 — experimental Shape-backed object attribute access.**
+  Replace the ordinary object's prior map/cell value storage with one
+  authoritative `DynamicObject` whose `Shape` holds the local slot values.
+  The `LinkedHashMap` continues to index names and optional PIC `SlotCell`
+  handles but no longer duplicates guest values.
+  - Introduce `ExperimentalGetAttribute`, with a cached `PropertyGetter`
+    and a primitive `int` specialization followed by an Object fallback.
+    The lowering of admitted compact member reads now uses this operation
+    instead of `ReadMemberAtRoot`; call-site guards and assumptions govern
+    selected locations and non-Closure continuity.
+  - Specialize `ExperimentalSetAttribute` for primitive `int` writes and
+    Object writes using `DynamicObject.PutNode`. Both use the same selected
+    Shape-backed storage as ordinary lookup and writes; invalidation of
+    value-lookup dependencies remains the selected-slot responsibility.
+  - The experimental readable-slot admission may normalize an existing
+    signed-32 guest `ProtosIntegerValue` into a raw Java `Integer` in the
+    authoritative store. Extend the compact slot read/write tests and
+    pay-as-you-grow storage tests for the new physical representation.
+  - **Historical semantic limitations:** the optimized write retains H8's
+    deliberate bypass of frozen-state checks and guest value normalization.
+    Primitive `int` (`Integer`) carriers remain in storage and at compact
+    boundaries, in conflict with Protos' long-only Integer design. Caching
+    Shape-backed locations is experimental and does not establish general
+    equivalence with dynamic message selection, mutable object semantics or
+    lexical rebinding under D179 C0. Previous divergences involving
+    `Object.call`, `ReturnHome` and suspension remain unresolved.
+    This historical replay does not claim compilation, behavioral tests,
+    numerical conformance or a measured performance improvement.
+  - Original implementation: `24ad02ed3a21f946e7222be64c144e4700e64cdd`.
+    All seven original source/test blobs remain unchanged in this replay.
+
 ## 0.4.26-SNAPSHOT
 
 - **I115-H8 — experimental GraalPy-shaped compact object-slot writes.**
