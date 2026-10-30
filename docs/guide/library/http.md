@@ -1,11 +1,12 @@
-# HTTP/1.1: `std:http/Server`, `std:http/Host`, `std:http/Client`
+# HTTP/1.1: `std:http/Server`, `std:http/Host`, `std:http/Client`, `std:http/Router`, `std:http/UrlClient`
 
-The Standard Library ships three independent HTTP/1.1 modules. Each one is
-written in Protos over existing byte I/O, Futures, Tasks, and Actors. None of
-them grants authority: they work on the duplexes and listeners you give them.
-The normative contract is [`spec/io/HTTP.md`](../../../spec/io/HTTP.md)
-(D215 for the server, D216 and D225-A for hosting, and D218-B for the
-client). If this guide and the specification disagree, the specification wins.
+The Standard Library ships three independent HTTP/1.1 modules and two optional
+composition modules. Each one is written in Protos over existing byte I/O,
+Futures, Tasks, and Actors. None of them grants authority: they work on the
+duplexes, listeners, and capabilities you give them. The normative contract is
+[`spec/io/HTTP.md`](../../../spec/io/HTTP.md) (D215 for the server, D216 and
+D225-A for hosting, D218-B for the client, and D222-C for the router and the
+URL client). If this guide and the specification disagree, the specification wins.
 
 ## Choosing a module
 
@@ -14,6 +15,8 @@ client). If this guide and the specification disagree, the specification wins.
 | `std:http/Server` | You already have one connection (or any duplex) and want to answer exactly one request on it | A duplex: `ByteReadable` + `ByteWritable` (+ `Closable` for `owning`) |
 | `std:http/Host` | You want to serve successive TCP connections continuously with Worker Actors | A live `TcpListener` you acquired with your own `network` |
 | `std:http/Client` | You already have one connection (or any duplex) and want to send exactly one request on it | A duplex, as for the server |
+| `std:http/Router` | You want one handler that dispatches on method and path to several route handlers | Nothing: it is authority-free |
+| `std:http/UrlClient` | You want one HTTP or HTTPS request to an absolute URL, with a buffered response | Your `network`, a `resolver` for host names, and explicit TLS `trust` for `https` |
 
 Each module is imported by its exact path; no Prelude or ambient binding exists,
 and importing one does not import the others:
@@ -22,6 +25,8 @@ and importing one does not import the others:
 http: import("std:http/Server")      // http.Server, http.HttpError
 hosting: import("std:http/Host")     // hosting.Host, hosting.HostError
 client: import("std:http/Client")    // client.Client, client.ClientError
+routing: import("std:http/Router")   // routing.Router
+urls: import("std:http/UrlClient")   // urls.UrlClient
 ```
 
 Every connection carries exactly one request and one *final* response.
@@ -48,7 +53,11 @@ access. See
 [What each launcher grants](../11-process-io-filesystems-and-authority.md#what-each-launcher-grants)
 and [Embedding Protos in a Java application](../embedding/java.md#authority-and-thread-policy).
 
-Endpoints are numeric; there is no DNS and no URL:
+`network.connectTcp` takes only numeric endpoints. Name resolution exists as a
+separate, explicitly granted `Resolver` capability (D223,
+[`NETWORK.md`](../../../spec/io/NETWORK.md) §14), which, like `network`, the
+standalone CLI does not bind. The low-level `Client` never resolves names or
+parses URLs; `UrlClient` (below) composes both for you when you pass them:
 
 ```protos
 IpAddress: import("std:network/IpAddresses").IpAddress
@@ -176,6 +185,96 @@ text: Client.exchangeOne.owning(connection, request, readText, null).value()
 The callback's ordinary result becomes the result of the returned Future. A
 404 or 500 is an ordinary response, not a failure. Returning a pending Future
 from the callback is adopted as usual, but it does not keep the body readable.
+
+## Router: dispatch by method and path
+
+```text
+Router.compile(routes) -> handler
+```
+
+`routes` is an Array of `{method, path, handle}` entries. A path is literal
+segments and whole-segment `{name}` captures; `"*"` is allowed only for
+`OPTIONS`. The table is validated and snapshotted when you compile it:
+duplicates, crossing overlaps such as `/a/{x}` with `/{y}/b`, and malformed
+paths signal an `Error` right away, never per request.
+
+```protos
+routing: import("std:http/Router")
+ascii: (text) => { Encoding.Latin1.encode(text) }
+
+handler: routing.Router.compile([
+    {
+        method: "GET"
+        path: "/users/me"
+        handle: (request, match) => {
+            { status: 200, headers: [], body: ascii("me") }
+        }
+    },
+    {
+        method: "GET"
+        path: "/users/{id}"
+        handle: (request, match) => {
+            { status: 200, headers: [], body: ascii("user " + match.params["id"]) }
+        }
+    }
+])
+```
+
+The handler suits `Server.serveOne` and `Host` handler modules. A literal
+segment beats a capture regardless of declaration order. `match.params` holds
+the raw, still percent-encoded segment text (`%2F` is never a separator), and
+`match.query` is the raw query String, `""` for a bare `?`, or `null`. A
+trailing `/` is significant. `GET` routes also serve `HEAD` unless a `HEAD`
+route exists; `OPTIONS` is never invented. Unknown paths answer a bodiless 404,
+and known paths with another method a 405 with `Allow`. The Router never reads
+the request body and holds no authority.
+
+## UrlClient: one request to a URL
+
+```text
+UrlClient.requestOne(authorities, url, request, limits) -> Future<{status, headers, body}>
+```
+
+```protos
+urls: import("std:http/UrlClient")
+Trust: import("std:tls/Client").Trust
+
+authorities: {
+    network: network            // bootstrap-local grant
+    resolver: resolver          // bootstrap-local grant; may be null for numeric hosts
+    trust: Trust.javaCacerts()  // explicit; used only for https
+}
+request: {
+    method: "GET"
+    headers: [["Accept", Encoding.Latin1.encode("application/json")]]
+    body: null
+}
+response: urls.UrlClient.requestOne(authorities, "https://example.org/a?b=1", request, null).value()
+```
+
+The URL is parsed by `std:uri`; it must be absolute `http` or `https`, without
+user information or fragment. The URL host becomes the `Host` field (with an
+explicit port kept exactly as written), and the raw path and query become the
+origin-form target; do not pass your own `Host`. A host name is looked up once
+with your `resolver`, and the returned addresses are tried in order with one
+TCP connect each; a numeric host is connected directly. For `https`, the TLS
+reference identity and SNI are the URL host name (or the numeric address,
+without SNI), never the resolved address. There is no default trust:
+`Trust.system()` has no adapter yet, so pass `Trust.javaCacerts()` or
+`Trust.anchors(...)`.
+
+Unlike the low-level `Client`, whose callback-scoped `response.body` must be
+read inside `onResponse`, `UrlClient` reads the whole body inside its own
+callback and answers fresh `Bytes`, bounded by `maxResponseBodyBytes`
+(32 MiB by default). Every status, including redirects and errors, is an
+ordinary response: nothing follows redirects, retries, decodes JSON, or
+stores cookies. Connections are closed exactly once on every path, including
+cancellation.
+
+`Host.owningWithFactory` (D225-A) only lets each Worker build its handler from
+transferable initialization data. It does not give a Worker `network` or
+`resolver`, so a Worker handler cannot call `UrlClient` with capabilities it was
+never granted.
 
 ## Borrowed versus owning
 
@@ -418,13 +517,15 @@ kind: http.HttpError.handle(
 
 None of the following exists in these modules. Do not expect it:
 
-- HTTPS/TLS (separate, unfinished D220 investigation);
-- DNS resolution, URL parsing, or connection acquisition by the Client;
+- HTTPS in `Server` or `Host`; the low-level `Client` runs over a secure
+  duplex from `std:tls/Client` but does no TLS itself;
+- DNS resolution, URL parsing, or connection acquisition by the low-level
+  Client (use `UrlClient` with explicit capabilities);
 - keep-alive, pipelining, or more than one request per connection;
 - connection pooling, retries, or automatic redirects;
 - built-in timeouts, deadlines, or slow-client eviction;
 - HTTP/2, HTTP/3, Upgrade, WebSocket, or CONNECT;
-- cookies, authentication, routing, content codings, or exposed trailers;
+- cookies, authentication, middleware, content codings, or exposed trailers;
 - streaming request bodies in the Client (the body is `null` or `Bytes`).
 
 The server is meant for development, loopback, trusted networks, or deployment
@@ -441,6 +542,8 @@ hostile Internet traffic.
 | [`examples/io/http-minimal-response.protos`](../../../protos/examples/io/http-minimal-response.protos) | One fixed response; a rejected request and its `HttpError` | standalone CLI |
 | [`examples/io/http-get.protos`](../../../protos/examples/io/http-get.protos) | GET over a connection the application opens, borrowed and closed with `ensure` | Java embedding with `network` |
 | [`examples/io/http-loopback-hosting.protos`](../../../protos/examples/io/http-loopback-hosting.protos) | Bounded hosting with limits, concurrent clients, drain | Java embedding with `network` |
+| [`examples/io/http-router.protos`](../../../protos/examples/io/http-router.protos) | A compiled Router handler with literal and capture routes, params, and query | standalone CLI |
+| [`examples/io/http-url-client.protos`](../../../protos/examples/io/http-url-client.protos) | An HTTPS `UrlClient` request with explicit `network`, `resolver`, and trust | Java embedding with `network` and `resolver` |
 
 The CLI sources run with `bin/protos <file>` from the repository root. The
 embedding sources run in
@@ -453,7 +556,8 @@ catalog. More exhaustive behavior is exercised by the
 ## Normative references
 
 - [`spec/io/HTTP.md`](../../../spec/io/HTTP.md): §§1–13 Server, §15 Host
-  (§15.13 for `owningWithFactory`), §16 Client.
+  (§15.13 for `owningWithFactory`), §16 Client, §17 Router, §18 UrlClient.
+- [`spec/io/TLS.md`](../../../spec/io/TLS.md): `std:tls/Client` and trust.
 - [`spec/io/NETWORK.md`](../../../spec/io/NETWORK.md): TCP, listeners, and
   `network` authority.
 - [`spec/io/IO_CORE.md`](../../../spec/io/IO_CORE.md) and

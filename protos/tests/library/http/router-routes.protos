@@ -1,0 +1,268 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+http: import("std:http/Router")
+
+ascii: (text) => {
+    Encoding.Latin1.encode(text)
+}
+
+text: (bytes) => {
+    Encoding.Latin1.decode(bytes)
+}
+
+// A request whose body records every read; routing never reads it.
+requestOf: (method, target) => {
+    reads: 0
+    request: {
+        method: method
+        target: ascii(target)
+        version: "1.1"
+        headers: [["Host", ascii("example.org")]]
+        body: {
+            read: (maxBytes) => {
+                reads = reads + 1
+                (() => { null }).future()
+            }
+        }
+        bodyReads: () => {
+            reads
+        }
+    }
+    request
+}
+
+// A route whose handle answers {name, request, match}.
+route: (method, path, name) => {
+    entry: {
+        method: method
+        path: path
+        handle: (request, match) => {
+            seen: {
+                name: name
+                request: request
+                match: match
+            }
+            seen
+        }
+    }
+    entry
+}
+
+dispatch: (handler, method, target) => {
+    handler(requestOf(method, target))
+}
+
+tests: [
+    Test("module exports exactly Router with compile", () => {
+        Assertions.require(http.slotNames().size() == 1)
+        Assertions.require(http.hasSlot("Router"))
+        Assertions.require(!http.hasSlot("_httpAsyncFacility"))
+        Assertions.require(http.Router.slotNames().size() == 1)
+        Assertions.require(http.Router.hasSlot("compile"))
+    }),
+    Test("Router is not a Prelude binding", () => {
+        Assertions.signals(SlotNotFound, () => { Router })
+    }),
+    Test("request method and target must be own slots of valid types", () => {
+        handler: http.Router.compile([route("GET", "/", "root")])
+        Assertions.signals(Error, () => {
+            handler({ target: ascii("/") })
+        })
+        Assertions.signals(Error, () => {
+            handler({ method: "GET" })
+        })
+        Assertions.signals(Error, () => {
+            handler({
+                method: 1
+                target: ascii("/")
+            })
+        })
+        Assertions.signals(Error, () => {
+            handler({
+                method: "GET"
+                target: "/"
+            })
+        })
+    }),
+    Test("literal and capture routes match full segments", () => {
+        handler: http.Router.compile([route("GET", "/users/{id}", "user"), route("GET", "/", "root")])
+        user: dispatch(handler, "GET", "/users/42")
+        Assertions.require(user.name == "user")
+        Assertions.require(user.match.params["id"] == "42")
+        Assertions.require(user.match.params.size() == 1)
+        Assertions.require(user.match.query === null)
+        root: dispatch(handler, "GET", "/")
+        Assertions.require(root.name == "root")
+        Assertions.require(root.match.params.size() == 0)
+        Assertions.require(dispatch(handler, "GET", "/users/42/x").status == 404)
+        Assertions.require(dispatch(handler, "GET", "/users").status == 404)
+    }),
+    Test("a trailing slash is significant", () => {
+        handler: http.Router.compile([route("GET", "/a", "plain"), route("GET", "/a/", "slash")])
+        Assertions.require(dispatch(handler, "GET", "/a").name == "plain")
+        Assertions.require(dispatch(handler, "GET", "/a/").name == "slash")
+        // A capture never matches the empty final segment.
+        captured: http.Router.compile([route("GET", "/a/{x}", "x")])
+        Assertions.require(dispatch(captured, "GET", "/a/").status == 404)
+    }),
+    Test("methods and literals compare case-sensitively", () => {
+        handler: http.Router.compile([route("GET", "/Path", "p")])
+        Assertions.require(dispatch(handler, "GET", "/path").status == 404)
+        Assertions.require(dispatch(handler, "get", "/Path").status == 405)
+    }),
+    Test("literal segments win over captures regardless of order", () => {
+        handler: http.Router.compile([route("GET", "/users/{id}", "any"), route("GET", "/users/me", "me")])
+        Assertions.require(dispatch(handler, "GET", "/users/me").name == "me")
+        Assertions.require(dispatch(handler, "GET", "/users/you").name == "any")
+        nested: http.Router.compile([route("GET", "/{a}/{b}", "both"), route("GET", "/x/{b}", "x"), route("GET", "/x/y", "xy")])
+        Assertions.require(dispatch(nested, "GET", "/x/y").name == "xy")
+        Assertions.require(dispatch(nested, "GET", "/x/z").name == "x")
+        Assertions.require(dispatch(nested, "GET", "/w/z").name == "both")
+    }),
+    Test("several captures and the raw query are reported", () => {
+        handler: http.Router.compile([route("GET", "/r/{owner}/{repo}", "repo")])
+        seen: dispatch(handler, "GET", "/r/a/b?x=1&x=2&a=")
+        Assertions.require(seen.match.params["owner"] == "a")
+        Assertions.require(seen.match.params["repo"] == "b")
+        Assertions.require(seen.match.query == "x=1&x=2&a=")
+        Assertions.require(dispatch(handler, "GET", "/r/a/b?").match.query == "")
+    }),
+    Test("match is fresh for each request", () => {
+        handler: http.Router.compile([route("GET", "/{x}", "x")])
+        first: dispatch(handler, "GET", "/a")
+        second: dispatch(handler, "GET", "/a")
+        Assertions.require(first.match !== second.match)
+        Assertions.require(first.match.params !== second.match.params)
+    }),
+    Test("an unmatched path answers a bodiless 404", () => {
+        response: dispatch(http.Router.compile([]), "GET", "/")
+        Assertions.require(response.status == 404)
+        Assertions.require(response.headers.size() == 0)
+        Assertions.require(response.body === null)
+    }),
+    Test("a matched path without the method answers 405 with Allow", () => {
+        handler: http.Router.compile([route("POST", "/items", "post"), route("GET", "/items", "get"), route("GET", "/other", "o")])
+        response: dispatch(handler, "DELETE", "/items")
+        Assertions.require(response.status == 405)
+        Assertions.require(response.body === null)
+        Assertions.require(response.headers.size() == 1)
+        Assertions.require(response.headers[0][0] == "Allow")
+        Assertions.require(text(response.headers[0][1]) == "POST, GET, HEAD")
+    }),
+    Test("GET serves HEAD unless an explicit HEAD route exists", () => {
+        fallback: http.Router.compile([route("GET", "/a", "get")])
+        Assertions.require(dispatch(fallback, "HEAD", "/a").name == "get")
+        explicit: http.Router.compile([route("GET", "/a", "get"), route("HEAD", "/a", "head")])
+        Assertions.require(dispatch(explicit, "HEAD", "/a").name == "head")
+        Assertions.require(dispatch(explicit, "GET", "/a").name == "get")
+        response: dispatch(explicit, "PUT", "/a")
+        Assertions.require(text(response.headers[0][1]) == "GET, HEAD")
+    }),
+    Test("OPTIONS is explicit, including OPTIONS *", () => {
+        handler: http.Router.compile([route("GET", "/a", "get"), route("OPTIONS", "*", "star")])
+        Assertions.require(dispatch(handler, "OPTIONS", "/a").status == 405)
+        star: dispatch(handler, "OPTIONS", "*")
+        Assertions.require(star.name == "star")
+        Assertions.require(star.match.params.size() == 0)
+        Assertions.require(star.match.query === null)
+        Assertions.signals(Error, () => {
+            http.Router.compile([route("GET", "*", "bad")])
+        })
+    }),
+    Test("duplicate routes of one method are rejected at compilation", () => {
+        Assertions.signals(Error, () => {
+            http.Router.compile([route("GET", "/a", "1"), route("GET", "/a", "2")])
+        })
+        Assertions.signals(Error, () => {
+            http.Router.compile([route("GET", "/a/{x}", "1"), route("GET", "/a/{y}", "2")])
+        })
+        Assertions.signals(Error, () => {
+            http.Router.compile([route("OPTIONS", "*", "1"), route("OPTIONS", "*", "2")])
+        })
+        http.Router.compile([route("GET", "/a", "1"), route("POST", "/a", "2")])
+        null
+    }),
+    Test("crossing overlaps are rejected at compilation", () => {
+        Assertions.signals(Error, () => {
+            http.Router.compile([route("GET", "/a/{x}", "1"), route("GET", "/{y}/b", "2")])
+        })
+        http.Router.compile([route("GET", "/a/{x}", "1"), route("POST", "/{y}/b", "2")])
+        http.Router.compile([route("GET", "/a/{x}", "1"), route("GET", "/{y}/b/c", "2")])
+        null
+    }),
+    Test("route entries are validated at compilation", () => {
+        Assertions.signals(Error, () => { http.Router.compile(null) })
+        Assertions.signals(Error, () => { http.Router.compile([1]) })
+        Assertions.signals(Error, () => { http.Router.compile([{
+            method: "GET"
+            path: "/"
+        }]) })
+        Assertions.signals(Error, () => { http.Router.compile([{
+            method: "GET"
+            path: "/"
+            handle: { call: 42 }
+        }]) })
+        Assertions.signals(Error, () => { http.Router.compile([route("G T", "/", "x")]) })
+        Assertions.signals(Error, () => { http.Router.compile([route(1, "/", "x")]) })
+        Assertions.signals(Error, () => { http.Router.compile([route("GET", "a", "x")]) })
+        Assertions.signals(Error, () => { http.Router.compile([route("GET", "", "x")]) })
+    }),
+    Test("compilation snapshots the route table", () => {
+        routes: [route("GET", "/a", "a")]
+        handler: http.Router.compile(routes)
+        routes[0].path = "/b"
+        routes[0].method = "POST"
+        routes[0] = route("GET", "/c", "c")
+        Assertions.require(dispatch(handler, "GET", "/a").name == "a")
+        Assertions.require(dispatch(handler, "GET", "/b").status == 404)
+        Assertions.require(dispatch(handler, "GET", "/c").status == 404)
+    }),
+    Test("the handle receives the unchanged request and the body is never read", () => {
+        handler: http.Router.compile([route("POST", "/a", "a")])
+        request: requestOf("POST", "/a")
+        seen: handler(request)
+        Assertions.require(seen.request === request)
+        Assertions.require(request.bodyReads() == 0)
+        Assertions.require(request.headers.size() == 1)
+        missed: requestOf("POST", "/b")
+        handler(missed)
+        Assertions.require(missed.bodyReads() == 0)
+    }),
+    Test("the handle runs exactly once and its result is answered unchanged", () => {
+        calls: 0
+        result: { marker: true }
+        handler: http.Router.compile([{
+            method: "GET"
+            path: "/"
+            handle: (request, match) => {
+                calls = calls + 1
+                result
+            }
+        }])
+        Assertions.require(handler(requestOf("GET", "/")) === result)
+        Assertions.require(calls == 1)
+    }),
+    Test("the router holds no ambient authority", () => {
+        Assertions.require(!http.hasSlot("network"))
+        Assertions.require(!http.hasSlot("resolver"))
+        Assertions.require(!http.Router.hasSlot("network"))
+        Assertions.signals(Error, () => {
+            http.Router.compile([route("GET", "/", "x")])(null)
+        })
+    })
+]

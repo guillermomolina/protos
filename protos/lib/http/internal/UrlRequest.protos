@@ -1,0 +1,312 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal URL and request preparation of std:http/UrlClient (D222-C,
+//! HTTP.md §18.2-§18.3). This module is an unpublished implementation
+//! artifact, not an approved Standard Library API. It is pure: it parses the
+//! URL with std:uri, validates and snapshots the caller's authorities and
+//! request, and answers the lower std:http/Client request. It resolves no
+//! name, opens no connection and reads no capability.
+
+uri: import("std:uri")
+IpAddresses: import("std:network/IpAddresses")
+MessageSyntax: import("std:http/internal/MessageSyntax")
+
+authoritySlots: ["network", "resolver", "trust"]
+requestSlots: ["method", "headers", "body"]
+
+hasOwnSlots: (object, required) => {
+    names: object.slotNames()
+    valid: true
+    required.each((slotName) => {
+        present: false
+        names.each((name) => {
+            if(name == slotName) {
+                present = true
+            }
+        })
+        if(!present) {
+            valid = false
+        }
+    })
+    valid
+}
+
+// Answers the URI record of text, or null when std:uri rejects it.
+parseUri: (text) => {
+    parsed: null
+    Error.handle(
+        () => {
+            parsed = uri.parse(text)
+        },
+        (error) => {
+            error
+        }
+    )
+    parsed
+}
+
+// Answers the IpAddress of numeric text, or null.
+parseAddress: (text) => {
+    address: null
+    Error.handle(
+        () => {
+            address = IpAddresses.parse(text)
+        },
+        (error) => {
+            error
+        }
+    )
+    address
+}
+
+// port = 1*5DIGIT in 1..65535, by bounded decimal accumulation; -1 otherwise.
+parsePort: (text) => {
+    bytes: Encoding.Latin1.encode(text)
+    value: -1
+    if((bytes.size() > 0) && (bytes.size() <= 5)) {
+        value = 0
+        bytes.each((octet) => {
+            if((value >= 0) && MessageSyntax.isDigit(octet)) {
+                value = value * 10 + (octet - 48)
+            } else {
+                value = -1
+            }
+        })
+        if((value < 1) || (value > 65535)) {
+            value = -1
+        }
+    }
+    value
+}
+
+// An ASCII host name: dot-separated labels of letters, digits and "-", each
+// 1..63 octets, at most 253 octets without one optional terminal root dot.
+// No percent escape is admitted. NR-LDH and A-label validity is decided by
+// the Resolver and the TLS reference identity, never converted here.
+isHostName: (bytes) => {
+    end: bytes.size()
+    if((end > 1) && (bytes[end - 1] == 46)) {
+        end = end - 1
+    }
+    valid: (end > 0) && (end <= 253)
+    labelSize: 0
+    index: 0
+    while(valid && (index < end)) {
+        octet: bytes[index]
+        if(octet == 46) {
+            valid = labelSize > 0
+            labelSize = 0
+        } else {
+            valid = MessageSyntax.isAlpha(octet) || MessageSyntax.isDigit(octet) || (octet == 45)
+            labelSize = labelSize + 1
+            if(labelSize > 63) {
+                valid = false
+            }
+        }
+        index = index + 1
+    }
+    valid && (labelSize > 0)
+}
+
+// Answers {address, name} for the URL host, or null: a bracketed IPv6
+// literal or IPv4 text yields an IpAddress; a host name is kept verbatim.
+classifyHost: (host) => {
+    bytes: Encoding.Latin1.encode(host)
+    size: bytes.size()
+    answer: null
+    if(size > 0) {
+        if(bytes[0] == 91) {
+            // IPvFuture ("[v...]") is never admitted.
+            if((size > 2) && (bytes[size - 1] == 93) && MessageSyntax.isIpv6(bytes, 1, size - 1)) {
+                address: parseAddress(Encoding.Latin1.decode(MessageSyntax.copyRange(bytes, 1, size - 1)))
+                if(address !== null) {
+                    answer = {
+                        address: address
+                        name: null
+                    }
+                }
+            }
+        } else {
+            if(MessageSyntax.isIpv4(bytes, 0, size)) {
+                address: parseAddress(host)
+                if(address !== null) {
+                    answer = {
+                        address: address
+                        name: null
+                    }
+                }
+            } else {
+                if(isHostName(bytes)) {
+                    answer = {
+                        address: null
+                        name: host
+                    }
+                }
+            }
+        }
+    }
+    answer
+}
+
+/// Validates and snapshots one UrlClient call (HTTP.md §18.2, §18.3) before
+/// any effect and answers a private frozen {network, resolver, trust, secure,
+/// address, name, port, request}, or null when it is not admissible. address
+/// is the IpAddress of a numeric host (connected directly, and the TLS
+/// reference), otherwise name is the original host name (the only Resolver
+/// lookup and the TLS reference). request is the ordinary std:http/Client
+/// request {method, target, headers, body} with exactly one injected Host
+/// first and the caller fields after it in order; its final head syntax is
+/// checked by the caller through ClientHead.prepareRequest. facility is the
+/// private asynchronous bridge of std:http/UrlClient.
+prepare: (facility, authorities, url, request) => {
+    valid: facility.ordinaryObject(authorities) && hasOwnSlots(authorities, authoritySlots)
+    network: null
+    resolver: null
+    trust: null
+    if(valid) {
+        network = authorities.slotValue("network")
+        resolver = authorities.slotValue("resolver")
+        trust = authorities.slotValue("trust")
+        valid = facility.provides(network, "connectTcp")
+        if(valid && (resolver !== null)) {
+            valid = facility.provides(resolver, "lookupAddresses")
+        }
+    }
+
+    parsed: null
+    if(valid) {
+        valid = String.recognizes(url)
+    }
+    if(valid) {
+        parsed = parseUri(url)
+        valid = (parsed !== null) &&
+            (parsed.scheme !== null) &&
+            (parsed.userInfo === null) &&
+            (parsed.host !== null) &&
+            (parsed.fragment === null)
+    }
+    secure: false
+    if(valid) {
+        // The scheme is ASCII case-insensitive (RFC 3986 §3.1).
+        scheme: Encoding.Latin1.encode(parsed.scheme)
+        secure = MessageSyntax.bytesEqualIgnoringCase(scheme, "https")
+        valid = secure || MessageSyntax.bytesEqualIgnoringCase(scheme, "http")
+    }
+    if(valid && secure) {
+        valid = trust !== null
+    }
+    port: 80
+    if(secure) {
+        port = 443
+    }
+    authority: null
+    host: null
+    if(valid) {
+        host = classifyHost(parsed.host)
+        valid = host !== null
+        if(valid && (host.name !== null)) {
+            valid = resolver !== null
+        }
+        authority = parsed.host
+    }
+    if(valid && (parsed.port !== null)) {
+        port = parsePort(parsed.port)
+        valid = port > 0
+        // The explicit port, even a default one, stays in Host verbatim.
+        authority = authority + ":" + parsed.port
+    }
+
+    // Snapshot of the caller request: the lower Client validates the method
+    // token, field names and values, and the body representation again.
+    method: null
+    fields: []
+    body: null
+    if(valid) {
+        valid = facility.ordinaryObject(request) && hasOwnSlots(request, requestSlots)
+    }
+    if(valid) {
+        method = request.slotValue("method")
+        valid = String.recognizes(method)
+    }
+    if(valid) {
+        rawHeaders: request.slotValue("headers")
+        valid = Array.recognizes(rawHeaders)
+        if(valid) {
+            Array(...rawHeaders).each((pair) => {
+                if(valid) {
+                    wellShaped: Array.recognizes(pair) && (pair.size() == 2)
+                    if(wellShaped) {
+                        wellShaped = String.recognizes(pair[0]) && facility.isBytes(pair[1])
+                    }
+                    valueBytes: null
+                    if(wellShaped) {
+                        valueBytes = MessageSyntax.snapshotBytes(pair[1])
+                        wellShaped = valueBytes !== null
+                    }
+                    // The Host field is owned by the URL (HTTP.md §18.2).
+                    if(wellShaped) {
+                        wellShaped = !MessageSyntax.bytesEqualIgnoringCase(Encoding.UTF8.encode(pair[0]), "host")
+                    }
+                    if(wellShaped) {
+                        fields = Array(...fields, [pair[0], valueBytes])
+                    } else {
+                        valid = false
+                    }
+                }
+            })
+        }
+    }
+    if(valid) {
+        rawBody: request.slotValue("body")
+        if(rawBody !== null) {
+            valid = facility.isBytes(rawBody)
+            if(valid) {
+                body = MessageSyntax.snapshotBytes(rawBody)
+                valid = body !== null
+            }
+        }
+    }
+
+    prepared: null
+    if(valid) {
+        // origin-form: the raw path ("/" when empty) and the raw query.
+        targetText: parsed.path
+        if(targetText == "") {
+            targetText = "/"
+        }
+        if(parsed.query !== null) {
+            targetText = targetText + "?" + parsed.query
+        }
+        lower: {
+            method: method
+            target: Encoding.Latin1.encode(targetText)
+            headers: Array(["Host", Encoding.Latin1.encode(authority)], ...fields)
+            body: body
+        }
+        prepared = {
+            network: network
+            resolver: resolver
+            trust: trust
+            secure: secure
+            address: host.address
+            name: host.name
+            port: port
+            request: lower
+        }
+        prepared.freeze()
+    }
+    prepared
+}

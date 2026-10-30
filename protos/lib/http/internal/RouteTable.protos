@@ -1,0 +1,386 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal route compilation and dispatch of std:http/Router (D222-C,
+//! HTTP.md §17.2-§17.6). This module is an unpublished implementation
+//! artifact, not an approved Standard Library API. It is pure: it never
+//! invokes a route handle, reads a request body, or acquires authority. All
+//! specificity and conflict checks happen once, at compilation.
+
+MessageSyntax: import("std:http/internal/MessageSyntax")
+RouteTarget: import("std:http/internal/RouteTarget")
+
+entrySlots: ["method", "path", "handle"]
+
+// Capture names are ASCII identifiers: [A-Za-z_][A-Za-z0-9_]*.
+isIdentifier: (bytes, start, end) => {
+    valid: start < end
+    index: start
+    while(valid && (index < end)) {
+        octet: bytes[index]
+        allowed: MessageSyntax.isAlpha(octet) || (octet == 95)
+        if(index > start) {
+            allowed = allowed || MessageSyntax.isDigit(octet)
+        }
+        valid = allowed
+        index = index + 1
+    }
+    valid
+}
+
+// Answers the frozen segment descriptors [{literal, name}] of a route path
+// beginning with "/", or null when it is malformed. A literal segment is
+// pchar text (no "{" or "}") and is empty only as the last segment; a
+// capture is exactly "{" identifier "}". Capture names are distinct.
+compilePath: (bytes) => {
+    size: bytes.size()
+    segments: []
+    names: []
+    valid: true
+    segmentStart: 1
+    scanning: true
+    while(valid && scanning) {
+        slash: MessageSyntax.indexOf(bytes, segmentStart, size, 47)
+        segmentEnd: size
+        if(slash >= 0) {
+            segmentEnd = slash
+        } else {
+            scanning = false
+        }
+        segment: null
+        if((segmentEnd > segmentStart) && (bytes[segmentStart] == 123)) {
+            valid = (bytes[segmentEnd - 1] == 125) && isIdentifier(bytes, segmentStart + 1, segmentEnd - 1)
+            if(valid) {
+                name: Encoding.Latin1.decode(MessageSyntax.copyRange(bytes, segmentStart + 1, segmentEnd - 1))
+                names.each((other) => {
+                    if(other == name) {
+                        valid = false
+                    }
+                })
+                names = Array(...names, name)
+                segment = {
+                    literal: null
+                    name: name
+                }
+            }
+        } else {
+            if(segmentEnd == segmentStart) {
+                valid = !scanning
+            } else {
+                valid = MessageSyntax.isComponent(bytes, segmentStart, segmentEnd, true, true, false)
+            }
+            if(valid) {
+                segment = {
+                    literal: Encoding.Latin1.decode(MessageSyntax.copyRange(bytes, segmentStart, segmentEnd))
+                    name: null
+                }
+            }
+        }
+        if(valid) {
+            segments = Array(...segments, segment.freeze())
+            segmentStart = segmentEnd + 1
+        }
+    }
+    answer: null
+    if(valid) {
+        answer = segments.freeze()
+    }
+    answer
+}
+
+// Validates and snapshots one route entry into a frozen {method, asterisk,
+// segments, handle, order}, or answers null.
+compileEntry: (facility, entry, order) => {
+    valid: facility.ordinaryObject(entry)
+    if(valid) {
+        names: entry.slotNames()
+        entrySlots.each((slotName) => {
+            present: false
+            names.each((name) => {
+                if(name == slotName) {
+                    present = true
+                }
+            })
+            if(!present) {
+                valid = false
+            }
+        })
+    }
+    method: null
+    path: null
+    handle: null
+    if(valid) {
+        method = entry.slotValue("method")
+        path = entry.slotValue("path")
+        handle = entry.slotValue("handle")
+        valid = String.recognizes(method) && String.recognizes(path) && facility.provides(handle, "call")
+    }
+    if(valid) {
+        methodBytes: Encoding.UTF8.encode(method)
+        valid = MessageSyntax.isToken(methodBytes, 0, methodBytes.size())
+    }
+    compiled: null
+    if(valid) {
+        pathBytes: Encoding.UTF8.encode(path)
+        asterisk: false
+        segments: null
+        if(path == "*") {
+            asterisk = true
+            valid = method == "OPTIONS"
+            segments = [].freeze()
+        } else {
+            valid = (pathBytes.size() > 0) && (pathBytes[0] == 47)
+            if(valid) {
+                segments = compilePath(pathBytes)
+                valid = segments !== null
+            }
+        }
+        if(valid) {
+            compiled = {
+                method: method
+                asterisk: asterisk
+                segments: segments
+                handle: handle
+                order: order
+            }
+            compiled.freeze()
+        }
+    }
+    compiled
+}
+
+// Compares two same-method routes: "disjoint" when no target matches both,
+// "duplicate" when they match exactly the same targets, "crossing" when they
+// overlap without a most-specific one, and otherwise "ordered".
+relation: (first, second) => {
+    answer: "ordered"
+    if(first.asterisk || second.asterisk) {
+        answer = "disjoint"
+        if(first.asterisk && second.asterisk) {
+            answer = "duplicate"
+        }
+    } else {
+        if(first.segments.size() != second.segments.size()) {
+            answer = "disjoint"
+        } else {
+            firstMore: false
+            secondMore: false
+            disjoint: false
+            index: 0
+            while(index < first.segments.size()) {
+                a: first.segments[index]
+                b: second.segments[index]
+                if((a.literal !== null) && (b.literal !== null)) {
+                    if(a.literal != b.literal) {
+                        disjoint = true
+                    }
+                }
+                // A capture never matches an empty segment.
+                if((a.literal !== null) && (b.literal === null)) {
+                    if(a.literal == "") {
+                        disjoint = true
+                    } else {
+                        firstMore = true
+                    }
+                }
+                if((a.literal === null) && (b.literal !== null)) {
+                    if(b.literal == "") {
+                        disjoint = true
+                    } else {
+                        secondMore = true
+                    }
+                }
+                index = index + 1
+            }
+            if(disjoint) {
+                answer = "disjoint"
+            } else {
+                if(firstMore && secondMore) {
+                    answer = "crossing"
+                }
+                if(!firstMore && !secondMore) {
+                    answer = "duplicate"
+                }
+            }
+        }
+    }
+    answer
+}
+
+/// Validates and snapshots routes (HTTP.md §17.2, §17.5) and answers a frozen
+/// table, or null when routes is not an Array of admissible entries or two
+/// routes of the same method are duplicate or crossing. facility is the
+/// private asynchronous bridge of std:http/Router, used only for its
+/// read-only representation probes.
+compile: (facility, routes) => {
+    valid: Array.recognizes(routes)
+    compiled: []
+    if(valid) {
+        Array(...routes).each((entry) => {
+            if(valid) {
+                route: compileEntry(facility, entry, compiled.size())
+                if(route === null) {
+                    valid = false
+                } else {
+                    compiled.each((earlier) => {
+                        if(earlier.method == route.method) {
+                            kind: relation(earlier, route)
+                            if((kind == "duplicate") || (kind == "crossing")) {
+                                valid = false
+                            }
+                        }
+                    })
+                    compiled = Array(...compiled, route)
+                }
+            }
+        })
+    }
+    table: null
+    if(valid) {
+        table = compiled.freeze()
+    }
+    table
+}
+
+// Answers whether route matches the split target.
+matches: (route, split) => {
+    found: route.asterisk == split.asterisk
+    if(found && !route.asterisk) {
+        found = route.segments.size() == split.segments.size()
+        index: 0
+        while(found && (index < route.segments.size())) {
+            pattern: route.segments[index]
+            actual: split.segments[index]
+            if(pattern.literal === null) {
+                found = actual != ""
+            } else {
+                found = pattern.literal == actual
+            }
+            index = index + 1
+        }
+    }
+    found
+}
+
+// Whether first is strictly more specific than second; both match the same
+// target, so compilation guaranteed that they are ordered.
+moreSpecific: (first, second) => {
+    more: false
+    decided: false
+    index: 0
+    while(!decided && (index < first.segments.size())) {
+        a: first.segments[index]
+        b: second.segments[index]
+        if((a.literal !== null) && (b.literal === null)) {
+            more = true
+            decided = true
+        }
+        if((a.literal === null) && (b.literal !== null)) {
+            decided = true
+        }
+        index = index + 1
+    }
+    more
+}
+
+/// Dispatches one request method and target (Bytes) against table and answers
+/// a frozen {kind, route, params, query, allow}. kind is "match" (route is the
+/// most specific matching route of the effective method, params a fresh Map
+/// of raw capture spellings, query the raw query or null), "methodNotAllowed"
+/// (allow is the Allow field value) or "notFound".
+dispatch: (table, method, target) => {
+    split: RouteTarget.split(target)
+    pathMatches: []
+    if(split !== null) {
+        table.each((route) => {
+            if(matches(route, split)) {
+                pathMatches = Array(...pathMatches, route)
+            }
+        })
+    }
+
+    best: (candidateMethod) => {
+        chosen: null
+        pathMatches.each((route) => {
+            if(route.method == candidateMethod) {
+                if((chosen === null) || moreSpecific(route, chosen)) {
+                    chosen = route
+                }
+            }
+        })
+        chosen
+    }
+
+    kind: "notFound"
+    selected: null
+    params: null
+    query: null
+    allow: null
+    if(pathMatches.size() > 0) {
+        selected = best(method)
+        // An explicit HEAD route wins; otherwise GET also serves HEAD.
+        if((selected === null) && (method == "HEAD")) {
+            selected = best("GET")
+        }
+        if(selected === null) {
+            kind = "methodNotAllowed"
+            methods: []
+            add: (name) => {
+                present: false
+                methods.each((other) => {
+                    if(other == name) {
+                        present = true
+                    }
+                })
+                if(!present) {
+                    methods = Array(...methods, name)
+                }
+            }
+            pathMatches.each((route) => {
+                add(route.method)
+                if(route.method == "GET") {
+                    add("HEAD")
+                }
+            })
+            allow = ""
+            methods.each((name) => {
+                if(allow != "") {
+                    allow = allow + ", "
+                }
+                allow = allow + name
+            })
+        } else {
+            kind = "match"
+            params = Map()
+            index: 0
+            while(index < selected.segments.size()) {
+                pattern: selected.segments[index]
+                if(pattern.literal === null) {
+                    params[pattern.name] = split.segments[index]
+                }
+                index = index + 1
+            }
+            query = split.query
+        }
+    }
+    result: {
+        kind: kind
+        route: selected
+        params: params
+        query: query
+        allow: allow
+    }
+    result
+}

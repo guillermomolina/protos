@@ -88,6 +88,13 @@ import java.util.List;
  * server session does; every client rule lives in {@code lib/http/Client.protos} and {@code
  * lib/http/internal/Client*.protos}.
  *
+ * <p>LIB026 (D222-C, HTTP.md §17-§18): the same facility, with no additional operation, is also
+ * a deferred member of {@code std:http/Router}, which uses only {@code ordinaryObject} and {@code
+ * provides}, and of {@code std:http/UrlClient}, which uses {@code failed}, the probes, {@code
+ * startService} and {@code enterService} for its one outer service Task. Every routing and URL
+ * rule lives in {@code lib/http/Router.protos}, {@code lib/http/UrlClient.protos} and their
+ * {@code lib/http/internal} helpers; network, resolution and TLS stay with their own facilities.
+ *
  * <p>I130-B (D220–S12): the operations are package-visible so that {@link
  * ProtosTlsBackendFacility} publishes the same eight operations to {@code std:tls/Client} without
  * a second implementation; the HTTP facility surface is unchanged.
@@ -99,6 +106,10 @@ public final class ProtosHttpAsyncFacility {
             new ProtosModuleKey("std:http/internal/HostWorker");
     public static final ProtosModuleKey CLIENT_MODULE_KEY =
             new ProtosModuleKey("std:http/Client");
+    public static final ProtosModuleKey ROUTER_MODULE_KEY =
+            new ProtosModuleKey("std:http/Router");
+    public static final ProtosModuleKey URL_CLIENT_MODULE_KEY =
+            new ProtosModuleKey("std:http/UrlClient");
     public static final String BOOTSTRAP_SLOT = "_httpAsyncFacility";
 
     private ProtosHttpAsyncFacility() {}

@@ -1,0 +1,115 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal request-target splitter of std:http/Router (D222-C, HTTP.md
+//! §17.4). This module is an unpublished implementation artifact, not an
+//! approved Standard Library API. It is pure: it reads only the target octets
+//! it is given, never the request or its body, and answers fresh values.
+//! Nothing is percent-decoded, normalized, or rewritten.
+
+MessageSyntax: import("std:http/internal/MessageSyntax")
+
+// Raw segments of the absolute path [start, end), which begins with "/":
+// each segment is the Latin1 projection of the octets between two "/".
+// "/" answers [""] and a trailing "/" answers a final "".
+segmentsOf: (bytes, start, end) => {
+    segments: []
+    segmentStart: start + 1
+    scanning: true
+    while(scanning) {
+        slash: MessageSyntax.indexOf(bytes, segmentStart, end, 47)
+        segmentEnd: end
+        if(slash >= 0) {
+            segmentEnd = slash
+        }
+        segments = Array(...segments, Encoding.Latin1.decode(MessageSyntax.copyRange(bytes, segmentStart, segmentEnd)))
+        if(slash >= 0) {
+            segmentStart = slash + 1
+        } else {
+            scanning = false
+        }
+    }
+    segments
+}
+
+/// Splits one request-target (Bytes) into a frozen {asterisk, segments,
+/// query}. asterisk is true only for the asterisk-form "*", which has no
+/// segments and a null query. For origin-form and absolute-form, segments are
+/// the raw path segments (an absolute-form target without a path routes as
+/// "/"), and query is the raw query String after the first "?", "" when the
+/// "?" is present without a query, or null when it is absent. Answers null
+/// when target is not one of the three forms (HTTP.md §7.1) or its path is not
+/// an absolute path.
+split: (target) => {
+    size: target.size()
+    answer: null
+    valid: (size > 0) && MessageSyntax.isTargetOctets(target, 0, size)
+    if(valid && (size == 1) && (target[0] == 42)) {
+        answer = {
+            asterisk: true
+            segments: []
+            query: null
+        }
+        valid = false
+    }
+    pathStart: 0
+    hierEnd: size
+    if(valid) {
+        question: MessageSyntax.indexOf(target, 0, size, 63)
+        if(question >= 0) {
+            hierEnd = question
+        }
+        if(target[0] == 47) {
+            valid = MessageSyntax.isOriginForm(target, 0, size)
+        } else {
+            valid = MessageSyntax.isAbsoluteForm(target, 0, size)
+            if(valid) {
+                // The scheme ends at the first ":"; an authority follows "//".
+                pathStart = MessageSyntax.indexOf(target, 0, hierEnd, 58) + 1
+                if(((hierEnd - pathStart) >= 2) && (target[pathStart] == 47) && (target[pathStart + 1] == 47)) {
+                    pathStart = MessageSyntax.indexOf(target, pathStart + 2, hierEnd, 47)
+                    if(pathStart < 0) {
+                        pathStart = hierEnd
+                    }
+                }
+            }
+        }
+    }
+    if(valid) {
+        segments: [""]
+        if(pathStart < hierEnd) {
+            // A rootless path (for example "urn:x") is not routable.
+            valid = target[pathStart] == 47
+            if(valid) {
+                segments = segmentsOf(target, pathStart, hierEnd)
+            }
+        }
+        if(valid) {
+            query: null
+            if(hierEnd < size) {
+                query = Encoding.Latin1.decode(MessageSyntax.copyRange(target, hierEnd + 1, size))
+            }
+            answer = {
+                asterisk: false
+                segments: segments.freeze()
+                query: query
+            }
+        }
+    }
+    if(answer !== null) {
+        answer.freeze()
+    }
+    answer
+}

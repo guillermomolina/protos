@@ -1,0 +1,105 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Standard Library authority-free HTTP request router (D222-C, HTTP.md §17).
+//!
+//! `Router.compile(routes)` validates and snapshots an Array of route entries
+//! `{method, path, handle}` and answers an ordinary one-argument handler
+//! suitable for `std:http/Server` and `std:http/Host`. For a request whose
+//! method and raw target select a route, the handler answers
+//! `route.handle(request, match)` with the unchanged request and a fresh
+//! `{params, query}`; otherwise it answers a bodiless 404 or a 405 carrying
+//! `Allow`. A path is literal ASCII segments and whole-segment `{name}`
+//! captures; literal segments are more specific than captures, and duplicate
+//! or crossing routes of one method are rejected at compilation.
+//!
+//! The Router acquires no authority, reads no request body, decodes no
+//! percent escape, creates no Task or Actor, and installs no global state.
+
+/// The request router.
+Router: ((facility) => {
+    RouteTable: import("std:http/internal/RouteTable")
+
+    compile: (routes) => {
+        // HTTP.md §17.2: the table is a snapshot; later mutation of routes or
+        // of its entries never changes dispatch.
+        table: RouteTable.compile(facility, routes)
+        if(table === null) {
+            Error().signal()
+        }
+
+        handler: (request) => {
+            valid: facility.ordinaryObject(request)
+            method: null
+            target: null
+            if(valid) {
+                names: request.slotNames()
+                hasMethod: false
+                hasTarget: false
+                names.each((name) => {
+                    if(name == "method") {
+                        hasMethod = true
+                    }
+                    if(name == "target") {
+                        hasTarget = true
+                    }
+                })
+                valid = hasMethod && hasTarget
+            }
+            if(valid) {
+                method = request.slotValue("method")
+                target = request.slotValue("target")
+                valid = String.recognizes(method) && facility.isBytes(target)
+            }
+            if(!valid) {
+                Error().signal()
+            }
+            result: RouteTable.dispatch(table, method, target)
+            answer: null
+            if(result.kind == "match") {
+                match: {
+                    params: result.params
+                    query: result.query
+                }
+                answer = result.route.handle(request, match)
+            } else {
+                if(result.kind == "methodNotAllowed") {
+                    answer = {
+                        status: 405
+                        headers: [["Allow", Encoding.Latin1.encode(result.allow)]]
+                        body: null
+                    }
+                } else {
+                    answer = {
+                        status: 404
+                        headers: []
+                        body: null
+                    }
+                }
+            }
+            answer
+        }
+        handler
+    }
+
+    router: {
+        compile: compile
+    }
+    router
+})(_httpAsyncFacility)
+
+// The runtime-provisioned facility is captured privately above; it is not
+// module surface.
+context.removeSlot("_httpAsyncFacility")

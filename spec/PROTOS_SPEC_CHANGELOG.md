@@ -23,6 +23,29 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.482] - 2026-10-30
+
+### D222-C — HTTP Router and explicit-authority URL client (LIB026)
+- `spec/io/HTTP.md` §17 (new): `std:http/Router` exporting only
+  `Router.compile(routes)`.
+  - Route table admission and snapshot. Literal and whole-segment capture
+    paths, plus `"*"` for `OPTIONS` only.
+  - Compile-time rejection of duplicate and crossing routes of one method.
+  - Byte-exact request-target projection for origin, absolute and asterisk
+    forms, without percent decoding.
+  - Literal-over-capture specificity and explicit `HEAD` over the `GET`
+    fallback. Automatic 404 and 405 with `Allow`.
+  - The `{params, query}` match shape.
+- `spec/io/HTTP.md` §18 (new): `std:http/UrlClient` exporting only
+  `UrlClient.requestOne(authorities, url, request, limits)`.
+  - URL admission through `std:uri`, and the `Host` and origin-form target
+    construction.
+  - Explicit `Resolver`, `Network` and trust use, with ordered single-attempt
+    TCP candidates.
+  - Owning TLS and HTTP composition, with the URL host as reference identity.
+  - Custody and cleanup, and the buffered `{status, headers, body}` response.
+- The introduction lists the two modules. §§1–16 are unchanged.
+
 ## [0.1.481] - 2026-10-30
 
 ### D225-A — Explicit HTTP Host Worker factory (I133)

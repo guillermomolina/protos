@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.423-SNAPSHOT
+
+- `LIB026` (#996, D222-C): optional `std:http/Router` and `std:http/UrlClient`
+  modules (spec 0.1.482).
+  - `Router.compile(routes)` validates and snapshots `{method, path, handle}`
+    routes and answers an ordinary Server/Host handler. Paths are literal
+    segments and whole-segment `{name}` captures. Literal segments beat
+    captures; duplicate or crossing routes of one method fail at compilation.
+    Matched routes receive `handle(request, {params, query})`, with raw,
+    undecoded segment text and the raw query. Unmatched paths answer 404 and
+    other methods 405 with `Allow`. `GET` serves `HEAD` unless an explicit
+    `HEAD` route exists. The Router reads no body and holds no authority.
+  - `UrlClient.requestOne(authorities, url, request, limits)` sends one HTTP
+    or HTTPS request to an absolute URL parsed by `std:uri`, using only the
+    explicit `network`, `resolver` (host names only) and TLS `trust`
+    (`https` only). It injects `Host` from the URL, tries the resolved
+    addresses in order with one TCP connect each, keeps the URL host as the
+    TLS reference identity, and composes the owning `std:tls/Client` and
+    `std:http/Client` operations. The response is buffered into detached
+    `Bytes` inside the exchange callback. It never redirects, retries or
+    pools. Invalid calls fail with `InvalidIOArgument` before any lookup or
+    connection, and every acquired resource is closed exactly once.
+  - Protos-first: the modules and their `internal/Route*` and `internal/Url*`
+    helpers are Protos source. The only runtime change registers the existing
+    private `_httpAsyncFacility` for the two new modules.
+
 ## 0.3.422-SNAPSHOT
 
 - `I133` (#995, D225-A): explicit Worker-local handler factory for

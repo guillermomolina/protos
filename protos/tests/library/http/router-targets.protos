@@ -1,0 +1,146 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+http: import("std:http/Router")
+RouteTarget: import("std:http/internal/RouteTarget")
+
+ascii: (text) => {
+    Encoding.Latin1.encode(text)
+}
+
+requestOf: (method, target) => {
+    request: {
+        method: method
+        target: target
+        version: "1.1"
+        headers: []
+        body: null
+    }
+    request
+}
+
+capture: (path) => {
+    entry: {
+        method: "GET"
+        path: path
+        handle: (request, match) => {
+            match
+        }
+    }
+    entry
+}
+
+sameSegments: (actual, expected) => {
+    same: actual.size() == expected.size()
+    index: 0
+    while(same && (index < expected.size())) {
+        same = actual[index] == expected[index]
+        index = index + 1
+    }
+    same
+}
+
+tests: [
+    Test("origin-form splits raw segments and query", () => {
+        split: RouteTarget.split(ascii("/a/b?x=1"))
+        Assertions.require(!split.asterisk)
+        Assertions.require(sameSegments(split.segments, ["a", "b"]))
+        Assertions.require(split.query == "x=1")
+        Assertions.require(sameSegments(RouteTarget.split(ascii("/")).segments, [""]))
+        Assertions.require(sameSegments(RouteTarget.split(ascii("/a/")).segments, ["a", ""]))
+    }),
+    Test("a missing query is null and an empty query is empty", () => {
+        Assertions.require(RouteTarget.split(ascii("/a")).query === null)
+        Assertions.require(RouteTarget.split(ascii("/a?")).query == "")
+        Assertions.require(RouteTarget.split(ascii("/a?b=1&b=2")).query == "b=1&b=2")
+        Assertions.require(RouteTarget.split(ascii("/a?b?c")).query == "b?c")
+    }),
+    Test("absolute-form routes by its path", () => {
+        split: RouteTarget.split(ascii("http://example.org:8080/a/b?q"))
+        Assertions.require(sameSegments(split.segments, ["a", "b"]))
+        Assertions.require(split.query == "q")
+        empty: RouteTarget.split(ascii("http://example.org"))
+        Assertions.require(sameSegments(empty.segments, [""]))
+        Assertions.require(empty.query === null)
+        emptyWithQuery: RouteTarget.split(ascii("http://example.org?x"))
+        Assertions.require(sameSegments(emptyWithQuery.segments, [""]))
+        Assertions.require(emptyWithQuery.query == "x")
+    }),
+    Test("asterisk-form is distinguished", () => {
+        split: RouteTarget.split(ascii("*"))
+        Assertions.require(split.asterisk)
+        Assertions.require(split.segments.size() == 0)
+        Assertions.require(split.query === null)
+    }),
+    Test("invalid targets are not routable", () => {
+        Assertions.require(RouteTarget.split(ascii("")) === null)
+        Assertions.require(RouteTarget.split(ascii("a/b")) === null)
+        Assertions.require(RouteTarget.split(ascii("/a#f")) === null)
+        Assertions.require(RouteTarget.split(ascii("/a b")) === null)
+        Assertions.require(RouteTarget.split(ascii("/%zz")) === null)
+        Assertions.require(RouteTarget.split(ascii("urn:x")) === null)
+        handler: http.Router.compile([capture("/{x}")])
+        Assertions.require(handler(requestOf("GET", ascii("/a#f"))).status == 404)
+        Assertions.require(handler(requestOf("GET", ascii("**"))).status == 404)
+    }),
+    Test("escaped separators stay inside one raw segment", () => {
+        handler: http.Router.compile([capture("/files/{name}")])
+        match: handler(requestOf("GET", ascii("/files/a%2Fb")))
+        Assertions.require(match.params["name"] == "a%2Fb")
+        Assertions.require(handler(requestOf("GET", ascii("/files/a/b"))).status == 404)
+        Assertions.require(handler(requestOf("GET", ascii("/files/a%252Fb"))).params["name"] == "a%252Fb")
+        Assertions.require(handler(requestOf("GET", ascii("/files/a%3Fb?c"))).params["name"] == "a%3Fb")
+    }),
+    Test("dot segments and escaped dots are literal text", () => {
+        handler: http.Router.compile([capture("/a/{x}/{y}")])
+        dots: handler(requestOf("GET", ascii("/a/../b")))
+        Assertions.require(dots.params["x"] == "..")
+        Assertions.require(dots.params["y"] == "b")
+        Assertions.require(handler(requestOf("GET", ascii("/a/%2E/b"))).params["x"] == "%2E")
+        Assertions.require(handler(requestOf("GET", ascii("/b/../a/x"))).status == 404)
+    }),
+    Test("percent escapes and non-ASCII spellings are never decoded", () => {
+        handler: http.Router.compile([capture("/{x}")])
+        Assertions.require(handler(requestOf("GET", ascii("/caf%C3%A9"))).params["x"] == "caf%C3%A9")
+        literal: http.Router.compile([capture("/caf%C3%A9")])
+        Assertions.require(literal(requestOf("GET", ascii("/caf%C3%A9"))).params.size() == 0)
+        Assertions.require(literal(requestOf("GET", ascii("/caf%c3%a9"))).status == 404)
+    }),
+    Test("the request target is read but never changed", () => {
+        target: ascii("/files/a%2Fb?x")
+        request: requestOf("GET", target)
+        http.Router.compile([capture("/files/{name}")])(request)
+        Assertions.require(request.target === target)
+        Assertions.require(Encoding.Latin1.decode(target) == "/files/a%2Fb?x")
+    }),
+    Test("malformed route patterns are rejected", () => {
+        Assertions.signals(Error, () => { http.Router.compile([capture("/a//b")]) })
+        Assertions.signals(Error, () => { http.Router.compile([capture("/{}")]) })
+        Assertions.signals(Error, () => { http.Router.compile([capture("/{1x}")]) })
+        Assertions.signals(Error, () => { http.Router.compile([capture("/x{y}")]) })
+        Assertions.signals(Error, () => { http.Router.compile([capture("/{y}x")]) })
+        Assertions.signals(Error, () => { http.Router.compile([capture("/{a}/{a}")]) })
+        Assertions.signals(Error, () => { http.Router.compile([capture("/a b")]) })
+        Assertions.signals(Error, () => { http.Router.compile([capture("/%zz")]) })
+        Assertions.signals(Error, () => { http.Router.compile([capture("/a?b")]) })
+    }),
+    Test("a request without Bytes target is rejected", () => {
+        handler: http.Router.compile([capture("/")])
+        Assertions.signals(Error, () => { handler(requestOf("GET", "/")) })
+        Assertions.signals(Error, () => { handler(requestOf(1, ascii("/"))) })
+    })
+]

@@ -1,0 +1,226 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal service body of std:http/UrlClient (D222-C, HTTP.md §18.4-§18.6).
+//! This module is an unpublished implementation artifact, not an approved
+//! Standard Library API. One admitted request runs in its one service Task:
+//! the explicit Resolver lookup of a host name, the ordered TCP attempts
+//! through the explicit Network, the owning std:tls/Client handshake for
+//! https, the owning std:http/Client exchange, and the buffering of the
+//! response inside the exchange callback. It owns no authority beyond the
+//! capabilities it is given and never retries after a TCP connection exists.
+
+MessageSyntax: import("std:http/internal/MessageSyntax")
+IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+HttpClient: import("std:http/Client").Client
+TlsClient: import("std:tls/Client").Client
+
+/// Answers the zero-argument service body of one admitted request, to be run
+/// as its one service Task. prepared is the UrlRequest.prepare snapshot whose
+/// request ClientHead already admitted; limits is the ClientLimits.capture
+/// snapshot, handed unchanged to the lower Client. The body answers the
+/// buffered response {status, headers, body}.
+serviceBody: (facility, prepared, limits) => {
+    // The resource whose close this session still owes; null while an owning
+    // lower operation has custody of it (HTTP.md §18.5).
+    owned: null
+
+    // Awaits a pending Future; a cancellation delivered meanwhile still waits
+    // for its completion as cleanup of that cancellation unwind.
+    awaitThroughCancellation: (future) => {
+        observed: false
+        (() => {
+            Error.handle(
+                () => {
+                    future.value()
+                },
+                (error) => {
+                    observed = true
+                    error.signal()
+                }
+            )
+        }).ensure(() => {
+            if(!observed) {
+                future.value()
+            }
+        })
+    }
+
+    closeOwned: () => {
+        resource: owned
+        owned = null
+        if(resource !== null) {
+            awaitThroughCancellation(resource.close())
+        }
+    }
+
+    // Awaits one stage Future. When the wait is abandoned by a cancellation of
+    // this service, the stage is cancelled and awaited, so its own cleanup
+    // completes first, and a resource it delivered nevertheless (acquiring)
+    // is closed rather than leaked.
+    awaitStage: (pending, acquiring) => {
+        result: null
+        settled: false
+        (() => {
+            Error.handle(
+                () => {
+                    result = pending.value()
+                },
+                (error) => {
+                    if(error.parent() !== Cancelled) {
+                        settled = true
+                    }
+                    error.signal()
+                }
+            )
+            settled = true
+        }).ensure(() => {
+            if(!settled) {
+                pending.cancel()
+                late: null
+                Error.handle(
+                    () => {
+                        late = pending.value()
+                    },
+                    (error) => {
+                        error
+                    }
+                )
+                if(acquiring && (late !== null)) {
+                    awaitThroughCancellation(late.close())
+                }
+            }
+        })
+        result
+    }
+
+    // Awaits an owning lower operation that received lower at admission. A
+    // rejected admission (InvalidIOArgument) never took custody (TLS.md §2.1,
+    // HTTP.md §16.2), so the session owes the close of lower again.
+    awaitOwning: (pending, lower, acquiring) => {
+        result: null
+        Error.handle(
+            () => {
+                result = awaitStage(pending, acquiring)
+            },
+            (error) => {
+                if(error.parent() === InvalidIOArgument) {
+                    owned = lower
+                }
+                error.signal()
+            }
+        )
+        result
+    }
+
+    // One TCP attempt per candidate, in order, until the first connection. A
+    // cancellation is never treated as a connect failure; when every attempt
+    // fails, the last observed failure is signaled unchanged.
+    connectFirst: (candidates) => {
+        connection: null
+        failure: null
+        index: 0
+        while((connection === null) && (index < candidates.size())) {
+            endpoint: IpEndpoint(candidates[index], prepared.port)
+            Error.handle(
+                () => {
+                    connection = awaitStage(prepared.network.connectTcp(endpoint), true)
+                },
+                (error) => {
+                    if(error.parent() === Cancelled) {
+                        error.signal()
+                    }
+                    failure = error
+                    error
+                }
+            )
+            index = index + 1
+        }
+        if(connection === null) {
+            failure.signal()
+        }
+        connection
+    }
+
+    // Runs inside the lower exchange callback, while response.body is live:
+    // every header value and every decoded body octet is copied. The lower
+    // Client bounds the decoded body by limits.maxResponseBodyBytes.
+    onResponse: (response) => {
+        headers: []
+        response.headers.each((pair) => {
+            headers = Array(...headers, [pair[0], MessageSyntax.copyRange(pair[1], 0, pair[1].size())])
+        })
+        body: Encoding.UTF8.encode("")
+        done: false
+        while(!done) {
+            chunk: response.body.read(limits.ioChunkBytes).value()
+            if(chunk === null) {
+                done = true
+            } else {
+                chunk.each((octet) => {
+                    body.add(octet)
+                })
+            }
+        }
+        buffered: {
+            status: response.status
+            headers: headers
+            body: body
+        }
+        buffered
+    }
+
+    process: () => {
+        candidates: [prepared.address]
+        if(prepared.address === null) {
+            candidates = awaitStage(prepared.resolver.lookupAddresses(prepared.name), false)
+        }
+        owned = connectFirst(candidates)
+
+        duplex: owned
+        if(prepared.secure) {
+            // The reference identity is the URL host, never a resolved address.
+            reference: prepared.name
+            if(prepared.address !== null) {
+                reference = prepared.address
+            }
+            tcp: owned
+            handshake: TlsClient.handshake.owning(tcp, reference, prepared.trust, {})
+            owned = null
+            duplex = awaitOwning(handshake, tcp, true)
+            owned = duplex
+        }
+
+        lower: owned
+        pending: HttpClient.exchangeOne.owning(lower, prepared.request, onResponse, limits)
+        owned = null
+        awaitOwning(pending, lower, false)
+    }
+
+    run: () => {
+        answer: null
+        (() => {
+            // First instruction: a cancellation requested before the service
+            // started unwinds from here, through the cleanup below.
+            facility.enterService()
+            answer = process()
+        }).ensure(() => {
+            closeOwned()
+        })
+        answer
+    }
+
+    run
+}

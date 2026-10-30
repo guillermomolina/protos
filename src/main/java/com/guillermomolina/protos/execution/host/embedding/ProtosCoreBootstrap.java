@@ -606,6 +606,15 @@ public final class ProtosCoreBootstrap {
                 Map.of(
                         ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
                         ProtosHttpAsyncFacility::createFacility),
+                // LIB026: the same private bridge for std:http/Router and std:http/UrlClient.
+                ProtosHttpAsyncFacility.ROUTER_MODULE_KEY,
+                Map.of(
+                        ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
+                        ProtosHttpAsyncFacility::createFacility),
+                ProtosHttpAsyncFacility.URL_CLIENT_MODULE_KEY,
+                Map.of(
+                        ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
+                        ProtosHttpAsyncFacility::createFacility),
                 // I130-B: the private TLS backend bridge of std:tls/Client.
                 ProtosTlsBackendFacility.MODULE_KEY,
                 Map.of(

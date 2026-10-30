@@ -1,0 +1,74 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Standard Library one-shot HTTP/1.1 URL client (D222-C, HTTP.md §18).
+//!
+//! `UrlClient.requestOne(authorities, url, request, limits)` sends one request
+//! to an absolute `http` or `https` URL and answers a fresh `Future` of the
+//! buffered response `{status, headers, body}`, whose `body` is detached
+//! Bytes. `authorities` is `{network, resolver, trust}`: the explicitly
+//! granted `Network` used for the TCP connection, the explicitly granted
+//! `Resolver` used only for a host name (it may be null for a numeric host),
+//! and the explicit `std:tls/Client` trust used only for `https`. `request` is
+//! `{method, headers, body}`; the `Host` field and the origin-form target come
+//! from the URL. `limits` are the `std:http/Client` limits.
+//!
+//! The UrlClient composes `std:network`, `std:tls/Client` and
+//! `std:http/Client`; it acquires no authority implicitly, has no default
+//! trust, and never follows redirects, retries, pools connections, stores
+//! cookies or decodes content. Any final status, including 3xx, 4xx and 5xx,
+//! is a successful response.
+
+/// The one-shot URL client.
+UrlClient: ((facility) => {
+    ClientLimits: import("std:http/internal/ClientLimits")
+    ClientHead: import("std:http/internal/ClientHead")
+    UrlRequest: import("std:http/internal/UrlRequest")
+    UrlSession: import("std:http/internal/UrlSession")
+
+    // HTTP.md §18.3: semantic validation and the complete snapshot precede
+    // every effect. An invalid call answers an already failed Future without
+    // a Task, a lookup or a connection; an admitted call creates exactly one
+    // service Task.
+    requestOne: (authorities, url, request, limits) => {
+        captured: ClientLimits.capture(facility, limits)
+        valid: captured !== null
+        prepared: null
+        if(valid) {
+            prepared = UrlRequest.prepare(facility, authorities, url, request)
+            valid = prepared !== null
+        }
+        if(valid) {
+            valid = ClientHead.prepareRequest(facility, prepared.request) !== null
+        }
+
+        answer: null
+        if(valid) {
+            answer = facility.startService(UrlSession.serviceBody(facility, prepared, captured))
+        } else {
+            answer = facility.failed(InvalidIOArgument {})
+        }
+        answer
+    }
+
+    client: {
+        requestOne: requestOne
+    }
+    client
+})(_httpAsyncFacility)
+
+// The runtime-provisioned facility is captured privately above; it is not
+// module surface.
+context.removeSlot("_httpAsyncFacility")

@@ -1,0 +1,430 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+http: import("std:http/UrlClient")
+IpAddresses: import("std:network/IpAddresses")
+IpEndpoints: import("std:network/IpEndpoints")
+
+// The suite holds no granted Network or Resolver. These Tests use structural
+// in-memory fixtures that satisfy the connectTcp and lookupAddresses
+// protocols, so URL admission, candidate order, Host and target encoding and
+// response buffering are observed without any live I/O.
+
+ascii: (text) => {
+    Encoding.Latin1.encode(text)
+}
+
+text: (bytes) => {
+    Encoding.Latin1.decode(bytes)
+}
+
+// A scripted duplex: reads answer the response text once, then null.
+duplexOf: (responseText) => {
+    pending: ascii(responseText)
+    output: ascii("")
+    closes: 0
+    fixture: null
+    fixture = {
+        read: (maxBytes) => {
+            result: null
+            if(pending.size() > 0) {
+                result = ascii("")
+                index: 0
+                while((index < pending.size()) && (index < maxBytes)) {
+                    result.add(pending[index])
+                    index = index + 1
+                }
+                rest: ascii("")
+                while(index < pending.size()) {
+                    rest.add(pending[index])
+                    index = index + 1
+                }
+                pending = rest
+            }
+            (() => { result }).future()
+        }
+        write: (bytes) => {
+            bytes.each((octet) => {
+                output.add(octet)
+            })
+            (() => { fixture }).future()
+        }
+        close: () => {
+            closes = closes + 1
+            (() => { null }).future()
+        }
+        written: () => {
+            text(output)
+        }
+        closeCount: () => {
+            closes
+        }
+    }
+    fixture
+}
+
+// A Network fixture answering each connectTcp with the next outcome: an Error
+// fails the attempt, anything else is the connection. Endpoints are recorded
+// as IpEndpoints.format text.
+networkOf: (outcomes) => {
+    attempts: []
+    fixture: {
+        connectTcp: (endpoint) => {
+            attempts = Array(...attempts, IpEndpoints.format(endpoint))
+            outcome: outcomes[attempts.size() - 1]
+            (() => {
+                if(outcome.parent() === IOError) {
+                    outcome.signal()
+                }
+                outcome
+            }).future()
+        }
+        attempts: () => {
+            attempts
+        }
+    }
+    fixture
+}
+
+resolverOf: (addressTexts) => {
+    names: []
+    fixture: {
+        lookupAddresses: (name) => {
+            names = Array(...names, name)
+            addresses: []
+            addressTexts.each((addressText) => {
+                addresses = Array(...addresses, IpAddresses.parse(addressText))
+            })
+            (() => { addresses.freeze() }).future()
+        }
+        names: () => {
+            names
+        }
+    }
+    fixture
+}
+
+authoritiesOf: (network, resolver, trust) => {
+    authorities: {
+        network: network
+        resolver: resolver
+        trust: trust
+    }
+    authorities
+}
+
+get: () => {
+    request: {
+        method: "GET"
+        headers: []
+        body: null
+    }
+    request
+}
+
+ok: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi"
+
+failureOf: (future) => {
+    caught: null
+    Error.handle(
+        () => {
+            future.value()
+        },
+        (error) => {
+            caught = error
+            error
+        }
+    )
+    caught
+}
+
+// Asserts that the call is inadmissible and performed no lookup or connect.
+rejects: (url, request, limits) => {
+    network: networkOf([])
+    resolver: resolverOf(["192.0.2.1"])
+    future: http.UrlClient.requestOne(authoritiesOf(network, resolver, null), url, request, limits)
+    Assertions.require(failureOf(future).parent() === InvalidIOArgument)
+    Assertions.require(network.attempts().size() == 0)
+    Assertions.require(resolver.names().size() == 0)
+}
+
+// Runs one admitted request against a single scripted connection.
+run: (url, request, responseText) => {
+    dx: duplexOf(responseText)
+    network: networkOf([dx])
+    resolver: resolverOf(["192.0.2.1"])
+    response: http.UrlClient.requestOne(authoritiesOf(network, resolver, null), url, request, null).value()
+    outcome: {
+        duplex: dx
+        network: network
+        resolver: resolver
+        response: response
+    }
+    outcome
+}
+
+head: (target, host) => {
+    "GET " + target + " HTTP/1.1\r\nHost: " + host + "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+}
+
+tests: [
+    Test("module exports exactly UrlClient with requestOne", () => {
+        Assertions.require(http.slotNames().size() == 1)
+        Assertions.require(http.hasSlot("UrlClient"))
+        Assertions.require(!http.hasSlot("_httpAsyncFacility"))
+        Assertions.require(http.UrlClient.slotNames().size() == 1)
+        Assertions.require(http.UrlClient.hasSlot("requestOne"))
+    }),
+    Test("UrlClient is not a Prelude binding and grants no authority", () => {
+        Assertions.signals(SlotNotFound, () => { UrlClient })
+        Assertions.require(!http.hasSlot("network"))
+        Assertions.require(!http.hasSlot("resolver"))
+    }),
+    Test("malformed and unsupported URLs are inadmissible", () => {
+        rejects("not a url", get(), null)
+        rejects("/relative", get(), null)
+        rejects("ftp://example.org/", get(), null)
+        rejects("http:/no-authority", get(), null)
+        rejects("http:///path", get(), null)
+        rejects("http://user@example.org/", get(), null)
+        rejects("http://example.org/#fragment", get(), null)
+        rejects("http://example.org:/", get(), null)
+        rejects("http://example.org:0/", get(), null)
+        rejects("http://example.org:65536/", get(), null)
+        rejects("http://example.org:123456/", get(), null)
+        rejects("http://[v1.x]/", get(), null)
+        rejects("http://exa%6Dple.org/", get(), null)
+        rejects("http://exa_mple.org/", get(), null)
+        rejects("http://example.org/a b", get(), null)
+        rejects("http://example.org/\r\n", get(), null)
+        rejects("http://example.org/%zz", get(), null)
+        rejects(1, get(), null)
+    }),
+    Test("a caller Host field is inadmissible", () => {
+        request: get()
+        request.headers = [["host", ascii("other.example")]]
+        rejects("http://example.org/", request, null)
+        request.headers = [["HOST", ascii("example.org")]]
+        rejects("http://example.org/", request, null)
+    }),
+    Test("malformed requests are inadmissible", () => {
+        rejects("http://example.org/", null, null)
+        rejects("http://example.org/", {
+            method: "GET"
+            headers: []
+        }, null)
+        rejects("http://example.org/", {
+            method: "G T"
+            headers: []
+            body: null
+        }, null)
+        rejects("http://example.org/", {
+            method: "CONNECT"
+            headers: []
+            body: null
+        }, null)
+        rejects("http://example.org/", {
+            method: "GET"
+            headers: [["X", "text"]]
+            body: null
+        }, null)
+        rejects("http://example.org/", {
+            method: "GET"
+            headers: [["X", ascii("a\r\nb")]]
+            body: null
+        }, null)
+        rejects("http://example.org/", {
+            method: "GET"
+            headers: [["Content-Length", ascii("0")]]
+            body: null
+        }, null)
+        rejects("http://example.org/", {
+            method: "GET"
+            headers: [["Connection", ascii("keep-alive")]]
+            body: null
+        }, null)
+        rejects("http://example.org/", {
+            method: "POST"
+            headers: []
+            body: "text"
+        }, null)
+    }),
+    Test("invalid limits are inadmissible", () => {
+        rejects("http://example.org/", get(), 5)
+        rejects("http://example.org/", get(), { maxResponseBodyBytes: 0 })
+        rejects("http://example.org/", get(), { unknownLimit: 1 })
+    }),
+    Test("authorities are checked before any effect", () => {
+        network: networkOf([])
+        resolver: resolverOf(["192.0.2.1"])
+        missing: http.UrlClient.requestOne({
+            network: network
+            resolver: resolver
+        }, "http://127.0.0.1/", get(), null)
+        Assertions.require(failureOf(missing).parent() === InvalidIOArgument)
+        noNetwork: http.UrlClient.requestOne(authoritiesOf(null, resolver, null), "http://127.0.0.1/", get(), null)
+        Assertions.require(failureOf(noNetwork).parent() === InvalidIOArgument)
+        // A host name needs an explicit Resolver; https needs explicit trust.
+        noResolver: http.UrlClient.requestOne(authoritiesOf(network, null, null), "http://example.org/", get(), null)
+        Assertions.require(failureOf(noResolver).parent() === InvalidIOArgument)
+        noTrust: http.UrlClient.requestOne(authoritiesOf(network, resolver, null), "https://127.0.0.1/", get(), null)
+        Assertions.require(failureOf(noTrust).parent() === InvalidIOArgument)
+        Assertions.require(network.attempts().size() == 0)
+        Assertions.require(resolver.names().size() == 0)
+    }),
+    Test("invalid calls answer fresh failed Futures", () => {
+        network: networkOf([])
+        first: http.UrlClient.requestOne(authoritiesOf(network, null, null), "ftp://x/", get(), null)
+        second: http.UrlClient.requestOne(authoritiesOf(network, null, null), "ftp://x/", get(), null)
+        Assertions.require(first !== second)
+        Assertions.require(failureOf(first) !== failureOf(second))
+    }),
+    Test("a numeric IPv4 host connects directly with Host and target", () => {
+        outcome: run("http://127.0.0.1:8080/a%2Fb?x=1&x=1", get(), ok)
+        Assertions.require(outcome.resolver.names().size() == 0)
+        Assertions.require(outcome.network.attempts().size() == 1)
+        Assertions.require(outcome.network.attempts()[0] == "127.0.0.1:8080")
+        Assertions.require(outcome.duplex.written() == head("/a%2Fb?x=1&x=1", "127.0.0.1:8080"))
+    }),
+    Test("a bracketed IPv6 host connects directly", () => {
+        outcome: run("http://[::1]/", get(), ok)
+        Assertions.require(outcome.resolver.names().size() == 0)
+        Assertions.require(outcome.network.attempts()[0] == "[::1]:80")
+        Assertions.require(outcome.duplex.written() == head("/", "[::1]"))
+    }),
+    Test("an empty path becomes / and an empty query is kept", () => {
+        Assertions.require(run("http://127.0.0.1", get(), ok).duplex.written() == head("/", "127.0.0.1"))
+        Assertions.require(run("http://127.0.0.1?", get(), ok).duplex.written() == head("/?", "127.0.0.1"))
+    }),
+    Test("an explicit default port stays in Host", () => {
+        outcome: run("http://127.0.0.1:80/", get(), ok)
+        Assertions.require(outcome.network.attempts()[0] == "127.0.0.1:80")
+        Assertions.require(outcome.duplex.written() == head("/", "127.0.0.1:80"))
+    }),
+    Test("a host name is looked up once and kept as the Host authority", () => {
+        outcome: run("http://Example.org:8081/x", get(), ok)
+        Assertions.require(outcome.resolver.names().size() == 1)
+        Assertions.require(outcome.resolver.names()[0] == "Example.org")
+        Assertions.require(outcome.network.attempts()[0] == "192.0.2.1:8081")
+        Assertions.require(outcome.duplex.written() == head("/x", "Example.org:8081"))
+    }),
+    Test("candidates are tried in order until the first connection", () => {
+        dx: duplexOf(ok)
+        network: networkOf([IOError {}, dx])
+        resolver: resolverOf(["192.0.2.1", "2001:db8::1", "192.0.2.3"])
+        response: http.UrlClient.requestOne(authoritiesOf(network, resolver, null), "http://example.org/", get(), null).value()
+        Assertions.require(response.status == 200)
+        Assertions.require(network.attempts().size() == 2)
+        Assertions.require(network.attempts()[0] == "192.0.2.1:80")
+        Assertions.require(network.attempts()[1] == "[2001:db8::1]:80")
+        Assertions.require(dx.closeCount() == 1)
+    }),
+    Test("when every candidate fails the last failure is preserved", () => {
+        last: IOError {}
+        network: networkOf([IOError {}, last])
+        resolver: resolverOf(["192.0.2.1", "192.0.2.2"])
+        failure: failureOf(http.UrlClient.requestOne(authoritiesOf(network, resolver, null), "http://example.org/", get(), null))
+        Assertions.require(failure === last)
+        Assertions.require(network.attempts().size() == 2)
+    }),
+    Test("caller fields follow the injected Host in order with their octets", () => {
+        request: {
+            method: "POST"
+            headers: [["Accept", ascii("*/*")], ["X-Bin", ascii("\u{FF}\u{80}")]]
+            body: ascii("abc")
+        }
+        outcome: run("http://127.0.0.1/p", request, ok)
+        expected: "POST /p HTTP/1.1\r\nHost: 127.0.0.1\r\nAccept: */*\r\nX-Bin: \u{FF}\u{80}\r\nContent-Length: 3\r\nConnection: close\r\n\r\nabc"
+        Assertions.require(outcome.duplex.written() == expected)
+    }),
+    Test("the request is snapshotted at admission", () => {
+        dx: duplexOf(ok)
+        network: networkOf([dx])
+        value: ascii("one")
+        request: {
+            method: "GET"
+            headers: [["X", value]]
+            body: null
+        }
+        future: http.UrlClient.requestOne(authoritiesOf(network, null, null), "http://127.0.0.1/", request, null)
+        value.add(33)
+        request.headers = []
+        future.value()
+        Assertions.require(dx.written() == "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nX: one\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+    }),
+    Test("the response is buffered into detached Bytes", () => {
+        outcome: run("http://127.0.0.1/", get(), "HTTP/1.1 200 OK\r\nSet-Cookie: a\r\nSet-Cookie: b\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nhi\r\n1\r\n\u{FF}\r\n0\r\n\r\n")
+        response: outcome.response
+        Assertions.require(response.slotNames().size() == 3)
+        Assertions.require(!response.hasSlot("version"))
+        Assertions.require(response.status == 200)
+        Assertions.require(text(response.body) == "hi\u{FF}")
+        Assertions.require(response.headers.size() == 3)
+        Assertions.require(response.headers[0][0] == "Set-Cookie")
+        Assertions.require(text(response.headers[0][1]) == "a")
+        Assertions.require(text(response.headers[1][1]) == "b")
+        Assertions.require(outcome.duplex.closeCount() == 1)
+    }),
+    Test("404 and redirects are answered unchanged", () => {
+        notFound: run("http://127.0.0.1/", get(), "HTTP/1.1 404 Not Found\r\nContent-Length: 2\r\n\r\nno").response
+        Assertions.require(notFound.status == 404)
+        Assertions.require(text(notFound.body) == "no")
+        redirect: run("http://127.0.0.1/", get(), "HTTP/1.1 302 Found\r\nLocation: /elsewhere\r\nContent-Length: 0\r\n\r\n")
+        Assertions.require(redirect.response.status == 302)
+        Assertions.require(text(redirect.response.headers[0][1]) == "/elsewhere")
+        Assertions.require(redirect.network.attempts().size() == 1)
+    }),
+    Test("a HEAD response has an empty body", () => {
+        request: {
+            method: "HEAD"
+            headers: []
+            body: null
+        }
+        response: run("http://127.0.0.1/", request, "HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\n").response
+        Assertions.require(response.body.size() == 0)
+    }),
+    Test("a response protocol failure closes the connection once", () => {
+        dx: duplexOf("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nab")
+        network: networkOf([dx])
+        failure: failureOf(http.UrlClient.requestOne(authoritiesOf(network, null, null), "http://127.0.0.1/", get(), null))
+        Assertions.require(failure.kind == "malformedResponse")
+        Assertions.require(dx.closeCount() == 1)
+    }),
+    Test("rejected TLS admission returns TCP custody to UrlClient", () => {
+        dx: duplexOf(ok)
+        network: networkOf([dx])
+        authorities: authoritiesOf(network, null, {})
+        future: http.UrlClient.requestOne(
+            authorities,
+            "https://127.0.0.1/",
+            get(),
+            null
+        )
+        failure: failureOf(future)
+        Assertions.require(failure.parent() === InvalidIOArgument)
+        Assertions.require(network.attempts().size() == 1)
+        Assertions.require(dx.written() == "")
+        Assertions.require(dx.closeCount() == 1)
+    }),
+    Test("an oversized body fails with the Client limit", () => {
+        dx: duplexOf("HTTP/1.1 200 OK\r\n\r\n0123456789")
+        network: networkOf([dx])
+        failure: failureOf(http.UrlClient.requestOne(authoritiesOf(network, null, null), "http://127.0.0.1/", get(), { maxResponseBodyBytes: 4 }))
+        Assertions.require(failure.kind == "responseLimit")
+        Assertions.require(dx.closeCount() == 1)
+    })
+]

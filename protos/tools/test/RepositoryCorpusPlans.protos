@@ -235,7 +235,10 @@ load: (corpusId) => {
             Array("client-request.protos", "suite-native", "-"),
             Array("client-response-head.protos", "suite-native", "-"),
             Array("client-response-body.protos", "suite-native", "-"),
-            Array("client-lifecycle.protos", "suite-native", "-")
+            Array("client-lifecycle.protos", "suite-native", "-"),
+            Array("router-routes.protos", "suite-native", "-"),
+            Array("router-targets.protos", "suite-native", "-"),
+            Array("url-client-admission.protos", "suite-native", "-")
             )
         )
         matched = true

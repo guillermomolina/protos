@@ -302,7 +302,10 @@ httpProgressGroups: [
     ["http/client-request.protos", "library/http/client-request"],
     ["http/client-response-head.protos", "library/http/client-response-head"],
     ["http/client-response-body.protos", "library/http/client-response-body"],
-    ["http/client-lifecycle.protos", "library/http/client-lifecycle"]
+    ["http/client-lifecycle.protos", "library/http/client-lifecycle"],
+    ["http/router-routes.protos", "library/http/router-routes"],
+    ["http/router-targets.protos", "library/http/router-targets"],
+    ["http/url-client-admission.protos", "library/http/url-client-admission"]
 ]
 
 isHttpLeaf: (leaf) => {

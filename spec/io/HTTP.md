@@ -17,9 +17,14 @@ It therefore owns three independent Standard Library facilities:
   D225-A in §15.13; and
 - `std:http/Client` — D218-B, §16.
 
+It also owns two optional composition modules selected by D222-C:
+
+- `std:http/Router` — authority-free request routing, §17; and
+- `std:http/UrlClient` — explicit-authority one-shot URL requests, §18.
+
 D216 does not revise D215. D218-B revises none of D215, D216 or D217. D225-A
 adds one `Host` construction operation and revises no other D215, D216 or
-D218-B rule.
+D218-B rule. D222-C adds §17 and §18 and revises no rule of §§1–16.
 
 HTTP is an optional Standard Library built entirely on existing capabilities.
 Byte reading/writing, Future commitment, cancellation, and half-close semantics
@@ -1969,3 +1974,331 @@ example.org \t" as Bytes]` is admitted and written as `Host: \t example.org
 *Counterexample (conflicting framing):* a final head with both
 `Transfer-Encoding: chunked` and `Content-Length: 3` fails the exchange with
 a `ClientError` of kind `"malformedResponse"` without invoking `onResponse`.
+
+## 17. Authority-free request Router (D222-C)
+
+D222-C selects a distinct, opt-in Standard Library module that builds a
+handler for §2.2 from a declared route table. This section is the sole
+normative owner of its public contract. It revises no rule of §§1–16. The
+Router is ordinary application logic above the handler contract: it is not
+part of the Server, the Host or the wire protocol.
+
+### 17.1 Module and exports
+
+The explicit module `std:http/Router` exports exactly `Router`, whose only
+operation is `compile`. There is no Prelude binding, no implicit import and no
+import effect: importing the module registers nothing, installs no global
+state and does not import `std:http/Server` or `std:http/Host`. Each Actor
+that imports the module obtains its own module instance under
+`../semantics/MODULES.md`. No public `RouterError` prototype exists.
+
+### 17.2 Route table and compilation
+
+```text
+Router.compile(routes) -> handler
+```
+
+`routes` is an `Array` of ordinary structural entries with the own slots
+`method`, `path` and `handle`; other own slots are ignored and inherited
+slots are never read:
+
+```text
+{
+    method: String   // an HTTP token (RFC 9110 §9.1), compared case-sensitively
+    path: String     // a route path, below
+    handle: callable // invoked as handle(request, match)
+}
+```
+
+A route path is either exactly `"*"`, admitted only when `method` is
+`"OPTIONS"`, or ASCII text beginning with `/` whose `/`-separated segments
+are each one of:
+
+- a *literal segment*: `pchar` text (RFC 3986 §3.3; unreserved, sub-delims,
+  `:`, `@` and well-formed `pct-encoded` triplets), compared octet-for-octet
+  and case-sensitively with the raw target segment; a literal segment may be
+  empty only as the last segment, so `/` and a trailing `/` are expressible;
+- a *capture*: exactly `{name}` occupying the whole segment, where `name` is
+  an ASCII identifier `[A-Za-z_][A-Za-z0-9_]*`, distinct within its route.
+
+There are no wildcard, glob, regular-expression, optional or multi-segment
+captures, and no implicit normalization of the route path: `/a` and `/a/` are
+different routes.
+
+For two routes with the same `method`, compilation compares them segment by
+segment. They are *disjoint* when their segment counts differ, when one is
+`"*"` and the other is not, or when at some position two literals differ or a
+capture faces an empty literal (a capture never matches an empty segment,
+§17.4). Otherwise they overlap and are *ordered* when one of them has a literal
+at every position where they differ; they are *duplicates* when no position
+differs; and they *cross* when each has a literal at some position where the
+other has a capture — for example `/a/{x}` and `/{y}/b`, which both match
+`/a/b`. Duplicate or crossing routes of the same method make `routes`
+inadmissible. Routes of different methods never conflict.
+
+`compile` signals a fresh `Error` synchronously when `routes` is not an
+`Array`, an entry is not an ordinary object with the three slots, `method` is
+not a token `String`, `path` is not an admissible route path, `handle` does
+not satisfy the invocability protocol, or two routes are duplicate or
+crossing. Every such failure is detected at compilation, never at request
+time.
+
+On success, `compile` snapshots each method, parsed path, declaration order and
+`handle` reference. Later mutation of `routes` or of any entry never changes
+dispatch. `handle` Closures are referenced, never copied, and are neither
+cloned nor shared across Actors by `compile`.
+
+### 17.3 The handler
+
+`compile` answers an ordinary one-argument callable `handler(request)` that
+satisfies §2.2. `request` must be an ordinary object whose `method` is a
+`String` and whose `target` is `Bytes`; otherwise the handler signals a fresh
+`Error`. Dispatch (§17.5) reads only `request.method` and `request.target`.
+
+When a route is selected, the handler invokes `route.handle(request, match)`
+exactly once with the unchanged `request` and answers its result unchanged.
+`match` is a fresh ordinary object:
+
+```text
+{
+    params: Map      // capture name -> raw segment String
+    query: null | String
+}
+```
+
+`params` maps each capture name of the selected route to the raw, still
+percent-encoded spelling of its target segment, as a `String` of the Latin-1
+projection of those octets; no value is ever decoded. `query` is the raw query
+after the first `?` of the target, exactly as received (including repeated and
+unordered parameters), `""` when `?` is present without a query, and `null`
+when the target has no `?`. No query Map is built.
+
+### 17.4 Request-target projection
+
+The handler interprets `request.target` byte-exactly under the target forms of
+§7.1:
+
+- *origin-form* (beginning `/`): the path is the octets before the first `?`;
+- *absolute-form*: the path is the octets after the authority (after the
+  scheme when there is no `//` authority) and before the first `?`; an empty
+  path routes as `/`, and a path not beginning with `/` matches no route;
+- *asterisk-form* `*`: matches only `"*"` routes and has empty `params` and a
+  `null` query.
+
+Any other `target`, including one with an octet that §7.1 does not admit,
+matches no route. The path is split at every `/` into raw segments; `/` is one
+empty segment and a trailing `/` adds a final empty segment. Nothing is
+percent-decoded: `%2F` never separates segments, `%2E` is never a dot segment,
+`%252F` stays literal, and `.` and `..` segments are ordinary literal text.
+The query is excluded from matching and preserved verbatim. A request-target
+never carries a fragment.
+
+A route matches a target when both are `"*"`, or when they have equal segment
+counts and at every position a literal equals the segment or a capture faces a
+nonempty segment.
+
+### 17.5 Selection, method fallback and automatic responses
+
+Among the routes that match the target, the *effective candidates* are those
+whose `method` equals `request.method`; when there is none and the request
+method is `HEAD`, the matching `GET` routes are the candidates. An explicit
+`HEAD` route therefore wins over the `GET` fallback; the Server suppresses
+`HEAD` content on the wire (§8). `OPTIONS` is served only by explicit routes.
+Compilation guarantees that matching candidates are ordered (§17.2); the most
+specific one, regardless of declaration order, is selected.
+
+When no route matches the target, the handler answers
+`{status: 404, headers: [], body: null}`. When routes match the target but
+none is a candidate, it answers
+`{status: 405, headers: [["Allow", value]], body: null}` where `value` is the
+Latin-1 Bytes of the distinct methods of the matching routes in declaration
+order, joined by `", "`, with `HEAD` inserted immediately after `GET` unless
+already listed. Neither response carries a field prohibited by §5; the Server
+owns framing and `Connection`.
+
+### 17.6 Authority and effects
+
+The Router never reads `request.body`, acquires `Network`, `Resolver`, clock,
+credential or other authority, creates a Task or Actor, serializes data,
+adds or modifies Server-owned header fields, or alters Host provisioning. Its
+dispatch is deterministic for a given table, method and target. The
+implementation is Protos source (`protos/lib/http/Router.protos` and its
+`protos/lib/http/internal/Route*.protos` helpers) over the shared internal
+HTTP wire syntax; these organization names are not public modules.
+
+### 17.7 Conformance examples
+
+*Example (specificity):* routes `GET /users/{id}` and `GET /users/me`, in
+that order, select `/users/me` for target `/users/me` and the capture route
+with `params` `{id: "42"}` for `/users/42?x=1&x=2`, whose `query` is
+`"x=1&x=2"`.
+
+*Example (raw captures):* route `GET /files/{name}` and target
+`/files/a%2Fb` select the route with `params` `{name: "a%2Fb"}`; target
+`/files/a/b` matches no route and answers 404.
+
+*Example (405):* routes `GET /items` and `POST /items` and request
+`DELETE /items` answer 405 with `Allow: GET, HEAD, POST`.
+
+*Counterexample (crossing):* compiling `GET /a/{x}` with `GET /{y}/b`
+signals an `Error`; `GET /a/{x}` with `POST /{y}/b` compiles.
+
+## 18. Explicit-authority one-shot URL client (D222-C)
+
+D222-C selects a distinct, opt-in Standard Library module that composes the
+explicitly granted `Resolver` and `Network` capabilities (`NETWORK.md`),
+`std:tls/Client` (`TLS.md`) and `std:http/Client` (§16) to perform one request
+addressed by an absolute URL. This section is the sole normative owner of its
+public contract. It revises no rule of §§1–17, `NETWORK.md` or `TLS.md`.
+
+### 18.1 Module, operation and data shapes
+
+The explicit module `std:http/UrlClient` exports exactly `UrlClient`, whose
+only operation is:
+
+```text
+UrlClient.requestOne(authorities, url, request, limits) -> Future<BufferedResponse>
+```
+
+There is no Prelude binding and no import effect. Importing the module grants
+no capability.
+
+```text
+authorities: { network, resolver: null | Resolver, trust: null | Trust }
+url:         String
+request:     { method: String, headers: Array<[String, Bytes]>, body: null | Bytes }
+limits:      null | the std:http/Client limits object (§16.12)
+BufferedResponse: { status: Integer, headers: Array<[String, Bytes]>, body: Bytes }
+```
+
+`authorities` and `request` are ordinary objects with the listed own slots;
+other own slots are ignored and inherited slots are never read. The response
+has no `version` slot.
+
+### 18.2 URL and request admission
+
+`url` is parsed only by `std:uri.parse`. It is admissible only when it is an
+absolute URI whose scheme is `http` or `https` (ASCII case-insensitive), with
+an authority whose host is nonempty, with no user information and no
+fragment. The host is one of:
+
+- a bracketed IPv6 literal, parsed by `std:network/IpAddresses.parse`;
+  `IPvFuture` literals are rejected;
+- IPv4 dotted-decimal text, parsed by `std:network/IpAddresses.parse`; or
+- an ASCII host name of `.`-separated labels of letters, digits and `-`, each
+  1 through 63 octets, at most 253 octets, with at most one terminal root
+  dot. No percent escape is admitted. Whether each label is NR-LDH or a strict
+  IDNA2008 A-label is decided by `resolver.lookupAddresses` (`NETWORK.md`
+  §14) and, for `https`, by the TLS reference identity (`TLS.md` §4); no
+  conversion is performed.
+
+An explicit port is 1 through 5 decimal digits with a value in 1..65535; an
+empty port is rejected. The default port is 80 for `http` and 443 for
+`https`.
+
+`authorities.network` must satisfy the `connectTcp` protocol. A host name
+requires a non-null `authorities.resolver` satisfying `lookupAddresses`; a
+numeric host does not use it. `https` requires a non-null `authorities.trust`,
+which is passed unchanged to `std:tls/Client`; `http` never uses it.
+
+The lower request (§16.4) is built as:
+
+- `method`: `request.method`;
+- `target`: the Latin-1 octets of the raw URI path, or `/` when it is empty,
+  followed by `?` and the raw query when the URI has a query; no
+  normalization, encoding, decoding or reordering occurs;
+- `headers`: first exactly one `Host` field whose value is the URI host
+  spelling, followed by `:` and the explicit port text exactly as written
+  when the URI has a port (including an explicit default port); then every
+  caller field in order with its value octets copied; and
+- `body`: a copy of `request.body`.
+
+A caller field named `Host` (ASCII case-insensitive) makes the call
+inadmissible. Every other field, the method and the body must be admissible
+for `std:http/Client` under §16.4 and §16.5.
+
+### 18.3 Admission and the service Task
+
+After ordinary dispatch, `limits` (§16.12), `authorities`, `url` and `request`
+are validated and snapshotted before any effect. When validation fails, the
+returned Future is already failed with a fresh `InvalidIOArgument`; no Task is
+created, no name is looked up and no connection is opened. When it succeeds,
+exactly one cooperative service Task is created as for §16.2, and its Future
+is returned. The Resolver lookup, the TCP attempts, the TLS handshake and the
+HTTP exchange keep their own documented Futures and Tasks. No automatic
+redirect, host selection, proxy, authentication, retry, cookie, content
+decoding or connection pooling is performed.
+
+### 18.4 Name resolution and TCP acquisition
+
+For a numeric host, the single parsed `IpAddress` is the only candidate and no
+lookup occurs. For a host name, `authorities.resolver.lookupAddresses(host)`
+is invoked exactly once and its ordered candidates are used. For each
+candidate in order, one `network.connectTcp(IpEndpoint(candidate, port))`
+attempt is made until the first succeeds. A failed attempt leads to the next
+candidate; a cancellation never does. When every attempt fails, the request
+fails with the Error of the last attempt, with identity preserved. There are
+no concurrent attempts, timers or delays. A lookup failure is the request's
+failure, with identity preserved.
+
+### 18.5 TLS, exchange and custody
+
+For `http`, the connection is passed to
+`std:http/Client` `Client.exchangeOne.owning(connection, request, onResponse,
+limits)`. For `https`, it is first passed to `std:tls/Client`
+`Client.handshake.owning(connection, reference, trust, {})`, where
+`reference` is the original URL host name or the parsed `IpAddress`, never a
+resolved candidate; the delivered secure duplex is then passed to
+`Client.exchangeOne.owning`. After a TCP connection exists, no other candidate
+is tried, whatever the later outcome.
+
+Exactly one owner is responsible for closing each resource at every moment:
+the service until an owning lower operation admits it, then that operation.
+A lower admission that fails with `InvalidIOArgument` takes no custody, and
+the service closes the resource. On every terminal path — success, a DNS, TCP,
+TLS or HTTP failure, or cancellation, including cancellation before the
+service Task's first instruction — every acquired resource is closed exactly
+once, and every close is awaited before the returned Future becomes terminal.
+A cancellation during a pending stage cancels and awaits that stage; a
+connection or secure duplex the stage delivers nevertheless is closed.
+
+The outcome is the buffered response, or the first failure with identity and
+the cleanup precedence of §16.10, `TLS.md` and `../semantics/ERRORS.md`
+preserved. An HTTP status, including 3xx, 4xx and 5xx, is never a failure.
+
+### 18.6 Buffered response
+
+Inside the exchange callback, while `response.body` is live (§16.9), the
+service copies `status`, every header pair in order with fresh value Bytes,
+and every decoded body octet, read with bounded `read(ioChunkBytes)` calls
+until `null`, into fresh Bytes. The callback answers the buffered response
+directly; no reader, deferred Future or callback-scoped object escapes. The
+decoded body is bounded by `maxResponseBodyBytes` of the lower Client (§16.7,
+§16.12); exceeding it fails the request with that Client's `ClientError`.
+
+### 18.7 Exclusions and implementation
+
+Portable behavior excludes HTTP/2 and HTTP/3, request-body streaming,
+redirects, retries, cookies, content codings, connection pooling, proxies,
+implicit or operating-system trust, and any implicit capability. Worker
+provisioning of `std:http/Host` is unaffected. The implementation is Protos
+source (`protos/lib/http/UrlClient.protos` and its
+`protos/lib/http/internal/Url*.protos` helpers) over `std:uri`,
+`std:network`, `std:tls/Client`, `std:http/Client` and the existing private
+asynchronous bridge; no host HTTP or URL engine is involved.
+
+### 18.8 Conformance examples
+
+*Example (target and Host):* `url` `"http://127.0.0.1:8080/a%2Fb?x=1&x=1"`
+connects to `127.0.0.1:8080` without a lookup and writes `GET
+/a%2Fb?x=1&x=1 HTTP/1.1\r\nHost: 127.0.0.1:8080\r\n...`.
+
+*Example (status):* a final `HTTP/1.1 302 Found` with `Location` resolves the
+Future with `status` 302 and the `Location` field; no second request is made.
+
+*Counterexample (caller Host):* a request header `["host", "x" as Bytes]`
+makes the returned Future already failed with `InvalidIOArgument`; no lookup
+or connection occurs.
+
+*Counterexample (URL):* `"ftp://h/"`, `"http://u@h/"`, `"http://h/#f"`,
+`"http://h:/"`, `"http://h:65536/"` and `"http://[v1.x]/"` are inadmissible.
