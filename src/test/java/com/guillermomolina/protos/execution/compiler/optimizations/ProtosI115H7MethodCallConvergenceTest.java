@@ -25,7 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
@@ -866,6 +868,334 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 Object after = session.processContextForTesting().callForRuntime(location::read);
                 assertNotSame(before, after, "the location reads the frame, not a copy");
             }
+        }
+    }
+
+    // ---- I115-H7-R4 Object global location --------------------------------------------
+
+    /** A compact global read retains the original Object after quickening. */
+    @Test
+    void objectGlobalLocationReadsCurrentValueAfterQuickening() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("r4-object-location", METHOD_CALL)) {
+            ProtosClosureValue anchor =
+                    session.prepareTopLevel("run").closureForTesting();
+            Value run = session.prepareTopLevel("run").executable();
+
+            for (int call = 0; call < WARM; call++) {
+                assertEquals(499500L, run.execute().asLong());
+            }
+
+            session.processContextForTesting().callForRuntime(() -> {
+                ProtosLexicalEnvironment module =
+                        anchor.capturedLexicalEnvironmentForRuntime();
+                ProtosFrameLexicalBindingAuthority authority = assertInstanceOf(
+                        ProtosFrameLexicalBindingAuthority.class,
+                        module.lexicalBindingAuthorityForRuntime());
+                int ordinal = authority.storedLayout().offsetOf("receiver");
+                Object receiver = module.readLocalSlotForRuntime("receiver").orElseThrow();
+
+                com.oracle.truffle.api.strings.TruffleString name =
+                        com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
+                                "receiver",
+                                com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_16);
+
+                ProtosFrameLexicalBindingAuthority.ExperimentalGlobalReadLocation location =
+                        ProtosExperimentalReadGlobalNode.locationOrNull(
+                                anchor, name, ordinal, 1);
+
+                assertTrue(location != null, "the Object location is admitted");
+                assertTrue(location.isCurrent(), "the location belongs to the current root");
+                assertEquals(ordinal, location.ordinal());
+                assertSame(receiver, location.read(),
+                        "the physical location returns the original Protos object");
+                return null;
+            });
+
+            assertEquals(499500L, run.execute().asLong());
+        }
+    }
+
+    /** The cached physical location reads a rebound Object, not a cached value. */
+    @Test
+    void objectGlobalLocationObservesRebinding() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("r4-object-rebinding", """
+                first: { f: (x) => { x } }
+                second: { f: (x) => { x + 100 } }
+                target: first
+
+                hot: () => { target.f(7) }
+
+                retarget: () => {
+                    target = second
+                    0
+                }
+                """)) {
+            ProtosClosureValue anchor =
+                    session.prepareTopLevel("hot").closureForTesting();
+            Value hot = session.prepareTopLevel("hot").executable();
+
+            for (int call = 0; call < WARM; call++) {
+                assertEquals(7L, hot.execute().asLong());
+            }
+
+            Object before = session.processContextForTesting().callForRuntime(() -> {
+                ProtosLexicalEnvironment module =
+                        anchor.capturedLexicalEnvironmentForRuntime();
+                ProtosFrameLexicalBindingAuthority authority = assertInstanceOf(
+                        ProtosFrameLexicalBindingAuthority.class,
+                        module.lexicalBindingAuthorityForRuntime());
+                int ordinal = authority.storedLayout().offsetOf("target");
+
+                ProtosFrameLexicalBindingAuthority.ExperimentalGlobalReadLocation location =
+                        authority.experimentalGlobalReadLocationOrNull("target", ordinal);
+
+                assertTrue(location != null, "initial Object location is admitted");
+                Object value = module.readLocalSlotForRuntime("target").orElseThrow();
+                assertSame(value, location.read());
+                return value;
+            });
+
+            session.prepareTopLevel("retarget").executable().execute();
+
+            for (int call = 0; call < WARM; call++) {
+                assertEquals(107L, hot.execute().asLong());
+            }
+
+            session.processContextForTesting().callForRuntime(() -> {
+                ProtosLexicalEnvironment module =
+                        anchor.capturedLexicalEnvironmentForRuntime();
+                ProtosFrameLexicalBindingAuthority authority = assertInstanceOf(
+                        ProtosFrameLexicalBindingAuthority.class,
+                        module.lexicalBindingAuthorityForRuntime());
+                int ordinal = authority.storedLayout().offsetOf("target");
+
+                ProtosFrameLexicalBindingAuthority.ExperimentalGlobalReadLocation location =
+                        authority.experimentalGlobalReadLocationOrNull("target", ordinal);
+
+                assertTrue(location != null, "rebound Object location remains admitted");
+                Object after = module.readLocalSlotForRuntime("target").orElseThrow();
+
+                assertNotSame(before, after, "the global binding was rebound");
+                assertSame(after, location.read(),
+                        "the location observes the current physical value");
+                return null;
+            });
+        }
+    }
+
+    /** The pinned generator mapping addresses the actual retained module frame. */
+    @Test
+    void globalLocationValidatesGeneratedFrameLayout() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("r4-physical-layout", METHOD_CALL)) {
+            ProtosClosureValue anchor =
+                    session.prepareTopLevel("run").closureForTesting();
+
+            session.processContextForTesting().callForRuntime(() -> {
+                ProtosLexicalEnvironment module =
+                        anchor.capturedLexicalEnvironmentForRuntime();
+                ProtosFrameLexicalBindingAuthority authority = assertInstanceOf(
+                        ProtosFrameLexicalBindingAuthority.class,
+                        module.lexicalBindingAuthorityForRuntime());
+                ProtosFrameLexicalLayout layout = authority.storedLayout();
+                int ordinal = layout.offsetOf("receiver");
+                int localOffset = layout.localOffsetAt(ordinal);
+
+                com.oracle.truffle.api.frame.MaterializedFrame frame =
+                        authority.retainedMaterializedFrameForCapturedAccess();
+
+                // Pinned Truffle 25.4.4.1.1 generated USER_LOCALS_START_INDEX.
+                int physicalIndex = 2 + localOffset;
+
+                assertTrue(localOffset >= 0);
+                assertTrue(physicalIndex >= 2);
+                assertTrue(physicalIndex < frame.getFrameDescriptor().getNumberOfSlots());
+                assertTrue(frame.isObject(physicalIndex),
+                        "the module global has an Object carrier");
+
+                Object receiver = module.readLocalSlotForRuntime("receiver").orElseThrow();
+
+                assertSame(receiver, frame.getValue(physicalIndex),
+                        "the generated physical slot holds the original binding");
+
+                ProtosFrameLexicalBindingAuthority.ExperimentalGlobalReadLocation location =
+                        authority.experimentalGlobalReadLocationOrNull("receiver", ordinal);
+
+                assertTrue(location != null, "validated Object location is admitted");
+                assertSame(frame.getValue(physicalIndex), location.read());
+
+                assertNull(authority.experimentalGlobalReadLocationOrNull(
+                                "wrong-name", ordinal),
+                        "the name must match the selected ordinal");
+                assertNull(authority.experimentalGlobalReadLocationOrNull(
+                                "receiver", -1),
+                        "a negative ordinal is never admitted");
+                assertNull(authority.experimentalGlobalReadLocationOrNull(
+                                "receiver", layout.length()),
+                        "an out-of-range ordinal is never admitted");
+                return null;
+            });
+        }
+    }
+
+    /** A published B5 invocation never enters the compact Closure PIC. */
+    @Test
+    void publishedHeaderDoesNotUseCompactGlobalCache() throws Exception {
+        try (ProtosStandaloneHostedSession session =
+                open("r4-published-header", METHOD_CALL)) {
+            ProtosClosureValue anchor =
+                    session.prepareTopLevel("run").closureForTesting();
+
+            session.processContextForTesting().callForRuntime(() -> {
+                ProtosActivation activation =
+                        ProtosActivation.forClosureInvocation(
+                                anchor,
+                                List.of(),
+                                anchor.prelude().orElseThrow());
+
+                Object[] published =
+                        ProtosFrameArguments.publishedInvocation(activation);
+
+                assertTrue(ProtosFrameArguments.hasPublishedActivation(published));
+                assertNull(
+                        ProtosExperimentalReadGlobalNode.compactClosureOrNull(published),
+                        "a published activation is not a compact Closure");
+
+                Object[] compact =
+                        ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
+                                anchor, activation);
+
+                assertSame(
+                        anchor,
+                        ProtosExperimentalReadGlobalNode.compactClosureOrNull(compact),
+                        "the original compact Closure remains admissible");
+
+                ProtosLexicalEnvironment module =
+                        anchor.capturedLexicalEnvironmentForRuntime();
+                ProtosFrameLexicalBindingAuthority authority = assertInstanceOf(
+                        ProtosFrameLexicalBindingAuthority.class,
+                        module.lexicalBindingAuthorityForRuntime());
+
+                int ordinal = authority.storedLayout().offsetOf("receiver");
+
+                com.oracle.truffle.api.strings.TruffleString name =
+                        com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
+                                "receiver",
+                                com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_16);
+
+                Object expected =
+                        module.readLocalSlotForRuntime("receiver").orElseThrow();
+
+                assertSame(
+                        expected,
+                        ProtosExperimentalReadGlobalNode.resolveInitial(
+                                published, ordinal, name, 1),
+                        "the published header resolves through the generic path");
+
+                return null;
+            });
+        }
+    }
+
+    /**
+     * An actual primitive frame slot is rejected by Object admission.
+     * Generic resolution projects the primitive carrier to a guest Integer.
+     */
+    @Test
+    void nonObjectGlobalUsesGenericFallback() throws Exception {
+        try (ProtosStandaloneHostedSession session =
+                open("r4-primitive-fallback", """
+                        target: { f: 5 }
+                        reader: () => { target }
+                        """)) {
+            ProtosClosureValue anchor =
+                    session.prepareTopLevel("reader").closureForTesting();
+
+            session.processContextForTesting().callForRuntime(() -> {
+                ProtosLexicalEnvironment module =
+                        anchor.capturedLexicalEnvironmentForRuntime();
+
+                ProtosFrameLexicalBindingAuthority authority = assertInstanceOf(
+                        ProtosFrameLexicalBindingAuthority.class,
+                        module.lexicalBindingAuthorityForRuntime());
+
+                ProtosFrameLexicalLayout layout = authority.storedLayout();
+                int ordinal = layout.offsetOf("target");
+                int physicalIndex = 2 + layout.localOffsetAt(ordinal);
+
+                com.oracle.truffle.api.frame.MaterializedFrame frame =
+                        authority.retainedMaterializedFrameForCapturedAccess();
+
+                assertTrue(
+                        physicalIndex >= 2
+                                && physicalIndex < frame.getFrameDescriptor().getNumberOfSlots(),
+                        "the pinned generated index must be in bounds");
+                assertTrue(frame.isObject(physicalIndex),
+                        "the fixture starts with a real Object slot");
+
+                ProtosFrameLexicalBindingAuthority.ExperimentalGlobalReadLocation location =
+                        authority.experimentalGlobalReadLocationOrNull(
+                                "target", ordinal);
+
+                assertTrue(location != null, "the initial Object is admitted");
+
+                Object original = frame.getValue(physicalIndex);
+
+                ProtosActivation activation =
+                        ProtosActivation.forClosureInvocation(
+                                anchor,
+                                List.of(),
+                                anchor.prelude().orElseThrow());
+
+                Object[] published =
+                        ProtosFrameArguments.publishedInvocation(activation);
+
+                com.oracle.truffle.api.strings.TruffleString name =
+                        com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
+                                "target",
+                                com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_16);
+
+                try {
+                    /*
+                     * Test-only physical representation transition.
+                     * This is the actual retained module frame, not a mock.
+                     */
+                    frame.setInt(physicalIndex, 41);
+
+                    assertTrue(frame.isInt(physicalIndex));
+                    assertFalse(frame.isObject(physicalIndex));
+
+                    assertNull(
+                            authority.experimentalGlobalReadLocationOrNull(
+                                    "target", ordinal),
+                            "primitive storage must not install an Object location");
+
+                    ProtosIntegerValue generic = assertInstanceOf(
+                            ProtosIntegerValue.class,
+                            ProtosExperimentalReadGlobalNode.resolveInitial(
+                                    published, ordinal, name, 1));
+
+                    assertEquals(41L, generic.longValue(),
+                            "the generic route converts the int carrier");
+
+                    ProtosIntegerValue recovered = assertInstanceOf(
+                            ProtosIntegerValue.class,
+                            location.read());
+
+                    assertEquals(41L, recovered.longValue(),
+                            "the old Object location recovers after a type change");
+
+                    assertFalse(location.isCurrent(),
+                            "the changed-type location must be invalidated");
+                } finally {
+                    frame.setObject(physicalIndex, original);
+                }
+
+                assertTrue(frame.isObject(physicalIndex),
+                        "the original physical representation is restored");
+                assertSame(original, frame.getValue(physicalIndex));
+
+                return null;
+            });
         }
     }
 
