@@ -8,6 +8,33 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.28-SNAPSHOT
+
+- **I115-H10 — experimental 64-bit Shape-backed attribute operations.**
+  - Replace `ExperimentalSetAttribute.directInt` with a signed-64 `directLong`
+    specialization and use a `PropertyGetter.getLong` fast path in
+    `ExperimentalGetAttribute`, with a guest-value Object fallback.
+    Compact numeric assignment emits a `Long` constant for eligible
+    attribute stores rather than narrowing the value to `int`.
+  - Keep one authoritative Shape-backed `DynamicObject` store: normalize
+    Protos guest Integer values and residual Java `Integer` carriers into
+    Java `Long` on storage, then return guest-facing `ProtosIntegerValue`
+    representations from standard binding reads, snapshots and removals.
+    Read admission no longer mutates storage simply to convert to `int`.
+  - Extend tests for signed-64 storage, large positive and negative values,
+    type generalization, removal/recreation and the typed/object fallback.
+    A generalized Shape may continue using an Object location after recreate.
+  - **Historical semantic limitations:** this H10 attribute-storage lane
+    uses `long` (signed 64-bit), but other I115-H7 experimental operations
+    still use Java `int` and raw `Integer` carriers, so Protos' global
+    long-only design is not yet achieved. The H8/H9 direct write retains
+    the deliberate bypass of frozen-state mutation checks; other known
+    divergences in `Object.call`, `ReturnHome`, suspension and D179 C0
+    remain unresolved. No complete semantic or performance acceptance
+    is implied, and no behavioral tests run on this historical replay.
+  - Original implementation: `f8dce47fbf371e5033c3fccd178cfb592c8867ac`.
+    All six source/test blobs are copied without modification.
+
 ## 0.4.27-SNAPSHOT
 
 - **I115-H9 — experimental Shape-backed object attribute access.**
