@@ -240,7 +240,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                                     receiver.closure, receiver.caller)
                             : ProtosFrameArguments.compactDirectClosureCallOneNoHome(
                                     receiver.closure, receiver.caller, supplied0);
-            return hostResult(call.call(frame));
+            return hostResult(receiver, call.call(frame));
         }
 
         /** I115-H6: megamorphic physical target dispatch with the same single invocation. */
@@ -259,16 +259,23 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                                     receiver.closure, receiver.caller)
                             : ProtosFrameArguments.compactDirectClosureCallOneNoHome(
                                     receiver.closure, receiver.caller, supplied0);
-            return hostResult(call.call(receiver.target, frame));
+            return hostResult(receiver, call.call(receiver.target, frame));
         }
 
         /*
-         * I115-H7 EXPERIMENTAL: an int carrier of the H7 compact operations
-         * becomes the guest Integer only here, at the Polyglot boundary.
-         * Every other raw result crosses unchanged (I115-H6).
+         * I115-H7-R5 EXPERIMENTAL: the same compilation-final root fact
+         * controls the epilogue and this Polyglot boundary. Otherwise,
+         * hostResult would recreate the guest allocation removed from
+         * EpilogForReturn. Other source roots retain their old conversion.
          */
-        private static Object hostResult(Object result) {
+        private static Object hostResult(
+                ProtosHostExecutableClosure receiver, Object result) {
             if (result instanceof Integer small) {
+                if (receiver.target.getRootNode()
+                        instanceof ProtosBytecodeRootNode root
+                        && root.isExperimentalH7RawIntegerReturn()) {
+                    return small;
+                }
                 return ProtosNumericValueSupport.guestValue(small);
             }
             return result;

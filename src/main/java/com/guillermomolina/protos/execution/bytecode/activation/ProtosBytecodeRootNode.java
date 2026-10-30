@@ -248,6 +248,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return experimentalPrimitiveArgumentRoot;
     }
 
+    /*
+     * I115-H7-R5 EXPERIMENTAL: an admitted compact root containing H7
+     * sends may return its int carrier without creating a guest Integer.
+     * The same root fact governs the host boundary. This does not change
+     * generic roots or the conversion of long, double and guest values.
+     */
+    @CompilationFinal private transient boolean experimentalH7RawIntegerReturn;
+
+    final void markExperimentalH7RawIntegerReturn() {
+        experimentalH7RawIntegerReturn = true;
+    }
+
+    final boolean isExperimentalH7RawIntegerReturn() {
+        return experimentalH7RawIntegerReturn;
+    }
+
     /**
      * I115-H4-B EXPERIMENTAL (GraalPy needsTraceAndProfileInstrumentation):
      * whether the internal trace probe is enabled. The JVM-start value of
@@ -755,6 +771,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
              * internal carrier may reach any caller of such a root.
              */
             if (root.isExperimentalPrimitiveArgumentRoot()) {
+                return value;
+            }
+            /*
+             * I115-H7-R5: the admitted H7 int result stays a Java Integer
+             * through the root epilogue, as on the GraalPy physical path.
+             * Non-int values retain the existing projection contract.
+             */
+            if (root.isExperimentalH7RawIntegerReturn()
+                    && value instanceof Integer) {
                 return value;
             }
             if (!root.epilogProjectsReturnCarrier()) {

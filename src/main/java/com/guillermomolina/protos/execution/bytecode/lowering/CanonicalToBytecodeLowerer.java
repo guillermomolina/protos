@@ -1696,6 +1696,14 @@ final class CanonicalToBytecodeLowerer {
         if (experimentalPrimitiveArgumentRoot) {
             result.markExperimentalPrimitiveArgumentRoot();
         }
+        /*
+         * I115-H7-R5: the compact admission and the presence of an H7
+         * invocation are compile-time facts. The root and its host entry
+         * must agree on whether a returned int remains unwrapped.
+         */
+        if (experimentalCompact != null && experimentalCompact.invokes()) {
+            result.markExperimentalH7RawIntegerReturn();
+        }
         builder.endSourceSection();
         /*
          * I107: the root publishes the EFFECTIVE_ROOT proof consumed from the
