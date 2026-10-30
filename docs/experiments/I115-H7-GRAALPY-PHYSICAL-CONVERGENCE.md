@@ -148,3 +148,130 @@ and no Tier 1/Tier 2 convergence is claimed.
   project it through `guestValue`.
 - The divergences recorded above (Prelude numeric admission, `whileTrue`
   selection, callback identity, ReturnHome lifecycle) are unchanged.
+
+## I115-H7-R3
+
+Physical convergence of `primitive-method-call` with GraalPy 25.4.4.1.1
+(`ReadGlobalOrBuiltinNode.readGlobalFastPath`, `GetMethod`,
+`CallBinaryMethodNode.callPFunction`, `PBytecodeDSLRootNode.CopyArguments`,
+`RootNodeCompiler.emitCall`/`emitGetMethod`). Starting point: I115-H7-R2
+(`521202f5`), whose owner measurement was After TruffleTier 417/329 and
+Final IR 866/714 (Tier 1/Tier 2), with five Tier 2 invokes. No new capture
+has been taken for R3: the R3 changes are not yet backed by any measured node,
+invoke or timing difference.
+
+### Changes
+
+- `ProtosFrameLexicalBindingAuthority`: new
+  `experimentalGlobalReadLocationOrNull(name, ordinal)` and nested
+  `ExperimentalGlobalReadLocation` (retained `MaterializedFrame`, declaring
+  `BytecodeRootNode`, selected `BytecodeNode`, its bytecode index, physical
+  local offset, ordinal). Name, ordinal and presence are checked only at
+  installation. `isCurrent()` is the single guard (the root still runs the
+  selected node). `read()` calls `BytecodeNode.getLocalValue` on the original
+  frame with no `@TruffleBoundary`. The general accessors are unchanged.
+- `ProtosExperimentalReadGlobalNode.readCached`: guarded by module identity
+  and `cachedLocation.isCurrent()`, returns `cachedLocation.read()`, and is
+  `@ForceQuickening`. The new `locationOrNull` installs the location; with no
+  location the specialization is not installed. The specialized body no
+  longer calls `readOwnerFrameBindingOrNull`, `resolveInitial`,
+  `hasFrameBackedBindingAt`, `readFrameBackedBindingAt` or
+  `lexicalBindingAuthorityForRuntime` (`resolveDeferredOwner`). Those calls
+  remain only in `readGeneric`/`resolveInitial`.
+- `ProtosExperimentalGetMethodNode`: the `Method` record is removed. `doCached`
+  (`@ForceQuickening`) is guarded by receiver identity and the selection
+  Assumption and returns `cachedSelection.currentValue()`. It reads neither
+  `callerReference` nor `callerPrelude`, and the `prelude == cachedPrelude`
+  guard is gone. `selectOrNull` installs with a `null` prelude.
+  `doGeneric`/`selectGeneric` return the selected value, or `null` when no
+  slot is selected.
+- `CanonicalToBytecodeLowerer.emitExperimentalCompactMethodSend`:
+  `Block { sv = BindStackValue(receiver); CallBinaryMethod[selector, terminal](GetMethod[selector](LoadStackValue sv), LoadStackValue sv, argument) }`.
+  The receiver and the argument are each evaluated once. The builder emits
+  the first reload, which directly follows the bind, as `dup`, and the
+  Block's cleanup emits one `store.stackvalue`. The instruction sequence is
+  `ReadGlobal, dup, GetMethod, load.stackvalue, <arg>, CallBinaryMethod, store.stackvalue`.
+- `ProtosExperimentalCallBinaryMethodNode`: the operands are
+  `(callable, receiver, argument)`, with constant `selector` and `terminal`.
+  `doDirect` (`@ForceQuickening`) is keyed by Closure identity and builds the
+  header with a `null` method home. Its caller slot comes from
+  `callerArgumentIfNeeded`, which returns `null` unless the PE-constant callee
+  root registered `NEEDS_CALLER_PRELUDE` (then it uses
+  `admittedCallerPrelude` and `InvokeMethodOneTail.callerArgument`) or
+  `NEEDS_EXACT_ACTIVATION` (then it passes the caller reference). The
+  `ProtosBytecodeControlTransferException` bridge is removed from `doDirect`
+  and kept in `doIndirect`. `admittedTargetOrNull` additionally requires
+  `isExperimentalPrimitiveArgumentRoot()`. `doIndirect` and `doGeneric` send
+  ordinarily with the constant selector. `selects`, `closureOrNull`,
+  `acceptsPrimitiveArguments` and the `Method`-based `callerArgument` are
+  removed.
+- `ProtosFrameArguments.experimentalMethodCallOne`: documented as accepting a
+  `null` home and caller. It has no new checks and no calls to the
+  caller-resolution functions.
+- `ProtosBytecodeRootNode.CopyArguments`: a single `copy` specialization
+  stores `arguments[SUPPLIED_ARGUMENT_OFFSET]` with
+  `LocalRangeAccessor.setObject`. The `hasSuppliedArgument0` guard and the
+  `authoritative` (`bindUnaryFrameParameterAuthoritatively`) fallback are
+  removed.
+- `ProtosBytecodeRootNode.EpilogForReturn`: a root with
+  `isExperimentalPrimitiveArgumentRoot()` (compilation-final) returns its
+  value as is. There is no `acceptsPrimitiveResult` test and no
+  `MaterializeReturnCarrier`. The trace probe is unchanged.
+
+### Divergences (I115-H7-R3, owner-authorized)
+
+- The cached method lookup is installed with a `null` Prelude and does not
+  observe later Prelude changes.
+- `methodHome` is omitted (`null`) for admitted compact callees.
+- The caller is not transported (`null` caller slot) when the callee has
+  registered no caller need. A callee that first needs it on that call
+  cannot recover it.
+- The per-call ReturnHome lifecycle is not established; the unobservable
+  marker is always used.
+- A control transfer out of the direct call is not translated in
+  `doDirect`.
+- `CopyArguments` does not recover from a wrong arity and does not inspect
+  excess arguments.
+- Internal carriers (for example an `int`) are returned directly by
+  admitted compact roots to any caller.
+- The specialized `ReadGlobal` execution skips the general location checks
+  (presence, layout name): a removal of the global is not observed while
+  the location is current.
+- A root whose only Prelude-reading send is an H7 `GetMethod` no longer
+  registers `NEEDS_CALLER_PRELUDE`. The assertions changed to this new
+  contract are root D in
+  `ProtosI115BDeferredCallerTest.realChainRegistersNeedsOnTheInvokedRootsAndConverges`,
+  `ProtosI115BDeferredCallerTest.terminalSendRegistersTheCallerPreludeNeedOnceAndConverges`
+  (which now registers the need explicitly to keep covering transport and
+  convergence) and `inner` in
+  `ProtosI115H7MethodCallConvergenceTest.inheritedPreludeSendRegistersAndConverges`.
+
+### Tests changed
+
+- `ProtosI115H7MethodCallConvergenceTest`: `RUN_DSL` and the `sendOne`
+  sequence now include the stack-value instructions, and the
+  evaluation-order test counts `dup`/`load.stackvalue`/`store.stackvalue`.
+  `inheritedPreludeSendRegistersAndConverges` changed as described above. New
+  tests: `getMethodReturnsTheSelectedValue`,
+  `copyArgumentsStoresTheSingleArgumentWithoutFallback`,
+  `identityIsCalledDirectlyWithoutCallerTransport`,
+  `cachedGlobalLocationObservesRebinding` and
+  `genericFallbackRemainsReachable`.
+- `ProtosI115BDeferredCallerTest`: new
+  `directMethodCallWithoutCalleeNeedsTransportsNoCaller`, and the two tests
+  described above.
+
+### Differences from GraalPy still open (not measured)
+
+- `GetMethod` still guards receiver identity plus an Assumption rather than a
+  `Shape`.
+- The B5 header is a 6-slot array including the unobservable ReturnHome
+  marker.
+- `ReadGlobal` still computes the captured module from the B5 header
+  (`capturedModuleOrNull`) for its identity guard.
+- The receiver is projected with `guestValue` before the call.
+
+### Results
+
+Functional tests: pending human execution. Physical measurements: none
+taken for R3.

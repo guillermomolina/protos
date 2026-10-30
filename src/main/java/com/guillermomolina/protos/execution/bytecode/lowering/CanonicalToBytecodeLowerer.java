@@ -52,6 +52,7 @@ import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
+import com.oracle.truffle.api.bytecode.StackValue;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.strings.TruffleString;
@@ -11414,13 +11415,27 @@ final class CanonicalToBytecodeLowerer {
         SourceSpan span = send.span();
         builder.beginSourceSection(span.startOffset(), span.length());
         builder.beginTag(StandardTags.CallTag.class);
-        builder.beginCallBinaryMethod(terminal);
-        builder.beginGetMethod(TruffleString.fromJavaStringUncached(
-                send.message(), TruffleString.Encoding.UTF_16));
+        /*
+         * I115-H7-R3 (GraalPy RootNodeCompiler.emitCall / emitGetMethod
+         * stack-value layout): the receiver is evaluated once and bound as a
+         * stack value of the enclosing Block; GetMethod and CallBinaryMethod
+         * each reload it, so CallBinaryMethod consumes (callable, receiver,
+         * argument) and the argument is evaluated once, after the selection.
+         */
+        TruffleString selector = TruffleString.fromJavaStringUncached(
+                send.message(), TruffleString.Encoding.UTF_16);
+        builder.beginBlock();
+        builder.beginBindStackValue();
         emitExperimentalCompactValue(builder, send.receiver());
+        StackValue receiver = builder.endBindStackValue();
+        builder.beginCallBinaryMethod(selector, terminal);
+        builder.beginGetMethod(selector);
+        builder.emitLoadStackValue(receiver);
         builder.endGetMethod();
+        builder.emitLoadStackValue(receiver);
         emitExperimentalCompactValue(builder, send.arguments().get(0));
         builder.endCallBinaryMethod();
+        builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
     }

@@ -1685,8 +1685,9 @@ final class ProtosI115BDeferredCallerTest {
      * guarded source send (which, unlike a native send such as indexing,
      * does not publish the sender) and ends in an admitted terminal Call1. The callee root each terminal site caches is the root of the
      * target its DirectCallNode invokes, and the needs land on exactly
-     * those roots: B, C and D, which initially read an inherited
-     * prelude through a caller reference that has not transported it.
+     * those roots that read an inherited prelude through a caller
+     * reference that has not transported it: B and C. I115-H7-R3: D's
+     * cached H7 method selection no longer reads the prelude.
      * I115-H7-R2 preserves the deferred B5 caller across admitted Send0
      * instead of publishing A merely for method selection.
      * A does not request an inherited caller prelude. Once the needs
@@ -1752,7 +1753,13 @@ final class ProtosI115BDeferredCallerTest {
             assertSame(rootC, tailCallee(rootB));
             assertSame(rootD, tailCallee(rootC));
 
-            assertTrue(rootD.hasCallerNeed(need), "D reads an untransported inherited prelude");
+            /*
+             * I115-H7-R3 (RECORDED DIVERGENCE): D's only send is a cached H7
+             * GetMethod selection, which reads no caller prelude, so D no
+             * longer registers the need (formerly asserted true).
+             */
+            assertFalse(rootD.hasCallerNeed(need),
+                    "D's cached H7 selection reads no inherited prelude");
             assertTrue(rootC.hasCallerNeed(need), "C computes the prelude D requested");
             assertTrue(rootB.hasCallerNeed(need),
                     "B also reads an initially untransported inherited prelude");
@@ -1770,6 +1777,49 @@ final class ProtosI115BDeferredCallerTest {
                         "root " + i + ": no repeated invalidation");
                 assertTrue(settled.get(i).isValid());
             }
+        });
+    }
+
+    /**
+     * I115-H7-R3: a compact H7 callee that requested nothing from its caller
+     * receives a null caller slot from CallBinaryMethod. Neither the caller
+     * activation is published nor a ProtosCallerFrameReference is built.
+     */
+    @Test
+    void directMethodCallWithoutCalleeNeedsTransportsNoCaller() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    holder: { identity: (value) => { value } }
+                    sender: (h) => { h.identity(7) }
+                    """, "i115-h7r3-no-needs-define.protos", module);
+            ProtosObjectValue holder = assertInstanceOf(ProtosObjectValue.class,
+                    module.context().readLocalSlot("holder").orElseThrow());
+            ProtosClosureValue identity = assertInstanceOf(ProtosClosureValue.class,
+                    holder.readLocalSlot("identity").orElseThrow());
+            ProtosBytecodeRootNode sender = functionRoot("sender", module);
+            ProtosBytecodeRootNode callee = assertInstanceOf(ProtosBytecodeRootNode.class,
+                    directTarget(identity).getRootNode());
+            assertTrue(callee.isExperimentalPrimitiveArgumentRoot(),
+                    "identity is an admitted compact H7 callee");
+            sender.getBytecodeNode().setUncachedThreshold(0);
+            callee.getBytecodeNode().setUncachedThreshold(0);
+
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(7, evaluate("sender(holder)\n", "i115-h7r3-no-needs.protos", module));
+            }
+            assertFalse(callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertFalse(callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
+            assertFalse(sender.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION),
+                    "the sender never published its own activation");
+
+            // No need registered: no caller reference is read or built.
+            assertSame(null, ProtosExperimentalCallBinaryMethodNode.callerArgumentIfNeeded(
+                    null, sender, callee, identity));
+            Object[] header = ProtosFrameArguments.experimentalMethodCallOne(
+                    identity, holder, null, null, SUPPLIED);
+            assertSame(null, header[2], "no method home");
+            assertSame(null, header[3], "no caller reference");
+            assertUnpublished(header);
         });
     }
 
@@ -2033,11 +2083,13 @@ final class ProtosI115BDeferredCallerTest {
 
     /**
      * Guest path: a non-capturing Closure (no own prelude) whose terminal
-     * send reads its inherited prelude. Entered with an untransported
-     * compact caller, its first read registers NEEDS_CALLER_PRELUDE once;
-     * entered as the producer then prepares it (a reference transporting
-     * the prelude), it converges without another invalidation, and every
-     * result is unchanged. A published caller never registers it: a guest
+     * send is an H7 GetMethod/CallBinaryMethod. I115-H7-R3 (RECORDED
+     * DIVERGENCE): that selection reads no caller prelude, so entries with
+     * an untransported compact caller register nothing and invalidate
+     * nothing (formerly the first read registered NEEDS_CALLER_PRELUDE).
+     * Once the need is registered explicitly, the producer prepares it (a
+     * reference transporting the prelude), the callee converges without
+     * another invalidation, and every result is unchanged. A published caller never registers it: a guest
      * call from top-level code enters through a published activation, which
      * answers the prelude directly.
      */
@@ -2067,7 +2119,7 @@ final class ProtosI115BDeferredCallerTest {
             assertFalse(innerRoot.hasCallerNeed(need), "a published caller registers nothing");
             com.oracle.truffle.api.Assumption before = innerRoot.callerNeedsStability();
 
-            // Untransported compact caller: the first read registers the need once.
+            // Untransported compact caller: the H7 selection registers nothing.
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 Object[] callerArguments = ProtosFrameArguments.compactDirectClosureCallOne(
                         closure("make()\n", module), module, null, SUPPLIED);
@@ -2076,8 +2128,12 @@ final class ProtosI115BDeferredCallerTest {
                                 inner, (Object) callerArguments, receiver))));
                 assertUnpublished(callerArguments);
             }
-            assertTrue(innerRoot.hasCallerNeed(need), "the inherited prelude read registered it");
-            assertFalse(before.isValid());
+            assertFalse(innerRoot.hasCallerNeed(need), "the H7 selection reads no prelude");
+            assertSame(before, innerRoot.callerNeedsStability());
+            assertTrue(before.isValid(), "nothing was invalidated");
+
+            innerRoot.requestCallerNeed(need);
+            assertFalse(before.isValid(), "one registration, one invalidation");
             com.oracle.truffle.api.Assumption settled = innerRoot.callerNeedsStability();
 
             // The producer now transports it, and the callee converges.

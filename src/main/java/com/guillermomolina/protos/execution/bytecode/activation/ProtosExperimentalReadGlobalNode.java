@@ -17,12 +17,14 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosFrameLexicalBindingAuthority.ExperimentalGlobalReadLocation;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.ForceQuickening;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
@@ -40,14 +42,17 @@ import com.oracle.truffle.api.strings.TruffleString;
  * shape: resolution separated from the fast access, both specialized in this
  * node, no caller-side branch).
  *
- * <p>I115-H7: {@link #readCached} is guarded by the identity of the module
- * scope selected from the invocation's captured chain (at most three) and
- * reads the CURRENT value of the module binding at its frame-backed
- * position, so a rebinding of the module binding is observed. When the
- * cached module no longer holds the binding at that position (for example a
- * prelude-level name), the read resolves generically for that execution.
- * {@link #readGeneric} is the separated fallback. The H5 unguarded value
- * cache is retired.
+ * <p>I115-H7-R3: {@link #readCached} is guarded by the identity of the
+ * module scope selected from the invocation's captured chain (at most three)
+ * and by the validity of a cached {@link ExperimentalGlobalReadLocation}
+ * (the module root still runs the selected bytecode node). It reads the
+ * CURRENT value directly from that physical location, so a rebinding of the
+ * module binding is observed without another lookup. A binding without an
+ * admitted physical location (for example a prelude-level name) is not
+ * installed and uses {@link #readGeneric}, the separated fallback.
+ *
+ * <p>RECORDED DIVERGENCE (I115-H7-R3): the specialized read does not
+ * re-validate presence or layout metadata of the cached location.
  *
  * <p>RECORDED DIVERGENCE (owner-authorized): only the statically resolved
  * module scope and the scopes outside it are consulted; no nearer-scope or
@@ -68,9 +73,11 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
             excludeForUncached = true,
             guards = {
                 "module == cachedModule",
-                "cachedModule != null"
+                "cachedLocation != null",
+                "cachedLocation.isCurrent()"
             },
             limit = "3")
+    @ForceQuickening
     static Object readCached(
             VirtualFrame frame,
             int frameOrdinal,
@@ -79,14 +86,25 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
             @Bind("capturedModuleOrNull(frame.getArguments(), lexicalDepth)")
                     ProtosLexicalEnvironment module,
             @Cached("module") ProtosLexicalEnvironment cachedModule,
-            @Cached("name.toJavaStringUncached()") String javaName) {
-        // Java null is the frame-authority miss sentinel, never guest null.
-        Object value = ProtosCapturedLexicalAccess.readOwnerFrameBindingOrNull(
-                cachedModule, javaName, frameOrdinal);
-        if (value != null) {
-            return value;
+            @Cached("locationOrNull(cachedModule, name, frameOrdinal)")
+                    ExperimentalGlobalReadLocation cachedLocation) {
+        return cachedLocation.read();
+    }
+
+    /*
+     * I115-H7-R3 installation only: the physical location of the binding in
+     * the selected module's frame authority, or null (not admitted).
+     */
+    @TruffleBoundary
+    static ExperimentalGlobalReadLocation locationOrNull(
+            ProtosLexicalEnvironment module, TruffleString name, int frameOrdinal) {
+        if (module != null
+                && module.lexicalBindingAuthorityForRuntime()
+                        instanceof ProtosFrameLexicalBindingAuthority authority) {
+            return authority.experimentalGlobalReadLocationOrNull(
+                    name.toJavaStringUncached(), frameOrdinal);
         }
-        return resolveInitial(frame.getArguments(), frameOrdinal, name, lexicalDepth);
+        return null;
     }
 
     @Specialization(replaces = "readCached")

@@ -420,9 +420,16 @@ final class ProtosFrameArguments {
      * value, written directly into the final array. No activation is
      * published and no intermediate supplied-argument array exists.
      *
+     * <p>I115-H7-R3: for an admitted compact callee, {@code methodHome} is
+     * always {@code null} and {@code callerReference} is {@code null} unless
+     * the callee root registered a caller need. No caller is resolved,
+     * validated or published here.
+     *
      * <p>RECORDED DIVERGENCE: the ReturnHome slot always holds the
      * primitive-accepting unobservable marker; the materialized ReturnHome
-     * lifecycle of the selected Closure is not established.
+     * lifecycle of the selected Closure is not established. A callee that
+     * reads its home or an untransported caller from this header is outside
+     * the experimental admission.
      */
     static Object[] experimentalMethodCallOne(
             ProtosClosureValue closure,

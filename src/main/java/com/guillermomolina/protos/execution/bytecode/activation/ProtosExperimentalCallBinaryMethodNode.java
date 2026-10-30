@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.execution.ProtosExperimentalGetMethodNode.Method;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -27,6 +26,7 @@ import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.ForceQuickening;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
@@ -38,36 +38,35 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.strings.TruffleString;
 
 /**
  * I115-H7 EXPERIMENTAL, proxied as the {@code CallBinaryMethod} operation
  * (GraalPy {@code CallBinaryMethodNode.callPFunction} shape): the call half of
- * an ordinary one-argument send, consuming the {@link Method} produced by
- * {@code GetMethod} and the explicit argument, each evaluated once by the
- * caller bytecode.
+ * an ordinary one-argument send. I115-H7-R3: it consumes three operands, each
+ * evaluated once by the caller bytecode: the selected {@code callable}
+ * produced by {@code GetMethod}, the {@code receiver} reloaded from its bound
+ * stack value, and the explicit {@code argument}. The selector and {@code
+ * terminal} are constant operands.
  *
  * <ul>
  *   <li>{@link #doDirect}: a PIC of at most three selected source Closures,
  *       keyed by Closure identity, each with its stable {@link
- *       RootCallTarget} and a cached {@link DirectCallNode}. The B5+ header
- *       ({@link ProtosFrameArguments#experimentalMethodCallOne}) is built
- *       immediately before the single call; the callee's result is returned
- *       directly.</li>
+ *       RootCallTarget} and a cached {@link DirectCallNode}. Only admitted
+ *       compact H7 callees ({@link #admittedTargetOrNull}) enter it. The B5+
+ *       header ({@link ProtosFrameArguments#experimentalMethodCallOne}) is
+ *       built immediately before the single call, with a {@code null} method
+ *       home; the caller reference is read only when the callee root has
+ *       registered {@code NEEDS_CALLER_PRELUDE} or {@code
+ *       NEEDS_EXACT_ACTIVATION}. The callee's result is returned directly.</li>
  *   <li>{@link #doIndirect}: the megamorphic Closure tier, the same header
- *       through an {@link IndirectCallNode}.</li>
+ *       through an {@link IndirectCallNode}, or the ordinary send for a
+ *       Closure that is not admitted.</li>
  *   <li>{@link #doGeneric}: any other selection (no slot, a non-Closure
- *       value, a native body, a target without the non-suspension proof):
- *       the complete ordinary send, behind {@link InliningCutoff}, never
+ *       value): the complete ordinary send of the constant selector on the
+ *       already evaluated operands, behind {@link InliningCutoff}, never
  *       another DSL operation tree.</li>
  * </ul>
- *
- * <p>Caller protocol (I115-H7-R1): the callee's caller slot is produced by
- * the existing B5 producer ({@code InvokeMethodOneTail#callerArgument}) from
- * the caller reference and prelude {@code GetMethod} read: the reference as
- * is, or a {@link ProtosCallerFrameReference} transporting the prelude when
- * the callee root registered {@code NEEDS_CALLER_PRELUDE}. The generic route
- * resolves the exact caller through {@code InvokeClosureOneTail#exactCaller},
- * which registers this root's {@code NEEDS_EXACT_ACTIVATION}.
  *
  * <p>Suspension: the direct and indirect tiers enter only roots proven
  * non-suspending. When the send is the root's terminal expression ({@code
@@ -77,76 +76,79 @@ import com.oracle.truffle.api.nodes.Node;
  * is abandoned and the standard {@code Error} is signalled at the caller
  * (RECORDED LIMITATION, see the I115-H7 experiment record).
  *
- * <p>An argument in the I115-H7 int representation is passed as is only to
- * a callee root that the experimental lowering entered with {@code
- * CopyArguments}; every other callee receives the guest value.
+ * <p>RECORDED DIVERGENCES (I115-H7-R3): an admitted callee receives no
+ * method home and, unless it registered a caller need, no caller reference;
+ * a non-local control transfer out of an admitted callee is not translated
+ * at this call site; the int carrier of the H7 operations is passed as is.
  */
 @GenerateUncached
 @GenerateInline(false)
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
+@ConstantOperand(type = TruffleString.class, name = "selector")
 @ConstantOperand(type = boolean.class, name = "terminal")
 abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
 
     abstract Object execute(
-            VirtualFrame frame, boolean terminal, Object method, Object argument);
+            VirtualFrame frame,
+            TruffleString selector,
+            boolean terminal,
+            Object callable,
+            Object receiver,
+            Object argument);
 
     @Specialization(
             excludeForUncached = true,
             guards = {
-                "cachedClosure != null",
-                "cachedTarget != null",
-                "selects(method, cachedClosure)"
+                "callable == cachedClosure",
+                "cachedTarget != null"
             },
             limit = "3")
+    @ForceQuickening
     static Object doDirect(
             VirtualFrame frame,
+            TruffleString selector,
             boolean terminal,
-            Method method,
+            ProtosClosureValue callable,
+            Object receiver,
             Object argument,
-            @Cached("closureOrNull(method.callable())") ProtosClosureValue cachedClosure,
+            @Cached("callable") ProtosClosureValue cachedClosure,
             @Cached("admittedTargetOrNull(cachedClosure, currentEnteredContext($node))")
                     RootCallTarget cachedTarget,
             @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
                     ProtosBytecodeRootNode cachedCallee,
-            @Cached("acceptsPrimitiveArguments(cachedCallee)") boolean cachedPrimitive,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached("createDirectCallNodeOrNull(cachedTarget)") DirectCallNode call) {
-        Object[] arguments = ProtosFrameArguments.experimentalMethodCallOne(
+        return call.call(ProtosFrameArguments.experimentalMethodCallOne(
                 cachedClosure,
-                ProtosNumericValueSupport.guestValue(method.receiver()),
-                method.home(),
-                callerArgument(cachedCallee, cachedClosure, method),
-                cachedPrimitive ? argument : ProtosNumericValueSupport.guestValue(argument));
-        try {
-            return call.call(arguments);
-        } catch (ProtosBytecodeControlTransferException bridged) {
-            throw bridged.transfer();
-        }
+                ProtosNumericValueSupport.guestValue(receiver),
+                null,
+                callerArgumentIfNeeded(frame, root, cachedCallee, cachedClosure),
+                argument));
     }
 
-    @Specialization(guards = "isClosure(method)", replaces = "doDirect")
+    @Specialization(replaces = "doDirect")
     static Object doIndirect(
             VirtualFrame frame,
+            TruffleString selector,
             boolean terminal,
-            Method method,
+            ProtosClosureValue callable,
+            Object receiver,
             Object argument,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached IndirectCallNode call) {
-        ProtosClosureValue closure = (ProtosClosureValue) method.callable();
         RootCallTarget target =
-                admittedTargetOrNull(closure, ProtosLanguageContext.current(call));
+                admittedTargetOrNull(callable, ProtosLanguageContext.current(call));
         if (target == null) {
-            return sendOne(root, method.caller(), terminal,
-                    method.receiver(), method.selector(), argument);
+            return sendOne(root, callerReference(frame), terminal,
+                    receiver, selector.toJavaStringUncached(), argument);
         }
         ProtosBytecodeRootNode callee = calleeRootOrNull(target);
         Object[] arguments = ProtosFrameArguments.experimentalMethodCallOne(
-                closure,
-                ProtosNumericValueSupport.guestValue(method.receiver()),
-                method.home(),
-                callerArgument(callee, closure, method),
-                acceptsPrimitiveArguments(callee)
-                        ? argument
-                        : ProtosNumericValueSupport.guestValue(argument));
+                callable,
+                ProtosNumericValueSupport.guestValue(receiver),
+                null,
+                callerArgumentIfNeeded(frame, root, callee, callable),
+                argument);
         try {
             return call.call(target, arguments);
         } catch (ProtosBytecodeControlTransferException bridged) {
@@ -154,37 +156,62 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
         }
     }
 
-    @Specialization(guards = "!isClosure(method)")
+    @Specialization(guards = "!isClosure(callable)")
     @InliningCutoff
     static Object doGeneric(
             VirtualFrame frame,
+            TruffleString selector,
             boolean terminal,
-            Method method,
+            Object callable,
+            Object receiver,
             Object argument,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
-        return sendOne(root, method.caller(), terminal,
-                method.receiver(), method.selector(), argument);
+        return sendOne(root, callerReference(frame), terminal,
+                receiver, selector.toJavaStringUncached(), argument);
     }
 
-    /* Closure identity of the cached PIC entry. */
-    static boolean selects(Method method, ProtosClosureValue cachedClosure) {
-        return method.callable() == cachedClosure;
+    static boolean isClosure(Object callable) {
+        return callable instanceof ProtosClosureValue;
     }
 
-    static boolean isClosure(Method method) {
-        return method.callable() instanceof ProtosClosureValue;
-    }
-
-    static ProtosClosureValue closureOrNull(Object callable) {
-        return callable instanceof ProtosClosureValue closure ? closure : null;
+    /*
+     * I115-H7-R3: the callee's B5 caller slot. Null unless the callee root
+     * registered a caller need; the needs are read from the (in doDirect,
+     * partial-evaluation constant) callee root under its stability
+     * Assumption, so compiled code of a callee without needs reads nothing.
+     * A requested prelude is transported through the existing producer
+     * contract (InvokeMethodOneTail#callerArgument).
+     */
+    static Object callerArgumentIfNeeded(
+            VirtualFrame frame,
+            ProtosBytecodeRootNode root,
+            ProtosBytecodeRootNode callee,
+            ProtosClosureValue closure) {
+        boolean needsPrelude = callee.hasCallerNeed(
+                ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE);
+        if (!needsPrelude
+                && !callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION)) {
+            return null;
+        }
+        Object caller = callerReference(frame);
+        if (!needsPrelude) {
+            return caller;
+        }
+        return ProtosBytecodeRootNode.InvokeMethodOneTail.callerArgument(
+                callee,
+                closure,
+                caller,
+                ProtosBytecodeRootNode.InvokeClosureOneTail.admittedCallerPrelude(root, caller));
     }
 
     /**
      * Installation (direct tier) or megamorphic (indirect tier): the
      * Context-owned Bytecode target of a source Closure whose root proves
-     * non-suspension and whose invocation ReturnHome is unobservable, or null.
-     * The experimental B5 header uses the primitive-result unobservable
-     * marker, so observable ReturnHomes must use the ordinary send path.
+     * non-suspension, whose invocation ReturnHome is unobservable and which
+     * the experimental lowering entered with {@code CopyArguments} (a compact
+     * H7 root using only its argument local), or null. The experimental B5
+     * header carries no method home and the primitive-result unobservable
+     * marker, so every other callee must use the ordinary send path.
      */
     @TruffleBoundary
     static RootCallTarget admittedTargetOrNull(
@@ -199,6 +226,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
         return target != null
                         && target.getRootNode() instanceof ProtosBytecodeRootNode root
                         && root.provablyNonSuspendingBody()
+                        && root.isExperimentalPrimitiveArgumentRoot()
                 ? target
                 : null;
     }
@@ -210,25 +238,8 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                 : null;
     }
 
-    static boolean acceptsPrimitiveArguments(ProtosBytecodeRootNode callee) {
-        return callee != null && callee.isExperimentalPrimitiveArgumentRoot();
-    }
-
     static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {
         return target == null ? null : DirectCallNode.create(target);
-    }
-
-    /*
-     * The callee's B5 caller slot through the existing producer contract
-     * (InvokeMethodOneTail#callerArgument), with the prelude GetMethod read.
-     */
-    static Object callerArgument(
-            ProtosBytecodeRootNode callee, ProtosClosureValue closure, Method method) {
-        if (callee == null) {
-            return method.caller();
-        }
-        return ProtosBytecodeRootNode.InvokeMethodOneTail.callerArgument(
-                callee, closure, method.caller(), method.callerPrelude());
     }
 
     @NonIdempotent

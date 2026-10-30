@@ -267,6 +267,81 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         return !frameBackedLocals.isCleared(bytecodeNode, frame, ordinal);
     }
 
+    /**
+     * I115-H7-R3 EXPERIMENTAL: the physical location of the frame-backed
+     * binding {@code expectedName} at {@code ordinal}, for a cached direct
+     * read, or {@code null} when the name, the ordinal and a PRESENT local do
+     * not correspond. Installation only: every check happens here, never in
+     * {@link ExperimentalGlobalReadLocation#read}.
+     */
+    @TruffleBoundary
+    ExperimentalGlobalReadLocation experimentalGlobalReadLocationOrNull(
+            String expectedName, int ordinal) {
+        BytecodeLocation current = declaringLocation.update();
+        BytecodeNode bytecodeNode = current.getBytecodeNode();
+        if (!hasFrameBackedBindingAt(bytecodeNode, expectedName, ordinal)) {
+            return null;
+        }
+        return new ExperimentalGlobalReadLocation(
+                frame,
+                declaringRoot,
+                bytecodeNode,
+                current.getBytecodeIndex(),
+                frameBackedLayout.localOffsetAt(ordinal),
+                ordinal);
+    }
+
+    /**
+     * I115-H7-R3 EXPERIMENTAL (GraalPy {@code ReadGlobalOrBuiltinNode}
+     * fast-path shape): the selected physical location of one module
+     * binding. It reads the original retained frame, never a copy, so the
+     * current value is observed. It is valid only while the declaring root
+     * still runs the {@link BytecodeNode} its bytecode index belongs to.
+     *
+     * <p>RECORDED DIVERGENCE (I115): the specialized read does not re-check
+     * presence or layout metadata; a later removal of the binding is not
+     * observed by this location.
+     */
+    static final class ExperimentalGlobalReadLocation {
+        private final MaterializedFrame frame;
+        private final BytecodeRootNode root;
+        private final BytecodeNode bytecodeNode;
+        private final int bytecodeIndex;
+        private final int localOffset;
+        private final int ordinal;
+
+        private ExperimentalGlobalReadLocation(
+                MaterializedFrame frame,
+                BytecodeRootNode root,
+                BytecodeNode bytecodeNode,
+                int bytecodeIndex,
+                int localOffset,
+                int ordinal) {
+            this.frame = frame;
+            this.root = root;
+            this.bytecodeNode = bytecodeNode;
+            this.bytecodeIndex = bytecodeIndex;
+            this.localOffset = localOffset;
+            this.ordinal = ordinal;
+        }
+
+        /** True while the owning root still uses the selected bytecode node. */
+        boolean isCurrent() {
+            return root.getBytecodeNode() == bytecodeNode;
+        }
+
+        /** The current value of the binding, read directly from the frame. */
+        Object read() {
+            // I091: a frame may retain a primitive carrier; observers see the guest value.
+            return ProtosNumericValueSupport.guestValue(
+                    bytecodeNode.getLocalValue(bytecodeIndex, frame, localOffset));
+        }
+
+        int ordinal() {
+            return ordinal;
+        }
+    }
+
     @TruffleBoundary
     Object readFrameBackedBindingAt(String expectedName, int ordinal) {
         BytecodeNode bytecodeNode = currentBytecodeNode();
