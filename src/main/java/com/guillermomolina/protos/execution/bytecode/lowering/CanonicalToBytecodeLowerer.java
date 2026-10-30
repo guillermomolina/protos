@@ -392,6 +392,18 @@ final class CanonicalToBytecodeLowerer {
      */
     private ComposedSequenceScratch currentExperimentalCompactScratch;
     /*
+     * I115-H7 EXPERIMENTAL: whether the compact root being emitted loads
+     * signed-32 Integer literals as int carriers (a non-recursive root
+     * without any pre-H7 dispatching site), and the root's physical scope.
+     */
+    private boolean currentExperimentalIntLiterals;
+    private CanonicalLexicalScope currentExperimentalCompactScope;
+    /*
+     * I115-H7-R1: the root's terminal expression while a compact root is
+     * emitted; a method send there may return a suspension transport.
+     */
+    private CanonicalExpression currentExperimentalCompactTerminal;
+    /*
      * I115-H1-FIX: the dispatching Boolean control sites of the compact root
      * being emitted (empty outside one). During admission only: the
      * bindings pinned to OBJECT, the bindings assigned by dispatching
@@ -1268,6 +1280,8 @@ final class CanonicalToBytecodeLowerer {
             }
         }
 
+        // I115-H7 EXPERIMENTAL: whether the prologue emitted CopyArguments.
+        boolean experimentalPrimitiveArgumentRoot = false;
         BytecodeLocal defaultValue = null;
         BytecodeLocal defaultPreparedCall = null;
         BytecodeLocal defaultChildResult = null;
@@ -1320,6 +1334,30 @@ final class CanonicalToBytecodeLowerer {
                         activationDefinition.parameters().get(0).name()));
                 builder.emitExperimentalLongArgument0();
                 builder.endStoreLocal();
+            } else if (experimentalCompact != null
+                    && !experimentalCompact.dispatches()
+                    && activationDefinition.parameters().size() == 1
+                    && currentActivationLocal == null
+                    && currentRootFrameNativeLocals != null
+                    && currentRootFrameNativeLayout != null) {
+                /*
+                 * I115-H7 EXPERIMENTAL: a non-dispatching compact unary root
+                 * copies its argument from the B5 position into the
+                 * parameter's frame local (GraalPy CopyArguments); the body
+                 * reads it with a plain LoadLocal.
+                 */
+                String parameterName = activationDefinition.parameters().get(0).name();
+                int ordinal = frameNativeOrdinal(parameterName);
+                if (ordinal < 0) {
+                    throw new AssertionError(
+                            "I115-H7 admitted parameter without a frame local");
+                }
+                builder.emitCopyArguments(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout,
+                        ordinal,
+                        parameterName);
+                experimentalPrimitiveArgumentRoot = true;
             } else if ((unaryEntry != null
                             || (experimentalCompact != null
                                     && activationDefinition.parameters().size() == 1))
@@ -1382,7 +1420,7 @@ final class CanonicalToBytecodeLowerer {
              * one publishes the refinement, as the I101-B direct
              * scalar-local body does.
              */
-            if (!experimentalCompact.dispatches()) {
+            if (!experimentalCompact.dispatches() && !experimentalCompact.invokes()) {
                 loweringRefinementAccepted = acceptsLoweringRefinement(
                         publishLoweringRefinement(rootPlan, "I115-M compact root"));
             }
@@ -1653,6 +1691,9 @@ final class CanonicalToBytecodeLowerer {
                 || (experimentalCompact != null
                         && experimentalCompact.experimentalRecursiveInteger())) {
             result.markExperimentalCalleeContextRoot();
+        }
+        if (experimentalPrimitiveArgumentRoot) {
+            result.markExperimentalPrimitiveArgumentRoot();
         }
         builder.endSourceSection();
         /*
@@ -10028,8 +10069,15 @@ final class CanonicalToBytecodeLowerer {
      * OBJECT, since its MISS path may select a method returning any value.
      * A comparison produces COMPARISON: canonical Boolean on its HIT, any
      * value on its MISS, so Boolean control over it is guarded at run time.
+     * I115-H7: GLOBAL is a bare read of a module (ROOT) binding, lowered to
+     * ReadGlobal and never registered as a local of the root; METHOD_RESULT
+     * is the result of an ordinary one-argument send lowered to GetMethod
+     * and CallBinaryMethod, any value at run time (the operation's
+     * specialization may produce a primitive).
      */
-    private enum ExperimentalCompactKind { INTEGER, BOOLEAN, COMPARISON, OBJECT }
+    private enum ExperimentalCompactKind {
+        INTEGER, BOOLEAN, COMPARISON, OBJECT, GLOBAL, METHOD_RESULT
+    }
 
     /**
      * I115-M EXPERIMENTAL: compilation fact that every expression of a
@@ -10043,6 +10091,10 @@ final class CanonicalToBytecodeLowerer {
      * numeric send or a dispatching Boolean control, whose MISS path
      * performs an ordinary send; {@code dispatchingControls} are the Boolean
      * control sites whose receiver is not proven canonical Boolean.
+     * I115-H7-R1: {@code invokes} is true when the root contains an H7 send
+     * (NumberAdd, NumberInPlaceAdd, Lt or a method send) whose generic route
+     * performs an ordinary send; such a root publishes no non-suspension
+     * refinement, exactly like a pre-H7 root with a numeric send site.
      */
     private record ExperimentalCompactRoot(
             CanonicalLexicalScope scope,
@@ -10050,7 +10102,8 @@ final class CanonicalToBytecodeLowerer {
             boolean guestIntegerLiteralReturn,
             boolean dispatches,
             boolean experimentalRecursiveInteger,
-            java.util.Set<CanonicalSend> dispatchingControls) {}
+            java.util.Set<CanonicalSend> dispatchingControls,
+            boolean invokes) {}
 
     /*
      * I115-N: compile-time binding families keyed by binding identity. A
@@ -10201,13 +10254,20 @@ final class CanonicalToBytecodeLowerer {
         if (guestIntegerReturn != null && pinned.contains(guestIntegerReturn)) {
             guestIntegerReturn = null;
         }
+        boolean invokes = false;
+        if (!experimentalRecursiveInteger) {
+            for (CanonicalExpression expression : sequence.expressions()) {
+                invokes |= experimentalCompactInvokes(expression);
+            }
+        }
         return new ExperimentalCompactRoot(
                 scope,
                 guestIntegerReturn,
                 guestIntegerLiteralReturn,
                 dispatches,
                 experimentalRecursiveInteger,
-                java.util.Collections.unmodifiableSet(dispatchingControls));
+                java.util.Collections.unmodifiableSet(dispatchingControls),
+                invokes);
     }
 
     /*
@@ -10297,11 +10357,20 @@ final class CanonicalToBytecodeLowerer {
      */
     private static boolean experimentalCompactDispatches(
             CanonicalExpression expression) {
+        return experimentalCompactDispatches(expression, false);
+    }
+
+    /*
+     * I115-H7-R1: whether an admitted expression, including its inline
+     * callback bodies, contains any send other than whileTrue and the
+     * structured Boolean controls themselves.
+     */
+    private static boolean experimentalCompactInvokes(CanonicalExpression expression) {
         if (expression instanceof CanonicalCreate create) {
-            return experimentalCompactDispatches(create.value());
+            return experimentalCompactInvokes(create.value());
         }
         if (expression instanceof CanonicalAssign assign) {
-            return experimentalCompactDispatches(assign.value());
+            return experimentalCompactInvokes(assign.value());
         }
         if (!(expression instanceof CanonicalSend send)) {
             return false;
@@ -10320,7 +10389,58 @@ final class CanonicalToBytecodeLowerer {
                             ? callback.body().expressions()
                             : java.util.List.of(part);
             for (CanonicalExpression inner : nested) {
-                if (experimentalCompactDispatches(inner)) {
+                if (experimentalCompactInvokes(inner)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /*
+     * I115-H7: NumberAdd ({@code +}), Lt (the {@code <} ending a whileTrue
+     * condition) and an ordinary method send (GetMethod, CallBinaryMethod)
+     * keep their generic route inside the operation, so they are not
+     * dispatching sites; only their operands are inspected.
+     */
+    private static boolean experimentalCompactDispatches(
+            CanonicalExpression expression,
+            boolean whileCondition) {
+        if (expression instanceof CanonicalCreate create) {
+            return experimentalCompactDispatches(create.value());
+        }
+        if (expression instanceof CanonicalAssign assign) {
+            return experimentalCompactDispatches(assign.value());
+        }
+        if (!(expression instanceof CanonicalSend send)) {
+            return false;
+        }
+        String selector = send.message();
+        if (!"whileTrue".equals(selector)
+                && experimentalCompactBooleanControl(selector) == null) {
+            boolean h7 = "+".equals(selector)
+                    || (whileCondition && "<".equals(selector))
+                    || experimentalCompactMethodSend(send);
+            return !h7
+                    || experimentalCompactDispatches(send.receiver())
+                    || experimentalCompactDispatches(send.arguments().get(0));
+        }
+        java.util.List<CanonicalExpression> parts =
+                new java.util.ArrayList<>(send.arguments().size() + 1);
+        parts.add(send.receiver());
+        parts.addAll(send.arguments());
+        for (CanonicalExpression part : parts) {
+            java.util.List<CanonicalExpression> nested =
+                    part instanceof CanonicalClosure callback
+                            ? callback.body().expressions()
+                            : java.util.List.of(part);
+            boolean condition = "whileTrue".equals(selector)
+                    && part == send.receiver()
+                    && part instanceof CanonicalClosure;
+            for (int index = 0; index < nested.size(); index++) {
+                if (experimentalCompactDispatches(
+                        nested.get(index),
+                        condition && index == nested.size() - 1)) {
                     return true;
                 }
             }
@@ -10586,7 +10706,14 @@ final class CanonicalToBytecodeLowerer {
                             currentRootAnalysis.resolutionOf(lookup).orElse(null),
                             scope,
                             lookup.name());
-            return identity == null ? null : kinds.get(identity);
+            if (identity == null) {
+                // I115-H7: a module binding is read in place, never localized.
+                return !currentExperimentalRecursiveIntegerAdmission
+                                && experimentalCompactGlobal(lookup, scope) != null
+                        ? ExperimentalCompactKind.GLOBAL
+                        : null;
+            }
+            return kinds.get(identity);
         }
         if (expression instanceof CanonicalCreate
                 || expression instanceof CanonicalAssign) {
@@ -10612,6 +10739,18 @@ final class CanonicalToBytecodeLowerer {
         if (experimentalCompactBooleanControl(send.message()) != null) {
             return admitExperimentalCompactBooleanControl(
                     send, scope, kinds, callback);
+        }
+        if (!currentExperimentalRecursiveIntegerAdmission
+                && experimentalCompactMethodSend(send)) {
+            // I115-H7: receiver then argument, each admitted and evaluated once.
+            if (admitExperimentalCompactExpression(
+                            send.receiver(), scope, kinds, callback) == null
+                    || admitExperimentalCompactExpression(
+                                    send.arguments().get(0), scope, kinds, callback)
+                            == null) {
+                return null;
+            }
+            return ExperimentalCompactKind.METHOD_RESULT;
         }
 
         boolean arithmetic = experimentalCompactArithmetic(send.message());
@@ -10892,6 +11031,57 @@ final class CanonicalToBytecodeLowerer {
                 : null;
     }
 
+    /**
+     * I115-H7 EXPERIMENTAL: a compact read of a module binding. The lookup
+     * must resolve, through any depth of inline callbacks, to a binding
+     * captured from a ROOT scope outside the physical scope. The result is
+     * the binding and its lexical depth counted from the physical root (the
+     * depth ReadGlobal resolves from that root's frame), or null.
+     */
+    private record ExperimentalCompactGlobal(
+            CanonicalBindingIdentity identity, int physicalDepth) {}
+
+    private ExperimentalCompactGlobal experimentalCompactGlobal(
+            CanonicalLookup lookup,
+            CanonicalLexicalScope scope) {
+        if (!(currentRootAnalysis.resolutionOf(lookup).orElse(null)
+                instanceof CanonicalBindingResolution.CapturedResolved captured)) {
+            return null;
+        }
+        CanonicalBindingIdentity identity = captured.identity();
+        if (identity.owner().kind() != CanonicalLexicalScope.Kind.ROOT
+                || identity.owner() == scope
+                || !identity.name().equals(lookup.name())) {
+            return null;
+        }
+        int depth = 0;
+        for (CanonicalLexicalScope current = scope;
+                current != null;
+                current = current.outwardScope()) {
+            if (current == identity.owner()) {
+                return new ExperimentalCompactGlobal(identity, depth);
+            }
+            depth++;
+        }
+        return null;
+    }
+
+    /**
+     * I115-H7 EXPERIMENTAL: an ordinary send of exactly one argument that
+     * the compact subset lowers to GetMethod and CallBinaryMethod: any
+     * selector except the numeric selectors, whileTrue and the standard
+     * Boolean controls, which keep their own lowering. Independent of the
+     * selector's spelling otherwise.
+     */
+    private static boolean experimentalCompactMethodSend(CanonicalSend send) {
+        String selector = send.message();
+        return send.arguments().size() == 1
+                && !experimentalCompactArithmetic(selector)
+                && !experimentalCompactComparison(selector)
+                && !"whileTrue".equals(selector)
+                && NormalBooleanControl.of(selector) == null;
+    }
+
     private static boolean experimentalCompactArithmetic(String selector) {
         return "+".equals(selector)
                 || "-".equals(selector)
@@ -10923,6 +11113,15 @@ final class CanonicalToBytecodeLowerer {
                 currentExperimentalRecursiveIntegerEmission;
         java.util.Set<CanonicalSend> savedDispatchingControls =
                 currentExperimentalDispatchingControls;
+        boolean savedIntLiterals = currentExperimentalIntLiterals;
+        CanonicalLexicalScope savedCompactScope = currentExperimentalCompactScope;
+        // I115-H7: int carriers never reach a pre-H7 dispatching site.
+        currentExperimentalIntLiterals =
+                !compact.experimentalRecursiveInteger() && !compact.dispatches();
+        currentExperimentalCompactScope = compact.scope();
+        CanonicalExpression savedCompactTerminal = currentExperimentalCompactTerminal;
+        currentExperimentalCompactTerminal =
+                sequence.expressions().get(sequence.expressions().size() - 1);
         currentExperimentalGuestIntegerBinding = compact.guestIntegerReturn();
         currentExperimentalRecursiveIntegerEmission =
                 compact.experimentalRecursiveInteger();
@@ -10959,6 +11158,9 @@ final class CanonicalToBytecodeLowerer {
                     savedRecursiveEmission;
             currentExperimentalCompactScratch = savedScratch;
             currentExperimentalDispatchingControls = savedDispatchingControls;
+            currentExperimentalIntLiterals = savedIntLiterals;
+            currentExperimentalCompactScope = savedCompactScope;
+            currentExperimentalCompactTerminal = savedCompactTerminal;
         }
     }
 
@@ -11023,6 +11225,16 @@ final class CanonicalToBytecodeLowerer {
                                 currentExperimentalGuestIntegerBinding.owner()))) {
             // I115-O: the guest Integer is prepared at lowering time.
             builder.emitLoadConstant(guestLiteralConstant(literal));
+        } else if (experimentalCompactInPlaceAdd(binding, value)) {
+            // I115-H7: x = x + e over the same binding (GraalPy PyNumberInPlaceAdd).
+            CanonicalSend add = (CanonicalSend) value;
+            SourceSpan span = add.span();
+            builder.beginSourceSection(span.startOffset(), span.length());
+            builder.beginNumberInPlaceAdd();
+            emitExperimentalCompactValue(builder, add.receiver());
+            emitExperimentalCompactValue(builder, add.arguments().get(0));
+            builder.endNumberInPlaceAdd();
+            builder.endSourceSection();
         } else {
             emitExperimentalCompactValue(builder, value);
         }
@@ -11031,6 +11243,30 @@ final class CanonicalToBytecodeLowerer {
         } else {
             builder.endStoreLocal();
         }
+    }
+
+    /*
+     * I115-H7: whether {@code value}, stored by {@code binding}, is a {@code
+     * +} whose left operand reads the same binding identity.
+     */
+    private boolean experimentalCompactInPlaceAdd(
+            CanonicalExpression binding,
+            CanonicalExpression value) {
+        if (currentExperimentalRecursiveIntegerEmission
+                || currentExperimentalCompactScope == null
+                || !(value instanceof CanonicalSend send)
+                || !"+".equals(send.message())
+                || send.arguments().size() != 1
+                || !(send.receiver() instanceof CanonicalLookup left)) {
+            return false;
+        }
+        CanonicalBindingIdentity stored =
+                experimentalCompactStoreIdentity(binding, currentExperimentalCompactScope);
+        return stored != null
+                && stored.equals(experimentalCompactIdentity(
+                        currentRootAnalysis.resolutionOf(left).orElse(null),
+                        currentExperimentalCompactScope,
+                        left.name()));
     }
 
     private BytecodeLocal experimentalCompactLocal(String name) {
@@ -11051,10 +11287,25 @@ final class CanonicalToBytecodeLowerer {
                 case TRUE -> ProtosBooleanValue.TRUE;
                 case FALSE -> ProtosBooleanValue.FALSE;
                 case NULL -> ProtosNullValue.INSTANCE;
-                default -> primitiveNumberLiteralOrNull(literal);
+                default -> experimentalCompactNumber(literal);
             });
         } else if (expression instanceof CanonicalLookup lookup) {
-            builder.emitLoadLocal(experimentalCompactLocal(lookup.name()));
+            ExperimentalCompactGlobal global =
+                    currentExperimentalRecursiveIntegerEmission
+                                    || currentExperimentalCompactScope == null
+                            ? null
+                            : experimentalCompactGlobal(lookup, currentExperimentalCompactScope);
+            if (global != null) {
+                // I115-H7: the module binding, read in place at this position.
+                builder.emitReadGlobal(
+                        frameBackedOrdinal(global.identity()),
+                        TruffleString.fromJavaStringUncached(
+                                global.identity().name(),
+                                TruffleString.Encoding.UTF_16),
+                        global.physicalDepth());
+            } else {
+                builder.emitLoadLocal(experimentalCompactLocal(lookup.name()));
+            }
         } else if (expression instanceof CanonicalCreate
                 || expression instanceof CanonicalAssign) {
             // The stored value is the result; the RHS is not reevaluated.
@@ -11096,6 +11347,19 @@ final class CanonicalToBytecodeLowerer {
                 emitExperimentalCompactBooleanControl(builder, send, result);
                 builder.emitLoadLocal(result);
                 builder.endBlock();
+            } else if (!currentExperimentalRecursiveIntegerEmission
+                    && experimentalCompactMethodSend(send)) {
+                emitExperimentalCompactMethodSend(builder, send);
+            } else if (!currentExperimentalRecursiveIntegerEmission
+                    && "+".equals(send.message())) {
+                // I115-H7: GraalPy PyNumberAdd; the generic route is inside the node.
+                SourceSpan span = send.span();
+                builder.beginSourceSection(span.startOffset(), span.length());
+                builder.beginNumberAdd();
+                emitExperimentalCompactValue(builder, send.receiver());
+                emitExperimentalCompactValue(builder, send.arguments().get(0));
+                builder.endNumberAdd();
+                builder.endSourceSection();
             } else {
                 if (currentExperimentalRecursiveIntegerEmission) {
                     emitExperimentalCompactSend(builder, send, false);
@@ -11109,6 +11373,56 @@ final class CanonicalToBytecodeLowerer {
                 }
             }
         }
+    }
+
+    /*
+     * I115-H7: a signed-32 Integer literal is an int carrier in a root that
+     * admits them; otherwise the existing long carrier.
+     */
+    private Object experimentalCompactNumber(CanonicalLiteral literal) {
+        Object number = primitiveNumberLiteralOrNull(literal);
+        if (currentExperimentalIntLiterals
+                && number instanceof Long small
+                && small.longValue() == (int) small.longValue()) {
+            return Integer.valueOf((int) small.longValue());
+        }
+        return number;
+    }
+
+    /**
+     * I115-H7 EXPERIMENTAL (GraalPy emitCall for an attribute call with one
+     * explicit argument): the receiver is evaluated once into GetMethod,
+     * which selects with the constant selector; the argument is evaluated
+     * once; CallBinaryMethod performs the single call and its result is
+     * consumed directly. Selection failure, non-Closure values and any other
+     * case are handled inside the two operations, so no DSL branch, prepared
+     * call or authority promotion is emitted. The original send keeps one
+     * CallTag region.
+     */
+    private void emitExperimentalCompactMethodSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send) {
+        /*
+         * I115-H7-R1: the root's terminal send may return a suspended
+         * outcome as the terminal transport; like every terminal invocation
+         * it withdraws the root's non-suspension proof.
+         */
+        boolean terminal = send == currentExperimentalCompactTerminal;
+        if (terminal) {
+            currentRootEmittedTerminalInvocation = true;
+        }
+        SourceSpan span = send.span();
+        builder.beginSourceSection(span.startOffset(), span.length());
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginCallBinaryMethod(terminal);
+        builder.beginGetMethod(TruffleString.fromJavaStringUncached(
+                send.message(), TruffleString.Encoding.UTF_16));
+        emitExperimentalCompactValue(builder, send.receiver());
+        builder.endGetMethod();
+        emitExperimentalCompactValue(builder, send.arguments().get(0));
+        builder.endCallBinaryMethod();
+        builder.endTag(StandardTags.CallTag.class);
+        builder.endSourceSection();
     }
 
     /**
@@ -11281,15 +11595,40 @@ final class CanonicalToBytecodeLowerer {
         java.util.List<CanonicalExpression> tests = sequence.expressions();
         CanonicalExpression condition = tests.get(tests.size() - 1);
         if (tests.size() == 1) {
-            emitExperimentalCompactBooleanCondition(builder, condition);
+            emitExperimentalCompactWhileTest(builder, condition);
             return;
         }
         builder.beginBlock();
         for (int index = 0; index < tests.size() - 1; index++) {
             emitExperimentalCompactStatement(builder, tests.get(index));
         }
-        emitExperimentalCompactBooleanCondition(builder, condition);
+        emitExperimentalCompactWhileTest(builder, condition);
         builder.endBlock();
+    }
+
+    /*
+     * I115-H7: a whileTrue condition ending in {@code <} is one Lt whose
+     * Java boolean the While consumes directly (no Boolean value, MISS
+     * classification or branch); every other condition keeps the I115-N/P
+     * conversion.
+     */
+    private void emitExperimentalCompactWhileTest(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression condition) {
+        if (!currentExperimentalRecursiveIntegerEmission
+                && condition instanceof CanonicalSend less
+                && "<".equals(less.message())
+                && less.arguments().size() == 1) {
+            SourceSpan span = less.span();
+            builder.beginSourceSection(span.startOffset(), span.length());
+            builder.beginLt();
+            emitExperimentalCompactValue(builder, less.receiver());
+            emitExperimentalCompactValue(builder, less.arguments().get(0));
+            builder.endLt();
+            builder.endSourceSection();
+            return;
+        }
+        emitExperimentalCompactBooleanCondition(builder, condition);
     }
 
     /**

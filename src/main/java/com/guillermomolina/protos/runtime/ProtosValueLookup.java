@@ -88,6 +88,16 @@ public final class ProtosValueLookup {
             Objects.requireNonNull(location, "location");
             Objects.requireNonNull(stability, "stability");
         }
+
+        /**
+         * I115-H7 EXPERIMENTAL: the current value of the selected physical
+         * location, read without a nominal lookup. Valid only while
+         * {@link #stability()} is valid; assignments through the same
+         * location stay visible because the value is never copied.
+         */
+        public Object currentValue() {
+            return location.value();
+        }
     }
 
     /**

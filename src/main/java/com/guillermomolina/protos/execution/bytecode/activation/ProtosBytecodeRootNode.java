@@ -182,6 +182,12 @@ import com.oracle.truffle.api.source.Source;
 @OperationProxy(value = ProtosNumericGreaterNode.class, name = "TryPrimitiveNumericGreater")
 @OperationProxy(value = ProtosNumericGreaterEqualNode.class, name = "TryPrimitiveNumericGreaterEqual")
 @OperationProxy(value = ProtosExperimentalReadGlobalNode.class, name = "ReadGlobal")
+// I115-H7 EXPERIMENTAL: GraalPy-shaped method call, numeric and comparison operations.
+@OperationProxy(value = ProtosExperimentalGetMethodNode.class, name = "GetMethod")
+@OperationProxy(value = ProtosExperimentalCallBinaryMethodNode.class, name = "CallBinaryMethod")
+@OperationProxy(value = ProtosExperimentalNumberAddNode.class, name = "NumberAdd")
+@OperationProxy(value = ProtosExperimentalNumberInPlaceAddNode.class, name = "NumberInPlaceAdd")
+@OperationProxy(value = ProtosExperimentalLessNode.class, name = "Lt")
 abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNode {
     protected ProtosBytecodeRootNode(
             ProtosLanguage language,
@@ -223,6 +229,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     final boolean isExperimentalCalleeContextRoot() {
         return experimentalCalleeContextRoot;
+    }
+
+    /*
+     * I115-H7 EXPERIMENTAL: whether this root binds its single parameter with
+     * CopyArguments, so its compact body accepts the int carrier of the H7
+     * operations as its argument, and returns an int result as is to a
+     * caller whose header accepts primitive results. Set once by the lowerer
+     * after endRoot(); a reparse replays that lowering.
+     */
+    @CompilationFinal private transient boolean experimentalPrimitiveArgumentRoot;
+
+    final void markExperimentalPrimitiveArgumentRoot() {
+        this.experimentalPrimitiveArgumentRoot = true;
+    }
+
+    final boolean isExperimentalPrimitiveArgumentRoot() {
+        return experimentalPrimitiveArgumentRoot;
     }
 
     /**
@@ -477,6 +500,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return;
             }
             registered |= need;
+            // TEMPORARY I115-H7-R1 DIAGNOSTIC: remove before commit.
+            if (System.getenv("PROTOS_I115_TRACE_CALLER_NEEDS") != null) {
+                new Throwable("I115_TRACE_CALLER_NEED need=" + need
+                        + " registered=" + registered).printStackTrace(System.out);
+            }
             Assumption previous = stable;
             stable = com.oracle.truffle.api.Truffle.getRuntime()
                     .createAssumption("Protos root caller needs");
@@ -722,6 +750,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             // I115-H5 EXPERIMENTAL: the callee's value, primitive included, as is.
             if (root.isExperimentalCalleeContextRoot()) {
+                return value;
+            }
+            // I115-H7 EXPERIMENTAL: an int result reaches an accepting caller as is.
+            if (root.isExperimentalPrimitiveArgumentRoot()
+                    && value instanceof Integer
+                    && ProtosFrameArguments.acceptsPrimitiveResult(frame.getArguments())) {
                 return value;
             }
             if (!root.epilogProjectsReturnCarrier()) {
@@ -1186,6 +1220,74 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             || ProtosFrameArguments.isExperimentalStaticUnaryCall(arguments))
                     && frameBackedLocals.isCleared(
                             bytecodeNode, frame, ordinal);
+        }
+    }
+
+    /**
+     * I115-H7 EXPERIMENTAL (GraalPy {@code CopyArguments}): the prologue of
+     * an admitted compact unary Closure root. {@link #copyOne} copies
+     * supplied argument 0 from its B5 position (unchanged by publication,
+     * and shared with the static unary layout) into the parameter's own
+     * frame local; an int carrier keeps its int frame tag, so the body's
+     * plain LoadLocal can be boxing-eliminated. No activation is published.
+     * Any other entry (a missing argument, an already published activation)
+     * takes {@link #authoritative}, the BindUnaryFrameParameter rules.
+     *
+     * <p>RECORDED DIVERGENCE: excess supplied arguments are not inspected.
+     */
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "ordinal")
+    @ConstantOperand(type = String.class, name = "name")
+    public static final class CopyArguments {
+        @Specialization(guards = "hasSuppliedArgument0(frame)")
+        public static void copyOne(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                int ordinal,
+                String name,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
+            Object value = ProtosFrameArguments.experimentalSuppliedArgument0(
+                    frame.getArguments());
+            if (value instanceof Integer small) {
+                frameBackedLocals.setInt(bytecodeNode, frame, ordinal, small.intValue());
+            } else {
+                frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
+            }
+        }
+
+        @Fallback
+        public static void authoritative(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                int ordinal,
+                String name,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind VirtualFrame frame) {
+            ProtosFrameLocalBindings.bindUnaryFrameParameterAuthoritatively(
+                    frameBackedLocals,
+                    frameBackedLayout,
+                    ordinal,
+                    name,
+                    frame.getArguments(),
+                    bytecodeNode,
+                    bytecodeIndex,
+                    frame.materialize());
+        }
+
+        @NonIdempotent
+        static boolean hasSuppliedArgument0(VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            return arguments.length == ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET + 1
+                    && (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                            || ProtosFrameArguments.isExperimentalStaticUnaryCall(arguments));
         }
     }
 

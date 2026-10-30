@@ -240,7 +240,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                                     receiver.closure, receiver.caller)
                             : ProtosFrameArguments.compactDirectClosureCallOneNoHome(
                                     receiver.closure, receiver.caller, supplied0);
-            return call.call(frame);
+            return hostResult(call.call(frame));
         }
 
         /** I115-H6: megamorphic physical target dispatch with the same single invocation. */
@@ -259,7 +259,19 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                                     receiver.closure, receiver.caller)
                             : ProtosFrameArguments.compactDirectClosureCallOneNoHome(
                                     receiver.closure, receiver.caller, supplied0);
-            return call.call(receiver.target, frame);
+            return hostResult(call.call(receiver.target, frame));
+        }
+
+        /*
+         * I115-H7 EXPERIMENTAL: an int carrier of the H7 compact operations
+         * becomes the guest Integer only here, at the Polyglot boundary.
+         * Every other raw result crosses unchanged (I115-H6).
+         */
+        private static Object hostResult(Object result) {
+            if (result instanceof Integer small) {
+                return ProtosNumericValueSupport.guestValue(small);
+            }
+            return result;
         }
 
         @TruffleBoundary

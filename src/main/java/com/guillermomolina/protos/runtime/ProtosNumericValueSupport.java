@@ -376,6 +376,14 @@ public final class ProtosNumericValueSupport {
 
     /** The guest value denoted by {@code value}; identity for every non-carrier. */
     public static Object guestValue(Object value) {
+        /*
+         * I115-H7 EXPERIMENTAL: an int carrier of the GraalPy-shaped compact
+         * operations (NumberAdd and the int-specialized locals) becomes the
+         * guest Integer only when it crosses an observable boundary.
+         */
+        if (value instanceof Integer small) {
+            return new ProtosIntegerValue(small.intValue());
+        }
         if (value instanceof Long small) {
             return new ProtosIntegerValue(small.longValue());
         }

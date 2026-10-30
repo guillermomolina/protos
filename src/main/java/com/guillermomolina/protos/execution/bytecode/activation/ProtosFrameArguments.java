@@ -413,6 +413,34 @@ final class ProtosFrameArguments {
     }
 
     /**
+     * I115-H7 (EXPERIMENTAL): the B5+ header of the GraalPy-shaped
+     * CallBinaryMethod (one explicit argument): the selected Closure, the
+     * original receiver, the method home, the caller reference (published
+     * activation or the caller's own B5 array, unresolved) and the supplied
+     * value, written directly into the final array. No activation is
+     * published and no intermediate supplied-argument array exists.
+     *
+     * <p>RECORDED DIVERGENCE: the ReturnHome slot always holds the
+     * primitive-accepting unobservable marker; the materialized ReturnHome
+     * lifecycle of the selected Closure is not established.
+     */
+    static Object[] experimentalMethodCallOne(
+            ProtosClosureValue closure,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            Object callerReference,
+            Object supplied0) {
+        return new Object[] {
+            closure,
+            receiver,
+            methodHome,
+            callerReference,
+            ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
+            supplied0
+        };
+    }
+
+    /**
      * I115-H (EXPERIMENTAL): the reduced static unary layout. I115-H3: a
      * direct construction with known positions; no caller, Task, Closure or
      * Context is validated, published or created.

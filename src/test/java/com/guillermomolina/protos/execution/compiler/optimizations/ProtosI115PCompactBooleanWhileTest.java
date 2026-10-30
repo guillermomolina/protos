@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
@@ -213,13 +214,14 @@ final class ProtosI115PCompactBooleanWhileTest {
                 """,
                 result -> assertEquals(1, result.asInt()));
 
-        assertEquals(1, census.names().stream()
-                        .filter(name -> name.contains("TryPrimitiveNumericLess"))
-                        .count(),
-                "The condition comparison is one shared numeric site");
-
-        // The HIT canonical Boolean and any MISS result share one validation.
-        assertBooleanConversion(census);
+        /*
+         * I115-H7: the condition comparison is exactly one Lt whose Java
+         * boolean the While branch consumes directly; the pre-H7 numeric
+         * site and its separate Boolean conversion are gone from this site.
+         * Lt validates a non-primitive (send) result itself; see
+         * comparisonMissNonBooleanConditionSignalsStandardError.
+         */
+        assertLtCondition(census.names());
 
         System.out.println(
                 "I115_P_INTEGER_COMPARISON_RUN_FULL=" + census.runFull());
@@ -423,10 +425,22 @@ final class ProtosI115PCompactBooleanWhileTest {
                     "(gate) => { body: 0\n(() => gate < 1).whileTrue() {\nbody = body + 1\n}\nbody }",
                     module);
             List<String> names = instructionNames(run);
-            assertTrue(names.stream().anyMatch(n -> n.contains("TryPrimitiveNumericLess")));
-            assertTrue(names.stream().anyMatch(
-                    n -> n.contains("ExperimentalCanonicalBooleanCondition")),
-                    "the condition is validated before branching");
+            // I115-H7: one Lt is the condition site and validates inside the node.
+            assertLtCondition(names);
+            ProtosBytecodeRootNode runRoot =
+                    run.executionPlan().orElseThrow().bytecodeActivationRootForTesting();
+            assertTrue(ProtosExperimentalLessNode.canonicalCondition(
+                    runRoot, module, ProtosBooleanValue.TRUE));
+            assertFalse(ProtosExperimentalLessNode.canonicalCondition(
+                    runRoot, module, ProtosBooleanValue.FALSE));
+            ProtosSignalException direct = assertThrows(
+                    ProtosSignalException.class,
+                    () -> ProtosExperimentalLessNode.canonicalCondition(
+                            runRoot, module, new ProtosIntegerValue(1)),
+                    "Lt accepts no truthiness");
+            assertSame(
+                    ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.ERROR),
+                    direct.error().parent().orElse(null));
 
             // Canonical false: zero iterations.
             assertEquals("0", integerValue(
@@ -700,6 +714,27 @@ final class ProtosI115PCompactBooleanWhileTest {
                         name -> name.contains(
                                 "ExperimentalCanonicalBooleanCondition")),
                 "A non-literal condition must use the validating conversion");
+    }
+
+    /*
+     * I115-H7: exactly one Lt, immediately consumed by the While's
+     * conditional branch, with neither the pre-H7 comparison site nor the
+     * separate Boolean conversion.
+     */
+    private static void assertLtCondition(List<String> names) {
+        assertEquals(1, names.stream().filter(name -> name.startsWith("c.Lt")).count(),
+                "The condition comparison is exactly one Lt: " + names);
+        int lt = 0;
+        while (!names.get(lt).startsWith("c.Lt")) {
+            lt++;
+        }
+        assertTrue(names.get(lt + 1).startsWith("branch.false"),
+                "The While branch consumes Lt's boolean directly: " + names);
+        assertFalse(names.stream().anyMatch(name -> name.contains("TryPrimitiveNumericLess")),
+                "The pre-H7 comparison site remains: " + names);
+        assertFalse(names.stream().anyMatch(
+                        name -> name.contains("ExperimentalCanonicalBooleanCondition")),
+                "Lt needs no separate Boolean conversion: " + names);
     }
 
     private static void assertGeneralLowering(

@@ -40,7 +40,9 @@ import org.junit.jupiter.api.Test;
  * the return-carrier projection; true/false literal conditions of structured
  * control are consumed directly as Java booleans. I115-H1-FIX: a numeric
  * send is the shared guarded numeric site; only roots without one are
- * free of ordinary send machinery.
+ * free of ordinary send machinery. I115-H7: {@code +} and the {@code <}
+ * ending a whileTrue condition are NumberAdd/NumberInPlaceAdd and Lt, whose
+ * ordinary send route stays inside the node.
  */
 final class ProtosI115QCompactLiteralReturnTest {
 
@@ -73,6 +75,7 @@ final class ProtosI115QCompactLiteralReturnTest {
             List<String> names,
             List<Long> guestIntegers,
             List<Long> carrierIntegers,
+            List<Integer> intCarriers,
             boolean projectsBefore,
             boolean projectsAfter) {
 
@@ -112,15 +115,39 @@ final class ProtosI115QCompactLiteralReturnTest {
         }
     }
 
+    /*
+     * I115-H7: a computed terminal is not a literal return. {@code 1 + 2} is
+     * one NumberAdd over two int carriers (no long carrier, no prepared
+     * guest Integer); the return epilogue projects the computed carrier, so
+     * the host receives the guest Integer 3. The literal-return policy above
+     * (prepared guest constant, no projection) does not apply.
+     */
     @Test
     void numericArithmeticStillUsesCarrier() throws Exception {
         Census census = runCase("arithmetic", """
                 run: () => { 1 + 2 }
-                """, result -> assertEquals(3L, result.asLong()));
-        assertTrue(census.has("TryPrimitiveNumericAdd"));
+                """, result -> {
+                    assertTrue(result.isNumber());
+                    assertTrue(result.fitsInInt());
+                    assertEquals(3L, result.asLong());
+                });
+        assertEquals(List.of(
+                        "c.EnterRoot",
+                        "load.constant",
+                        "load.constant",
+                        "c.NumberAdd",
+                        "c.EpilogForReturn",
+                        "return"),
+                census.names().stream().map(ProtosI115QCompactLiteralReturnTest::unquickened)
+                        .toList(),
+                "the computed terminal is one NumberAdd");
+        assertFalse(census.has("TryPrimitiveNumeric"));
         assertFalse(census.has("ExperimentalInteger"));
+        assertNoGenericDispatch(census);
         assertTrue(census.guestIntegers().isEmpty());
-        assertFalse(census.carrierIntegers().isEmpty());
+        assertTrue(census.carrierIntegers().isEmpty(),
+                "signed-32 literals are int carriers, not long carriers");
+        assertEquals(List.of(1, 2), census.intCarriers());
         assertTrue(census.projectsBefore());
         assertTrue(census.projectsAfter());
     }
@@ -219,10 +246,24 @@ final class ProtosI115QCompactLiteralReturnTest {
                     i
                 }
                 """, result -> assertEquals(1L, result.asLong()));
-        assertTrue(census.has("TryPrimitiveNumericLess"));
+        /*
+         * I115-H7: one Lt whose Java boolean the conditional branch consumes
+         * directly; a non-primitive comparison result is validated inside
+         * Lt (exactly canonical true/false, otherwise the standard Error),
+         * so no separate Boolean conversion is emitted.
+         */
+        List<String> names = census.names();
+        assertEquals(1, names.stream().filter(name -> name.startsWith("c.Lt")).count());
+        int lt = names.indexOf(names.stream()
+                .filter(name -> name.startsWith("c.Lt")).findFirst().orElseThrow());
+        assertTrue(names.get(lt + 1).startsWith("branch.false"),
+                "the branch consumes Lt's boolean: " + names);
+        assertFalse(census.has("TryPrimitiveNumeric"));
+        assertFalse(census.has(BOOLEAN_CONDITION));
         assertFalse(census.has("ExperimentalInteger"));
-        // The comparison result, HIT or MISS, is validated before branching.
-        assertTrue(census.has(BOOLEAN_CONDITION));
+        assertTrue(census.has("c.NumberInPlaceAdd"));
+        assertNoGenericDispatch(census);
+        assertFalse(census.has("PromoteFrameLexicalAuthority"));
     }
 
     @Test
@@ -242,9 +283,22 @@ final class ProtosI115QCompactLiteralReturnTest {
         // Compact: the literal callbacks add no roots.
         assertEquals(2, census.rootCount(), "No callback roots");
         assertFalse(census.has(BOOLEAN_CONDITION));
-        // The prefix '+' is the shared numeric site; its MISS keeps the send.
-        assertTrue(census.has("TryPrimitiveNumericAdd"));
+        /*
+         * I115-H7: the prefix n = n + 1 is the single NumberInPlaceAdd and
+         * stays inside the While condition, before the literal test, so it
+         * runs exactly once although the body never runs (result 1).
+         */
+        List<String> names = census.names();
+        assertEquals(1, names.stream()
+                .filter(name -> name.startsWith("c.NumberInPlaceAdd")).count());
+        int prefix = names.indexOf(names.stream()
+                .filter(name -> name.startsWith("c.NumberInPlaceAdd")).findFirst().orElseThrow());
+        int exit = names.indexOf(names.stream()
+                .filter(name -> name.startsWith("branch.false")).findFirst().orElseThrow());
+        assertTrue(prefix < exit, "the prefix is evaluated before the loop test: " + names);
+        assertFalse(census.has("TryPrimitiveNumeric"));
         assertFalse(census.has("ExperimentalInteger"));
+        assertNoGenericDispatch(census);
     }
 
     @Test
@@ -387,16 +441,25 @@ final class ProtosI115QCompactLiteralReturnTest {
         int moduleFull = roots.get(0).getBytecodeNode().getInstructionsAsList().size();
         List<Instruction> instructions = run.getBytecodeNode().getInstructionsAsList();
         List<Long> carriers = new ArrayList<>();
+        List<Integer> intCarriers = new ArrayList<>();
         for (Instruction instruction : instructions) {
             for (Object constant : constants(instruction)) {
                 if (constant instanceof Long carrier) {
                     carriers.add(carrier);
+                } else if (constant instanceof Integer small) {
+                    intCarriers.add(small);
                 }
             }
         }
         return new Census(name, roots.size(), instructions.size(), moduleFull,
-                names(run), guestIntegers(run), carriers,
+                names(run), guestIntegers(run), carriers, intCarriers,
                 projectsBefore, projectsAfter);
+    }
+
+    /* An instruction name without its quickening suffix. */
+    private static String unquickened(String name) {
+        int quickened = name.indexOf('$');
+        return quickened < 0 ? name : name.substring(0, quickened);
     }
 
     private static List<String> names(ProtosBytecodeRootNode run) {

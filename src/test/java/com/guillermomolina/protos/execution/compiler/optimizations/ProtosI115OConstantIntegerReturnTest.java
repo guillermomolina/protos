@@ -68,6 +68,8 @@ final class ProtosI115OConstantIntegerReturnTest {
             int moduleFull,
             List<Long> guestIntegers,
             List<Long> carrierIntegers,
+            List<Integer> intCarriers,
+            List<String> h7Operations,
             boolean compact,
             boolean projectsBefore,
             boolean projectsAfter) {
@@ -256,8 +258,48 @@ final class ProtosI115OConstantIntegerReturnTest {
                     r: 1 + 2
                     r
                 }
-                """, result -> assertEquals(3, result.asInt()));
-        assertNotAdmittedCompact(census);
+                """, result -> assertHostInteger(3, result));
+        assertCompactH7Arithmetic(census, "c.NumberAdd", List.of(1, 2));
+    }
+
+    /*
+     * I115-H7: a computed return over int carriers crosses signed-32 and
+     * signed-64 without precision loss and reaches the host as a guest
+     * Integer.
+     */
+    @Test
+    void computedReturnPromotesWithoutLoss() throws Exception {
+        Census intOverflow = runCase("computed-int-overflow", """
+                run: () => {
+                    r: 2147483647 + 1
+                    r
+                }
+                """, result -> {
+                    assertTrue(result.isNumber());
+                    assertTrue(result.fitsInLong());
+                    assertEquals(2147483648L, result.asLong());
+                });
+        assertCompactH7Arithmetic(intOverflow, "c.NumberAdd", List.of(2147483647, 1));
+
+        Census longOverflow = runCase("computed-long-overflow", """
+                run: () => {
+                    r: 9223372036854775807 + 1
+                    r
+                }
+                """, result -> {
+                    assertTrue(result.isNumber());
+                    assertFalse(result.fitsInLong());
+                    assertTrue(result.toString().contains("9223372036854775808"),
+                            "exact large Integer: " + result);
+                });
+        assertTrue(longOverflow.compact());
+        assertTrue(longOverflow.h7Operations().contains("c.NumberAdd"));
+        assertEquals(List.of(9223372036854775807L), longOverflow.carrierIntegers(),
+                "a literal outside signed-32 stays a long carrier");
+        assertEquals(List.of(1), longOverflow.intCarriers());
+        assertTrue(longOverflow.guestIntegers().isEmpty());
+        assertTrue(longOverflow.projectsBefore());
+        assertTrue(longOverflow.projectsAfter());
     }
 
     @Test
@@ -283,8 +325,8 @@ final class ProtosI115OConstantIntegerReturnTest {
                     y: x + 1
                     x
                 }
-                """, result -> assertEquals(4, result.asInt()));
-        assertNotAdmittedCompact(census);
+                """, result -> assertHostInteger(4, result));
+        assertCompactH7Arithmetic(census, "c.NumberAdd", List.of(4, 1));
     }
 
     @Test
@@ -295,8 +337,8 @@ final class ProtosI115OConstantIntegerReturnTest {
                     s: 2
                     r + s
                 }
-                """, result -> assertEquals(3, result.asInt()));
-        assertNotAdmittedCompact(census);
+                """, result -> assertHostInteger(3, result));
+        assertCompactH7Arithmetic(census, "c.NumberAdd", List.of(1, 2));
     }
 
     @Test
@@ -308,8 +350,29 @@ final class ProtosI115OConstantIntegerReturnTest {
                     s: c.ifTrueIfFalse(() => r = 1, () => r = 2)
                     r
                 }
-                """, result -> assertEquals(1, result.asInt()));
-        assertNotAdmittedCompact(census);
+                """, result -> assertHostInteger(1, result));
+        assertCompactValuePositionStores(census);
+
+        /*
+         * I115-H7-R1: the assignment inside ifTrueIfFalse is a value: s
+         * receives the stored value of the selected branch, which also
+         * updates r; the unselected assignment never runs.
+         */
+        for (String flag : List.of("true", "false")) {
+            int expected = flag.equals("true") ? 1 : 2;
+            for (String returned : List.of("r", "s")) {
+                Census variant = runCase("value-position-" + flag + "-" + returned, """
+                        run: () => {
+                            r: null
+                            c: %s
+                            s: c.ifTrueIfFalse(() => r = 1, () => r = 2)
+                            %s
+                        }
+                        """.formatted(flag, returned),
+                        result -> assertHostInteger(expected, result));
+                assertCompactValuePositionStores(variant);
+            }
+        }
     }
 
     @Test
@@ -411,6 +474,51 @@ final class ProtosI115OConstantIntegerReturnTest {
         }
     }
 
+    /*
+     * I115-H7: arithmetic in a non-dispatching compact root is the physical
+     * H7 operation over int carriers. The literals are exactly the expected
+     * int carriers (neither long carriers nor prepared guest Integers), and
+     * the return epilogue keeps projecting the carrier result.
+     */
+    private static void assertCompactH7Arithmetic(
+            Census census, String operation, List<Integer> intCarriers) {
+        assertTrue(census.compact(), census.name() + " must stay compact");
+        assertTrue(census.h7Operations().contains(operation),
+                census.name() + " uses " + operation + ": " + census.h7Operations());
+        assertFalse(census.h7Operations().stream()
+                        .anyMatch(name -> name.contains("TryPrimitiveNumeric")),
+                census.name());
+        assertTrue(census.guestIntegers().isEmpty(),
+                census.name() + " must not certify a guest Integer return");
+        assertTrue(census.carrierIntegers().isEmpty(),
+                census.name() + " must not load long carriers for signed-32 literals");
+        assertEquals(intCarriers, census.intCarriers(), census.name());
+        assertTrue(census.projectsBefore(), census.name());
+        assertTrue(census.projectsAfter(), census.name());
+    }
+
+    /*
+     * I115-H7: value-position stores of a structured Boolean control keep
+     * the compact control (its result local) and store int carriers; the
+     * binding is not certified, so the epilogue projects.
+     */
+    private static void assertCompactValuePositionStores(Census census) {
+        assertTrue(census.compact(), census.name() + " must stay compact");
+        assertTrue(census.guestIntegers().isEmpty(),
+                census.name() + " must not certify a guest Integer return");
+        assertTrue(census.carrierIntegers().isEmpty(), census.name());
+        assertEquals(List.of(1, 2), census.intCarriers(), census.name());
+        assertTrue(census.projectsBefore(), census.name());
+        assertTrue(census.projectsAfter(), census.name());
+    }
+
+    /* The host receives a guest Integer, never a host representation leak. */
+    private static void assertHostInteger(int expected, Value result) {
+        assertTrue(result.isNumber(), "guest Integer at the host: " + result);
+        assertTrue(result.fitsInInt(), "guest Integer at the host: " + result);
+        assertEquals(expected, result.asInt());
+    }
+
     private static void assertNotAdmittedCompact(Census census) {
         assertTrue(census.compact(), census.name() + " must stay compact");
         assertTrue(census.guestIntegers().isEmpty(),
@@ -491,6 +599,15 @@ final class ProtosI115OConstantIntegerReturnTest {
                 prepared.hostExecutableForTesting().target.getRootNode());
     }
 
+    /* I115-H7: operations emitted only by the compact lowering. */
+    private static final List<String> H7_OPERATIONS = List.of(
+            "c.NumberAdd",
+            "c.NumberInPlaceAdd",
+            "c.Lt",
+            "c.GetMethod",
+            "c.CallBinaryMethod",
+            "c.CopyArguments");
+
     /* Value locals declared only by the compact lowering's emitters. */
     private static final List<String> COMPACT_VALUE_LOCALS = List.of(
             "compactSendResult",
@@ -510,11 +627,23 @@ final class ProtosI115OConstantIntegerReturnTest {
         List<Instruction> instructions = run.getBytecodeNode().getInstructionsAsList();
         boolean compact = false;
         List<Long> carriers = new ArrayList<>();
+        List<Integer> intCarriers = new ArrayList<>();
+        List<String> h7Operations = new ArrayList<>();
         for (Instruction instruction : instructions) {
-            compact |= ProtosInstructionNames.of(instruction).contains("Experimental");
+            String instructionName = ProtosInstructionNames.of(instruction);
+            compact |= instructionName.contains("Experimental");
+            // I115-H7: the compact-only physical operations.
+            for (String h7 : H7_OPERATIONS) {
+                if (instructionName.startsWith(h7)) {
+                    compact = true;
+                    h7Operations.add(h7);
+                }
+            }
             for (Object constant : constants(instruction)) {
                 if (constant instanceof Long carrier) {
                     carriers.add(carrier);
+                } else if (constant instanceof Integer small) {
+                    intCarriers.add(small);
                 }
             }
         }
@@ -528,7 +657,8 @@ final class ProtosI115OConstantIntegerReturnTest {
         }
         List<Long> guests = guestIntegers(run);
         return new Census(name, roots.size(), instructions.size(), moduleFull,
-                guests, carriers, compact, projectsBefore, projectsAfter);
+                guests, carriers, intCarriers, h7Operations, compact,
+                projectsBefore, projectsAfter);
     }
 
     private static List<Long> guestIntegers(ProtosBytecodeRootNode run) {
