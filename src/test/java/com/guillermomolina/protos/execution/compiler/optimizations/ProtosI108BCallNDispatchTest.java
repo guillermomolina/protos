@@ -25,16 +25,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.oracle.truffle.api.debug.DebuggerSession;
 import com.oracle.truffle.api.debug.Debugger;
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureArguments;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
-import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.source.Source;
-import java.lang.reflect.Field;
 import java.nio.file.Path;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
@@ -86,26 +83,21 @@ final class ProtosI108BCallNDispatchTest {
                         "i108-b-mutation-warm.protos", module));
             }
 
-            Object callNEntry = directEntry("callN", module);
-            Object spreadEntry = directEntry("callSpread", module);
-            Object mutationEntry = directEntry("callWithMutation", module);
+            assertTerminalVarargsSite("callN", module);
+            assertComposedVarargsSite("callSpread", module);
+            assertComposedVarargsSite("callWithMutation", module);
 
-            assertNotNull(callNEntry);
-            assertNotNull(spreadEntry);
-            assertNotNull(mutationEntry);
 
             ProtosClosureValue sample = assertInstanceOf(
                     ProtosClosureValue.class,
                     evaluate("make()", "i108-b-sample.protos", module));
 
-            RootCallTarget target = InvokeClosureArguments.targetFor(
-                    sample, module, ProtosLanguageContext.current());
+            RootCallTarget target = ProtosGuardedSendSelection.fastOrdinarySendTarget(
+                    sample, ProtosLanguageContext.current());
 
             assertNotNull(target);
-            assertTrue(InvokeClosureArguments.nonSuspending(target));
-            assertSame(target, field(callNEntry, "cachedTarget_"));
-            assertSame(target, field(spreadEntry, "cachedTarget_"));
-            assertSame(target, field(mutationEntry, "cachedTarget_"));
+            assertTrue((target.getRootNode() instanceof ProtosBytecodeRootNode root
+                            && root.provablyNonSuspendingBody()));
 
             evaluate("changed: make()", "i108-b-changed.protos", module);
 
@@ -140,10 +132,9 @@ final class ProtosI108BCallNDispatchTest {
                     "i108-b-spread-recovered.protos", module));
 
             // Rejections must not discard the positive PIC entry.
-            assertSame(callNEntry, directEntry("callN", module));
-            assertSame(spreadEntry, directEntry("callSpread", module));
-            assertSame(mutationEntry,
-                    directEntry("callWithMutation", module));
+            assertTerminalVarargsSite("callN", module);
+            assertComposedVarargsSite("callSpread", module);
+            assertComposedVarargsSite("callWithMutation", module);
         });
     }
 
@@ -217,11 +208,9 @@ final class ProtosI108BCallNDispatchTest {
                         "i108-b-positive-spread.protos", module));
             }
 
-            Object callNEntry = directEntry("callN", module);
-            Object spreadEntry = directEntry("callSpread", module);
+            assertTerminalVarargsSite("callN", module);
+            assertComposedVarargsSite("callSpread", module);
 
-            assertNotNull(callNEntry);
-            assertNotNull(spreadEntry);
 
             // Generic -> direct on the same previously overridden value.
             evaluate(
@@ -259,8 +248,8 @@ final class ProtosI108BCallNDispatchTest {
                     "callSpread(overridden, Array(4, 5))",
                     "i108-b-recovered-spread.protos", module));
 
-            assertSame(callNEntry, directEntry("callN", module));
-            assertSame(spreadEntry, directEntry("callSpread", module));
+            assertTerminalVarargsSite("callN", module);
+            assertComposedVarargsSite("callSpread", module);
         });
     }
 
@@ -397,9 +386,8 @@ final class ProtosI108BCallNDispatchTest {
                                 "i108-b-origin-closure.protos",
                                 module));
 
-                originTarget = InvokeClosureArguments.targetFor(
+                originTarget = ProtosGuardedSendSelection.fastOrdinarySendTarget(
                         foreign,
-                        module,
                         ProtosLanguageContext.current());
 
                 assertNotNull(originTarget);
@@ -418,8 +406,8 @@ final class ProtosI108BCallNDispatchTest {
                         ProtosLanguageContext.current();
 
                 RootCallTarget projected =
-                        InvokeClosureArguments.targetFor(
-                                foreign, module, entered);
+                        ProtosGuardedSendSelection.fastOrdinarySendTarget(
+                                foreign, entered);
 
                 assertNotNull(projected);
                 org.junit.jupiter.api.Assertions.assertNotSame(
@@ -433,8 +421,8 @@ final class ProtosI108BCallNDispatchTest {
 
                 assertSame(
                         projected,
-                        InvokeClosureArguments.targetFor(
-                                foreign, module, entered));
+                        ProtosGuardedSendSelection.fastOrdinarySendTarget(
+                                foreign, entered));
 
                 module.context().createLocalSlot("foreign", foreign);
 
@@ -472,10 +460,10 @@ final class ProtosI108BCallNDispatchTest {
         record Site(String function, String operation) {}
 
         java.util.List<Site> sites = java.util.List.of(
-                new Site("callZero", "InvokeClosureZero"),
-                new Site("callOne", "InvokeClosureOne"),
-                new Site("callN", "InvokeClosureArguments"),
-                new Site("callSpread", "InvokeClosureArguments"));
+                new Site("callZero", "CallNilaryMethod"),
+                new Site("callOne", "CallUnaryMethod"),
+                new Site("callN", "CallVarargsMethod"),
+                new Site("callSpread", "CallVarargsMethod"));
 
         for (boolean debugger : new boolean[] {false, true}) {
             String mode = debugger ? "debugger attached" : "no debugger";
@@ -512,7 +500,7 @@ final class ProtosI108BCallNDispatchTest {
                         // composed protocol; PLAT067-B: an attached debugger changes neither.
                         boolean terminal = !site.function().equals("callSpread");
                         String operation =
-                                terminal ? site.operation() + "Tail" : site.operation();
+                                site.operation();
 
                         assertInvocationTopology(
                                 before,
@@ -674,8 +662,8 @@ final class ProtosI108BCallNDispatchTest {
                     "i108-b-polymorphic-first-spread.protos",
                     module));
 
-            assertNotNull(directEntry("callN", module));
-            assertNotNull(directEntry("callSpread", module));
+            assertTerminalVarargsSite("callN", module);
+            assertComposedVarargsSite("callSpread", module);
 
             // Five independently parsed Closure definitions at each
             // of two stable call sites, exceeding the PIC limit of 3.
@@ -756,48 +744,55 @@ final class ProtosI108BCallNDispatchTest {
                 .bytecodeActivationRootForTesting();
     }
 
-    private static Object directEntry(
-            String function, ProtosActivation module) throws Exception {
-        Object bytecode = functionRoot(function, module).getBytecodeNode();
-        Node[] cachedNodes = (Node[]) field(bytecode, "cachedNodes_");
+    private static void assertTerminalVarargsSite(
+            String function, ProtosActivation module) {
+        java.util.List<String> instructions =
+                instructionNames(functionRoot(function, module));
 
-        int sites = 0;
-        Object entry = null;
+        long varargs = instructions.stream()
+                .filter(name -> name.equals("c.CallVarargsMethod")
+                        || name.equals("CallVarargsMethod"))
+                .count();
 
-        for (Node node : cachedNodes) {
-            // I112: a final CallN is the terminal form of the same site.
-            if (node == null
-                    || !(node.getClass().getSimpleName()
-                                    .equals("InvokeClosureArguments_Node")
-                            || node.getClass().getSimpleName()
-                                    .equals("InvokeClosureArgumentsTail_Node"))) {
-                continue;
-            }
+        long legacy = instructions.stream()
+                .filter(name -> name.equals("c.InvokeClosureArguments")
+                        || name.equals("InvokeClosureArguments")
+                        || name.equals("c.InvokeClosureArgumentsTail")
+                        || name.equals("InvokeClosureArgumentsTail"))
+                .count();
 
-            sites++;
-            entry = field(node, "direct_cache");
-        }
-
-        assertEquals(1, sites, "expected one CallN PIC site in " + function);
-        return entry;
+        assertEquals(1L, varargs,
+                "one terminal CallVarargsMethod in "
+                        + function + ": " + instructions);
+        assertEquals(0L, legacy,
+                "no legacy CallN dispatch in "
+                        + function + ": " + instructions);
     }
 
-    private static Object field(Object owner, String name)
-            throws ReflectiveOperationException {
-        for (Class<?> type = owner.getClass();
-                type != null;
-                type = type.getSuperclass()) {
-            try {
-                Field result = type.getDeclaredField(name);
-                result.setAccessible(true);
-                return result.get(owner);
-            } catch (NoSuchFieldException missing) {
-                // Try the superclass.
-            }
-        }
+    private static void assertComposedVarargsSite(
+            String function, ProtosActivation module) {
+        java.util.List<String> instructions =
+                instructionNames(functionRoot(function, module));
 
-        throw new NoSuchFieldException(
-                owner.getClass().getName() + "." + name);
+        long varargs = instructions.stream()
+                .filter(name -> name.equals("c.CallVarargsMethod")
+                        || name.equals("CallVarargsMethod"))
+                .count();
+
+        assertEquals(1L, varargs,
+                "one composed CallVarargsMethod in "
+                        + function + ": " + instructions);
+
+        assertTrue(
+                containsOperation(
+                        instructions, "IsPreparedClosureInvocation"),
+                "composed call retains continuation discrimination: "
+                        + instructions);
+
+        assertTrue(
+                !containsOperation(
+                        instructions, "InvokeClosureArguments"),
+                "legacy CallN dispatch remains: " + instructions);
     }
 
     private interface CoreCase {

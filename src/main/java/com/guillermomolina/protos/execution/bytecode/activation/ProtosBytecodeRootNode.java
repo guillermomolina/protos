@@ -83,6 +83,7 @@ import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.bytecode.ContinuationRootNode;
 import com.oracle.truffle.api.bytecode.EpilogExceptional;
 import com.oracle.truffle.api.bytecode.EpilogReturn;
+import com.oracle.truffle.api.bytecode.ForceQuickening;
 import com.oracle.truffle.api.bytecode.GenerateBytecode;
 import com.oracle.truffle.api.bytecode.Instrumentation;
 import com.oracle.truffle.api.bytecode.LocalAccessor;
@@ -186,6 +187,7 @@ import com.oracle.truffle.api.source.Source;
 @OperationProxy(value = ProtosNumericGreaterEqualNode.class, name = "TryPrimitiveNumericGreaterEqual")
 @OperationProxy(value = ProtosExperimentalReadGlobalNode.class, name = "ReadGlobal")
 // I115-H7 EXPERIMENTAL: GraalPy-shaped method call, numeric and comparison operations.
+@OperationProxy(value = ProtosCallUnaryMethodNode.class, name = "CallUnaryMethod")
 @OperationProxy(value = ProtosExperimentalGetMethodNode.class, name = "GetMethod")
 @OperationProxy(value = ProtosExperimentalCallBinaryMethodNode.class, name = "CallBinaryMethod")
 @OperationProxy(value = ProtosExperimentalNumberAddNode.class, name = "NumberAdd")
@@ -5011,16 +5013,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static CanonicalClosure sourceDefinitionOrNull(
                 Object receiver) {
-            return InvokeClosureZero.sourceDefinitionOrNull(receiver);
+            return ProtosClosureCallPreparation.sourceDefinitionOrNull(receiver);
         }
 
         static ProtosClosureExecutionPlan sourcePlanOrNull(
                 Object receiver) {
-            return InvokeClosureZero.sourcePlanOrNull(receiver);
+            return ProtosClosureCallPreparation.sourcePlanOrNull(receiver);
         }
 
         static boolean requiresProjection(Object receiver) {
-            return InvokeClosureZero.requiresContextProjection(receiver);
+            return ProtosClosureCallPreparation.requiresContextProjection(receiver);
         }
 
         static RootCallTarget targetForSelected(
@@ -5047,13 +5049,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         static boolean nonSuspending(RootCallTarget target) {
-            return InvokeClosureZero.admittedTarget(target, 0);
+            return ProtosClosureCallPreparation.admittedTarget(target, 0);
         }
 
         static DirectCallNode createDirectCallNodeOrNull(
                 RootCallTarget target) {
-            return InvokeClosureZero
-                    .createDirectCallNodeOrNull(target);
+            return ProtosClosureCallPreparation.createDirectCallNodeOrNull(target);
         }
 
 
@@ -5848,168 +5849,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         public static Object[] perform(PreparedArgumentVector vector) {
             return vector.snapshot().toArray();
-        }
-    }
-
-    /**
-     * I108-B: semantic invocation for CallN and spread.
-     *
-     * Selection is performed after argument effects. The admitted path
-     * executes the existing B5 entry; every other case produces the
-     * existing prepared invocation for structural composition.
-     */
-    @Operation
-    public static final class InvokeClosureArguments {
-        @Specialization(
-                excludeForUncached = true,
-                guards = {
-                    "definition != null",
-                    "definition == cachedDefinition",
-                    "plan != null",
-                    "plan == cachedPlan",
-                    "entered != null",
-                    "entered == cachedContext",
-                    "projection == cachedProjection",
-                    "cachedTarget != null",
-                    "cachedAdmitted"
-                },
-                limit = "3")
-        public static Object direct(
-                Object receiver,
-                ProtosActivation caller,
-                Object[] supplied,
-                @Bind("sourceDefinitionOrNull(receiver)")
-                        CanonicalClosure definition,
-                @Bind("sourcePlanOrNull(receiver)")
-                        ProtosClosureExecutionPlan plan,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext entered,
-                @Bind("requiresProjection(receiver)")
-                        boolean projection,
-                @Cached("definition")
-                        CanonicalClosure cachedDefinition,
-                @Cached("plan")
-                        ProtosClosureExecutionPlan cachedPlan,
-                @Cached("entered")
-                        ProtosLanguageContext cachedContext,
-                @Cached("projection")
-                        boolean cachedProjection,
-                @Cached("targetFor(receiver, caller, entered)")
-                        RootCallTarget cachedTarget,
-                @Cached("nonSuspending(cachedTarget)")
-                        boolean cachedAdmitted,
-                @Cached("createDirectCallNodeOrNull(cachedTarget)")
-                        DirectCallNode node) {
-
-            ProtosClosureValue closure = admitted(receiver, caller);
-
-            if (closure == null) {
-                return fallback(receiver, caller, supplied);
-            }
-
-            Object[] frameArguments =
-                    ProtosFrameArguments.compactDirectClosureCall(
-                            closure, caller, null, supplied);
-
-            try {
-                return ProtosNumericValueSupport.guestValue(
-                        node.call(frameArguments));
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
-        }
-
-        @Specialization(guards = "temporarilyRejected(receiver, caller)")
-        public static Object rejected(
-                Object receiver,
-                ProtosActivation caller,
-                Object[] supplied) {
-            return fallback(receiver, caller, supplied);
-        }
-
-        @Specialization
-        public static Object generic(
-                Object receiver,
-                ProtosActivation caller,
-                Object[] supplied) {
-            return fallback(receiver, caller, supplied);
-        }
-
-        static Object fallback(
-                Object receiver,
-                ProtosActivation caller,
-                Object[] supplied) {
-            return PrepareClosureCallArguments
-                    .perform(false, receiver, caller, supplied);
-        }
-
-        static CanonicalClosure sourceDefinitionOrNull(Object receiver) {
-            return receiver instanceof ProtosClosureValue closure
-                            && closure.nativeBody().isEmpty()
-                    ? closure.definition() : null;
-        }
-
-        static ProtosClosureExecutionPlan sourcePlanOrNull(Object receiver) {
-            return receiver instanceof ProtosClosureValue closure
-                            && closure.nativeBody().isEmpty()
-                    ? closure.executionPlan().orElse(null) : null;
-        }
-
-        static boolean requiresProjection(Object receiver) {
-            return receiver instanceof ProtosClosureValue closure
-                    && closure.requiresContextLocalExecutionProjectionForRuntime();
-        }
-
-        static ProtosClosureValue admitted(
-                Object receiver, ProtosActivation caller) {
-            ProtosClosureValue closure =
-                    ProtosClosureCallPreparation.directClosureCallSelectionOrNull(
-                            receiver, caller);
-
-            return closure != null
-                            && closure.nativeBody().isEmpty()
-                            && closure.invocationReturnHomeForRuntime()
-                                    == ProtosReturnHome.unobservable()
-                    ? closure : null;
-        }
-
-        @NonIdempotent
-        static boolean temporarilyRejected(
-                Object receiver, ProtosActivation caller) {
-            return sourceDefinitionOrNull(receiver) != null
-                    && admitted(receiver, caller) == null;
-        }
-
-        static RootCallTarget targetFor(
-                Object receiver,
-                ProtosActivation caller,
-                ProtosLanguageContext entered) {
-            if (entered == null || sourcePlanOrNull(receiver) == null) {
-                return null;
-            }
-            ProtosClosureValue closure = admitted(receiver, caller);
-            return closure == null ? null
-                    : ProtosGuardedSendSelection
-                            .fastOrdinarySendTarget(closure, entered);
-        }
-
-        static DirectCallNode createDirectCallNodeOrNull(
-                RootCallTarget target) {
-            return target == null
-                    ? null
-                    : DirectCallNode.create(target);
-        }
-
-        static boolean nonSuspending(RootCallTarget target) {
-            return target != null
-                    && target.getRootNode()
-                            instanceof ProtosBytecodeRootNode root
-                    && root.provablyNonSuspendingBody();
-        }
-
-        @NonIdempotent
-        static ProtosLanguageContext currentEnteredContext(Node node) {
-            return ProtosLanguageContext.current(node);
         }
     }
 
@@ -9187,8 +9026,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
              * caller unchanged; the callee registers its own need on
              * the first untransported read.
              */
-            Object calleeCaller = InvokeMethodOneTail.callerArgument(
-                    cachedCallee, cachedSend.closure(), callerReference, prelude);
+            Object calleeCaller;
+            if (!cachedCallee.hasCallerNeed(NEEDS_CALLER_PRELUDE)
+                    || !(callerReference instanceof Object[] callerArguments)
+                    || cachedSend.closure().preludeOrNullForRuntime() != null) {
+                calleeCaller = callerReference;
+            } else {
+                calleeCaller =
+                        ProtosFrameArguments.callerFrameReference(
+                                callerArguments, prelude);
+            }
 
             Object[] frameArguments =
                     ProtosFrameArguments
@@ -9245,7 +9092,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static ProtosBytecodeRootNode calleeRootOrNull(
                 GuardedSendTarget selected) {
-            return InvokeMethodOneTail.calleeRootOrNull(selected);
+            return selected != null
+                            && selected.target() != null
+                            && selected.target().getRootNode()
+                                    instanceof ProtosBytecodeRootNode callee
+                    ? callee
+                    : null;
         }
 
         /*
@@ -9413,554 +9265,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /**
-     * A failed fused attempt delegates to the original prepared
-     * invocation. The marker cannot collide with a Protos result.
-     */
-    /**
-     * PERF038-H: direct Call0 of a proven straight-line source
-     * Closure, without constructing an OrdinarySourceCall carrier.
-     */
-    @Operation
-    public static final class InvokeClosureZero {
-        @Specialization(
-                excludeForUncached = true,
-                guards = {
-                    "receiver == cachedReceiver",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "prelude == cachedPrelude",
-                    "cachedGuarded != null",
-                    "admitted(cachedGuarded, 0)"
-                },
-                assumptions = "cachedGuarded.stability()",
-                limit = "3")
-        public static Object guardedSource(
-                Object receiver,
-                Object caller,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Bind("callerPrelude(caller)")
-                        ProtosPrelude prelude,
-                @Cached("receiver") Object cachedReceiver,
-                @Cached("enteredContext")
-                        ProtosLanguageContext cachedContext,
-                @Cached("prelude") ProtosPrelude cachedPrelude,
-                @Cached("createGuardedDirectClosureCallForPrelude(receiver, prelude, enteredContext)")
-                        GuardedDirectClosureCallTarget cachedGuarded,
-                @Cached("create(cachedGuarded.target())")
-                        DirectCallNode node) {
-            ProtosActivation exactCaller =
-                    PrepareSendArguments.exactCaller(caller);
 
-            Object[] frameArguments =
-                    ProtosFrameArguments
-                            .compactDirectClosureCallZeroNoHome(
-                                    cachedGuarded.closure(),
-                                    exactCaller);
-
-            try {
-                return ProtosNumericValueSupport.guestValue(
-                        node.call(frameArguments));
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
-        }
-
-        /**
-         * PERF042: second tier keyed by the stable {@link CanonicalClosure}
-         * definition, the receiver's prepared plan template, its
-         * Context-projection requirement and the entered Context: exactly the
-         * inputs from which {@code fastOrdinarySendTarget} derives the
-         * Context-owned target, so the cached target is the one the ordinary
-         * path would select for the current instance. Only those keys, the
-         * target and target-level admission are cached; the current Closure
-         * is always the one entered. Per-instance facts (the ordinary
-         * {@code call} selection and the unobservable ReturnHome) are
-         * re-proved on every hit, and a rejected instance answers the miss
-         * marker, so neither fresh instances nor one overridden instance
-         * degrade the site.
-         */
-        @Specialization(
-                excludeForUncached = true,
-                guards = {
-                    "closureDefinition != null",
-                    "closureDefinition == cachedClosureDefinition",
-                    "sourcePlan != null",
-                    "sourcePlan == cachedSourcePlan",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "projectionRequired == cachedProjectionRequired",
-                    "cachedTarget != null",
-                    "cachedAdmitted"
-                },
-                limit = "3")
-        public static Object definitionSource(
-                Object receiver,
-                Object caller,
-                @Bind("sourceDefinitionOrNull(receiver)")
-                        CanonicalClosure closureDefinition,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Bind("sourcePlanOrNull(receiver)")
-                        ProtosClosureExecutionPlan sourcePlan,
-                @Bind("requiresContextProjection(receiver)")
-                        boolean projectionRequired,
-                @Cached("closureDefinition")
-                        CanonicalClosure cachedClosureDefinition,
-                @Cached("enteredContext")
-                        ProtosLanguageContext cachedContext,
-                @Cached("sourcePlan")
-                        ProtosClosureExecutionPlan cachedSourcePlan,
-                @Cached("projectionRequired")
-                        boolean cachedProjectionRequired,
-                @Cached("definitionTarget(receiver, caller, enteredContext)")
-                        RootCallTarget cachedTarget,
-                @Cached("admittedTarget(cachedTarget, 0)")
-                        boolean cachedAdmitted,
-                @Cached("createDirectCallNodeOrNull(cachedTarget)")
-                        DirectCallNode node) {
-            ProtosClosureValue closure =
-                    admittedInstanceOrNull(receiver, caller);
-            if (closure == null) {
-                return prepareFallback(receiver, caller);
-            }
-            ProtosActivation exactCaller =
-                    PrepareSendArguments.exactCaller(caller);
-
-            Object[] frameArguments =
-                    ProtosFrameArguments
-                            .compactDirectClosureCallZeroNoHome(
-                                    closure,
-                                    exactCaller);
-
-            try {
-                return ProtosNumericValueSupport.guestValue(
-                        node.call(frameArguments));
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
-        }
-
-        /**
-         * PERF042: a source Closure that currently cannot take the fused path
-         * (overridden {@code call}, observable ReturnHome, or a plan not yet
-         * prepared) misses without activating {@link #generic}, so the
-         * cached tiers keep admitting later instances.
-         */
-        @Specialization(
-                guards = "temporarilyRejectedInstance(receiver, caller)")
-        public static Object rejectedSource(Object receiver, Object caller) {
-            return prepareFallback(receiver, caller);
-        }
-
-        @Specialization
-        public static Object generic(Object receiver, Object caller) {
-            return prepareFallback(receiver, caller);
-        }
-
-        /*
-         * I108-A: an unadmitted Call0 prepares the real ordinary
-         * invocation here, rather than returning a miss marker to
-         * trigger another selection in the caller's bytecode.
-         */
-        private static PreparedClosureCall prepareFallback(
-                Object receiver, Object caller) {
-            return PrepareClosureCall.perform(
-                    receiver, PrepareSendArguments.exactCaller(caller));
-        }
-
-        static CanonicalClosure sourceDefinitionOrNull(Object receiver) {
-            return receiver instanceof ProtosClosureValue closure
-                            && closure.nativeBody().isEmpty()
-                    ? closure.definition()
-                    : null;
-        }
-
-        static ProtosClosureExecutionPlan sourcePlanOrNull(
-                Object receiver) {
-            return receiver instanceof ProtosClosureValue closure
-                            && closure.nativeBody().isEmpty()
-                    ? closure.executionPlan().orElse(null)
-                    : null;
-        }
-
-        static boolean requiresContextProjection(Object receiver) {
-            return receiver instanceof ProtosClosureValue closure
-                    && closure.requiresContextLocalExecutionProjectionForRuntime();
-        }
-
-        static DirectCallNode createDirectCallNodeOrNull(
-                RootCallTarget target) {
-            return target == null ? null : DirectCallNode.create(target);
-        }
-
-        @NonIdempotent
-        static boolean temporarilyRejectedInstance(
-                Object receiver, Object caller) {
-            return sourceDefinitionOrNull(receiver) != null
-                    && admittedInstanceOrNull(receiver, caller) == null;
-        }
-
-        /**
-         * Runs only while populating a definition-tier entry. The instance's
-         * ordinary {@code call} selection and ReturnHome are proved, and its
-         * plan must already be prepared, before any target is derived: a
-         * deferred plan is never rematerialized here and an overridden
-         * {@code call} never reaches plan or projection work.
-         */
-        static RootCallTarget definitionTarget(
-                Object receiver,
-                Object caller,
-                ProtosLanguageContext enteredContext) {
-            if (enteredContext == null
-                    || !(receiver instanceof ProtosClosureValue closure)
-                    || closure.executionPlan().isEmpty()
-                    || admittedInstanceOrNull(receiver, caller) != closure) {
-                return null;
-            }
-            return ProtosGuardedSendSelection
-                    .fastOrdinarySendTarget(closure, enteredContext);
-        }
-
-        /**
-         * Target-level half of {@link #admitted}: depends only on the
-         * cached target, so it is proved once per cache entry.
-         */
-        static boolean admittedTarget(
-                RootCallTarget target, int suppliedArgumentCount) {
-            return target != null
-                    && target.getRootNode()
-                            instanceof ProtosBytecodeRootNode root
-                    && root.provablyNonSuspendingBody();
-        }
-
-        /**
-         * Instance-level half of {@link #admitted}, re-proved on every
-         * definition-tier hit: the receiver's current ordinary {@code call}
-         * selection is the canonical standard one, and this exact Closure
-         * proves the unobservable ReturnHome marker.
-         */
-        static ProtosClosureValue admittedInstanceOrNull(
-                Object receiver, Object caller) {
-            ProtosClosureValue closure =
-                    ProtosClosureCallPreparation.directClosureCallSelectionForPreludeOrNull(
-                                    receiver, callerPrelude(caller));
-            if (closure == null
-                    || !closure.hasUnobservableInvocationReturnHomeForRuntime()) {
-                return null;
-            }
-            return closure;
-        }
-
-        static boolean admitted(
-                GuardedDirectClosureCallTarget guarded,
-                int suppliedArgumentCount) {
-            if (guarded == null
-                    || !(guarded.target().getRootNode()
-                            instanceof ProtosBytecodeRootNode root)
-                    || !root.provablyNonSuspendingBody()) {
-                return false;
-            }
-
-            /*
-             * No physical ReturnHome is discarded. The exact Closure
-             * must independently prove the unobservable marker.
-             */
-            return guarded.closure()
-                    .hasUnobservableInvocationReturnHomeForRuntime();
-        }
-
-        static GuardedDirectClosureCallTarget
-                createGuardedDirectClosureCallForPrelude(
-                        Object receiver,
-                        ProtosPrelude prelude,
-                        ProtosLanguageContext enteredContext) {
-            return ProtosClosureCallPreparation.createGuardedDirectClosureCallForPrelude(
-                            receiver, prelude, enteredContext);
-        }
-
-        static ProtosPrelude callerPrelude(Object caller) {
-            return PrepareSendArguments.callerPrelude(caller);
-        }
-
-        @NonIdempotent
-        static ProtosLanguageContext currentEnteredContext(Node node) {
-            return ProtosLanguageContext.current(node);
-        }
-    }
-
-    /**
-     * PERF038-H: scalar direct Call1 with the same canonical
-     * selection and execution-capability proof as Call0.
-     */
-    @Operation
-    public static final class InvokeClosureOne {
-        @Specialization(
-                excludeForUncached = true,
-                guards = {
-                    "receiver == cachedReceiver",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "prelude == cachedPrelude",
-                    "cachedGuarded != null",
-                    "admitted(cachedGuarded)"
-                },
-                assumptions = "cachedGuarded.stability()",
-                limit = "3")
-        public static Object guardedSource(
-                Object receiver,
-                Object caller,
-                Object supplied0,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Bind("callerPrelude(caller)")
-                        ProtosPrelude prelude,
-                @Cached("receiver") Object cachedReceiver,
-                @Cached("enteredContext")
-                        ProtosLanguageContext cachedContext,
-                @Cached("prelude") ProtosPrelude cachedPrelude,
-                @Cached("createGuardedDirectClosureCallForPrelude(receiver, prelude, enteredContext)")
-                        GuardedDirectClosureCallTarget cachedGuarded,
-                @Cached("create(cachedGuarded.target())")
-                        DirectCallNode node) {
-            ProtosActivation exactCaller =
-                    PrepareSendArguments.exactCaller(caller);
-
-            Object[] frameArguments =
-                    ProtosFrameArguments
-                            .compactDirectClosureCallOneNoHome(
-                                    cachedGuarded.closure(),
-                                    exactCaller,
-                                    supplied0);
-
-            try {
-                return ProtosNumericValueSupport.guestValue(
-                        node.call(frameArguments));
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
-        }
-
-        /** PERF042: the Call1 counterpart of {@link InvokeClosureZero#definitionSource}. */
-        @Specialization(
-                excludeForUncached = true,
-                guards = {
-                    "closureDefinition != null",
-                    "closureDefinition == cachedClosureDefinition",
-                    "sourcePlan != null",
-                    "sourcePlan == cachedSourcePlan",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "projectionRequired == cachedProjectionRequired",
-                    "cachedTarget != null",
-                    "cachedAdmitted"
-                },
-                limit = "3")
-        public static Object definitionSource(
-                Object receiver,
-                Object caller,
-                Object supplied0,
-                @Bind("sourceDefinitionOrNull(receiver)")
-                        CanonicalClosure closureDefinition,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Bind("sourcePlanOrNull(receiver)")
-                        ProtosClosureExecutionPlan sourcePlan,
-                @Bind("requiresContextProjection(receiver)")
-                        boolean projectionRequired,
-                @Cached("closureDefinition")
-                        CanonicalClosure cachedClosureDefinition,
-                @Cached("enteredContext")
-                        ProtosLanguageContext cachedContext,
-                @Cached("sourcePlan")
-                        ProtosClosureExecutionPlan cachedSourcePlan,
-                @Cached("projectionRequired")
-                        boolean cachedProjectionRequired,
-                @Cached("definitionTarget(receiver, caller, enteredContext)")
-                        RootCallTarget cachedTarget,
-                @Cached("admittedTarget(cachedTarget, 1)")
-                        boolean cachedAdmitted,
-                @Cached("createDirectCallNodeOrNull(cachedTarget)")
-                        DirectCallNode node) {
-            ProtosClosureValue closure =
-                    InvokeClosureZero.admittedInstanceOrNull(receiver, caller);
-            if (closure == null) {
-                return prepareFallback(receiver, caller, supplied0);
-            }
-            ProtosActivation exactCaller =
-                    PrepareSendArguments.exactCaller(caller);
-
-            Object[] frameArguments =
-                    ProtosFrameArguments
-                            .compactDirectClosureCallOneNoHome(
-                                    closure,
-                                    exactCaller,
-                                    supplied0);
-
-            try {
-                return ProtosNumericValueSupport.guestValue(
-                        node.call(frameArguments));
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
-        }
-
-        /** PERF042: see {@link InvokeClosureZero#rejectedSource}. */
-        @Specialization(
-                guards = "temporarilyRejectedInstance(receiver, caller)")
-        public static Object rejectedSource(Object receiver, Object caller, Object supplied0) {
-            return prepareFallback(receiver, caller, supplied0);
-        }
-
-        @Specialization
-        public static Object generic(
-                Object receiver,
-                Object caller,
-                Object supplied0) {
-            return prepareFallback(receiver, caller, supplied0);
-        }
-
-        /*
-         * I108-A: the semantic operation owns generic selection and
-         * preparation. A primitive argument carrier must be projected
-         * before the ordinary D013 selection/binding protocol sees it.
-         */
-        private static PreparedClosureCall prepareFallback(
-                Object receiver, Object caller, Object supplied0) {
-            return ProtosClosureCallPreparation.prepareClosureCallOneFallback(
-                    receiver,
-                    PrepareSendArguments.exactCaller(caller),
-                    ProtosNumericValueSupport.guestValue(supplied0));
-        }
-
-        static CanonicalClosure sourceDefinitionOrNull(Object receiver) {
-            return InvokeClosureZero.sourceDefinitionOrNull(receiver);
-        }
-
-        static ProtosClosureExecutionPlan sourcePlanOrNull(
-                Object receiver) {
-            return InvokeClosureZero.sourcePlanOrNull(receiver);
-        }
-
-        static boolean requiresContextProjection(Object receiver) {
-            return InvokeClosureZero.requiresContextProjection(receiver);
-        }
-
-        static DirectCallNode createDirectCallNodeOrNull(
-                RootCallTarget target) {
-            return InvokeClosureZero.createDirectCallNodeOrNull(target);
-        }
-
-        @NonIdempotent
-        static boolean temporarilyRejectedInstance(
-                Object receiver, Object caller) {
-            return InvokeClosureZero.temporarilyRejectedInstance(
-                    receiver, caller);
-        }
-
-        static RootCallTarget definitionTarget(
-                Object receiver,
-                Object caller,
-                ProtosLanguageContext enteredContext) {
-            return InvokeClosureZero.definitionTarget(
-                    receiver, caller, enteredContext);
-        }
-
-        static boolean admittedTarget(
-                RootCallTarget target, int suppliedArgumentCount) {
-            return InvokeClosureZero.admittedTarget(
-                    target, suppliedArgumentCount);
-        }
-
-        static boolean admitted(
-                GuardedDirectClosureCallTarget guarded) {
-            return InvokeClosureZero.admitted(guarded, 1);
-        }
-
-        static GuardedDirectClosureCallTarget
-                createGuardedDirectClosureCallForPrelude(
-                        Object receiver,
-                        ProtosPrelude prelude,
-                        ProtosLanguageContext enteredContext) {
-            return InvokeClosureZero
-                    .createGuardedDirectClosureCallForPrelude(
-                            receiver, prelude, enteredContext);
-        }
-
-        static ProtosPrelude callerPrelude(Object caller) {
-            return InvokeClosureZero.callerPrelude(caller);
-        }
-
-        @NonIdempotent
-        static ProtosLanguageContext currentEnteredContext(Node node) {
-            return ProtosLanguageContext.current(node);
-        }
-    }
-
-    /**
-     * I115-H5 EXPERIMENTAL: the admitted terminal Call1 of an experimental
-     * caller root. The direct tier resolves the receiver's target once, at
-     * installation, in the Context entered then, and afterwards only calls it
-     * with the reduced static unary layout ({@link
-     * ProtosFrameArguments#experimentalStaticUnaryCall}), the ABI of {@link
-     * InvokeStaticClosureOneTail}.
-     *
-     * <p>NORMATIVE DIVERGENCE (owner-authorized): the receiver identity, the
-     * Context and {@code Object.call} are not re-checked after installation;
-     * no caller, Prelude, Task or ReturnHome is passed; suspension, control
-     * transfer and result projection are not handled. A receiver without a
-     * direct target is an internal error at installation.
-     */
-    @Operation
-    public static final class InvokeExperimentalClosureOneTail {
-        @Specialization(
-                excludeForUncached = true,
-                guards = "cachedTarget != null")
-        public static Object direct(
-                Object receiver,
-                Object supplied0,
-                @Cached("experimentalTarget(receiver, currentEnteredContext($bytecodeNode))")
-                        RootCallTarget cachedTarget,
-                @Cached("create(cachedTarget)") DirectCallNode node) {
-            return node.call(ProtosFrameArguments.experimentalStaticUnaryCall(supplied0));
-        }
-
-        /* The uncached interpreter only: the same resolution and ABI, per call. */
-        @Specialization
-        @InliningCutoff
-        public static Object uncached(
-                Object receiver,
-                Object supplied0,
-                @Bind("currentEnteredContext($node)") ProtosLanguageContext enteredContext,
-                @Cached IndirectCallNode indirectCall) {
-            return indirectCall.call(
-                    experimentalTarget(receiver, enteredContext),
-                    ProtosFrameArguments.experimentalStaticUnaryCall(supplied0));
-        }
-
-        /** Installation only: the receiver's direct target, or an internal error. */
-        @TruffleBoundary
-        static RootCallTarget experimentalTarget(
-                Object receiver, ProtosLanguageContext enteredContext) {
-            DirectClosureExecutableFacts facts =
-                    receiver instanceof ProtosClosureValue closure
-                            ? ProtosClosureCallPreparation
-                                    .establishDirectClosureExecutableFactsOrNull(
-                                            closure, enteredContext)
-                            : null;
-            if (facts == null || facts.target() == null) {
-                throw new IllegalStateException(
-                        "I115-H5 experimental Call1 receiver has no direct Closure target");
-            }
-            return facts.target();
-        }
-
-        @NonIdempotent
-        static ProtosLanguageContext currentEnteredContext(Node node) {
-            return ProtosLanguageContext.current(node);
-        }
-    }
 
     /**
      * I112 / PLAT062-T terminal Call1: the final expression of a genuine
@@ -9969,8 +9274,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * right; the caller is this root's own frame argument 0. D013 selection
      * of {@code call} happens here, after both operands.
      *
-     * <p>The caches and guards are those of {@link InvokeClosureOne}, except
-     * that admission does not require a non-suspending callee: a terminal
+     * <p>Terminal admission differs from the removed composed-call PIC:
+     * it does not require a non-suspending callee: a terminal
      * caller has no guest work left, so a suspended callee is returned as a
      * {@link ProtosTailCallContinuation} that retains its pending state and
      * the owner of its completion. A synchronous result is returned as the
@@ -9998,165 +9303,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
     @Operation
     public static final class InvokeClosureOneTail {
-        /**
-         * Identity-keyed direct call.
-         *
-         * Local call selection and the Context projection
-         * requirement are protected by invalidatable Assumptions.
-         * Executable target and ReturnHome eligibility are
-         * certified at PIC installation.
-         */
-        @Specialization(
-                excludeForUncached = true,
-                guards = {
-                    "receiver == cachedReceiver",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "cachedClosure != null",
-                    "cachedLocalCallAbsence != null",
-                    "cachedProjectionStability != null",
-                    "cachedFacts != null",
-                    "cachedHomeProven",
-                    "admittedTailTarget(cachedFacts.target())",
-                    "cachedCallee != null"
-                },
-                assumptions = {
-                    "cachedFacts.rootCallStability()",
-                    "cachedLocalCallAbsence",
-                    "cachedProjectionStability"
-                },
-                limit = "3")
-        public static Object guardedSource(
-                Object receiver,
-                Object supplied0,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("callerReference(frame)") Object caller,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Cached("receiver") Object cachedReceiver,
-                @Cached("enteredContext")
-                        ProtosLanguageContext cachedContext,
-                @Cached("admittedInstanceUnderGuardedRootCallOrNull(receiver)")
-                        ProtosClosureValue cachedClosure,
-                @Cached("localCallAbsenceOrNull(cachedClosure)")
-                        Assumption cachedLocalCallAbsence,
-                @Cached("projectionStabilityOrNull(cachedClosure)")
-                        Assumption cachedProjectionStability,
-                @Cached("establishFacts(cachedClosure, enteredContext)")
-                        DirectClosureExecutableFacts cachedFacts,
-                @Cached("stableUnobservableReturnHome(cachedClosure, cachedFacts)")
-                        boolean cachedHomeProven,
-                @Cached("provenNonSuspending(cachedFacts.target())")
-                        boolean cachedProven,
-                @Cached(value = "calleeRootOrNull(cachedFacts)", adopt = false)
-                        ProtosBytecodeRootNode cachedCallee,
-                @Cached("create(cachedFacts.target())")
-                        DirectCallNode node) {
-            return enterAdmitted(
-                    cachedProven,
-                    cachedCallee,
-                    root,
-                    cachedClosure,
-                    caller,
-                    supplied0,
-                    node,
-                    bytecodeNode,
-                    bytecodeIndex);
-        }
-
-        /**
-         * The terminal counterpart of {@link InvokeClosureOne#definitionSource}.
-         * I114: admission of the current instance is a DSL guard evaluated
-         * before any cache initializer, so when this body runs the direct
-         * decision is already made. A rejected instance falls through to
-         * {@link #rejectedSource} without consuming a cache entry, and a
-         * restored instance re-enters an existing entry. The entered Closure is
-         * always {@code admittedClosure}, never one cached by an entry.
-         *
-         * <p>I115-B: an entry is keyed by the definition, the prepared
-         * template plan, the entered Context and the instance's projection
-         * requirement, exactly the inputs from which {@link
-         * DirectClosureExecutableFacts} derive the Context-owned target, so
-         * Closures of one definition share the target while each hit enters
-         * its own captures, receiver and ReturnHome. A plan that is not yet
-         * prepared misses here and is never rematerialized for installation.
-         * ReturnHome admission precedes executable-facts installation.
-         * It uses the prepared template's immutable proof and the current
-         * Closure's immutable captured-home state.
-         */
-        @Specialization(
-                excludeForUncached = true,
-                guards = {
-                    "admittedClosure != null",
-                    "closureDefinition != null",
-                    "closureDefinition == cachedClosureDefinition",
-                    "sourcePlan != null",
-                    "sourcePlan == cachedSourcePlan",
-                    "definitionHomeAdmitted(admittedClosure, sourcePlan)",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "projectionRequired == cachedProjectionRequired",
-                    "cachedFacts != null",
-                    "cachedTarget != null",
-                    "cachedAdmitted",
-                    "cachedCallee != null"
-                },
-                assumptions = "cachedFacts.rootCallStability()",
-                limit = "3")
-        public static Object definitionSource(
-                Object receiver,
-                Object supplied0,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("callerReference(frame)") Object caller,
-                @Bind("definitionCandidateUnderGuardedRootCallOrNull(receiver)")
-                        ProtosClosureValue admittedClosure,
-                @Bind("admittedDefinitionOrNull(admittedClosure)")
-                        CanonicalClosure closureDefinition,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Bind("preparedPlanOrNull(admittedClosure)")
-                        ProtosClosureExecutionPlan sourcePlan,
-                @Bind("instanceProjection(admittedClosure)")
-                        boolean projectionRequired,
-                @Cached("closureDefinition")
-                        CanonicalClosure cachedClosureDefinition,
-                @Cached("enteredContext")
-                        ProtosLanguageContext cachedContext,
-                @Cached("sourcePlan")
-                        ProtosClosureExecutionPlan cachedSourcePlan,
-                @Cached("projectionRequired")
-                        boolean cachedProjectionRequired,
-                @Cached("establishFacts(admittedClosure, enteredContext)")
-                        DirectClosureExecutableFacts cachedFacts,
-                @Cached("cachedFacts.target()")
-                        RootCallTarget cachedTarget,
-                @Cached("admittedTailTarget(cachedTarget)")
-                        boolean cachedAdmitted,
-                @Cached("provenNonSuspending(cachedTarget)")
-                        boolean cachedProven,
-                @Cached(value = "calleeRootOrNull(cachedFacts)", adopt = false)
-                        ProtosBytecodeRootNode cachedCallee,
-                @Cached("create(cachedTarget)")
-                        DirectCallNode node) {
-            return enterAdmitted(
-                    cachedProven,
-                    cachedCallee,
-                    root,
-                    admittedClosure,
-                    caller,
-                    supplied0,
-                    node,
-                    bytecodeNode,
-                    bytecodeIndex);
-        }
-
-        /** See {@link InvokeClosureZero#rejectedSource}. */
+        /** Rejected instances retain the ordinary prepared-call fallback. */
         @Specialization(
                 guards = "temporarilyRejectedInstance(receiver, caller)")
         @InliningCutoff
@@ -10318,81 +9465,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosNumericValueSupport.guestValue(outcome);
         }
 
-        /*
-         * I115-B: the admitted direct Call1 of either tier. Admission and the
-         * suspension capability are independent: every admitted entry builds
-         * the B5+ header with the original caller reference (no caller
-         * materialization), and {@code proven}, an entry constant, selects
-         * only the outcome handling, so each compiled entry has one branch.
-         *
-         * PROVEN: the effective target's EFFECTIVE_ROOT proof excludes a
-         * suspended outcome, so neither the suspension test nor the
-         * transport is compiled. Control transfers and errors still cross.
-         *
-         * UNKNOWN: the I114 terminal outcome handling of enterDirect,
-         * unchanged: suspension classification, deferDirect with this
-         * instruction's location, and the C-prime transport. A suspended
-         * callee retains its frame arguments, and so the deferred caller;
-         * a later resolution selects the same caller activation and the same
-         * Task/dynamic-control authority (see
-         * ProtosFrameArguments#resolveExactCaller).
-         */
-        private static Object enterAdmitted(
-                boolean proven,
-                ProtosBytecodeRootNode callee,
-                ProtosBytecodeRootNode callerRoot,
-                ProtosClosureValue closure,
-                Object caller,
-                Object supplied0,
-                DirectCallNode node,
-                BytecodeNode bytecodeNode,
-                int bytecodeIndex) {
-            /*
-             * I115-H11 EXPERIMENTAL: the compact unary callee receives
-             * only its lexical Closure owner and supplied argument.
-             * Caller control metadata and invocation preparation are omitted.
-             */
-            if (proven && callee.isExperimentalPrimitiveArgumentRoot()) {
-                Object[] arguments =
-                        callee.experimentalUnaryNeedsCapturedOwner()
-                                ? ProtosFrameArguments.experimentalCapturedUnaryCall(
-                                        closure, supplied0)
-                                : ProtosFrameArguments.experimentalMinimalUnaryCall(
-                                        supplied0);
-                return node.call(arguments);
-            }
-
-            Object callerReference =
-                    callerArgument(callerRoot, callee, closure, caller);
-            Object[] frameArguments =
-                    ProtosFrameArguments.compactAdmittedTerminalClosureCallOneNoHome(
-                            closure, callerReference, supplied0);
-            if (proven) {
-                return enterDirectProven(node, frameArguments);
-            }
-            return enterDirect(bytecodeNode, bytecodeIndex, node, frameArguments);
-        }
-
-        /*
-         * I115-B: the synchronous direct entry of a target whose consumed
-         * EFFECTIVE_ROOT non-suspension proof holds. Non-suspension is not
-         * non-failure: the control-transfer bridge stays, and the result is
-         * projected by the owning root's return epilogue only when
-         * its caller does not accept an internal numeric carrier.
-         */
-        private static Object enterDirectProven(
-                DirectCallNode node,
-                Object[] frameArguments) {
-            Object outcome;
-            try {
-                outcome = node.call(frameArguments);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
-            java.util.Objects.requireNonNull(outcome, "terminal Closure invocation returned null");
-            return outcome;
-        }
-
         /**
          * I115-B per-instance admission of both direct tiers, valid only
          * under the entry's declared canonical root {@code Object.call}
@@ -10536,7 +9608,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         /**
-         * {@link InvokeClosureZero#admitted} without the non-suspension
+         * Direct Closure admission without the non-suspension
          * requirement: a source entry, and the exact Closure proves the
          * unobservable ReturnHome marker.
          */
@@ -10548,7 +9620,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             .hasUnobservableInvocationReturnHomeForRuntime();
         }
 
-        /** {@link InvokeClosureZero#admittedTarget} without the non-suspension requirement. */
+        /** Direct target admission without the non-suspension requirement. */
         static boolean admittedTailTarget(RootCallTarget target) {
             return target != null
                     && target.getRootNode() instanceof ProtosBytecodeRootNode;
@@ -10556,7 +9628,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @NonIdempotent
         static boolean temporarilyRejectedInstance(Object receiver, Object caller) {
-            return InvokeClosureZero.temporarilyRejectedInstance(receiver, caller);
+            return ProtosClosureCallPreparation.temporarilyRejectedInstance(receiver, caller);
         }
 
         /**
@@ -10568,7 +9640,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @NonIdempotent
         static ProtosClosureValue admittedInstanceOrNull(
                 Object receiver, Object caller) {
-            return InvokeClosureZero.admittedInstanceOrNull(receiver, caller);
+            return ProtosClosureCallPreparation.admittedInstanceOrNull(receiver, caller);
         }
 
         /**
@@ -10585,194 +9657,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             return PrepareSendArguments
                     .fastOrdinarySendTarget(admittedClosure, enteredContext);
-        }
-
-        @NonIdempotent
-        static ProtosLanguageContext currentEnteredContext(Node node) {
-            return ProtosLanguageContext.current(node);
-        }
-    }
-
-    /**
-     * PERF038-I: terminal immediate method Send1 (GraalPy
-     * {@code CallUnaryMethodNode} shape). The final expression of a genuine
-     * source root, after which the root only returns. The selector is a
-     * constant operand; the receiver and the supplied value are the dynamic
-     * operands, evaluated once, left to right; the caller is this root's own
-     * caller reference. Selection happens here, after both operands.
-     *
-     * <p>{@link #guardedSource} is the {@link TryDirectSendOne} PIC (receiver
-     * identity, entered Context, caller prelude, the selection's stability
-     * Assumption, at most three entries) restricted to the same admitted
-     * targets: a source Closure method with an unobservable ReturnHome whose
-     * root proves non-suspension. Selection and target creation occur only at
-     * installation. A hit enters the selected Closure with its method home
-     * through the B5+ header, carrying the caller reference unmaterialized as
-     * {@link InvokeClosureOneTail} does; no prepared call, caller activation
-     * or extracted Closure is created, and the result (possibly a primitive
-     * carrier) is projected by the root's return epilogue.
-     *
-     * <p>I115 (GraalJS JSFunctionCallNode / GraalPy CallContext): the hit
-     * reads the caller prelude through the admitted B5 accessor shared with
-     * {@link InvokeClosureOneTail} ({@link
-     * InvokeClosureOneTail#admittedCallerPrelude}), writes the six Method
-     * Call1 slots directly, and passes the caller as a lightweight reference;
-     * no header validator and no boundary run on it. Only {@link #generic}
-     * resolves the caller, through {@link InvokeClosureOneTail#exactCaller},
-     * which registers this root's exact-activation need.
-     *
-     * <p>Every other case (native, foreign, structured, observable home,
-     * possibly suspending target, failing selection) is prepared and executed
-     * terminally by {@link #generic} inside this operation. {@code generic}
-     * does not replace the direct tier, so a site that temporarily misses can
-     * hit a valid entry again.
-     */
-    @Operation
-    @ConstantOperand(type = String.class, name = "selector")
-    public static final class InvokeMethodOneTail {
-        @Specialization(
-                excludeForUncached = true,
-                guards = {
-                    "!isPrimitiveCarrier(receiver)",
-                    "!isForeignReceiver(receiver)",
-                    "receiver == cachedReceiver",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "prelude == cachedPrelude",
-                    "cachedSend != null",
-                    "admitted(cachedSend)",
-                    "cachedCallee != null"
-                },
-                assumptions = "cachedSend.stability()",
-                limit = "3")
-        public static Object guardedSource(
-                String selector,
-                Object receiver,
-                Object supplied0,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root,
-                @Bind("callerReference(frame)") Object caller,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Bind("callerPrelude(root, caller)")
-                        ProtosPrelude prelude,
-                @Cached("receiver") Object cachedReceiver,
-                @Cached("enteredContext")
-                        ProtosLanguageContext cachedContext,
-                @Cached("prelude") ProtosPrelude cachedPrelude,
-                @Cached("createGuardedSendForPrelude(receiver, selector, prelude, enteredContext)")
-                        GuardedSendTarget cachedSend,
-                @Cached(value = "calleeRootOrNull(cachedSend)", adopt = false)
-                        ProtosBytecodeRootNode cachedCallee,
-                @Cached("create(cachedSend.target())")
-                        DirectCallNode node) {
-            Object[] frameArguments =
-                    ProtosFrameArguments.compactAdmittedTerminalMethodCallOneNoHome(
-                            cachedSend.closure(),
-                            receiver,
-                            cachedSend.methodHome(),
-                            callerArgument(cachedCallee, cachedSend.closure(), caller, prelude),
-                            supplied0);
-            try {
-                return node.call(frameArguments);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                // The no-home bridge of TryDirectSendOne.
-                throw bridged.transfer();
-            }
-        }
-
-        /*
-         * The complete ordinary Send1 preparation on the already evaluated
-         * operands, then the terminal execution of the selected invocation.
-         * Primitive carrier operands are projected before selection; only
-         * here is the deferred caller resolved.
-         */
-        @Specialization
-        @InliningCutoff
-        public static Object generic(
-                String selector,
-                Object receiver,
-                Object supplied0,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("callerReference(frame)") Object caller,
-                @Cached IndirectCallNode indirectCall) {
-            return ProtosTailCallContinuation.executeTerminalPreparedCall(
-                    ProtosSendPreparation.prepareSendOneFallback(
-                            ProtosNumericValueSupport.guestValue(receiver),
-                            selector,
-                            InvokeClosureOneTail.exactCaller(root, caller),
-                            ProtosNumericValueSupport.guestValue(supplied0)),
-                    indirectCall, bytecodeNode, bytecodeIndex);
-        }
-
-        static boolean admitted(GuardedSendTarget send) {
-            return TryDirectSendOne.admitted(send);
-        }
-
-        /** A primitive receiver carrier is projected by {@link #generic} first. */
-        static boolean isPrimitiveCarrier(Object receiver) {
-            return ProtosNumericValueSupport.isPrimitiveCarrier(receiver);
-        }
-
-        static GuardedSendTarget createGuardedSendForPrelude(
-                Object receiver,
-                String selector,
-                ProtosPrelude prelude,
-                ProtosLanguageContext enteredContext) {
-            return TryDirectSendOne.createGuardedSendForPrelude(
-                    receiver, selector, prelude, enteredContext);
-        }
-
-        @NonIdempotent
-        static Object callerReference(VirtualFrame frame) {
-            return InvokeClosureOneTail.callerReference(frame);
-        }
-
-        /*
-         * I115: the caller reference is this root's own published activation
-         * or admitted call header, so the admitted B5 Prelude accessor
-         * applies; no general header validation and no caller walk run on a
-         * hit, and an untransported inherited prelude registers this root's
-         * NEEDS_CALLER_PRELUDE.
-         */
-        static ProtosPrelude callerPrelude(ProtosBytecodeRootNode root, Object caller) {
-            return InvokeClosureOneTail.admittedCallerPrelude(root, caller);
-        }
-
-        /*
-         * I115: InvokeClosureOneTail#callerArgument with the prelude the PIC
-         * guard already read, so a requested transport costs no further read.
-         */
-        static Object callerArgument(
-                ProtosBytecodeRootNode callee,
-                ProtosClosureValue closure,
-                Object caller,
-                ProtosPrelude prelude) {
-            if (!callee.hasCallerNeed(NEEDS_CALLER_PRELUDE)
-                    || !(caller instanceof Object[] callerArguments)
-                    || closure.preludeOrNullForRuntime() != null) {
-                return caller;
-            }
-            return ProtosFrameArguments.callerFrameReference(callerArguments, prelude);
-        }
-
-        /**
-         * Installation only: the selected target's root, whose caller needs
-         * are consulted. Cached without adoption: it is another root.
-         */
-        static ProtosBytecodeRootNode calleeRootOrNull(GuardedSendTarget send) {
-            return send != null
-                            && send.target() != null
-                            && send.target().getRootNode() instanceof ProtosBytecodeRootNode callee
-                    ? callee
-                    : null;
-        }
-
-        static boolean isForeignReceiver(Object receiver) {
-            return PrepareSendArguments.isForeignReceiver(receiver);
         }
 
         @NonIdempotent
@@ -10881,7 +9765,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * DirectCallNode.create.
          */
         static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {
-            return InvokeClosureZero.createDirectCallNodeOrNull(target);
+            return ProtosClosureCallPreparation.createDirectCallNodeOrNull(target);
         }
 
         /**
@@ -10944,196 +9828,100 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /** I112 / PLAT062-T terminal Call0; see {@link InvokeClosureOneTail}. */
-    @Operation
-    public static final class InvokeClosureZeroTail {
-        @Specialization(
-                excludeForUncached = true,
-                guards = {
-                    "receiver == cachedReceiver",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "prelude == cachedPrelude",
-                    "cachedGuarded != null",
-                    "admittedTail(cachedGuarded)"
-                },
-                assumptions = "cachedGuarded.stability()",
-                limit = "3")
-        public static Object guardedSource(
-                Object receiver,
-                @Bind VirtualFrame frame,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("callerReference(frame)") Object caller,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Bind("callerPrelude(caller)")
-                        ProtosPrelude prelude,
-                @Cached("receiver") Object cachedReceiver,
-                @Cached("enteredContext")
-                        ProtosLanguageContext cachedContext,
-                @Cached("prelude") ProtosPrelude cachedPrelude,
-                @Cached("createGuardedDirectClosureCallForPrelude(receiver, prelude, enteredContext)")
-                        GuardedDirectClosureCallTarget cachedGuarded,
-                @Cached("create(cachedGuarded.target())")
-                        DirectCallNode node) {
-            return InvokeClosureOneTail.enterDirect(
-                    bytecodeNode,
-                    bytecodeIndex,
-                    node,
-                    ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
-                            cachedGuarded.closure(),
-                            PrepareSendArguments.exactCaller(caller)));
+
+    /**
+     * I115: GraalPy-shaped CallNilaryMethod.
+     * One direct PFunction specialization and one generic call.
+     * Terminal continuation is handled by the invocation.
+     */
+    @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = boolean.class, name = "terminal")
+    public static final class CallNilaryMethod {
+        @NonIdempotent
+        static boolean canonicalCallSelection(
+                ProtosClosureValue callable) {
+            return ProtosClosureCallPreparation
+                    .directClosureCallSelectionWithoutPreludeOrNull(callable)
+                    == callable;
         }
 
+        @ForceQuickening
         @Specialization(
                 excludeForUncached = true,
                 guards = {
-                    "closureDefinition != null",
-                    "closureDefinition == cachedClosureDefinition",
-                    "sourcePlan != null",
-                    "sourcePlan == cachedSourcePlan",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "projectionRequired == cachedProjectionRequired",
-                    "cachedTarget != null",
-                    "cachedAdmitted"
+                    "terminal",
+                    "canonicalCallSelection(callable)",
+                    "callable.hasUnobservableInvocationReturnHomeForRuntime()",
+                    "callable == cachedFunction",
+                    "cachedTarget != null"
                 },
                 limit = "3")
-        public static Object definitionSource(
-                Object receiver,
+        public static Object callPFunction(
+                boolean terminal,
+                ProtosClosureValue callable,
                 @Bind VirtualFrame frame,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("callerReference(frame)") Object caller,
-                @Bind("sourceDefinitionOrNull(receiver)")
-                        CanonicalClosure closureDefinition,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Bind("sourcePlanOrNull(receiver)")
-                        ProtosClosureExecutionPlan sourcePlan,
-                @Bind("requiresContextProjection(receiver)")
-                        boolean projectionRequired,
-                @Cached("closureDefinition")
-                        CanonicalClosure cachedClosureDefinition,
-                @Cached("enteredContext")
-                        ProtosLanguageContext cachedContext,
-                @Cached("sourcePlan")
-                        ProtosClosureExecutionPlan cachedSourcePlan,
-                @Cached("projectionRequired")
-                        boolean cachedProjectionRequired,
-                @Cached("definitionTarget(receiver, caller, enteredContext)")
+                @Cached("callable") ProtosClosureValue cachedFunction,
+                @Cached("targetFor(cachedFunction, currentEnteredContext($node))")
                         RootCallTarget cachedTarget,
-                @Cached("admittedTailTarget(cachedTarget)")
-                        boolean cachedAdmitted,
                 @Cached("createDirectCallNodeOrNull(cachedTarget)")
-                        DirectCallNode node,
-                @Cached IndirectCallNode indirectCall) {
-            ProtosClosureValue closure =
-                    InvokeClosureZero.admittedInstanceOrNull(receiver, caller);
-            if (closure == null) {
-                return prepareAndEnter(
-                    receiver, caller, indirectCall, bytecodeNode, bytecodeIndex);
-            }
+                        DirectCallNode call) {
+            ProtosActivation caller =
+                    PrepareSendArguments.exactCaller(
+                            InvokeClosureOneTail.callerReference(frame));
+
+            Object[] arguments =
+                    ProtosFrameArguments.compactDirectClosureCallZeroPrepared(
+                            callable,
+                            caller,
+                            callable.invocationReturnHomeForRuntime());
+
             return InvokeClosureOneTail.enterDirect(
-                    bytecodeNode,
-                    bytecodeIndex,
-                    node,
-                    ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
-                            closure,
-                            PrepareSendArguments.exactCaller(caller)));
+                    bytecodeNode, bytecodeIndex, call, arguments);
         }
 
-        @Specialization(
-                guards = "temporarilyRejectedInstance(receiver, caller)")
-        public static Object rejectedSource(
-                Object receiver,
+        @Specialization(replaces = "callPFunction")
+        @InliningCutoff
+        public static Object doCall(
+                boolean terminal,
+                Object callable,
                 @Bind VirtualFrame frame,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("callerReference(frame)") Object caller,
-                @Cached IndirectCallNode indirectCall) {
-            return prepareAndEnter(
-                    receiver, caller, indirectCall, bytecodeNode, bytecodeIndex);
-        }
+                @Cached IndirectCallNode call) {
+            ProtosActivation caller =
+                    PrepareSendArguments.exactCaller(
+                            InvokeClosureOneTail.callerReference(frame));
 
-        @Specialization
-        public static Object generic(
-                Object receiver,
-                @Bind VirtualFrame frame,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("callerReference(frame)") Object caller,
-                @Cached IndirectCallNode indirectCall) {
-            return prepareAndEnter(
-                    receiver, caller, indirectCall, bytecodeNode, bytecodeIndex);
-        }
-
-        private static Object prepareAndEnter(
-                Object receiver,
-                Object caller,
-                IndirectCallNode indirectCall,
-                BytecodeNode bytecodeNode,
-                int bytecodeIndex) {
-            return ProtosTailCallContinuation.executeTerminalPreparedCall(
+            PreparedClosureCall prepared =
                     PrepareClosureCall.perform(
-                            ProtosNumericValueSupport.guestValue(receiver),
-                            PrepareSendArguments.exactCaller(caller)),
-                    indirectCall, bytecodeNode, bytecodeIndex);
+                            ProtosNumericValueSupport.guestValue(callable),
+                            caller);
+
+            if (!terminal) {
+                return prepared;
+            }
+
+            return ProtosTailCallContinuation.executeTerminalPreparedCall(
+                    prepared, call, bytecodeNode, bytecodeIndex);
         }
 
-        @NonIdempotent
-        static Object callerReference(VirtualFrame frame) {
-            return InvokeClosureOneTail.callerReference(frame);
-        }
-
-        static boolean admittedTail(GuardedDirectClosureCallTarget guarded) {
-            return InvokeClosureOneTail.admittedTail(guarded);
-        }
-
-        static boolean admittedTailTarget(RootCallTarget target) {
-            return InvokeClosureOneTail.admittedTailTarget(target);
-        }
-
-        static CanonicalClosure sourceDefinitionOrNull(Object receiver) {
-            return InvokeClosureZero.sourceDefinitionOrNull(receiver);
-        }
-
-        static ProtosClosureExecutionPlan sourcePlanOrNull(Object receiver) {
-            return InvokeClosureZero.sourcePlanOrNull(receiver);
-        }
-
-        static boolean requiresContextProjection(Object receiver) {
-            return InvokeClosureZero.requiresContextProjection(receiver);
-        }
-
-        static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {
-            return InvokeClosureZero.createDirectCallNodeOrNull(target);
-        }
-
-        @NonIdempotent
-        static boolean temporarilyRejectedInstance(Object receiver, Object caller) {
-            return InvokeClosureZero.temporarilyRejectedInstance(receiver, caller);
-        }
-
-        static RootCallTarget definitionTarget(
-                Object receiver,
-                Object caller,
+        static RootCallTarget targetFor(
+                ProtosClosureValue function,
                 ProtosLanguageContext enteredContext) {
-            return InvokeClosureZero.definitionTarget(receiver, caller, enteredContext);
+            if (function == null
+                    || enteredContext == null
+                    || function.nativeBody().isPresent()) {
+                return null;
+            }
+            return ProtosGuardedSendSelection.fastOrdinarySendTarget(
+                    function, enteredContext);
         }
 
-        static GuardedDirectClosureCallTarget
-                createGuardedDirectClosureCallForPrelude(
-                        Object receiver,
-                        ProtosPrelude prelude,
-                        ProtosLanguageContext enteredContext) {
-            return InvokeClosureZero.createGuardedDirectClosureCallForPrelude(
-                    receiver, prelude, enteredContext);
-        }
-
-        static ProtosPrelude callerPrelude(Object caller) {
-            return InvokeClosureZero.callerPrelude(caller);
+        static DirectCallNode createDirectCallNodeOrNull(
+                RootCallTarget target) {
+            return target == null ? null : DirectCallNode.create(target);
         }
 
         @NonIdempotent
@@ -11142,156 +9930,38 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+
     /**
-     * I112 / PLAT062-T terminal CallN and spread; see {@link
-     * InvokeClosureOneTail}. The supplied vector is the already evaluated
-     * {@link CollectClosureCallArguments} or {@link
-     * SnapshotClosureCallArguments} operand, so argument effects and the
-     * spread snapshot keep their order. The caches are those of {@link
-     * InvokeClosureArguments}, without its non-suspension requirement.
+     * I115: GraalPy-shaped CallVarargsMethod.
+     * One generic specialization; no definition-keyed or
+     * plan-keyed direct call specialization.
      */
-    @Operation
-    public static final class InvokeClosureArgumentsTail {
-        @Specialization(
-                excludeForUncached = true,
-                guards = {
-                    "definition != null",
-                    "definition == cachedDefinition",
-                    "plan != null",
-                    "plan == cachedPlan",
-                    "entered != null",
-                    "entered == cachedContext",
-                    "projection == cachedProjection",
-                    "cachedTarget != null",
-                    "cachedAdmitted"
-                },
-                limit = "3")
-        public static Object direct(
-                Object receiver,
-                Object[] supplied,
-                @Bind VirtualFrame frame,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("currentActivation(frame)") ProtosActivation caller,
-                @Bind("sourceDefinitionOrNull(receiver)")
-                        CanonicalClosure definition,
-                @Bind("sourcePlanOrNull(receiver)")
-                        ProtosClosureExecutionPlan plan,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext entered,
-                @Bind("requiresProjection(receiver)")
-                        boolean projection,
-                @Cached("definition")
-                        CanonicalClosure cachedDefinition,
-                @Cached("plan")
-                        ProtosClosureExecutionPlan cachedPlan,
-                @Cached("entered")
-                        ProtosLanguageContext cachedContext,
-                @Cached("projection")
-                        boolean cachedProjection,
-                @Cached("targetFor(receiver, caller, entered)")
-                        RootCallTarget cachedTarget,
-                @Cached("admittedTailTarget(cachedTarget)")
-                        boolean cachedAdmitted,
-                @Cached("createDirectCallNodeOrNull(cachedTarget)")
-                        DirectCallNode node,
-                @Cached IndirectCallNode indirectCall) {
-            ProtosClosureValue closure = InvokeClosureArguments.admitted(receiver, caller);
-            if (closure == null) {
-                return prepareAndEnter(
-                    receiver, caller, supplied, indirectCall, bytecodeNode, bytecodeIndex);
-            }
-            return InvokeClosureOneTail.enterDirect(
-                    bytecodeNode,
-                    bytecodeIndex,
-                    node,
-                    ProtosFrameArguments.compactDirectClosureCall(
-                            closure, caller, null, supplied));
-        }
-
-        @Specialization(guards = "temporarilyRejected(receiver, caller)")
-        public static Object rejected(
-                Object receiver,
-                Object[] supplied,
-                @Bind VirtualFrame frame,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("currentActivation(frame)") ProtosActivation caller,
-                @Cached IndirectCallNode indirectCall) {
-            return prepareAndEnter(
-                    receiver, caller, supplied, indirectCall, bytecodeNode, bytecodeIndex);
-        }
-
+    @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = boolean.class, name = "terminal")
+    public static final class CallVarargsMethod {
         @Specialization
-        public static Object generic(
-                Object receiver,
+        @InliningCutoff
+        public static Object doCall(
+                boolean terminal,
+                Object callable,
                 Object[] supplied,
                 @Bind VirtualFrame frame,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("currentActivation(frame)") ProtosActivation caller,
-                @Cached IndirectCallNode indirectCall) {
-            return prepareAndEnter(
-                    receiver, caller, supplied, indirectCall, bytecodeNode, bytecodeIndex);
-        }
-
-        private static Object prepareAndEnter(
-                Object receiver,
-                ProtosActivation caller,
-                Object[] supplied,
-                IndirectCallNode indirectCall,
-                BytecodeNode bytecodeNode,
-                int bytecodeIndex) {
-            return ProtosTailCallContinuation.executeTerminalPreparedCall(
+                @Cached IndirectCallNode call) {
+            PreparedClosureCall prepared =
                     PrepareClosureCallArguments.perform(
                             false,
-                            ProtosNumericValueSupport.guestValue(receiver),
-                            caller,
-                            supplied),
-                    indirectCall, bytecodeNode, bytecodeIndex);
-        }
+                            ProtosNumericValueSupport.guestValue(callable),
+                            ProtosFrameArguments.activation(frame),
+                            supplied);
 
-        /** The exact activation of this root, as {@link CurrentActivation} yields it. */
-        @NonIdempotent
-        static ProtosActivation currentActivation(VirtualFrame frame) {
-            return ProtosFrameArguments.activation(frame);
-        }
+            if (!terminal) {
+                return prepared;
+            }
 
-        static boolean admittedTailTarget(RootCallTarget target) {
-            return InvokeClosureOneTail.admittedTailTarget(target);
-        }
-
-        static CanonicalClosure sourceDefinitionOrNull(Object receiver) {
-            return InvokeClosureArguments.sourceDefinitionOrNull(receiver);
-        }
-
-        static ProtosClosureExecutionPlan sourcePlanOrNull(Object receiver) {
-            return InvokeClosureArguments.sourcePlanOrNull(receiver);
-        }
-
-        static boolean requiresProjection(Object receiver) {
-            return InvokeClosureArguments.requiresProjection(receiver);
-        }
-
-        @NonIdempotent
-        static boolean temporarilyRejected(Object receiver, ProtosActivation caller) {
-            return InvokeClosureArguments.temporarilyRejected(receiver, caller);
-        }
-
-        static RootCallTarget targetFor(
-                Object receiver,
-                ProtosActivation caller,
-                ProtosLanguageContext entered) {
-            return InvokeClosureArguments.targetFor(receiver, caller, entered);
-        }
-
-        static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {
-            return InvokeClosureArguments.createDirectCallNodeOrNull(target);
-        }
-
-        @NonIdempotent
-        static ProtosLanguageContext currentEnteredContext(Node node) {
-            return ProtosLanguageContext.current(node);
+            return ProtosTailCallContinuation.executeTerminalPreparedCall(
+                    prepared, call, bytecodeNode, bytecodeIndex);
         }
     }
 

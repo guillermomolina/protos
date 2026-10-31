@@ -149,6 +149,7 @@ final class ProtosFrameArguments {
 
     private ProtosFrameArguments() {}
 
+
     static Object[] compactImmediateMethodCall(
             ProtosClosureValue closure,
             Object receiver,

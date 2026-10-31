@@ -224,7 +224,8 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 guards = {
                     "receiver.target != null",
                     "receiver.target == cachedTarget",
-                    "arguments.length <= 1"
+                    "arguments.length <= 1",
+                    "receiver.closure.hasUnobservableInvocationReturnHomeForRuntime()"
                 },
                 limit = "3")
         static Object direct(
@@ -245,7 +246,8 @@ final class ProtosHostExecutableClosure implements TruffleObject {
 
         /** I115-H6: megamorphic physical target dispatch with the same single invocation. */
         @Specialization(
-                guards = {"receiver.target != null", "arguments.length <= 1"},
+                guards = {"receiver.target != null", "arguments.length <= 1",
+                    "receiver.closure.hasUnobservableInvocationReturnHomeForRuntime()"},
                 replaces = "direct")
         static Object indirect(
                 ProtosHostExecutableClosure receiver,
@@ -260,6 +262,83 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                             : ProtosFrameArguments.compactDirectClosureCallOneNoHome(
                                     receiver.closure, receiver.caller, supplied0);
             return hostResult(receiver, call.call(receiver.target, frame));
+        }
+
+        /*
+         * I115_C5F_OBSERVABLE_HOME_FALLBACK
+         *
+         * H6 remains the direct, allocation-minimal host entry for
+         * a Closure whose ReturnHome is proven unobservable.
+         * An owning observable home needs ordinary B5 admission
+         * and completion; it must not enter through NoHome.
+         */
+        @Specialization(guards = {
+                "receiver.target != null",
+                "arguments.length <= 1",
+                "!receiver.closure.hasUnobservableInvocationReturnHomeForRuntime()"
+        })
+        static Object observableHome(
+                ProtosHostExecutableClosure receiver,
+                Object[] arguments,
+                @Bind("$node") Node node,
+                @Cached IndirectCallNode call)
+                throws ArityException, UnsupportedTypeException {
+            Object[] supplied = receiver.admitArguments(arguments, node);
+            return executeObservableHome(receiver, supplied, call);
+        }
+
+        /*
+         * Cold semantic fallback. The specialized H6 direct/indirect
+         * paths never enter this helper or allocate a prepared call.
+         */
+        @TruffleBoundary
+        private static Object executeObservableHome(
+                ProtosHostExecutableClosure receiver,
+                Object[] supplied,
+                IndirectCallNode call) {
+            ProtosEmbeddedProcess embedding = receiver.embedding;
+            Thread token =
+                    embedding == null ? null : embedding.enterRootActor();
+            HostEntryExtent previous =
+                    embedding == null
+                            ? null
+                            : embedding.beginHostEntryExtent(token);
+
+            try {
+                ProtosPreparedCalls.OrdinarySourceCall prepared =
+                        receiver.prepare(supplied);
+
+                try {
+                    Object outcome =
+                            ProtosBytecodeRootNode.EnterClosureCall
+                                    .ordinaryIndirect(prepared, call);
+
+                    if (ProtosTailCallContinuation.isPending(outcome)) {
+                        if (embedding == null) {
+                            ProtosTailCallContinuation.abandon(outcome);
+                            throw new IllegalStateException(
+                                    "a session host executable cannot drive"
+                                            + " a suspended continuation");
+                        }
+                        outcome = ProtosHostEntrySuspension.resumeAfterWaits(
+                                embedding, prepared, outcome);
+                    }
+
+                    return hostResult(receiver, prepared.finish(outcome));
+                } finally {
+                    prepared.complete();
+                }
+            } catch (ProtosSignalException failure) {
+                if (embedding != null) {
+                    embedding.outermostEntryFailed(token, failure);
+                }
+                throw failure;
+            } finally {
+                if (embedding != null) {
+                    embedding.endHostEntryExtent(previous);
+                    embedding.exitRootActor(token);
+                }
+            }
         }
 
         /*
@@ -398,18 +477,12 @@ final class ProtosHostExecutableClosure implements TruffleObject {
      * I102: the B5 direct Closure call of this adapter's Closure from its caller provenance.
      */
     private ProtosPreparedCalls.OrdinarySourceCall prepare(Object[] supplied) {
-        if (supplied.length == 0) {
-            return (ProtosPreparedCalls.OrdinarySourceCall)
-                    ProtosClosureCallPreparation.finishDirectClosureCallZero(
-                            closure, target, caller);
-        }
-        if (supplied.length == 1) {
-            return (ProtosPreparedCalls.OrdinarySourceCall)
-                    ProtosClosureCallPreparation.finishDirectClosureCallOne(
-                            closure, target, supplied[0], caller);
-        }
-        return (ProtosPreparedCalls.OrdinarySourceCall)
-                ProtosClosureCallPreparation.finishDirectClosureCall(
-                        closure, target, supplied, caller);
+        ProtosPreparedCalls.OrdinarySourceCall prepared =
+                (ProtosPreparedCalls.OrdinarySourceCall)
+                        ProtosClosureCallPreparation.finishDirectClosureCall(
+                                closure, target, supplied, caller);
+
+
+        return prepared;
     }
 }

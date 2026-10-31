@@ -1587,11 +1587,7 @@ final class CanonicalToBytecodeLowerer {
                     // Return is the root's last operation: no implicit fallthrough.
                     builder.beginReturn();
                     beginStatement(builder, last);
-                    experimentalCallRoot = emitTerminalClosureCall(
-                            builder,
-                            (CanonicalCall) last,
-                            sequence,
-                            activationDefinition);
+                    experimentalCallRoot = emitCall(builder, last);
                     endStatement(builder);
                     builder.endReturn();
                 } else if (admitsTerminalMethodSend(last)) {
@@ -1612,7 +1608,7 @@ final class CanonicalToBytecodeLowerer {
                     // Return is the root's last operation: no implicit fallthrough.
                     builder.beginReturn();
                     beginStatement(builder, last);
-                    emitTerminalMethodSend(builder, (CanonicalSend) last);
+                    emitCall(builder, last);
                     endStatement(builder);
                     builder.endReturn();
                 } else {
@@ -4425,138 +4421,86 @@ final class CanonicalToBytecodeLowerer {
                 && isTerminalCallOperand(send.arguments().get(0));
     }
 
+
     /**
-     * PERF038-I: emits an admitted terminal Send1
-     * ({@link #admitsTerminalMethodSend}) as one {@code InvokeMethodOneTail}
-     * operation whose selector is a constant operand. The receiver and the
-     * argument are its only dynamic operands, evaluated once, left to right;
-     * a number literal argument stays a primitive carrier. The send keeps
-     * its CallTag over its exact span.
+     * Shared fixed-arity call emission.
+     *
+     * Closure calls and selected method calls use the same lowering
+     * entry point. Terminal position is a property of the enclosing
+     * Return, not a reason to select a different direct-call PIC.
+     *
+     * The remaining zero/variadic operations are migration dependencies
+     * and will be replaced when their consumers are moved.
      */
-    private void emitTerminalMethodSend(
+    private boolean emitCall(
             ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalSend send) {
+            CanonicalExpression expression) {
+
         currentRootEmittedTerminalInvocation = true;
-        builder.beginSourceSection(
-                send.span().startOffset(),
-                send.span().length());
+
+        SourceSpan span = expression instanceof CanonicalCall call
+                ? call.span()
+                : ((CanonicalSend) expression).span();
+
+        builder.beginSourceSection(span.startOffset(), span.length());
         builder.beginTag(StandardTags.CallTag.class);
-        builder.beginInvokeMethodOneTail(send.message());
-        emitTerminalCallOperand(builder, send.receiver());
-        emitTerminalCallOneArgument(builder, send.arguments().get(0));
-        builder.endInvokeMethodOneTail();
+
+        if (expression instanceof CanonicalCall call) {
+            java.util.List<CanonicalExpression> arguments = call.arguments();
+
+            if (arguments.isEmpty()) {
+                builder.beginCallNilaryMethod(true);
+                emitTerminalCallOperand(builder, call.receiver());
+                builder.endCallNilaryMethod();
+            } else if (arguments.size() == 1) {
+                builder.beginCallUnaryMethod(true);
+                emitTerminalCallOperand(builder, call.receiver());
+                emitTerminalCallOneArgument(builder, arguments.get(0));
+                builder.endCallUnaryMethod();
+            } else {
+                builder.beginCallVarargsMethod(true);
+                emitTerminalCallOperand(builder, call.receiver());
+                builder.beginCollectClosureCallArguments();
+                for (CanonicalExpression argument : arguments) {
+                    emitExpression(builder, argument);
+                }
+                builder.endCollectClosureCallArguments();
+                builder.endCallVarargsMethod();
+            }
+        } else if (expression instanceof CanonicalSend send) {
+            TruffleString selector = TruffleString.fromJavaStringUncached(
+                    send.message(), TruffleString.Encoding.UTF_16);
+
+            builder.beginBlock();
+            builder.beginBindStackValue();
+            emitTerminalCallOperand(builder, send.receiver());
+            StackValue receiver = builder.endBindStackValue();
+
+            builder.beginCallBinaryMethod(selector, true);
+
+            builder.beginGetMethod(selector);
+            builder.emitLoadStackValue(receiver);
+            builder.endGetMethod();
+
+            builder.emitLoadStackValue(receiver);
+            emitTerminalCallOneArgument(builder, send.arguments().get(0));
+
+            builder.endCallBinaryMethod();
+            builder.endBlock();
+        } else {
+            throw new AssertionError(
+                    "Unsupported fixed-arity call: " + expression.getClass());
+        }
+
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
+
+        return false;
     }
 
     private static boolean isTerminalCallOperand(CanonicalExpression expression) {
         return isDirectTerminalValue(expression)
                 && !requiresComposedInvocation(expression);
-    }
-
-    /**
-     * I112 / PLAT062-T: emits an admitted terminal call
-     * ({@link #admitsTerminalClosureCall}) as one {@code InvokeClosure*Tail}
-     * operation. The receiver and the arguments are emitted once, left to
-     * right, as its operands; the caller is the operation's own frame. A
-     * root-binding receiver is read directly (the operation projects a
-     * primitive carrier before any generic selection), and a Call1 numeric
-     * argument stays a carrier exactly as for {@code InvokeClosureOne}. The
-     * call keeps its CallTag over the exact call span of the statement.
-     * Answers whether the I115-H4-B experimental Call1 was emitted.
-     * I115-H5: the experimental Call1, with the static unary ABI, is emitted
-     * only for a ROOT binding whose Closure was admitted as
-     * experimentalRecursiveInteger; every other Call1 keeps the ordinary
-     * InvokeClosureOneTail, decided here during lowering.
-     */
-    private boolean emitTerminalClosureCall(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalCall call,
-            CanonicalSequence sequence,
-            CanonicalClosure activationDefinition) {
-        currentRootEmittedTerminalInvocation = true;
-        java.util.List<CanonicalExpression> arguments = call.arguments();
-        boolean experimental = false;
-        builder.beginSourceSection(
-                call.span().startOffset(),
-                call.span().length());
-        builder.beginTag(StandardTags.CallTag.class);
-        if (arguments.isEmpty()) {
-            builder.beginInvokeClosureZeroTail();
-            emitTerminalCallOperand(builder, call.receiver());
-            builder.endInvokeClosureZeroTail();
-        } else if (arguments.size() == 1
-                && admitsExperimentalTerminalUnaryCall(
-                        call, sequence, activationDefinition)) {
-            /*
-             * I115-H5 EXPERIMENTAL: a direct call with the static unary ABI
-             * to an admitted recursive Integer callee; no other operation is
-             * emitted. InstrumentCallReturn and InstrumentCall
-             * emit instructions only under EXPERIMENTAL_TRACE_CONFIG.
-             */
-            experimental = true;
-            builder.beginInstrumentCallReturn();
-            builder.beginInvokeExperimentalClosureOneTail();
-            emitTerminalCallOperand(builder, call.receiver());
-            builder.beginInstrumentCall();
-            emitTerminalCallOneArgument(builder, arguments.get(0));
-            builder.endInstrumentCall();
-            builder.endInvokeExperimentalClosureOneTail();
-            builder.endInstrumentCallReturn();
-        } else if (arguments.size() == 1) {
-            builder.beginInvokeClosureOneTail();
-            emitTerminalCallOperand(builder, call.receiver());
-            emitTerminalCallOneArgument(builder, arguments.get(0));
-            builder.endInvokeClosureOneTail();
-        } else {
-            builder.beginInvokeClosureArgumentsTail();
-            emitTerminalCallOperand(builder, call.receiver());
-            builder.beginCollectClosureCallArguments();
-            for (CanonicalExpression argument : arguments) {
-                emitExpression(builder, argument);
-            }
-            builder.endCollectClosureCallArguments();
-            builder.endInvokeClosureArgumentsTail();
-        }
-        builder.endTag(StandardTags.CallTag.class);
-        builder.endSourceSection();
-        return experimental;
-    }
-
-    /*
-     * I115-H4-A / I115-H4-B EXPERIMENTAL: a static, purely structural
-     * admission localized to the focal run shape: the terminal Call1 of a
-     * parameterless Closure root whose body is only that call, whose
-     * receiver is a captured lookup of a module ROOT binding and whose
-     * argument is an Integer literal. I115-H5: the operation enters its
-     * callee only with the static unary ABI, so the binding must also be one
-     * whose Closure was already lowered as an experimentalRecursiveInteger
-     * root (experimentalDirectUnaryBindings). Any other Call1 keeps the
-     * ordinary InvokeClosureOneTail; nothing is decided at run time.
-     */
-    private boolean admitsExperimentalTerminalUnaryCall(
-            CanonicalCall call,
-            CanonicalSequence sequence,
-            CanonicalClosure activationDefinition) {
-        if (activationDefinition == null
-                || !activationDefinition.parameters().isEmpty()
-                || sequence.expressions().size() != 1
-                || sequence.expressions().get(0) != call
-                || call.arguments().size() != 1
-                || hasSpreadArgument(call.arguments())
-                || !(call.receiver() instanceof CanonicalLookup lookup)
-                || currentRootAnalysis == null
-                || !isTerminalCallOperand(call.receiver())
-                || !isTerminalCallOperand(call.arguments().get(0))
-                || !(call.arguments().get(0) instanceof CanonicalLiteral argument)
-                || !(primitiveNumberLiteralOrNull(argument) instanceof Long)) {
-            return false;
-        }
-        return currentRootAnalysis.resolutionOf(lookup).orElse(null)
-                        instanceof CanonicalBindingResolution.CapturedResolved captured
-                && captured.identity().owner().kind()
-                        == CanonicalLexicalScope.Kind.ROOT
-                && experimentalDirectUnaryBindings.contains(captured.identity());
     }
 
     /** The single Call1 argument; a number literal stays a primitive carrier. */
@@ -12814,36 +12758,24 @@ final class CanonicalToBytecodeLowerer {
                 }
 
                 builder.endInvokeInlineClosureArguments();
-            } else if (semanticCall) {
-                if (call.arguments().isEmpty()) {
-                    builder.beginInvokeClosureZero();
-                } else {
-                    builder.beginInvokeClosureOne();
-                }
-
+            } else if (semanticCall && call.arguments().isEmpty()) {
+                builder.beginCallNilaryMethod(false);
                 builder.emitLoadLocal(receiverValue);
-                emitInvocationCallerOperand(builder);
-
-                if (!call.arguments().isEmpty()) {
-                    builder.emitLoadLocal(argumentValues.get(0));
-                }
-
-                if (call.arguments().isEmpty()) {
-                    builder.endInvokeClosureZero();
-                } else {
-                    builder.endInvokeClosureOne();
-                }
+                builder.endCallNilaryMethod();
+            } else if (semanticCall) {
+                builder.beginCallUnaryMethod(false);
+                builder.emitLoadLocal(receiverValue);
+                builder.emitLoadLocal(argumentValues.get(0));
+                builder.endCallUnaryMethod();
             } else {
-                builder.beginInvokeClosureArguments();
+                builder.beginCallVarargsMethod(false);
                 builder.emitLoadLocal(receiverValue);
 
                 if (spreadArguments) {
-                    emitCurrentActivation(builder);
                     builder.beginSnapshotClosureCallArguments();
                     builder.emitLoadLocal(suppliedVector);
                     builder.endSnapshotClosureCallArguments();
                 } else {
-                    emitInvocationCallerOperand(builder);
                     builder.beginCollectClosureCallArguments();
                     for (BytecodeLocal argumentValue : argumentValues) {
                         builder.emitLoadLocal(argumentValue);
@@ -12851,7 +12783,7 @@ final class CanonicalToBytecodeLowerer {
                     builder.endCollectClosureCallArguments();
                 }
 
-                builder.endInvokeClosureArguments();
+                builder.endCallVarargsMethod();
             }
             builder.endStoreLocal();
 
@@ -12865,86 +12797,6 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadLocal(closureInvocationOutcome);
             builder.endStoreLocal();
         }
-
-        if (!semanticCall && !semanticCallN
-                && !semanticInlineZero
-                && !semanticInlineOne
-                && !semanticInlineArguments) {
-            builder.beginStoreLocal(preparedCall);
-            if (spreadArguments) {
-                builder.beginPrepareClosureCallVector(false);
-                builder.emitLoadLocal(receiverValue);
-                emitCurrentActivation(builder);
-                builder.emitLoadLocal(suppliedVector);
-                builder.endPrepareClosureCallVector();
-            } else if (call.arguments().isEmpty() && currentInlineCallbackFrameNative) {
-                builder.beginPrepareInlineClosureCall(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                if (stageInputs) {
-                    builder.emitLoadLocal(receiverValue);
-                } else {
-                    emitExpression(builder, receiver);
-                }
-                emitCurrentInlineCallbackCall(builder);
-                builder.endPrepareInlineClosureCall();
-            } else if (call.arguments().isEmpty()) {
-                builder.beginPrepareClosureCall();
-                if (stageInputs) {
-                    builder.emitLoadLocal(receiverValue);
-                } else {
-                    emitExpression(builder, receiver);
-                }
-                emitCurrentActivation(builder);
-                builder.endPrepareClosureCall();
-            } else {
-                if (currentInlineCallbackFrameNative) {
-                    if (call.arguments().size() == 1) {
-                        builder.beginPrepareInlineClosureCallOne(
-                                currentRootFrameNativeLocals,
-                                currentRootFrameNativeLayout);
-                    } else {
-                        builder.beginPrepareInlineClosureCallArguments(
-                                currentRootFrameNativeLocals,
-                                currentRootFrameNativeLayout);
-                    }
-                } else if (call.arguments().size() == 1) {
-                    builder.beginPrepareClosureCallOne();
-                } else {
-                    builder.beginPrepareClosureCallArguments(false);
-                }
-                if (stageInputs) {
-                    builder.emitLoadLocal(receiverValue);
-                } else {
-                    emitExpression(builder, receiver);
-                }
-                emitInvocationCallerOperand(builder);
-                if (stageInputs) {
-                    for (BytecodeLocal argumentValue :
-                            argumentValues) {
-                        builder.emitLoadLocal(argumentValue);
-                    }
-                } else {
-                    for (CanonicalExpression argument :
-                            call.arguments()) {
-                        emitExpression(builder, argument);
-                    }
-                }
-                if (currentInlineCallbackFrameNative) {
-                    if (call.arguments().size() == 1) {
-                        builder.endPrepareInlineClosureCallOne();
-                    } else {
-                        builder.endPrepareInlineClosureCallArguments();
-                    }
-                } else if (call.arguments().size() == 1) {
-                    builder.endPrepareClosureCallOne();
-                } else {
-                    builder.endPrepareClosureCallArguments();
-                }
-            }
-            builder.endStoreLocal();
-        }
-
 
         emitPreparedInvocation(
                 builder,

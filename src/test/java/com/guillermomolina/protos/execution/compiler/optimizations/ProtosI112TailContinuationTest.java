@@ -61,7 +61,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureZero;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
 import org.junit.jupiter.api.Test;
@@ -92,7 +91,7 @@ final class ProtosI112TailContinuationTest {
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
             ProtosBytecodeRootNode root =
                     lowerRoot(scope.language(), IDENTITY, "i112-identity.protos");
-            assertTerminal(root, "c.InvokeClosureOneTail");
+            assertTerminal(root, "c.CallUnaryMethod");
 
             for (int run = 0; run < 3; run++) {
                 // Each run creates the binding afresh in its own module activation.
@@ -110,7 +109,7 @@ final class ProtosI112TailContinuationTest {
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
             ProtosBytecodeRootNode root =
                     lowerRoot(scope.language(), "target(1)", "i112-transitions.protos");
-            assertTerminal(root, "c.InvokeClosureOneTail");
+            assertTerminal(root, "c.CallUnaryMethod");
             root.getBytecodeNode().setUncachedThreshold(0);
 
             ProtosActivation creator = activation(prelude, domain);
@@ -216,7 +215,7 @@ final class ProtosI112TailContinuationTest {
             second.context().createLocalSlot("argument", new ProtosIntegerValue(3));
             ProtosBytecodeRootNode terminal =
                     lowerRoot(scope.language(), "target(argument)", "i112-selection-terminal.protos");
-            assertTerminal(terminal, "c.InvokeClosureOneTail");
+            assertTerminal(terminal, "c.CallUnaryMethod");
             assertInteger(3, terminal.getCallTarget().call(second));
             fresh.createLocalSlot(
                     "call", nativeClosure((activation, supplied) -> new ProtosIntegerValue(56)));
@@ -290,7 +289,7 @@ final class ProtosI112TailContinuationTest {
 
                 ProtosBytecodeRootNode root =
                         lowerRoot(scope.language(), "waiter()", "i112-waiter-top.protos");
-                assertTerminal(root, "c.InvokeClosureZeroTail");
+                assertTerminal(root, "c.CallNilaryMethod");
                 if (directEntry) {
                     root.getBytecodeNode().setUncachedThreshold(0);
                 }
@@ -338,7 +337,7 @@ final class ProtosI112TailContinuationTest {
                             + "reader()",
                     "i115-e1-suspension.protos");
 
-            assertTerminal(root, "c.InvokeClosureZeroTail");
+            assertTerminal(root, "c.CallNilaryMethod");
 
             ProtosTask task = execute(domain, module, root);
 
@@ -470,7 +469,7 @@ final class ProtosI112TailContinuationTest {
 
             ProtosBytecodeRootNode root =
                     lowerRoot(scope.language(), "ensurer(cleanup)", "i112-ensure-top.protos");
-            assertTerminal(root, "c.InvokeClosureOneTail");
+            assertTerminal(root, "c.CallUnaryMethod");
             ProtosTask task = execute(domain, module, root);
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.SUSPENDED, task.state());
@@ -826,14 +825,14 @@ final class ProtosI112TailContinuationTest {
                                 "i112-cross-context-target.protos");
                         site[0] = uncheckedLowerRoot(
                                 LANGUAGE_REF.get(null), "target(1)", "i112-cross-context-site.protos");
-                        assertTerminal(site[0], "c.InvokeClosureOneTail");
+                        assertTerminal(site[0], "c.CallUnaryMethod");
                         site[0].getBytecodeNode().setUncachedThreshold(0);
                         for (int run = 0; run < 3; run++) {
                             ProtosActivation module = activation(prelude, domain);
                             module.context().createLocalSlot("target", closure);
                             assertInteger(2, site[0].getCallTarget().call(module));
                         }
-                        firstTarget[0] = InvokeClosureZero.definitionTarget(
+                        firstTarget[0] = ProtosClosureCallPreparation.definitionTarget(
                                 closure, creator, ProtosLanguageContext.current());
                         carried[0] = closure;
                         return null;
@@ -858,7 +857,7 @@ final class ProtosI112TailContinuationTest {
 
                         ProtosBytecodeRootNode secondSite = uncheckedLowerRoot(
                                 LANGUAGE_REF.get(null), "target(1)", "i112-cross-context-site.protos");
-                        assertTerminal(secondSite, "c.InvokeClosureOneTail");
+                        assertTerminal(secondSite, "c.CallUnaryMethod");
                         assertNotSame(site[0], secondSite);
                         secondSite.getBytecodeNode().setUncachedThreshold(0);
                         assertInteger(2, secondSite.getCallTarget().call(module));
@@ -867,7 +866,7 @@ final class ProtosI112TailContinuationTest {
                                 ProtosLanguageContext.current()
                                         .projectedBytecodeExecutionPlanCountForTesting(),
                                 "the site projects one Context-local plan instead of reusing a target");
-                        RootCallTarget secondTarget = InvokeClosureZero.definitionTarget(
+                        RootCallTarget secondTarget = ProtosClosureCallPreparation.definitionTarget(
                                 rebound, module, ProtosLanguageContext.current());
                         if (secondTarget != null) {
                             assertNotSame(firstTarget[0], secondTarget,
@@ -1032,7 +1031,7 @@ final class ProtosI112TailContinuationTest {
                     module.getRootNodes().ensureComplete();
                     List<String> instructions = signature(module);
                     boolean terminal = instructions.stream()
-                            .anyMatch(entry -> entry.startsWith("c.InvokeClosureOneTail"));
+                            .anyMatch(entry -> entry.startsWith("c.CallUnaryMethod"));
                     assertTrue(terminal, () -> mode + ": " + instructions);
 
                     TagTree tree = module.getBytecodeNode().getTagTree();
@@ -1047,7 +1046,7 @@ final class ProtosI112TailContinuationTest {
                     if (terminal) {
                         Instruction call = instructions(module).stream()
                                 .filter(instruction -> instruction.getName()
-                                        .equals("c.InvokeClosureOneTail"))
+                                        .equals("c.CallUnaryMethod"))
                                 .findFirst()
                                 .orElseThrow();
                         SourceSection section = call.getSourceSection();
@@ -1114,7 +1113,7 @@ final class ProtosI112TailContinuationTest {
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
             ProtosBytecodeRootNode root =
                     lowerRoot(scope.language(), "target(1)", "i114-local-call.protos");
-            assertTerminal(root, "c.InvokeClosureOneTail");
+            assertTerminal(root, "c.CallUnaryMethod");
             root.getBytecodeNode().setUncachedThreshold(0);
             ProtosActivation creator = activation(prelude, domain);
             ProtosClosureValue template =
@@ -1147,7 +1146,7 @@ final class ProtosI112TailContinuationTest {
                 // Removed: the canonical selection is restored and direct again.
                 target.removeLocalSlot("call");
                 assertInteger(2, callWithTarget(root, prelude, domain, target));
-                assertSame(target, InvokeClosureZero.admittedInstanceOrNull(target, creator));
+                assertSame(target, ProtosClosureCallPreparation.admittedInstanceOrNull(target, creator));
             }
         }
     }
@@ -1205,7 +1204,7 @@ final class ProtosI112TailContinuationTest {
             // instance is rejected before any target work and runs generically.
             ProtosReturnHome materialized = new ProtosReturnHome();
             ProtosClosureValue homed = sibling(template, creator.receiver(), materialized);
-            assertTrue(InvokeClosureZero.admittedInstanceOrNull(homed, creator) == null);
+            assertTrue(ProtosClosureCallPreparation.admittedInstanceOrNull(homed, creator) == null);
             for (int run = 0; run < 3; run++) {
                 assertInteger(2, callWithTarget(root, prelude, domain, homed));
                 assertInteger(2, callWithTarget(root, prelude, domain, template));

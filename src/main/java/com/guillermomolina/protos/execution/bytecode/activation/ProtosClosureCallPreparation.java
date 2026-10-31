@@ -31,6 +31,8 @@ import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.api.nodes.DirectCallNode;
+import com.oracle.truffle.api.dsl.NonIdempotent;
 import java.util.List;
 
 /**
@@ -40,6 +42,79 @@ import java.util.List;
  */
 final class ProtosClosureCallPreparation {
     private ProtosClosureCallPreparation() {}
+
+    // I115: shared closure admission formerly owned by Call0.
+    // No call-site cache is introduced here.
+
+    static CanonicalClosure sourceDefinitionOrNull(Object receiver) {
+        return receiver instanceof ProtosClosureValue closure
+                        && closure.nativeBody().isEmpty()
+                ? closure.definition()
+                : null;
+    }
+
+    static ProtosClosureExecutionPlan sourcePlanOrNull(
+            Object receiver) {
+        return receiver instanceof ProtosClosureValue closure
+                        && closure.nativeBody().isEmpty()
+                ? closure.executionPlan().orElse(null)
+                : null;
+    }
+
+    static boolean requiresContextProjection(Object receiver) {
+        return receiver instanceof ProtosClosureValue closure
+                && closure.requiresContextLocalExecutionProjectionForRuntime();
+    }
+
+    static DirectCallNode createDirectCallNodeOrNull(
+            RootCallTarget target) {
+        return target == null ? null : DirectCallNode.create(target);
+    }
+
+    @NonIdempotent
+    static boolean temporarilyRejectedInstance(
+            Object receiver, Object caller) {
+        return sourceDefinitionOrNull(receiver) != null
+                && admittedInstanceOrNull(receiver, caller) == null;
+    }
+
+    static RootCallTarget definitionTarget(
+            Object receiver,
+            Object caller,
+            ProtosLanguageContext enteredContext) {
+        if (enteredContext == null
+                || !(receiver instanceof ProtosClosureValue closure)
+                || closure.executionPlan().isEmpty()
+                || admittedInstanceOrNull(receiver, caller) != closure) {
+            return null;
+        }
+        return ProtosGuardedSendSelection
+                .fastOrdinarySendTarget(closure, enteredContext);
+    }
+
+    static boolean admittedTarget(
+            RootCallTarget target, int suppliedArgumentCount) {
+        return target != null
+                && target.getRootNode()
+                        instanceof ProtosBytecodeRootNode root
+                && root.provablyNonSuspendingBody();
+    }
+
+    static ProtosClosureValue admittedInstanceOrNull(
+            Object receiver, Object caller) {
+        ProtosClosureValue closure =
+                ProtosClosureCallPreparation.directClosureCallSelectionForPreludeOrNull(
+                                receiver, callerPrelude(caller));
+        if (closure == null
+                || !closure.hasUnobservableInvocationReturnHomeForRuntime()) {
+            return null;
+        }
+        return closure;
+    }
+
+    static ProtosPrelude callerPrelude(Object caller) {
+        return ProtosBytecodeRootNode.PrepareSendArguments.callerPrelude(caller);
+    }
 
     static PreparedClosureCall prepareTaskOwnedDirectClosureIfBytecode(
             ProtosClosureValue closure,

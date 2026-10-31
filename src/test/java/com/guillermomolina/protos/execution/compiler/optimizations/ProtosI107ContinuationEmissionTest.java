@@ -111,20 +111,69 @@ final class ProtosI107ContinuationEmissionTest {
         }
     }
 
-    /** The previous topology of the same shape: ordinary send plus continuation. */
+    /**
+     * The same shape whose innermost value is a send is not folded. I115: both nested
+     * literal-Boolean controls are inline branches with no callback root, and the innermost {@code 7 + 0} is the GraalPy-shaped {@code NumberAdd} arithmetic operation,
+     * which owns its fast path and its ordinary-dispatch fallback, instead of an explicit
+     * PrepareSend plus continuation composition. The absence of a root-level Yield is not a
+     * non-suspension proof.
+     */
     @Test
-    void unprovenNestingKeepsTheGenericTopology() throws Exception {
+    void unprovenNestingUsesInlineNumericTopology() throws Exception {
         try (Harness normal = new Harness(false)) {
             normal.run(() -> {
                 ProtosBytecodeRootNode module = compile(NESTED_UNPROVEN, "unproven");
-                List<String> actual = completeSignature(activationRoot(module));
+                ProtosBytecodeRootNode activation = activationRoot(module);
+                List<String> actual = completeSignature(activation);
                 List<String> folded = completeSignature(activationRoot(compile(NESTED, "folded")));
-                assertHasContinuation(actual);
-                assertTrue(actual.stream().anyMatch(entry -> entry.startsWith("c.PrepareSend")
-                        || entry.contains("PrepareSend")));
+                int add = -1;
+                for (int index = 0; index < actual.size(); index++) {
+                    if (actual.get(index).split(" ", 2)[0].equals("c.NumberAdd")) {
+                        add = index;
+                    }
+                }
+                assertTrue(add >= 0, () -> "NumberAdd missing in " + actual);
+                // Both nested controls: literal true, then literal false, each followed by
+                // its conditional branch, all before the arithmetic.
+                int outer = -1;
+                int inner = -1;
+                for (int index = 0; index < actual.size(); index++) {
+                    String entry = actual.get(index);
+                    if (outer < 0 && entry.startsWith("load.constant ")
+                            && entry.contains("=Boolean(true)")) {
+                        outer = index;
+                    } else if (outer >= 0 && inner < 0 && entry.startsWith("load.constant ")
+                            && entry.contains("=Boolean(false)")) {
+                        inner = index;
+                    }
+                }
+                assertTrue(outer >= 0 && inner > outer && add > inner, actual::toString);
+                for (int condition : new int[] {outer, inner}) {
+                    int next = condition + 1;
+                    while (next < actual.size() && actual.get(next).startsWith("trace.")) {
+                        next++;
+                    }
+                    assertTrue(next < actual.size()
+                                    && actual.get(next).startsWith("branch.false "),
+                            actual::toString);
+                }
+                // Both operands of the arithmetic dispatch are staged before it.
+                assertTrue(add >= 2, actual::toString);
+                // I091: the scalar operand is a primitive carrier (Integer or Long).
+                assertTrue(actual.stream().anyMatch(entry -> entry.contains("=Integer(7)")
+                                || entry.contains("=Long(7)")),
+                        actual::toString);
                 assertTrue(folded.size() < actual.size(), folded + " vs " + actual);
-                assertTrue(groupRoots(module).size() > 2);
-                assertFalse(activationRoot(module).provablyNonSuspendingBody());
+                assertEquals(2, groupRoots(module).size());
+                assertSame(module, groupRoots(module).get(0));
+                assertSame(activationRoot(module), groupRoots(module).get(1));
+                assertFalse(activation.provablyNonSuspendingBody());
+
+                RootCallTarget target = activation.getCallTarget();
+                module.getRootNodes().ensureComplete();
+                assertEquals(actual, signature(activation));
+                assertSame(target, activation.getCallTarget());
+                assertFalse(activation.provablyNonSuspendingBody());
                 assertInteger(7, callClosure(normal, closureOf(normal, module)));
             });
         }
@@ -221,8 +270,7 @@ final class ProtosI107ContinuationEmissionTest {
                 "() => { f: () => { 1 }\n f = () => { 2 }\n f() }",
                 // Literal receiver: inline region with its admission miss.
                 "() => { (() => { 1 })() }",
-                // Dynamic Boolean receiver and callback.
-                "(b, g) => { b.ifTrue(g) }",
+                // Terminal method calls are tested separately below.
                 // Spread argument.
                 "(f, items) => { f(...items) }");
         try (Harness normal = new Harness(false)) {
@@ -232,9 +280,72 @@ final class ProtosI107ContinuationEmissionTest {
                             completeSignature(activationRoot(compile(source, "fallback")));
                     assertHasContinuation(instructions);
                 }
+
+                // I115: a terminal method send uses GraalPy-shaped
+                // GetMethod + CallBinaryMethod. Suspension is carried
+                // by the terminal call, not by a caller Yield.
+                List<String> terminalMethod =
+                        completeSignature(activationRoot(compile(
+                                "(b, g) => { b.ifTrue(g) }",
+                                "terminal-method")));
+
+                assertTrue(
+                        terminalMethod.stream().anyMatch(
+                                entry -> entry.split(" ", 2)[0]
+                                        .equals("c.GetMethod")),
+                        () -> "GetMethod missing in " + terminalMethod);
+
+                assertTrue(
+                        terminalMethod.stream().anyMatch(
+                                entry -> entry.startsWith("c.CallBinaryMethod ")
+                                        && entry.contains(
+                                                "terminal:CONSTANT=Boolean(true)")),
+                        () -> "terminal CallBinaryMethod missing in "
+                                + terminalMethod);
+
+                assertNoContinuation(terminalMethod);
+
                 ProtosBytecodeRootNode replaced =
                         compile("() => { f: () => { 1 }\n f = () => { 2 }\n f() }", "replace");
                 assertInteger(2, callClosure(normal, closureOf(normal, replaced)));
+            });
+        }
+    }
+
+    /**
+     * I115: composed Call1 uses CallUnaryMethod(false), retaining the
+     * physical prepared-call continuation and execution semantics.
+     */
+    @Test
+    void composedUnaryCallUsesPhysicalContinuation() throws Exception {
+        try (Harness normal = new Harness(false)) {
+            normal.run(() -> {
+                ProtosBytecodeRootNode module =
+                        compile("(f) => { f(1)\n 9 }", "composed-unary");
+
+                List<String> instructions =
+                        completeSignature(activationRoot(module));
+
+                assertHasContinuation(instructions);
+
+                assertTrue(
+                        instructions.stream().anyMatch(
+                                entry -> entry.split(" ", 2)[0]
+                                        .equals("c.CallUnaryMethod")),
+                        () -> "CallUnaryMethod missing in " + instructions);
+
+                assertFalse(
+                        instructions.stream().anyMatch(
+                                entry -> entry.split(" ", 2)[0]
+                                        .equals("c.InvokeClosureOne")),
+                        () -> "legacy InvokeClosureOne in " + instructions);
+
+                assertInteger(
+                        9,
+                        callClosureWith(
+                                normal,
+                                closureOf(normal, module),
+                                "(value) => { value + 4 }"));
             });
         }
     }
@@ -250,11 +361,11 @@ final class ProtosI107ContinuationEmissionTest {
     void terminalCallWithoutYieldIsNotANonSuspensionProof() throws Exception {
         record Case(String source, String operation, String argument, long expected) {}
         List<Case> terminal = List.of(
-                new Case("(f) => { f() }", "c.InvokeClosureZeroTail",
+                new Case("(f) => { f() }", "c.CallNilaryMethod",
                         "() => { 5 }", 5),
-                new Case("(f) => { f(1) }", "c.InvokeClosureOneTail",
+                new Case("(f) => { f(1) }", "c.CallUnaryMethod",
                         "(value) => { value + 4 }", 5),
-                new Case("(f) => { f(2, 3) }", "c.InvokeClosureArgumentsTail",
+                new Case("(f) => { f(2, 3) }", "c.CallVarargsMethod",
                         "(a, b) => { a + b }", 5));
         try (Harness normal = new Harness(false)) {
             normal.run(() -> {
@@ -315,21 +426,56 @@ final class ProtosI107ContinuationEmissionTest {
                 ProtosBytecodeRootNode activation = activationRoot(module);
                 List<String> actual = completeSignature(activation);
 
-                assertHasContinuation(actual);
-                assertTrue(actual.stream().anyMatch(
-                        item -> item.contains("InlineLiteralFallbackCall")),
-                        actual::toString);
-                assertFalse(activation.provablyNonSuspendingBody());
+                // I115-H7: a dispatching Boolean control. The staged receiver
+                // is tested by ExperimentalCanonicalBooleanCondition and a
+                // conditional branch selects the inline body (HIT); any other
+                // value takes the ordinary send (MISS). The structural check
+                // alone does not prove the fallback: the HIT and MISS
+                // behaviors are exercised separately below.
+                int condition = -1;
+                int branch = -1;
+                for (int index = 0; index < actual.size(); index++) {
+                    String name = actual.get(index).split(" ", 2)[0];
+                    if (condition < 0
+                            && name.equals("c.ExperimentalCanonicalBooleanCondition")) {
+                        condition = index;
+                    }
+                    if (condition >= 0 && branch < 0 && name.startsWith("branch.false")) {
+                        branch = index;
+                    }
+                }
+                assertTrue(condition >= 0, actual::toString);
+                assertTrue(branch > condition, actual::toString);
+                // The local b is canonical true with no intervening mutation, so the
+                // physical guarded fallback is unreachable for this closed program.
+                assertTrue(activation.provablyNonSuspendingBody());
                 assertInteger(1, callClosure(normal, closureOf(normal, module)));
 
                 module.getRootNodes().ensureComplete();
                 assertEquals(actual, signature(activation));
-                assertFalse(activation.provablyNonSuspendingBody());
+                assertTrue(activation.provablyNonSuspendingBody());
 
                 ProtosBytecodeRootNode equivalent =
                         activationRoot(compile(source, "inline-fallback-reparse"));
                 assertEquals(actual, completeSignature(equivalent));
-                assertFalse(equivalent.provablyNonSuspendingBody());
+                assertTrue(equivalent.provablyNonSuspendingBody());
+
+                // Admitted path versus failed guard: a dynamic canonical
+                // Boolean runs the inline body, while a non-Boolean receiver
+                // with its own ifTrue receives the ordinary send.
+                ProtosBytecodeRootNode dynamicModule =
+                        compile("(b) => { b.ifTrue() { 1 } }", "dynamic-boolean");
+                ProtosBytecodeRootNode dynamicActivation = activationRoot(dynamicModule);
+                completeSignature(dynamicActivation);
+                // A dynamic receiver may select an overridden ifTrue: no guarantee.
+                assertFalse(dynamicActivation.provablyNonSuspendingBody());
+                ProtosClosureValue dynamic = closureOf(normal, dynamicModule);
+                assertInteger(1, callClosureWith(normal, dynamic, "true"));
+                assertSame(
+                        ProtosNullValue.INSTANCE,
+                        callClosureWith(normal, dynamic, "false"));
+                assertInteger(99, callClosureWith(
+                        normal, dynamic, "{ ifTrue: (callback) => { 99 } }"));
 
                 ProtosBytecodeRootNode safe =
                         activationRoot(compile("() => { 1 }", "independent-root"));
@@ -375,7 +521,6 @@ final class ProtosI107ContinuationEmissionTest {
                             builder.beginSource(source);
                             builder.beginSourceSection(bodyStart, bodyLength);
                             builder.beginRoot();
-                            builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
                             builder.beginSourceSection(statementStart, statement.length());
                             builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
@@ -387,7 +532,6 @@ final class ProtosI107ContinuationEmissionTest {
                             builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
