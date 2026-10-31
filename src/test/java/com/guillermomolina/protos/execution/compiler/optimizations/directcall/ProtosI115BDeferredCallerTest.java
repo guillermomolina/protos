@@ -29,7 +29,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.oracle.truffle.api.debug.DebuggerSession;
 import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureOneTail;
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeMethodOneTail;
 import com.guillermomolina.protos.execution.ProtosClosureCallPreparation.DirectClosureExecutableFacts;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
@@ -647,7 +646,7 @@ final class ProtosI115BDeferredCallerTest {
             Object entry = entries.get(0);
             RootCallTarget target = (RootCallTarget) field(entry, "cachedTarget_");
             ProtosClosureExecutionPlan template =
-                    (ProtosClosureExecutionPlan) field(entry, "cachedSourcePlan_");
+                    (ProtosClosureExecutionPlan) field(entry, "cachedPlan_");
             assertSame(template.bytecodeActivationTargetForComposition(), target);
             DirectClosureExecutableFacts facts =
                     (DirectClosureExecutableFacts) field(entry, "cachedFacts_");
@@ -1559,8 +1558,6 @@ final class ProtosI115BDeferredCallerTest {
                     callerRoot, callee, inherited, callerArguments));
             assertSame(module, InvokeClosureOneTail.callerArgument(
                     callerRoot, callee, inherited, module));
-            assertSame(callerArguments, InvokeMethodOneTail.callerArgument(
-                    callee, inherited, callerArguments, modulePrelude));
             assertUnpublished(callerArguments);
 
             callee.requestCallerNeed(need);
@@ -1577,11 +1574,6 @@ final class ProtosI115BDeferredCallerTest {
             assertSame(modulePrelude, reference.transportedPrelude());
             assertSame(null, reference.publishedActivationOrNull());
 
-            // The method form transports the prelude its PIC guard read, even null.
-            ProtosCallerFrameReference transportedNull = assertInstanceOf(
-                    ProtosCallerFrameReference.class,
-                    InvokeMethodOneTail.callerArgument(callee, inherited, callerArguments, null));
-            assertSame(null, transportedNull.transportedPrelude());
             assertUnpublished(callerArguments);
 
             // The caller read its prelude from an activation caller: no need of its own.
@@ -2378,23 +2370,23 @@ final class ProtosI115BDeferredCallerTest {
     private static ProtosBytecodeRootNode tailCallee(ProtosBytecodeRootNode root)
             throws Exception {
         Node[] cachedNodes = (Node[]) field(root.getBytecodeNode(), "cachedNodes_");
-        String nodeName = InvokeClosureOneTail.class.getSimpleName() + "_Node";
+        String nodeName = "CallUnaryMethod_Node";
         ProtosBytecodeRootNode callee = null;
         int entries = 0;
         for (Node node : cachedNodes) {
             if (node == null || !node.getClass().getSimpleName().equals(nodeName)) {
                 continue;
             }
-            for (String cache : List.of("guardedSource_cache", "definitionSource_cache")) {
+            for (String cache : List.of("callPFunction_cache", "callPFunction_cache")) {
                 for (Object entry = field(node, cache); entry != null; entry = field(entry, "next_")) {
                     entries++;
                     ProtosBytecodeRootNode cached = assertInstanceOf(
-                            ProtosBytecodeRootNode.class, field(entry, "cachedCallee_"));
+                            ProtosBytecodeRootNode.class, calleeFromCachedDirectEntry(entry));
                     DirectClosureExecutableFacts facts =
                             (DirectClosureExecutableFacts) field(entry, "cachedFacts_");
                     assertSame(facts.target().getRootNode(), cached, "facts target root");
                     com.oracle.truffle.api.nodes.DirectCallNode direct = assertInstanceOf(
-                            com.oracle.truffle.api.nodes.DirectCallNode.class, field(entry, "node_"));
+                            com.oracle.truffle.api.nodes.DirectCallNode.class, field(entry, "call_"));
                     assertSame(
                             assertInstanceOf(RootCallTarget.class, direct.getCallTarget()).getRootNode(),
                             cached, "invoked target root");
@@ -2412,9 +2404,15 @@ final class ProtosI115BDeferredCallerTest {
     /** Structural, test-only view of the terminal Call1 site's cache entries. */
     private static List<Object> tierEntries(
             String function, String cache, ProtosActivation module) throws Exception {
+        assertTrue(
+                cache.equals("definitionSource_cache")
+                        || cache.equals("guardedSource_cache"),
+                "Unexpected legacy cache selector: " + cache);
+
         Object bytecode = functionRoot(function, module).getBytecodeNode();
         Node[] cachedNodes = (Node[]) field(bytecode, "cachedNodes_");
-        String nodeName = InvokeClosureOneTail.class.getSimpleName() + "_Node";
+
+        String nodeName = "CallUnaryMethod_Node";
         List<Object> entries = new ArrayList<>();
         int sites = 0;
         for (Node node : cachedNodes) {
@@ -2422,7 +2420,7 @@ final class ProtosI115BDeferredCallerTest {
                 continue;
             }
             sites++;
-            for (Object entry = field(node, cache); entry != null; entry = field(entry, "next_")) {
+            for (Object entry = field(node, "callPFunction_cache"); entry != null; entry = field(entry, "next_")) {
                 entries.add(entry);
             }
         }
@@ -2435,6 +2433,36 @@ final class ProtosI115BDeferredCallerTest {
                 + "; cached tier: "
                 + (cachedNodes.length > 0));
         return entries;
+    }
+
+    /**
+     * I115-C4: the physical CallUnaryMethod PIC retains executable
+     * facts and its installed target, but does not cache a redundant
+     * callee-root field.
+     *
+     * Verify their consistency before inspecting the invoked root's
+     * caller needs. A missing or non-Protos target is a real failure,
+     * not a reason to skip the test.
+     */
+    private static ProtosBytecodeRootNode calleeFromCachedDirectEntry(
+            Object entry) throws ReflectiveOperationException {
+        RootCallTarget target = assertInstanceOf(
+                RootCallTarget.class,
+                field(entry, "cachedTarget_"));
+
+        DirectClosureExecutableFacts facts = assertInstanceOf(
+                DirectClosureExecutableFacts.class,
+                field(entry, "cachedFacts_"));
+
+        assertSame(
+                facts.target(),
+                target,
+                "physical direct entry must retain its certified target");
+
+        return assertInstanceOf(
+                ProtosBytecodeRootNode.class,
+                target.getRootNode(),
+                "physical direct entry must target a Protos root");
     }
 
     private static Object field(Object owner, String name) throws ReflectiveOperationException {

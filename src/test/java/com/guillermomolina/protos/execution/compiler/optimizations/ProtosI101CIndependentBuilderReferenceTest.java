@@ -125,7 +125,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                 assertSame(actualRoot, plan.bytecodeActivationRootForTesting());
                 assertSame(targets.get(1), plan.bytecodeActivationTargetForComposition());
                 assertNotSemantics(normal, closure, "no debugger");
-                assertEquals(actual, signature(actualRoot));
+                // Execution quickens instructions; compare logical programs.
+                assertSameLogicalProgram(actual, signature(actualRoot), "after execution");
                 System.out.println("I101_C_NOT_BUILDER_REFERENCE=PASS");
             });
         }
@@ -299,7 +300,6 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.beginRoot();
 
                             BytecodeLocal receiver = builder.createLocal("receiver", null);
-                            builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
                             BytecodeLocal[] locals = {receiver};
                             ProtosFrameLexicalLayout layout = ProtosFrameLexicalLayout.of(
@@ -388,7 +388,6 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.endReturn();
 
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -436,7 +435,6 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                     builder.beginSource(source);
                     builder.beginSourceSection(outerBodyStart, outerBodyLength);
                     builder.beginRoot();
-                    builder.beginTag(StandardTags.RootTag.class);
                     builder.beginBlock();
 
                     BytecodeLocal prepared = builder.createLocal("preparedClosureCall", null);
@@ -455,7 +453,6 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                     // The inner root is registered in this group before its Closure materializes.
                     builder.beginSourceSection(innerBodyStart, innerBodyLength);
                     builder.beginRoot();
-                    builder.beginTag(StandardTags.RootTag.class);
                     builder.beginBlock();
                     // PLAT067-B: the surviving constant return keeps its statement's tags.
                     builder.beginSourceSection(literalStart, 1);
@@ -463,14 +460,13 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                     builder.beginBlock();
                     builder.beginReturn();
-                    builder.emitLoadConstant(1L);
+                    builder.emitLoadConstant(ProtosNumericValueSupport.integer(1L));
                     builder.endReturn();
                     builder.endBlock();
                     builder.endTag(
                             StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                     builder.endSourceSection();
                     builder.endBlock();
-                    builder.endTag(StandardTags.RootTag.class);
                     builder.endRoot();
                     builder.endSourceSection();
 
@@ -539,7 +535,6 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                     builder.endReturn();
 
                     builder.endBlock();
-                    builder.endTag(StandardTags.RootTag.class);
                     builder.endRoot();
                     builder.endSourceSection();
                     builder.endSource();
@@ -570,12 +565,12 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                         "call-zero",
                         "() => { null() }",
                         false,
-                        "InvokeClosureZeroTail"),
+                        "CallNilaryMethod"),
                 new Witness(
                         "call-n",
                         "() => { null(7, 9) }",
                         true,
-                        "InvokeClosureArgumentsTail"));
+                        "CallVarargsMethod"));
 
         try (Harness normal =
                 new Harness(false)) {
@@ -696,7 +691,6 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.beginSourceSection(
                                     bodyStart, bodyLength);
                             builder.beginRoot();
-                            builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
 
                             // I112 / PLAT062-T: the final call is the
@@ -712,9 +706,9 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                                     StandardTags.CallTag.class);
 
                             if (multi) {
-                                builder.beginInvokeClosureArgumentsTail();
+                                builder.beginCallVarargsMethod(true);
                             } else {
-                                builder.beginInvokeClosureZeroTail();
+                                builder.beginCallNilaryMethod(true);
                             }
 
                             builder.emitLoadConstant(
@@ -727,9 +721,9 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                                 builder.emitLoadConstant(
                                         ProtosNumericValueSupport.integer(9));
                                 builder.endCollectClosureCallArguments();
-                                builder.endInvokeClosureArgumentsTail();
+                                builder.endCallVarargsMethod();
                             } else {
-                                builder.endInvokeClosureZeroTail();
+                                builder.endCallNilaryMethod();
                             }
 
                             builder.endTag(
@@ -740,7 +734,6 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.endReturn();
 
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -803,9 +796,13 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                 // operation owns selection, fallback and the transport
                 // of a suspended invocation; no physical composition
                 // remains in this root.
+                // I115: the GraalPy-shaped CallUnaryMethod replaces the
+                // retired InvokeClosureOneTail terminal operation.
                 assertTrue(
                         indexOfOperation(
-                                actual, "InvokeClosureOneTail") >= 0);
+                                actual, "CallUnaryMethod") >= 0,
+                        actual::toString);
+                assertNoOperation(actual, "InvokeClosureOneTail");
 
                 for (String operation : List.of(
                         "IsPreparedClosureInvocation",
@@ -896,7 +893,6 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             BytecodeLocal identity =
                                     builder.createLocal(
                                             "identity", null);
-                            builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
 
                             BytecodeLocal[] locals = {identity};
@@ -935,7 +931,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.beginTag(
                                     StandardTags.CallTag.class);
 
-                            builder.beginInvokeClosureOneTail();
+                            builder.beginCallUnaryMethod(true);
 
                             // The receiver binding is read directly; the
                             // operation projects a carrier before any
@@ -950,7 +946,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             // a guest numeric value.
                             builder.emitLoadConstant(1L);
 
-                            builder.endInvokeClosureOneTail();
+                            builder.endCallUnaryMethod();
 
                             builder.endTag(
                                     StandardTags.CallTag.class);
@@ -962,7 +958,6 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.endReturn();
 
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -1257,6 +1252,48 @@ final class ProtosI101CIndependentBuilderReferenceTest {
         assertTrue(
                 signature.stream().noneMatch(entry -> entry.split(" ", 2)[0].contains(operation)),
                 () -> operation + " in " + signature);
+    }
+
+    /**
+     * Compares two complete signatures of one program across Truffle
+     * quickening. The instruction count and order must be identical; each
+     * operation name is compared with only its DSL quickening suffix (from
+     * the first {@code $}) removed, and each operand is compared after
+     * dropping generated specialization state and node profiles. Nothing is
+     * deleted, sorted, filtered or collapsed.
+     */
+    private static void assertSameLogicalProgram(
+            List<String> before, List<String> after, String message) {
+        assertEquals(
+                before.size(),
+                after.size(),
+                () -> message + ": instruction count " + before + " vs " + after);
+        for (int index = 0; index < before.size(); index++) {
+            assertEquals(
+                    logicalInstruction(before.get(index)),
+                    logicalInstruction(after.get(index)),
+                    message + ": instruction " + index + "\n" + before + "\nvs\n" + after);
+        }
+    }
+
+    private static String logicalInstruction(String entry) {
+        String[] parts = entry.split(" ");
+        StringBuilder logical = new StringBuilder();
+        String name = parts[0];
+        int quickened = name.indexOf('$');
+        logical.append(quickened < 0 ? name : name.substring(0, quickened));
+        for (int index = 1; index < parts.length; index++) {
+            String operand = parts[index];
+            // Generated specialization state and node profile identities
+            // are not part of the language-level program.
+            if (operand.startsWith("state_")
+                    || operand.contains(":NODE_PROFILE=")
+                    || operand.contains(":BRANCH_PROFILE=")) {
+                continue;
+            }
+            logical.append(' ').append(operand);
+        }
+        return logical.toString();
     }
 
     private static List<String> completeSignature(ProtosBytecodeRootNode root) {

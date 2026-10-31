@@ -8,6 +8,39 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.30-SNAPSHOT
+
+- **I115-C6 — reconcile Bytecode DSL call and Boolean-control oracles with
+  the GraalPy-shaped physical lowering.** This is a historical migration
+  checkpoint, not a completed semantic or performance acceptance.
+  - Add `ProtosCallUnaryMethodNode` with a specialized unary Closure call
+    and its generic fallback; converge fixed-arity terminal lowering on
+    `CallUnaryMethod` / `CallNilaryMethod`, and retain `CallVarargsMethod`
+    for spread and variable arity. Move shared Closure admission helpers
+    into `ProtosClosureCallPreparation`; retire the obsolete composed
+    `InvokeClosureArguments` operation. The new unary node is the one added
+    original source file in this commit.
+  - For host Closures with observable `ReturnHome`, add an ordinary-entry
+    fallback with RootActor ownership, prepared call completion and
+    continuation handling. The narrow no-home direct/indirect route remains
+    experimental for Closures with unobservable homes.
+  - Reconcile builder, profiling, continuation, CallN/spread, tail-call,
+    PERF042 and deferred-caller test oracles with the new physical DSL.
+    Update the nested Boolean-control oracle to expect inline conditional
+    branches and the H7 `NumberAdd` operation, while still recording
+    dynamic-receiver fallback cases. No tests are executed in this replay.
+  - **Historical semantic limitations:** retaining the experimental
+    compact paths does not prove dynamic `Object.call` selection,
+    `ReturnHome`, caller authority, suspension, cancellation or
+    non-local control-transfer equivalence; D179 C0 also remains open.
+    GraalPy-shaped H7 arithmetic/Boolean paths still use Java `int`
+    carriers beyond the H10 `long` attribute lane, in conflict with the
+    Protos long-only design. Structural oracle changes are not Tier 1/
+    Tier 2 graph evidence or a correctness/performance acceptance.
+  - Original implementation: `bbba82478bc48721b75d01b587b5cdbf397f90ac`.
+    All thirteen original source/test blobs (one addition) are preserved
+    byte-for-byte, without editing the code or historical commits.
+
 ## 0.4.29-SNAPSHOT
 
 - **I115-H11 — experimental convergence of Closure and method calls on a compact unary ABI.**

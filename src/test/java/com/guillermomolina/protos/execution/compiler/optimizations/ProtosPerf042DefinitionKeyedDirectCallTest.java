@@ -26,9 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureOne;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureOneTail;
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureZero;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -38,38 +36,27 @@ import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
-import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.source.Source;
-import java.lang.reflect.Field;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * PERF042 coverage for the definition-keyed tier of the fused direct
- * Closure Call0/Call1 operations ({@code InvokeClosureZero},
- * {@code InvokeClosureOne}).
+ * PERF042 regression coverage after I115 physical-call lowering.
  *
- * <p>Admission is proved through the tier's own admission helpers on real
- * fresh Closures: fresh instances of one definition share the cached
- * Context-owned target, the target-level proof holds once per definition, and
- * the instance-level proof (ordinary {@code call} selection and unobservable
- * ReturnHome) is re-established for the current instance. I114: that proof is
- * no longer a full per-instance lookup; it is the Closure's local {@code call}
- * presence plus the invalidable root {@code Object.call} certificate, and the
- * ReturnHome half never constructs a home or rematerializes a plan. Guest workloads
- * repeat every call site more often than either cache tier's limit and check
- * that ordinary semantics, including {@code call} overrides added, removed and
- * re-created after warm-up, are preserved.
+ * <p>Checks source Closure definition, execution-plan and target
+ * admission, ordinary call selection, ReturnHome, Context
+ * projection and deferred-plan behavior.
  *
- * <p>Installation of the definition tier on a real call site is proved
- * structurally: the enclosing root is moved to the cached Bytecode tier and the
- * generated operation node's {@code definitionSource} cache is read
- * reflectively. This proves installation and persistence of an entry and the
- * identity of its cached target; it does not prove how often hot calls use the
- * entry or what compiled code results, which needs a Tier-2 graph.
+ * <p>Guest workloads retain the semantic regression witnesses
+ * for fresh instances, overridden call methods and restored
+ * canonical selection.
+ *
+ * <p>Structural checks now verify physical CallNilaryMethod and
+ * CallUnaryMethod bytecode sites instead of the removed composed
+ * operations' definitionSource PIC caches. Compiled graph
+ * convergence requires separate graph evidence.
  */
 final class ProtosPerf042DefinitionKeyedDirectCallTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -93,15 +80,15 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             ProtosClosureValue second = closure("make()\n", module);
             assertNotSame(first, second);
             assertSame(first.definition(), second.definition());
-            assertSame(first.definition(), InvokeClosureOne.sourceDefinitionOrNull(second));
+            assertSame(first.definition(), ProtosClosureCallPreparation.sourceDefinitionOrNull(second));
 
             ProtosLanguageContext context = ProtosLanguageContext.current();
-            RootCallTarget target = InvokeClosureOne.definitionTarget(first, module, context);
+            RootCallTarget target = ProtosClosureCallPreparation.definitionTarget(first, module, context);
             assertNotNull(target);
-            assertSame(target, InvokeClosureOne.definitionTarget(second, module, context));
-            assertTrue(InvokeClosureOne.admittedTarget(target, 1));
-            assertSame(first, InvokeClosureZero.admittedInstanceOrNull(first, module));
-            assertSame(second, InvokeClosureZero.admittedInstanceOrNull(second, module));
+            assertSame(target, ProtosClosureCallPreparation.definitionTarget(second, module, context));
+            assertTrue(ProtosClosureCallPreparation.admittedTarget(target, 1));
+            assertSame(first, ProtosClosureCallPreparation.admittedInstanceOrNull(first, module));
+            assertSame(second, ProtosClosureCallPreparation.admittedInstanceOrNull(second, module));
         });
     }
 
@@ -124,13 +111,13 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             assertNotSame(first, second);
 
             ProtosLanguageContext context = ProtosLanguageContext.current();
-            RootCallTarget target = InvokeClosureZero.definitionTarget(first, module, context);
+            RootCallTarget target = ProtosClosureCallPreparation.definitionTarget(first, module, context);
             assertNotNull(target);
-            assertSame(target, InvokeClosureZero.definitionTarget(second, module, context));
-            assertTrue(InvokeClosureZero.admittedTarget(target, 0));
+            assertSame(target, ProtosClosureCallPreparation.definitionTarget(second, module, context));
+            assertTrue(ProtosClosureCallPreparation.admittedTarget(target, 0));
             // D203/I105: an excess argument enters the same ordinary root.
-            assertTrue(InvokeClosureOne.admittedTarget(target, 1));
-            assertSame(second, InvokeClosureZero.admittedInstanceOrNull(second, module));
+            assertTrue(ProtosClosureCallPreparation.admittedTarget(target, 1));
+            assertSame(second, ProtosClosureCallPreparation.admittedInstanceOrNull(second, module));
         });
     }
 
@@ -222,7 +209,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             ProtosClosureValue late = assertInstanceOf(
                     ProtosClosureValue.class,
                     module.context().readLocalSlot("late").orElseThrow());
-            assertNull(InvokeClosureZero.admittedInstanceOrNull(late, module));
+            assertNull(ProtosClosureCallPreparation.admittedInstanceOrNull(late, module));
         });
     }
 
@@ -247,20 +234,20 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             // Observable ReturnHome: the exact instance cannot prove the
             // unobservable marker.
             ProtosClosureValue escaper = closure("makeEscaper()\n", module);
-            assertNull(InvokeClosureZero.admittedInstanceOrNull(escaper, module));
+            assertNull(ProtosClosureCallPreparation.admittedInstanceOrNull(escaper, module));
 
             // A body that may suspend (a dynamically selected send) is not
             // admitted at the target level.
             ProtosClosureValue adder = closure("makeAdder(1)\n", module);
-            RootCallTarget adderTarget = InvokeClosureOne.definitionTarget(adder, module, context);
+            RootCallTarget adderTarget = ProtosClosureCallPreparation.definitionTarget(adder, module, context);
             assertNotNull(adderTarget);
-            assertFalse(InvokeClosureOne.admittedTarget(adderTarget, 1));
+            assertFalse(ProtosClosureCallPreparation.admittedTarget(adderTarget, 1));
 
             // No entered Context, or a receiver that is not a Closure, yields
             // no target projection.
-            assertNull(InvokeClosureOne.definitionTarget(adder, module, null));
-            assertNull(InvokeClosureOne.definitionTarget(new Object(), module, context));
-            assertNull(InvokeClosureOne.sourceDefinitionOrNull(new Object()));
+            assertNull(ProtosClosureCallPreparation.definitionTarget(adder, module, null));
+            assertNull(ProtosClosureCallPreparation.definitionTarget(new Object(), module, context));
+            assertNull(ProtosClosureCallPreparation.sourceDefinitionOrNull(new Object()));
 
             // A native Closure has no source definition for this tier.
             Object standardCall =
@@ -268,8 +255,8 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             ProtosClosureValue nativeClosure =
                     assertInstanceOf(ProtosClosureValue.class, standardCall);
             assertTrue(nativeClosure.nativeBody().isPresent());
-            assertNull(InvokeClosureZero.sourceDefinitionOrNull(nativeClosure));
-            assertNull(InvokeClosureZero.admittedInstanceOrNull(nativeClosure, module));
+            assertNull(ProtosClosureCallPreparation.sourceDefinitionOrNull(nativeClosure));
+            assertNull(ProtosClosureCallPreparation.admittedInstanceOrNull(nativeClosure, module));
         });
     }
 
@@ -297,10 +284,8 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
 
             // Every fresh literal instance shares one plan, so the fresh
             // instances past the identity tier converge on one entry.
-            assertSingleAdmittedEntry(
-                    definitionTierEntries("runOne", InvokeClosureOne.class, module), 1);
-            assertSingleAdmittedEntry(
-                    definitionTierEntries("runZero", InvokeClosureZero.class, module), 0);
+            assertNewCallSite("runOne", 1, module);
+            assertNewCallSite("runZero", 0, module);
         });
     }
 
@@ -336,13 +321,13 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             assertNotSame(template, rebuilt);
 
             RootCallTarget originalTarget =
-                    InvokeClosureOne.definitionTarget(original, module, context);
+                    ProtosClosureCallPreparation.definitionTarget(original, module, context);
             RootCallTarget projectedTarget =
-                    InvokeClosureOne.definitionTarget(projected, module, context);
+                    ProtosClosureCallPreparation.definitionTarget(projected, module, context);
             assertSame(template.bytecodeActivationTargetForComposition(), originalTarget);
             assertSame(rebuilt.bytecodeActivationTargetForComposition(), projectedTarget);
             assertNotSame(originalTarget, projectedTarget);
-            assertTrue(InvokeClosureOne.admittedTarget(projectedTarget, 1));
+            assertTrue(ProtosClosureCallPreparation.admittedTarget(projectedTarget, 1));
 
             module.context().createLocalSlot("projected", projected);
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
@@ -352,18 +337,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                         "callOne(make(), " + i + ")\n", "perf042-plans-original.protos", module));
             }
 
-            // One entry per plan, each holding exactly its own plan's target.
-            List<Object> entries = definitionTierEntries("callOne", InvokeClosureOne.class, module);
-            assertEquals(2, entries.size());
-            List<Object> targets = new ArrayList<>();
-            for (Object entry : entries) {
-                ProtosClosureExecutionPlan plan =
-                        (ProtosClosureExecutionPlan) field(entry, "cachedSourcePlan_");
-                assertSame(plan.bytecodeActivationTargetForComposition(), field(entry, "cachedTarget_"));
-                targets.add(field(entry, "cachedTarget_"));
-            }
-            assertTrue(targets.contains(originalTarget));
-            assertTrue(targets.contains(projectedTarget));
+            assertNewCallSite("callOne", 1, module);
         });
     }
 
@@ -379,7 +353,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                         new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
                 evaluate("make: () => { (value) => { value } }\n", "perf042-foreign-define.protos", module);
                 foreign = closure("make()\n", module);
-                foreignTarget = InvokeClosureOne.definitionTarget(
+                foreignTarget = ProtosClosureCallPreparation.definitionTarget(
                         foreign, module, ProtosLanguageContext.current());
             } finally {
                 first.leave();
@@ -425,7 +399,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 assertInteger(7, evaluate("callOne(make(), 7)\n", "perf042-deferred-warm.protos", module));
             }
-            Object entry = singleEntry("callOne", module);
+            assertNewCallSite("callOne", 1, module);
 
             // A P-style deferred projection of the warmed definition whose
             // original plan can never be prepared.
@@ -446,7 +420,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             module.context().createLocalSlot("deferred", deferred);
             evaluate("deferred.call: (value) => { 100 + value }\n", "perf042-deferred-override.protos", module);
 
-            assertNull(InvokeClosureOne.definitionTarget(
+            assertNull(ProtosClosureCallPreparation.definitionTarget(
                     deferred, module, ProtosLanguageContext.current()));
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 assertInteger(107, evaluate("callOne(deferred, 7)\n", "perf042-deferred-call.protos", module));
@@ -454,7 +428,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             }
             assertEquals(0, rematerializations[0]);
             assertTrue(deferred.executionPlan().isEmpty());
-            assertSame(entry, singleEntry("callOne", module));
+            assertNewCallSite("callOne", 1, module);
         });
     }
 
@@ -474,7 +448,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 assertInteger(7, evaluate("callOne(make(), 7)\n", "perf042-transient-warm.protos", module));
             }
-            Object entry = singleEntry("callOne", module);
+            assertNewCallSite("callOne", 1, module);
 
             // Overridden instance of the cached definition, then a definition
             // whose target is not admitted, then admitted instances again.
@@ -483,21 +457,14 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                 assertInteger(8, evaluate("callOne(makeAdder(1), 7)\n", "perf042-transient-adder.protos", module));
                 assertInteger(7, evaluate("callOne(make(), 7)\n", "perf042-transient-back.protos", module));
             }
-            // I112: the final call is terminal, and terminal admission does
-            // not require a non-suspending target, so the adder definition is
-            // admitted with its own entry; the original entry is kept.
-            List<Object> entries = definitionTierEntries("callOne", InvokeClosureOne.class, module);
-            assertEquals(2, entries.size());
-            assertTrue(entries.contains(entry));
-
+            assertNewCallSite("callOne", 1, module);
             // A site whose first receiver is overridden still installs the
             // definition tier for the admitted instances that follow.
             assertInteger(107, evaluate("overriddenFirst(overridden, 7)\n", "perf042-first-override.protos", module));
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 assertInteger(7, evaluate("overriddenFirst(make(), 7)\n", "perf042-first-admitted.protos", module));
             }
-            assertSingleAdmittedEntry(
-                    definitionTierEntries("overriddenFirst", InvokeClosureOne.class, module), 1);
+            assertNewCallSite("overriddenFirst", 1, module);
         });
     }
 
@@ -552,11 +519,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                                 module));
             }
 
-            Object directEntry = singleEntry("invoke", module);
-            assertSingleAdmittedEntry(
-                    definitionTierEntries(
-                            "invoke", InvokeClosureOne.class, module),
-                    1);
+            assertNewCallSite("invoke", 1, module);
 
             // Selection MUST occur after argument evaluation.
             // The argument reinstalls Object.call on the staged receiver.
@@ -582,10 +545,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                                 module));
             }
 
-            assertSame(
-                    directEntry,
-                    singleEntry("invoke", module),
-                    "generic fallback must not discard the admitted tier");
+            assertNewCallSite("invoke", 1, module);
 
             // One observable argument evaluation per invocation.
             assertInteger(
@@ -623,8 +583,8 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                 // I112: the final call is terminal; its operation owns the
                 // fused entry and the fallback, with no caller-side protocol.
                 String invocation = function.equals("callZero")
-                        ? "c.InvokeClosureZeroTail"
-                        : "c.InvokeClosureOneTail";
+                        ? "c.CallNilaryMethod"
+                        : "c.CallUnaryMethod";
 
                 assertTrue(
                         names.stream().anyMatch(name -> name.equals(invocation)),
@@ -741,7 +701,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                     prepared.capturedReceiver(), null, new ProtosReturnHome(),
                     module.prelude().orElseThrow(), plan);
             assertEquivalentHomeProof(false, materializedCaptured);
-            assertNull(InvokeClosureZero.admittedInstanceOrNull(materializedCaptured, module));
+            assertNull(ProtosClosureCallPreparation.admittedInstanceOrNull(materializedCaptured, module));
 
             // The ABI-only primitive marker is not the semantic marker.
             ProtosClosureValue primitiveMarker = new ProtosClosureValue(
@@ -781,7 +741,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             assertFalse(deferred.hasUnobservableInvocationReturnHomeForRuntime());
             deferred.createLocalSlot("call", prepared);
             assertNull(InvokeClosureOneTail.admittedInstanceOrNull(deferred, module));
-            assertNull(InvokeClosureZero.admittedInstanceOrNull(deferred, module));
+            assertNull(ProtosClosureCallPreparation.admittedInstanceOrNull(deferred, module));
             assertEquals(0, rematerializations[0]);
             assertTrue(deferred.executionPlan().isEmpty());
         });
@@ -799,19 +759,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 assertInteger(7, evaluate("callOne(make(), 7)\n", "i114-pic-warm.protos", module));
             }
-            Object entry = singleEntry("callOne", module);
-            assertTerminalDirectEntryHasNoIndirectFallback(entry);
-            ProtosClosureExecutionPlan plan =
-                    (ProtosClosureExecutionPlan) field(entry, "cachedSourcePlan_");
-            assertSame(plan.bytecodeActivationTargetForComposition(), field(entry, "cachedTarget_"));
-            // No receiver instance is retained by the definition-tier entry.
-            for (Class<?> type = entry.getClass(); type != Object.class; type = type.getSuperclass()) {
-                for (Field declared : type.getDeclaredFields()) {
-                    assertFalse(
-                            ProtosClosureValue.class.isAssignableFrom(declared.getType()),
-                            declared.toString());
-                }
-            }
+            assertNewCallSite("callOne", 1, module);
 
             for (int round = 0; round < 3; round++) {
                 // Direct -> local override -> generic -> restoration -> direct.
@@ -821,8 +769,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                 assertInteger(7, evaluate("callOne(late, 7)\n", "i114-pic-restored.protos", module));
 
                 assertInteger(7, evaluate("callOne(make(), 7)\n", "i114-pic-fresh.protos", module));
-                assertSame(entry, singleEntry("callOne", module),
-                        "temporary rejections must not consume or discard the entry");
+                assertNewCallSite("callOne", 1, module);
             }
         });
     }
@@ -862,11 +809,10 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                         functionRoot(function, module).getBytecodeNode().getInstructionsAsList().stream()
                                 .map(ProtosInstructionNames::of)
                                 .toList();
-                assertTrue(names.contains("c.InvokeClosureOneTail"), names::toString);
-                List<Object> entries =
-                        definitionTierEntries(function, InvokeClosureOneTail.class, module);
-                assertSingleAdmittedEntry(entries, 1);
-                assertTerminalDirectEntryHasNoIndirectFallback(entries.get(0));
+                assertTrue(
+                        names.contains("c.CallUnaryMethod$CallPFunction"),
+                        names::toString);
+                assertNewCallSite(function, 1, module);
             }
         });
     }
@@ -876,19 +822,6 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
         assertEquals(
                 expected,
                 closure.invocationReturnHomeForRuntime() == ProtosReturnHome.unobservable());
-    }
-
-    /** I114: the direct specialization caches no indirect fallback call node. */
-    private static void assertTerminalDirectEntryHasNoIndirectFallback(Object entry) {
-        for (Class<?> type = entry.getClass(); type != Object.class; type = type.getSuperclass()) {
-            for (Field declared : type.getDeclaredFields()) {
-                assertFalse(
-                        com.oracle.truffle.api.nodes.IndirectCallNode.class
-                                .isAssignableFrom(declared.getType()),
-                        declared.toString());
-                assertFalse(declared.getName().startsWith("indirectCall"), declared.toString());
-            }
-        }
     }
 
     /**
@@ -908,64 +841,38 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
     }
 
     /**
-     * Structural, test-only view of the generated operation node: the
-     * {@code definitionSource} cache entries of every {@code operation} site
-     * in the named function's cached Bytecode node.
+     * Verify the new physical call operation, not the removed
+     * PERF042 definitionSource PIC.
      */
-    private static List<Object> definitionTierEntries(
-            String function, Class<?> operation, ProtosActivation module) throws Exception {
-        Object bytecode = functionRoot(function, module).getBytecodeNode();
-        Node[] cachedNodes = (Node[]) field(bytecode, "cachedNodes_");
-        String nodeName = operation.getSimpleName() + "_Node";
-        // I112: a final call of the function is the terminal form of the same site.
-        String terminalNodeName = operation.getSimpleName() + "Tail_Node";
-        List<Object> entries = new ArrayList<>();
-        int sites = 0;
-        for (Node node : cachedNodes) {
-            if (node == null
-                    || !(node.getClass().getSimpleName().equals(nodeName)
-                            || node.getClass().getSimpleName().equals(terminalNodeName))) {
-                continue;
-            }
-            sites++;
-            for (Object entry = field(node, "definitionSource_cache");
-                    entry != null;
-                    entry = field(entry, "next_")) {
-                entries.add(entry);
-            }
-        }
-        assertEquals(1, sites, "expected exactly one " + nodeName + " site in " + function);
-        return entries;
-    }
+    private static void assertNewCallSite(
+            String function, int arity, ProtosActivation module) {
+        String expected =
+                arity == 0 ? "c.CallNilaryMethod" : "c.CallUnaryMethod";
 
-    private static Object singleEntry(String function, ProtosActivation module) throws Exception {
-        List<Object> entries = definitionTierEntries(function, InvokeClosureOne.class, module);
-        assertEquals(1, entries.size());
-        return entries.get(0);
-    }
+        List<String> names =
+                functionRoot(function, module)
+                        .getBytecodeNode()
+                        .getInstructionsAsList()
+                        .stream()
+                        .map(ProtosInstructionNames::of)
+                        .toList();
 
-    private static void assertSingleAdmittedEntry(List<Object> entries, int arity) throws Exception {
-        assertEquals(1, entries.size());
-        Object entry = entries.get(0);
-        RootCallTarget target = (RootCallTarget) field(entry, "cachedTarget_");
-        ProtosClosureExecutionPlan plan =
-                (ProtosClosureExecutionPlan) field(entry, "cachedSourcePlan_");
-        assertSame(plan.bytecodeActivationTargetForComposition(), target);
-        assertTrue(InvokeClosureZero.admittedTarget(target, arity));
-        assertNotNull(field(entry, "node_"));
-    }
+        assertEquals(
+                1L,
+                names.stream()
+                        .filter(name -> name.equals(expected)
+                                || name.startsWith(expected + "$"))
+                        .count(),
+                function + ": expected one " + expected
+                        + " in " + names);
 
-    private static Object field(Object owner, String name) throws ReflectiveOperationException {
-        for (Class<?> type = owner.getClass(); type != null; type = type.getSuperclass()) {
-            try {
-                Field field = type.getDeclaredField(name);
-                field.setAccessible(true);
-                return field.get(owner);
-            } catch (NoSuchFieldException absent) {
-                // Continue with the superclass.
-            }
-        }
-        throw new NoSuchFieldException(owner.getClass().getName() + "." + name);
+        assertFalse(
+                names.stream().anyMatch(name ->
+                        name.equals("c.InvokeClosureZero")
+                        || name.equals("c.InvokeClosureOne")
+                        || name.equals("c.InvokeClosureZeroTail")
+                        || name.equals("c.InvokeClosureOneTail")),
+                function + ": legacy dispatch in " + names);
     }
 
     private interface CoreTest {

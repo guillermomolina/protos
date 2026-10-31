@@ -90,7 +90,12 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     @TempDir
     Path directory;
 
-    /** DIRECT_LITERAL == FOLDED_BOOLEAN == HANDWRITTEN_ORACLE for complete activation roots. */
+    /**
+     * DIRECT_LITERAL == HANDWRITTEN_ORACLE for complete activation roots. The Boolean-control
+     * witness is no longer a literal-only root: I115-H7 lowers it through the experimental
+     * Boolean-control topology, which is verified explicitly rather than equated with the
+     * literal oracle.
+     */
     @Test
     void foldedWitnessMatchesDirectLiteralAndHandwrittenOracle() throws Exception {
         for (boolean debugger : new boolean[] {false, true}) {
@@ -98,8 +103,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
             normal.run(() -> {
                 ProtosBytecodeRootNode oracle = handwrittenLiteralOneActivationRoot();
                 ProtosBytecodeRootNode direct = activationRoot(compile(DIRECT, "direct"));
-                ProtosBytecodeRootNode folded =
-                        activationRoot(compile(WITNESS, "witness"));
+                ProtosBytecodeRootNode witnessModule = compile(WITNESS, "witness");
+                ProtosBytecodeRootNode folded = activationRoot(witnessModule);
 
                 List<String> expected = completeSignature(oracle);
                 List<String> directSignature = completeSignature(direct);
@@ -109,11 +114,11 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 System.out.println("I101_A_FOLDED_SIGNATURE=" + foldedSignature);
 
                 assertEquals(expected, directSignature, "direct literal root");
-                assertEquals(expected, foldedSignature, "folded Boolean-control root");
                 assertTrue(
-                        expected.stream().anyMatch(entry -> entry.contains("=Long(1)")),
+                        expected.stream().anyMatch(entry -> entry.contains("=Metadata(com.guillermomolina.protos.runtime.ProtosIntegerValue)")),
                         expected::toString);
-                assertNoForbiddenNormalOperation(foldedSignature);
+                assertExperimentalBooleanControlTopology(
+                        folded, foldedSignature, "witness " + label(debugger));
                 /*
                  * Capabilities are proved over the effective body (the fold's proven result),
                  * not inferred from equal instructions: the witness gets those of the literal.
@@ -124,6 +129,12 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 ProtosBytecodeRootNode unfolded =
                         activationRoot(compile("() => { true.ifTrue() { 1 + 0 } }", "unfolded"));
                 assertTrue(!unfolded.provablyNonSuspendingBody());
+                ProtosClosureValue closure = assertInstanceOf(
+                        ProtosClosureValue.class,
+                        witnessModule.getCallTarget().call(normal.moduleActivation()));
+                assertSame(folded, closure.executionPlan().orElseThrow()
+                        .bytecodeActivationRootForTesting());
+                assertInteger(1, callClosure(normal, closure));
                 System.out.println("I101_A_THREE_WAY_SIGNATURE=PASS " + label(debugger));
             });
           }
@@ -163,9 +174,15 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 assertTrue(
                         expected.size() < previous.size(),
                         "the new entry must physically reduce instructions");
+                // I115: the unary entry is GraalPy-shaped CopyArguments.
                 assertTrue(
                         actual.stream().anyMatch(
-                                item -> item.contains("BindUnaryFrameParameter")));
+                                item -> item.contains("CopyArguments")),
+                        actual::toString);
+                assertTrue(
+                        actual.stream().noneMatch(
+                                item -> item.contains("BindUnaryFrameParameter")),
+                        actual::toString);
                 assertTrue(
                         actual.stream().noneMatch(
                                 item -> item.contains("BindClosureFrameParameter")));
@@ -206,6 +223,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
             normal.run(() -> {
                 List<String> oracle = completeSignature(handwrittenLiteralOneActivationRoot());
                 for (String characters : List.of(DIRECT, WITNESS)) {
+                    boolean literal = characters.equals(DIRECT);
                     ProtosBytecodeRootNode module =
                             compile(characters, "topology-" + characters.length());
                     List<ProtosBytecodeRootNode> roots = groupRoots(module);
@@ -220,12 +238,19 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                      * materialize nothing; the physical program equals the oracle's.
                      */
                     List<String> physical = signature(roots.get(1));
-                    assertEquals(signature(handwrittenLiteralOneActivationRoot()), physical,
-                            label(debugger) + " DEFAULT " + characters);
+                    if (literal) {
+                        assertEquals(signature(handwrittenLiteralOneActivationRoot()), physical,
+                                label(debugger) + " DEFAULT " + characters);
+                    }
                     assertTrue(physical.stream().noneMatch(entry -> entry.startsWith("tag.")),
                             physical::toString);
-                    assertEquals(oracle, completeSignature(roots.get(1)),
-                            label(debugger) + " " + characters);
+                    List<String> complete = completeSignature(roots.get(1));
+                    if (literal) {
+                        assertEquals(oracle, complete, label(debugger) + " " + characters);
+                    } else {
+                        assertExperimentalBooleanControlTopology(
+                                roots.get(1), complete, label(debugger) + " " + characters);
+                    }
 
                     ProtosClosureValue closure = assertInstanceOf(
                             ProtosClosureValue.class,
@@ -259,8 +284,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 ProtosBytecodeRootNode activationRoot = roots.get(1);
                 assertTrue(activationRoot.provablyNonSuspendingBody());
                 List<String> activation = completeSignature(activationRoot);
-                assertEquals(completeSignature(handwrittenLiteralOneActivationRoot()), activation);
-                assertNoForbiddenNormalOperation(activation);
+                assertExperimentalBooleanControlTopology(
+                        activationRoot, activation, "debugger witness");
                 assertEquals(2, groupRoots(module).size(), "instrumentation adds no root");
                 assertNotNull(activationRoot.getSourceSection());
                 assertTrue(hasRootTag(activationRoot.getBytecodeNode().getTagTree()));
@@ -344,14 +369,19 @@ final class ProtosI101ProfileSpecializedLoweringTest {
             for (int round = 0; round < 2; round++) {
                 String name = "mixed-" + round;
                 List<String> firstSignature = first.call(() -> {
-                    List<String> expected =
-                            completeSignature(handwrittenLiteralOneActivationRoot());
-                    List<String> actual = completeSignature(activationRoot(compile(WITNESS, name)));
-                    assertEquals(expected, actual);
+                    ProtosBytecodeRootNode module = compile(WITNESS, name);
+                    List<String> actual = completeSignature(activationRoot(module));
+                    assertExperimentalBooleanControlTopology(
+                            activationRoot(module), actual, "first " + name);
                     return actual;
                 });
-                List<String> secondSignature = second.call(() ->
-                        completeSignature(activationRoot(compile(WITNESS, name))));
+                List<String> secondSignature = second.call(() -> {
+                    ProtosBytecodeRootNode module = compile(WITNESS, name);
+                    List<String> actual = completeSignature(activationRoot(module));
+                    assertExperimentalBooleanControlTopology(
+                            activationRoot(module), actual, "second " + name);
+                    return actual;
+                });
                 assertEquals(firstSignature, secondSignature);
             }
         }
@@ -385,9 +415,10 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 assertSame(destination.languageForRuntime(), projected.language().orElseThrow());
                 assertSame(projected, destination.bytecodeExecutionPlanForDefinition(
                         normalClosure.definition(), normalTemplate));
-                assertEquals(
-                        completeSignature(handwrittenLiteralOneActivationRoot()),
-                        completeSignature(projected.bytecodeActivationRootForTesting()));
+                ProtosBytecodeRootNode projectedRoot = projected.bytecodeActivationRootForTesting();
+                assertExperimentalBooleanControlTopology(
+                        projectedRoot, completeSignature(projectedRoot), "projected into debug",
+                        PROJECTED_GROUP_ROOTS);
             });
             normal.run(() -> {
                 ProtosLanguageContext destination = ProtosLanguageContext.current();
@@ -395,9 +426,10 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         destination.bytecodeExecutionPlanForDefinition(
                                 debugClosure.definition(), debugTemplate);
                 assertSame(destination.languageForRuntime(), projected.language().orElseThrow());
-                assertEquals(
-                        completeSignature(handwrittenLiteralOneActivationRoot()),
-                        completeSignature(projected.bytecodeActivationRootForTesting()));
+                ProtosBytecodeRootNode projectedRoot = projected.bytecodeActivationRootForTesting();
+                assertExperimentalBooleanControlTopology(
+                        projectedRoot, completeSignature(projectedRoot), "projected into normal",
+                        PROJECTED_GROUP_ROOTS);
             });
             assertNotSame(normalTemplate.language().orElseThrow(),
                     debugTemplate.language().orElseThrow());
@@ -408,10 +440,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     /** An imported module is compiled by the one lowering, with and without a debugger. */
     @Test
     void importedModuleUsesTheSingleLowering() throws Exception {
-        List<String> oracle;
-        try (Harness normal = new Harness(false, null)) {
-            oracle = normal.call(() -> completeSignature(handwrittenLiteralOneActivationRoot()));
-        }
+        List<String> previous = null;
         for (boolean debugger : new boolean[] {false, true}) {
             String mode = label(debugger);
             Path root = Files.createDirectories(directory.resolve(mode.toString()));
@@ -437,12 +466,19 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         session.prepareTopLevel("run");
                 ProtosClosureExecutionPlan plan =
                         run.closureForTesting().executionPlan().orElseThrow();
-                List<String> signature =
-                        completeSignature(plan.bytecodeActivationRootForTesting());
-                assertEquals(oracle, signature, mode);
+                ProtosBytecodeRootNode imported = plan.bytecodeActivationRootForTesting();
+                RootCallTarget importedTarget = imported.getCallTarget();
+                List<String> signature = completeSignature(imported);
+                assertExperimentalBooleanControlTopology(imported, signature, mode.toString());
+                // Debugger attachment selects no different lowering.
+                if (previous != null) {
+                    assertEquals(previous, signature, mode);
+                }
+                previous = signature;
                 for (int iteration = 0; iteration < 3; iteration++) {
                     assertEquals(1, run.executable().execute().asInt(), mode.toString());
                 }
+                assertSame(importedTarget, imported.getCallTarget(), mode.toString());
             }
         }
         System.out.println("I101_A_IMPORTED_MODULE_SINGLE_LOWERING=PASS");
@@ -506,9 +542,13 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     }
 
     /**
-     * Fold boundary: only an admitted literal receiver whose selected EXACT callback body is one
-     * pure literal folds. Every other shape keeps ordinary semantics, with or without a
-     * debugger.
+     * Fold boundary: every case must produce its observable result, with or without a debugger.
+     * Separately, the physical outcome of each site is identified. The previous eager Boolean
+     * fold (a literal-only root equal to the folded source's root) and the I115-H7 Boolean
+     * control path (a physical condition and conditional branch with inline callback bodies)
+     * are distinct optimization contracts: a branching root is never declared equivalent to a
+     * literal-only root. A case expected to fold must emit one of these two physical outcomes;
+     * a case not expected to fold must not emit a literal-only root equal to its folded form.
      */
     @Test
     void foldBoundaryKeepsOrdinarySemantics() throws Exception {
@@ -550,8 +590,30 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             List<String> folded = completeSignature(activationRoot(
                                     compile(test.folded(), name + "-folded")));
                             boolean expectFold = foldedCases.contains(index);
-                            assertEquals(expectFold, folded.equals(actual),
-                                    mode + " " + test.closure() + "\n" + actual);
+                            boolean literalFold = folded.equals(actual);
+                            if (literalFold) {
+                                // Strict literal-oracle equality: a literal-only root.
+                                assertTrue(expectFold,
+                                        mode + " unexpected fold " + test.closure() + "\n" + actual);
+                                assertNoForbiddenNormalOperation(actual);
+                            } else if (expectFold) {
+                                // I115-H7: only the unguarded literal Boolean-control
+                                // form may replace the literal-only oracle, and it
+                                // must carry the selected literal value in its branch.
+                                boolean guarded = assertExperimentalBooleanControlTopology(
+                                        activationRoot(module), actual,
+                                        mode + " " + test.closure());
+                                assertTrue(!guarded,
+                                        mode + " guarded control is not a fold "
+                                                + test.closure() + "\n" + actual);
+                                List<String> literals = test.expected() instanceof Long value
+                                        ? List.of(
+                                                "load.constant constant:CONSTANT=Integer(" + value + ")",
+                                                "load.constant constant:CONSTANT=Long(" + value + ")")
+                                        : List.of("load.constant constant:CONSTANT=Protos(null)");
+                                assertTrue(actual.stream().anyMatch(literals::contains),
+                                        mode + " " + literals + " missing in " + actual);
+                            }
                         }
                         ProtosClosureValue closure = assertInstanceOf(
                                 ProtosClosureValue.class,
@@ -771,6 +833,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                     assertNotNull(root.getSourceSection());
                     assertTrue(hasRootTag(
                             root.getBytecodeNode().getTagTree()));
+
 
                     for (int repetition = 0; repetition < 2; repetition++) {
                         if ("suspendible-ensure".equals(example.name())) {
@@ -1106,13 +1169,45 @@ final class ProtosI101ProfileSpecializedLoweringTest {
      * {@code c.EpilogForReturn}, {@code return}. Each local offset is cleared
      * at most once. The pre-existing semantic instruction prefix must remain
      * identical. Bytecode indices are normalized by semanticSignature.
+     *
+     * <p>I115: a root ending with an explicit terminal Return has no
+     * fallthrough path; its only appended epilogue is exactly one
+     * {@code c.EpilogForReturn} followed by {@code return}.
      */
+    /**
+     * I115: the one observed Bytecode DSL reparse shape that is not an append. Before reparse
+     * the root ends {@code load.local, c.EpilogForReturn, return, return}: the reachable return
+     * and its epilogue, then the unreachable fallthrough return. Instrumentation inserts exactly
+     * one {@code c.EpilogForReturn} before that unreachable return. Every other instruction,
+     * including the reachable return and its epilogue, must be identical; nothing else may be
+     * inserted or appended.
+     */
+    private static boolean isUnreachableReturnEpilogueInsertion(
+            List<String> before, List<String> after) {
+        int size = before.size();
+        if (size < 4 || after.size() != size + 1) {
+            return false;
+        }
+        String epilogue = before.get(size - 3);
+        boolean shape = before.get(size - 4).startsWith("load.local ")
+                && epilogue.startsWith("c.EpilogForReturn")
+                && before.get(size - 2).equals("return")
+                && before.get(size - 1).equals("return");
+        return shape
+                && after.subList(0, size - 1).equals(before.subList(0, size - 1))
+                && after.get(size - 1).equals(epilogue)
+                && after.get(size).equals("return");
+    }
+
     private static void assertReparsePrefixAndCleanup(
             List<String> before, List<String> after, String message) {
         assertTrue(
                 after.size() >= before.size(),
                 () -> message + ": instructions disappeared");
 
+        if (isUnreachableReturnEpilogueInsertion(before, after)) {
+            return;
+        }
         assertEquals(
                 before,
                 after.subList(0, before.size()),
@@ -1120,6 +1215,11 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
         List<String> epilogue = after.subList(before.size(), after.size());
         if (epilogue.isEmpty() || epilogue.equals(List.of("return"))) {
+            return;
+        }
+        if (epilogue.size() == 2
+                && epilogue.get(0).startsWith("c.EpilogForReturn")
+                && epilogue.get(1).equals("return")) {
             return;
         }
         java.util.Set<String> cleared = new java.util.HashSet<>();
@@ -1225,10 +1325,10 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         .toList();
 
                 long callZero = operationNames.stream()
-                        .filter(name -> name.startsWith("c.InvokeClosureZero"))
+                        .filter(name -> name.startsWith("c.CallNilaryMethod"))
                         .count();
                 long callN = operationNames.stream()
-                        .filter(name -> name.startsWith("c.InvokeClosureArguments"))
+                        .filter(name -> name.startsWith("c.CallVarargsMethod"))
                         .count();
 
                 assertEquals(1L, callZero,
@@ -1283,7 +1383,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
                             BytecodeLocal local =
                                     builder.createLocal("value", null);
-                            builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
                             BytecodeLocal[] locals = {local};
                             ProtosFrameLexicalLayout layout =
@@ -1293,7 +1392,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                                     locals));
 
                             if (fused) {
-                                builder.emitBindUnaryFrameParameter(
+                                builder.emitCopyArguments(
                                         locals, layout, 0, "value");
                             } else {
                                 builder.beginBindClosureFrameParameter(
@@ -1303,6 +1402,32 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 builder.emitLoadConstant(0);
                                 builder.endLoadFrameClosureArgument();
                                 builder.endBindClosureFrameParameter();
+                            }
+
+                            if (fused) {
+                                // I115-H7: after CopyArguments the body reads the
+                                // parameter with a plain LoadLocal; the statement's
+                                // own Return sits inside its tagged Block.
+                                builder.beginSourceSection(
+                                        readStart, "value".length());
+                                builder.beginTag(
+                                        StandardTags.StatementTag.class,
+                                        StandardTags.ExpressionTag.class);
+                                builder.beginBlock();
+                                builder.beginReturn();
+                                builder.emitLoadLocal(local);
+                                builder.endReturn();
+                                builder.endBlock();
+                                builder.endTag(
+                                        StandardTags.StatementTag.class,
+                                        StandardTags.ExpressionTag.class);
+                                builder.endSourceSection();
+
+                                builder.endBlock();
+                                builder.endRoot();
+                                builder.endSourceSection();
+                                builder.endSource();
+                                return;
                             }
 
                             // I112: the Return is the root's last operation and
@@ -1328,7 +1453,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             builder.endReturn();
 
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -1393,21 +1517,17 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         beforeReparse,
                         afterReparse.subList(0, beforeReparse.size()),
                         "I104-B reparse changed the original instruction prefix");
-                // I111-A: the root now ends with its explicit RootTag, whose
-                // instrumented fallthrough appends the unreachable implicit
-                // root return: it clears the root-scoped a, b, c and runs the
-                // I112 EpilogForReturn epilogue.
+                // I115: the root ends with an explicit terminal Return, so
+                // there is no fallthrough path and no unreachable load.null or
+                // local cleanup. Reparse appends only the root return
+                // epilogue: EpilogForReturn, then return.
                 assertEquals(
                         List.of(
-                                "load.null",
-                                "clear.local LOCAL_OFFSET=0",
-                                "clear.local LOCAL_OFFSET=1",
-                                "clear.local LOCAL_OFFSET=2",
                                 "c.EpilogForReturn INTEGER=1 NODE_PROFILE=profile",
                                 "return"),
                         afterReparse.subList(
                                 beforeReparse.size(), afterReparse.size()),
-                        "I104-B reparse must append only the implicit root return epilogue");
+                        "I104-B reparse must append only the explicit-return epilogue");
 
                 System.out.println("I104_B_BUILDER_ORACLE=PASS");
                 System.out.println("I104_B_REPARSE=PASS");
@@ -1460,7 +1580,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 builder.createLocal("b", null),
                                 builder.createLocal("c", null)
                             };
-                            builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
                             String[] names = {"a", "b", "c"};
                             ProtosFrameLexicalLayout layout =
@@ -1510,7 +1629,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             builder.endReturn();
 
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -1539,20 +1657,18 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             builder.beginSource(source);
                             builder.beginSourceSection(bodyStart, bodyLength);
                             builder.beginRoot();
-                            builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
                             builder.beginSourceSection(statementStart, statement.length());
                             builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.beginBlock();
                             builder.beginReturn();
-                            builder.emitLoadConstant(1L);
+                            builder.emitLoadConstant(ProtosNumericValueSupport.integer(1L));
                             builder.endReturn();
                             builder.endBlock();
                             builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
 
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -1581,6 +1697,125 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         return root.getRootNodes().getNodes().stream()
                 .map(ProtosBytecodeRootNode.class::cast)
                 .toList();
+    }
+
+    /**
+     * I115-H7: the experimental Boolean-control topology of a {@code literal.ifTrue() {...}}
+     * activation root. This is a distinct optimization contract from the previous eager
+     * Boolean fold: the root keeps a physical condition and conditional branch whose selected
+     * callback body is lowered inline, so it is verified on its own terms and never equated
+     * with the literal-only oracle. {@code signature} is the root's complete signature.
+     *
+     * <p>A literal receiver is an unguarded condition ({@code load.constant Boolean(...)}): it
+     * has no MISS path, so no send may appear. A staged receiver is guarded by
+     * {@code ExperimentalCanonicalBooleanCondition}: its MISS path must keep the ordinary
+     * send. In both forms the callbacks never become Closures or roots.
+     *
+     * @return whether the condition is the guarded form
+     */
+    private static boolean assertExperimentalBooleanControlTopology(
+            ProtosBytecodeRootNode activation, List<String> signature, String message) {
+        return assertExperimentalBooleanControlTopology(
+                activation, signature, message, MODULE_AND_CLOSURE_GROUP_ROOTS);
+    }
+
+    /** A module-compiled witness: the module root, then the Closure root. */
+    private static final int MODULE_AND_CLOSURE_GROUP_ROOTS = 2;
+
+    /**
+     * A Closure projected into another Context is lowered from its definition alone: its
+     * group holds exactly its own root.
+     */
+    private static final int PROJECTED_GROUP_ROOTS = 1;
+
+    private static boolean assertExperimentalBooleanControlTopology(
+            ProtosBytecodeRootNode activation,
+            List<String> signature,
+            String message,
+            int expectedGroupRoots) {
+        int condition = -1;
+        int branch = -1;
+        boolean guarded = false;
+        for (int index = 0; index < signature.size(); index++) {
+            String entry = signature.get(index);
+            String name = entry.split(" ", 2)[0];
+            if (condition < 0
+                    && ((name.equals("load.constant") && entry.contains("=Boolean("))
+                            || name.equals("c.ExperimentalCanonicalBooleanCondition"))) {
+                condition = index;
+                guarded = !name.equals("load.constant");
+            }
+            if (condition >= 0 && branch < 0 && name.startsWith("branch.false")) {
+                branch = index;
+            }
+        }
+        assertTrue(condition >= 0, () -> message + ": no Boolean condition in " + signature);
+        assertTrue(branch > condition,
+                () -> message + ": no conditional branch after the condition in " + signature);
+        // The selected callback body runs inline: no callback Closure and no callback call.
+        for (String forbidden : List.of(
+                "Capture",
+                "PrepareClosureCall",
+                "TryDirectCall",
+                "PrepareInlineClosureLiteralCall",
+                "CallNilaryMethod")) {
+            assertTrue(
+                    signature.stream().noneMatch(
+                            entry -> entry.split(" ", 2)[0].contains(forbidden)),
+                    () -> message + ": " + forbidden + " in " + signature);
+        }
+        List<String> sends = List.of(
+                "PrepareSend", "GetMethod", "CallUnaryMethod", "CallBinaryMethod",
+                "CallVarargsMethod");
+        java.util.function.Predicate<String> isSend = entry -> {
+            String name = entry.split(" ", 2)[0];
+            return sends.stream().anyMatch(name::contains);
+        };
+        if (guarded) {
+            // The guarded MISS path keeps the ordinary send after the guard.
+            int guard = condition;
+            assertTrue(
+                    signature.subList(guard + 1, signature.size()).stream().anyMatch(isSend),
+                    () -> message + ": guarded control without its MISS send " + signature);
+        } else {
+            // An unguarded literal condition has no MISS path.
+            assertTrue(
+                    signature.stream().noneMatch(isSend),
+                    () -> message + ": send in an unguarded control " + signature);
+        }
+        // Exactly the expected roots, with this activation root last; no callback root.
+        List<ProtosBytecodeRootNode> roots = groupRoots(activation);
+        assertEquals(expectedGroupRoots, roots.size(),
+                () -> message + ": root topology " + roots);
+        assertSame(activation, roots.get(expectedGroupRoots - 1), message);
+        assertNotNull(activation.getSourceSection(), message);
+        TagTree tree = activation.getBytecodeNode().getTagTree();
+        assertTrue(hasTag(tree, StandardTags.RootTag.class), message + ": RootTag");
+        assertTrue(hasTag(tree, StandardTags.RootBodyTag.class), message + ": RootBodyTag");
+        assertTrue(hasTag(tree, StandardTags.StatementTag.class), message + ": StatementTag");
+
+        // Reparse keeps the root, its CallTarget and the complete program.
+        RootCallTarget target = activation.getCallTarget();
+        activation.getRootNodes().ensureComplete();
+        assertEquals(roots, groupRoots(activation), message);
+        assertSame(target, activation.getCallTarget(), message);
+        assertEquals(signature, signature(activation), message + ": reparse stability");
+        return guarded;
+    }
+
+    private static boolean hasTag(TagTree tree, Class<? extends com.oracle.truffle.api.instrumentation.Tag> tag) {
+        if (tree == null) {
+            return false;
+        }
+        if (tree.hasTag(tag)) {
+            return true;
+        }
+        for (TagTree child : tree.getTreeChildren()) {
+            if (hasTag(child, tag)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void assertNoForbiddenNormalOperation(List<String> signature) {
