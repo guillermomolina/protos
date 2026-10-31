@@ -18,6 +18,16 @@ URL client). If this guide and the specification disagree, the specification win
 | `std:http/Router` | You want one handler that dispatches on method and path to several route handlers | Nothing: it is authority-free |
 | `std:http/UrlClient` | You want one HTTP or HTTPS request to an absolute URL, with a buffered response | Your `network`, a `resolver` for host names, and explicit TLS `trust` for `https` |
 
+A short decision rule:
+
+- `Server`: you already own or borrow a duplex and serve once.
+- `Host`: you want continuous application hosting with Worker Actors.
+- `Client`: you already have the duplex (plain, or secure from
+  [`std:tls/Client`](tls.md)).
+- `Router`: you need authority-free request dispatch.
+- `UrlClient`: you want one URL-based request composed from explicit
+  authorities.
+
 Each module is imported by its exact path; no Prelude or ambient binding exists,
 and importing one does not import the others:
 
@@ -57,7 +67,10 @@ and [Embedding Protos in a Java application](../embedding/java.md#authority-and-
 separate, explicitly granted `Resolver` capability (D223,
 [`NETWORK.md`](../../../spec/io/NETWORK.md) §14), which, like `network`, the
 standalone CLI does not bind. The low-level `Client` never resolves names or
-parses URLs; `UrlClient` (below) composes both for you when you pass them:
+parses URLs; `UrlClient` (below) composes both for you when you pass them.
+[Explicit networking and name resolution](networking.md) shows the resolve,
+select and connect steps, and the [TLS client guide](tls.md) shows how to
+authenticate the connection yourself:
 
 ```protos
 IpAddress: import("std:network/IpAddresses").IpAddress
@@ -261,7 +274,8 @@ TCP connect each; a numeric host is connected directly. For `https`, the TLS
 reference identity and SNI are the URL host name (or the numeric address,
 without SNI), never the resolved address. There is no default trust:
 `Trust.system()` has no adapter yet, so pass `Trust.javaCacerts()` or
-`Trust.anchors(...)`.
+`Trust.anchors(...)`. See the [TLS client guide](tls.md) for trust, identity
+and failure kinds, and for the same composition written step by step.
 
 Unlike the low-level `Client`, whose callback-scoped `response.body` must be
 read inside `onResponse`, `UrlClient` reads the whole body inside its own
@@ -481,7 +495,9 @@ session, or a fatal RootActor failure) ends the Host and its Workers with it.
 A complete version is `protos/examples/http/root-service-host.protos` with its
 factory `protos/examples/http/root-service-handler.protos`. This is
 a composition pattern, not a REST framework: routing, retries and deadlines
-remain your program's business.
+remain your program's business. For the Java side, see
+[Hosting a RootActor message service](../embedding/java.md#hosting-a-rootactor-message-service);
+the application, its Workers and their handlers stay Protos source.
 
 **The host owns the listener.** After a valid `Host.owning` or
 `Host.owningWithFactory`, do not accept from or close the listener yourself.
@@ -587,7 +603,7 @@ kind: http.HttpError.handle(
 None of the following exists in these modules. Do not expect it:
 
 - HTTPS in `Server` or `Host`; the low-level `Client` runs over a secure
-  duplex from `std:tls/Client` but does no TLS itself;
+  duplex from [`std:tls/Client`](tls.md) but does no TLS itself;
 - DNS resolution, URL parsing, or connection acquisition by the low-level
   Client (use `UrlClient` with explicit capabilities);
 - keep-alive, pipelining, or more than one request per connection;
@@ -612,14 +628,27 @@ hostile Internet traffic.
 | [`examples/io/http-get.protos`](../../../protos/examples/io/http-get.protos) | GET over a connection the application opens, borrowed and closed with `ensure` | Java embedding with `network` |
 | [`examples/io/http-loopback-hosting.protos`](../../../protos/examples/io/http-loopback-hosting.protos) | Bounded hosting with limits, concurrent clients, drain | Java embedding with `network` |
 | [`examples/io/http-router.protos`](../../../protos/examples/io/http-router.protos) | A compiled Router handler with literal and capture routes, params, and query | standalone CLI |
-| [`examples/io/http-url-client.protos`](../../../protos/examples/io/http-url-client.protos) | An HTTPS `UrlClient` request with explicit `network`, `resolver`, and trust | Java embedding with `network` and `resolver` |
+| [`tutorials/13-http/04-router-dispatch.protos`](../../../protos/tutorials/13-http/04-router-dispatch.protos) | A two-route Router: literal and captured paths, the raw query, a 404 | standalone CLI |
+| [`examples/io/http-url-client.protos`](../../../protos/examples/io/http-url-client.protos) | An HTTPS `UrlClient` request with explicit `network`, `resolver`, and trust | Java embedding with `network` and `resolver` (manual) |
+| [`examples/io/tls-client-over-tcp.protos`](../../../protos/examples/io/tls-client-over-tcp.protos) | Direct composition: resolve, connect, `Client.handshake`, then `Client.exchangeOne` over the secure duplex | Java embedding with `network` and `resolver` (manual) |
 | [`examples/http/root-service-host.protos`](../../../protos/examples/http/root-service-host.protos) with [`root-service-handler.protos`](../../../protos/examples/http/root-service-handler.protos) | The RootActor as the application service of factory-built Workers, through a GroupRef | `ProtosRootActorServiceSession` with `network` and the handler as `app:root-service-handler` (the same composition is tested in `ProtosHttpHostFactoryIntegrationTest`) |
 
 The CLI sources run with `bin/protos <file>` from the repository root. The
-embedding sources run in
-[`ProtosHttpLearningMaterialIntegrationTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/integration/http/ProtosHttpLearningMaterialIntegrationTest.java).
-That test grants socket access and installs the handler modules in the `app:`
-catalog. More exhaustive behavior is exercised by the
+embedding sources are not all executed the same way:
+
+- [`ProtosHttpLearningMaterialIntegrationTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/integration/http/ProtosHttpLearningMaterialIntegrationTest.java)
+  runs the basic Host/Client learning sources (`03-host-and-client-over-tcp`,
+  `http-get`, `http-loopback-hosting`) unchanged. It grants socket access and
+  installs the handler modules in the `app:` catalog.
+- `ProtosHttpHostFactoryIntegrationTest` covers the RootActor service and Host
+  factory composition, `ProtosHttpUrlClientIntegrationTest` the UrlClient
+  protocol behavior, `ProtosTlsClientIntegrationTest` the TLS client, and
+  `ProtosResolverAuthorityTest` explicit Resolver authority. They use their own
+  controlled fixtures; they do not run the manual examples verbatim.
+- `http-url-client.protos` and `tls-client-over-tcp.protos` are manual
+  examples that reach a real external origin; no automated test runs them.
+
+More exhaustive behavior is exercised by the
 [Protos HTTP tests](../../../protos/tests/library/http/) and the
 [HTTP integration tests](../../../src/test/java/com/guillermomolina/protos/execution/integration/http/).
 

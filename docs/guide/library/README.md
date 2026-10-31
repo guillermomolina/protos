@@ -21,7 +21,10 @@ need authority that already exists:
 - `std:network/Resolvers` exports the authority-free `Resolver` protocol and
   `ResolutionError`. Resolving names needs a `resolver` capability that only an
   explicit host grant provisions, independently of `network`; see
-  [Name resolution is a separate capability](../11-process-io-filesystems-and-authority.md#name-resolution-is-a-separate-capability).
+  [Name resolution is a separate capability](../11-process-io-filesystems-and-authority.md#name-resolution-is-a-separate-capability)
+  and [Explicit networking and name resolution](networking.md).
+- `std:tls/Client` holds no network authority and has no default trust: you
+  pass it a connected duplex and an explicit `Trust`; see [TLS client](tls.md).
 - `std:inspect` requires authority the host must already have granted to the
   Context (the `protos.Inspect` option). Without it, the import itself signals
   an ordinary `Error`; importing never creates that authority.
@@ -48,13 +51,16 @@ is not a module; import `std:datetime/Date`, `std:datetime/Instant`, and so on.
 | Guide | Modules | Use it for |
 |---|---|---|
 | [Numeric arithmetic and roots](../05-values-identity-equality-and-collections.md#working-with-integer-float-fraction-and-complex) | `std:math/Math`, `std:math/Integer` | `Math.sqrt(value)` over Numbers, and exact Integer algorithms (`gcd`, `lcm`, `factorial`, `pow`, `powMod`) |
+| [Vectors and matrices](linear-algebra.md) | `std:math/LinearAlgebra` | Dense numeric `Vector` and `Matrix` values with exact shapes and a fixed contraction order |
 | [Array algorithms](../05-values-identity-equality-and-collections.md#core-collections-and-standard-library-algorithms-are-different-layers) | `std:collections/Array` | Copy/edit operations `append`, `concat`, `slice`, `insertAt`, `removeAt`, `reverse` that answer new Arrays, and `sort` with a default `<` comparator |
 | [Regular expressions](regex.md) | `std:regex/Regex` | Portable, linear-time pattern matching, captures, replacement, and splitting |
 | [Dates, times, and durations](datetime.md) | `std:datetime/*` | Civil dates and times, instants, fixed offsets, durations, periods, ISO 8601 and RFC 3339 text |
 | [Structured logging](logging.md) | `std:logging/*` | Explicit loggers, levels, structured fields, text/JSON/colored formatting, and sinks |
 | [Text styling and encodings](text.md) | `std:text/*` | Styled text, ANSI rendering, color-mode policy, and UTF-8/UTF-16/Latin-1 helpers |
 | [Semantic versions](semver.md) | `std:semver/SemVer` | Strict Semantic Versioning 2.0.0 parsing, formatting, equality, and precedence |
-| [HTTP/1.1](http.md) | `std:http/Server`, `std:http/Host`, `std:http/Client` | One request on a supplied duplex, continuous hosting on an owned `TcpListener`, and one client exchange on a supplied duplex |
+| [HTTP/1.1](http.md) | `std:http/Server`, `std:http/Host`, `std:http/Client`, `std:http/Router`, `std:http/UrlClient` | One request on a supplied duplex, continuous hosting on an owned `TcpListener`, one client exchange on a supplied duplex, authority-free route dispatch, and one URL request from explicit capabilities |
+| [Explicit networking and name resolution](networking.md) | `std:network/Resolvers` | Host-granted `resolver` lookups, choosing an `IpAddress`, and connecting to a numeric `IpEndpoint` |
+| [TLS client](tls.md) | `std:tls/Client` | Authenticating a connected duplex with explicit trust and the original hostname |
 | [Explicit foreign operations](interop.md) | `std:interop` | `invoke`, `instantiate`, `readMember`, and `writeMember` on foreign values |
 | [Runtime metadata](runtime.md) | `std:runtime` | Four read-only String fields: `implementation`, `implementationVersion`, `engineVersion`, `platform` (no Context mode) |
 | [Runtime inspection](inspect.md) | `std:inspect` | Host-authorized diagnostics of value representations, Closures, Bytecode and Truffle trees |

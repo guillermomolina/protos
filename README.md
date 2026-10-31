@@ -559,7 +559,12 @@ failures.
     execution, formatter, linter, language server, Package Tool, Test Tool,
     and Native/JVM differences.
 -   [Standard Library guides](docs/guide/library/README.md) — using `std:`
-    modules.
+    modules, including [HTTP](docs/guide/library/http.md),
+    [explicit networking](docs/guide/library/networking.md),
+    [TLS](docs/guide/library/tls.md), and
+    [linear algebra](docs/guide/library/linear-algebra.md).
+-   [Test Tool](docs/guide/tools/test-tool.md) — running and registering
+    Protos test corpora.
 -   [Embedding Protos in Java](docs/guide/embedding/java.md) and
     [foreign interoperability](docs/guide/interop/README.md) — portable JVM
     integration.

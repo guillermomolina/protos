@@ -23,6 +23,7 @@ Current progression:
 11. `11-actor-groups/`
 12. `12-system-resources/`
 13. `13-http/`
+14. `14-linear-algebra/`
 
 The system/resource progression deliberately uses two execution hosts:
 `01-process-stream-output.protos` is a normal standalone-CLI lesson, while
@@ -40,5 +41,23 @@ contracts are checked by the standalone-CLI source `memory-duplex-contract.proto
 ownership and drain) requires an explicitly provisioned bootstrap-local
 `network` capability and the support module `hello-handler.protos` installed as
 `app:hello`; `ProtosHttpLearningMaterialIntegrationTest` runs it in a Java
-Polyglot embedding with socket access. The
-[HTTP guide](../../docs/guide/library/http.md) explains all three modules.
+Polyglot embedding with socket access. `04-router-dispatch.protos`
+(`std:http/Router`) is a standalone-CLI lesson: the compiled Router is an
+ordinary handler that needs no duplex and no authority. The
+[HTTP guide](../../docs/guide/library/http.md) explains all five HTTP modules.
+
+After the HTTP progression, the next advanced workflow reaches real hosts and
+is not a tutorial: the manual cookbook examples
+[`http-url-client.protos`](../examples/io/http-url-client.protos) (one HTTPS
+request through `std:http/UrlClient`),
+[`hostname-resolution.protos`](../examples/io/hostname-resolution.protos) and
+[`tls-client-over-tcp.protos`](../examples/io/tls-client-over-tcp.protos) need a
+Java host that grants `network` and `resolver`. Read the
+[networking guide](../../docs/guide/library/networking.md) and the
+[TLS client guide](../../docs/guide/library/tls.md) first.
+
+The linear-algebra progression is entirely standalone-CLI:
+`01-vector-operations.protos`, `02-matrix-operations.protos` and
+`03-complex-and-shapes.protos` use `std:math/LinearAlgebra` and need no host
+capability. The [linear-algebra guide](../../docs/guide/library/linear-algebra.md)
+is the reference.

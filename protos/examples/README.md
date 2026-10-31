@@ -35,6 +35,7 @@ Print-dependent cookbook programs are maintained as executable standalone-CLI so
 | Capture independent values in a collection of Closures | `closures/value-capture.protos` |
 | Delegate optional behavior to a helper object | `objects/rosetta-delegates.protos` |
 | Work with exact Fractions, Float mixing, Complex numbers and square roots | `numbers/exact-and-complex.protos` |
+| Apply and verify a linear transformation with Vectors and Matrices (`std:math/LinearAlgebra`) | `numbers/vector-matrix.protos` |
 | Show portable runtime metadata (`std:runtime`) | `runtime-introspection/info.protos` |
 | Inspect the runtime (`std:inspect`, requires `--inspect`) | `runtime-introspection/inspect.protos` |
 | Use value-keyed maps | `collections/maps.protos` |
@@ -53,6 +54,10 @@ Print-dependent cookbook programs are maintained as executable standalone-CLI so
 | Perform an HTTP GET over an application-opened TCP connection (`std:http/Client`, requires `network`) | `io/http-get.protos` |
 | Host HTTP on loopback with explicit bounds and drain it (`std:http/Host`, requires `network`) | `io/http-loopback-hosting.protos` with `io/http-echo-handler.protos` |
 | Host HTTP Workers that call a RootActor service (`std:http/Host`, RootActor service entry, requires `network`) | `http/root-service-host.protos` with `http/root-service-handler.protos` as `app:root-service-handler` |
+| Dispatch requests by method and path with captured parameters (`std:http/Router`) | `io/http-router.protos` |
+| Make one HTTPS request to a URL (`std:http/UrlClient`, requires `network` and `resolver`, manual) | `io/http-url-client.protos` |
+| Resolve a hostname and connect to a chosen address (`std:network/Resolvers`, requires `network` and `resolver`, manual) | `io/hostname-resolution.protos` |
+| Authenticate TLS over a TCP connection and send one HTTP request (`std:tls/Client`, requires `network` and `resolver`, manual) | `io/tls-client-over-tcp.protos` |
 
 Run the metadata example normally from the product repository root:
 `bin/protos protos/examples/runtime-introspection/info.protos`. The
@@ -72,3 +77,20 @@ binding; `protos <file>` would only evaluate their top level. The HTTP one also
 supplies `root-service-handler.protos` through that session's application
 module catalog.
 See the [HTTP guide](../../docs/guide/library/http.md).
+
+Execution modes at a glance:
+
+- **Standalone CLI** (`bin/protos <file>`): `io/http-router.protos`,
+  `numbers/vector-matrix.protos`, and the in-memory byte-duplex HTTP example
+  `io/http-minimal-response.protos`.
+- **Explicit host authority required**: `io/hostname-resolution.protos`,
+  `io/tls-client-over-tcp.protos` and `io/http-url-client.protos` (`network`
+  and `resolver`), and the TCP Host/Client examples above (`network`).
+
+The three examples marked "manual" reach a real external host. They are not
+CI tests and no automated test runs them unchanged. Verified behavior of the
+same facilities lives in controlled-fixture Java integration tests:
+`ProtosResolverAuthorityTest`, `ProtosTlsClientIntegrationTest` and
+`ProtosHttpUrlClientIntegrationTest`. See the
+[networking guide](../../docs/guide/library/networking.md) and the
+[TLS client guide](../../docs/guide/library/tls.md).

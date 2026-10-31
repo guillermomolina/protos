@@ -1,0 +1,45 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Apply a linear transformation to a point and verify it two ways, with exact
+// Integer arithmetic from std:math/LinearAlgebra. Expected output: -1, 2, then true.
+
+LA: import("std:math/LinearAlgebra")
+Vector: LA.Vector
+Matrix: LA.Matrix
+
+// A quarter turn counterclockwise, as row-major data: rows [0, -1] and [1, 0].
+rotate: Matrix(2, 2, 0, -1, 1, 0)
+point: Vector(2, 1)
+
+turned: rotate.matvec(point)
+print(turned[0])
+print(turned[1])
+
+// Check 1: four quarter turns compose to the identity.
+fullTurn: rotate.matmul(rotate).matmul(rotate).matmul(rotate)
+same: fullTurn.matvec(point)
+
+// Check 2: a rotation's transpose undoes it.
+back: rotate.transpose().matvec(turned)
+
+verified: (turned[0] == -1) && (turned[1] == 2) &&
+    (same[0] == 2) && (same[1] == 1) &&
+    (back[0] == 2) && (back[1] == 1)
+// A wrong result must fail the program, not print false.
+if(!verified) {
+    Error().signal()
+}
+print(verified)

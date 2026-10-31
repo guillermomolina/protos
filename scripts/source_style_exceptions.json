@@ -1,4 +1,11 @@
 {
   "version": 1,
-  "exceptions": []
+  "exceptions": [
+    {
+      "path": "protos/tutorials/14-linear-algebra/02-matrix-operations.protos",
+      "family": "indexing",
+      "max_count": 2,
+      "reason": "Matrix requires two-dimensional at(row, column) access; the normative contract defines no equivalent bracket indexing form."
+    }
+  ]
 }

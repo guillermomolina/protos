@@ -1,0 +1,89 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Direct HTTPS, one explicit step at a time: resolve, connect, authenticate
+// TLS, then run one HTTP/1.1 exchange over the secure duplex (TLS.md §12).
+//
+// HOST-DEPENDENT, MANUAL EXAMPLE. It requires a Java Polyglot embedding that
+// grants BOTH bootstrap-local capabilities, `resolver` and `network`, plus
+// outbound connectivity and accessible Java cacerts. The standalone CLI grants
+// neither, and CI never runs this file: it reaches a real external origin.
+// Controlled-fixture coverage of the same facilities is in
+// ProtosTlsClientIntegrationTest and ProtosResolverAuthorityTest.
+// For a one-call version of this composition, see http-url-client.protos.
+
+IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+TLS: import("std:tls/Client")
+HttpClient: import("std:http/Client").Client
+
+// The original hostname is the TLS reference identity (and SNI) and the HTTP
+// Host value, even after we connect to a numeric address.
+originalHostname: "example.org"
+
+// 1. Resolve with the granted resolver, and release it once we have answers.
+addresses: (() => {
+    resolver.lookupAddresses(originalHostname).value()
+}).ensure(() => {
+    resolver.close().value()
+})
+
+request: {
+    method: "GET"
+    target: Encoding.Latin1.encode("/")
+    headers: [
+        ["Host", Encoding.Latin1.encode(originalHostname)],
+        ["User-Agent", Encoding.Latin1.encode("protos-tls-example")]
+    ]
+    body: null
+}
+
+// The response body is readable only while this callback runs.
+onResponse: (response) => {
+    total: 0
+    piece: response.body.read(4096).value()
+    while(piece !== null) {
+        total = total + piece.size()
+        piece = response.body.read(4096).value()
+    }
+    result: {
+        status: response.status
+        bodyBytes: total
+    }
+    result
+}
+
+// 2. Connect to a chosen numeric endpoint. The first address is advisory only;
+// this example makes no retry over the other candidates. Nothing runs between
+// this connect and the ensure below, so no failure can leak the connection.
+connection: network.connectTcp(IpEndpoint(addresses[0], 443)).value()
+
+received: (() => {
+    // 3. Authenticate with explicitly selected trust. The borrowing handshake
+    // never closes `connection`; we close it in the outer ensure.
+    secure: TLS.Client.handshake(connection, originalHostname, TLS.Trust.javaCacerts(), {}).value()
+    (() => {
+        // 4. One HTTP/1.1 exchange over the secure duplex, borrowed as well.
+        HttpClient.exchangeOne(secure, request, onResponse, null).value()
+    }).ensure(() => {
+        // 5. Send close_notify before the transport goes away.
+        secure.close().value()
+    })
+}).ensure(() => {
+    connection.close().value()
+})
+
+// Any final status counts as a received response; TLS failures would have
+// signalled a TlsError instead.
+(received.status >= 100) && (received.bodyBytes >= 0)

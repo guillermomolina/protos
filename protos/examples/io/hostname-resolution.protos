@@ -32,7 +32,12 @@ originalHostname: "api.github.com"
 // candidates in advisory order. It never connects and never appends a search
 // domain; a failure is a ResolutionError with kind "noAddress",
 // "unavailable", "denied" or "limit".
-addresses: resolver.lookupAddresses(originalHostname).value()
+// The Resolver is closed once the lookup ends, whether it succeeds or fails.
+addresses: (() => {
+    resolver.lookupAddresses(originalHostname).value()
+}).ensure(() => {
+    resolver.close().value()
+})
 
 // The application chooses an address; ordering promises no reachability.
 endpoint: IpEndpoint(addresses[0], 443)
@@ -41,15 +46,20 @@ endpoint: IpEndpoint(addresses[0], 443)
 // connectTcp has no hostname form.
 connection: network.connectTcp(endpoint).value()
 
-// For HTTPS, the ORIGINAL hostname — never a resolved address or alias — is
-// the TLS reference identity (and SNI), and the HTTP Host authority:
-//
-//     Client: import("std:tls/Client").Client
-//     secure: Client.handshake(connection, originalHostname, trust, options).value()
-//     headers: [["Host", Encoding.Latin1.encode(originalHostname)], ...]
-//
-// `trust` must be selected explicitly, e.g. Trust.javaCacerts().
+connected: (() => {
+    // For HTTPS, the ORIGINAL hostname — never a resolved address or alias — is
+    // the TLS reference identity (and SNI), and the HTTP Host authority:
+    //
+    //     Client: import("std:tls/Client").Client
+    //     secure: Client.handshake(connection, originalHostname, trust, options).value()
+    //     headers: [["Host", Encoding.Latin1.encode(originalHostname)], ...]
+    //
+    // `trust` must be selected explicitly, e.g. Trust.javaCacerts(). The
+    // complete composition is tls-client-over-tcp.protos.
+    true
+}).ensure(() => {
+    // The connection is ours: close it on every path.
+    connection.close().value()
+})
 
-connection.close().value()
-resolver.close().value()
-true
+connected

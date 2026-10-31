@@ -161,6 +161,18 @@ host that instead wants the RootActor itself to be a long-lived message service
 `protos.jar`. It is a separate host API, not a `Context` option, and the
 `protos` command line does not offer it.
 
+**Which embedding entry should I use?**
+
+| Entry | Use it for |
+|---|---|
+| A Polyglot `Context` and `eval` | Ordinary one-shot evaluation: run a program or expression and read its result |
+| `ProtosRootActorServiceSession` | A long-lived Protos application service, such as an HTTP Host whose Workers call the RootActor |
+| The `app:` application module catalog | Supplying Protos modules by exact `app:` name, for example an HTTP Worker factory, to either entry |
+
+In every case the application, the HTTP Worker handler factory, request
+handling and service logic stay written in Protos. Java selects the entry, the
+grants and the module catalog; it is not an application server.
+
 ```java
 try (ProtosRootActorServiceSession service =
         ProtosRootActorServiceSession.open(

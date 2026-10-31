@@ -1381,6 +1381,14 @@ Connect-by-name, Happy Eyeballs, DNS record APIs, DNSSEC, DNS over HTTPS or
 TLS, TTL/cache APIs, search domains, Actor delegation, and timeouts remain
 deferred. See [`hostname-resolution.protos`](../../protos/examples/io/hostname-resolution.protos).
 
+For the practical next step, the [networking guide](library/networking.md) and
+the [TLS client guide](library/tls.md) follow one explicit chain: a `resolver`
+answers `IpAddress` values; an `IpAddress` and a port make an `IpEndpoint`;
+`network.connectTcp` turns the endpoint into a connection; the original
+hostname plus an explicitly selected trust authenticate that connection with
+`std:tls/Client`; and the authenticated duplex carries one `std:http/Client`
+exchange.
+
 ## Practical examples
 
 The examples below use only operations implemented in the current runtime.

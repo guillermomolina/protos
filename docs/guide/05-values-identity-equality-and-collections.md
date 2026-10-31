@@ -1027,6 +1027,30 @@ This is a good example of the Protos design principle "mechanisms over
 institutions": higher-level collection abstractions can be written in ordinary
 Protos when Core already supplies the necessary semantic foundation.
 
+## Vectors and matrices
+
+Arrays hold any values. For numeric linear algebra, the Standard Library module
+`std:math/LinearAlgebra` provides two prototypes, `Vector` and `Matrix`, whose
+elements must be genuine Numbers. Import the module explicitly and bind both
+prototypes before calling them:
+
+```protos
+LA: import("std:math/LinearAlgebra")
+Vector: LA.Vector
+Matrix: LA.Matrix
+
+v: Vector(1, 2, 3)                 // three elements
+m: Matrix(2, 3, 1, 2, 3, 4, 5, 6)  // 2 × 3, row-major values
+m.matvec(v)[1]                     // 4 + 10 + 18 == 32
+```
+
+Vectors use the ordinary zero-based `v[i]` indexing; matrices use
+`at(row, column)`. Shapes must match exactly: nothing is broadcast, reshaped or
+converted, and every scalar step is the ordinary Number arithmetic described
+above. Results are fresh identity-bearing objects. See
+[Vectors and matrices](library/linear-algebra.md) for the full API, Complex
+behavior, and the fixed reduction order.
+
 ## Equality choice propagates into collection choice
 
 A useful design sequence is:

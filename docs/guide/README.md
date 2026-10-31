@@ -101,8 +101,14 @@ language-teaching progression under DOC001.
 - [Structured logging](library/logging.md) — `std:logging/*`.
 - [Text styling and encodings](library/text.md) — `std:text/*`.
 - [Semantic versions](library/semver.md) — `std:semver/SemVer`.
-- [HTTP/1.1](library/http.md) — `std:http/Server`, `std:http/Host`, and
-  `std:http/Client`, with their Network authority and lifetime rules.
+- [HTTP/1.1](library/http.md) — `std:http/Server`, `std:http/Host`,
+  `std:http/Client`, `std:http/Router`, and `std:http/UrlClient`, with their
+  Network authority and lifetime rules.
+- [Explicit networking and name resolution](library/networking.md) —
+  `network`, `std:network/Resolvers`, `IpAddress`, and `IpEndpoint`.
+- [TLS client](library/tls.md) — `std:tls/Client`, explicit trust, and
+  reference identity.
+- [Vectors and matrices](library/linear-algebra.md) — `std:math/LinearAlgebra`.
 - [Explicit foreign operations](library/interop.md) — `std:interop`.
 - [Numeric functions](library/README.md) — `std:math/Math` and `std:math/Integer`;
   see also [numeric values](05-values-identity-equality-and-collections.md).

@@ -1,0 +1,76 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Router.compile turns a list of routes into ONE ordinary handler. The Router
+// holds no authority and reads no body, so this lesson calls the handler
+// directly with request objects and runs under the standalone CLI.
+
+Router: import("std:http/Router").Router
+
+// Each route names a method and a path pattern. `{name}` captures one path
+// segment; the handler receives the request and the match.
+handler: Router.compile([
+    {
+        method: "GET"
+        path: "/"
+        handle: (request, match) => {
+            {
+                status: 200
+                headers: []
+                body: Encoding.UTF8.encode("home")
+            }
+        }
+    },
+    {
+        method: "GET"
+        path: "/projects/{name}"
+        handle: (request, match) => {
+            {
+                status: 200
+                headers: []
+                body: Encoding.UTF8.encode(match.params["name"] + " (" + match.query + ")")
+            }
+        }
+    }
+])
+
+// The method is a String; the target is raw Bytes, as Server delivers it.
+get: (target) => {
+    {
+        method: "GET"
+        target: Encoding.Latin1.encode(target)
+    }
+}
+
+home: handler(get("/"))
+project: handler(get("/projects/protos?view=short"))
+missing: handler(get("/missing"))
+
+print(Encoding.UTF8.decode(home.body))
+print(Encoding.UTF8.decode(project.body))
+print(missing.status)
+
+// An unknown path answers a bodiless 404.
+verified: (home.status == 200) &&
+    (Encoding.UTF8.decode(home.body) == "home") &&
+    (project.status == 200) &&
+    (Encoding.UTF8.decode(project.body) == "protos (view=short)") &&
+    (missing.status == 404) &&
+    (missing.body === null)
+// A wrong result must fail the program, not print false.
+if(!verified) {
+    Error().signal()
+}
+print(verified)
