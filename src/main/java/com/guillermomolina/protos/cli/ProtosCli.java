@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.cli;
 
 import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
+import com.guillermomolina.protos.analysis.ProtosStaticMemberCompletionSite;
 import com.guillermomolina.protos.execution.*;
 import com.guillermomolina.protos.lsp.ProtosLanguageServerMain;
 import com.guillermomolina.protos.parser.ParseError;
@@ -1331,7 +1332,8 @@ public final class ProtosCli {
                                     pending::toString,
                                     () -> s.processContext()
                                             .tryObservePersistentLexicalNamesForRuntime(
-                                                    s.activation())))
+                                                    s.activation()),
+                                    site -> observeSelectorNames(s, site)))
                             .option(LineReader.Option.BRACKETED_PASTE, true)
                             .option(LineReader.Option.COMPLETE_IN_WORD, true)
                             .option(LineReader.Option.COMPLETE_MATCHER_TYPO, false)
@@ -1403,6 +1405,25 @@ public final class ProtosCli {
         return result;
     }
 
+    /** D228-A1: names-only selector observation for one parser-proven site. */
+    private static List<ProtosReplSourceCompletion.MemberName> observeSelectorNames(
+            Session s, ProtosStaticMemberCompletionSite site) {
+        ProtosReplSelectorObservation.Receiver receiver =
+                site.receiverKind() == ProtosStaticMemberCompletionSite.ReceiverKind.THIS
+                        ? ProtosReplSelectorObservation.Receiver.thisReceiver()
+                        : ProtosReplSelectorObservation.Receiver.lexicalName(
+                                site.receiverName());
+        List<ProtosReplSourceCompletion.MemberName> names = new ArrayList<>();
+        for (ProtosReplSelectorObservation.Candidate candidate :
+                s.processContext().tryObservePersistentSelectorNamesForRuntime(
+                        s.activation(), receiver)) {
+            names.add(new ProtosReplSourceCompletion.MemberName(
+                    candidate.name(),
+                    candidate.provenance() == ProtosReplSelectorObservation.Provenance.OWN));
+        }
+        return names;
+    }
+
     private ReplInputResult processReturnedInput(
             String input, Session s, PrintStream out, PrintStream err) {
         if (input.isBlank()) return ReplInputResult.COMPLETE;
@@ -1414,6 +1435,7 @@ public final class ProtosCli {
                             + ":exit  exit\n"
                             + "Arrow keys edit lines and navigate session history.\n"
                             + "Tab completes REPL commands and eligible Protos identifiers.\n"
+                            + "After name. or this., Tab completes own and delegated slot names.\n"
                             + "Ctrl-A/Ctrl-E move to start/end; Ctrl-C cancels; Ctrl-D exits.\n"
                             + "Top-level context persists between evaluations.\n"
                             + "The REPL Process has an empty process.args() snapshot.");

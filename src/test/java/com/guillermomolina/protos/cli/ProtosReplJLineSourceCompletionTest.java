@@ -159,4 +159,188 @@ final class ProtosReplJLineSourceCompletionTest {
         completer.complete(null, parsed("sess", 4), results);
         assertTrue(results.isEmpty());
     }
+
+    private static List<Candidate> selectorCandidates(
+            String pending, String line, int cursor,
+            ProtosReplSourceCompletion.MemberName... names) {
+        var result = new ArrayList<Candidate>();
+        new ProtosReplJLineCompleter(
+                () -> pending,
+                () -> List.of(),
+                site -> List.of(names))
+                .complete(null, parsed(line, cursor), result);
+        return result;
+    }
+
+    private static ProtosReplSourceCompletion.MemberName own(String name) {
+        return new ProtosReplSourceCompletion.MemberName(name, true);
+    }
+
+    private static ProtosReplSourceCompletion.MemberName delegated(String name) {
+        return new ProtosReplSourceCompletion.MemberName(name, false);
+    }
+
+    @Test
+    void selectorCompletesWithinTheJLineWord() {
+        ParsedLine line = parsed("dog.met", 7);
+        List<Candidate> candidates =
+                selectorCandidates("", "dog.met", 7, delegated("method"));
+
+        assertEquals(List.of("dog.method"), values(candidates));
+        assertEquals(List.of("dog.method"), matched(line, candidates));
+        assertEquals("method", candidates.get(0).displ());
+        assertEquals("delegated slot", candidates.get(0).descr());
+        assertFalse(candidates.get(0).complete());
+
+        assertEquals(
+                "own slot",
+                selectorCandidates("", "dog.met", 7, own("method"))
+                        .get(0).descr());
+    }
+
+    @Test
+    void middleOfSelectorPreservesTheCorrectCharacters() {
+        ParsedLine line = parsed("dog.methd", 8);
+        List<Candidate> candidates =
+                selectorCandidates("", "dog.methd", 8, own("method"));
+
+        assertEquals(List.of("dog.method"), values(candidates));
+        assertEquals(List.of("dog.method"), matched(line, candidates));
+    }
+
+    @Test
+    void selectorInsideExpressionKeepsTheRest() {
+        String source = "print(dog.met)";
+        int cursor = "print(dog.met".length();
+        List<Candidate> candidates =
+                selectorCandidates("", source, cursor, own("method"));
+
+        assertEquals(List.of("print(dog.method)"), values(candidates));
+        assertEquals(
+                List.of("print(dog.method)"),
+                matched(parsed(source, cursor), candidates));
+    }
+
+    @Test
+    void groupedReceiversAndMultilinePendingSource() {
+        assertEquals(
+                List.of("((dog)).speak"),
+                values(selectorCandidates(
+                        "", "((dog)).sp", 10, own("speak"))));
+
+        assertEquals(
+                List.of("dog.speak"),
+                values(selectorCandidates(
+                        "f: (dog) => {", "dog.sp\n}", 6, own("speak"))));
+    }
+
+    @Test
+    void emptySelectorWithoutMatchingSlotHasNoCandidates() {
+        assertTrue(selectorCandidates("", "object.", 7).isEmpty());
+        assertEquals(
+                List.of("object.slot"),
+                values(selectorCandidates("", "object.", 7, own("slot"))));
+    }
+
+    @Test
+    void rejectsSpansThatTheJLineWordCannotReplace() {
+        // A JLine word "th" inside "dog.meth" cannot replace the whole
+        // parser-proven selector "meth", so no candidate is offered.
+        var narrow = new NarrowWordLine("dog.meth", 7, 6, 8);
+        var results = new ArrayList<Candidate>();
+        new ProtosReplJLineCompleter(
+                () -> "",
+                () -> List.of(),
+                site -> List.of(own("method")))
+                .complete(null, narrow, results);
+
+        assertTrue(results.isEmpty());
+    }
+
+    private record NarrowWordLine(String line, int cursor, int wordStart, int wordEnd)
+            implements CompletingParsedLine {
+        @Override
+        public String word() {
+            return line.substring(wordStart, wordEnd);
+        }
+
+        @Override
+        public int wordCursor() {
+            return cursor - wordStart;
+        }
+
+        @Override
+        public int wordIndex() {
+            return 0;
+        }
+
+        @Override
+        public List<String> words() {
+            return List.of(word());
+        }
+
+        @Override
+        public CharSequence escape(CharSequence candidate, boolean complete) {
+            return candidate;
+        }
+
+        @Override
+        public int rawWordCursor() {
+            return wordCursor();
+        }
+
+        @Override
+        public int rawWordLength() {
+            return wordEnd - wordStart;
+        }
+    }
+
+    @Test
+    void ambiguousSelectorsDoNotRewriteTheBuffer() {
+        ParsedLine line = parsed("dog.s", 5);
+        List<Candidate> candidates = selectorCandidates(
+                "", "dog.s", 5, own("sit"), delegated("speak"));
+
+        assertEquals(List.of("dog.sit", "dog.speak"), values(candidates));
+        // Protos owns the candidate order above; JLine's matcher applies its
+        // own presentation order, so only the matched set is asserted here.
+        assertEquals(
+                java.util.Set.of("dog.sit", "dog.speak"),
+                java.util.Set.copyOf(matched(line, candidates)));
+        assertTrue(candidates.stream().noneMatch(Candidate::complete));
+    }
+
+    @Test
+    void metacommandsAndBareNamesConsultOnlyTheirOwnProviders() {
+        AtomicInteger lexical = new AtomicInteger();
+        AtomicInteger selectors = new AtomicInteger();
+        var completer = new ProtosReplJLineCompleter(
+                () -> "",
+                () -> {
+                    lexical.incrementAndGet();
+                    return List.of("sessionVariable");
+                },
+                site -> {
+                    selectors.incrementAndGet();
+                    return List.of(own("speak"));
+                });
+        var results = new ArrayList<Candidate>();
+
+        completer.complete(null, parsed(":he", 3), results);
+        assertEquals(List.of(":help"), values(results));
+        assertEquals(0, lexical.get());
+        assertEquals(0, selectors.get());
+
+        results.clear();
+        completer.complete(null, parsed("sess", 4), results);
+        assertEquals(List.of("sessionVariable"), values(results));
+        assertEquals(1, lexical.get());
+        assertEquals(0, selectors.get());
+
+        results.clear();
+        completer.complete(null, parsed("dog.sp", 6), results);
+        assertEquals(List.of("dog.speak"), values(results));
+        assertEquals(1, lexical.get());
+        assertEquals(1, selectors.get());
+    }
 }

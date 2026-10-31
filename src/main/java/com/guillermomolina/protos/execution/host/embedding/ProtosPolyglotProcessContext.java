@@ -20,6 +20,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosReplSelectorObservation;
 import com.guillermomolina.protos.runtime.process.ProtosProcessExecutionHost;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.oracle.truffle.api.source.Source;
@@ -56,6 +57,15 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
     private final ReentrantLock persistentRootActorGate =
             new ReentrantLock();
 
+    /**
+     * D228-A1: RootActor direct entries ({@code execute}, {@code executeFile},
+     * {@code executeModuleSource}) currently in progress. Guarded by
+     * {@link #persistentRootActorGate}, which is held only to update or read
+     * it, never across execution. It is an observation barrier, not a
+     * scheduling mechanism: direct entries are not serialized.
+     */
+    private int activeDirectRootEntries;
+
     ProtosPolyglotProcessContext(
             ProtosPolyglotRuntimeHost runtimeHost,
             ProtosProcessRuntime process,
@@ -71,7 +81,14 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
     public ProtosExecutionOutcome execute(Source source, ProtosActivation activation) {
         Objects.requireNonNull(source, "source");
         requireActivationProcess(activation);
-        return context.execute(source, activation);
+        boolean registered = beginDirectRootEntry(activation);
+        try {
+            return context.execute(source, activation);
+        } finally {
+            if (registered) {
+                endDirectRootEntry();
+            }
+        }
     }
 
     public ProtosExecutionOutcome executeFile(
@@ -81,7 +98,14 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
         Objects.requireNonNull(path, "path");
         Objects.requireNonNull(characters, "characters");
         requireActivationProcess(activation);
-        return context.executeFile(path, characters, activation);
+        boolean registered = beginDirectRootEntry(activation);
+        try {
+            return context.executeFile(path, characters, activation);
+        } finally {
+            if (registered) {
+                endDirectRootEntry();
+            }
+        }
     }
 
     public ProtosExecutionOutcome executeModuleSource(
@@ -89,7 +113,14 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
             ProtosActivation activation) {
         Objects.requireNonNull(source, "source");
         requireActivationProcess(activation);
-        return context.executeModuleSource(source, activation);
+        boolean registered = beginDirectRootEntry(activation);
+        try {
+            return context.executeModuleSource(source, activation);
+        } finally {
+            if (registered) {
+                endDirectRootEntry();
+            }
+        }
     }
 
     /** Persistent top-level evaluation for REPL-like drivers inside this exact Process Context. */
@@ -126,7 +157,8 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
             return List.of();
         }
         try {
-            if (!eligibleForPersistentLexicalObservation(activation)) {
+            if (activeDirectRootEntries != 0
+                    || !eligibleForPersistentLexicalObservation(activation)) {
                 return List.of();
             }
             return context.callEntered(() -> {
@@ -141,6 +173,90 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
             });
         } catch (RuntimeException unavailable) {
             return List.of();
+        } finally {
+            persistentRootActorGate.unlock();
+        }
+    }
+
+    /**
+     * D228-A1: names-only selector candidates for one parser-proven REPL receiver.
+     *
+     * <p>Both admissions are required and neither waits: the D227 persistent gate excludes
+     * persistent RootActor evaluation, and the scheduler's exclusive observation permit excludes
+     * RootActor segments. Inside the entered Context only the receiver binding is read; no guest
+     * code is executed and no guest value escapes. Any failure yields an empty list.</p>
+     */
+    public List<ProtosReplSelectorObservation.Candidate> tryObservePersistentSelectorNamesForRuntime(
+            ProtosActivation activation,
+            ProtosReplSelectorObservation.Receiver receiver) {
+        if (activation == null || receiver == null
+                || !persistentRootActorGate.tryLock()) {
+            return List.of();
+        }
+        try {
+            if (activeDirectRootEntries != 0
+                    || !eligibleForPersistentLexicalObservation(activation)) {
+                return List.of();
+            }
+            Optional<ProtosActorScheduler> scheduler = actorSchedulerForRuntime();
+            if (scheduler.isEmpty()) {
+                return List.of();
+            }
+            Optional<ProtosActorScheduler.ObservationPermit> admitted =
+                    scheduler.orElseThrow().tryAcquireObservation(process.rootActorForRuntime());
+            if (admitted.isEmpty()) {
+                return List.of();
+            }
+            try (ProtosActorScheduler.ObservationPermit permit = admitted.orElseThrow()) {
+                return context.callEntered(() -> {
+                    if (!eligibleForPersistentLexicalObservation(activation)) {
+                        return List.<ProtosReplSelectorObservation.Candidate>of();
+                    }
+                    List<ProtosReplSelectorObservation.Candidate> candidates =
+                            ProtosReplSelectorObservation.observe(activation, receiver);
+                    return eligibleForPersistentLexicalObservation(activation)
+                            ? candidates
+                            : List.<ProtosReplSelectorObservation.Candidate>of();
+                });
+            }
+        } catch (RuntimeException unavailable) {
+            return List.of();
+        } finally {
+            persistentRootActorGate.unlock();
+        }
+    }
+
+    /**
+     * Registers a RootActor direct entry; other Actors neither count nor take
+     * the gate. The gate is held only for the update, so a running observation
+     * delays the start of an entry only for its own bounded duration.
+     *
+     * @return whether exactly one registration was added
+     */
+    private boolean beginDirectRootEntry(ProtosActivation activation) {
+        if (activation.executionDomain().currentActorForRuntime().orElse(null)
+                != process.rootActorForRuntime()) {
+            return false;
+        }
+        persistentRootActorGate.lock();
+        try {
+            if (activeDirectRootEntries == Integer.MAX_VALUE) {
+                throw new IllegalStateException("too many concurrent RootActor direct entries");
+            }
+            activeDirectRootEntries++;
+            return true;
+        } finally {
+            persistentRootActorGate.unlock();
+        }
+    }
+
+    private void endDirectRootEntry() {
+        persistentRootActorGate.lock();
+        try {
+            if (activeDirectRootEntries <= 0) {
+                throw new IllegalStateException("unbalanced RootActor direct entry");
+            }
+            activeDirectRootEntries--;
         } finally {
             persistentRootActorGate.unlock();
         }

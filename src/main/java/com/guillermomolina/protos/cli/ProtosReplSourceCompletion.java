@@ -19,6 +19,7 @@ package com.guillermomolina.protos.cli;
 import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore;
 import com.guillermomolina.protos.analysis.ProtosStaticCompletionResult;
+import com.guillermomolina.protos.analysis.ProtosStaticMemberCompletionSite;
 import com.guillermomolina.protos.lexer.ProtosLexer;
 import com.guillermomolina.protos.lexer.TokenOccurrence;
 import com.guillermomolina.protos.lexer.TokenType;
@@ -28,14 +29,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
- * D227-A1: pure REPL source-candidate composition.
+ * D227-A1/D228-A1: pure REPL source-candidate composition.
  *
  * <p>Only an existing LM010 parser-proven bare read accepts live lexical
+ * names, and only a D228-A1 parser-proven selector site accepts member
  * names. This class never reads the session, evaluates guest source,
- * guesses member names or launches a language server. The caller supplies
- * one admitted names-only runtime snapshot.</p>
+ * guesses names or launches a language server. Each runtime provider is
+ * invoked lazily, at most once, and only after its own site is proven.</p>
  */
 final class ProtosReplSourceCompletion {
     private static final int MAX_SOURCE_CHARS = 65536;
@@ -44,7 +48,16 @@ final class ProtosReplSourceCompletion {
     enum Kind {
         LIVE_BINDING,
         PROVEN_BINDING,
-        SYNTAX
+        SYNTAX,
+        MEMBER_OWN,
+        MEMBER_DELEGATED
+    }
+
+    /** One inert selector name observed for a proven member site. */
+    record MemberName(String name, boolean own) {
+        MemberName {
+            Objects.requireNonNull(name, "name");
+        }
     }
 
     record Candidate(String label, Kind kind) {
@@ -68,11 +81,28 @@ final class ProtosReplSourceCompletion {
 
     private ProtosReplSourceCompletion() {}
 
+    /** D227-A1 composition without an approved selector provider. */
     static Optional<Result> complete(
             String pending,
             String line,
             int cursor,
             List<String> liveNames) {
+        Objects.requireNonNull(liveNames, "liveNames");
+        return complete(pending, line, cursor, () -> liveNames, null);
+    }
+
+    /**
+     * @param memberNames D228-A1 selector provider, or {@code null} when no
+     *     selector provider is approved; a proven member site then yields no
+     *     candidates
+     */
+    static Optional<Result> complete(
+            String pending,
+            String line,
+            int cursor,
+            Supplier<List<String>> liveNames,
+            Function<ProtosStaticMemberCompletionSite, List<MemberName>>
+                    memberNames) {
         Objects.requireNonNull(pending, "pending");
         Objects.requireNonNull(line, "line");
         Objects.requireNonNull(liveNames, "liveNames");
@@ -98,6 +128,16 @@ final class ProtosReplSourceCompletion {
         var snapshot = new ProtosDocumentSnapshot(
                 "memory:/repl-completion.protos", 0, source);
         var analysis = new ProtosStaticAnalysisCore();
+
+        Optional<ProtosStaticMemberCompletionSite> memberSite =
+                analysis.memberCompletionSite(snapshot, offset);
+        if (memberSite.isPresent()) {
+            return memberNames == null
+                    ? Optional.empty()
+                    : completeMember(
+                            source, prefixLength, offset,
+                            memberSite.orElseThrow(), memberNames);
+        }
 
         Optional<ProtosStaticCompletionResult> proven =
                 analysis.completion(snapshot, offset);
@@ -148,7 +188,7 @@ final class ProtosReplSourceCompletion {
 
         LinkedHashMap<String, Candidate> unique = new LinkedHashMap<>();
 
-        for (String name : liveNames) {
+        for (String name : liveNames.get()) {
             if (unique.size() >= MAX_CANDIDATES) {
                 break;
             }
@@ -184,6 +224,48 @@ final class ProtosReplSourceCompletion {
                 new ArrayList<>(unique.values())));
     }
 
+    private static Optional<Result> completeMember(
+            String source,
+            int prefixLength,
+            int offset,
+            ProtosStaticMemberCompletionSite site,
+            Function<ProtosStaticMemberCompletionSite, List<MemberName>>
+                    memberNames) {
+        SourceSpan span = site.replacementSpan();
+        if (span.startOffset() < prefixLength
+                || span.startOffset() > offset
+                || span.endOffset() < offset
+                || span.endOffset() > source.length()) {
+            return Optional.empty();
+        }
+
+        String before = source.substring(span.startOffset(), offset);
+        String after = source.substring(offset, span.endOffset());
+
+        // The provider's order (nearest level first, scalar order within a
+        // level) is kept; the presentation limit applies only afterwards.
+        LinkedHashMap<String, Candidate> unique = new LinkedHashMap<>();
+        for (MemberName member : memberNames.apply(site)) {
+            if (unique.size() >= MAX_CANDIDATES) {
+                break;
+            }
+            String name = member.name();
+            if (matches(name, before, after) && isMemberName(name)) {
+                unique.putIfAbsent(name, new Candidate(
+                        name,
+                        member.own() ? Kind.MEMBER_OWN : Kind.MEMBER_DELEGATED));
+            }
+        }
+
+        if (unique.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new Result(
+                span.startOffset() - prefixLength,
+                span.endOffset() - prefixLength,
+                new ArrayList<>(unique.values())));
+    }
+
     private static boolean matches(
             String name, String before, String after) {
         return name != null
@@ -193,11 +275,30 @@ final class ProtosReplSourceCompletion {
     }
 
     private static boolean isIdentifier(String name) {
+        return isSingleToken(name, false);
+    }
+
+    /** A structural member name: an identifier or a reserved word valid after {@code .}. */
+    private static boolean isMemberName(String name) {
+        return isSingleToken(name, true);
+    }
+
+    private static boolean isSingleToken(String name, boolean memberName) {
         try {
             List<TokenOccurrence> tokens =
                     new ProtosLexer(name).tokenizeOccurrences();
-            return tokens.size() == 2
-                    && tokens.get(0).token().type() == TokenType.IDENTIFIER
+            if (tokens.size() != 2) {
+                return false;
+            }
+            TokenType type = tokens.get(0).token().type();
+            boolean admitted = memberName
+                    ? switch (type) {
+                        case IDENTIFIER, THIS, CONTEXT, SUPER,
+                                TRUE, FALSE, NULL -> true;
+                        default -> false;
+                    }
+                    : type == TokenType.IDENTIFIER;
+            return admitted
                     && tokens.get(0).span().startOffset() == 0
                     && tokens.get(0).span().endOffset() == name.length()
                     && tokens.get(1).token().type() == TokenType.EOF;

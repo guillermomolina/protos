@@ -19,6 +19,7 @@ package com.guillermomolina.protos.runtime;
 import java.util.ArrayDeque;
 import java.util.IdentityHashMap;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 
 /**
@@ -38,6 +39,13 @@ public final class ProtosActorScheduler {
         private boolean queued;
         private boolean running;
         private boolean preferMailbox;
+        /** D228-A1: a live observation permit excludes Protos segments. */
+        private boolean observed;
+        /**
+         * D228-A1: the State exists only to hold an observation permit for an
+         * Actor this scheduler has not attached; it is not schedulable.
+         */
+        private boolean observationPlaceholder;
 
         private State(ProtosActor actor) {
             this.actor = actor;
@@ -76,25 +84,125 @@ public final class ProtosActorScheduler {
         this.parallelism = parallelism;
     }
 
+    /**
+     * D228-A1 short-lived exclusive observation permit for one Actor.
+     *
+     * <p>Admission is immediate and never waits: it is denied while the Actor is executing a
+     * segment, already holds a permit, or is terminating/terminated. While the permit is live the
+     * Actor is removed from, and cannot re-enter, the ready queue, so no segment of that Actor can
+     * begin; its pending work is kept and becomes eligible again on {@link
+     * ObservationPermit#close()}. Other Actors are unaffected. An Actor that this scheduler has not
+     * attached cannot have a segment started here; its permit is held by a non-schedulable
+     * placeholder that a concurrent {@link #attach} adopts without scheduling until release.</p>
+     */
+    public Optional<ObservationPermit> tryAcquireObservation(ProtosActor actor) {
+        Objects.requireNonNull(actor, "actor");
+        synchronized (lock) {
+            ProtosActor.LifecycleState lifecycle = actor.lifecycleState();
+            if (lifecycle == ProtosActor.LifecycleState.TERMINATING
+                    || lifecycle == ProtosActor.LifecycleState.TERMINATED) {
+                return Optional.empty();
+            }
+            State state = states.get(actor);
+            if (state == null) {
+                state = new State(actor);
+                state.observationPlaceholder = true;
+                states.put(actor, state);
+            } else if (state.running || state.observed) {
+                return Optional.empty();
+            }
+            state.observed = true;
+            if (state.queued) {
+                readyActors.remove(state);
+                state.queued = false;
+            }
+            return Optional.of(new ObservationPermit(this, state));
+        }
+    }
+
+    /** Releasable D228-A1 observation admission; closing is idempotent. */
+    public static final class ObservationPermit implements AutoCloseable {
+        private final ProtosActorScheduler scheduler;
+        private State state;
+
+        private ObservationPermit(ProtosActorScheduler scheduler, State state) {
+            this.scheduler = scheduler;
+            this.state = state;
+        }
+
+        @Override
+        public void close() {
+            State released;
+            synchronized (scheduler.lock) {
+                released = state;
+                state = null;
+            }
+            if (released != null) {
+                scheduler.releaseObservation(released);
+            }
+        }
+    }
+
+    private void releaseObservation(State state) {
+        synchronized (lock) {
+            state.observed = false;
+            if (states.get(state.actor) != state) {
+                return;
+            }
+            if (state.observationPlaceholder) {
+                states.remove(state.actor);
+                return;
+            }
+        }
+        signal(state.actor, false);
+    }
+
     /** Attaches one Actor incarnation to this scheduler without creating background work. */
     public void attach(ProtosActor actor) {
         Objects.requireNonNull(actor, "actor");
         synchronized (lock) {
-            if (states.containsKey(actor)) {
+            State existing = states.get(actor);
+            if (existing != null && existing.observationPlaceholder) {
+                // A live D228-A1 permit keeps the adopted State unschedulable until release.
+                existing.observationPlaceholder = false;
+            } else if (existing != null) {
                 throw new IllegalStateException("Actor is already attached to this scheduler");
+            } else {
+                states.put(actor, new State(actor));
             }
-            states.put(actor, new State(actor));
         }
         try {
             actor.executionDomain().bindSchedulerWakeup(() -> signal(actor, false));
             actor.mailboxForRuntime().bindSchedulerWakeup(() -> signal(actor, false));
         } catch (RuntimeException failure) {
             synchronized (lock) {
-                states.remove(actor);
+                unregister(actor);
             }
             throw failure;
         }
         signal(actor, false);
+    }
+
+    /*
+     * D228-A1: removes the attachment of a State under the lock. A State still holding a live
+     * observation permit reverts to a non-schedulable placeholder instead, so a second permit
+     * cannot be granted before release; the release then drops it.
+     */
+    private void unregister(ProtosActor actor) {
+        State state = states.get(actor);
+        if (state == null) {
+            return;
+        }
+        if (state.queued) {
+            readyActors.remove(state);
+            state.queued = false;
+        }
+        state.controlTurns.clear();
+        if (state.observed) {
+            state.observationPlaceholder = true;
+        } else {
+            states.remove(actor);
+        }
     }
 
     /**
@@ -113,22 +221,14 @@ public final class ProtosActorScheduler {
     /** Removes a terminal/unpublished Actor from this scheduler; queued work is not transferred. */
     public void detach(ProtosActor actor) {
         synchronized (lock) {
-            State state = states.remove(actor);
-            if (state == null) {
-                return;
-            }
-            if (state.queued) {
-                readyActors.remove(state);
-                state.queued = false;
-            }
-            state.controlTurns.clear();
+            unregister(actor);
         }
     }
 
     private State requireState(ProtosActor actor) {
         Objects.requireNonNull(actor, "actor");
         State state = states.get(actor);
-        if (state == null) {
+        if (state == null || state.observationPlaceholder) {
             throw new IllegalStateException("Actor is not attached to this scheduler");
         }
         return state;
@@ -138,10 +238,11 @@ public final class ProtosActorScheduler {
         boolean startWorker = false;
         synchronized (lock) {
             State state = states.get(actor);
-            if (state == null) {
+            if (state == null || state.observationPlaceholder) {
                 return;
             }
-            if (!state.queued && !state.running && hasSchedulableWork(state)) {
+            if (!state.queued && !state.running && !state.observed
+                    && hasSchedulableWork(state)) {
                 state.queued = true;
                 readyActors.addLast(state);
             }
@@ -185,7 +286,8 @@ public final class ProtosActorScheduler {
             } finally {
                 synchronized (lock) {
                     state.running = false;
-                    if (states.get(state.actor) == state && hasSchedulableWork(state)) {
+                    if (states.get(state.actor) == state && !state.observed
+                            && hasSchedulableWork(state)) {
                         state.queued = true;
                         readyActors.addLast(state);
                     } else if (state.actor.lifecycleState()

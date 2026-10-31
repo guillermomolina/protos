@@ -59,16 +59,64 @@ On a terminal, press TAB to complete:
   including names visible in its actual lexical-parent chain.
 - Additional identifiers and language syntax only where the Protos parser and
   static analyzer can establish a valid completion position.
+- Slot names after `name.` or `this.`, including slots the receiver inherits
+  through ordinary delegation.
 
 For example, after `sessionVariable: 42`, typing `sess` and pressing TAB
 can complete the existing name to `sessionVariable`. Completion also supports
 editing inside an identifier and within expressions where the parser proves
 the cursor position safe.
 
-Completion reads binding **names**, not their values. It does not execute
-guest expressions, inspect dynamic receiver members, import modules, search
-files or infer names from previous commands. Removing a binding changes what
+Completion of a bare name reads binding **names**, not their values. It does
+not execute guest expressions, import modules, search files or infer names from
+previous commands. Removing a binding changes what
 the next TAB can suggest; a binding whose value is `null` is still present.
+
+#### Selector completion
+
+After a member-access dot, TAB offers the slot names of the receiver and of its
+delegation ancestors up to `Object`:
+
+```protos
+animal: {
+    alive: true
+    speak: () => { "..." }
+}
+dog: animal {
+    name: "Rex"
+    method: () => { "fetch" }
+}
+```
+
+Typing `dog.met` and pressing TAB completes to `dog.method`; `dog.` followed by
+TAB lists `method` and `name` (own slots) before `alive` and `speak` (delegated
+slots), and then the slots inherited from `Object`. A slot defined on `dog`
+hides a slot with the same name on `animal`. Within each delegation level names
+are ordered by Unicode scalar value. Data slots and Closure-valued slots are
+offered alike: completing a name does not prove that reading or calling it will
+succeed.
+
+The receiver must be an existing lexical binding name or `this`, optionally in
+parentheses, as in `(dog).met` or `((this)).met`. A name that is not currently
+bound offers nothing; there is no fallback to `this`. Completion works while
+editing inside a selector and inside a larger expression such as
+`print(dog.met)`, but not for assignment or slot-creation targets such as
+`dog.name = ...`.
+
+No selector completion is offered for computed receivers: calls
+(`makeDog().me`), imports, indexing (`items[0].me`), member chains
+(`dog.owner.na`), literals, object or collection constructions, `context`,
+`super`, or foreign values.
+
+Selector completion never executes guest code. TAB reads only the value of the
+one present lexical binding that names the receiver, then enumerates slot
+**names** along the ordinary delegation chain; it does not read slot values or
+call `slotNames()`, `parent()`, getters or methods.
+
+Selector completion has fixed resource limits per TAB and fails closed: while
+the REPL is busy evaluating, after its Process has ended, or when the receiver
+has too many slot names or delegation ancestors, TAB offers no selectors and
+leaves the input unchanged. At most 256 selector suggestions are shown.
 
 Completion is conservative: unfinished or invalid source may have no
 suggestions. An unmatched TAB leaves the input intact. Multiline input is

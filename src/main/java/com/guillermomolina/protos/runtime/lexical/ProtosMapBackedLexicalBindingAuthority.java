@@ -177,6 +177,25 @@ final class ProtosMapBackedLexicalBindingAuthority
     }
 
     @Override
+    public boolean appendBindingNamesToBounded(
+            java.util.ArrayList<String> names,
+            int remainingBudget) {
+        Objects.requireNonNull(names, "names");
+        if (bindings == null) {
+            return true;
+        }
+        int appended = 0;
+        for (String name : bindings.keySet()) {
+            if (appended >= remainingBudget) {
+                return false;
+            }
+            names.add(name);
+            appended++;
+        }
+        return true;
+    }
+
+    @Override
     public void appendBindingsTo(
             java.util.ArrayList<String> names,
             java.util.ArrayList<Object> values) {

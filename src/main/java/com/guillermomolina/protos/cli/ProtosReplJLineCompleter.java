@@ -16,7 +16,9 @@
  */
 package com.guillermomolina.protos.cli;
 
+import com.guillermomolina.protos.analysis.ProtosStaticMemberCompletionSite;
 import java.util.List;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.Objects;
 import org.jline.reader.Candidate;
@@ -26,23 +28,28 @@ import org.jline.reader.LineReader;
 import org.jline.reader.ParsedLine;
 
 /**
- * JLine projection of the REPL meta-command catalog.
+ * JLine projection of REPL completion.
  *
- * <p>The adapter is deliberately limited to commands. Guest-source completion,
- * session bindings, runtime inspection and evaluation are not performed here.
- * This component is not installed on the public REPL until the owning
- * completion behavior has been approved.</p>
+ * <p>Meta-commands stay a separate context. For source, every syntactic
+ * decision belongs to {@link ProtosReplSourceCompletion}; this adapter only
+ * checks that JLine can replace the proven span within its word, transports
+ * candidates and never evaluates guest code. The D227 lexical-name provider and
+ * the D228-A1 selector provider are separate and lazy.</p>
  */
 final class ProtosReplJLineCompleter implements Completer {
     private final Supplier<String> pendingSource;
     private final Supplier<List<String>> liveBindingNames;
+    private final Function<ProtosStaticMemberCompletionSite,
+            List<ProtosReplSourceCompletion.MemberName>> selectorNames;
 
     // Retains the batch-3 commands-only adapter contract.
     ProtosReplJLineCompleter() {
         pendingSource = null;
         liveBindingNames = null;
+        selectorNames = null;
     }
 
+    // Retains the D227-A1 contract: no approved selector provider.
     ProtosReplJLineCompleter(
             Supplier<String> pendingSource,
             Supplier<List<String>> liveBindingNames) {
@@ -50,6 +57,20 @@ final class ProtosReplJLineCompleter implements Completer {
                 Objects.requireNonNull(pendingSource, "pendingSource");
         this.liveBindingNames =
                 Objects.requireNonNull(liveBindingNames, "liveBindingNames");
+        this.selectorNames = null;
+    }
+
+    ProtosReplJLineCompleter(
+            Supplier<String> pendingSource,
+            Supplier<List<String>> liveBindingNames,
+            Function<ProtosStaticMemberCompletionSite,
+                    List<ProtosReplSourceCompletion.MemberName>> selectorNames) {
+        this.pendingSource =
+                Objects.requireNonNull(pendingSource, "pendingSource");
+        this.liveBindingNames =
+                Objects.requireNonNull(liveBindingNames, "liveBindingNames");
+        this.selectorNames =
+                Objects.requireNonNull(selectorNames, "selectorNames");
     }
 
     @Override
@@ -96,7 +117,8 @@ final class ProtosReplJLineCompleter implements Completer {
                     pendingSource.get(),
                     line.line(),
                     cursor,
-                    liveBindingNames.get());
+                    liveBindingNames,
+                    selectorNames);
             if (completion.isEmpty()) {
                 return;
             }
@@ -119,6 +141,8 @@ final class ProtosReplJLineCompleter implements Completer {
                     case LIVE_BINDING -> "session binding";
                     case PROVEN_BINDING -> "proven local";
                     case SYNTAX -> "Protos syntax";
+                    case MEMBER_OWN -> "own slot";
+                    case MEMBER_DELEGATED -> "delegated slot";
                 };
 
                 // complete=false: do not append whitespace after TAB.

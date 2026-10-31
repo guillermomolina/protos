@@ -81,6 +81,14 @@ public class ProtosObjectValue implements TruffleObject {
         }
 
         @Override
+        public boolean appendBindingNamesToBounded(
+                java.util.ArrayList<String> names,
+                int remainingBudget) {
+            Objects.requireNonNull(names, "names");
+            return true;
+        }
+
+        @Override
         public void appendBindingsTo(
                 java.util.ArrayList<String> names,
                 java.util.ArrayList<Object> values) {
@@ -382,6 +390,26 @@ public class ProtosObjectValue implements TruffleObject {
             ProtosLexicalBindingAuthorityCalls.appendNamesTo(
                     lexicalBindingAuthority, names);
         }
+    }
+
+    /**
+     * D228-A1 bounded names-only projection of current local bindings for
+     * REPL selector completion. No guest values are read, no delegation is
+     * traversed and no storage is materialized.
+     *
+     * @return {@code false} when the PRESENT names exceed
+     *     {@code remainingBudget}; {@code names} then holds a partial prefix
+     *     that the caller must discard
+     */
+    public final boolean appendLocalBindingNamesToBounded(
+            java.util.ArrayList<String> names,
+            int remainingBudget) {
+        Objects.requireNonNull(names, "names");
+        if (lexicalBindingAuthority == EMPTY_LEXICAL_BINDINGS) {
+            return true;
+        }
+        return ProtosLexicalBindingAuthorityCalls.appendNamesToBounded(
+                lexicalBindingAuthority, names, remainingBudget);
     }
 
     public final void appendLocalBindingsTo(

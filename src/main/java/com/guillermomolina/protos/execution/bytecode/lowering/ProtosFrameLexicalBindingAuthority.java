@@ -548,6 +548,52 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         }
     }
 
+    @TruffleBoundary
+    @Override
+    public boolean appendBindingNamesToBounded(
+            java.util.ArrayList<String> names,
+            int remainingBudget) {
+        Objects.requireNonNull(names, "names");
+        BytecodeNode bytecodeNode = currentBytecodeNode();
+        int appended = 0;
+
+        if (establishmentOrder == null) {
+            for (int ordinal = 0;
+                    ordinal < frameBackedLayout.length();
+                    ordinal++) {
+                if (!frameBackedLocals.isCleared(
+                        bytecodeNode, frame, ordinal)) {
+                    if (appended >= remainingBudget) {
+                        return false;
+                    }
+                    names.add(frameBackedLayout.nameAt(ordinal));
+                    appended++;
+                }
+            }
+            return true;
+        }
+
+        for (String name : establishmentOrder) {
+            Integer offset = frameBackedLayout.offsetOf(name);
+            boolean present;
+            if (offset != null) {
+                present = !frameBackedLocals.isCleared(
+                        bytecodeNode, frame, offset);
+            } else {
+                present = dynamicOverflow != null
+                        && dynamicOverflow.containsKey(name);
+            }
+            if (present) {
+                if (appended >= remainingBudget) {
+                    return false;
+                }
+                names.add(name);
+                appended++;
+            }
+        }
+        return true;
+    }
+
     @Override
     public void appendBindingsTo(
             java.util.ArrayList<String> names,

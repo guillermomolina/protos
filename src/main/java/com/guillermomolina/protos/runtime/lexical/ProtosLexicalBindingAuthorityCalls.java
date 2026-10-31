@@ -61,6 +61,14 @@ final class ProtosLexicalBindingAuthorityCalls {
     }
 
     @TruffleBoundary
+    static boolean appendNamesToBounded(
+            ProtosLexicalBindingAuthority authority,
+            ArrayList<String> names,
+            int remainingBudget) {
+        return authority.appendBindingNamesToBounded(names, remainingBudget);
+    }
+
+    @TruffleBoundary
     static void appendTo(
             ProtosLexicalBindingAuthority authority,
             ArrayList<String> names,

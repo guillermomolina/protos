@@ -133,6 +133,22 @@ public final class ProtosStaticAnalysisCore {
     }
 
     /**
+     * Proves the D228-A1 REPL selector-completion site for one cursor offset in
+     * the supplied immutable snapshot.
+     *
+     * <p>Syntactic only: the result identifies the replaceable selector span and
+     * a receiver that is, through grouping alone, a lexical name or {@code this}.
+     * No runtime state is consulted and no candidates are produced. A position
+     * that is not unambiguously such a site is an ordinary empty result.</p>
+     */
+    public Optional<ProtosStaticMemberCompletionSite> memberCompletionSite(
+            ProtosDocumentSnapshot snapshot,
+            int sourceOffset) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        return ProtosStaticMemberCompletion.find(snapshot, sourceOffset);
+    }
+
+    /**
      * Projects the LM010-C static signature help for one cursor offset in the
      * supplied immutable snapshot.
      *

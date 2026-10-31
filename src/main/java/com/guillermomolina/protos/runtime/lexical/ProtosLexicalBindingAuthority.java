@@ -61,6 +61,19 @@ public interface ProtosLexicalBindingAuthority {
      */
     void appendBindingNamesTo(java.util.ArrayList<String> names);
 
+    /**
+     * D228-A1 cold tooling projection: append at most {@code remainingBudget}
+     * PRESENT local binding names, under the same no-read, no-storage and
+     * no-materialization rules as {@link #appendBindingNamesTo}.
+     *
+     * @return {@code true} when every PRESENT name fit in the budget;
+     *     {@code false} as soon as one more name would exceed it, in which
+     *     case enumeration stops without visiting the remaining storage
+     */
+    boolean appendBindingNamesToBounded(
+            java.util.ArrayList<String> names,
+            int remainingBudget);
+
     void appendBindingsTo(
             java.util.ArrayList<String> names,
             java.util.ArrayList<Object> values);

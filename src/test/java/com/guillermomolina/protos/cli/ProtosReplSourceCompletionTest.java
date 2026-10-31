@@ -18,8 +18,11 @@ package com.guillermomolina.protos.cli;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.guillermomolina.protos.analysis.ProtosStaticMemberCompletionSite;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 final class ProtosReplSourceCompletionTest {
@@ -28,6 +31,25 @@ final class ProtosReplSourceCompletionTest {
             String... liveNames) {
         return ProtosReplSourceCompletion.complete(
                 pending, line, cursor, List.of(liveNames));
+    }
+
+    private static ProtosReplSourceCompletion.MemberName own(String name) {
+        return new ProtosReplSourceCompletion.MemberName(name, true);
+    }
+
+    private static ProtosReplSourceCompletion.MemberName delegated(String name) {
+        return new ProtosReplSourceCompletion.MemberName(name, false);
+    }
+
+    private static Optional<ProtosReplSourceCompletion.Result> member(
+            String pending, String line, int cursor,
+            ProtosReplSourceCompletion.MemberName... names) {
+        return ProtosReplSourceCompletion.complete(
+                pending, line, cursor,
+                () -> {
+                    throw new AssertionError("lexical provider used for a selector");
+                },
+                site -> List.of(names));
     }
 
     private static List<String> labels(
@@ -81,6 +103,7 @@ final class ProtosReplSourceCompletionTest {
 
     @Test
     void excludesMembersDeclarationsAndInvalidGuestNames() {
+        // Without an approved selector provider a member site stays empty.
         assertTrue(complete(
                 "", "object.member", 13, "member").isEmpty());
         assertTrue(complete(
@@ -152,5 +175,139 @@ final class ProtosReplSourceCompletionTest {
 
         assertTrue(complete(
                 "x".repeat(65536), "x", 1, "x").isEmpty());
+    }
+
+    @Test
+    void parserProvenSelectorOffersProviderNamesWithProvenance() {
+        AtomicInteger observed = new AtomicInteger();
+        List<ProtosStaticMemberCompletionSite> sites = new ArrayList<>();
+        var result = ProtosReplSourceCompletion.complete(
+                "", "object.mem", 10,
+                () -> List.of("memberLexical"),
+                site -> {
+                    observed.incrementAndGet();
+                    sites.add(site);
+                    return List.of(own("member"), delegated("memo"),
+                            delegated("other"));
+                }).orElseThrow();
+
+        assertEquals(1, observed.get());
+        assertEquals("object", sites.get(0).receiverName());
+        assertEquals(7, result.replaceStart());
+        assertEquals(10, result.replaceEnd());
+        assertEquals(List.of("member", "memo"), labels(result));
+        assertEquals(
+                ProtosReplSourceCompletion.Kind.MEMBER_OWN,
+                result.candidates().get(0).kind());
+        assertEquals(
+                ProtosReplSourceCompletion.Kind.MEMBER_DELEGATED,
+                result.candidates().get(1).kind());
+    }
+
+    @Test
+    void ownAndDelegatedOrderAndShadowingFollowTheProvider() {
+        var result = member("", "dog.", 4,
+                own("name"), own("speak"),
+                delegated("age"), delegated("speak"))
+                .orElseThrow();
+
+        assertEquals(List.of("name", "speak", "age"), labels(result));
+        assertEquals(
+                ProtosReplSourceCompletion.Kind.MEMBER_OWN,
+                result.candidates().get(1).kind());
+    }
+
+    @Test
+    void selectorFilteringUsesTextBeforeAndAfterCursor() {
+        var middle = member("", "dog.mthod", 5,
+                own("method"), own("mthod"), own("mod"))
+                .orElseThrow();
+        assertEquals(4, middle.replaceStart());
+        assertEquals(9, middle.replaceEnd());
+        assertEquals(List.of("method", "mthod"), labels(middle));
+
+        assertTrue(member("", "dog.xy", 5, own("method")).isEmpty());
+    }
+
+    @Test
+    void selectorCandidatesAreLimitedTo256AfterOrdering() {
+        var names = new ProtosReplSourceCompletion.MemberName[300];
+        for (int index = 0; index < names.length; index++) {
+            names[index] = own(String.format("m%03d", index));
+        }
+        var result = member("", "dog.m", 5, names).orElseThrow();
+
+        assertEquals(256, result.candidates().size());
+        assertEquals("m000", result.candidates().get(0).label());
+        assertEquals("m255", result.candidates().get(255).label());
+    }
+
+    @Test
+    void reservedSelectorsAreValidMemberNamesButNotJunk() {
+        var result = member("", "dog.", 4,
+                own("this"), own("super"), own("null"),
+                own("two words"), own("1x"))
+                .orElseThrow();
+        assertEquals(List.of("this", "super", "null"), labels(result));
+
+        var reserved = member("", "dog.th", 6, own("this"), own("thing"))
+                .orElseThrow();
+        assertEquals(List.of("this", "thing"), labels(reserved));
+    }
+
+    @Test
+    void multilinePendingSelectorUsesLineRelativeOffsets() {
+        var result = member(
+                "f: (dog) => {",
+                "  dog.sp\n}",
+                8,
+                own("speak")).orElseThrow();
+
+        assertEquals(6, result.replaceStart());
+        assertEquals(8, result.replaceEnd());
+        assertEquals(List.of("speak"), labels(result));
+    }
+
+    @Test
+    void rejectedPositionsInvokeNoProvider() {
+        AtomicInteger lexical = new AtomicInteger();
+        AtomicInteger selectors = new AtomicInteger();
+        for (String line : List.of(
+                "makeDog().me", "dog.child.me", "super.me()",
+                "context.me", "\"dog.me\"", "// dog.me",
+                "dog.me = 1", "array[0].me")) {
+            var result = ProtosReplSourceCompletion.complete(
+                    "", line, line.endsWith(")") || line.endsWith("1")
+                            ? line.indexOf("me") + 2
+                            : line.length(),
+                    () -> {
+                        lexical.incrementAndGet();
+                        return List.of("me", "meow");
+                    },
+                    site -> {
+                        selectors.incrementAndGet();
+                        return List.of(own("meow"));
+                    });
+            assertTrue(result.isEmpty(), line);
+        }
+        assertEquals(0, lexical.get());
+        assertEquals(0, selectors.get());
+    }
+
+    @Test
+    void lexicalPathIsUnchangedAndNeverAsksForSelectors() {
+        AtomicInteger selectors = new AtomicInteger();
+        var withProvider = ProtosReplSourceCompletion.complete(
+                "", "f: (first, second) => fir", 25,
+                () -> List.of("fire", "first"),
+                site -> {
+                    selectors.incrementAndGet();
+                    return List.of();
+                }).orElseThrow();
+        var legacy = complete("", "f: (first, second) => fir", 25,
+                "fire", "first").orElseThrow();
+
+        assertEquals(legacy, withProvider);
+        assertEquals(0, selectors.get());
     }
 }

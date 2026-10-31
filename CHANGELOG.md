@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.428-SNAPSHOT
+
+- `I134` (D228-A1): add REPL Tab completion of receiver selectors.
+  - Complete `name.selector` and `this.selector`, optionally parenthesized,
+    with the receiver's own and delegated slot names along ordinary
+    delegation up to `Object`; nearest definitions shadow, and each level is
+    ordered by Unicode scalar value.
+  - Prove the site with the real lexer and parser only; computed receivers,
+    member chains, `context`, `super`, literals, constructions, imports,
+    foreign values and mutation targets yield no candidates.
+  - Read only the one PRESENT lexical binding naming the receiver and
+    enumerate names without reading slot values or executing guest code,
+    within 64 delegation nodes, 1,024 examined names and 256 presented
+    candidates.
+  - Fail closed unless persistent evaluation, RootActor direct entries and
+    scheduler segments are all excluded through non-blocking admission; add
+    a scheduler observation permit and a direct-entry observation barrier.
+  - Add analysis, source-completion, JLine, scheduler-permit and REPL
+    observation tests; document selector completion and reconcile the PE
+    guard baselines for the bounded name-enumeration sites.
+
 ## 0.3.427-SNAPSHOT
 
 - `CLI011` (#988, D227-A1): add interactive REPL Tab completion with
