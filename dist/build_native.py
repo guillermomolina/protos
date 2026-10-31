@@ -265,8 +265,16 @@ def native_build_march(root: Path) -> str:
     except ET.ParseError as exc:
         fail("pom.xml is not valid XML: " + str(exc))
 
+    native_profiles = [
+        profile
+        for profile in tree.findall("./{*}profiles/{*}profile")
+        if (profile.findtext("{*}id") or "").strip() == "native"
+    ]
+    if len(native_profiles) != 1:
+        fail("expected exactly one Maven native profile")
+
     matches: list[str] = []
-    for element in tree.iter():
+    for element in native_profiles[0].iter():
         if element.tag.rsplit("}", 1)[-1] != "buildArg":
             continue
         value = (element.text or "").strip()
