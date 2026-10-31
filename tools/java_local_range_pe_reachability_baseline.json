@@ -549,6 +549,36 @@
         "ProtosBytecodeRootNode.unprojectedFrameNativeBindingsForTooling(BytecodeNode,int,MaterializedFrame,ProtosActivation)"
       ],
       "rationale": "every PE path is cut by @TruffleBoundary ProtosBytecodeRootNode.unprojectedFrameNativeBindingsForTooling"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/lowering/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "appendBindingNamesTo(ArrayList)",
+      "operation": "isCleared",
+      "index": "offset",
+      "classification": "TRUFFLE_BOUNDARY",
+      "occurrence": 0,
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
+      "pe_call_chain": [
+        "ProtosFrameLexicalBindingAuthority.appendBindingNamesTo(ArrayList)"
+      ],
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.appendBindingNamesTo"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/lowering/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "appendBindingNamesTo(ArrayList)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "TRUFFLE_BOUNDARY",
+      "occurrence": 0,
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
+      "pe_call_chain": [
+        "ProtosFrameLexicalBindingAuthority.appendBindingNamesTo(ArrayList)"
+      ],
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.appendBindingNamesTo"
     }
   ]
 }

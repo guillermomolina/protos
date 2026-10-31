@@ -409,6 +409,30 @@
       "receiver_class": "FIELD_DERIVED_RECEIVER",
       "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
       "pe_reachability": "BOUNDARY_CUT"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/lowering/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "appendBindingNamesTo(ArrayList)",
+      "operation": "isCleared",
+      "receiver": "frameBackedLocals",
+      "bytecode_node": "bytecodeNode",
+      "occurrence": 0,
+      "receiver_class": "FIELD_DERIVED_RECEIVER",
+      "bytecode_node_class": "CURRENT_ROOT_DERIVED_BYTECODE_NODE",
+      "pe_reachability": "BOUNDARY_CUT"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/lowering/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "appendBindingNamesTo(ArrayList)",
+      "operation": "isCleared",
+      "receiver": "frameBackedLocals",
+      "bytecode_node": "bytecodeNode",
+      "occurrence": 1,
+      "receiver_class": "FIELD_DERIVED_RECEIVER",
+      "bytecode_node_class": "CURRENT_ROOT_DERIVED_BYTECODE_NODE",
+      "pe_reachability": "BOUNDARY_CUT"
     }
   ]
 }

@@ -169,6 +169,14 @@ final class ProtosMapBackedLexicalBindingAuthority
     }
 
     @Override
+    public void appendBindingNamesTo(java.util.ArrayList<String> names) {
+        Objects.requireNonNull(names, "names");
+        if (bindings != null) {
+            names.addAll(bindings.keySet());
+        }
+    }
+
+    @Override
     public void appendBindingsTo(
             java.util.ArrayList<String> names,
             java.util.ArrayList<Object> values) {

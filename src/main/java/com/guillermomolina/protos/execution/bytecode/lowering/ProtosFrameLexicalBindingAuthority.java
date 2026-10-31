@@ -516,6 +516,38 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         return Collections.unmodifiableMap(snapshot);
     }
 
+    @TruffleBoundary
+    @Override
+    public void appendBindingNamesTo(java.util.ArrayList<String> names) {
+        Objects.requireNonNull(names, "names");
+        BytecodeNode bytecodeNode = currentBytecodeNode();
+
+        if (establishmentOrder == null) {
+            for (int ordinal = 0;
+                    ordinal < frameBackedLayout.length();
+                    ordinal++) {
+                if (!frameBackedLocals.isCleared(
+                        bytecodeNode, frame, ordinal)) {
+                    names.add(frameBackedLayout.nameAt(ordinal));
+                }
+            }
+            return;
+        }
+
+        for (String name : establishmentOrder) {
+            Integer offset = frameBackedLayout.offsetOf(name);
+            if (offset != null) {
+                if (!frameBackedLocals.isCleared(
+                        bytecodeNode, frame, offset)) {
+                    names.add(name);
+                }
+            } else if (dynamicOverflow != null
+                    && dynamicOverflow.containsKey(name)) {
+                names.add(name);
+            }
+        }
+    }
+
     @Override
     public void appendBindingsTo(
             java.util.ArrayList<String> names,

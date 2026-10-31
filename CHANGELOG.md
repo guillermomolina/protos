@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.427-SNAPSHOT
+
+- `CLI011` (#988, D227-A1): add interactive REPL Tab completion with
+  JLine editing and parser-authoritative Protos candidate selection.
+  - Complete REPL meta-commands and currently present lexical binding
+    names, combining live session visibility with independent static
+    parser/lexer completion proofs.
+  - Enumerate lexical names without reading guest values, materializing
+    deferred contexts, evaluating receivers or importing modules.
+  - Coordinate persistent RootActor evaluation and on-demand name
+    observation; unavailable or contended observations fail closed.
+  - Preserve cursor-in-middle editing, multiline input, history,
+    bracketed paste, Ctrl-C/Ctrl-D and non-interactive stream behavior.
+  - Add runtime, source-completion, JLine and lexical-authority tests;
+    validate interactive JVM and Native CLI behavior.
+  - Document Tab completion and its conservative limitations, and
+    reconcile the PE guard baselines for the two bounded name-enumeration
+    sites.
+
 ## 0.3.426-SNAPSHOT
 
 - `D225-B1` (#992): explicit opt-in RootActor message-service bootstrap for

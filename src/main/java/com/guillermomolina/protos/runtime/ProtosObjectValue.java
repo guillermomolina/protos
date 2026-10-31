@@ -75,6 +75,12 @@ public class ProtosObjectValue implements TruffleObject {
         }
 
         @Override
+        public void appendBindingNamesTo(
+                java.util.ArrayList<String> names) {
+            Objects.requireNonNull(names, "names");
+        }
+
+        @Override
         public void appendBindingsTo(
                 java.util.ArrayList<String> names,
                 java.util.ArrayList<Object> values) {
@@ -363,6 +369,19 @@ public class ProtosObjectValue implements TruffleObject {
         return lexicalBindingAuthority == EMPTY_LEXICAL_BINDINGS
                 ? Map.of()
                 : ProtosLexicalBindingAuthorityCalls.snapshot(lexicalBindingAuthority);
+    }
+
+    /**
+     * Backend-private names-only projection of current local bindings.
+     * No guest values are read and no delegation is traversed.
+     */
+    public final void appendLocalBindingNamesTo(
+            java.util.ArrayList<String> names) {
+        Objects.requireNonNull(names, "names");
+        if (lexicalBindingAuthority != EMPTY_LEXICAL_BINDINGS) {
+            ProtosLexicalBindingAuthorityCalls.appendNamesTo(
+                    lexicalBindingAuthority, names);
+        }
     }
 
     public final void appendLocalBindingsTo(

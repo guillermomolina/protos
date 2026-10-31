@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -89,8 +90,19 @@ final class ProtosBug013FrameLexicalAuthorityMaterializationTest {
 
                 ProtosObjectValue value =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
+                var before = new java.util.ArrayList<String>();
+                authority.appendBindingNamesTo(before);
+                assertEquals(List.of(), before,
+                        "a reserved frame local is not yet a binding");
+
                 authority.putBinding("x", value);
                 assertTrue(authority.containsBinding("x"));
+
+                var present = new java.util.ArrayList<String>();
+                authority.appendBindingNamesTo(present);
+                assertEquals(List.of("x"), present);
+                assertNull(privateField(activation, "context"),
+                        "enumerating names must not materialize Context");
                 assertSame(value, authority.readBinding("x").orElseThrow());
 
                 ProtosExecutionContextValue observedContext =
@@ -103,6 +115,10 @@ final class ProtosBug013FrameLexicalAuthorityMaterializationTest {
                 assertSame(
                         value,
                         observedContext.readLocalSlot("x").orElseThrow());
+
+                var observedNames = new java.util.ArrayList<String>();
+                observedContext.appendLocalBindingNamesTo(observedNames);
+                assertEquals(List.of("x"), observedNames);
             } finally {
                 context.leave();
             }

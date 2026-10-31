@@ -55,6 +55,12 @@ public interface ProtosLexicalBindingAuthority {
      */
     Map<String, Object> bindingsSnapshot();
 
+    /**
+     * Append PRESENT local binding names without reading guest values,
+     * creating backing storage or materializing guest contexts.
+     */
+    void appendBindingNamesTo(java.util.ArrayList<String> names);
+
     void appendBindingsTo(
             java.util.ArrayList<String> names,
             java.util.ArrayList<Object> values);

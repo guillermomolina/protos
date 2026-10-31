@@ -19,6 +19,8 @@ package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -726,6 +728,51 @@ public final class ProtosActivation {
     /** Innermost captured lexical scope, or {@code null} when none is captured. */
     public ProtosLexicalEnvironment capturedLexicalEnvironmentForRuntime() {
         return capturedEnvironment;
+    }
+
+    /**
+     * Names-only lexical observation for an already-admitted runtime caller.
+     *
+     * <p>This method does not establish Actor ownership or enter a Polyglot
+     * Context. The hosting caller must ensure both before invoking it.
+     * It never reads guest values, materializes deferred guest Contexts,
+     * traverses delegation, or infers names from source history.</p>
+     */
+    public List<String> lexicalBindingNamesForRuntime() {
+        ArrayList<String> names = new ArrayList<>();
+
+        ProtosObjectValue current = materializedContextOrNullForRuntime();
+        if (current != null) {
+            current.appendLocalBindingNamesTo(names);
+        } else {
+            ProtosLexicalBindingAuthority authority =
+                    currentLexicalBindingAuthorityForRuntime();
+            if (authority == null) {
+                return List.of();
+            }
+            ProtosLexicalBindingAuthorityCalls.appendNamesTo(
+                    authority, names);
+        }
+
+        for (ProtosLexicalEnvironment scope = capturedEnvironment;
+                scope != null;
+                scope = scope.outer()) {
+            ProtosObjectValue existing =
+                    scope.materializedContextOrNullForRuntime();
+            if (existing != null) {
+                existing.appendLocalBindingNamesTo(names);
+            } else {
+                ProtosLexicalBindingAuthority authority =
+                        scope.lexicalBindingAuthorityForRuntime();
+                if (authority == null) {
+                    return List.of();
+                }
+                ProtosLexicalBindingAuthorityCalls.appendNamesTo(
+                        authority, names);
+            }
+        }
+
+        return List.copyOf(new LinkedHashSet<>(names));
     }
 
     /**

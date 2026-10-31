@@ -25,9 +25,11 @@ import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.concurrent.locks.ReentrantLock;
 import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.Value;
 
@@ -46,6 +48,13 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
     private final ProtosPolyglotExecutionContext context;
     private final ProtosForeignProviderProcessLifecycle foreignProviders;
     private volatile Throwable foreignCleanupFailure;
+
+    /**
+     * D227-A1: admission shared by standalone persistent RootActor
+     * evaluation and its completion observation. Not a cross-Actor lock.
+     */
+    private final ReentrantLock persistentRootActorGate =
+            new ReentrantLock();
 
     ProtosPolyglotProcessContext(
             ProtosPolyglotRuntimeHost runtimeHost,
@@ -87,7 +96,65 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
     public Object evaluatePersistent(Source source, ProtosActivation activation) {
         Objects.requireNonNull(source, "source");
         requireActivationProcess(activation);
-        return context.evaluatePersistent(source, activation);
+
+        // Other Actors keep their existing independent execution path.
+        if (activation.executionDomain()
+                .currentActorForRuntime().orElse(null)
+                != process.rootActorForRuntime()) {
+            return context.evaluatePersistent(source, activation);
+        }
+
+        persistentRootActorGate.lock();
+        try {
+            return context.evaluatePersistent(source, activation);
+        } finally {
+            persistentRootActorGate.unlock();
+        }
+    }
+
+    /**
+     * D227-A1: read-only live lexical names for the standalone REPL.
+     *
+     * <p>The calling path must already own this REPL's activation.
+     * Concurrent RootActor evaluation, Process termination and unavailable
+     * Polyglot Contexts fail closed, without evaluating guest expressions.
+     * No values, delegated names or other Actors are inspected.</p>
+     */
+    public List<String> tryObservePersistentLexicalNamesForRuntime(
+            ProtosActivation activation) {
+        if (activation == null || !persistentRootActorGate.tryLock()) {
+            return List.of();
+        }
+        try {
+            if (!eligibleForPersistentLexicalObservation(activation)) {
+                return List.of();
+            }
+            return context.callEntered(() -> {
+                if (!eligibleForPersistentLexicalObservation(activation)) {
+                    return List.of();
+                }
+                List<String> names =
+                        activation.lexicalBindingNamesForRuntime();
+                return eligibleForPersistentLexicalObservation(activation)
+                        ? names
+                        : List.of();
+            });
+        } catch (RuntimeException unavailable) {
+            return List.of();
+        } finally {
+            persistentRootActorGate.unlock();
+        }
+    }
+
+    private boolean eligibleForPersistentLexicalObservation(
+            ProtosActivation activation) {
+        return process.lifecycleState()
+                        == ProtosProcessRuntime.LifecycleState.RUNNING
+                && process.rootActorForRuntime().lifecycleState()
+                        == ProtosActor.LifecycleState.INITIALIZING
+                && activation.executionDomain()
+                        .currentActorForRuntime().orElse(null)
+                        == process.rootActorForRuntime();
     }
 
     /**

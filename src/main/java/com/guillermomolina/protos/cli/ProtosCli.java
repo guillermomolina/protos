@@ -50,6 +50,12 @@ public final class ProtosCli {
      */
     static final String IMPLEMENTATION_VERSION_ENV = "PROTOS_IMPLEMENTATION_VERSION";
 
+    static final String REPL_HELP_COMMAND = ":help";
+    static final String REPL_QUIT_COMMAND = ":quit";
+    static final String REPL_EXIT_COMMAND = ":exit";
+    static final List<String> REPL_COMMANDS =
+            List.of(REPL_HELP_COMMAND, REPL_QUIT_COMMAND, REPL_EXIT_COMMAND);
+
     private static final Set<String> SUBCOMMANDS =
             Set.of("language-server", "debug", "run", "package", "test", "format", "lint");
     private static final Set<String> PACKAGE_METADATA_FILES =
@@ -1316,13 +1322,20 @@ public final class ProtosCli {
                         .system(true)
                         .streams(System.in, System.out)
                         .build()) {
+            StringBuilder pending = new StringBuilder();
             LineReader reader =
                     LineReaderBuilder.builder()
                             .terminal(terminal)
                             .history(new ReplHistory())
+                            .completer(new ProtosReplJLineCompleter(
+                                    pending::toString,
+                                    () -> s.processContext()
+                                            .tryObservePersistentLexicalNamesForRuntime(
+                                                    s.activation())))
                             .option(LineReader.Option.BRACKETED_PASTE, true)
+                            .option(LineReader.Option.COMPLETE_IN_WORD, true)
+                            .option(LineReader.Option.COMPLETE_MATCHER_TYPO, false)
                             .build();
-            StringBuilder pending = new StringBuilder();
             for (;;) {
                 try {
                     String input =
@@ -1374,7 +1387,7 @@ public final class ProtosCli {
             pending.setLength(0);
             return ReplInputResult.EXIT;
         }
-        if (input.equals(":help")) {
+        if (input.equals(REPL_HELP_COMMAND)) {
             processReturnedInput(input, s, out, err);
             return pending.isEmpty()
                     ? ReplInputResult.COMPLETE
@@ -1394,12 +1407,13 @@ public final class ProtosCli {
             String input, Session s, PrintStream out, PrintStream err) {
         if (input.isBlank()) return ReplInputResult.COMPLETE;
         if (isExit(input)) return ReplInputResult.EXIT;
-        if (input.equals(":help")) {
+        if (input.equals(REPL_HELP_COMMAND)) {
             out.println(
                     ":help  show help\n"
                             + ":quit  exit\n"
                             + ":exit  exit\n"
                             + "Arrow keys edit lines and navigate session history.\n"
+                            + "Tab completes REPL commands and eligible Protos identifiers.\n"
                             + "Ctrl-A/Ctrl-E move to start/end; Ctrl-C cancels; Ctrl-D exits.\n"
                             + "Top-level context persists between evaluations.\n"
                             + "The REPL Process has an empty process.args() snapshot.");
@@ -1426,7 +1440,7 @@ public final class ProtosCli {
     }
 
     private static boolean isExit(String line) {
-        return line.equals(":quit") || line.equals(":exit");
+        return line.equals(REPL_QUIT_COMMAND) || line.equals(REPL_EXIT_COMMAND);
     }
 
     /*

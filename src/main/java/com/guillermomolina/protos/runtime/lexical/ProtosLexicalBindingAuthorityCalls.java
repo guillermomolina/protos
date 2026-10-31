@@ -54,6 +54,13 @@ final class ProtosLexicalBindingAuthorityCalls {
     }
 
     @TruffleBoundary
+    static void appendNamesTo(
+            ProtosLexicalBindingAuthority authority,
+            ArrayList<String> names) {
+        authority.appendBindingNamesTo(names);
+    }
+
+    @TruffleBoundary
     static void appendTo(
             ProtosLexicalBindingAuthority authority,
             ArrayList<String> names,

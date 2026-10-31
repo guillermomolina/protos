@@ -46,8 +46,37 @@ protos -e 'print(process.args().size())' a b c
   file, inside the entry file's directory tree. There is no current-directory
   fallback and no implicit `.protos` extension.
 
-The REPL supports line editing and history; `:help` lists its commands,
-`:quit` or Ctrl-D exits.
+The interactive REPL supports line editing, history and TAB completion.
+`:help` lists the REPL commands; `:quit`, `:exit` or Ctrl-D exits.
+Ctrl-C cancels the current input.
+
+### TAB completion in the REPL
+
+On a terminal, press TAB to complete:
+
+- REPL commands `:help`, `:quit` and `:exit`, when entering a command.
+- Currently present lexical binding names from the persistent REPL context,
+  including names visible in its actual lexical-parent chain.
+- Additional identifiers and language syntax only where the Protos parser and
+  static analyzer can establish a valid completion position.
+
+For example, after `sessionVariable: 42`, typing `sess` and pressing TAB
+can complete the existing name to `sessionVariable`. Completion also supports
+editing inside an identifier and within expressions where the parser proves
+the cursor position safe.
+
+Completion reads binding **names**, not their values. It does not execute
+guest expressions, inspect dynamic receiver members, import modules, search
+files or infer names from previous commands. Removing a binding changes what
+the next TAB can suggest; a binding whose value is `null` is still present.
+
+Completion is conservative: unfinished or invalid source may have no
+suggestions. An unmatched TAB leaves the input intact. Multiline input is
+handled using the pending source when its position can be established safely.
+
+TAB completion is available on the interactive terminal in both JVM and
+Native distributions. When the REPL receives piped input instead of a terminal,
+it uses its existing stream behavior without terminal completion.
 
 ### Inspection
 

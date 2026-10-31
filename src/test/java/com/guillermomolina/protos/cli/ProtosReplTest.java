@@ -22,6 +22,7 @@ import java.io.*;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class ProtosReplTest {
@@ -37,12 +38,27 @@ final class ProtosReplTest {
     }
 
     @Test
+    void replCommandCatalogPreservesExactExistingInputs() {
+        assertEquals(
+                List.of(":help", ":quit", ":exit"),
+                ProtosCli.REPL_COMMANDS);
+
+        R result = repl(String.join(System.lineSeparator(), ":help", ":exit", "1 + )", ""));
+        assertEquals(0, result.c);
+        assertTrue(result.o.contains(":help  show help"), result.o);
+        assertTrue(result.o.contains(":quit  exit"), result.o);
+        assertTrue(result.o.contains(":exit  exit"), result.o);
+        assertTrue(result.e.isBlank(), result.e);
+    }
+
+    @Test
     void persistenceCommandsEofAndRecovery() {
         R r = repl("x: 10\nx\n:help\nmissingName\n1 + 1\n:quit\n");
         assertEquals(0, r.c);
         assertTrue(r.o.contains("10\nprotos> 10\n"));
         assertTrue(r.o.contains(":help"));
         assertTrue(r.o.contains("Arrow keys"));
+        assertTrue(r.o.contains("Tab completes REPL commands and eligible Protos identifiers."));
         assertTrue(r.o.contains("2\n"));
         assertFalse(r.e.isBlank());
         assertEquals(0, repl("").c);
