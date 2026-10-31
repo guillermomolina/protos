@@ -1,11 +1,11 @@
 name: Tracked project work
-description: Maintainer-only intake for an already-allocated formal Protos work item; exploratory ideas and unresolved design belong in Discussions first.
+description: Maintainer-only intake for an already-allocated formal Protos work item; incubator ideas use Incubator idea, and community exploration or unresolved design belongs in Discussions.
 labels: ["status:inbox"]
 body:
   - type: markdown
     attributes:
       value: |
-        Maintainer use only: use this form only when the formal identifier has already been allocated under `AGENTS.md`. If you do not already have an allocated identifier, use Community request or Discussions instead.
+        Maintainer use only: use this form only when the formal identifier has already been allocated under `AGENTS.md`. If you do not already have an allocated identifier, use Community request or Discussions instead; maintainers record exploratory `INCxxx` ideas with Incubator idea.
 
         `spec/`, ratified `Dxxx` / `PLATxxx`, and repository blocker records remain
         authoritative where applicable. This Issue coordinates work; it cannot approve

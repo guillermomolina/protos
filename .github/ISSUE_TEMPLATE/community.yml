@@ -10,7 +10,8 @@ body:
         maintainer-allocated formal Protos work item.
 
         Language-design proposals, open-ended ideas, and questions belong in
-        GitHub Discussions. Reproducible defects should use the Bug report form,
+        GitHub Discussions; maintainers may later adopt one as a formal
+        incubator idea. Reproducible defects should use the Bug report form,
         and documentation corrections should use Documentation problem.
 
         Community requests enter Inbox without a formal `family:*` or scheduling

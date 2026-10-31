@@ -41,6 +41,7 @@ FORMAL_FAMILIES = (
     "CLI",
     "DOC",
     "AUD",
+    "INC",
     "LM",
     "I",
     "D",
@@ -941,6 +942,68 @@ def self_test():
     assert upstream_mock.ensured_family_labels == ["family:UPSTREAM"]
     assert (700, ("family:UPSTREAM",)) in upstream_mock.added_labels
 
+    assert parse_title_identifier(
+        "INC001 — Exploratory idea"
+    ) == {
+        "identifier": "INC001",
+        "family": "INC",
+    }
+    assert parse_title_identifier("INC001-A — Exploratory slice") == {
+        "identifier": "INC001-A",
+        "family": "INC",
+    }
+    assert parse_title_identifier("I031 — Object work")["family"] == "I"
+    assert parse_title_identifier("INC — missing number") is None
+    assert parse_title_identifier("INC01 — short number") is None
+
+    incubator_mock = MockApi()
+    incubator_mock.issues[810] = _mock_issue(
+        810,
+        "INC001 — Exploratory idea",
+        labels=["family:D", "status:inbox", "priority:p3"],
+    )
+    incubator = reconcile_issue(incubator_mock, incubator_mock.issues[810])
+    assert incubator["formal"]
+    assert incubator["family"] == "INC"
+    assert (810, "family:D") in incubator_mock.removed_labels
+    assert (810, ("family:INC",)) in incubator_mock.added_labels
+    assert incubator_mock.ensured_family_labels == ["family:INC"]
+    assert not incubator_mock.added_parents
+    incubator_labels = set(label_names(incubator_mock.issues[810]))
+    assert "status:inbox" in incubator_labels
+    assert "priority:p3" in incubator_labels
+
+    untrusted_incubator = MockApi()
+    untrusted_incubator.issues[995] = _mock_issue(
+        995,
+        "INC002 — Self-allocated idea",
+        labels=["status:inbox"],
+        association="CONTRIBUTOR",
+    )
+    result = reconcile_issue(
+        untrusted_incubator,
+        untrusted_incubator.issues[995],
+    )
+    assert result["kind"] == "untrusted-formal-candidate"
+    assert not untrusted_incubator.added_labels
+    assert not untrusted_incubator.removed_labels
+
+    incubator_duplicate = [
+        _mock_issue(810, "INC001 — First idea", labels=["family:INC"]),
+        _mock_issue(996, "INC001 — Racing idea", labels=["family:INC"]),
+    ]
+    try:
+        assert_no_identifier_collisions(incubator_duplicate)
+    except IntakeError as exc:
+        assert "INC001" in str(exc)
+        assert "owner=#810" in str(exc)
+    else:
+        raise AssertionError("duplicate INC identifier did not fail")
+    assert formal_identifier_collisions([
+        _mock_issue(810, "INC001 — Idea", labels=["family:INC"]),
+        _mock_issue(997, "I001 — Implementation", labels=["family:I"]),
+    ]) == {}
+
     mock.parents[318] = 287
     try:
         reconcile_issue(mock, mock.issues[318])
@@ -1156,6 +1219,9 @@ x
     print("FORMAL_PARENT_RECONCILIATION: PASS")
     print("TEST_FAMILY_RECONCILIATION: PASS")
     print("UPSTREAM_FAMILY_RECONCILIATION: PASS")
+    print("INC_FAMILY_RECONCILIATION: PASS")
+    print("UNTRUSTED_INC_CANDIDATE_NO_PROMOTION: PASS")
+    print("INC_IDENTIFIER_UNIQUENESS_FAIL_CLOSED: PASS")
     print("PARENT_CONFLICT_FAIL_CLOSED: PASS")
     print("UNTRUSTED_FORMAL_CANDIDATE_NO_PROMOTION: PASS")
     print("COMMUNITY_NO_FAMILY_PROMOTION: PASS")

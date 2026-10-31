@@ -1,0 +1,42 @@
+name: Incubator idea
+description: Maintainer-only intake for an experimental or speculative idea adopted as a formal INCxxx; community ideas belong in Discussions.
+labels: ["status:inbox"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Maintainer use only. You must enter the Issue title as
+        `INCxxx — Description`, with an identifier allocated under the
+        collision-safe allocation rule in `AGENTS.md`; intake recognizes the
+        formal idea only from that title. If you are not a maintainer, open a Discussion instead.
+
+        An incubator idea is exploratory and non-normative. It implies no design
+        approval, priority, schedule, or commitment to develop anything.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: What is imagined?
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why it may be interesting
+      description: What possibility or motivation makes this worth tracking?
+    validations:
+      required: true
+
+  - type: textarea
+    id: unknowns
+    attributes:
+      label: Unknowns
+      description: Optional open questions or what remains unclear.
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Optional related Discussions, Issues, or prior art.

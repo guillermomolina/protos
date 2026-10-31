@@ -99,6 +99,7 @@ that work:
 | LIBxxx Standard Library | AGENTS.work/LIBRARY.md |
 | TOOLxxx bundled tools | AGENTS.work/TOOL.md |
 | TESTxxx tests | AGENTS.work/TEST.md |
+| INCxxx incubator ideas (exploration only; never approval) | AGENTS.work/INCUBATOR.md |
 | Live GitHub coordination (Issues, Project, allocation, closure) | AGENTS.work/COORDINATION.md |
 | Release publication | AGENTS.work/RELEASE.md |
 

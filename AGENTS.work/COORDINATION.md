@@ -62,7 +62,7 @@ The repository distinguishes:
 - **documentation problems** — community documentation intake; and
 - **community requests** — concrete adoption/example/tooling/packaging/ecosystem
   requests. Open-ended questions and language/design proposals belong in
-  Discussions.
+  Discussions; a maintainer may later adopt one as a formal `INCxxx` idea.
 
 Form-created Issues start with `status:inbox`. No Issue form assigns
 `priority:*`; GITHUB005's explicit-unset priority rule remains authoritative.
@@ -616,12 +616,20 @@ concurrent work.
 
 #### Discussions and actionable work
 
-Use a Discussion while the primary activity is exploration: understanding a
-problem, collecting use cases, comparing alternatives/prior art, or preparing a
-decision packet. Once there is bounded actionable project work with sufficiently
-settled semantics/architecture, track that work in an Issue. A Discussion may
-remain as historical reasoning and link to the resulting Issue/decision record;
-it does not become normative authority.
+Exploration has two homes, distinguished by formal identity:
+
+- **Discussions** hold community exploration, questions, and open conversation
+  without a formal identifier: understanding a problem, collecting use cases,
+  comparing alternatives/prior art, or preparing a decision packet.
+- **`INCxxx`** Issues hold an exploratory idea that the maintainer decides to
+  adopt into the formal record before it is implementable work, under
+  `AGENTS.work/INCUBATOR.md`.
+
+Once there is bounded actionable project work with sufficiently settled
+semantics/architecture, track that work in an Issue of the family whose own
+contract governs it. A Discussion or `INCxxx` Issue may remain as historical
+reasoning and link to the resulting Issue/decision record; neither becomes
+normative authority.
 
 When an unresolved substantive design choice appears during an Issue, do not
 silently settle it in the Issue. Route the choice through the existing design
@@ -634,11 +642,11 @@ Formal identifiers use the family meanings already established by current
 repository records and GitHub history; identifier-shaped text or chat memory does
 not establish authority.
 
-Every newly allocated formal Protos identifier, including `Dxxx`, `PLATxxx`, and
-`Bxxx`, MUST have a GitHub Issue as part of allocation. The Issue owns live
-coordination; durable decision/blocker authority remains in its repository
-record. A formal identifier MUST NOT exist only in chat. When it also owns a
-durable repository record, persist that record no later than the first
+Every newly allocated formal Protos identifier, including `Dxxx`, `PLATxxx`,
+`Bxxx`, and `INCxxx`, MUST have a GitHub Issue as part of allocation. The Issue
+owns live coordination; durable decision/blocker authority remains in its
+repository record. A formal identifier MUST NOT exist only in chat. When it also
+owns a durable repository record, persist that record no later than the first
 publication that materially establishes the work.
 
 <!-- GITHUB001-A2 FAMILY-IDENTIFIER-POLICY -->
@@ -658,6 +666,9 @@ without a formal identifier need no family label.
 their Issue representation; Issue/Project state, reactions, comments, or labels
 cannot ratify, redefine, or clear that authority. GitHub Issue numbers and
 Protos formal identifiers are independent namespaces.
+
+`family:INC` classifies an incubated idea only; like every family label, it
+confers no approval, priority, status, or architectural decision.
 
 <!-- GITHUB004 ISSUE-OWNED-PROJECT-STATUS -->
 ##### Issue-owned status and derived GitHub Project projection
