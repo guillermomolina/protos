@@ -102,6 +102,11 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
      * This is a discriminator for an admitted root, not a general ABI validator.
      */
     static ProtosClosureValue compactClosureOrNull(Object[] arguments) {
+        if (arguments.length == 2) {
+            return arguments[0] instanceof ProtosClosureValue closure
+                    ? closure
+                    : null;
+        }
         if (arguments.length < ProtosFrameArguments.HEADER_LENGTH) {
             return null;
         }
@@ -181,7 +186,11 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
     static ProtosLexicalEnvironment capturedModuleOrNull(
             Object[] arguments, int lexicalDepth) {
         ProtosLexicalEnvironment captured;
-        if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
+        if (arguments.length == 2
+                && arguments[0] instanceof ProtosClosureValue closure) {
+            // I115-H11: the compact unary entry retains its lexical owner.
+            captured = closure.capturedLexicalEnvironmentForRuntime();
+        } else if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
             captured = ProtosFrameArguments.compactCapturedLexicalEnvironment(arguments);
         } else {
             captured = ProtosFrameArguments.publishedActivation(arguments)

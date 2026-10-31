@@ -859,10 +859,93 @@ final class ProtosI115H7MethodCallConvergenceTest {
                                         com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_16))
                         .currentValue(),
                         "the cached selection is installed without a prelude");
+                Object selected = ProtosExperimentalGetMethodNode.selectGenericWithHome(receiver, "identity", null);
+                var result = assertInstanceOf(
+                        com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult.class,
+                        selected);
+                assertSame(identity, result.value());
+                assertSame(receiver, result.home());
                 assertNull(ProtosExperimentalGetMethodNode.selectGeneric(receiver, "absent", null));
                 return null;
             });
         }
+    }
+
+    @Test
+    void h11UnaryEntryOmitsClosureWithoutReadGlobal() throws Exception {
+        try (ProtosStandaloneHostedSession session = open(
+                "h11-entry-selection",
+                """
+                shared: 7
+
+                holder: {
+                    identity: (x) => { x }
+                    captured: (x) => { shared }
+                }
+
+                runIdentity: () => { holder.identity(1) }
+                runCaptured: () => { holder.captured(0) }
+                """)) {
+            ProtosBytecodeRootNode identity =
+                    methodRoot(session, "runIdentity", "holder", "identity");
+            ProtosBytecodeRootNode captured =
+                    methodRoot(session, "runCaptured", "holder", "captured");
+
+            assertTrue(identity.isExperimentalPrimitiveArgumentRoot());
+            assertTrue(captured.isExperimentalPrimitiveArgumentRoot());
+
+            assertFalse(identity.experimentalUnaryNeedsCapturedOwner());
+            assertTrue(captured.experimentalUnaryNeedsCapturedOwner());
+
+            assertNumber(session, "runIdentity", 1L);
+            assertNumber(session, "runCaptured", 7L);
+        }
+    }
+
+    @Test
+    void h11CapturedUnaryAbiRetainsTheGlobalReadOwner() throws Exception {
+        try (ProtosStandaloneHostedSession session = open(
+                "h11-captured-unary",
+                "global: 7\nrun: (value) => { global }\n")) {
+            ProtosClosureValue closure =
+                    session.prepareTopLevel("run").closureForTesting();
+            Object supplied = Long.valueOf(42L);
+            Object[] arguments =
+                    ProtosFrameArguments.experimentalCapturedUnaryCall(
+                            closure, supplied);
+
+            assertEquals(2, arguments.length);
+            assertSame(closure, arguments[0]);
+            assertSame(supplied,
+                    ProtosFrameArguments.experimentalSuppliedArgument0(arguments));
+            assertSame(closure,
+                    ProtosExperimentalReadGlobalNode.compactClosureOrNull(arguments));
+
+            session.processContextForTesting().callForRuntime(() -> {
+                assertSame(
+                        closure.capturedLexicalEnvironmentForRuntime(),
+                        ProtosExperimentalReadGlobalNode.capturedModuleOrNull(
+                                arguments, 1));
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void h11MinimalUnaryAbiSharesTheArgumentWithLegacyEntries() {
+        Object value = Long.valueOf(42L);
+        Object[] minimal =
+                ProtosFrameArguments.experimentalMinimalUnaryCall(value);
+        assertEquals(1, minimal.length);
+        assertSame(
+                value,
+                ProtosFrameArguments.experimentalSuppliedArgument0(minimal));
+
+        Object[] previous =
+                ProtosFrameArguments.experimentalStaticUnaryCall(value);
+        assertSame(
+                value,
+                ProtosFrameArguments.experimentalSuppliedArgument0(previous));
     }
 
     /**

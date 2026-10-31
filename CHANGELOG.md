@@ -8,6 +8,34 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.29-SNAPSHOT
+
+- **I115-H11 — experimental convergence of Closure and method calls on a compact unary ABI.**
+  - Replace the H7 method-call B5-like experimental header with two selected
+    unary argument layouts: `[supplied0]` for callees that do not require a
+    lexical owner; `[selectedClosure, supplied0]` for roots using `ReadGlobal`.
+    A compilation-final callee-root fact selects the layout after lowering.
+    `CopyArguments` and `ReadGlobal` recognize these layouts alongside B5.
+  - Apply the same reduced unary call protocol to admitted direct Closure
+    sends and experimental `CallBinaryMethod`, including indirect tiers where
+    admitted. Preserve the selected home only in the generic method lookup
+    tier; the cached `GetMethod` path reads a Shape-backed selected value
+    through a cached `DynamicObject.GetNode` without copying the slot value.
+  - Extend H7 convergence and deferred-caller test coverage for layouts with
+    and without captured lexical owner, generic home selection and reduced
+    caller publication. These original tests are not run on this replay.
+  - **Historical semantic limitations:** the optimized unary ABI omits the
+    receiver, method home, caller, `Task` and `ReturnHome` transport, and
+    non-local control transfers are not fully translated. Direct admission
+    does not establish equivalence to dynamic `Object.call` selection or
+    general suspension/continuation semantics. H7 still contains Java `int`
+    carriers outside the H10 attribute `long` lane, so Protos' long-only
+    goal is not yet met; D179 C0 and other existing experimental divergences
+    remain unresolved. No complete correctness or performance acceptance is
+    claimed for this historical point.
+  - Original implementation: `b429ee096421fc55f326cfff9b986d0155b9d4a8`.
+    All ten original source/test blobs are preserved byte-for-byte.
+
 ## 0.4.28-SNAPSHOT
 
 - **I115-H10 — experimental 64-bit Shape-backed attribute operations.**

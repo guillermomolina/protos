@@ -83,8 +83,9 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             Object receiver,
             @Cached("receiver") Object cachedReceiver,
             @Cached("selectOrNull(receiver, selector)")
-                    GuardedSlotSelection cachedSelection) {
-        return cachedSelection.currentValue();
+                    GuardedSlotSelection cachedSelection,
+            @Cached com.oracle.truffle.api.object.DynamicObject.GetNode getNode) {
+        return cachedSelection.currentValue(getNode);
     }
 
     @Specialization(replaces = "doCached")
@@ -97,7 +98,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
         Object caller = ProtosBytecodeRootNode.InvokeClosureOneTail.callerReference(frame);
         ProtosPrelude prelude =
                 ProtosBytecodeRootNode.InvokeClosureOneTail.admittedCallerPrelude(root, caller);
-        return selectGeneric(receiver, selector.toJavaStringUncached(), prelude);
+        return selectGenericWithHome(receiver, selector.toJavaStringUncached(), prelude);
     }
 
     /* Installation only: the guarded physical selection without a prelude, or null. */
@@ -123,6 +124,21 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
                     .map(ProtosSlotLookupResult::value)
                     .orElse(null);
         } catch (UnsupportedOperationException unsupportedRepresentation) {
+            return null;
+        }
+    }
+
+    /* I115-H11-B3: preserve the selected home only in the generic tier. */
+    @TruffleBoundary
+    static Object selectGenericWithHome(Object receiver, String selector, ProtosPrelude prelude) {
+        try {
+            var found = ProtosValueLookup.lookup(ProtosNumericValueSupport.guestValue(receiver), selector, prelude);
+            if (found.isEmpty()) return null;
+            ProtosSlotLookupResult selected = found.orElseThrow();
+            return receiver != null && receiver.getClass() == ProtosObjectValue.class
+                    && selected.value() instanceof com.guillermomolina.protos.runtime.ProtosClosureValue
+                    ? selected : selected.value();
+        } catch (UnsupportedOperationException unsupported) {
             return null;
         }
     }
