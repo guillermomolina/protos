@@ -252,6 +252,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
+     * I115-H11-B1 EXPERIMENTAL: whether a compact unary callee
+     * executes ReadGlobal and therefore needs its selected Closure
+     * as the lexical owner. The lowerer establishes this fact once
+     * after building the physical root; it remains compilation-final.
+     */
+    @CompilationFinal
+    private transient boolean experimentalUnaryNeedsCapturedOwner;
+
+    final void markExperimentalUnaryNeedsCapturedOwner() {
+        experimentalUnaryNeedsCapturedOwner = true;
+    }
+
+    final boolean experimentalUnaryNeedsCapturedOwner() {
+        return experimentalUnaryNeedsCapturedOwner;
+    }
+
+    /*
      * I115-H7-R5 EXPERIMENTAL: an admitted compact root containing H7
      * sends may return its int carrier without creating a guest Integer.
      * The same root fact governs the host boundary. This does not change
@@ -732,7 +749,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind ProtosBytecodeRootNode root) {
             if (root.isExperimentalCalleeContextRoot()) {
                 assert frame.getArguments().length >= ProtosFrameArguments.HEADER_LENGTH
-                        : "experimental callee context root entered without a B5 header";
+                        || frame.getArguments().length == 1
+                        || (frame.getArguments().length == 2
+                                && frame.getArguments()[0] instanceof ProtosClosureValue)
+                        : "experimental callee context root entered without an admitted header";
             }
         }
     }
@@ -1285,7 +1305,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     bytecodeNode,
                     frame,
                     ordinal,
-                    frame.getArguments()[ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET]);
+                    ProtosFrameArguments.experimentalSuppliedArgument0(
+                            frame.getArguments()));
         }
     }
 
@@ -10036,8 +10057,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         DirectCallNode node) {
             return enterAdmitted(
                     cachedProven,
+                    cachedCallee,
+                    root,
                     cachedClosure,
-                    callerArgument(root, cachedCallee, cachedClosure, caller),
+                    caller,
                     supplied0,
                     node,
                     bytecodeNode,
@@ -10123,8 +10146,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         DirectCallNode node) {
             return enterAdmitted(
                     cachedProven,
+                    cachedCallee,
+                    root,
                     admittedClosure,
-                    callerArgument(root, cachedCallee, admittedClosure, caller),
+                    caller,
                     supplied0,
                     node,
                     bytecodeNode,
@@ -10314,12 +10339,31 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          */
         private static Object enterAdmitted(
                 boolean proven,
+                ProtosBytecodeRootNode callee,
+                ProtosBytecodeRootNode callerRoot,
                 ProtosClosureValue closure,
-                Object callerReference,
+                Object caller,
                 Object supplied0,
                 DirectCallNode node,
                 BytecodeNode bytecodeNode,
                 int bytecodeIndex) {
+            /*
+             * I115-H11 EXPERIMENTAL: the compact unary callee receives
+             * only its lexical Closure owner and supplied argument.
+             * Caller control metadata and invocation preparation are omitted.
+             */
+            if (proven && callee.isExperimentalPrimitiveArgumentRoot()) {
+                Object[] arguments =
+                        callee.experimentalUnaryNeedsCapturedOwner()
+                                ? ProtosFrameArguments.experimentalCapturedUnaryCall(
+                                        closure, supplied0)
+                                : ProtosFrameArguments.experimentalMinimalUnaryCall(
+                                        supplied0);
+                return node.call(arguments);
+            }
+
+            Object callerReference =
+                    callerArgument(callerRoot, callee, closure, caller);
             Object[] frameArguments =
                     ProtosFrameArguments.compactAdmittedTerminalClosureCallOneNoHome(
                             closure, callerReference, supplied0);

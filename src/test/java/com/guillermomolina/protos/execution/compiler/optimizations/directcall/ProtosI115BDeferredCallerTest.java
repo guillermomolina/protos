@@ -1813,13 +1813,11 @@ final class ProtosI115BDeferredCallerTest {
                     "the sender never published its own activation");
 
             // No need registered: no caller reference is read or built.
-            assertSame(null, ProtosExperimentalCallBinaryMethodNode.callerArgumentIfNeeded(
-                    null, sender, callee, identity));
-            Object[] header = ProtosFrameArguments.experimentalMethodCallOne(
-                    identity, holder, null, null, SUPPLIED);
-            assertSame(null, header[2], "no method home");
-            assertSame(null, header[3], "no caller reference");
-            assertUnpublished(header);
+            assertFalse(callee.experimentalUnaryNeedsCapturedOwner());
+            Object[] header = ProtosFrameArguments.experimentalMinimalUnaryCall(SUPPLIED);
+            assertEquals(1, header.length);
+            assertSame(SUPPLIED, ProtosFrameArguments.experimentalSuppliedArgument0(header));
+            assertFalse(ProtosFrameArguments.hasActivation(header));
         });
     }
 

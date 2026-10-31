@@ -1695,6 +1695,17 @@ final class CanonicalToBytecodeLowerer {
         }
         if (experimentalPrimitiveArgumentRoot) {
             result.markExperimentalPrimitiveArgumentRoot();
+
+            /*
+             * I115-H11-B1: physical ReadGlobal is the compact unary
+             * callee operation that consumes the selected Closure.
+             * Determine the ABI requirement once, when emitting the root.
+             */
+            if (result.getBytecodeNode().getInstructionsAsList().stream()
+                    .anyMatch(instruction ->
+                            instruction.getName().startsWith("c.ReadGlobal"))) {
+                result.markExperimentalUnaryNeedsCapturedOwner();
+            }
         }
         /*
          * I115-H7-R5: the compact admission and the presence of an H7

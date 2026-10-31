@@ -108,6 +108,10 @@ final class ProtosMapBackedLexicalBindingAuthority
                             .execute(store, key, null));
         }
 
+        Object value(DynamicObject.GetNode getNode) {
+            return toGuestValue(getNode.execute(store, key, null));
+        }
+
         Store storage() {
             return store;
         }

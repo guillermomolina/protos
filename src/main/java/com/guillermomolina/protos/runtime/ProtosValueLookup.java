@@ -101,6 +101,10 @@ public final class ProtosValueLookup {
             return location.value();
         }
 
+        public Object currentValue(DynamicObject.GetNode getNode) {
+            return location.value(getNode);
+        }
+
         public DynamicObject storage() {
             return location.storage();
         }

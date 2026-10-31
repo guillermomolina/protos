@@ -413,45 +413,28 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * I115-H7 (EXPERIMENTAL): the B5+ header of the GraalPy-shaped
-     * CallBinaryMethod (one explicit argument): the selected Closure, the
-     * original receiver, the method home, the caller reference (published
-     * activation or the caller's own B5 array, unresolved) and the supplied
-     * value, written directly into the final array. No activation is
-     * published and no intermediate supplied-argument array exists.
-     *
-     * <p>I115-H7-R3: for an admitted compact callee, {@code methodHome} is
-     * always {@code null} and {@code callerReference} is {@code null} unless
-     * the callee root registered a caller need. No caller is resolved,
-     * validated or published here.
-     *
-     * <p>RECORDED DIVERGENCE: the ReturnHome slot always holds the
-     * primitive-accepting unobservable marker; the materialized ReturnHome
-     * lifecycle of the selected Closure is not established. A callee that
-     * reads its home or an untransported caller from this header is outside
-     * the experimental admission.
-     */
-    static Object[] experimentalMethodCallOne(
-            ProtosClosureValue closure,
-            Object receiver,
-            ProtosObjectValue methodHome,
-            Object callerReference,
-            Object supplied0) {
-        return new Object[] {
-            closure,
-            receiver,
-            methodHome,
-            callerReference,
-            ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
-            supplied0
-        };
-    }
-
-    /**
      * I115-H (EXPERIMENTAL): the reduced static unary layout. I115-H3: a
      * direct construction with known positions; no caller, Task, Closure or
      * Context is validated, published or created.
      */
+    /**
+     * I115-H11 EXPERIMENTAL: single-element unary entry for a callee
+     * that does not require a lexical invocation owner.
+     */
+    static Object[] experimentalMinimalUnaryCall(Object supplied0) {
+        return new Object[] {supplied0};
+    }
+
+    /**
+     * I115-H11 EXPERIMENTAL: compact unary entry retaining the selected
+     * Closure solely as the lexical owner used by ReadGlobal.
+     * No receiver, method home, caller, Task or ReturnHome is transported.
+     */
+    static Object[] experimentalCapturedUnaryCall(
+            ProtosClosureValue closure, Object supplied0) {
+        return new Object[] {closure, supplied0};
+    }
+
     static Object[] experimentalStaticUnaryCall(Object supplied0) {
         return new Object[] {
             EXPERIMENTAL_STATIC_UNARY_CALL,
@@ -468,6 +451,13 @@ final class ProtosFrameArguments {
      * layout or B5, read without any layout test.
      */
     static Object experimentalSuppliedArgument0(Object[] arguments) {
+        if (arguments.length == 1) {
+            return arguments[0];
+        }
+        if (arguments.length == 2
+                && arguments[0] instanceof ProtosClosureValue) {
+            return arguments[1];
+        }
         return arguments[SUPPLIED_ARGUMENT_OFFSET];
     }
 
