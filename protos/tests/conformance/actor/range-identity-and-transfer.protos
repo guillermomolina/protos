@@ -70,6 +70,39 @@ tests: [
             })
         }
         Assertions.require(tool009LegacyCase().value() === true)
+    }),
+    Test("range normalized descending instance transfer by value", () => {
+        tool009LegacyCase: () => {
+            big: 100000000000000000000000000000
+            original: Range(big, -big)
+            worker: Actor.spawn("workers", "ranges")
+
+            worker.request("bounds", original).then((observed) => {
+                worker.stop()
+                (original.parent() === InvertedRange) &&
+                    observed[0] && (observed[1] == big) && (observed[2] == -big)
+            })
+        }
+        Assertions.require(tool009LegacyCase().value() === true)
+    }),
+    Test("range normalized ascending instance echo keeps canonical parent", () => {
+        tool009LegacyCase: () => {
+            original: InvertedRange(3, 9)
+            worker: Actor.spawn("workers", "echo")
+
+            worker.request("echo", original).then((copy) => {
+                worker.stop()
+                names: copy.slotNames()
+                (copy !== original) &&
+                    (copy.parent() === Range) &&
+                    (names.size() == 2) &&
+                    copy.hasSlot("start") &&
+                    copy.hasSlot("stop") &&
+                    (copy.start == 3) &&
+                    (copy.stop == 9)
+            })
+        }
+        Assertions.require(tool009LegacyCase().value() === true)
     })
 ]
 tests.freeze()

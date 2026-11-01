@@ -128,7 +128,7 @@ class ProtosCoreBootstrapTest {
         assertTrue(prelude.ipAddressPrototypeForRuntime().isFrozen());
         assertTrue(prelude.ipEndpointPrototypeForRuntime().isFrozen());
         // D235-B1-F: the Prelude range prototypes are frozen, source-backed and are also the
-        // shared std:collections/Range standard members.
+        // shared std:collections/Range standard members. D236-B1: each owns a source call.
         for (String name : java.util.List.of("Range", "InvertedRange")) {
             ProtosObjectValue range =
                     assertInstanceOf(
@@ -136,7 +136,7 @@ class ProtosCoreBootstrapTest {
             assertTrue(range.isFrozen(), name);
             assertSame(ProtosObjectValue.rootObject(), range.parent().orElseThrow());
             assertEquals(
-                    Set.of("init", "each", "eachStep", "invert", "reverse"),
+                    Set.of("init", "call", "each", "eachStep", "invert", "reverse"),
                     range.localSlotsSnapshot().keySet());
             assertTrue(prelude.isStandardModuleMemberForRuntime(range), name);
             ProtosClosureValue each =
@@ -144,6 +144,11 @@ class ProtosCoreBootstrapTest {
                             ProtosClosureValue.class, range.readLocalSlot("each").orElseThrow());
             assertTrue(each.isFrozen(), name);
             assertTrue(each.nativeBody().isEmpty(), name);
+            ProtosClosureValue call =
+                    assertInstanceOf(
+                            ProtosClosureValue.class, range.readLocalSlot("call").orElseThrow());
+            assertTrue(call.isFrozen(), name);
+            assertTrue(call.nativeBody().isEmpty(), name);
         }
         assertFalse(bindings.hasLocalSlot("_coreRootObject"));
         assertEquals(

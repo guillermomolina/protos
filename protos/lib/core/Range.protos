@@ -13,11 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-// The canonical directed Integer range prototypes (D232, D235-B1-F). They are
-// published as the Prelude bindings Range and InvertedRange and, with the
-// same identities, as the standard members of std:collections/Range. Both are
-// ordinary source-backed objects frozen with the shared standard graph; the
-// bare names below resolve lexically to these canonical prototypes.
+// The canonical directed Integer range prototypes (D232, D235-B1-F, D236-B1).
+// They are published as the Prelude bindings Range and InvertedRange and,
+// with the same identities, as the standard members of std:collections/Range.
+// Both are ordinary source-backed objects frozen with the shared standard
+// graph; the bare names below resolve lexically to these canonical
+// prototypes. Each canonical constructor selects the result prototype from
+// the order of its Integer bounds (D236-B1).
 
 /// Ascending half-open Integer range [start, stop).
 Range: {
@@ -47,6 +49,34 @@ Range: {
         this.start: start
         this.stop: stop
         this.freeze()
+    }
+
+    /// Constructs a range in the direction selected by its Integer bounds.
+    /// Noncanonical receivers retain ordinary Object.call construction.
+    call: (...args) => {
+        if(this !== Range) {
+            super.call(...args)
+        } else {
+            (args.size() == 2).ifFalse(() => {
+                Error().signal()
+            })
+
+            start: args[0]
+            stop: args[1]
+
+            Integer.recognizes(start).ifFalse(() => {
+                Error().signal()
+            })
+            Integer.recognizes(stop).ifFalse(() => {
+                Error().signal()
+            })
+
+            if(start > stop) {
+                InvertedRange(start, stop)
+            } else {
+                super.call(start, stop)
+            }
+        }
     }
 
     /// Visits each Integer of the range in ascending unit order.
@@ -114,6 +144,34 @@ InvertedRange: {
         this.start: start
         this.stop: stop
         this.freeze()
+    }
+
+    /// Constructs a range in the direction selected by its Integer bounds.
+    /// Noncanonical receivers retain ordinary Object.call construction.
+    call: (...args) => {
+        if(this !== InvertedRange) {
+            super.call(...args)
+        } else {
+            (args.size() == 2).ifFalse(() => {
+                Error().signal()
+            })
+
+            start: args[0]
+            stop: args[1]
+
+            Integer.recognizes(start).ifFalse(() => {
+                Error().signal()
+            })
+            Integer.recognizes(stop).ifFalse(() => {
+                Error().signal()
+            })
+
+            if(start < stop) {
+                Range(start, stop)
+            } else {
+                super.call(start, stop)
+            }
+        }
     }
 
     /// Visits each Integer of the range in descending unit order.

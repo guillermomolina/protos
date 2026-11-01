@@ -75,6 +75,37 @@ tests: Array(
 
         Assertions.require(Range.hasSlot("start") === false)
         Assertions.require(InvertedRange.hasSlot("stop") === false)
+
+        // Normalized construction selects the other canonical prototype and
+        // keeps the bounds exactly as supplied.
+        down: Range(3, 0)
+        up: InvertedRange(0, 3)
+
+        Assertions.require(down.parent() === InvertedRange)
+        Assertions.require(up.parent() === Range)
+        Assertions.require((down.start === 3) && (down.stop === 0))
+        Assertions.require((up.start === 0) && (up.stop === 3))
+
+        downNames: down.slotNames()
+        Assertions.require((downNames.size() == 2) &&
+            (downNames[0] == "start") &&
+            (downNames[1] == "stop"))
+        upNames: up.slotNames()
+        Assertions.require((upNames.size() == 2) &&
+            (upNames[0] == "start") &&
+            (upNames[1] == "stop"))
+
+        // Each invocation answers a fresh instance compared by identity.
+        Assertions.require(Range(3, 0) !== down)
+        Assertions.require(InvertedRange(0, 3) !== up)
+        Assertions.require(down !== InvertedRange)
+        Assertions.require(up !== Range)
+        Assertions.require(down === down)
+
+        // Equal bounds keep the invoked prototype.
+        Assertions.require(Range(3, 3).parent() === Range)
+        Assertions.require(InvertedRange(3, 3).parent() === InvertedRange)
+        Assertions.require(Range(3, 3).parent() !== InvertedRange(3, 3).parent())
     }),
     Test("range instances are frozen", () => {
         r: Range(0, 3)
@@ -89,6 +120,19 @@ tests: Array(
 
         Assertions.require(sameRange(r, Range, 0, 3))
         Assertions.require(sameRange(ir, InvertedRange, 3, 0))
+
+        down: Range(3, 0)
+        up: InvertedRange(0, 3)
+
+        Assertions.signals(Error, () => { down.start = 1 })
+        Assertions.signals(Error, () => { down.removeSlot("stop") })
+        Assertions.signals(Error, () => { down.extra: 1 })
+        Assertions.signals(Error, () => { up.stop = 1 })
+        Assertions.signals(Error, () => { up.removeSlot("start") })
+        Assertions.signals(Error, () => { up.extra: 1 })
+
+        Assertions.require(sameRange(down, InvertedRange, 3, 0))
+        Assertions.require(sameRange(up, Range, 0, 3))
     }),
     Test("range prototypes cannot be initialized directly", () => {
         Assertions.signals(Error, () => { Range.init(0, 3) })
@@ -104,14 +148,22 @@ tests: Array(
         Assertions.signals(Error, () => { InvertedRange.extra: 1 })
         Assertions.require(sameRange(Range(0, 3), Range, 0, 3))
         Assertions.require(sameRange(InvertedRange(3, 0), InvertedRange, 3, 0))
+
+        // init stays strict: it never redirects construction.
+        Assertions.signals(Error, () => { Range(0, 3).init(3, 0) })
+        Assertions.signals(Error, () => { InvertedRange(3, 0).init(0, 3) })
     }),
     Test("range bound ordering", () => {
         Assertions.require(sameValues(collect(Range(0, 3)), Array(0, 1, 2)))
-        Assertions.signals(Error, () => { Range(3, 0) })
+        Assertions.require(sameRange(Range(3, 0), InvertedRange, 3, 0))
+        Assertions.require(sameValues(collect(Range(3, 0)), Array(3, 2, 1)))
+        Assertions.require(sameRange(Range(3, 3), Range, 3, 3))
         Assertions.require(collect(Range(3, 3)).size() == 0)
 
         Assertions.require(sameValues(collect(InvertedRange(3, 0)), Array(3, 2, 1)))
-        Assertions.signals(Error, () => { InvertedRange(0, 3) })
+        Assertions.require(sameRange(InvertedRange(0, 3), Range, 0, 3))
+        Assertions.require(sameValues(collect(InvertedRange(0, 3)), Array(0, 1, 2)))
+        Assertions.require(sameRange(InvertedRange(3, 3), InvertedRange, 3, 3))
         Assertions.require(collect(InvertedRange(3, 3)).size() == 0)
     }),
     Test("range argument count rejection", () => {
@@ -121,6 +173,9 @@ tests: Array(
         Assertions.signals(Error, () => { InvertedRange() })
         Assertions.signals(Error, () => { InvertedRange(1) })
         Assertions.signals(Error, () => { InvertedRange(2, 1, 0) })
+        // Normalization never accepts a previously invalid arity.
+        Assertions.signals(Error, () => { Range(3, 0, 1) })
+        Assertions.signals(Error, () => { InvertedRange(0, 3, 1) })
     }),
     Test("range bound domain rejection", () => {
         delegatedIntegerLookalike: (1) {}
@@ -132,6 +187,8 @@ tests: Array(
         Assertions.signals(Error, () => { Range(null, 3) })
         Assertions.signals(Error, () => { Range(1, null) })
         Assertions.signals(Error, () => { Range(delegatedIntegerLookalike, 3) })
+        Assertions.signals(Error, () => { Range(3.0, 1) })
+        Assertions.signals(Error, () => { Range(3, delegatedIntegerLookalike) })
 
         Assertions.signals(Error, () => { InvertedRange(3.0, 1) })
         Assertions.signals(Error, () => { InvertedRange(3, 1.0) })
@@ -139,6 +196,8 @@ tests: Array(
         Assertions.signals(Error, () => { InvertedRange(Complex(3, 1), 1) })
         Assertions.signals(Error, () => { InvertedRange(null, 1) })
         Assertions.signals(Error, () => { InvertedRange(3, delegatedIntegerLookalike) })
+        Assertions.signals(Error, () => { InvertedRange(1, 3.0) })
+        Assertions.signals(Error, () => { InvertedRange(delegatedIntegerLookalike, 3) })
     }),
     Test("range arguments evaluated once left to right", () => {
         trace: 0
@@ -160,15 +219,27 @@ tests: Array(
         Assertions.require(trace == 12)
 
         trace = 0
-        Assertions.signals(Error, () => { Range(start(5), stop(2)) })
+        down: Range(start(5), stop(2))
         Assertions.require(trace == 12)
+        Assertions.require(sameRange(down, InvertedRange, 5, 2))
+
+        trace = 0
+        up: InvertedRange(start(2), stop(5))
+        Assertions.require(trace == 12)
+        Assertions.require(sameRange(up, Range, 2, 5))
 
         trace = 0
         Assertions.signals(Error, () => { InvertedRange(start(2.0), stop(1)) })
         Assertions.require(trace == 12)
 
+        trace = 0
+        Assertions.signals(Error, () => { Range(start(5), stop(2.0)) })
+        Assertions.require(trace == 12)
+
         Assertions.require(sameValues(collect(r), Array(2, 3, 4)))
         Assertions.require(sameValues(collect(ir), Array(5, 4, 3)))
+        Assertions.require(sameValues(collect(down), Array(5, 4, 3)))
+        Assertions.require(sameValues(collect(up), Array(2, 3, 4)))
     }),
     Test("range order and steps", () => {
         Assertions.require(sameValues(collect(Range(0, 10)), Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)))
@@ -194,6 +265,10 @@ tests: Array(
         // Equal bounds are empty for every valid step.
         Assertions.require(collectStep(Range(5, 5), 1).size() == 0)
         Assertions.require(collectStep(InvertedRange(5, 5), -1).size() == 0)
+
+        // The step sign follows the prototype of the normalized result.
+        Assertions.require(sameValues(collectStep(Range(5, 0), -2), Array(5, 3, 1)))
+        Assertions.require(sameValues(collectStep(InvertedRange(0, 5), 2), Array(0, 2, 4)))
     }),
     Test("range invalid step rejection", () => {
         Assertions.signals(Error, () => { Range(0, 3).eachStep(0, (value) => { null }) })
@@ -208,6 +283,14 @@ tests: Array(
         Assertions.signals(Error, () => { InvertedRange(0, 0).eachStep(0, (value) => { null }) })
         Assertions.signals(Error, () => { InvertedRange(0, 0).eachStep(1, (value) => { null }) })
         Assertions.signals(Error, () => { InvertedRange(3, 0).eachStep(-1.0, (value) => { null }) })
+
+        // Dynamically selected direction keeps the result prototype's sign.
+        Assertions.signals(Error, () => { Range(5, 0).eachStep(2, (value) => { null }) })
+        Assertions.signals(Error, () => { Range(5, 0).eachStep(0, (value) => { null }) })
+        Assertions.signals(Error, () => { InvertedRange(0, 5).eachStep(-2, (value) => { null }) })
+        Assertions.signals(Error, () => { InvertedRange(0, 5).eachStep(0, (value) => { null }) })
+        Assertions.signals(Error, () => { Range(5, 5).eachStep(-1, (value) => { null }) })
+        Assertions.signals(Error, () => { InvertedRange(5, 5).eachStep(1, (value) => { null }) })
     }),
     Test("range unbounded integer endpoints", () => {
         base: 10000000000000000000000000000000000000000
@@ -240,6 +323,24 @@ tests: Array(
         Assertions.require(sameRange(InvertedRange(minLong, minLong - 1).reverse(), Range, minLong, minLong + 1))
         Assertions.require(sameRange(Range(-base, base).reverse(), InvertedRange, base - 1, -base - 1))
         Assertions.require(sameValues(collect(Range(maxLong, maxLong + 1).reverse()), Array(maxLong)))
+
+        // Normalized construction with unbounded endpoints.
+        Assertions.require(sameRange(Range(base + 3, base), InvertedRange, base + 3, base))
+        Assertions.require(sameValues(collect(Range(base + 3, base)), Array(base + 3, base + 2, base + 1)))
+        Assertions.require(sameRange(InvertedRange(base, base + 3), Range, base, base + 3))
+        Assertions.require(sameValues(collect(InvertedRange(base, base + 3)), Array(base, base + 1, base + 2)))
+        Assertions.require(sameRange(Range(1, -2), InvertedRange, 1, -2))
+        Assertions.require(sameValues(collect(Range(1, -2)), Array(1, 0, -1)))
+        Assertions.require(sameRange(InvertedRange(-2, 1), Range, -2, 1))
+        Assertions.require(sameValues(collect(InvertedRange(-2, 1)), Array(-2, -1, 0)))
+        Assertions.require(sameValues(collect(Range(maxLong + 1, maxLong - 2)),
+            Array(maxLong + 1, maxLong, maxLong - 1)))
+        Assertions.require(sameValues(collect(InvertedRange(minLong - 1, minLong + 2)),
+            Array(minLong - 1, minLong, minLong + 1)))
+        Assertions.require(sameRange(Range(base, -base), InvertedRange, base, -base))
+        Assertions.require(sameValues(collectStep(Range(base, -base), -base), Array(base, 0)))
+        Assertions.require(sameRange(InvertedRange(-base, base), Range, -base, base))
+        Assertions.require(sameValues(collectStep(InvertedRange(-base, base), base), Array(-base, 0)))
     }),
     Test("range invert and reverse", () => {
         source: Range(0, 3)
@@ -273,6 +374,28 @@ tests: Array(
         Assertions.require(sameRange(source.reverse().reverse(), Range, 0, 3))
         Assertions.require(sameRange(descending.invert().invert(), InvertedRange, 3, 0))
         Assertions.require(sameRange(descending.reverse().reverse(), InvertedRange, 3, 0))
+
+        // Normalized instances keep the transformation meanings.
+        down: Range(3, 0)
+        downInverted: down.invert()
+        Assertions.require(sameRange(downInverted, Range, 0, 3))
+        Assertions.require(sameValues(collect(downInverted), Array(0, 1, 2)))
+        downReversed: down.reverse()
+        Assertions.require(sameRange(downReversed, Range, 1, 4))
+        Assertions.require(sameValues(collect(downReversed), Array(1, 2, 3)))
+
+        up: InvertedRange(0, 3)
+        Assertions.require(sameRange(up.invert(), InvertedRange, 3, 0))
+        Assertions.require(sameRange(up.reverse(), InvertedRange, 2, -1))
+
+        Assertions.require(sameRange(down.invert().invert(), InvertedRange, 3, 0))
+        Assertions.require(sameRange(down.reverse().reverse(), InvertedRange, 3, 0))
+        Assertions.require(sameRange(up.invert().invert(), Range, 0, 3))
+        Assertions.require(sameRange(up.reverse().reverse(), Range, 0, 3))
+        Assertions.require(down.invert().invert() !== down)
+        Assertions.require(down.reverse().reverse() !== down)
+        Assertions.require(up.invert().invert() !== up)
+        Assertions.require(up.reverse().reverse() !== up)
 
         Assertions.require(sameRange(Range(0, 0).invert(), InvertedRange, 0, 0))
         Assertions.require(sameRange(Range(0, 0).reverse(), InvertedRange, -1, -1))

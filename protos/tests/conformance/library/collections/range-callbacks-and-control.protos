@@ -69,6 +69,8 @@ tests: Array(
         Assertions.require(exact((block) => { InvertedRange(4, 1).each(block) }))
         Assertions.require(exact((block) => { Range(0, 4).eachStep(2, block) }))
         Assertions.require(exact((block) => { InvertedRange(4, 0).eachStep(-2, block) }))
+        Assertions.require(exact((block) => { Range(4, 1).each(block) }))
+        Assertions.require(exact((block) => { InvertedRange(1, 4).each(block) }))
     }),
     Test("range nonlocal return propagation", () => {
         forwardProbe: () => {
@@ -107,6 +109,26 @@ tests: Array(
             99
         }
 
+        normalizedProbe: () => {
+            Range(6, 1).each((value) => {
+                if(value == 3) {
+                    ^value
+                }
+            })
+            99
+        }
+
+        normalizedStepProbe: () => {
+            InvertedRange(1, 10).eachStep(2, (value) => {
+                if(value == 5) {
+                    ^value
+                }
+            })
+            99
+        }
+
+        Assertions.require(normalizedProbe() == 3)
+        Assertions.require(normalizedStepProbe() == 5)
         Assertions.require(forwardProbe() == 3)
         Assertions.require(reverseProbe() == 3)
         Assertions.require(forwardStepProbe() == 5)
@@ -164,6 +186,32 @@ tests: Array(
 
         Assertions.require(caughtExact)
         Assertions.require(errorCleanups == 12)
+
+        // A normalized descending instance from Range keeps the same counts.
+        normalizedCleanups: 0
+        normalizedVisited: 0
+
+        normalizedReturnProbe: () => {
+            (() => {
+                Range(5, 0).each((value) => {
+                    normalizedVisited = normalizedVisited + 1
+                    (() => {
+                        if(value == 3) {
+                            ^value
+                        }
+                    }).ensure(() => {
+                        normalizedCleanups = normalizedCleanups + 1
+                    })
+                })
+                99
+            }).ensure(() => {
+                normalizedCleanups = normalizedCleanups + 10
+            })
+        }
+
+        Assertions.require(normalizedReturnProbe() == 3)
+        Assertions.require(normalizedVisited == 3)
+        Assertions.require(normalizedCleanups == 13)
     }),
     Test("range empty does not inspect callback", () => {
         Assertions.require(Range(4, 4).each(42) === null)
@@ -172,9 +220,20 @@ tests: Array(
         Assertions.require(InvertedRange(4, 4).eachStep(-3, 42) === null)
         Assertions.require(Range(-1, -1).each(null) === null)
     }),
-    Test("range malformed bounds are errors not empty traversals", () => {
-        Assertions.signals(Error, () => { Range(5, 2).each(42) })
-        Assertions.signals(Error, () => { InvertedRange(2, 5).each(42) })
+    Test("range normalized direction retains reached callback validation", () => {
+        down: Range(5, 2)
+        up: InvertedRange(2, 5)
+
+        Assertions.require((down.parent() === InvertedRange) && (down.start == 5) && (down.stop == 2))
+        Assertions.require((up.parent() === Range) && (up.start == 2) && (up.stop == 5))
+
+        // These ranges are nonempty, so iteration reaches the noninvokable callback.
+        Assertions.signals(Error, () => { down.each(42) })
+        Assertions.signals(Error, () => { up.each(42) })
+
+        // Unlike an empty traversal, which never inspects the callback.
+        Assertions.require(Range(5, 5).each(42) === null)
+        Assertions.require(InvertedRange(2, 2).each(42) === null)
     }),
     Test("range reached noninvokable callback rejection", () => {
         Assertions.signals(Error, () => { Range(1, 2).each(42) })

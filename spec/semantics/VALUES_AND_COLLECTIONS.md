@@ -1267,7 +1267,7 @@ guest collection for that complete vector. This uses the existing Array and
 frozen-object mechanisms for rest bindings rather than defining a second
 privileged argument-collection object model.
 
-## Standard directed Integer Range and InvertedRange (D232, D235-B1-F)
+## Standard directed Integer Range and InvertedRange (D232, D235-B1-F, D236-B1)
 
 This section is the normative owner of the standard directed Integer range
 contract. It uses only existing object-model, invocation, module, and error
@@ -1322,31 +1322,62 @@ prototype before invoking it, as before.
 
 ### Construction
 
-Neither prototype defines its own `call`. Construction is the inherited
-`Object.call`: it creates a fresh object whose parent is the invoked prototype
-and sends it ordinary `init` with the supplied arguments. Each prototype's own
-messages are exactly `init`, `each`, `eachStep`, `invert`, and `reverse`.
+Each prototype's own messages are exactly six: `init`, `call`, `each`,
+`eachStep`, `invert`, and `reverse`. Each prototype owns an ordinary
+source-defined `call` method (D236-B1). By the ordinary lookup and invocation
+rules (`CALLABLES.md`), invoking either prototype selects its own `call`, which
+takes precedence over the inherited `Object.call`; the general call protocol
+is owned by `CALLABLES.md` and is not changed by this section.
 
-`init` requires exactly two arguments; zero, one, or three or more arguments
-signal `Error`. It then requires that the receiver's immediate parent is the
-corresponding prototype (`Range` or `InvertedRange`), signalling `Error` before
-any slot is modified otherwise; initializing a prototype itself or an unrelated
-receiver is therefore rejected. Both arguments, `start` and `stop`, must satisfy
-`Integer.recognizes`; Floats, Fractions, Complex values, `null`, and objects
-that merely delegate to an Integer are rejected with `Error` and are never
-converted. Arguments are evaluated once, left to right, by ordinary invocation,
-including when construction is subsequently rejected.
+The own `call` specializes only invocations whose receiver is the canonical
+prototype that owns the method. When the receiver is any other object (for
+example a derived object that inherits the method), `call` delegates to
+`Object.call` through `super.call`, preserving the original receiver and the
+complete supplied argument vector; construction of such a receiver is ordinary
+`Object.call` construction with that receiver's own `init`.
 
-- `Range(start, stop)` requires `start <= stop` and denotes the ascending
-  half-open interval `[start, stop)`.
-- `InvertedRange(start, stop)` requires `start >= stop` and denotes the
-  descending interval from `start` inclusive down to `stop` exclusive.
+For the canonical receiver, `call` requires exactly two arguments; zero, one,
+or three or more arguments signal `Error`. Both arguments, `start` and `stop`,
+must satisfy `Integer.recognizes`; Floats, Fractions, Complex values, `null`,
+and objects that merely delegate to an Integer are rejected with `Error` and
+are never converted. Arity and Integer membership are checked before the
+bounds are compared. The result prototype is then selected from the exact
+order of the bounds:
 
-Bounds in the wrong order signal `Error`; they are not an empty traversal.
-Equal bounds are valid and denote an empty range in both prototypes.
+- `Range(start, stop)` answers a `Range` instance when `start <= stop`, and an
+  `InvertedRange` instance when `start > stop`.
+- `InvertedRange(start, stop)` answers an `InvertedRange` instance when
+  `start >= stop`, and a `Range` instance when `start < stop`.
 
-A successfully constructed instance has ordinary object identity, its immediate
-parent is `Range` or `InvertedRange` respectively, and it carries exactly two
+When the direction already matches the invoked prototype, `call` constructs
+through the inherited `Object.call` by `super.call(start, stop)`; for the
+opposite direction it invokes the other canonical prototype with the same
+bounds. Equal bounds keep the invoked prototype and denote an empty range.
+Bounds are never swapped or converted.
+
+A `Range` instance denotes the ascending half-open interval `[start, stop)`;
+an `InvertedRange` instance denotes the descending interval from `start`
+inclusive down to `stop` exclusive.
+
+The names `Range` and `InvertedRange` referenced inside the canonical `call`
+methods resolve lexically to the canonical frozen Core prototypes, never to
+the mutable members of `std:collections/Range` or to any nearer binding at the
+call site. Arguments are evaluated exactly once, left to right, by ordinary
+invocation before `call` runs, including when construction is subsequently
+rejected; their errors and control transfers propagate ordinarily.
+
+`init` remains strict and does not redirect construction. It requires exactly
+two arguments, then requires that the receiver's immediate parent is the
+corresponding prototype (`Range` or `InvertedRange`), signalling `Error`
+before any slot is modified otherwise; initializing a prototype itself or an
+unrelated receiver is therefore rejected. It requires both bounds to satisfy
+`Integer.recognizes`, and requires `start <= stop` (`Range`) or
+`start >= stop` (`InvertedRange`), signalling `Error` otherwise. As for every
+`Object.call` construction, the normal result of `init` is ignored.
+
+A successfully constructed instance is fresh on every invocation and has
+ordinary object identity; its immediate parent is the selected prototype
+(`Range` or `InvertedRange`), and it carries exactly two
 local slots, `start` and `stop`, holding the supplied Integers unchanged (no
 normalization or swapping). They are observable through ordinary slot access
 and reflection (`hasSlot`, `slotValue`, `slotNames`). After the slots are
@@ -1360,7 +1391,8 @@ a failed `init` neither creates slots on them nor changes them otherwise.
 `step > 0`; `InvertedRange.eachStep(step, block)` requires
 `Integer.recognizes(step)` and `step < 0`. A zero step, a step of the wrong
 sign, or a non-Integer step signals `Error`, even when the range is empty.
-Traversal starts at `start` and invokes `block(current)` while
+The required sign is determined by the prototype of the instance, not by the
+constructor that was invoked. Traversal starts at `start` and invokes `block(current)` while
 `current < stop` (`Range`) or `current > stop` (`InvertedRange`), advancing by
 `current + step`. Completion answers `null`.
 
@@ -1381,13 +1413,17 @@ not materialize storage proportional to the number of visited elements.
 ### Transformations
 
 Both transformations answer fresh frozen instances and leave the receiver
-unchanged:
+unchanged. Let `r` be an instance with `r.parent() === Range`, `r.start == a`,
+`r.stop == b`, and `a <= b`; let `ir` be an instance with
+`ir.parent() === InvertedRange`, `ir.start == a`, `ir.stop == b`, and
+`a >= b`, whichever constructor produced them. Each result is an instance of
+the named prototype with the given `start` and `stop`:
 
 ```text
-Range(a, b).invert()           -> InvertedRange(b, a)
-Range(a, b).reverse()          -> InvertedRange(b - 1, a - 1)
-InvertedRange(a, b).invert()   -> Range(b, a)
-InvertedRange(a, b).reverse()  -> Range(b + 1, a + 1)
+r.invert()    -> InvertedRange instance: start b,      stop a
+r.reverse()   -> InvertedRange instance: start b - 1,  stop a - 1
+ir.invert()   -> Range instance:         start b,      stop a
+ir.reverse()  -> Range instance:         start b + 1,  stop a + 1
 ```
 
 `invert` swaps bounds and direction and does not necessarily preserve the

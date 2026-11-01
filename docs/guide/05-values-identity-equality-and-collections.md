@@ -1109,15 +1109,32 @@ Range(0, 3).invert().each(i => print(i))          // 3, 2, 1
 Range(0, 3).reverse().each(i => print(i))         // 2, 1, 0
 ```
 
-The first bound is included and the second excluded. Bounds must be Integers
-in the prototype's direction: `Range(3, 0)` and `InvertedRange(0, 3)` signal an
-`Error`, while equal bounds give an empty range. The direction belongs to the
-prototype, so `Range.eachStep` needs a positive step and
-`InvertedRange.eachStep` a negative one.
+The first bound is included and the second excluded, so every range is
+half-open. Both bounds must be Integers. Each constructor picks the prototype
+that matches the order of its bounds, and keeps the bounds exactly as you wrote
+them:
+
+```protos
+Range(3, 0).each(i => print(i))          // 3, 2, 1  (an InvertedRange)
+InvertedRange(0, 3).each(i => print(i))  // 0, 1, 2  (a Range)
+
+Range(3, 0).parent() === InvertedRange   // true
+Range(3, 3).parent() === Range           // true: empty, prototype kept
+InvertedRange(3, 3).parent() === InvertedRange  // true: empty, prototype kept
+```
+
+The direction belongs to the prototype of the result, not to the constructor
+you wrote: `Range.eachStep` needs a positive step and `InvertedRange.eachStep`
+a negative one, so `Range(5, 0).eachStep(-2, ...)` visits 5, 3, 1 while
+`Range(5, 0).eachStep(2, ...)` signals an `Error`.
+
+That `Range(a, b)` can answer an object whose parent is `InvertedRange` is
+similar to exact arithmetic answering a different numeric family; it does not
+mean ranges compare numerically by value. Ranges still compare by identity.
 
 `invert()` swaps the bounds and the direction, so it can visit different
 elements. `reverse()` keeps exactly the same elements and reverses their
-order. Both answer new ranges; instances are frozen, with reflectable `start`
+order. Their meanings do not depend on which constructor built the range. Both answer new ranges; instances are frozen, with reflectable `start`
 and `stop` slots, and compare by identity.
 
 The `std:collections/Range` module still exists for compatibility: its

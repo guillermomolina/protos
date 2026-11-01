@@ -15,6 +15,7 @@
 
 // D235-B1-F: Range and InvertedRange are frozen Core Prelude prototypes, and
 // std:collections/Range is a compatibility module exporting the same objects.
+// D236-B1: each prototype owns an ordinary call that normalizes direction.
 
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
@@ -28,21 +29,23 @@ tests: Array(
         Assertions.require(InvertedRange(2, 0).parent() === InvertedRange)
 
         names: Range.slotNames()
-        Assertions.require((names.size() == 5) &&
+        Assertions.require((names.size() == 6) &&
             Range.hasSlot("init") &&
+            Range.hasSlot("call") &&
             Range.hasSlot("each") &&
             Range.hasSlot("eachStep") &&
             Range.hasSlot("invert") &&
             Range.hasSlot("reverse"))
         invertedNames: InvertedRange.slotNames()
-        Assertions.require((invertedNames.size() == 5) &&
+        Assertions.require((invertedNames.size() == 6) &&
             InvertedRange.hasSlot("init") &&
+            InvertedRange.hasSlot("call") &&
             InvertedRange.hasSlot("each") &&
             InvertedRange.hasSlot("eachStep") &&
             InvertedRange.hasSlot("invert") &&
             InvertedRange.hasSlot("reverse"))
-        Assertions.require(Range.hasSlot("call") === false)
-        Assertions.require(InvertedRange.hasSlot("call") === false)
+        Assertions.require(Range.hasSlot("call") === true)
+        Assertions.require(InvertedRange.hasSlot("call") === true)
     }),
     Test("range canonical prototypes are frozen", () => {
         Assertions.signals(Error, () => { Range.extra: 1 })
@@ -51,6 +54,11 @@ tests: Array(
         Assertions.signals(Error, () => { InvertedRange.extra: 1 })
         Assertions.signals(Error, () => { InvertedRange.eachStep = null })
         Assertions.signals(Error, () => { InvertedRange.removeSlot("reverse") })
+        Assertions.signals(Error, () => { Range.call = null })
+        Assertions.signals(Error, () => { Range.removeSlot("call") })
+        Assertions.signals(Error, () => { InvertedRange.call = null })
+        Assertions.signals(Error, () => { InvertedRange.removeSlot("call") })
+        Assertions.require(Range.hasSlot("call") && InvertedRange.hasSlot("call"))
 
         Assertions.require(Range.hasSlot("extra") === false)
         Assertions.require(InvertedRange.hasSlot("extra") === false)
@@ -87,6 +95,11 @@ tests: Array(
 
         Extracted: Ranges.Range
         Assertions.require(Extracted(0, 3).parent() === Range)
+        Assertions.require(Extracted(3, 0).parent() === InvertedRange)
+        ExtractedInverted: Ranges.InvertedRange
+        Assertions.require(ExtractedInverted(3, 0).parent() === InvertedRange)
+        Assertions.require(ExtractedInverted(0, 3).parent() === Range)
+        Assertions.require(Ranges.slotNames().size() == 2)
     }),
     Test("range module member rebinding leaves the canonical prototype", () => {
         Ranges: import("std:collections/Range")
@@ -105,6 +118,111 @@ tests: Array(
         })
 
         Assertions.require(Ranges.Range === Range)
+
+        canonicalInverted: InvertedRange
+
+        (() => {
+            Ranges.InvertedRange = 7
+            Assertions.require(Ranges.InvertedRange == 7)
+            Assertions.require(InvertedRange === canonicalInverted)
+            down: Range(5, 0)
+            Assertions.require(down.parent() === canonicalInverted)
+            Assertions.require((down.start == 5) && (down.stop == 0))
+        }).ensure(() => {
+            Ranges.InvertedRange = canonicalInverted
+        })
+
+        Assertions.require(Ranges.InvertedRange === InvertedRange)
+    }),
+    Test("range extracted call closures keep normalization", () => {
+        rangeCall: Range.call
+        invertedCall: InvertedRange.call
+
+        up: rangeCall(0, 3)
+        down: rangeCall(3, 0)
+        Assertions.require((up.parent() === Range) && (up.start == 0) && (up.stop == 3))
+        Assertions.require((down.parent() === InvertedRange) && (down.start == 3) && (down.stop == 0))
+
+        invertedDown: invertedCall(3, 0)
+        invertedUp: invertedCall(0, 3)
+        Assertions.require((invertedDown.parent() === InvertedRange) &&
+            (invertedDown.start == 3) && (invertedDown.stop == 0))
+        Assertions.require((invertedUp.parent() === Range) &&
+            (invertedUp.start == 0) && (invertedUp.stop == 3))
+
+        Assertions.signals(Error, () => { rangeCall(0) })
+        Assertions.signals(Error, () => { invertedCall(0, 1.0) })
+    }),
+    Test("range inherited call delegates to Object.call for noncanonical receivers", () => {
+        DerivedRange: (Range) {
+            init: (...args) => {
+                this.mark: "derived-range"
+                this.count: args.size()
+            }
+        }
+
+        derived: DerivedRange(9, 1, 4)
+        Assertions.require(derived.parent() === DerivedRange)
+        Assertions.require(derived.mark == "derived-range")
+        Assertions.require(derived.count == 3)
+        Assertions.require(derived.hasSlot("start") === false)
+
+        derivedEmpty: DerivedRange()
+        Assertions.require((derivedEmpty.parent() === DerivedRange) && (derivedEmpty.count == 0))
+
+        DerivedInverted: (InvertedRange) {
+            init: (...args) => {
+                this.mark: "derived-inverted"
+                this.count: args.size()
+            }
+        }
+
+        derivedInverted: DerivedInverted(1)
+        Assertions.require(derivedInverted.parent() === DerivedInverted)
+        Assertions.require(derivedInverted.mark == "derived-inverted")
+        Assertions.require(derivedInverted.count == 1)
+        Assertions.require(derivedInverted.hasSlot("stop") === false)
+
+        // Two descending-order Integers still use the derived init.
+        derivedPair: DerivedInverted(0, 5)
+        Assertions.require((derivedPair.parent() === DerivedInverted) && (derivedPair.count == 2))
+    }),
+    Test("range derived local call keeps ordinary precedence", () => {
+        Custom: (Range) {
+            call: (...args) => {
+                args.size() * 100
+            }
+        }
+
+        Assertions.require(Custom(3, 0) == 200)
+        Assertions.require(Custom() == 0)
+
+        CustomInverted: (InvertedRange) {
+            call: (...args) => {
+                "custom"
+            }
+        }
+
+        Assertions.require(CustomInverted(0, 3) == "custom")
+    }),
+    Test("range canonical call ignores lexical shadowing at the call site", () => {
+        canonicalInverted: InvertedRange
+        canonicalRange: Range
+
+        (() => {
+            InvertedRange: { marker: 1 }
+            down: Range(5, 0)
+            Assertions.require(down.parent() === canonicalInverted)
+            Assertions.require(down.parent() !== InvertedRange)
+            Assertions.require((down.start == 5) && (down.stop == 0))
+        })()
+
+        (() => {
+            Range: { marker: 2 }
+            up: canonicalInverted(0, 5)
+            Assertions.require(up.parent() === canonicalRange)
+            Assertions.require(up.parent() !== Range)
+        })()
     }),
     Test("range traversal observes cancellation and runs ensure once", () => {
         visited: 0
@@ -160,6 +278,14 @@ tests: Array(
         copy: ((start, stop) => { Range(start, stop).reverse() }).parallel(2, 6).value()
         Assertions.require(copy.parent() === InvertedRange)
         Assertions.require((copy.start == 5) && (copy.stop == 1))
+
+        down: ((start, stop) => { Range(start, stop) }).parallel(4, 1).value()
+        Assertions.require(down.parent() === InvertedRange)
+        Assertions.require((down.start == 4) && (down.stop == 1))
+
+        up: ((start, stop) => { InvertedRange(start, stop) }).parallel(1, 4).value()
+        Assertions.require(up.parent() === Range)
+        Assertions.require((up.start == 1) && (up.stop == 4))
     })
 )
 tests.freeze()

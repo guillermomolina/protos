@@ -23,6 +23,33 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.489] - 2026-11-01
+
+### D236-B1 — Bidirectional guarded Range constructors
+- `semantics/VALUES_AND_COLLECTIONS.md` **Standard directed Integer Range and
+  InvertedRange**: invoking either canonical prototype now selects the result
+  prototype from the exact order of its two Integer bounds. `Range(a, b)`
+  answers a `Range` when `a <= b` and an `InvertedRange` when `a > b`;
+  `InvertedRange(a, b)` answers an `InvertedRange` when `a >= b` and a `Range`
+  when `a < b`. Equal bounds keep the invoked prototype and denote an empty
+  range. Bounds are never swapped or converted; results remain fresh, frozen
+  instances with exactly the local slots `start` and `stop`. This replaces
+  D232's rule that bounds in the wrong order signal `Error`.
+- Each prototype now owns six methods: an ordinary source-defined `call` joins
+  `init`, `each`, `eachStep`, `invert`, and `reverse`, replacing D235-B1-F's
+  statement that construction relies only on the inherited `Object.call`. The
+  `call` validates arity and Integer membership before comparing bounds,
+  constructs a matching direction through `super.call`, and invokes the other
+  canonical prototype for the opposite direction. For any noncanonical
+  receiver it delegates to `Object.call` through `super.call` with the
+  original receiver and complete argument vector.
+- `init` stays strict (parent, arity, domain and direction checks) and does
+  not redirect construction. Traversal, the `eachStep` sign rule (now
+  determined by the result prototype), `invert`, `reverse`, identity
+  equality, Core/Prelude ownership, freezing and sharing, and the two-member
+  `std:collections/Range` compatibility module are unchanged. No syntax, Core
+  family, export, or Java kernel is added; `CALLABLES.md` is unchanged.
+
 ## [0.1.488] - 2026-11-01
 
 ### D235-B1-F — Frozen Core Range prototypes with module compatibility

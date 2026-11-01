@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.434-SNAPSHOT
+
+- `I140` (D236-B1): implement guarded bidirectional `Range` and
+  `InvertedRange` constructors.
+  - Add an ordinary source-defined `call` to each canonical prototype in
+    `protos/lib/core/Range.protos`: it validates arity and Integer bounds,
+    constructs a matching direction through `super.call`, and invokes the
+    other canonical prototype for the opposite order; equal bounds keep the
+    invoked prototype. Noncanonical receivers delegate to `Object.call`.
+  - Each prototype now has six own methods; `init`, traversal, `invert`,
+    `reverse`, and the two-member `std:collections/Range` module are
+    unchanged. No Java production code, syntax, or kernel.
+  - Extend Range core, Prelude/module, callback/control, Actor, and Core
+    bootstrap coverage; update the guide.
+
 ## 0.3.433-SNAPSHOT
 
 - `I139` (D235-B1-F): promote `Range` and `InvertedRange` to frozen Core
