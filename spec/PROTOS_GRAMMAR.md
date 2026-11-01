@@ -820,10 +820,21 @@ The D143 target is not a primary or parenthesized expression. Consequently `(a, 
 
 ```ebnf
 non-local-return =
-    "^", expression;
+      "^", expression
+    | contextual-return ;
+
+contextual-return =
+    "return", expression ;
 ```
 
 `^a + b` means `^(a + b)`.
+
+`contextual-return` is the D234-B2-S1 contextual spelling of the same
+non-local return: `return expression` is exactly `^expression`. The word
+`return` stays an ordinary `identifier` token; it is not reserved. The
+`"return"` terminal above denotes that identifier spelling in the contextual
+position defined by section 36 (Contextual `return` expression), not a new
+token. `return a + b` means `^(a + b)`.
 
 ## 12. Primary Expressions
 
@@ -2461,7 +2472,9 @@ Therefore a `^` inside nested trailing closures may unwind across those closures
 
 If the captured home activation has already completed, `InvalidReturn` is signaled.
 
-This is control flow, not an ordinary message send.
+This is control flow, not an ordinary message send. The D234-B2-S1 contextual
+spelling `return value` (Contextual `return` expression) lowers to exactly the
+same `NonLocalReturn`.
 
 ## 36. Optional Control-flow Sugar
 
@@ -2576,20 +2589,98 @@ conditional syntax, and D211 does not make arbitrary undotted message sends
 valid (D199).
 
 Contextual `while` is specified by D210-Q2 (Contextual `while` expression).
-Other possible control-flow surface conveniences remain independent questions.
-For example:
+The contextual `return` spelling of non-local return is specified by
+D234-B2-S1 (Contextual `return` expression). There is no second return
+mechanism.
 
-```js
-return value
+### Contextual `return` expression (D234-B2-S1)
+
+```ebnf
+contextual-return =
+    "return", expression ;
 ```
 
-may lower exactly to:
+`return expression` is an exact contextual spelling of `^expression`
+(Non-local Return; Non-local Return Lowering). Both spellings produce the same
+canonical `NonLocalReturn`, with the same return-home authority, single
+evaluation of the operand, value, effects, Errors, `InvalidReturn` conditions,
+and `ensure` interaction defined by `semantics/CALLABLES.md`. It is not a
+statement form, not a local return, and not a keyword: the lexer tokenizes
+`return` as an ordinary identifier, and the word is not added to the
+reserved-word set.
 
-```js
-^value
+Recognition is structural and never depends on the value or type of any
+binding named `return`. The form is recognized only where an `expression`
+begins (the position where `"^", expression` may begin), and only when:
+
+- the token at that position is the bare, ungrouped identifier `return` (not a
+  member name and not a parenthesized expression);
+- the immediately following token, with no logical NEWLINE in between, can
+  begin the operand: an identifier, a literal, a reserved intrinsic, `super`,
+  unary `!`, `-` or `~`, `^`, `[`, `{`, or `(`;
+- when that token is `(`, the balanced parenthesized group holds exactly one
+  syntactically present expression that is not a `...` spread and contains no
+  top-level `,`, or the group is immediately followed by `=>` (a Closure
+  parameter list);
+- the tokens starting at the operand do not form a postfix chain of balanced
+  `( )`, `[ ]`, `{ }` groups and `.name` member suffixes that ends at `=` or
+  `:`. Such a chain makes the whole construct a complete assignment or
+  slot-creation target rooted at `return`, which keeps its ordinary meaning.
+
+The operand is then parsed exactly as the operand of `^`, so the contextual
+form has the same scope and precedence: `return a + b` returns `a + b`.
+Horizontal whitespace is insignificant: `return[0]` and `return [0]` are the
+same form, as are `return -x` and `return - x`. A logical NEWLINE immediately
+after the bare identifier `return` neither begins nor continues an operand: the
+`^` newline-continuation rule does not apply to `return`. A line comment whose
+terminator produces a logical NEWLINE therefore separates the two expressions;
+a block comment, which produces no token, does not prevent recognition. No
+automatic semicolon insertion, empty `return`, or `return;` statement exists.
+
+These are contextual returns:
+
+```text
+return x
+return x + y
+return(x)
+return (x) * 2
+return -x
+return ~x
+return[0]
+return { a: 1 }
+return (
+    calculate()
+)
 ```
 
-There is no second return mechanism.
+Every other spelling keeps its ordinary identifier, call, member, operator,
+and target meaning, including:
+
+```text
+return
+return: x
+return = x
+return => x
+return()
+return(x, y)
+return(...xs)
+return * 2
+object.return(x)
+(return)(x)
+return[0] = x
+return[0].name = x
+return[0].name: x
+return
+calculate()
+```
+
+Programs that use `return` as an ordinary binding reach the reinterpreted
+shapes through grouping: `(return)(x)`, `(return) - x`, `(return) ~ x`,
+`(return)[0]`, and `(return) { a: 1 }`. The approved incompatibilities with
+the previous ordinary reading are exactly `return(x)`, `return - x`,
+`return ~ x`, `return[0]`, and `return { a: 1 }`. A `%` after `return` is not
+an operand start, so `return %{...}` keeps its ordinary binary reading; write
+`return (%{...})` to return a Map construction.
 
 ## 37. Futures and Errors Require No New Grammar
 
@@ -2699,7 +2790,13 @@ assignment =
     assignment-target, "=", expression ;
 
 non-local-return =
-    "^", expression ;
+      "^", expression
+    | contextual-return ;
+
+(* D234-B2-S1: "return" is an ordinary identifier recognized contextually;
+   see section 36, Contextual `return` expression. *)
+contextual-return =
+    "return", expression ;
 
 slot-creation-target =
       identifier
@@ -3388,8 +3485,9 @@ while(condition)
 
 Programs may still define and call `while` as an ordinary binding or member
 name through those spellings. Apart from the D211 contextual `if`/`else`
-expression (Optional Control-flow Sugar) and the D212 contextual `until` suffix
-(Contextual `until` suffix expression), no other identifier acquires a
+expression (Optional Control-flow Sugar), the D212 contextual `until` suffix
+(Contextual `until` suffix expression), and the D234-B2-S1 contextual `return`
+expression (Contextual `return` expression), no other identifier acquires a
 contextual interpretation.
 
 ### Contextual `until` suffix expression (D212)

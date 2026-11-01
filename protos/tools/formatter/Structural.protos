@@ -1762,16 +1762,42 @@ formatExpression = (node, level, layout) => {
             )
     }
 
+    // I138: the contextual `return expression` alias keeps its spelling; a
+    // single space keeps the identifier apart from the operand. Comments
+    // between the prefix and the operand stay there, separated by spaces
+    // only: a logical newline after `return` would end the contextual form.
     if(kind == "NON_LOCAL_RETURN") {
+        operandText:
+            formatExpression(
+                node.expression,
+                level,
+                layout
+            )
+
+        operandComments:
+            contextualHeaderComments(
+                node,
+                "NON_LOCAL_RETURN_OPERAND",
+                node.spelling != "return",
+                layout
+            )
+
         formatted =
             joinSymbolicPrefix(
                 "^",
-                formatExpression(
-                    node.expression,
-                    level,
-                    layout
-                )
+                operandText
             )
+
+        if(operandComments.size() > 0) {
+            formatted = "^" + operandComments + operandText
+        }
+
+        if(node.spelling == "return") {
+            formatted =
+                "return " +
+                operandComments +
+                operandText
+        }
     }
 
     if(kind == "SLOT_CREATION") {
@@ -1939,6 +1965,11 @@ formatBody: (layout) => {
                     "CONTEXTUAL_UNTIL_AFTER_LPAREN")) &&
             (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
 
+        nonLocalReturnComment:
+            (comment.boundaryKind ==
+                "NON_LOCAL_RETURN_OPERAND") &&
+            (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
+
         embeddedComment:
             (comment.boundaryKind == "NONE") &&
             (comment.placement == "EMBEDDED_BETWEEN_TOKENS") &&
@@ -1951,6 +1982,7 @@ formatBody: (layout) => {
             contextualWhileHeaderComment ||
             contextualIfComment ||
             contextualUntilComment ||
+            nonLocalReturnComment ||
             embeddedComment).ifFalse(() => {
             Error().signal()
         })

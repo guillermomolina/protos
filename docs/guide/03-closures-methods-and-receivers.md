@@ -610,6 +610,44 @@ innermost Closure.
 That is different from languages where every lambda invocation automatically
 creates a new local return target.
 
+## `return value` is the same non-local return
+
+`return value` is an exact contextual spelling of `^value` (D234-B2-S1):
+
+```protos
+find: (items) => {
+    items.each((item) => {
+        if(item.valid) {
+            return item
+        }
+    })
+
+    null
+}
+```
+
+This is **not** the `return` of a JavaScript callback. In JavaScript, `return`
+inside the callback passed to `forEach` only ends that callback. In Protos,
+`return item` targets the captured return home exactly like `^item`, so it
+returns from `find`. Choose either spelling; they compile to the same operation.
+
+`return` is still an ordinary identifier. Only a bare `return` at the start of
+an expression, followed on the same line by an operand, is a return. A newline
+ends it:
+
+```protos
+return          // an ordinary read of a binding named `return`
+calculate()     // a separate expression
+
+return (
+    calculate()
+)               // returns the value of calculate()
+```
+
+If you have a binding named `return`, group it to call, index or combine it:
+`(return)(x)`, `(return)[0]`, `(return) - x`. Complete assignment targets such
+as `return[0] = x` keep their ordinary meaning.
+
 ## Escaped non-local return is an error
 
 A captured return home has a lifetime.
@@ -653,7 +691,8 @@ a Closure escaped.
 8. Treat `super` as a message-send lookup form, never as a value.
 9. Remember that nested Closures can retain receiver, `methodHome`, and return
    home information from the invocation in which they were created.
-10. Use `^` only when you intend a non-local return to the captured home.
+10. Use `^` or `return` only when you intend a non-local return to the
+    captured home; neither is a local callback return.
 11. Omitted Closure arguments bind `null` or evaluate declared defaults;
     supplying `null` explicitly never triggers a default.
 12. A rest parameter captures only surplus supplied arguments into a fresh
@@ -672,6 +711,10 @@ The current conformance corpus also contains focused executable examples for
 receiver-preserving `super` behavior:
 
 - [`../../protos/tests/conformance/regression/super-dispatch.protos`](../../protos/tests/conformance/regression/super-dispatch.protos)
+
+and for the contextual `return` spelling of non-local return:
+
+- [`../../protos/tests/conformance/surface-sugar/contextual-return.protos`](../../protos/tests/conformance/surface-sugar/contextual-return.protos)
 
 The tutorials remain intentionally small; this guide supplies the broader mental
 model around them.

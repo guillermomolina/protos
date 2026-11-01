@@ -191,14 +191,16 @@ public final class ProtosStaticLint {
     private void checkUnreachableAfterNonLocalReturn(SurfaceSequence body) {
         List<SurfaceExpression> expressions = body.expressions();
         for (int index = 0; index < expressions.size() - 1; index++) {
-            if (expressions.get(index) instanceof SurfaceNonLocalReturn) {
+            if (expressions.get(index) instanceof SurfaceNonLocalReturn nonLocalReturn) {
                 SurfaceExpression last = expressions.get(expressions.size() - 1);
                 report(
                         ProtosStaticLintDiagnostic.UNREACHABLE_AFTER_NONLOCAL_RETURN,
                         new SourceSpan(
                                 expressions.get(index + 1).span().startOffset(),
                                 last.span().endOffset()),
-                        "Unreachable code: the preceding '^' never continues "
+                        "Unreachable code: the preceding '"
+                                + nonLocalReturn.spelling().lexeme()
+                                + "' never continues "
                                 + "this closure body");
                 return;
             }

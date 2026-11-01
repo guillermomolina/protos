@@ -85,6 +85,23 @@ final class ProtosReplTest {
     }
 
     @Test
+    void contextualReturnInMultilineInputLeavesTheHomeInvocation() {
+        R r = repl("find: (items) => {\n"
+                + "    items.each((item) => {\n"
+                + "        (item > 1).ifTrue() {\n"
+                + "            return item * 10\n"
+                + "        }\n"
+                + "    })\n"
+                + "    0\n"
+                + "}\n"
+                + "find([1, 2, 3])\n"
+                + ":quit\n");
+        assertEquals(0, r.c);
+        assertTrue(r.o.contains("protos> 20\n"), r.o);
+        assertTrue(r.e.isBlank(), r.e);
+    }
+
+    @Test
     void nestedClosureMultilineInputExecutesOnlyWhenComplete() {
         R r = repl("outer: () => {\n"
                 + "    () => {\n"

@@ -55,6 +55,25 @@ class CanonicalizerReturnTest {
         assertEquals("*", multiplication.message());
     }
 
+    @Test
+    void contextualReturnCanonicalizesExactlyLikeCaret() {
+        // I138: "^" padded to the width of "return " keeps every span equal,
+        // so the canonical records compare equal component by component.
+        String[][] pairs = {
+            {"^      value", "return value"},
+            {"^      a + b * c", "return a + b * c"},
+            {"^     (x)", "return(x)"},
+            {"^      -x", "return -x"},
+            {"^      ~x", "return ~x"},
+            {"^     [0]", "return[0]"},
+            {"^      { a: 1 }", "return { a: 1 }"},
+            {"^      () => { ^      1 }", "return () => { return 1 }"},
+        };
+        for (String[] pair : pairs) {
+            assertEquals(canonicalizeOnly(pair[0]), canonicalizeOnly(pair[1]), pair[1]);
+        }
+    }
+
     private Object canonicalizeOnly(String source) {
         SurfaceExpression surface = only(source);
         return canonicalizer.canonicalize(surface);

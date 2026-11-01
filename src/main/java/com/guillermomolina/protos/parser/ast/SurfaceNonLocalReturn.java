@@ -20,10 +20,41 @@ package com.guillermomolina.protos.parser.ast;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.Objects;
 
-public record SurfaceNonLocalReturn(SurfaceExpression expression, SourceSpan span)
+/**
+ * Non-local return, spelled {@code ^expression} or, by the I138
+ * (D234-B2-S1) contextual alias, {@code return expression}.
+ *
+ * <p>Both spellings canonicalize to the same {@code CanonicalReturn}; the
+ * spelling is surface-only provenance kept for source-preserving tooling.
+ */
+public record SurfaceNonLocalReturn(
+        SurfaceExpression expression,
+        Spelling spelling,
+        SourceSpan span)
         implements SurfaceExpression {
+    /** Source spelling of the non-local return. */
+    public enum Spelling {
+        CARET("^"),
+        RETURN("return");
+
+        private final String lexeme;
+
+        Spelling(String lexeme) {
+            this.lexeme = lexeme;
+        }
+
+        public String lexeme() {
+            return lexeme;
+        }
+    }
+
     public SurfaceNonLocalReturn {
         Objects.requireNonNull(expression, "expression");
+        Objects.requireNonNull(spelling, "spelling");
         Objects.requireNonNull(span, "span");
+    }
+
+    public SurfaceNonLocalReturn(SurfaceExpression expression, SourceSpan span) {
+        this(expression, Spelling.CARET, span);
     }
 }

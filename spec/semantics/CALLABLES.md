@@ -349,7 +349,21 @@ Closures defined at module level have no enclosing function return home. When su
 
 A closure created inside an active function or method invocation captures that invocation's return home. Calling such a closure as an ordinary nested block does not replace the captured home.
 
-`return value` may eventually exist as syntactic sugar for `^value`, but `return` is not part of the fundamental semantics.
+`return value` is the D234-B2-S1 contextual spelling of `^value` (`../PROTOS_GRAMMAR.md`, Contextual `return` expression). It is exactly equivalent: it produces the same canonical non-local return, targets the same captured return home, evaluates its operand once, and has the same value, effects, Errors, `InvalidReturn` conditions (section 14), and `ensure` precedence. It is not a local return from the innermost Closure:
+
+```js
+find: (items) => {
+    items.each((item) => {
+        item.valid.ifTrue() {
+            return item
+        }
+    })
+
+    null
+}
+```
+
+`return item` returns from the active invocation of `find`, exactly as `^item` does. `return` remains an ordinary identifier outside the contextual shape, and the fundamental semantics define no second return mechanism.
 ## 14. Return from Escaped Closures
 
 A nested closure may outlive the activation that owns its captured return home.

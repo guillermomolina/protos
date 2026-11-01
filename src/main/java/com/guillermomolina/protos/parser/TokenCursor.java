@@ -192,6 +192,106 @@ final class TokenCursor {
     }
 
     /**
+     * I138 (D234-B2-S1): non-consuming recognition of the contextual
+     * {@code return expression} alias of {@code ^expression} at the current
+     * token. Recognition is purely structural: the current token must be the
+     * bare identifier {@code return}, immediately followed (no logical
+     * NEWLINE) by a token that can begin an operand. A following {@code '('}
+     * qualifies only when it holds exactly one syntactically present,
+     * non-spread top-level expression, or when the parenthesized group is a
+     * Closure parameter list. A complete assignment or slot-creation target
+     * rooted at {@code return} ({@code return[0] = x},
+     * {@code return[0].name: x}, ...) keeps its ordinary meaning.
+     */
+    boolean atContextualReturn() {
+        if (!at(TokenType.IDENTIFIER)
+                || !current().token().lexeme().equals("return")) {
+            return false;
+        }
+
+        int operand = index + 1;
+        if (operand >= tokens.size()) {
+            return false;
+        }
+
+        switch (tokens.get(operand).token().type()) {
+            case IDENTIFIER, NUMBER, STRING, THIS, CONTEXT, NULL, TRUE, FALSE,
+                    SUPER, BANG, MINUS, TILDE, CARET -> {
+                return true;
+            }
+            case LPAREN -> {
+                if (!parenthesizedReturnOperand(operand)) {
+                    return false;
+                }
+            }
+            case LBRACKET, LBRACE -> {
+                // Candidate; complete targets are excluded below.
+            }
+            default -> {
+                return false;
+            }
+        }
+
+        return !postfixChainEndsInMutation(operand);
+    }
+
+    private boolean parenthesizedReturnOperand(int open) {
+        int close = matchingCloseOffset(open);
+        if (close < 0) {
+            return false;
+        }
+        if (typeAt(close + 1, TokenType.FAT_ARROW)) {
+            return true;
+        }
+
+        int first = skipNewlines(open + 1);
+        if (first >= close || typeAt(first, TokenType.ELLIPSIS)) {
+            return false;
+        }
+
+        int offset = first;
+        while (offset < close) {
+            TokenType type = tokens.get(offset).token().type();
+            if (type == TokenType.COMMA) {
+                return false;
+            }
+            if (closerFor(type) != null) {
+                offset = matchingCloseOffset(offset);
+                if (offset < 0) {
+                    return false;
+                }
+            }
+            offset++;
+        }
+        return true;
+    }
+
+    private boolean postfixChainEndsInMutation(int offset) {
+        while (true) {
+            if (typeAt(offset, TokenType.NEWLINE)
+                    && typeAt(offset + 1, TokenType.DOT)) {
+                offset++;
+            }
+            if (typeAt(offset, TokenType.DOT)
+                    && typeAt(offset + 1, TokenType.IDENTIFIER)) {
+                offset += 2;
+                continue;
+            }
+            if (offset < tokens.size()
+                    && closerFor(tokens.get(offset).token().type()) != null) {
+                offset = matchingCloseOffset(offset);
+                if (offset < 0) {
+                    return false;
+                }
+                offset++;
+                continue;
+            }
+            return typeAt(offset, TokenType.EQUALS)
+                    || typeAt(offset, TokenType.COLON);
+        }
+    }
+
+    /**
      * Returns the offset of the delimiter closing the opener at
      * {@code openOffset}, respecting nested parentheses, brackets, and
      * braces, or -1 when the delimiters are unbalanced or mismatched before

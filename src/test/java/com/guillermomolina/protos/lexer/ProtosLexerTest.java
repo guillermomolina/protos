@@ -48,6 +48,16 @@ class ProtosLexerTest {
     }
 
     @Test
+    void returnIsAnOrdinaryIdentifier() {
+        assertTypes(
+            "return x",
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.EOF
+        );
+    }
+
+    @Test
     void reservedWordRecognitionIsExactAndCaseSensitive() {
         assertTypes(
             "This CONTEXT Args SUPER True FALSE Null",

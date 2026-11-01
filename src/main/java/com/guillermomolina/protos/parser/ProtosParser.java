@@ -142,6 +142,15 @@ public final class ProtosParser {
                     new SourceSpan(caret.span().startOffset(), expression.span().endOffset()));
         }
 
+        if (cursor.at(TokenType.IDENTIFIER) && cursor.atContextualReturn()) {
+            TokenOccurrence keyword = cursor.advance();
+            SurfaceExpression expression = parseExpressionFoundation();
+            return new SurfaceNonLocalReturn(
+                    expression,
+                    SurfaceNonLocalReturn.Spelling.RETURN,
+                    new SourceSpan(keyword.span().startOffset(), expression.span().endOffset()));
+        }
+
         if (cursor.multipleSlotCreationTargetFollowedByColon()) {
             return parseMultipleSlotCreation();
         }

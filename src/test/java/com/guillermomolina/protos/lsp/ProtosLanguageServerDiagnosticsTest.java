@@ -177,6 +177,24 @@ class ProtosLanguageServerDiagnosticsTest {
     }
 
     @Test
+    void contextualReturnLintWarningNamesTheWrittenSpelling() {
+        List<PublishDiagnosticsParams> published = new ArrayList<>();
+        ProtosTextDocumentService documents = connectedDocuments(published);
+        String uri = "file:///workspace/return-lint.protos";
+
+        documents.didOpen(open(uri, 1, "f: () => {\n    return 1\n    a\n}"));
+
+        assertEquals(1, published.size());
+        List<Diagnostic> diagnostics = published.get(0).getDiagnostics();
+        assertEquals(1, diagnostics.size());
+        assertWarning(
+                diagnostics.get(0),
+                "protos/unreachable-after-nonlocal-return",
+                new Range(new Position(2, 4), new Position(2, 5)));
+        assertTrue(diagnostics.get(0).getMessage().getLeft().contains("'return'"));
+    }
+
+    @Test
     void parserErrorReplacesLintAndRecoveryAndCloseUpdateIt() {
         List<PublishDiagnosticsParams> published = new ArrayList<>();
         ProtosTextDocumentService documents = connectedDocuments(published);

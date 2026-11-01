@@ -48,6 +48,26 @@ class ProtosStaticLintTest {
     }
 
     @Test
+    void reportsUnreachableSuffixAfterContextualReturnWithItsSpelling() {
+        String source = "f: () => {\n    return 1\n    a\n}";
+
+        ProtosStaticLintDiagnostic only = single(source);
+
+        assertEquals(UNREACHABLE, only.ruleId());
+        assertEquals(
+                new SourceSpan(source.indexOf("a\n"), source.indexOf("a\n") + 1),
+                only.span());
+        assertTrue(only.message().contains("'return'"), only.message());
+        assertFalse(only.message().contains("'^'"), only.message());
+        assertTrue(single("f: () => { ^1; a }").message().contains("'^'"));
+    }
+
+    @Test
+    void bareReturnFollowedByNewlineIsNotUnreachable() {
+        assertTrue(lint("f: () => {\n    return\n    a\n}").isEmpty());
+    }
+
+    @Test
     void reportsSingleFollowingExpression() {
         String source = "f: () => { ^1; a }";
 

@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.432-SNAPSHOT
+
+- `I138` (D234-B2-S1): implement the contextual `return expression` spelling
+  of non-local return.
+  - Recognize, structurally and without new tokens, the bare ungrouped
+    identifier `return` followed on the same logical line by an operand start;
+    `return(x)` qualifies only with one non-spread expression, and complete
+    assignment or slot-creation targets rooted at `return` stay ordinary.
+  - Reuse `SurfaceNonLocalReturn` (now carrying its source spelling),
+    `Canonicalizer` and `CanonicalReturn`; no new runtime node, instruction,
+    or return-home protocol, and no cost for code that does not use it.
+  - The bundled formatter preserves the `return` or `^` spelling and keeps
+    block comments between the prefix and its operand (new
+    `NON_LOCAL_RETURN_OPERAND` comment boundary, for both spellings); the
+    unreachable-code lint names the spelling the user wrote.
+  - Add parser, canonicalization, lint, LSP, REPL, formatter and
+    `surface-sugar/contextual-return.protos` conformance coverage.
+
 ## 0.3.431-SNAPSHOT
 
 - `I137` (D233-B1): add fixed bitwise and shift operator syntax over the

@@ -348,14 +348,18 @@ public final class ProtosSourceLayoutToolBridge {
                                 paths,
                                 prelude));
             }
-            case SurfaceNonLocalReturn nonLocalReturn ->
-                    value.createLocalSlot(
-                            "expression",
-                            expression(
-                                    nonLocalReturn.expression(),
-                                    view,
-                                    paths,
-                                    prelude));
+            case SurfaceNonLocalReturn nonLocalReturn -> {
+                value.createLocalSlot(
+                        "spelling",
+                        string(nonLocalReturn.spelling().lexeme()));
+                value.createLocalSlot(
+                        "expression",
+                        expression(
+                                nonLocalReturn.expression(),
+                                view,
+                                paths,
+                                prelude));
+            }
             case SurfaceSlotCreation creation -> {
                 value.createLocalSlot(
                         "target",

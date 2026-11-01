@@ -36,6 +36,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
+import com.guillermomolina.protos.parser.ast.SurfaceNonLocalReturn;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.List;
@@ -1084,6 +1085,46 @@ class ProtosSourceLayoutViewTest {
         assertEquals(kinds, view.preservationProjection().comments().stream()
                 .map(ProtosSourceLayoutView.CommentProjection::boundaryKind)
                 .toList());
+    }
+
+    @Test
+    void nonLocalReturnOperandCommentsAttachInsideTheReturn() {
+        for (String source : List.of(
+                "return /* c */ value",
+                "^ /* c */ value",
+                "return /* one\n two */ value")) {
+            ProtosSourceLayoutView view =
+                    core.sourceLayout(
+                            new ProtosDocumentSnapshot(
+                                    "memory:i138-return-comment",
+                                    17L,
+                                    source));
+
+            SurfaceNonLocalReturn nonLocalReturn =
+                    assertInstanceOf(
+                            SurfaceNonLocalReturn.class,
+                            view.program().expressions().get(0),
+                            source);
+            assertEquals(1, view.commentAttachments().size(), source);
+            ProtosSourceLayoutView.CommentAttachment attachment =
+                    view.commentAttachments().get(0);
+            assertEquals(
+                    ProtosSourceLayoutView.CommentBoundaryKind.NON_LOCAL_RETURN_OPERAND,
+                    attachment.boundaryKind(),
+                    source);
+            assertEquals(
+                    ProtosSourceLayoutView.CommentPlacement.EMBEDDED_BETWEEN_TOKENS,
+                    attachment.placement(),
+                    source);
+            assertEquals(
+                    view.pathOf(nonLocalReturn).orElseThrow().toString(),
+                    attachment.preceding().orElseThrow().toString(),
+                    source);
+            assertEquals(
+                    view.pathOf(nonLocalReturn.expression()).orElseThrow().toString(),
+                    attachment.following().orElseThrow().toString(),
+                    source);
+        }
     }
 
     @Test

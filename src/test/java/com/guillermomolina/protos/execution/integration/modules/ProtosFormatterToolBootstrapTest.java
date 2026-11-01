@@ -1618,6 +1618,64 @@ final class ProtosFormatterToolBootstrapTest {
         assertEquals(continued, formatOnce(continued, version++));
     }
 
+    @Test
+    void preservesContextualReturnSpellingAndMeaning()
+            throws Exception {
+        String[][] samples = {
+            {"return  x", "return x"},
+            {"return a+b", "return a + b"},
+            {"return(x)", "return (x)"},
+            {"return -x", "return -x"},
+            {"return ~ x", "return ~x"},
+            {"return[0]", "return [0]"},
+            {"return {a:1}", "return { a: 1 }"},
+            {"^ a+b", "^a + b"},
+            {"(return)(x)", "(return)(x)"},
+            {"(return) - x", "(return) - x"},
+            {"(return)[0]", "(return)[0]"},
+            {"return(x,y)", "return(x, y)"},
+            {"return[0]=x", "return[0] = x"},
+            {"return[0].name:x", "return[0].name: x"},
+            {"f:()=>{return 1\n// done\nnext()}",
+                "f: () => {\n    return 1\n    // done\n    next()\n}"},
+            {"return\ncalculate()", "return\ncalculate()"},
+            {"return /* note */ value", "return /* note */ value"},
+            {"return  /* first\n   second */  value",
+                "return /* first\n   second */ value"},
+            {"return // note\nnext()", "return // note\nnext()"},
+            {"^ /* note */ value", "^ /* note */ value"},
+            {"^ /* first\n   second */value", "^ /* first\n   second */ value"},
+            {"^value // note\nnext()", "^value // note\nnext()"},
+            {"f:()=>{return /* early */ 1\nnext()}",
+                "f: () => {\n    return /* early */ 1\n    next()\n}"},
+        };
+
+        long version = 60L;
+        for (String[] sample : samples) {
+            String first = formatOnce(sample[0], version++);
+            assertEquals(sample[1] + "\n", first, sample[0]);
+            assertEquals(
+                    canonicalOf(sample[0], version++),
+                    canonicalOf(first, version++),
+                    sample[0]);
+            assertEquals(first, formatOnce(first, version++), sample[0]);
+        }
+    }
+
+    private static String canonicalOf(String source, long version)
+            throws ReflectiveOperationException {
+        ProtosSourceLayoutView view =
+                new ProtosStaticAnalysisCore()
+                        .sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:i138-return-semantic",
+                                        version,
+                                        source));
+        return canonicalSemanticProjection(
+                new com.guillermomolina.protos.semantic.Canonicalizer()
+                        .canonicalize(view.program()));
+    }
+
     private static String formatOnce(String source, long version)
             throws Exception {
         ProtosSourceLayoutView view =

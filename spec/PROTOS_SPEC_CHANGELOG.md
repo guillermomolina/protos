@@ -23,6 +23,30 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.487] - 2026-11-01
+
+### D234-B2-S1 — Contextual `return` spelling of non-local return
+- `PROTOS_GRAMMAR.md` section 11 **Non-local Return** and the **Compact EBNF**:
+  `non-local-return` gains the `contextual-return` alternative
+  `"return", expression`; `return a + b` means `^(a + b)`. Section 36 gains
+  **Contextual `return` expression (D234-B2-S1)**: structural recognition only
+  where an expression begins, for the bare ungrouped identifier `return`
+  immediately followed (no logical NEWLINE) by an operand-start token; a
+  following `(` qualifies only for exactly one non-spread expression or a
+  Closure parameter list; a complete assignment or slot-creation target rooted
+  at `return` stays ordinary. A logical NEWLINE after bare `return` separates
+  expressions; block comments do not. Approved incompatibilities are exactly
+  `return(x)`, `return - x`, `return ~ x`, `return[0]` and `return { a: 1 }`,
+  each reachable in its ordinary meaning through `(return)`. Section 35 and
+  the D210-Q2 contextual-identifier sentence reference the new form.
+- `semantics/CALLABLES.md` 13 **Return Semantics**: `return value` is
+  normatively the same non-local return as `^value` (same captured return
+  home, single operand evaluation, Errors, `InvalidReturn`, `ensure`), not a
+  local Closure return.
+- `PROTOS_LANGUAGE_SPEC.md` 33: removes the future-question wording; `return`
+  is still not reserved. No new runtime return mechanism, Closure category, or
+  return-home protocol; `^` and its newline-continuation rule are unchanged.
+
 ## [0.1.486] - 2026-11-01
 
 ### D233-B1 — Fixed bitwise and shift operator syntax

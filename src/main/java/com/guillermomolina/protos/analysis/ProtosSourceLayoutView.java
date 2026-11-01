@@ -90,6 +90,7 @@ public final class ProtosSourceLayoutView {
         CONTEXTUAL_UNTIL_BEFORE_KEYWORD,
         CONTEXTUAL_UNTIL_BEFORE_LPAREN,
         CONTEXTUAL_UNTIL_AFTER_LPAREN,
+        NON_LOCAL_RETURN_OPERAND,
         DOCUMENT_PREFIX,
         DOCUMENT_SUFFIX
     }
@@ -887,6 +888,13 @@ public final class ProtosSourceLayoutView {
 
             if (boundary.isEmpty()) {
                 boundary =
+                        nonLocalReturnOperandBoundary(
+                                occurrence.span(),
+                                structuralIndex);
+            }
+
+            if (boundary.isEmpty()) {
+                boundary =
                         contextualElseBoundary(
                                 occurrence.span(),
                                 sourceFacts,
@@ -1062,6 +1070,45 @@ public final class ProtosSourceLayoutView {
                                 ownerPath.orElseThrow(),
                                 conditionPath.orElseThrow(),
                                 kind,
+                                Optional.empty()));
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    /**
+     * I138: comments between a non-local return's {@code ^} or contextual
+     * {@code return} and its operand attach from the return node to its
+     * operand, so the formatter keeps them inside the return instead of
+     * moving them across it.
+     */
+    private static Optional<ResolvedBoundary>
+            nonLocalReturnOperandBoundary(
+                    SourceSpan comment,
+                    StructuralIndex structuralIndex) {
+        for (StructuralNode structuralNode : structuralIndex.nodes) {
+            if (!(structuralNode.node()
+                    instanceof SurfaceNonLocalReturn nonLocalReturn)) {
+                continue;
+            }
+
+            SurfaceExpression operand = nonLocalReturn.expression();
+            if (comment.startOffset() < nonLocalReturn.span().startOffset()
+                    || comment.endOffset() > operand.span().startOffset()) {
+                continue;
+            }
+
+            Optional<StructuralPath> ownerPath =
+                    structuralIndex.pathOf(nonLocalReturn);
+            Optional<StructuralPath> operandPath =
+                    structuralIndex.pathOf(operand);
+            if (ownerPath.isPresent() && operandPath.isPresent()) {
+                return Optional.of(
+                        new ResolvedBoundary(
+                                ownerPath.orElseThrow(),
+                                operandPath.orElseThrow(),
+                                CommentBoundaryKind.NON_LOCAL_RETURN_OPERAND,
                                 Optional.empty()));
             }
         }

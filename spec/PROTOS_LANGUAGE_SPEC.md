@@ -252,7 +252,12 @@ meaning. Conditional execution itself remains the ordinary Boolean protocol owne
 by `semantics/VALUES_AND_COLLECTIONS.md`; no conditional runtime primitive
 exists.
 
-`return` remains an independent possible future syntactic-sugar question.
+`return` is not a reserved word. The contextual expression `return expression`
+is approved (D234-B2-S1) as an exact spelling of the non-local return
+`^expression`, with the same captured return home, and is defined, with its
+recognition limits, by `PROTOS_GRAMMAR.md` (Contextual `return` expression)
+and `semantics/CALLABLES.md` (Return Semantics). Every other spelling of
+`return` keeps its ordinary identifier meaning.
 `while` is not a reserved word; the exact contextual expression
 `while(condition) { body }` is approved (D210-Q2) and defined, with its
 recognition limits and its desugaring to the ordinary `whileTrue` send, by
