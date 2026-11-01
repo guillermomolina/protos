@@ -68,6 +68,20 @@ final class ProtosI116OptimizedDapAcceptanceTest {
     }
 
     @Test
+    void optimizedContextualReturnRemainsBreakpointVisibleOverRealDap()
+            throws Exception {
+        assertOptimizedBodyOverRealDap(
+                "run: () => {\n"
+                        + "    return 7\n"
+                        + "}\n"
+                        + "run()\n",
+                new int[] {2},
+                4,
+                "7",
+                null);
+    }
+
+    @Test
     void optimizedScalarLocalsRemainVisibleOverRealDap()
             throws Exception {
         assertOptimizedBodyOverRealDap(

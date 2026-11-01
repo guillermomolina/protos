@@ -96,6 +96,56 @@ class ProtosLanguageServerDocumentSymbolsTest {
     }
 
     @Test
+    void projectsSlotsAcrossContextualForHeadersBodiesAndReturnOperands() {
+        ProtosLanguageServer server = initializedServer();
+        ProtosTextDocumentService documents = server.textDocuments();
+        String uri = "file:///workspace/contextual-for-symbols.protos";
+        String source = "for(item in { iterableSlot: xs }) {\n"
+                + "    genericBody: item & 1\n"
+                + "}\n"
+                + "for(i, { startSlot: 0 }.startSlot, { stopSlot: 2 }.stopSlot) {\n"
+                + "    numericBody: i\n"
+                + "}\n"
+                + "for(j, 3, 0, { stepSlot: -1 }.stepSlot) {\n"
+                + "    steppedBody: j\n"
+                + "    return { returnedSlot: j }\n"
+                + "}\n";
+
+        documents.didOpen(open(uri, 1, source));
+        List<DocumentSymbol> symbols = symbols(documents, uri);
+
+        assertEquals(
+                List.of(
+                        "iterableSlot",
+                        "genericBody",
+                        "startSlot",
+                        "stopSlot",
+                        "numericBody",
+                        "stepSlot",
+                        "steppedBody",
+                        "returnedSlot"),
+                symbols.stream().map(DocumentSymbol::getName).toList());
+
+        assertEquals(
+                new Position(0, 14),
+                symbols.get(0).getSelectionRange().getStart());
+        assertEquals(
+                new Position(3, 9),
+                symbols.get(2).getSelectionRange().getStart());
+        assertEquals(
+                new Position(6, 15),
+                symbols.get(5).getSelectionRange().getStart());
+        assertEquals(
+                new Position(8, 13),
+                symbols.get(7).getSelectionRange().getStart());
+
+        assertTrue(symbols.stream().allMatch(
+                symbol -> symbol.getKind() == SymbolKind.Property));
+        assertTrue(symbols.stream().allMatch(
+                symbol -> childNames(symbol).isEmpty()));
+    }
+
+    @Test
     void preservesUtf16ColumnsAndReturnsNoTreeForCurrentParseFailure() {
         ProtosLanguageServer server = initializedServer();
         ProtosTextDocumentService documents = server.textDocuments();

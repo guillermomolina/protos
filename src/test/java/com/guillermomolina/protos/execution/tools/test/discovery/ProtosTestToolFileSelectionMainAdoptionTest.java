@@ -81,11 +81,11 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
 
         assertTrue(
                 source.contains(
-                        "filePaths.each((filePath) => {"));
+                        "for(filePath in filePaths) {"));
 
         assertTrue(
                 source.contains(
-                        "directoryPaths.each((directoryPath) => {"));
+                        "for(directoryPath in directoryPaths) {"));
 
         assertTrue(
                 source.contains(

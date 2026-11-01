@@ -7,6 +7,12 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.437-SNAPSHOT
+
+- `AUD022`: audit the post-0.3.428 syntax across static tooling, source formatting and debugging without changing language semantics.
+  - Add eight regressions for contextual `for` document symbols, completion and signature help; breakpoint scopes and binder lifetime for generic, numeric and stepped loops; real DAP contextual `return` breakpoint visibility; and idempotent semantic-preserving mixed-syntax formatting.
+  - Update two Test Tool source-adoption assertions from explicit `.each` calls to their I142 contextual `for` equivalents; selector validation and production behavior remain unchanged.
+
 ## 0.3.436-SNAPSHOT
 
 - `I142` (D231-F2-PURE): migrate eligible ordinary first-party Library, Tool

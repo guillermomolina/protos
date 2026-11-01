@@ -210,6 +210,45 @@ class ProtosLanguageServerCompletionTest {
     }
 
     @Test
+    void contextualForBinderRemainsAvailableToDocumentCompletion()
+            throws Exception {
+        ProjectFixture project = project("contextual-for");
+        ProtosLanguageServer server = initialized(project, canonical(project));
+        String uri = project.source().toUri().toString();
+
+        String generic = "for(item in items) { it }";
+        server.textDocuments().didOpen(open(uri, 1, generic));
+
+        int genericStart = generic.lastIndexOf("it");
+        CompletionList genericItems =
+                completion(server, uri, 0, genericStart + 2);
+        assertEquals(
+                "item", genericItems.getItems().get(0).getLabel());
+        assertEquals(
+                CompletionItemKind.Variable,
+                genericItems.getItems().get(0).getKind());
+        assertEquals(
+                new TextEdit(
+                        range(0, genericStart, 0, genericStart + 2),
+                        "item"),
+                genericItems.getItems().get(0).getTextEdit().getLeft());
+
+        String numeric = "for(i, 0, 3) { i }";
+        server.textDocuments().didChange(change(uri, 2, numeric));
+
+        int numericStart = numeric.lastIndexOf("i");
+        CompletionList numericItems =
+                completion(server, uri, 0, numericStart + 1);
+        assertEquals(
+                "i", numericItems.getItems().get(0).getLabel());
+        assertEquals(
+                new TextEdit(
+                        range(0, numericStart, 0, numericStart + 1),
+                        "i"),
+                numericItems.getItems().get(0).getTextEdit().getLeft());
+    }
+
+    @Test
     void mapsUtf16NonBmpAndCrlfPositions() throws Exception {
         ProjectFixture project = project("utf16");
         ProtosLanguageServer server = initialized(project, canonical(project));

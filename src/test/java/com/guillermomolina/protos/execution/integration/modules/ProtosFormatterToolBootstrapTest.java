@@ -1632,6 +1632,39 @@ final class ProtosFormatterToolBootstrapTest {
     }
 
     @Test
+    void aud022PreservesMixedContextualForReturnBitwiseAndRangeForms()
+            throws Exception {
+        String source =
+                "run:()=>{\n"
+                        + "for(item in InvertedRange(3,0).reverse())"
+                        + "{mask:~item&3|item<<1\nreturn mask}\n"
+                        + "for(i,5,0,-2) /* step */ "
+                        + "{shifted:i>>1\nshifted}\n"
+                        + "for(j,0,3){j~ ~j}\n"
+                        + "return /* final */ Range(0,3).reverse()\n"
+                        + "}\n";
+
+        String formatted = formatOnce(source, 901L);
+
+        assertEquals(
+                canonicalOf(source, 902L),
+                canonicalOf(formatted, 903L),
+                "formatting must preserve the combined canonical semantics");
+        assertEquals(
+                formatted,
+                formatOnce(formatted, 904L),
+                "formatting the combined forms must be idempotent");
+
+        assertTrue(formatted.contains("for(item in "));
+        assertTrue(formatted.contains("for(i, "));
+        assertTrue(formatted.contains("for(j, "));
+        assertTrue(formatted.contains("return mask"));
+        assertTrue(formatted.contains("return /* final */"));
+        assertTrue(formatted.contains("~item & 3 | item << 1"));
+        assertTrue(formatted.contains("j ~ ~j"));
+    }
+
+    @Test
     void formatsBitwiseOperatorsWithLexicallySafePrefixes()
             throws Exception {
         String[][] samples = {

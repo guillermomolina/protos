@@ -216,6 +216,35 @@ class ProtosLanguageServerSignatureHelpTest {
     }
 
     @Test
+    void contextualForHeaderHasNoInventedSignatureButNestedCallDoes()
+            throws Exception {
+        ProjectFixture project = project("contextual-for-signature");
+        ProtosLanguageServer server = initialized(project, canonical(project));
+        String uri = project.source().toUri().toString();
+
+        String generic = "for(item in items) { item }";
+        server.textDocuments().didOpen(open(uri, 1, generic));
+        assertNull(signatureHelp(
+                server, uri, 0, generic.indexOf('(') + 1));
+
+        String numeric = "for(i, 0, 2) { i }";
+        server.textDocuments().didChange(change(uri, 2, numeric));
+        assertNull(signatureHelp(
+                server, uri, 0, numeric.indexOf('(') + 1));
+
+        String nested =
+                "for(i, 0, 2) { ((value) => value)(i) }";
+        server.textDocuments().didChange(change(uri, 3, nested));
+
+        SignatureHelp help = signatureHelp(
+                server, uri, 0, nested.lastIndexOf("(i)") + 1);
+        assertNotNull(help);
+        assertEquals(
+                "(value)", help.getSignatures().get(0).getLabel());
+        assertEquals(0, help.getActiveParameter());
+    }
+
+    @Test
     void mapsUtf16NonBmpAndCrlfPositions() throws Exception {
         ProjectFixture project = project("utf16");
         ProtosLanguageServer server = initialized(project, canonical(project));

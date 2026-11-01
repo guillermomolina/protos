@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -34,6 +35,8 @@ import com.oracle.truffle.api.source.Source;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -109,6 +112,133 @@ final class ProtosI026EDebuggerIntegrationTest {
         rethrowCallbackFailure(callbackFailure);
         assertEquals(1, callbacks.get(), "exactly one source breakpoint must suspend");
         assertEquals("single", observedMarker.get());
+    }
+
+    @Test
+    void genericContextualForKeepsBinderInsideDebuggerCallbackScope()
+            throws Exception {
+        assertContextualForDebuggerScopes(
+                "generic",
+                "for(item in Array(5, 6))",
+                "item",
+                List.of("5", "6"),
+                11);
+    }
+
+    @Test
+    void numericContextualForKeepsBinderInsideDebuggerCallbackScope()
+            throws Exception {
+        assertContextualForDebuggerScopes(
+                "numeric",
+                "for(i, 0, 2)",
+                "i",
+                List.of("0", "1"),
+                1);
+    }
+
+    @Test
+    void steppedContextualForKeepsBinderInsideDebuggerCallbackScope()
+            throws Exception {
+        assertContextualForDebuggerScopes(
+                "stepped",
+                "for(i, 3, 1, -1)",
+                "i",
+                List.of("3", "2"),
+                5);
+    }
+
+    private static void assertContextualForDebuggerScopes(
+            String scenario,
+            String header,
+            String binder,
+            List<String> expectedVisits,
+            long expectedResult)
+            throws Exception {
+        String characters = "run: () => {\n"
+                + "    outerMarker: 41\n"
+                + "    total: 0\n"
+                + "    " + header + " {\n"
+                + "        total = total + " + binder + "\n"
+                + "    }\n"
+                + "    total\n"
+                + "}\n"
+                + "run()\n";
+
+        Source program = source(
+                characters, "aud022-for-" + scenario + ".protos");
+
+        ProtosActivation activation = new ProtosCoreBootstrap()
+                .bootstrap(Path.of("protos", "lib", "core"))
+                .newModuleActivation();
+
+        AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+        List<String> visits = new ArrayList<>();
+        AtomicInteger afterLoop = new AtomicInteger();
+
+        try (ProtosPolyglotExecutionContext polyglot = open()) {
+            Debugger debugger = debugger(polyglot);
+
+            try (DebuggerSession session =
+                    debugger.startSession(event -> {
+                        try {
+                            int line = event.getSourceSection().getStartLine();
+                            DebugScope scope = event.getTopStackFrame().getScope();
+                            assertNotNull(scope);
+
+                            DebugValue outer = scope.getDeclaredValue(
+                                    "outerMarker");
+                            assertNotNull(outer);
+                            assertEquals("41", outer.toDisplayString());
+
+                            if (line == 5) {
+                                DebugValue value =
+                                        scope.getDeclaredValue(binder);
+                                assertNotNull(
+                                        value,
+                                        "binder must be visible in the callback");
+                                visits.add(value.toDisplayString());
+                            } else if (line == 7) {
+                                assertNull(
+                                        scope.getDeclaredValue(binder),
+                                        "binder must not leak after the loop");
+                                afterLoop.incrementAndGet();
+                            } else {
+                                assertEquals(
+                                        5, line,
+                                        "unexpected debugger stop location");
+                            }
+                        } catch (Throwable failure) {
+                            callbackFailure.compareAndSet(null, failure);
+                        } finally {
+                            event.prepareContinue();
+                        }
+                    })) {
+
+                session.install(
+                        Breakpoint.newBuilder(program).lineIs(5).build());
+                session.install(
+                        Breakpoint.newBuilder(program).lineIs(7).build());
+
+                ProtosExecutionOutcome outcome =
+                        polyglot.execute(program, activation);
+
+                assertEquals(
+                        ProtosExecutionOutcome.State.COMPLETED,
+                        outcome.state());
+                assertEquals(
+                        Long.toString(expectedResult),
+                        ProtosNumericValueSupport.integerDecimalText(
+                                outcome.value()));
+            }
+        }
+
+        rethrowCallbackFailure(callbackFailure);
+        assertEquals(
+                expectedVisits, visits,
+                "each iteration must suspend with its exact binder value");
+        assertEquals(
+                1, afterLoop.get(),
+                "execution must suspend once after the loop");
     }
 
     @Test
