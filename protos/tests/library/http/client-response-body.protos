@@ -85,9 +85,9 @@ duplexOf: (chunks) => {
             }
             failure: writeFailure
             if(failure === null) {
-                bytes.each((octet) => {
+                for(octet in bytes) {
                     output.add(octet)
-                })
+                }
             }
             (() => {
                 if(failure !== null) {
@@ -214,9 +214,9 @@ drain: (body, size) => {
         } else {
             Assertions.require(chunk.size() > 0)
             Assertions.require(chunk.size() <= size)
-            chunk.each((octet) => {
+            for(octet in chunk) {
                 collected.add(octet)
-            })
+            }
         }
     }
     text(collected)
@@ -305,9 +305,9 @@ drive: (framer, input, sliceSize, maxContent, eof) => {
                 if(result.state == "CONTENT") {
                     Assertions.require(result.content.size() > 0)
                     Assertions.require(result.content.size() <= maxContent)
-                    result.content.each((octet) => {
+                    for(octet in result.content) {
                         collected.add(octet)
-                    })
+                    }
                 }
                 if(result.state == "NEED_MORE") {
                     Assertions.require(result.consumed == length)
@@ -505,18 +505,18 @@ tests: [
         head: exchangeWith([ascii("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n")], requestOf("HEAD", "/", [hostField()], null), readBy(4), null)
         Assertions.require(head.failure === null)
         Assertions.require(head.value == "")
-        [
+        for(input in [
             "HTTP/1.1 204 No Content\r\n\r\nabc",
             "HTTP/1.1 205 Reset Content\r\n\r\nabc",
             "HTTP/1.1 205 Reset Content\r\nContent-Length: 0\r\n\r\nabc",
             "HTTP/1.1 304 Not Modified\r\nContent-Length: 3\r\n\r\nabc"
-        ].each((input) => {
+        ]) {
             outcome: exchange([ascii(input)], (response) => {
                 response.body.read(10).value()
             })
             Assertions.require(outcome.failure === null)
             Assertions.require(outcome.value === null)
-        })
+        }
         null
     }),
     Test("no-body responses reach logical EOF immediately whatever the representation size", () => {
@@ -547,11 +547,11 @@ tests: [
     Test("chunk and CRLF boundaries split across reads are decoded", () => {
         input: ascii("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4;x=1\r\nwxyz\r\n2\r\n!?\r\n0\r\nT: t\r\n\r\n")
         chunks: []
-        input.each((octet) => {
+        for(octet in input) {
             single: ascii("")
             single.add(octet)
             chunks = Array(...chunks, single)
-        })
+        }
         Assertions.require(exchange(chunks, readBy(3)).value == "wxyz!?")
     }),
     Test("body reads are incremental short reads in order", () => {
@@ -571,9 +571,9 @@ tests: [
             result
         })
         Assertions.require(outcome.value == "abcdefg")
-        sizes.each((size) => {
+        for(size in sizes) {
             Assertions.require((size > 0) && (size <= 3))
-        })
+        }
         null
     }),
     Test("lower reads are bounded by ioChunkBytes and maxPrefetchBytes", () => {
@@ -583,9 +583,9 @@ tests: [
         }
         outcome: exchangeWith([ascii(fixed("0123456789", "10"))], get(), readBy(100), limits)
         Assertions.require(outcome.value == "0123456789")
-        outcome.duplex.readSizes().each((size) => {
+        for(size in outcome.duplex.readSizes()) {
             Assertions.require(size == 3)
-        })
+        }
         null
     }),
     Test("an unread body is neither materialized nor drained", () => {

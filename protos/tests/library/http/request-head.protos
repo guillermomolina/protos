@@ -225,12 +225,12 @@ tests: [
         rejects("GET / HTTP/1.1\r\nHost: h\r\nhost: h\r\n\r\n", "malformedRequest", 400)
     }),
     Test("invalid Host is malformed", () => {
-        [
+        for(host in [
             "", "a b", "user@h", "h/x", "h?x", "h#x", "h\\x", "[::1", "::1]",
             "h:80x", "h%zz", "[1:2]"
-        ].each((host) => {
+        ]) {
             rejects("GET / HTTP/1.1\r\nHost: " + host + "\r\n\r\n", "malformedRequest", 400)
-        })
+        }
         accepted("GET / HTTP/1.1\r\nHost: 192.0.2.1:80\r\n\r\n")
         accepted("GET / HTTP/1.1\r\nHost: [v1.fe]\r\n\r\n")
         null
@@ -419,14 +419,14 @@ tests: [
     Test("invalid feed ranges signal an Error without consuming input", () => {
         bytes: ascii(simple)
         size: bytes.size()
-        [
+        for(range in [
             [size + 1, 0],
             [size, 1],
             [1, 9223372036854775807],
             [9223372036854775807, 1],
             [-1, 0],
             [0, -1]
-        ].each((range) => {
+        ]) {
             parser: MessageHead.requestHeadParser(defaultLimits())
             Assertions.signals(Error, () => { parser.feed(bytes, range[0], range[1]) })
 
@@ -438,7 +438,7 @@ tests: [
             Assertions.require(text(result.head.target) == "/index.html")
             Assertions.require(result.head.headers.size() == 1)
             Assertions.require(valueText(result.head.headers[0]) == "example.com")
-        })
+        }
         null
     }),
     Test("empty feed at end of source needs more input", () => {

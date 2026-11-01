@@ -61,13 +61,13 @@ tests: [
         requireSpan(Regex.compile("(?:(?:a|b){2}c)*").search("abcbac"), 0, 6)
     }),
     Test("nullable repetition terminates", () => {
-        Array("(?:)*", "(?:)+", "(?:){1000000000}", "(?:){3,}", "(a*)*", "(a*)+", "(?:a?)*", "(?:a?)+", "(^)*",
-            "(\\b)*", "(?:a*|b)*", "((a*)*)*", "(?:a?){5}", "(?:$|a)*", "(?:\\b|a)*").each((source) => {
+        for(source in Array("(?:)*", "(?:)+", "(?:){1000000000}", "(?:){3,}", "(a*)*", "(a*)+", "(?:a?)*", "(?:a?)+", "(^)*",
+            "(\\b)*", "(?:a*|b)*", "((a*)*)*", "(?:a?){5}", "(?:$|a)*", "(?:\\b|a)*")) {
             pattern: Regex.compile(source)
             requireSpan(pattern.search(""), 0, 0)
             Assertions.require(pattern.search("bcd") !== null)
             Assertions.require(pattern.findAll("aab").size() > 0)
-        })
+        }
         Assertions.require(Regex.compile("(\\b)+").search("") === null)
         requireSpan(Regex.compile("(\\b)+").search(" a"), 1, 1)
         requireSpan(Regex.compile("(a*)*").fullMatch("aaa"), 0, 3)

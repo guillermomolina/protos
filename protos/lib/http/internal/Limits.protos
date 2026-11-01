@@ -40,14 +40,14 @@ capture: (facility, limits) => {
     if(limits !== null) {
         valid = facility.ordinaryObject(limits)
         if(valid) {
-            limits.slotNames().each((name) => {
+            for(name in limits.slotNames()) {
                 if(valid) {
                     known: false
-                    limitNames.each((limitName) => {
+                    for(limitName in limitNames) {
                         if(name == limitName) {
                             known = true
                         }
-                    })
+                    }
                     if(known) {
                         value: limits.slotValue(name)
                         if(Integer.recognizes(value)) {
@@ -61,7 +61,7 @@ capture: (facility, limits) => {
                         valid = false
                     }
                 }
-            })
+            }
         }
     }
 

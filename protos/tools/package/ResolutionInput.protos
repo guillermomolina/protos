@@ -32,7 +32,7 @@ bytesLess: (left, right) => {
     result: false
     rightSize: right.size()
 
-    left.each((leftOctet) => {
+    for(leftOctet in left) {
         decided.ifFalse(() => {
             if(index < rightSize) {
                 rightOctet: right[index]
@@ -52,7 +52,7 @@ bytesLess: (left, right) => {
         })
 
         index = index + 1
-    })
+    }
 
     decided.ifFalse(() => {
         result = left.size() < right.size()
@@ -101,7 +101,7 @@ validateMemberLocation: (location) => {
         }
     }
 
-    source.each((octet) => {
+    for(octet in source) {
         if(octet == 47) {
             validateComponent()
             component = Encoding.UTF8.encode("")
@@ -110,7 +110,7 @@ validateMemberLocation: (location) => {
         (octet == 47).ifFalse(() => {
             component.add(octet)
         })
-    })
+    }
 
     validateComponent()
     location
@@ -292,7 +292,7 @@ renderDependencies: (
 ) => {
     seenAliases: Map()
 
-    dependencies.each((dependency) => {
+    for(dependency in dependencies) {
         alias: dependency.alias
         ignoredAliasValidation: Syntax.renderQstring(alias)
 
@@ -300,12 +300,12 @@ renderDependencies: (
             fail()
         }
         seenAliases[alias] = true
-    })
+    }
 
     ordered: Arrays.sort(dependencies, dependencyLess)
     result: ""
 
-    ordered.each((dependency) => {
+    for(dependency in ordered) {
         result =
             result +
             renderDependency(
@@ -315,7 +315,7 @@ renderDependencies: (
                 rootPackageId,
                 memberPackageIds
             )
-    })
+    }
 
     result
 }
@@ -357,7 +357,7 @@ text: (resolutionRoot) => {
     seenPackageIds[rootPackageId] = true
     memberPackageIds: Map()
 
-    members.each((member) => {
+    for(member in members) {
         location: validateMemberLocation(member.location)
         packageId: nonEmptyString(member.packageId)
 
@@ -376,7 +376,7 @@ text: (resolutionRoot) => {
         seenPackageIds[packageId] = true
 
         memberPackageIds[location] = packageId
-    })
+    }
 
     orderedMembers: Arrays.sort(members, memberLess)
 
@@ -396,7 +396,7 @@ text: (resolutionRoot) => {
             memberPackageIds
         )
 
-    orderedMembers.each((member) => {
+    for(member in orderedMembers) {
         result =
             result +
             manifestLine(
@@ -415,7 +415,7 @@ text: (resolutionRoot) => {
                 rootPackageId,
                 memberPackageIds
             )
-    })
+    }
 
     result
 }
@@ -433,12 +433,12 @@ lowerHex: (digestBytes) => {
     )
 
     result: ""
-    digestBytes.each((octet) => {
+    for(octet in digestBytes) {
         result =
             result +
             digits[octet.div(16)] +
             digits[octet.mod(16)]
-    })
+    }
 
     result
 }

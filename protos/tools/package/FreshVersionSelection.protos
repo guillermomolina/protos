@@ -20,7 +20,7 @@ select: (constraint, candidates) => {
     found: false
     selected: null
 
-    candidates.each((candidate) => {
+    for(candidate in candidates) {
         if(Constraint.satisfies(constraint, candidate)) {
             found.ifFalse(() => {
                 selected = candidate
@@ -33,7 +33,7 @@ select: (constraint, candidates) => {
                 }
             }
         }
-    })
+    }
 
     found.ifFalse(() => {
         fail()
@@ -46,12 +46,12 @@ selectText: (constraintText, candidateTexts) => {
     constraint: Constraint.parse(constraintText)
     candidates: Array()
 
-    candidateTexts.each((candidateText) => {
+    for(candidateText in candidateTexts) {
         candidates = Array(
             ...candidates,
             Version.parse(candidateText)
         )
-    })
+    }
 
     select(constraint, candidates).text
 }

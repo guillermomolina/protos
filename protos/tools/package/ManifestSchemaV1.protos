@@ -166,14 +166,14 @@ sectionsFromTable: (root) => {
 
         members: Array()
         seenMembers: Map()
-        membersNode.value.each((memberNode) => {
+        for(memberNode in membersNode.value) {
             member: nonEmptyString(memberNode)
             if(seenMembers.containsKey(member)) {
                 fail()
             }
             seenMembers[member] = true
             members = Array(...members, member)
-        })
+        }
 
         workspace = {
             members: members

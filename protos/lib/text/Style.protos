@@ -40,11 +40,11 @@ call: ((facility) => (foreground) => {
         Error().signal()
     })
     valid: false
-    ["default", "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"].each((name) => {
+    for(name in ["default", "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"]) {
         if(name == foreground) {
             valid = true
         }
-    })
+    }
     valid.ifFalse(() => {
         Error().signal()
     })

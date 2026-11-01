@@ -77,7 +77,7 @@ number: (coefficient, exponent) => {
 /// Answers a fresh JSON array node of `nodes`; each argument must have one of the six
 /// JSON node kinds.
 array: (...nodes) => {
-    nodes.each((node) => {
+    for(node in nodes) {
         kind: node.kind
         valid: kind === "null"
         if(kind === "boolean") { valid = true }
@@ -89,7 +89,7 @@ array: (...nodes) => {
             Error().signal()
         })
         ignoredValue: node.value
-    })
+    }
 
 
     node: {
@@ -106,7 +106,7 @@ object: (...nameNodePairs) => {
     pendingName: null
     expectingName: true
 
-    nameNodePairs.each((entry) => {
+    for(entry in nameNodePairs) {
         wasExpectingName: expectingName
 
         if(wasExpectingName) {
@@ -137,7 +137,7 @@ object: (...nameNodePairs) => {
             pendingName = null
             expectingName = true
         })
-    })
+    }
 
     expectingName.ifFalse(() => {
         Error().signal()
@@ -471,7 +471,7 @@ parse: (text) => {
         exponentNegative: false
         exponentValue: 0
 
-        numberBuffer.each((octet) => {
+        for(octet in numberBuffer) {
             previous: state
             digit: decimalDigit(octet)
             handled: false
@@ -601,7 +601,7 @@ parse: (text) => {
             handled.ifFalse(() => {
                 fail()
             })
-        })
+        }
 
         validEnd: state == "afterZero"
         if(state == "integer") { validEnd = true }
@@ -841,7 +841,7 @@ parse: (text) => {
         })
     }
 
-    source.each((octet) => {
+    for(octet in source) {
         previousMode: mode
 
         if(previousMode == "normal") {
@@ -1008,7 +1008,7 @@ parse: (text) => {
             unicodeDigits = 0
             mode = "unicode"
         }
-    })
+    }
 
     if(mode == "number") {
         finalizeNumber()
@@ -1035,9 +1035,9 @@ encode: (root) => {
     output: Encoding.UTF8.encode("")
 
     emitAsciiText: (text) => {
-        Encoding.UTF8.encode(text).each((octet) => {
+        for(octet in Encoding.UTF8.encode(text)) {
             output.add(octet)
-        })
+        }
     }
 
     emitHexNibble: (digit) => {
@@ -1055,7 +1055,7 @@ encode: (root) => {
         })
 
         output.add(34)
-        Encoding.UTF8.encode(text).each((octet) => {
+        for(octet in Encoding.UTF8.encode(text)) {
             handled: false
 
             if(octet == 34) {
@@ -1085,7 +1085,7 @@ encode: (root) => {
             handled.ifFalse(() => {
                 output.add(octet)
             })
-        })
+        }
         output.add(34)
     }
 
@@ -1182,13 +1182,13 @@ encode: (root) => {
 
             output.add(91)
             first: true
-            value.each((child) => {
+            for(child in value) {
                 first.ifFalse(() => {
                     output.add(44)
                 })
                 visit(child)
                 first = false
-            })
+            }
             output.add(93)
 
             active.remove(node)
@@ -1531,7 +1531,7 @@ eventParser: (emit) => {
         exponentNegative: false
         exponentValue: 0
 
-        numberBuffer.each((octet) => {
+        for(octet in numberBuffer) {
             previous: state
             digit: decimalDigit(octet)
             handled: false
@@ -1661,7 +1661,7 @@ eventParser: (emit) => {
             handled.ifFalse(() => {
                 fail()
             })
-        })
+        }
 
         validEnd: state == "afterZero"
         if(state == "integer") { validEnd = true }
@@ -2087,9 +2087,9 @@ eventParser: (emit) => {
             String.recognizes(text).ifFalse(() => {
                 Error().signal()
             })
-            Encoding.UTF8.encode(text).each((octet) => {
+            for(octet in Encoding.UTF8.encode(text)) {
                 consumeOctet(octet)
-            })
+            }
             parser
         }
 

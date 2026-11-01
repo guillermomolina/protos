@@ -36,24 +36,24 @@ readSource: (spec, filesystem) => {
     readBatch = () => {
         pending: Array(...batchTemplate)
         issueIndex: 0
-        batchTemplate.each((ignored) => {
+        for(ignored in batchTemplate) {
             pending[issueIndex] = file.read(65536)
             issueIndex = issueIndex + 1
-        })
+        }
 
         chunks: Future.all(...pending).value()
-        chunks.each((chunk) => {
+        for(chunk in chunks) {
             done.ifFalse(() => {
                 if(chunk === null) {
                     done = true
                 }
                 (chunk === null).ifFalse(() => {
-                    chunk.each((octet) => {
+                    for(octet in chunk) {
                         bytes.add(octet)
-                    })
+                    }
                 })
             })
-        })
+        }
 
         done.ifFalse(() => {
             readBatch()
@@ -136,7 +136,7 @@ parseFutureObservationPolicy: (text) => {
     parentBytes: Encoding.UTF8.encode("")
     separatorSeen: false
 
-    source.each((octet) => {
+    for(octet in source) {
         if(octet == 58) {
             if(separatorSeen) { policyError() }
             separatorSeen = true
@@ -149,7 +149,7 @@ parseFutureObservationPolicy: (text) => {
                 modeBytes.add(octet)
             })
         })
-    })
+    }
 
     separatorSeen.ifFalse(() => { policyError() })
     if(modeBytes.size() == 0) { policyError() }
@@ -337,7 +337,7 @@ parseExpectedInteger: (text) => {
     digits: 0
     first: true
 
-    source.each((octet) => {
+    for(octet in source) {
         sign: false
         if(first) {
             if(octet == 45) {
@@ -357,7 +357,7 @@ parseExpectedInteger: (text) => {
             digits = digits + 1
         })
         first = false
-    })
+    }
 
     if(digits == 0) { policyError() }
     if(negative) { value = 0 - value }
@@ -369,7 +369,7 @@ parseExpectedFloatBits: (text) => {
     (source.size() == 16).ifFalse(() => { policyError() })
 
     value: 0
-    source.each((octet) => {
+    for(octet in source) {
         digit: -1
 
         decimal: (octet >= 48) && (octet <= 57)
@@ -389,7 +389,7 @@ parseExpectedFloatBits: (text) => {
 
         if(digit < 0) { policyError() }
         value = value * 16 + digit
-    })
+    }
 
     value
 }
@@ -588,11 +588,11 @@ integerOneOfComparisonSource: (text) => {
         // when embedding the inert Integer literal into the inspector source.
         literalBytes: Encoding.UTF8.encode("")
         tokenIndex: 0
-        token.each((octet) => {
+        for(octet in token) {
             leadingPlus: (tokenIndex == 0) && (octet == 43)
             leadingPlus.ifFalse(() => { literalBytes.add(octet) })
             tokenIndex = tokenIndex + 1
-        })
+        }
         literal: Encoding.UTF8.decode(literalBytes)
 
         if(count > 0) {
@@ -603,14 +603,14 @@ integerOneOfComparisonSource: (text) => {
         token = Encoding.UTF8.encode("")
     }
 
-    source.each((octet) => {
+    for(octet in source) {
         if(octet == 44) {
             flush()
         }
         (octet == 44).ifFalse(() => {
             token.add(octet)
         })
-    })
+    }
     flush()
 
     if(count == 0) { policyError() }
@@ -1121,7 +1121,7 @@ runSimpleWithLoader: (plan, sourceLoader, executor, inspectorExecutor) => {
     // one recursive Protos call frame per selected case.
     chain: Future.all()
 
-    cases.each((spec) => {
+    for(spec in cases) {
         supported: isDExpectation(spec)
         if(supported) {
             previous: chain
@@ -1132,24 +1132,24 @@ runSimpleWithLoader: (plan, sourceLoader, executor, inspectorExecutor) => {
                 null
             })
         }
-    })
+    }
 
     chain.value()
 
     caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
     passedCount: 0
-    caseResults.each((caseRun) => {
+    for(caseRun in caseResults) {
         if(resultPassed(caseRunEvaluation(caseRun))) {
             passedCount = passedCount + 1
         }
-    })
+    }
 
     skippedCount: 0
-    cases.each((spec) => {
+    for(spec in cases) {
         isDExpectation(spec).ifFalse(() => {
             skippedCount = skippedCount + 1
         })
-    })
+    }
 
     runTuple(
         caseResults,
@@ -1184,11 +1184,11 @@ runBoundedSimpleWithLoader: (
 
     cases: Manifest.planCases(plan)
     selectedCases: Array()
-    cases.each((spec) => {
+    for(spec in cases) {
         if(isSimpleExpectation(spec)) {
             selectedCases = Array(...selectedCases, spec)
         }
-    })
+    }
 
     resultChunks: Map()
     maxChunkLevel: -1
@@ -1263,11 +1263,11 @@ runBoundedSimpleWithLoader: (
 
     caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
     passedCount: 0
-    caseResults.each((caseRun) => {
+    for(caseRun in caseResults) {
         if(resultPassed(caseRunEvaluation(caseRun))) {
             passedCount = passedCount + 1
         }
-    })
+    }
 
     runTuple(
         caseResults,
@@ -1396,11 +1396,11 @@ runBoundedWithLoader: (
 
     cases: Manifest.planCases(plan)
     selectedCases: Array()
-    cases.each((spec) => {
+    for(spec in cases) {
         if(isDExpectation(spec)) {
             selectedCases = Array(...selectedCases, spec)
         }
-    })
+    }
 
     resultChunks: Map()
     maxChunkLevel: -1
@@ -1479,11 +1479,11 @@ runBoundedWithLoader: (
 
     caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
     passedCount: 0
-    caseResults.each((caseRun) => {
+    for(caseRun in caseResults) {
         if(resultPassed(caseRunEvaluation(caseRun))) {
             passedCount = passedCount + 1
         }
-    })
+    }
 
     runTuple(
         caseResults,
@@ -1515,11 +1515,11 @@ runBoundedWithResourcesWithLoader: (
 
     cases: Manifest.planCases(plan)
     selectedCases: Array()
-    cases.each((spec) => {
+    for(spec in cases) {
         if(isDExpectation(spec)) {
             selectedCases = Array(...selectedCases, spec)
         }
-    })
+    }
 
     resultChunks: Map()
     maxChunkLevel: -1
@@ -1676,11 +1676,11 @@ runBoundedWithResourcesWithLoader: (
 
     caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
     passedCount: 0
-    caseResults.each((caseRun) => {
+    for(caseRun in caseResults) {
         if(resultPassed(caseRunEvaluation(caseRun))) {
             passedCount = passedCount + 1
         }
-    })
+    }
 
     runTuple(
         caseResults,
@@ -1785,11 +1785,11 @@ d108RunHealthyRun: (run) => {
 
     caseResults: d108RunCaseResults(run)
     passedCount: 0
-    caseResults.each((caseRun) => {
+    for(caseRun in caseResults) {
         if(resultPassed(caseRunEvaluation(caseRun))) {
             passedCount = passedCount + 1
         }
-    })
+    }
 
     runTuple(
         caseResults,
@@ -1922,11 +1922,11 @@ runD108WithResourcesWithLoader: (
 
     cases: Manifest.planCases(plan)
     selectedCases: Array()
-    cases.each((spec) => {
+    for(spec in cases) {
         if(isDExpectation(spec)) {
             selectedCases = Array(...selectedCases, spec)
         }
-    })
+    }
 
     resultChunks: Map()
     maxChunkLevel: -1
@@ -2437,14 +2437,14 @@ testRunOutcomeCompletedAcrossRuns: (
     primarySeen: false
     allHealthy: true
 
-    executedRuns.each((run) => {
+    for(run in executedRuns) {
         if(run === primaryRun) {
             primarySeen = true
         }
         runAllPassed(run).ifFalse(() => {
             allHealthy = false
         })
-    })
+    }
 
     primarySeen.ifFalse(() => {
         policyError()
@@ -2463,11 +2463,11 @@ testRunOutcomeCompletedAcrossRuns: (
 
 selectedDCaseSpecs: (plan) => {
     selected: Array()
-    Manifest.planCases(plan).each((spec) => {
+    for(spec in Manifest.planCases(plan)) {
         if(isDExpectation(spec)) {
             selected = Array(...selected, spec)
         }
-    })
+    }
     resultTuple(...selected)
 }
 
@@ -2483,7 +2483,7 @@ testRunOutcomeInfrastructureAbortedAcrossInvocation: (
     executedCaseRuns: Array()
     ordinaryUnsupportedCount: 0
 
-    completedRuns.each((run) => {
+    for(run in completedRuns) {
         executedCaseRuns =
             Array(
                 ...executedCaseRuns,
@@ -2492,7 +2492,7 @@ testRunOutcomeInfrastructureAbortedAcrossInvocation: (
         ordinaryUnsupportedCount =
             ordinaryUnsupportedCount +
             runSkippedCount(run)
-    })
+    }
 
     executedCaseRuns =
         Array(
@@ -2506,13 +2506,13 @@ testRunOutcomeInfrastructureAbortedAcrossInvocation: (
     cutoverNotAdmitted:
         Array(...d108RunCutoverCases(abortedD108))
 
-    laterPlans.each((plan) => {
+    for(plan in laterPlans) {
         cutoverNotAdmitted =
             Array(
                 ...cutoverNotAdmitted,
                 ...selectedDCaseSpecs(plan)
             )
-    })
+    }
 
     testRunOutcomeInfrastructureAborted(
         resultTuple(...executedCaseRuns),

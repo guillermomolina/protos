@@ -81,9 +81,9 @@ duplexOf: (chunks) => {
             }
             failure: writeFailure
             if(failure === null) {
-                bytes.each((octet) => {
+                for(octet in bytes) {
                     output.add(octet)
-                })
+                }
             }
             (() => {
                 if(failure !== null) {
@@ -191,12 +191,12 @@ emptyResponse: (status) => {
 
 concat: (first, second) => {
     joined: ascii("")
-    first.each((octet) => {
+    for(octet in first) {
         joined.add(octet)
-    })
-    second.each((octet) => {
+    }
+    for(octet in second) {
         joined.add(octet)
-    })
+    }
     joined
 }
 
@@ -223,9 +223,9 @@ drainBody: (body) => {
                 if(chunk === null) {
                     done = true
                 } else {
-                    chunk.each((octet) => {
+                    for(octet in chunk) {
                         received.add(octet)
-                    })
+                    }
                 }
             },
             (error) => {

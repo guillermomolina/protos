@@ -81,9 +81,9 @@ duplexOf: (chunks) => {
             }
             failure: writeFailure
             if(failure === null) {
-                bytes.each((octet) => {
+                for(octet in bytes) {
                     output.add(octet)
-                })
+                }
             }
             (() => {
                 if(failure !== null) {

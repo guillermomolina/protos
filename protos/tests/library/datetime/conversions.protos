@@ -93,13 +93,13 @@ tests: [
     }),
     Test("day numbering agrees with period arithmetic", () => {
         epoch: Date(1970, 1, 1)
-        dayNumbers.each((days) => {
+        for(days in dayNumbers) {
             date: Period.addToDate(Period(0, 0, days), epoch)
             midnight: OffsetDateTime(LocalDateTime(date, Time(0, 0, 0, 0)), Offset(0))
             Assertions.require(OffsetDateTime.toInstant(midnight) == Instant(days * day))
             Assertions.require(OffsetDateTime.fromInstant(Instant(days * day), Offset(0)) == midnight)
             Assertions.require(OffsetDateTime.fromInstant(Instant(days * day + day - 1), Offset(0)).dateTime.date == date)
-        })
+        }
         Assertions.require(dayNumbers.size() == 20)
     }),
     Test("round trips preserve values and instants", () => {
@@ -113,21 +113,21 @@ tests: [
             odt(-9999, 1, 1, 18, 0, 0, 0, 64800),
             odt(9999, 12, 31, 5, 0, 0, 0, -64800)
         ]
-        values.each((value) => {
+        for(value in values) {
             Assertions.require(OffsetDateTime.fromInstant(OffsetDateTime.toInstant(value), value.offset) == value)
-        })
+        }
 
         instants: [
             Instant(0), Instant(1), Instant(-1), Instant(951782400 * second + 123456789),
             Instant(-62167219200 * second - 1), Instant(-4371586 * day + 7)
         ]
-        instants.each((instant) => {
-            offsets.each((seconds) => {
+        for(instant in instants) {
+            for(seconds in offsets) {
                 value: OffsetDateTime.fromInstant(instant, Offset(seconds))
                 Assertions.require(OffsetDateTime.toInstant(value) == instant)
                 Assertions.require(value.offset == Offset(seconds))
-            })
-        })
+            }
+        }
         // Test bodies must not answer the non-transferable values above.
         Assertions.require(instants.size() == 6)
     }),

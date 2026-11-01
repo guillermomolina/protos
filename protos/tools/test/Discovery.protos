@@ -68,7 +68,7 @@ requireDeclarationSignature: (module, expectedSignature) => {
     })
 
     index: 0
-    actualSignature.each((selector) => {
+    for(selector in actualSignature) {
         expected: expectedSignature[index]
 
         String.recognizes(expected).ifFalse(() => {
@@ -80,7 +80,7 @@ requireDeclarationSignature: (module, expectedSignature) => {
         })
 
         index = index + 1
-    })
+    }
 
     actualSignature
 }

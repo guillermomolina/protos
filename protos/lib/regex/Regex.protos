@@ -266,9 +266,9 @@ compileWithFlags: ((unicode, transfer) => {
             first[0] < second[0]
         })
         writer: newRangeWriter()
-        sorted.each((pair) => {
+        for(pair in sorted) {
             writer.add(pair[0], pair[1])
-        })
+        }
         writer.finish()
     }
 
@@ -288,11 +288,11 @@ compileWithFlags: ((unicode, transfer) => {
     includes: (names, candidate) => {
         found: false
         if(candidate !== null) {
-            names.each((name) => {
+            for(name in names) {
                 if(name == candidate) {
                     found = true
                 }
-            })
+            }
         }
         found
     }
@@ -301,7 +301,7 @@ compileWithFlags: ((unicode, transfer) => {
     // that are not Unicode property aliases.
     looseName: (text) => {
         output: Encoding.UTF8.encode("")
-        Encoding.UTF8.encode(text).each((octet) => {
+        for(octet in Encoding.UTF8.encode(text)) {
             ((octet == 32) || (octet == 45) || (octet == 95)).ifFalse(() => {
                 if((octet >= 65) && (octet <= 90)) {
                     output.add(octet + 32)
@@ -309,7 +309,7 @@ compileWithFlags: ((unicode, transfer) => {
                     output.add(octet)
                 }
             })
-        })
+        }
         Encoding.UTF8.decode(output)
     }
 
@@ -407,7 +407,7 @@ compileWithFlags: ((unicode, transfer) => {
         count: 0
         pending: 0
         value: 0
-        Encoding.UTF8.encode(text).each((octet) => {
+        for(octet in Encoding.UTF8.encode(text)) {
             if(pending > 0) {
                 value = value * 64 + (octet - 128)
                 pending = pending - 1
@@ -430,7 +430,7 @@ compileWithFlags: ((unicode, transfer) => {
                 scalars[count] = value
                 count = count + 1
             }
-        })
+        }
         scalars
     }
 
@@ -509,11 +509,11 @@ compileWithFlags: ((unicode, transfer) => {
             }
             namedGroups: () => {
                 snapshot: Map()
-                groupNames.each((groupName) => {
+                for(groupName in groupNames) {
                     (groupName === null).ifFalse(() => {
                         snapshot[groupName] = capturedTexts[captureNames[groupName]]
                     })
-                })
+                }
                 snapshot
             }
         }
@@ -638,12 +638,12 @@ compileWithFlags: ((unicode, transfer) => {
             consumes: op == "set"
             if((op == "concat") || (op == "alternate")) {
                 position: 0
-                node.items.each((item) => {
+                for(item in node.items) {
                     parents[item] = index
                     positions[item] = position
                     position = position + 1
                     consumes = consumes || consumers[item]
-                })
+                }
             }
             if((op == "capture") || (op == "repeat")) {
                 parents[node.item] = index
@@ -1118,9 +1118,9 @@ compileWithFlags: ((unicode, transfer) => {
         }
 
         appendText: (output, text) => {
-            Encoding.UTF8.encode(text).each((octet) => {
+            for(octet in Encoding.UTF8.encode(text)) {
                 output.add(octet)
-            })
+            }
         }
 
         // Replaces the first selected match, or every match `traverse` visits,
@@ -1135,7 +1135,7 @@ compileWithFlags: ((unicode, transfer) => {
             copyFrom: 0
             replaceMatch: (found) => {
                 input.appendSpan(output, copyFrom, found.start(0))
-                template.each((part) => {
+                for(part in template) {
                     if(String.recognizes(part)) {
                         appendText(output, part)
                     } else {
@@ -1144,7 +1144,7 @@ compileWithFlags: ((unicode, transfer) => {
                             appendText(output, captured)
                         })
                     }
-                })
+                }
                 copyFrom = found.end(0)
             }
             if(every) {
@@ -1236,7 +1236,7 @@ compileWithFlags: ((unicode, transfer) => {
         multiline: false
         dotAll: false
         extended: false
-        Encoding.UTF8.encode(flags).each((octet) => {
+        for(octet in Encoding.UTF8.encode(flags)) {
             known: false
             if(octet == 105) {
                 if(caseInsensitive) {
@@ -1269,7 +1269,7 @@ compileWithFlags: ((unicode, transfer) => {
             known.ifFalse(() => {
                 Error().signal()
             })
-        })
+        }
         canonicalFlags: ""
         if(caseInsensitive) {
             canonicalFlags = canonicalFlags + "i"
@@ -1330,9 +1330,9 @@ compileWithFlags: ((unicode, transfer) => {
 
         weightOf: (indexes) => {
             total: 0
-            indexes.each((index) => {
+            for(index in indexes) {
                 total = total + nodes[index].weight
-            })
+            }
             total
         }
 
@@ -2044,12 +2044,12 @@ compileWithFlags: ((unicode, transfer) => {
         } else {
             names: Map()
             group: 0
-            first.each((name) => {
+            for(name in first) {
                 (name === null).ifFalse(() => {
                     names[name] = group
                 })
                 group = group + 1
-            })
+            }
             names.freeze()
             built = newMatch(names, first, second, third)
         }
@@ -2082,9 +2082,9 @@ escape: (text) => {
     })
     output: Encoding.UTF8.encode("")
     appendAscii: (spelling) => {
-        Encoding.UTF8.encode(spelling).each((octet) => {
+        for(octet in Encoding.UTF8.encode(spelling)) {
             output.add(octet)
-        })
+        }
     }
     appendHexEscape: (scalar) => {
         digits: "0123456789ABCDEF"
@@ -2101,7 +2101,7 @@ escape: (text) => {
     pending: Encoding.UTF8.encode("")
     expected: 0
     scalar: 0
-    Encoding.UTF8.encode(text).each((octet) => {
+    for(octet in Encoding.UTF8.encode(text)) {
         if(expected == 0) {
             if(octet < 128) {
                 handled: false
@@ -2158,14 +2158,14 @@ escape: (text) => {
                     (scalar == 8233)) {
                     appendHexEscape(scalar)
                 } else {
-                    pending.each((held) => {
+                    for(held in pending) {
                         output.add(held)
-                    })
+                    }
                 }
                 pending = Encoding.UTF8.encode("")
             }
         }
-    })
+    }
     Encoding.UTF8.decode(output)
 }
 
@@ -2178,11 +2178,11 @@ escapeReplacement: (text) => {
         Error().signal()
     })
     output: Encoding.UTF8.encode("")
-    Encoding.UTF8.encode(text).each((octet) => {
+    for(octet in Encoding.UTF8.encode(text)) {
         if(octet == 36) {
             output.add(36)
         }
         output.add(octet)
-    })
+    }
     Encoding.UTF8.decode(output)
 }

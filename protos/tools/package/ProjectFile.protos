@@ -32,12 +32,12 @@ lockMemberAt: (lock, location) => {
     found: null
     count: 0
 
-    lock.workspaceMembers.each((member) => {
+    for(member in lock.workspaceMembers) {
         if(member.declaration == location) {
             found = member
             count = count + 1
         }
-    })
+    }
 
     if(count > 1) {
         fail()
@@ -49,7 +49,7 @@ lockMemberAt: (lock, location) => {
 projectionMembers: (resolutionRoot) => {
     members: Array()
 
-    resolutionRoot.members.each((member) => {
+    for(member in resolutionRoot.members) {
         members = Array(
             ...members,
             {
@@ -57,7 +57,7 @@ projectionMembers: (resolutionRoot) => {
                 packageId: member.packageId
             }
         )
-    })
+    }
 
     Document.normalizeMembers(members)
 }
@@ -71,7 +71,7 @@ validateLockProjection: (lock, resolutionRoot) => {
         fail()
     })
 
-    resolutionRoot.members.each((member) => {
+    for(member in resolutionRoot.members) {
         locked: lockMemberAt(lock, member.location)
         if(locked === null) {
             fail()
@@ -80,7 +80,7 @@ validateLockProjection: (lock, resolutionRoot) => {
         workspaceRefMatches(locked.ref, member.packageId).ifFalse(() => {
             fail()
         })
-    })
+    }
 
     lock
 }

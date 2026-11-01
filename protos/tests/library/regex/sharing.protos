@@ -30,13 +30,13 @@ summary: (matches) => {
         text
     }
     result: ""
-    matches.each((found) => {
+    for(found in matches) {
         group: found.group(1)
         if(group === null) {
             group = "-"
         }
         result = result + number(found.start(0)) + ":" + number(found.end(0)) + ":" + group + ";"
-    })
+    }
     result
 }
 

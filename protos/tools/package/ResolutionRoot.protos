@@ -71,7 +71,7 @@ splitPath: (text, allowNavigation) => {
         current = Encoding.UTF8.encode("")
     }
 
-    source.each((octet) => {
+    for(octet in source) {
         if(octet == 47) {
             appendCurrent()
         }
@@ -79,7 +79,7 @@ splitPath: (text, allowNavigation) => {
         (octet == 47).ifFalse(() => {
             current.add(octet)
         })
-    })
+    }
 
     appendCurrent()
     result
@@ -89,13 +89,13 @@ joinComponents: (components) => {
     result: ""
     index: 0
 
-    components.each((component) => {
+    for(component in components) {
         if(index > 0) {
             result = result + "/"
         }
         result = result + component
         index = index + 1
-    })
+    }
 
     result
 }
@@ -109,12 +109,12 @@ popComponent: (components) => {
     index: 0
     limit: components.size() - 1
 
-    components.each((component) => {
+    for(component in components) {
         if(index < limit) {
             result = Array(...result, component)
         }
         index = index + 1
-    })
+    }
 
     result
 }
@@ -126,9 +126,9 @@ canonicalMemberLocation: (text) => {
 memberManifestPath: (location) => {
     path: Path.relative()
 
-    splitPath(location, false).each((component) => {
+    for(component in splitPath(location, false)) {
         path = path.child(component)
-    })
+    }
 
     path.child("protos.toml")
 }
@@ -155,7 +155,7 @@ resolvePathDependency: (
 ) => {
     components: baseLocationComponents(declaringLocation)
 
-    splitPath(sourceText, true).each((component) => {
+    for(component in splitPath(sourceText, true)) {
         (component == ".").ifFalse(() => {
             if(component == "..") {
                 components = popComponent(components)
@@ -165,7 +165,7 @@ resolvePathDependency: (
                 components = Array(...components, component)
             })
         })
-    })
+    }
 
     targetLocation: joinComponents(components)
     targetPackageId: null
@@ -323,7 +323,7 @@ assembleState: (projectTreeFilesystem) => {
     seenPackageIds[rootPackageId] = true
 
     (rootManifest.workspace === null).ifFalse(() => {
-        rootManifest.workspace.members.each((declaration) => {
+        for(declaration in rootManifest.workspace.members) {
             location: canonicalMemberLocation(declaration)
 
             // F2B2 chooses rejection rather than alternate-spelling
@@ -361,7 +361,7 @@ assembleState: (projectTreeFilesystem) => {
                         manifest: memberManifest
                     }
                 )
-        })
+        }
     })
 
     projectedRoot:
@@ -373,7 +373,7 @@ assembleState: (projectTreeFilesystem) => {
         )
 
     projectedMembers: Array()
-    rawMembers.each((member) => {
+    for(member in rawMembers) {
         projectedMembers =
             Array(
                 ...projectedMembers,
@@ -389,7 +389,7 @@ assembleState: (projectTreeFilesystem) => {
                         )
                 }
             )
-    })
+    }
 
     resolutionRoot: {
         languageCompatibility: "0.1"
@@ -407,13 +407,13 @@ assembleState: (projectTreeFilesystem) => {
             }
         )
 
-    rawMembers.each((member) => {
+    for(member in rawMembers) {
         projected: null
-        projectedMembers.each((candidate) => {
+        for(candidate in projectedMembers) {
             if(candidate.location == member.location) {
                 projected = candidate.manifest
             }
-        })
+        }
 
         if(projected === null) {
             fail()
@@ -429,7 +429,7 @@ assembleState: (projectTreeFilesystem) => {
                     projected: projected
                 }
             )
-    })
+    }
 
     {
         resolutionRoot: resolutionRoot

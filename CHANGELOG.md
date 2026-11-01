@@ -7,6 +7,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.436-SNAPSHOT
+
+- `I142` (D231-F2-PURE): migrate eligible ordinary first-party Library, Tool
+  and algorithmic test traversals to generic contextual `for`, rewriting 529
+  single-parameter braced-Closure `.each` sends in 112 `.protos` files (159
+  in 34 Library files, 217 in 35 Tool files, 153 in 43 Library test files),
+  with no semantic, algorithm, parser, Range or protocol changes. Explicit
+  Map two-argument dispatch, the Range implementation, stored-callback sends,
+  and conformance, fixture and baseline code are left intact.
+
 ## 0.3.435-SNAPSHOT
 
 - `I141` (D231-F2-PURE): implement contextual generic and numeric `for` as

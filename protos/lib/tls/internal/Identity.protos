@@ -132,20 +132,20 @@ sameOctets: (referenceOctets, presented) => {
 matches: (unicode, reference, dnsNames, ipAddresses) => {
     found: false
     if(reference.labels !== null) {
-        dnsNames.each((presented) => {
+        for(presented in dnsNames) {
             if(!found) {
                 candidate: dnsName(unicode, presented, true)
                 if(candidate !== null) {
                     found = sameName(reference.labels, candidate.labels)
                 }
             }
-        })
+        }
     } else {
-        ipAddresses.each((presented) => {
+        for(presented in ipAddresses) {
             if(!found) {
                 found = sameOctets(reference.octets, presented)
             }
-        })
+        }
     }
     found
 }

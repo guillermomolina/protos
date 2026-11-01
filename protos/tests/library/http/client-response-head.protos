@@ -85,9 +85,9 @@ duplexOf: (chunks) => {
             }
             failure: writeFailure
             if(failure === null) {
-                bytes.each((octet) => {
+                for(octet in bytes) {
                     output.add(octet)
-                })
+                }
             }
             (() => {
                 if(failure !== null) {
@@ -214,9 +214,9 @@ drain: (body, size) => {
         } else {
             Assertions.require(chunk.size() > 0)
             Assertions.require(chunk.size() <= size)
-            chunk.each((octet) => {
+            for(octet in chunk) {
                 collected.add(octet)
-            })
+            }
         }
     }
     text(collected)
@@ -360,13 +360,13 @@ final200: "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"
 
 tests: [
     Test("200, 404, and 500 are ordinary final heads", () => {
-        [[200, "200"], [404, "404"], [500, "500"]].each((code) => {
+        for(code in [[200, "200"], [404, "404"], [500, "500"]]) {
             head: accepted("HTTP/1.1 " + code[1] + " Reason\r\nContent-Length: 0\r\n\r\n")
             Assertions.require(head.status == code[0])
             Assertions.require(!head.informational)
             Assertions.require(head.framing == "CONTENT_LENGTH")
             Assertions.require(head.contentLength == 0)
-        })
+        }
         null
     }),
     Test("100 and 103 are informational heads without a body", () => {
@@ -464,9 +464,9 @@ tests: [
         Assertions.require(accepted("HTTP/1.1 200 OK\r\nContent-Length: 9223372036854775807\r\n\r\n").contentLength == 9223372036854775807)
     }),
     Test("invalid, duplicated, and comma-list Content-Length is malformed", () => {
-        ["", "-1", "+1", "0x5", "5 5", "5,5", "5, 5", "1.0", "9223372036854775808", "99999999999999999999"].each((value) => {
+        for(value in ["", "-1", "+1", "0x5", "5 5", "5,5", "5, 5", "1.0", "9223372036854775808", "99999999999999999999"]) {
             malformed("HTTP/1.1 200 OK\r\nContent-Length: " + value + "\r\n\r\n")
-        })
+        }
         malformed("HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 5\r\n\r\n")
     }),
     Test("Transfer-Encoding chunked selects chunked framing", () => {
@@ -483,38 +483,38 @@ tests: [
         rejectedAs("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked;q=\"x\"\r\n\r\n", "unsupportedFeature")
     }),
     Test("BWS around a transfer-parameter equals sign is valid but parameters stay unsupported", () => {
-        ["gzip; q = 1", "gzip; q= 1", "gzip; q = \"a\"", "chunked; x = \"a\"", "chunked; x= \"a\"", "chunked; x =a"].each((value) => {
+        for(value in ["gzip; q = 1", "gzip; q= 1", "gzip; q = \"a\"", "chunked; x = \"a\"", "chunked; x= \"a\"", "chunked; x =a"]) {
             rejectedAs("HTTP/1.1 200 OK\r\nTransfer-Encoding: " + value + "\r\n\r\n", "unsupportedFeature")
-        })
+        }
         Assertions.require(accepted("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n").framing == "CHUNKED")
         null
     }),
     Test("malformed transfer-parameter syntax stays malformed", () => {
-        ["chunked; x =", "chunked; =a", "chunked; x = \"unterminated"].each((value) => {
+        for(value in ["chunked; x =", "chunked; =a", "chunked; x = \"unterminated"]) {
             malformed("HTTP/1.1 200 OK\r\nTransfer-Encoding: " + value + "\r\n\r\n")
-        })
+        }
         malformed("HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip; q = 1\r\nContent-Length: 5\r\n\r\n")
         null
     }),
     Test("parameter syntax classification reaches the public exchange without a callback", () => {
-        [
+        for(entry in [
             ["HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip; q = 1\r\n\r\n", "unsupportedFeature"],
             ["HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked; x = \"a\"\r\n\r\n", "unsupportedFeature"],
             ["HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked; x =\r\n\r\n", "malformedResponse"],
             ["HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip; q = 1\r\nContent-Length: 5\r\n\r\n", "malformedResponse"]
-        ].each((entry) => {
+        ]) {
             tally: counted()
             outcome: exchange([ascii(entry[0])], tally.handler)
             Assertions.require(outcome.failure.parent() === http.ClientError)
             Assertions.require(outcome.failure.kind == entry[1])
             Assertions.require(tally.count() == 0)
-        })
+        }
         null
     }),
     Test("empty transfer-coding list elements are never discarded", () => {
-        [", chunked", "chunked,", "chunked, ", ", chunked ,", "chunked,,chunked", "chunked , ,"].each((value) => {
+        for(value in [", chunked", "chunked,", "chunked, ", ", chunked ,", "chunked,,chunked", "chunked , ,"]) {
             rejectedAs("HTTP/1.1 200 OK\r\nTransfer-Encoding: " + value + "\r\n\r\n", "unsupportedFeature")
-        })
+        }
         malformed("HTTP/1.1 200 OK\r\nTransfer-Encoding: , ,\r\n\r\n")
     }),
     Test("malformed transfer-coding syntax is malformed", () => {
@@ -553,7 +553,7 @@ tests: [
         })
     }),
     Test("final 200, 404, and 500 responses invoke the callback once", () => {
-        [[200, "200"], [404, "404"], [500, "500"]].each((code) => {
+        for(code in [[200, "200"], [404, "404"], [500, "500"]]) {
             handler: counted()
             outcome: exchange([ascii("HTTP/1.1 " + code[1] + " X\r\nContent-Length: 2\r\n\r\nhi")], handler.handler)
             Assertions.require(outcome.failure === null)
@@ -561,7 +561,7 @@ tests: [
             Assertions.require(outcome.value.version == "1.1")
             Assertions.require(outcome.value.body == "hi")
             Assertions.require(handler.count() == 1)
-        })
+        }
         null
     }),
     Test("100 and 103 precede the final response and are not exposed", () => {
@@ -614,11 +614,11 @@ tests: [
     Test("a one-byte-per-read response is parsed identically", () => {
         input: ascii("HTTP/1.1 103 Early Hints\r\nLink: </a>\r\n\r\nHTTP/1.1 200 OK\r\nX: y\r\nContent-Length: 3\r\n\r\nabc")
         chunks: []
-        input.each((octet) => {
+        for(octet in input) {
             single: ascii("")
             single.add(octet)
             chunks = Array(...chunks, single)
-        })
+        }
         handler: counted()
         outcome: exchange(chunks, handler.handler)
         Assertions.require(outcome.value.status == 200)
@@ -632,14 +632,14 @@ tests: [
             first: ascii("")
             second: ascii("")
             index: 0
-            input.each((octet) => {
+            for(octet in input) {
                 if(index < split) {
                     first.add(octet)
                 } else {
                     second.add(octet)
                 }
                 index = index + 1
-            })
+            }
             handler: counted()
             outcome: exchange([first, second], handler.handler)
             Assertions.require(outcome.value.status == 404)
@@ -649,12 +649,12 @@ tests: [
         }
     }),
     Test("EOF before a complete final head is malformed", () => {
-        [
+        for(input in [
             "",
             "HTTP/1.1 200 OK\r\n",
             "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n",
             "HTTP/1.1 100 Continue\r\n\r\n"
-        ].each((input) => {
+        ]) {
             chunks: []
             if(input != "") {
                 chunks = [ascii(input)]
@@ -662,7 +662,7 @@ tests: [
             outcome: exchange(chunks, never)
             Assertions.require(outcome.failure.parent() === http.ClientError)
             Assertions.require(outcome.failure.kind == "malformedResponse")
-        })
+        }
         null
     }),
     Test("framing conflicts and excessive declared lengths fail before the callback", () => {
@@ -707,45 +707,45 @@ tests: [
         rejectedAs("HTTP/1.1 101 Switching Protocols\r\nContent-Length: 0\r\n\r\n", "unsupportedFeature")
     }),
     Test("forbidden framing on a final head never reaches the callback", () => {
-        [
+        for(input in [
             "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n",
             "HTTP/1.1 204 No Content\r\nContent-Length: 100\r\n\r\n",
             "HTTP/1.1 204 No Content\r\nTransfer-Encoding: chunked\r\n\r\n",
             "HTTP/1.1 205 Reset Content\r\nContent-Length: 100\r\n\r\n"
-        ].each((input) => {
+        ]) {
             tally: counted()
             outcome: exchange([ascii(input)], tally.handler)
             Assertions.require(outcome.failure.parent() === http.ClientError)
             Assertions.require(outcome.failure.kind == "malformedResponse")
             Assertions.require(tally.count() == 0)
-        })
+        }
         null
     }),
     Test("a forbidden framing field on an informational head fails before the final response", () => {
-        [
+        for(input in [
             "HTTP/1.1 100 Continue\r\nContent-Length: 0\r\n\r\n",
             "HTTP/1.1 103 Early Hints\r\nContent-Length: 100\r\n\r\n",
             "HTTP/1.1 100 Continue\r\nTransfer-Encoding: chunked\r\n\r\n"
-        ].each((input) => {
+        ]) {
             tally: counted()
             outcome: exchange([ascii(input + final200)], tally.handler)
             Assertions.require(outcome.failure.kind == "malformedResponse")
             Assertions.require(tally.count() == 0)
-        })
+        }
         null
     }),
     Test("valid 205 heads expose an empty body", () => {
-        [
+        for(input in [
             "HTTP/1.1 205 Reset Content\r\n\r\n",
             "HTTP/1.1 205 Reset Content\r\nContent-Length: 0\r\n\r\n"
-        ].each((input) => {
+        ]) {
             tally: counted()
             outcome: exchange([ascii(input)], tally.handler)
             Assertions.require(outcome.failure === null)
             Assertions.require(outcome.value.status == 205)
             Assertions.require(outcome.value.body == "")
             Assertions.require(tally.count() == 1)
-        })
+        }
         null
     }),
     Test("a body-bearing Content-Length above the body limit fails before the callback", () => {

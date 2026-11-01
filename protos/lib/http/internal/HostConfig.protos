@@ -36,17 +36,17 @@ capture: (facility, options) => {
     if(options !== null) {
         valid = facility.ordinaryObject(options)
         if(valid) {
-            options.slotNames().each((name) => {
+            for(name in options.slotNames()) {
                 known: false
-                optionNames.each((optionName) => {
+                for(optionName in optionNames) {
                     if(name == optionName) {
                         known = true
                     }
-                })
+                }
                 if(!known) {
                     valid = false
                 }
-            })
+            }
         }
     }
 

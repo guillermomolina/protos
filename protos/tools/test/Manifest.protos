@@ -26,7 +26,7 @@ splitFields: (line) => {
     fields: Array()
     field: Encoding.UTF8.encode("")
 
-    source.each((octet) => {
+    for(octet in source) {
         if(octet == 9) {
             fields = Array(...fields, Encoding.UTF8.decode(field))
             field = Encoding.UTF8.encode("")
@@ -34,7 +34,7 @@ splitFields: (line) => {
         (octet == 9).ifFalse(() => {
             field.add(octet)
         })
-    })
+    }
 
     Array(...fields, Encoding.UTF8.decode(field))
 }
@@ -80,7 +80,7 @@ pathValue: (text) => {
         component = Encoding.UTF8.encode("")
     }
 
-    source.each((octet) => {
+    for(octet in source) {
         invalid: octet == 0
         if(octet == 92) {
             invalid = true
@@ -95,7 +95,7 @@ pathValue: (text) => {
         (octet == 47).ifFalse(() => {
             component.add(octet)
         })
-    })
+    }
 
     finishComponent()
     path
@@ -344,7 +344,7 @@ caseSpecWithRequirements: (spec, suppliedRequirements) => {
     seenKeys: Map()
     validated: Array()
 
-    suppliedRequirements.each((supplied) => {
+    for(supplied in suppliedRequirements) {
         canonical: requirement(
             requirementKey(supplied),
             requirementMode(supplied),
@@ -357,7 +357,7 @@ caseSpecWithRequirements: (spec, suppliedRequirements) => {
         }
         seenKeys[key] = true
         validated = Array(...validated, canonical)
-    })
+    }
 
     requirements: frozenTuple(...validated)
     descriptor: caseAuthorityDescriptor(spec)
@@ -467,13 +467,13 @@ loadWithParser: (filesystem, parser) => {
     readBatch = () => {
         pending: Array(...batchTemplate)
         issueIndex: 0
-        batchTemplate.each((ignored) => {
+        for(ignored in batchTemplate) {
             pending[issueIndex] = reader.readLine(65536)
             issueIndex = issueIndex + 1
-        })
+        }
 
         lines: Future.all(...pending).value()
-        lines.each((line) => {
+        for(line in lines) {
             done.ifFalse(() => {
                 if(line === null) {
                     done = true
@@ -485,7 +485,7 @@ loadWithParser: (filesystem, parser) => {
                     })
                 })
             })
-        })
+        }
 
         done.ifFalse(() => {
             readBatch()
@@ -577,13 +577,13 @@ loadProjectTreeCases: (filesystem, caseNamespace) => {
     plan: loadWithParser(filesystem, parser)
 
     seenIds: Map()
-    planCases(plan).each((spec) => {
+    for(spec in planCases(plan)) {
         id: caseId(spec)
         if(seenIds.containsKey(id)) {
             fail()
         }
         seenIds[id] = true
-    })
+    }
 
     plan
 }
@@ -659,13 +659,13 @@ loadCaseOutcomes: (filesystem, caseNamespace) => {
 
     // D132 rejects duplicate logical CaseIds rather than merging them.
     seenIds: Map()
-    planCases(plan).each((spec) => {
+    for(spec in planCases(plan)) {
         id: caseId(spec)
         if(seenIds.containsKey(id)) {
             fail()
         }
         seenIds[id] = true
-    })
+    }
 
     plan
 }

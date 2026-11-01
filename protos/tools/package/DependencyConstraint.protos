@@ -92,12 +92,12 @@ caretConstraint: (text, lower) => {
 bytesAfter: (source, start) => {
     result: emptyBytes()
     index: 0
-    source.each((octet) => {
+    for(octet in source) {
         if(index >= start) {
             result.add(octet)
         }
         index = index + 1
-    })
+    }
     result
 }
 
@@ -149,7 +149,7 @@ intervalConstraint: (text, source) => {
     inSecond: false
     afterSecond: false
 
-    source.each((octet) => {
+    for(octet in source) {
         separator: isSeparator(octet)
 
         if(separator) {
@@ -179,7 +179,7 @@ intervalConstraint: (text, source) => {
                 first.add(octet)
             })
         })
-    })
+    }
 
     inSecond.ifFalse(() => {
         fail()

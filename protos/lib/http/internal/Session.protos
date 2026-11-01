@@ -325,9 +325,9 @@ serviceBody: (facility, HttpError, duplex, handler, limits, owning) => {
         framer = MessageBody.requestBodyFramer(head, limits)
         bodyReader: BufferedReader(framedSource)
         requestHeaders: []
-        head.headers.each((pair) => {
+        for(pair in head.headers) {
             requestHeaders = Array(...requestHeaders, [pair[0], sliceFrom(pair[1], 0)])
-        })
+        }
         publicBody: {
             read: (maxBytes) => {
                 answer: null

@@ -310,7 +310,7 @@ command: (descriptor) => {
         shortNames: Map()
 
         optionIndex: 0
-        optionDescriptors.each((entry) => {
+        for(entry in optionDescriptors) {
             spec: option(entry)
 
             if(optionKeys.containsKey(spec.key)) {
@@ -334,13 +334,13 @@ command: (descriptor) => {
 
             canonicalOptions[optionIndex] = spec
             optionIndex = optionIndex + 1
-        })
+        }
         canonicalOptions.freeze()
 
         canonicalPositionals: Array(...positionalDescriptors)
         positionalKeys: Map()
         positionalIndex: 0
-        positionalDescriptors.each((entry) => {
+        for(entry in positionalDescriptors) {
             spec: positional(entry)
 
             if(positionalKeys.containsKey(spec.key)) {
@@ -356,7 +356,7 @@ command: (descriptor) => {
 
             canonicalPositionals[positionalIndex] = spec
             positionalIndex = positionalIndex + 1
-        })
+        }
         canonicalPositionals.freeze()
 
         suspended: {
@@ -451,9 +451,9 @@ parse: ((arrayBuilderFactory) => {
         spec: specification
 
         validateArray(suppliedArguments)
-        suppliedArguments.each((entry) => {
+        for(entry in suppliedArguments) {
             validateString(entry)
-        })
+        }
 
         arguments: Array(...suppliedArguments)
         arguments.freeze()
@@ -495,10 +495,10 @@ parse: ((arrayBuilderFactory) => {
 
         allocatePositionals: (scopeSpec, rawPositionals) => {
             requiredPositionals: 0
-            scopeSpec.positionals.each((positionalSpec) => {
+            for(positionalSpec in scopeSpec.positionals) {
                 requiredPositionals =
                     requiredPositionals + positionalSpec.minOccurrences
-            })
+            }
 
             if(rawPositionals.size() < requiredPositionals) {
                 fail()
@@ -508,7 +508,7 @@ parse: ((arrayBuilderFactory) => {
             rawIndex: 0
             laterMinimum: requiredPositionals
 
-            scopeSpec.positionals.each((positionalSpec) => {
+            for(positionalSpec in scopeSpec.positionals) {
                 laterMinimum =
                     laterMinimum - positionalSpec.minOccurrences
 
@@ -550,7 +550,7 @@ parse: ((arrayBuilderFactory) => {
                     rawIndex = rawIndex + 1
                     consumed = consumed + 1
                 }
-            })
+            }
 
             (rawIndex == rawPositionals.size()).ifFalse(() => {
                 fail()
@@ -577,7 +577,7 @@ parse: ((arrayBuilderFactory) => {
             shortOptions: Map()
             occurrenceCounts: Map()
 
-            scopeSpec.options.each((optionSpec) => {
+            for(optionSpec in scopeSpec.options) {
                 occurrenceCounts[optionSpec.key] = 0
 
                 (optionSpec.long === null).ifFalse(() => {
@@ -587,18 +587,18 @@ parse: ((arrayBuilderFactory) => {
                 (optionSpec.short === null).ifFalse(() => {
                     shortOptions[optionSpec.short] = optionSpec
                 })
-            })
+            }
 
             childSpecs: Map()
-            scopeSpec.subcommands.each((childSpec) => {
+            for(childSpec in scopeSpec.subcommands) {
                 childSpecs[childSpec.name] = childSpec
-            })
+            }
 
             requiredPositionals: 0
             boundedMaximumPositionals: 0
             unboundedPositionals: false
 
-            scopeSpec.positionals.each((positionalSpec) => {
+            for(positionalSpec in scopeSpec.positionals) {
                 requiredPositionals =
                     requiredPositionals + positionalSpec.minOccurrences
 
@@ -611,7 +611,7 @@ parse: ((arrayBuilderFactory) => {
                         boundedMaximumPositionals +
                         positionalSpec.maxOccurrences
                 })
-            })
+            }
 
             optionBuilder: newBuilder()
             rawPositionalBuilder: newBuilder()
@@ -873,14 +873,14 @@ parse: ((arrayBuilderFactory) => {
                 scanIndex = scanIndex + advance
             }
 
-            scopeSpec.options.each((optionSpec) => {
+            for(optionSpec in scopeSpec.options) {
                 if(
                     occurrenceCounts[optionSpec.key] <
                     optionSpec.minOccurrences
                 ) {
                     fail()
                 }
-            })
+            }
 
             rawPositionals: finishBuilder(rawPositionalBuilder)
             positionalOccurrences:
@@ -955,25 +955,25 @@ renderHelp: (rootSpec, commandPath) => {
     validateArray(commandPath)
 
     selectedSpec: rootSpec
-    commandPath.each((segment) => {
+    for(segment in commandPath) {
         validateString(segment)
 
         selectedChild: null
-        selectedSpec.subcommands.each((childSpec) => {
+        for(childSpec in selectedSpec.subcommands) {
             if(
                 (selectedChild === null) &&
                 (childSpec.name == segment)
             ) {
                 selectedChild = childSpec
             }
-        })
+        }
 
         if(selectedChild === null) {
             fail()
         }
 
         selectedSpec = selectedChild
-    })
+    }
 
     output: Encoding.UTF8.encode("")
 
@@ -1083,13 +1083,13 @@ renderHelp: (rootSpec, commandPath) => {
     appendText("Usage: ")
     appendText(rootSpec.name)
 
-    commandPath.each((segment) => {
+    for(segment in commandPath) {
         appendText(" ")
         appendText(segment)
-    })
+    }
 
     hasOptionalOptions: false
-    selectedSpec.options.each((optionSpec) => {
+    for(optionSpec in selectedSpec.options) {
         if(optionSpec.minOccurrences == 0) {
             hasOptionalOptions = true
         }
@@ -1105,16 +1105,16 @@ renderHelp: (rootSpec, commandPath) => {
                 appendText("]...")
             }
         }
-    })
+    }
 
     if(hasOptionalOptions) {
         appendText(" [OPTIONS]")
     }
 
-    selectedSpec.positionals.each((positionalSpec) => {
+    for(positionalSpec in selectedSpec.positionals) {
         appendText(" ")
         appendText(positionalTerm(positionalSpec))
-    })
+    }
 
     if(selectedSpec.subcommands.size() > 0) {
         appendText(" [COMMAND]")
@@ -1127,29 +1127,29 @@ renderHelp: (rootSpec, commandPath) => {
 
     if(selectedSpec.positionals.size() > 0) {
         appendText("\n\nArguments:")
-        selectedSpec.positionals.each((positionalSpec) => {
+        for(positionalSpec in selectedSpec.positionals) {
             appendText("\n  ")
             appendText(positionalTerm(positionalSpec))
             appendDescription(positionalSpec.help)
-        })
+        }
     }
 
     if(selectedSpec.options.size() > 0) {
         appendText("\n\nOptions:")
-        selectedSpec.options.each((optionSpec) => {
+        for(optionSpec in selectedSpec.options) {
             appendText("\n  ")
             appendText(optionEntry(optionSpec))
             appendDescription(optionSpec.help)
-        })
+        }
     }
 
     if(selectedSpec.subcommands.size() > 0) {
         appendText("\n\nCommands:")
-        selectedSpec.subcommands.each((childSpec) => {
+        for(childSpec in selectedSpec.subcommands) {
             appendText("\n  ")
             appendText(childSpec.name)
             appendDescription(childSpec.help)
-        })
+        }
     }
 
     Encoding.UTF8.decode(output)

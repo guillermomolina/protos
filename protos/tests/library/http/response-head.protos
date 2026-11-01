@@ -89,20 +89,20 @@ contains: (haystack, needle) => {
 lowercase: (value) => {
     bytes: Encoding.Latin1.encode(value)
     lowered: Encoding.UTF8.encode("")
-    bytes.each((octet) => {
+    for(octet in bytes) {
         if((octet >= 65) && (octet <= 90)) {
             lowered.add(octet + 32)
         } else {
             lowered.add(octet)
         }
-    })
+    }
     Encoding.Latin1.decode(lowered)
 }
 
 allValidShapes: () => {
     shapes: []
-    [200, 204, 205, 304, 404, 500, 599].each((status) => {
-        [false, true].each((headRequest) => {
+    for(status in [200, 204, 205, 304, 404, 500, 599]) {
+        for(headRequest in [false, true]) {
             shapes = Array(...shapes, prepared(status, "NULL", null, headRequest))
             shapes = Array(...shapes, prepared(status, "BYTES", empty(), headRequest))
             bodiless: (status == 204) || (status == 205) || (status == 304)
@@ -110,8 +110,8 @@ allValidShapes: () => {
                 shapes = Array(...shapes, prepared(status, "BYTES", ascii("body!"), headRequest))
                 shapes = Array(...shapes, prepared(status, "STREAM", null, headRequest))
             }
-        })
-    })
+        }
+    }
     shapes
 }
 
@@ -162,10 +162,10 @@ tests: [
         requireInvalidWith(304, [], "BYTES", ascii("x"), true)
     }),
     Test("bodiless statuses with STREAM are invalid", () => {
-        [204, 205, 304].each((status) => {
+        for(status in [204, 205, 304]) {
             requireInvalidWith(status, [], "STREAM", null, false)
             requireInvalidWith(status, [], "STREAM", null, true)
-        })
+        }
         null
     }),
     Test("HEAD with NULL has zero Content-Length and no emission", () => {
@@ -193,7 +193,7 @@ tests: [
         Assertions.require(text(p.capturedBodyBytes) == "abc")
     }),
     Test("reserved names are rejected in any case", () => {
-        [
+        for(name in [
             "Content-Length", "content-length", "CONTENT-LENGTH",
             "Transfer-Encoding", "transfer-encoding", "TRANSFER-encoding",
             "Connection", "connection", "CONNECTION",
@@ -202,15 +202,15 @@ tests: [
             "TE", "te", "Te",
             "Keep-Alive", "keep-alive", "KEEP-ALIVE",
             "Proxy-Connection", "proxy-connection", "PROXY-CONNECTION"
-        ].each((name) => {
+        ]) {
             requireInvalidWith(200, [header("X-Ok", "1"), header(name, "v")], "NULL", null, false)
-        })
+        }
         null
     }),
     Test("invalid header name or malformed pair is rejected", () => {
-        ["", "Bad Name", "Bad:Name", "Bad(Name)", "Caf\u{E9}"].each((name) => {
+        for(name in ["", "Bad Name", "Bad:Name", "Bad(Name)", "Caf\u{E9}"]) {
             requireInvalidWith(200, [header(name, "v")], "NULL", null, false)
-        })
+        }
         requireInvalidWith(200, [["X"]], "NULL", null, false)
         requireInvalidWith(200, [["X", ascii("v"), ascii("w")]], "NULL", null, false)
         requireInvalidWith(200, [[42, ascii("v")]], "NULL", null, false)
@@ -253,24 +253,24 @@ tests: [
         requireWire("HTTP/1.1 404 \r\nx-CuStOm: V\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", p)
     }),
     Test("Content-Length and Transfer-Encoding never coexist", () => {
-        allValidShapes().each((p) => {
+        for(p in allValidShapes()) {
             wire: text(p.headerBytes)
             Assertions.require(!(contains(wire, "Content-Length:") && contains(wire, "Transfer-Encoding:")))
-        })
+        }
         null
     }),
     Test("every valid response has Connection close", () => {
-        allValidShapes().each((p) => {
+        for(p in allValidShapes()) {
             Assertions.require(contains(text(p.headerBytes), "\r\nConnection: close\r\n"))
-        })
+        }
         null
     }),
     Test("no Date or Server is added", () => {
-        allValidShapes().each((p) => {
+        for(p in allValidShapes()) {
             wire: lowercase(text(p.headerBytes))
             Assertions.require(!contains(wire, "\r\ndate:"))
             Assertions.require(!contains(wire, "\r\nserver:"))
-        })
+        }
         null
     }),
     Test("headerBytes is a defensive snapshot", () => {
@@ -296,18 +296,18 @@ tests: [
         requireWire("HTTP/1.1 200 \r\nContent-Length: 5\r\nConnection: close\r\n\r\n", p)
     }),
     Test("status outside range or non-Integer is invalid", () => {
-        [-1, 0, 100, 101, 199, 600, 999, 99999999999999999999].each((status) => {
+        for(status in [-1, 0, 100, 101, 199, 600, 999, 99999999999999999999]) {
             requireInvalid(status, "NULL", null)
-        })
-        ["200", 200.0, null].each((status) => {
+        }
+        for(status in ["200", 200.0, null]) {
             requireInvalid(status, "NULL", null)
-        })
+        }
         prepared(200, "NULL", null, false)
         prepared(599, "NULL", null, false)
         null
     }),
     Test("header section ends with CRLF CRLF", () => {
-        allValidShapes().each((p) => {
+        for(p in allValidShapes()) {
             bytes: p.headerBytes
             size: bytes.size()
             Assertions.require(bytes[size - 4] == 13)
@@ -316,16 +316,16 @@ tests: [
             Assertions.require(bytes[size - 1] == 10)
             // The first CRLF CRLF is the terminating one.
             Assertions.require(firstIndex(text(bytes), "\r\n\r\n") == (size - 4))
-        })
+        }
         null
     }),
     Test("body octets never appear in headerBytes", () => {
         body: ascii("UNIQUE-BODY-MARKER")
-        [false, true].each((headRequest) => {
+        for(headRequest in [false, true]) {
             p: prepared(200, "BYTES", body, headRequest)
             requireWire("HTTP/1.1 200 \r\nContent-Length: 18\r\nConnection: close\r\n\r\n", p)
             Assertions.require(!contains(text(p.headerBytes), "UNIQUE-BODY-MARKER"))
-        })
+        }
         null
     })
 ]

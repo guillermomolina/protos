@@ -30,12 +30,12 @@ tests: [
             })
 
             index: 0
-            first.each((octet) => {
+            for(octet in first) {
                 (second[index] == octet).ifFalse(() => {
                     ok = false
                 })
                 index = index + 1
-            })
+            }
             ok
         }
         Assertions.require(tool009LegacyCase())
@@ -54,12 +54,12 @@ tests: [
             expected: Array(0, 255, 1, 254)
             ok: input.size() == expected.size()
             index: 0
-            expected.each((octet) => {
+            for(octet in expected) {
                 (input[index] == octet).ifFalse(() => {
                     ok = false
                 })
                 index = index + 1
-            })
+            }
             ok
         }
         Assertions.require(tool009LegacyCase())

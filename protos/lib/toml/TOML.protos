@@ -428,9 +428,9 @@ array: (...nodes) => {
         ignoredValue: node.value
     }
 
-    nodes.each((node) => {
+    for(node in nodes) {
         validateNode(node)
-    })
+    }
 
     {
         kind: "array"
@@ -468,7 +468,7 @@ table: (...nameNodePairs) => {
     pendingName: null
     expectingName: true
 
-    nameNodePairs.each((entry) => {
+    for(entry in nameNodePairs) {
         wasExpectingName: expectingName
 
         if(wasExpectingName) {
@@ -488,7 +488,7 @@ table: (...nameNodePairs) => {
             pendingName = null
             expectingName = true
         })
-    })
+    }
 
     expectingName.ifFalse(() => {
         Error().signal()
@@ -509,9 +509,9 @@ encode: (rootTable) => {
         String.recognizes(text).ifFalse(() => {
             Error().signal()
         })
-        Encoding.UTF8.encode(text).each((octet) => {
+        for(octet in Encoding.UTF8.encode(text)) {
             output.add(octet)
-        })
+        }
     }
 
     emitHexNibble: (digit) => {
@@ -529,7 +529,7 @@ encode: (rootTable) => {
         })
 
         output.add(34)
-        Encoding.UTF8.encode(text).each((octet) => {
+        for(octet in Encoding.UTF8.encode(text)) {
             handled: false
 
             if(octet == 34) {
@@ -562,7 +562,7 @@ encode: (rootTable) => {
             handled.ifFalse(() => {
                 output.add(octet)
             })
-        })
+        }
         output.add(34)
     }
 
@@ -928,9 +928,9 @@ encode: (rootTable) => {
                 buffer.add(48)
                 padding = padding - 1
             }
-            raw.each((octet) => {
+            for(octet in raw) {
                 buffer.add(octet)
-            })
+            }
             result = Encoding.UTF8.decode(buffer)
         }
         result
@@ -3788,12 +3788,12 @@ parseDialect: (text, version) => {
         }
 
         visitIndex: 0
-        source.each((ignoredOctet) => {
+        for(ignoredOctet in source) {
             if(visitIndex == index) {
                 step()
             }
             visitIndex = visitIndex + 1
-        })
+        }
 
         (index == length).ifFalse(() => {
             fail()
@@ -4264,7 +4264,7 @@ parseDialect: (text, version) => {
             }
         }
 
-        items.each((statement) => {
+        for(statement in items) {
             source: Encoding.UTF8.encode(statement)
             bounds: trimBounds(source)
             if(bounds.left >= bounds.right) {
@@ -4286,7 +4286,7 @@ parseDialect: (text, version) => {
                 assignment: parseAssignment(statement)
                 putDotted(current, assignment.path, 0, assignment.value)
             })
-        })
+        }
 
         builderIndex: 0
         while(builderIndex < arrayTableBuilderCount) {

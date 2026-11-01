@@ -36,11 +36,11 @@ maxLabelOctets: 63
 // Whether value equals one element of choices.
 oneOf: (value, choices) => {
     found: false
-    choices.each((choice) => {
+    for(choice in choices) {
         if(choice == value) {
             found = true
         }
-    })
+    }
     found
 }
 
@@ -198,11 +198,11 @@ punycodeDecode: (payload) => {
 // value is exact.
 punycodeEncode: (scalars) => {
     result: Encoding.Latin1.encode("")
-    scalars.each((scalar) => {
+    for(scalar in scalars) {
         if(scalar < 128) {
             result.add(scalar)
         }
-    })
+    }
     basic: result.size()
     handled: basic
     if(basic > 0) {
@@ -213,14 +213,14 @@ punycodeEncode: (scalars) => {
     bias: 72
     while(handled < scalars.size()) {
         m: scalarLimit
-        scalars.each((scalar) => {
+        for(scalar in scalars) {
             if((scalar >= n) && (scalar < m)) {
                 m = scalar
             }
-        })
+        }
         delta = delta + (m - n) * (handled + 1)
         n = m
-        scalars.each((scalar) => {
+        for(scalar in scalars) {
             if(scalar < n) {
                 delta = delta + 1
             }
@@ -243,7 +243,7 @@ punycodeEncode: (scalars) => {
                 delta = 0
                 handled = handled + 1
             }
-        })
+        }
         delta = delta + 1
         n = n + 1
     }
@@ -352,28 +352,28 @@ contextO: (scalars, facts, index) => {
     }
     // A.7 KATAKANA MIDDLE DOT in a label with Hiragana, Katakana or Han.
     if(scalar == 12539) {
-        facts.each((other) => {
+        for(other in facts) {
             if(oneOf(other.script, ["Hiragana", "Katakana", "Han"])) {
                 allowed = true
             }
-        })
+        }
     }
     // A.8 ARABIC-INDIC DIGITS and A.9 EXTENDED ARABIC-INDIC DIGITS never mix.
     if((scalar >= 1632) && (scalar <= 1641)) {
         allowed = true
-        scalars.each((other) => {
+        for(other in scalars) {
             if((other >= 1776) && (other <= 1785)) {
                 allowed = false
             }
-        })
+        }
     }
     if((scalar >= 1776) && (scalar <= 1785)) {
         allowed = true
-        scalars.each((other) => {
+        for(other in scalars) {
             if((other >= 1632) && (other <= 1641)) {
                 allowed = false
             }
-        })
+        }
     }
     allowed
 }
@@ -387,11 +387,11 @@ uLabelClasses: (unicode, scalars) => {
     valid: size > 0
     if(valid) {
         nonAscii: false
-        scalars.each((scalar) => {
+        for(scalar in scalars) {
             if(scalar >= 128) {
                 nonAscii = true
             }
-        })
+        }
         valid = nonAscii && (scalars[0] != 45) && (scalars[size - 1] != 45)
     }
     if(valid && (size >= 4)) {
@@ -461,7 +461,7 @@ aLabelClasses: (unicode, label) => {
 // Bidi_Class names of an ASCII NR-LDH label: letters L, digits EN, hyphen ES.
 asciiClasses: (label) => {
     classes: []
-    Encoding.UTF8.encode(label).each((octet) => {
+    for(octet in Encoding.UTF8.encode(label)) {
         bidi: "L"
         if((octet >= 48) && (octet <= 57)) {
             bidi = "EN"
@@ -470,7 +470,7 @@ asciiClasses: (label) => {
             bidi = "ES"
         }
         classes = Arrays.append(classes, bidi)
-    })
+    }
     classes
 }
 
@@ -488,7 +488,7 @@ bidiRule: (classes) => {
         }
         hasEn: false
         hasAn: false
-        classes.each((bidi) => {
+        for(bidi in classes) {
             if(!oneOf(bidi, permitted)) {
                 satisfied = false
             }
@@ -498,7 +498,7 @@ bidiRule: (classes) => {
             if(bidi == "AN") {
                 hasAn = true
             }
-        })
+        }
         end: classes.size() - 1
         while((end > 0) && (classes[end] == "NSM")) {
             end = end - 1
@@ -559,11 +559,11 @@ admit: (unicode, text, minimumLabels, allowWildcard) => {
         }
         if(valid) {
             if(classes !== null) {
-                classes.each((bidi) => {
+                for(bidi in classes) {
                     if(oneOf(bidi, ["R", "AL", "AN"])) {
                         bidiName = true
                     }
-                })
+                }
             }
             labels = Arrays.append(labels, Encoding.UTF8.decode(label))
             labelClasses = Arrays.append(labelClasses, classes)

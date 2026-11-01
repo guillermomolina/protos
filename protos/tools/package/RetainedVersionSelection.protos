@@ -20,13 +20,13 @@ Fresh: import("self:FreshVersionSelection")
 retainedAvailable: (retained, candidates) => {
     available: false
 
-    candidates.each((candidate) => {
+    for(candidate in candidates) {
         available.ifFalse(() => {
             if(Version.compare(retained, candidate) == 0) {
                 available = true
             }
         })
-    })
+    }
 
     available
 }
@@ -60,12 +60,12 @@ selectText: (constraintText, retainedText, candidateTexts) => {
     })
 
     candidates: Array()
-    candidateTexts.each((candidateText) => {
+    for(candidateText in candidateTexts) {
         candidates = Array(
             ...candidates,
             Version.parse(candidateText)
         )
-    })
+    }
 
     select(constraint, retained, candidates).text
 }

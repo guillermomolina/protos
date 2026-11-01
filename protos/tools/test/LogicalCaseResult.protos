@@ -111,7 +111,7 @@ exitCode: (results) => {
 
     code: 0
 
-    results.each((result) => {
+    for(result in results) {
         kind: classification(result)
 
         if(kind == "fail") {
@@ -131,7 +131,7 @@ exitCode: (results) => {
         ) {
             policyError()
         }
-    })
+    }
 
     code
 }

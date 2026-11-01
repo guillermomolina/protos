@@ -139,9 +139,9 @@ tests: [
         forward: Map()
         backward: Map()
         keys: ["z", "a", "aa", "ab", "A", "b", "\u{E9}", "\u{20AC}", "\u{FFFD}", "\u{1F600}", ""]
-        keys.each((key) => {
+        for(key in keys) {
             forward[key] = key.size()
-        })
+        }
         index: keys.size() - 1
         while(index >= 0) {
             backward[keys[index]] = keys[index].size()

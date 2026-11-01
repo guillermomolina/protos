@@ -63,13 +63,13 @@ tests: [
         requireStarts(Regex.compile("$"), "", 0)
     }),
     Test("^ and $ with m match at every line boundary", () => {
-        terminators.each((terminator) => {
+        for(terminator in terminators) {
             text: "a" + terminator + "b"
             requireStarts(Regex.compileWithFlags("^", "m"), text, 0, 2)
             requireStarts(Regex.compileWithFlags("$", "m"), text, 1, 3)
             Assertions.require(Regex.compileWithFlags("^b", "m").search(text).start(0) == 2)
             Assertions.require(Regex.compileWithFlags("a$", "m").search(text).end(0) == 1)
-        })
+        }
         requireStarts(Regex.compileWithFlags("^", "m"), "\n\n", 0, 1, 2)
         requireStarts(Regex.compileWithFlags("$", "m"), "\n\n", 0, 1, 2)
     }),
@@ -88,10 +88,10 @@ tests: [
     Test("dot excludes line terminators unless s is present", () => {
         dot: Regex.compile(".")
         dotAll: Regex.compileWithFlags(".", "s")
-        terminators.each((terminator) => {
+        for(terminator in terminators) {
             Assertions.require(dot.search(terminator) === null)
             Assertions.require(dotAll.fullMatch(terminator) !== null)
-        })
+        }
         Assertions.require(dot.search("\nx").start(0) == 1)
         Assertions.require(dot.fullMatch("😀") !== null)
         Assertions.require(Regex.compileWithFlags("a.b", "s").fullMatch("a\u{D}b") !== null)
@@ -111,14 +111,14 @@ tests: [
     }),
     Test("word boundaries use the Unicode word set", () => {
         // Alphabetic, Mark, Decimal_Number, Connector_Punctuation, Join_Control.
-        Array("é", "日", "\u{301}", "٣", "_", "‿", "\u{200D}").each((wordScalar) => {
+        for(wordScalar in Array("é", "日", "\u{301}", "٣", "_", "‿", "\u{200D}")) {
             Assertions.require(Regex.compile("a\\B").search("a" + wordScalar) !== null)
             Assertions.require(Regex.compile("a\\b").search("a" + wordScalar) === null)
             requireStarts(Regex.compile("\\b"), " " + wordScalar + " ", 1, 2)
-        })
-        Array("-", " ", "😀", "\u{200E}").each((otherScalar) => {
+        }
+        for(otherScalar in Array("-", " ", "😀", "\u{200E}")) {
             Assertions.require(Regex.compile("a\\b").search("a" + otherScalar) !== null)
-        })
+        }
         Assertions.require(Regex.compile("e\\b").search("e\u{301}") === null)
         Assertions.require(Regex.compileWithFlags("\\bé\\b", "i").search("x É y").start(0) == 2)
     })

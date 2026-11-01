@@ -169,9 +169,9 @@ digest: (bytes) => {
     )
 
     message: Encoding.UTF8.encode("")
-    bytes.each((octet) => {
+    for(octet in bytes) {
         message.add(octet)
-    })
+    }
 
     message.add(128)
 
@@ -201,15 +201,15 @@ digest: (bytes) => {
         256,
         1
     )
-    lengthDivisors.each((divisor) => {
+    for(divisor in lengthDivisors) {
         message.add(bitLength.div(divisor).mod(256))
-    })
+    }
 
     processBlock: (blockOffset) => {
         schedule: Array(...roundConstants)
         scheduleIndex: 0
 
-        roundConstants.each((ignoredConstant) => {
+        for(ignoredConstant in roundConstants) {
             if(scheduleIndex < 16) {
                 offset: blockOffset + scheduleIndex * 4
                 value:
@@ -232,12 +232,12 @@ digest: (bytes) => {
             }
 
             scheduleIndex = scheduleIndex + 1
-        })
+        }
 
         (a, b, c, d, e, f, g, h): state
 
         roundIndex: 0
-        roundConstants.each((constant) => {
+        for(constant in roundConstants) {
             temporary1: word32(
                 h +
                 upperSigma1(e) +
@@ -261,7 +261,7 @@ digest: (bytes) => {
             a = word32(temporary1 + temporary2)
 
             roundIndex = roundIndex + 1
-        })
+        }
 
         state[0] = word32(state[0] + a)
         state[1] = word32(state[1] + b)
@@ -291,12 +291,12 @@ digest: (bytes) => {
     processBlocks(0, message.size().div(64))
 
     result: Encoding.UTF8.encode("")
-    state.each((value) => {
+    for(value in state) {
         result.add(value.div(16777216).mod(256))
         result.add(value.div(65536).mod(256))
         result.add(value.div(256).mod(256))
         result.add(value.mod(256))
-    })
+    }
 
     result
 }

@@ -30,17 +30,17 @@ requestSlots: ["method", "headers", "body"]
 hasOwnSlots: (object, required) => {
     names: object.slotNames()
     valid: true
-    required.each((slotName) => {
+    for(slotName in required) {
         present: false
-        names.each((name) => {
+        for(name in names) {
             if(name == slotName) {
                 present = true
             }
-        })
+        }
         if(!present) {
             valid = false
         }
-    })
+    }
     valid
 }
 
@@ -78,13 +78,13 @@ parsePort: (text) => {
     value: -1
     if((bytes.size() > 0) && (bytes.size() <= 5)) {
         value = 0
-        bytes.each((octet) => {
+        for(octet in bytes) {
             if((value >= 0) && MessageSyntax.isDigit(octet)) {
                 value = value * 10 + (octet - 48)
             } else {
                 value = -1
             }
-        })
+        }
         if((value < 1) || (value > 65535)) {
             value = -1
         }
@@ -245,7 +245,7 @@ prepare: (facility, authorities, url, request) => {
         rawHeaders: request.slotValue("headers")
         valid = Array.recognizes(rawHeaders)
         if(valid) {
-            Array(...rawHeaders).each((pair) => {
+            for(pair in Array(...rawHeaders)) {
                 if(valid) {
                     wellShaped: Array.recognizes(pair) && (pair.size() == 2)
                     if(wellShaped) {
@@ -266,7 +266,7 @@ prepare: (facility, authorities, url, request) => {
                         valid = false
                     }
                 }
-            })
+            }
         }
     }
     if(valid) {

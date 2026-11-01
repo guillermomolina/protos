@@ -18,9 +18,9 @@ Test: import("std:test/Test")
 Regex: import("std:regex/Regex")
 
 rejects: (...sources) => {
-    sources.each((source) => {
+    for(source in sources) {
         Assertions.signals(Error, () => { Regex.compile(source) })
-    })
+    }
     true
 }
 

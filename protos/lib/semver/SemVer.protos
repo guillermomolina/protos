@@ -71,10 +71,10 @@ parse: (text) => {
     materialize: (entries) => {
         result: sized(entries.size())
         index: 0
-        result.each((ignored) => {
+        for(ignored in result) {
             result[index] = entries[index]
             index = index + 1
-        })
+        }
         result
     }
 
@@ -97,9 +97,9 @@ parse: (text) => {
             Error().signal()
         }
         value: 0
-        bytes.each((octet) => {
+        for(octet in bytes) {
             value = value * 10 + (octet - 48)
-        })
+        }
         value
     }
 
@@ -131,7 +131,7 @@ parse: (text) => {
     // Sections: "core" (MAJOR.MINOR.PATCH), "prerelease", and "build".
     section: "core"
 
-    source.each((octet) => {
+    for(octet in source) {
         previousSection: section
 
         if(previousSection == "core") {
@@ -212,7 +212,7 @@ parse: (text) => {
                 current.add(octet)
             })
         }
-    })
+    }
 
     if(section == "core") {
         (components.size() == 2).ifFalse(() => {
@@ -283,17 +283,17 @@ parse: (text) => {
             version: this
             result: mix(mix(mix(17, version.major.hash()), version.minor.hash()), version.patch.hash())
             result = mix(result, version.prerelease.size())
-            version.prerelease.each((identifier) => {
+            for(identifier in version.prerelease) {
                 family: 1
                 if(String.recognizes(identifier)) {
                     family = 2
                 }
                 result = mix(mix(result, family), identifier.hash())
-            })
+            }
             result = mix(result, version.build.size())
-            version.build.each((identifier) => {
+            for(identifier in version.build) {
                 result = mix(result, identifier.hash())
-            })
+            }
             result
         }
     }
@@ -328,17 +328,17 @@ format: (version) => {
         ((version.major >= 0) && (version.minor >= 0) && (version.patch >= 0)).ifFalse(() => {
             Error().signal()
         })
-        version.prerelease.each((identifier) => {
+        for(identifier in version.prerelease) {
             numeric: Integer.recognizes(identifier) && (identifier >= 0)
             (numeric || String.recognizes(identifier)).ifFalse(() => {
                 Error().signal()
             })
-        })
-        version.build.each((identifier) => {
+        }
+        for(identifier in version.build) {
             String.recognizes(identifier).ifFalse(() => {
                 Error().signal()
             })
-        })
+        }
     }
 
     requireVersion(version)
@@ -379,7 +379,7 @@ format: (version) => {
             Error().signal()
         }
         hasNonDigit: false
-        bytes.each((octet) => {
+        for(octet in bytes) {
             isIdentifierOctet(octet).ifFalse(() => {
                 Error().signal()
             })
@@ -387,7 +387,7 @@ format: (version) => {
                 hasNonDigit = true
             })
             output.add(octet)
-        })
+        }
         if(alphanumeric && (hasNonDigit == false)) {
             Error().signal()
         }
@@ -395,7 +395,7 @@ format: (version) => {
 
     appendIdentifiers: (separator, identifiers, alphanumeric) => {
         next: separator
-        identifiers.each((identifier) => {
+        for(identifier in identifiers) {
             output.add(next)
             next = 46
             if(Integer.recognizes(identifier)) {
@@ -404,7 +404,7 @@ format: (version) => {
             if(String.recognizes(identifier)) {
                 appendText(identifier, alphanumeric)
             }
-        })
+        }
     }
 
     appendDecimal(version.major)
@@ -439,17 +439,17 @@ comparePrecedence: (left, right) => {
         ((version.major >= 0) && (version.minor >= 0) && (version.patch >= 0)).ifFalse(() => {
             Error().signal()
         })
-        version.prerelease.each((identifier) => {
+        for(identifier in version.prerelease) {
             numeric: Integer.recognizes(identifier) && (identifier >= 0)
             (numeric || String.recognizes(identifier)).ifFalse(() => {
                 Error().signal()
             })
-        })
-        version.build.each((identifier) => {
+        }
+        for(identifier in version.build) {
             String.recognizes(identifier).ifFalse(() => {
                 Error().signal()
             })
-        })
+        }
     }
 
     requireVersion(left)

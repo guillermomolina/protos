@@ -258,7 +258,7 @@ documentLines: (text) => {
     lines: Array()
     current: emptyBytes()
 
-    source.each((octet) => {
+    for(octet in source) {
         if(octet == 10) {
             line: ""
             if(current.size() > 0) {
@@ -274,7 +274,7 @@ documentLines: (text) => {
             }
             current.add(octet)
         })
-    })
+    }
 
     (current.size() == 0).ifFalse(() => {
         fail()
@@ -294,27 +294,27 @@ nodeExists: (ref, root, workspaceMembers, registryNodes, gitNodes) => {
             found = true
         }
 
-        workspaceMembers.each((member) => {
+        for(member in workspaceMembers) {
             if(refEquals(ref, member.ref)) {
                 found = true
             }
-        })
+        }
     }
 
     if(ref.kind == "registry") {
-        registryNodes.each((node) => {
+        for(node in registryNodes) {
             if(refEquals(ref, node.ref)) {
                 found = true
             }
-        })
+        }
     }
 
     if(ref.kind == "git") {
-        gitNodes.each((node) => {
+        for(node in gitNodes) {
             if(refEquals(ref, node.ref)) {
                 found = true
             }
-        })
+        }
     }
 
     found
@@ -343,7 +343,7 @@ parseStructural: (text) => {
     dependencies: Array()
 
     index: 0
-    lines.each((line) => {
+    for(line in lines) {
         if(index >= 4) {
             if(line == "") {
                 fail()
@@ -356,63 +356,63 @@ parseStructural: (text) => {
             }
 
             if(record.kind == "workspace-member") {
-                workspaceMembers.each((existing) => {
+                for(existing in workspaceMembers) {
                     if(existing.declaration == record.declaration) {
                         fail()
                     }
                     if(refEquals(existing.ref, record.ref)) {
                         fail()
                     }
-                })
+                }
                 workspaceMembers = Array(...workspaceMembers, record)
             }
 
             if(record.kind == "registry-node") {
-                registryNodes.each((existing) => {
+                for(existing in registryNodes) {
                     if(refEquals(existing.ref, record.ref)) {
                         fail()
                     }
-                })
+                }
                 registryNodes = Array(...registryNodes, record)
             }
 
             if(record.kind == "git-node") {
-                gitNodes.each((existing) => {
+                for(existing in gitNodes) {
                     if(refEquals(existing.ref, record.ref)) {
                         fail()
                     }
-                })
+                }
                 gitNodes = Array(...gitNodes, record)
             }
 
             if(record.kind == "dependency") {
-                dependencies.each((existing) => {
+                for(existing in dependencies) {
                     sameDeclaring: refEquals(existing.declaring, record.declaring)
                     if(sameDeclaring) {
                         if(existing.alias == record.alias) {
                             fail()
                         }
                     }
-                })
+                }
                 dependencies = Array(...dependencies, record)
             }
         }
 
         index = index + 1
-    })
+    }
 
     (roots.size() == 1).ifFalse(() => {
         fail()
     })
     root: roots[0].ref
 
-    workspaceMembers.each((member) => {
+    for(member in workspaceMembers) {
         if(refEquals(member.ref, root)) {
             fail()
         }
-    })
+    }
 
-    dependencies.each((dependency) => {
+    for(dependency in dependencies) {
         nodeExists(
             dependency.declaring,
             root,
@@ -432,7 +432,7 @@ parseStructural: (text) => {
         ).ifFalse(() => {
             fail()
         })
-    })
+    }
 
     {
         header: header
@@ -450,7 +450,7 @@ bytesLess: (left, right) => {
     result: false
     rightSize: right.size()
 
-    left.each((leftOctet) => {
+    for(leftOctet in left) {
         decided.ifFalse(() => {
             if(index < rightSize) {
                 rightOctet: right[index]
@@ -470,7 +470,7 @@ bytesLess: (left, right) => {
         })
 
         index = index + 1
-    })
+    }
 
     decided.ifFalse(() => {
         result = left.size() < right.size()
@@ -644,21 +644,21 @@ write: (model) => {
         Syntax.renderHeader(model.header) +
         "root " + Syntax.renderNodeRef(model.root) + "\n"
 
-    members.each((member) => {
+    for(member in members) {
         result = result + renderWorkspaceMember(member) + "\n"
-    })
+    }
 
-    registry.each((node) => {
+    for(node in registry) {
         result = result + renderRegistryNode(node) + "\n"
-    })
+    }
 
-    git.each((node) => {
+    for(node in git) {
         result = result + renderGitNode(node) + "\n"
-    })
+    }
 
-    dependencies.each((dependency) => {
+    for(dependency in dependencies) {
         result = result + renderDependency(dependency) + "\n"
-    })
+    }
 
     ignoredStructuralValidation: parseStructural(result)
     result

@@ -40,14 +40,14 @@ selectionError: () => {
 begin: (caseRefs) => {
     requested: Map()
 
-    caseRefs.each((text) => {
+    for(text in caseRefs) {
         CaseRef.requireSupported(text)
 
         if(requested.containsKey(text)) {
             selectionError()
         }
         requested[text] = false
-    })
+    }
 
     {
         active: caseRefs.size() > 0
@@ -112,8 +112,8 @@ requireComplete: (selection) => {
 listing: (projections) => {
     accumulated: ArrayAccumulator.create()
 
-    projections.each((selected) => {
-        Discovery.projectionPlan(selected).each((entry) => {
+    for(selected in projections) {
+        for(entry in Discovery.projectionPlan(selected)) {
             ArrayAccumulator.append(
                 accumulated,
                 JSON.object(
@@ -121,8 +121,8 @@ listing: (projections) => {
                     "display", JSON.string(CaseRef.display(entry))
                 )
             )
-        })
-    })
+        }
+    }
 
     cases: ArrayAccumulator.finish(accumulated)
 

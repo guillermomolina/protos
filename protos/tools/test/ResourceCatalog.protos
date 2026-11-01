@@ -134,7 +134,7 @@ parse: (text) => {
             fail()
         })
 
-        resourceNodes.value.each((resourceNode) => {
+        for(resourceNode in resourceNodes.value) {
             entries: tableEntries(resourceNode)
 
             allowed: Map()
@@ -173,7 +173,7 @@ parse: (text) => {
                 ...catalogEntries,
                 catalogEntry(key, capacity, scope, provider, profile)
             )
-        })
+        }
     }
 
     frozenTuple(...catalogEntries)

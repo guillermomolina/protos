@@ -93,7 +93,7 @@ parse: (text) => {
             fail()
         })
 
-        requirementNodes.value.each((requirementNode) => {
+        for(requirementNode in requirementNodes.value) {
             entries: tableEntries(requirementNode)
             allowed: Map()
             allowed["case"] = true
@@ -135,7 +135,7 @@ parse: (text) => {
                 ...declarations,
                 declaration(caseName, requirementValue)
             )
-        })
+        }
     }
 
     frozenTuple(...declarations)
@@ -151,7 +151,7 @@ attachToPlan: (plan, declarations) => {
     caseById: Map()
     ambiguousCaseIds: Map()
 
-    cases.each((spec) => {
+    for(spec in cases) {
         id: Manifest.caseId(spec)
         if(caseById.containsKey(id)) {
             ambiguousCaseIds[id] = true
@@ -159,10 +159,10 @@ attachToPlan: (plan, declarations) => {
         caseById.containsKey(id).ifFalse(() => {
             caseById[id] = spec
         })
-    })
+    }
 
     requirementsByCase: Map()
-    declarations.each((declarationValue) => {
+    for(declarationValue in declarations) {
         id: declarationCase(declarationValue)
 
         caseById.containsKey(id).ifFalse(() => {
@@ -175,17 +175,17 @@ attachToPlan: (plan, declarations) => {
         attached: requirementsByCase.atIfAbsent(id, () => { Array() })
         attached = Array(...attached, declarationRequirement(declarationValue))
         requirementsByCase[id] = attached
-    })
+    }
 
     joinedCases: Array()
-    cases.each((spec) => {
+    for(spec in cases) {
         id: Manifest.caseId(spec)
         attached: requirementsByCase.atIfAbsent(id, () => { Array() })
         joinedCases = Array(
             ...joinedCases,
             Manifest.caseSpecWithRequirements(spec, attached)
         )
-    })
+    }
 
     frozenTuple(frozenTuple(...joinedCases))
 }
@@ -230,7 +230,7 @@ loadFromCorpus: (filesystem, plan) => {
     present: false
     presentKind: null
 
-    entries.each((entry) => {
+    for(entry in entries) {
         if(entry.name == "resource-requirements.toml") {
             if(present) {
                 fail()
@@ -238,7 +238,7 @@ loadFromCorpus: (filesystem, plan) => {
             present = true
             presentKind = entry.kind
         }
-    })
+    }
 
     result: plan
     if(present) {

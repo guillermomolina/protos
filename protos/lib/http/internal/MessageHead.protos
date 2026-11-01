@@ -157,7 +157,7 @@ requestHeadParser: (limits) => {
         unsupportedExpect: false
         upgrade: false
 
-        fieldLines.each((pair) => {
+        for(pair in fieldLines) {
             name: pair[0]
             value: pair[1]
             if(MessageSyntax.nameIs(name, "host")) {
@@ -181,7 +181,7 @@ requestHeadParser: (limits) => {
             if(MessageSyntax.nameIs(name, "upgrade")) {
                 upgrade = true
             }
-        })
+        }
 
         if(hostCount != 1) {
             malformed()
@@ -205,11 +205,11 @@ requestHeadParser: (limits) => {
             }
         }
         if(chunked) {
-            transferEncodings.each((value) => {
+            for(value in transferEncodings) {
                 if(value.size() == 0) {
                     malformed()
                 }
-            })
+            }
             if(transferEncodings.size() != 1) {
                 reject("unsupportedFeature", 501)
             }
@@ -409,7 +409,7 @@ prepareResponseHead: (status, headers, bodyKind, bytesBody, headRequest) => {
     }
     capturedFields: []
     if(Array.recognizes(headers)) {
-        Array(...headers).each((pair) => {
+        for(pair in Array(...headers)) {
             if(!invalid) {
                 wellShaped: Array.recognizes(pair)
                 if(wellShaped) {
@@ -430,7 +430,7 @@ prepareResponseHead: (status, headers, bodyKind, bytesBody, headRequest) => {
                     invalid = true
                 }
             }
-        })
+        }
     } else {
         invalid = true
     }
@@ -448,28 +448,28 @@ prepareResponseHead: (status, headers, bodyKind, bytesBody, headRequest) => {
             invalid = true
         }
     }
-    capturedFields.each((field) => {
+    for(field in capturedFields) {
         nameBytes: field[0]
         valueBytes: field[1]
         if(nameBytes.size() == 0) {
             invalid = true
         }
-        nameBytes.each((octet) => {
+        for(octet in nameBytes) {
             if(!MessageSyntax.isTchar(octet)) {
                 invalid = true
             }
-        })
-        reservedNames.each((reserved) => {
+        }
+        for(reserved in reservedNames) {
             if(MessageSyntax.bytesEqualIgnoringCase(nameBytes, reserved)) {
                 invalid = true
             }
-        })
-        valueBytes.each((octet) => {
+        }
+        for(octet in valueBytes) {
             if(!MessageSyntax.isFieldValueOctet(octet)) {
                 invalid = true
             }
-        })
-    })
+        }
+    }
 
     framingField: null
     emission: "NONE"
@@ -517,15 +517,15 @@ prepareResponseHead: (status, headers, bodyKind, bytesBody, headRequest) => {
         output: Encoding.UTF8.encode("")
 
         appendAscii: (text) => {
-            Encoding.Latin1.encode(text).each((octet) => {
+            for(octet in Encoding.Latin1.encode(text)) {
                 output.add(octet)
-            })
+            }
         }
 
         appendBytes: (bytes) => {
-            bytes.each((octet) => {
+            for(octet in bytes) {
                 output.add(octet)
-            })
+            }
         }
 
         appendDecimal: null
@@ -540,12 +540,12 @@ prepareResponseHead: (status, headers, bodyKind, bytesBody, headRequest) => {
         appendAscii("HTTP/1.1 ")
         appendDecimal(status)
         appendAscii(" \r\n")
-        capturedFields.each((field) => {
+        for(field in capturedFields) {
             appendBytes(field[0])
             appendAscii(": ")
             appendBytes(field[1])
             appendAscii("\r\n")
-        })
+        }
         if(framingField !== null) {
             appendAscii(framingField)
             if(framingField == "Content-Length: ") {

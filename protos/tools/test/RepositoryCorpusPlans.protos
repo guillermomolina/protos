@@ -18,7 +18,7 @@ Manifest: import("self:Manifest")
 
 planFromEntries: (prefix, entries) => {
     cases: Array()
-    entries.each((entry) => {
+    for(entry in entries) {
         cases = Array(
             ...cases,
             Manifest.caseSpec(
@@ -29,7 +29,7 @@ planFromEntries: (prefix, entries) => {
                 )
             )
         )
-    })
+    }
     cases.freeze()
     plan: Array(cases)
     plan.freeze()

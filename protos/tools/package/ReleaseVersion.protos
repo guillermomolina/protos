@@ -37,7 +37,7 @@ parse: (text) => {
         pieces: Array()
         current: Encoding.UTF8.encode("")
         inPrerelease: false
-        Encoding.UTF8.encode(text).each((octet) => {
+        for(octet in Encoding.UTF8.encode(text)) {
             if(inPrerelease) {
                 if(octet == 46) {
                     pieces = Array(...pieces, Encoding.UTF8.decode(current))
@@ -50,12 +50,12 @@ parse: (text) => {
             inPrerelease.ifFalse(() => {
                 inPrerelease = octet == 45
             })
-        })
+        }
         pieces = Array(...pieces, Encoding.UTF8.decode(current))
 
         prerelease = Array()
         index: 0
-        generic.prerelease.each((identifier) => {
+        for(identifier in generic.prerelease) {
             numeric: Integer.recognizes(identifier)
             number: null
             if(numeric) {
@@ -67,7 +67,7 @@ parse: (text) => {
                 text: pieces[index]
             })
             index = index + 1
-        })
+        }
     }
 
     {
@@ -84,13 +84,13 @@ parse: (text) => {
 semVerValue: (version) => {
     identifiers: Array()
     (version.prerelease === null).ifFalse(() => {
-        version.prerelease.each((identifier) => {
+        for(identifier in version.prerelease) {
             value: identifier.text
             if(identifier.numeric) {
                 value = identifier.number
             }
             identifiers = Array(...identifiers, value)
-        })
+        }
     })
 
     {

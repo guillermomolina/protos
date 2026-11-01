@@ -74,12 +74,12 @@ withoutGenerated: (text, code) => {
     index: 0
     while(index < text.size()) {
         skipped: false
-        known.each((sequence) => {
+        for(sequence in known) {
             if((skipped == false) && occursAt(text, index, sequence)) {
                 index = index + sequence.size()
                 skipped = true
             }
-        })
+        }
         skipped.ifFalse(() => {
             result = result + text[index]
             index = index + 1
@@ -121,9 +121,9 @@ tests: [
         Assertions.require(first !== second)
         Assertions.require(first.hasSlot("format"))
         Assertions.require(first.slotNames().size() == 1)
-        ["mode", "autoEnabled", "stylingEnabled", "styles", "palette", "writer", "sink", "theme"].each((name) => {
+        for(name in ["mode", "autoEnabled", "stylingEnabled", "styles", "palette", "writer", "sink", "theme"]) {
             Assertions.require(first.hasSlot(name) == false)
-        })
+        }
         Assertions.signals(Error, () => {
             first.format = null
         })
@@ -132,34 +132,34 @@ tests: [
     }),
     Test("the module publishes only its constructor", () => {
         Assertions.require(ColoredFormatter.hasSlot("call"))
-        ["format", "palette", "ColorMode", "TextFormatter", "ANSI", "Style", "StyledText"].each((name) => {
+        for(name in ["format", "palette", "ColorMode", "TextFormatter", "ANSI", "Style", "StyledText"]) {
             Assertions.require(ColoredFormatter.hasSlot(name) == false)
-        })
+        }
         null
     }),
     Test("every canonical mode with a Boolean constructs", () => {
-        [ColorMode.AUTO, ColorMode.ALWAYS, ColorMode.NEVER].each((mode) => {
+        for(mode in [ColorMode.AUTO, ColorMode.ALWAYS, ColorMode.NEVER]) {
             Assertions.require(ColoredFormatter(mode, true).hasSlot("format"))
             Assertions.require(ColoredFormatter(mode, false).hasSlot("format"))
-        })
+        }
         null
     }),
     Test("an invalid mode signals Error", () => {
-        [null, "auto", "Always", "", "ON", true, 1, ColorMode].each((mode) => {
+        for(mode in [null, "auto", "Always", "", "ON", true, 1, ColorMode]) {
             Assertions.signals(Error, () => {
                 ColoredFormatter(mode, true)
             })
-        })
+        }
         null
     }),
     Test("autoEnabled must be exactly a Boolean for every mode", () => {
-        [ColorMode.AUTO, ColorMode.ALWAYS, ColorMode.NEVER].each((mode) => {
-            [null, 0, 1, "true", "false", []].each((autoEnabled) => {
+        for(mode in [ColorMode.AUTO, ColorMode.ALWAYS, ColorMode.NEVER]) {
+            for(autoEnabled in [null, 0, 1, "true", "false", []]) {
                 Assertions.signals(Error, () => {
                     ColoredFormatter(mode, autoEnabled)
                 })
-            })
-        })
+            }
+        }
         null
     }),
     Test("styling follows the ColorMode resolution matrix", () => {
@@ -210,17 +210,17 @@ tests: [
             ColoredFormatter(ColorMode.NEVER, true),
             ColoredFormatter(ColorMode.NEVER, false)
         ]
-        corpus().each((event) => {
+        for(event in corpus()) {
             expected: TextFormatter.format(event)
-            formatters.each((formatter) => {
+            for(formatter in formatters) {
                 Assertions.require(formatter.format(event) == expected)
-            })
-        })
+            }
+        }
         null
     }),
     Test("enabled styling keeps the TextFormatter line outside generated sequences", () => {
         formatter: colored()
-        corpus().each((event) => {
+        for(event in corpus()) {
             expected: TextFormatter.format(event)
             line: formatter.format(event)
             if(event.level == Level.INFO) {
@@ -230,7 +230,7 @@ tests: [
                 Assertions.require(withoutGenerated(line, codeOf(event.level)) == expected)
                 Assertions.require(escapes(line) == 2)
             }
-        })
+        }
         null
     }),
     Test("styled INFO generates no escape sequence", () => {
@@ -239,11 +239,11 @@ tests: [
             LogEvent(Level.INFO, "started", null, null),
             LogEvent(Level.INFO, "stamped", %{ "n": 1 }, Failure(), stamp)
         ]
-        events.each((event) => {
+        for(event in events) {
             line: formatter.format(event)
             Assertions.require(line == TextFormatter.format(event))
             Assertions.require(escapes(line) == 0)
-        })
+        }
         null
     }),
     Test("escape characters in event text never reach the output", () => {
@@ -275,13 +275,13 @@ tests: [
         day: 86400000000000
         late: LogEvent(Level.WARN, "late", null, null, Instant(2932897 * day))
         early: LogEvent(Level.ERROR, "early", null, null, Instant(-4371587 * day - 1))
-        [colored(), plain()].each((formatter) => {
-            [lookalike, null, "WARN \"m\"", LogEvent, late, early].each((candidate) => {
+        for(formatter in [colored(), plain()]) {
+            for(candidate in [lookalike, null, "WARN \"m\"", LogEvent, late, early]) {
                 Assertions.signals(Error, () => {
                     formatter.format(candidate)
                 })
-            })
-        })
+            }
+        }
         null
     }),
     Test("a text sink writes one colored line per event to a borrowed writer", () => {

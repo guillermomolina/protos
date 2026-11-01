@@ -108,9 +108,9 @@ start: (facility, HostError, listener, acceptors, spawnWorker, config, serveArgu
     beginAbort: () => {
         if((state != "ABORTING") && (state != "TERMINATED")) {
             state = "ABORTING"
-            workers.each((worker) => {
+            for(worker in workers) {
                 worker.send("abort")
-            })
+            }
             commitClose()
         }
     }
@@ -143,9 +143,9 @@ start: (facility, HostError, listener, acceptors, spawnWorker, config, serveArgu
     // the stop Task stops the Workers once their sessions have retired.
     beginDrain: () => {
         state = "DRAINING"
-        workers.each((worker) => {
+        for(worker in workers) {
             worker.send("drain")
-        })
+        }
         commitClose()
     }
 
@@ -290,18 +290,18 @@ start: (facility, HostError, listener, acceptors, spawnWorker, config, serveArgu
             // On the normal path the stop Task already stopped every Worker;
             // a Worker not yet stopped means this Task was cancelled.
             unstopped: false
-            stopRequested.each((requested) => {
+            for(requested in stopRequested) {
                 if(!requested) {
                     unstopped = true
                 }
-            })
+            }
             if(unstopped) {
                 beginAbort()
                 stopWorkers()
             }
-            workers.each((worker) => {
+            for(worker in workers) {
                 settle(worker.termination())
-            })
+            }
             commitClose()
             Error.handle(
                 () => {

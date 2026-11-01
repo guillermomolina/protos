@@ -18,10 +18,10 @@ Test: import("std:test/Test")
 Regex: import("std:regex/Regex")
 
 acceptsWithFlags: (flags, ...sources) => {
-    sources.each((source) => {
+    for(source in sources) {
         pattern: Regex.compileWithFlags(source, flags)
         Assertions.require(pattern.source == source)
-    })
+    }
     true
 }
 
@@ -30,9 +30,9 @@ accepts: (...sources) => {
 }
 
 rejectsFlags: (...flagSets) => {
-    flagSets.each((flags) => {
+    for(flags in flagSets) {
         Assertions.signals(Error, () => { Regex.compileWithFlags("a", flags) })
-    })
+    }
     true
 }
 

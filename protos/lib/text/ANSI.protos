@@ -58,7 +58,7 @@ render: ((styledTextFacility, styleFacility) => (styledText, stylingEnabled) => 
         reset: escape.concat("0m")
 
         active: "default"
-        runs.each((run) => {
+        for(run in runs) {
             foreground: styleFacility.state(run[1])
             if(foreground != active) {
                 if(active != "default") {
@@ -70,14 +70,14 @@ render: ((styledTextFacility, styleFacility) => (styledText, stylingEnabled) => 
                 active = foreground
             }
             result = result.concat(run[0])
-        })
+        }
         if(active != "default") {
             result = result.concat(reset)
         }
     } else {
-        runs.each((run) => {
+        for(run in runs) {
             result = result.concat(run[0])
-        })
+        }
     }
     result
 })(_styledTextFacility, _styleFacility)

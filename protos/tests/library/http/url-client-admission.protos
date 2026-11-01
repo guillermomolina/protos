@@ -58,9 +58,9 @@ duplexOf: (responseText) => {
             (() => { result }).future()
         }
         write: (bytes) => {
-            bytes.each((octet) => {
+            for(octet in bytes) {
                 output.add(octet)
-            })
+            }
             (() => { fixture }).future()
         }
         close: () => {
@@ -106,9 +106,9 @@ resolverOf: (addressTexts) => {
         lookupAddresses: (name) => {
             names = Array(...names, name)
             addresses: []
-            addressTexts.each((addressText) => {
+            for(addressText in addressTexts) {
                 addresses = Array(...addresses, IpAddresses.parse(addressText))
-            })
+            }
             (() => { addresses.freeze() }).future()
         }
         names: () => {

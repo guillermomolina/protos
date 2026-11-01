@@ -79,9 +79,9 @@ tests: [
         Assertions.require(!server.hasSlot("serve"))
     }),
     Test("invalid options signal InvalidIOArgument before the listener is examined", () => {
-        invalidOptions.each((options) => {
+        for(options in invalidOptions) {
             construct(null, options)
-        })
+        }
         null
     }),
     Test("the ordering workers <= maxPendingAccepts <= maxConnections is required", () => {
@@ -134,9 +134,9 @@ tests: [
         Assertions.require(!invoked)
     }),
     Test("owningWithFactory rejects invalid options before the listener is examined", () => {
-        invalidOptions.each((options) => {
+        for(options in invalidOptions) {
             constructWithFactory(null, handlerModule, "Server", null, options)
-        })
+        }
         null
     }),
     Test("owningWithFactory requires factory module and binding Strings", () => {
@@ -157,9 +157,9 @@ tests: [
                 null
             }
         }
-        [null, {}, 42, "127.0.0.1:8080", fake].each((listener) => {
+        for(listener in [null, {}, 42, "127.0.0.1:8080", fake]) {
             constructWithFactory(listener, handlerModule, "Server", null, null)
-        })
+        }
         Assertions.require(!invoked)
     }),
     Test("a structural rejection precedes any examination of initialization", () => {
@@ -191,7 +191,7 @@ tests: [
         Assertions.require(HostConfig.quota(7, 4, 3) == 1)
     }),
     Test("quotas sum exactly to the global limit", () => {
-        [[64, 1], [64, 3], [7, 4], [2147483647, 7], [9, 9]].each((pair) => {
+        for(pair in [[64, 1], [64, 3], [7, 4], [2147483647, 7], [9, 9]]) {
             total: 0
             index: 0
             previous: null
@@ -206,7 +206,7 @@ tests: [
                 index = index + 1
             }
             Assertions.require(total == pair[0])
-        })
+        }
         null
     })
 ]

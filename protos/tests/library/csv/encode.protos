@@ -71,7 +71,7 @@ tests: [
 
                 if(same) {
                     rowIndex: 0
-                    left.each((leftRow) => {
+                    for(leftRow in left) {
                         rightRow: right[rowIndex]
 
                         (leftRow.size() == rightRow.size()).ifFalse(() => {
@@ -80,16 +80,16 @@ tests: [
 
                         if(same) {
                             fieldIndex: 0
-                            leftRow.each((leftField) => {
+                            for(leftField in leftRow) {
                                 (leftField == rightRow[fieldIndex]).ifFalse(() => {
                                     same = false
                                 })
                                 fieldIndex = fieldIndex + 1
-                            })
+                            }
                         }
 
                         rowIndex = rowIndex + 1
-                    })
+                    }
                 }
 
                 same
@@ -107,11 +107,11 @@ tests: [
                 Array(Array("é", "雪", "🙂"))
             )
 
-            tables.each((table) => {
+            for(table in tables) {
                 encoded: CSV.encode(table)
                 decoded: CSV.parse(encoded)
                 Assertions.require(sameTable(table, decoded))
-            })
+            }
 
             true
         }

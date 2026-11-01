@@ -62,7 +62,7 @@ run: (
 
     workItems: Array()
 
-    projections.each((projection) => {
+    for(projection in projections) {
         signature:
             Discovery.projectionSignature(
                 projection
@@ -84,7 +84,7 @@ run: (
                 ...workItems,
                 ...sourceItems
             )
-    })
+    }
 
     workItems.freeze()
 

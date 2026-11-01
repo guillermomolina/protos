@@ -21,10 +21,10 @@ map: (array, transform) => {
     snapshot: Array(...array)
     result: Array(...snapshot)
     index: 0
-    snapshot.each((element) => {
+    for(element in snapshot) {
         result[index] = transform(element)
         index = index + 1
-    })
+    }
     result
 }
 
@@ -80,7 +80,7 @@ findIndex: (array, predicate) => {
     snapshot: Array(...array)
     index: 0
 
-    snapshot.each((element) => {
+    for(element in snapshot) {
         decision: predicate(element)
 
         if(decision === true) {
@@ -91,7 +91,7 @@ findIndex: (array, predicate) => {
         })
 
         index = index + 1
-    })
+    }
 
     null
 }
@@ -474,9 +474,9 @@ parallelMap: (array, worker, ...arguments) => {
             Future.all(...children).value()
         }).ensure(() => {
             input.cancel()
-            children.each((child) => {
+            for(child in children) {
                 child.cancel()
-            })
+            }
         })
     }).future()
 }
@@ -518,9 +518,9 @@ parallelFilter: (array, predicate, ...arguments) => {
             })
         }).ensure(() => {
             input.cancel()
-            children.each((child) => {
+            for(child in children) {
                 child.cancel()
-            })
+            }
         })
     }).future()
 }
@@ -559,9 +559,9 @@ parallelFindIndex: (array, predicate, ...arguments) => {
             })
         }).ensure(() => {
             input.cancel()
-            children.each((child) => {
+            for(child in children) {
                 child.cancel()
-            })
+            }
         })
     }).future()
 }

@@ -60,13 +60,13 @@ tests: Array(
     Test("each ResolutionError kind is a distinct fresh occurrence", () => {
         kinds: Array("noAddress", "unavailable", "denied", "limit")
         previous: null
-        kinds.each((expected) => {
+        for(expected in kinds) {
             occurrence: ResolutionError { kind: expected }
             Assertions.require(occurrence.parent() === ResolutionError)
             Assertions.require(occurrence.kind == expected)
             Assertions.require(occurrence !== previous)
             previous = occurrence
-        })
+        }
         Assertions.require(previous.kind == "limit")
     })
 )

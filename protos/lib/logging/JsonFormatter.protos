@@ -111,9 +111,9 @@ format: ((numeric) => (event) => {
         })
         sorted: Arrays.sort(entries, (left, right) => precedes(left[0], right[0]))
         members: []
-        sorted.each((entry) => {
+        for(entry in sorted) {
             members = Array(...members, entry[1], project(entry[2]))
-        })
+        }
         JSON.object(...members)
     }
 

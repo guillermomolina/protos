@@ -48,14 +48,14 @@ Router: ((facility) => {
                 names: request.slotNames()
                 hasMethod: false
                 hasTarget: false
-                names.each((name) => {
+                for(name in names) {
                     if(name == "method") {
                         hasMethod = true
                     }
                     if(name == "target") {
                         hasTarget = true
                     }
-                })
+                }
                 valid = hasMethod && hasTarget
             }
             if(valid) {

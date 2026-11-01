@@ -78,11 +78,11 @@ settle: (future) => {
 
 // Requests cancellation of every Future held in futures.
 cancelEach: (futures) => {
-    futures.each((future) => {
+    for(future in futures) {
         if(future !== null) {
             future.cancel()
         }
-    })
+    }
 }
 
 /// The acceptance service of one Worker, answered as its behavior: `serve`,
@@ -224,9 +224,9 @@ acceptance: (acceptor, connectionQuota, pendingQuota, admitConnection) => {
             while(initial.size() < pendingQuota) {
                 initial = Array(...initial, startLane(initial.size()))
             }
-            initial.each((started) => {
+            for(started in initial) {
                 settle(started)
-            })
+            }
             outcome: "drained"
             if(failure !== null) {
                 outcome = failure

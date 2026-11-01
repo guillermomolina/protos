@@ -164,7 +164,7 @@ create: (facility, TlsError, duplex, engine, options, owning) => {
     retainedBytes: () => {
         retained: []
         total: 0
-        reserved.each((entry) => {
+        for(entry in reserved) {
             if(facility.pending(entry[0])) {
                 retained = Array(...retained, entry)
                 total = total + entry[1]
@@ -174,7 +174,7 @@ create: (facility, TlsError, duplex, engine, options, owning) => {
                     recordOutputFailure(failure)
                 }
             }
-        })
+        }
         reserved = retained
         total
     }
@@ -275,9 +275,9 @@ create: (facility, TlsError, duplex, engine, options, owning) => {
             // Committed writes keep their own aftermath; close waits for it
             // but does not report it.
             awaited: []
-            reserved.each((entry) => {
+            for(entry in reserved) {
                 awaited = Array(...awaited, entry[0])
-            })
+            }
             closeLifecycle = facility.settle([tail.close(), reader.close()], awaited, secure)
         }
         facility.settle([closeLifecycle], [], secure)

@@ -61,10 +61,10 @@ tests: [
         requireNames(Regex.compile("(?<A>x)(?<a>y)"), "A", 1, "a", 2)
     }),
     Test("patterns preserve their exact source", () => {
-        Array("", "a", "(?<n>é)+\\p{L}", "a b # c", "😀{2}", "[\\u{41}-\\u{5A}]", "e\u{301}").each((source) => {
+        for(source in Array("", "a", "(?<n>é)+\\p{L}", "a b # c", "😀{2}", "[\\u{41}-\\u{5A}]", "e\u{301}")) {
             Assertions.require(Regex.compile(source).source == source)
             Assertions.require(Regex.compileWithFlags(source, "im").source == source)
-        })
+        }
         null
     }),
     Test("flags are canonical and independent of input order", () => {
@@ -87,14 +87,14 @@ tests: [
     }),
     Test("patterns are frozen and expose no compiled representation", () => {
         pattern: Regex.compile("(?<n>a)(b)")
-        Array("source", "flags", "captureCount", "captureNames", "fullMatch", "search", "searchFrom", "eachMatch", "findAll",
-            "replaceFirst", "replaceAll", "split").each((name) => {
+        for(name in Array("source", "flags", "captureCount", "captureNames", "fullMatch", "search", "searchFrom", "eachMatch", "findAll",
+            "replaceFirst", "replaceAll", "split")) {
             Assertions.require(pattern.hasSlot(name))
-        })
-        Array("program", "nodes", "root", "threads", "engine", "matcher", "currentPosition", "lastIndex", "match",
-            "traverse", "matchIn", "replace", "parseReplacement", "template", "appendText").each((name) => {
+        }
+        for(name in Array("program", "nodes", "root", "threads", "engine", "matcher", "currentPosition", "lastIndex", "match",
+            "traverse", "matchIn", "replace", "parseReplacement", "template", "appendText")) {
             Assertions.require(pattern.hasSlot(name) == false)
-        })
+        }
         Assertions.signals(Error, () => { pattern.source = "b" })
         Assertions.signals(Error, () => { pattern.captureCount = 0 })
         Assertions.signals(Error, () => { pattern.extra: 1 })
@@ -106,9 +106,9 @@ tests: [
         requireNames(Regex.compile("(?<n>a)(b)"), "n", 1)
     }),
     Test("the module publishes only its ratified operations", () => {
-        Array("compile", "compileWithFlags", "escape", "escapeReplacement").each((name) => {
+        for(name in Array("compile", "compileWithFlags", "escape", "escapeReplacement")) {
             Assertions.require(Regex.hasSlot(name))
-        })
+        }
         Assertions.require(Regex.hasSlot("_regexUnicodeFacility") == false)
     }),
     Test("counted repetition compiles without expansion", () => {

@@ -97,7 +97,7 @@ tests: [
     }),
     Test("empty optional iterations follow greedy or lazy priority", () => {
         // `a` cannot consume at offset 0 of either subject.
-        Array("", "b").each((subject) => {
+        for(subject in Array("", "b")) {
             requireGroup(Regex.compile("(a?)*").search(subject), 0, 0, 0, "")
             requireGroup(Regex.compile("(a?)*").search(subject), 1, 0, 0, "")
             requireGroup(Regex.compile("(a?)+").search(subject), 1, 0, 0, "")
@@ -108,7 +108,7 @@ tests: [
             requireGroup(lazy, 0, 0, 0, "")
             requireAbsent(lazy, 1)
             requireAbsent(Regex.compile("(a?)??").search(subject), 1)
-        })
+        }
         requireGroup(Regex.compile("(a?)*").fullMatch(""), 1, 0, 0, "")
         requireAbsent(Regex.compile("(a?)*?").fullMatch(""), 1)
         // After consuming iterations, a greedy loop still takes the empty one.
@@ -117,9 +117,9 @@ tests: [
         requireGroup(Regex.compile("(a?)*?").fullMatch("aa"), 1, 1, 2, "a")
         requireGroup(Regex.compile("(a?)+?").fullMatch("aa"), 1, 1, 2, "a")
         // The empty iteration ends the repetition, so traversal terminates.
-        Array("(a?)*", "(a?)+", "(a?)*?", "(a?)+?").each((source) => {
+        for(source in Array("(a?)*", "(a?)+", "(a?)*?", "(a?)+?")) {
             Assertions.require(Regex.compile(source).findAll("bb").size() == 3)
-        })
+        }
         Assertions.require(Regex.compile("(a?)*").findAll("aab").size() == 3)
     }),
     Test("capture spans count Unicode scalars and keep text unnormalized", () => {
@@ -148,9 +148,9 @@ tests: [
         Assertions.require(found.namedGroups()["x"] == "a")
         Assertions.signals(Error, () => { found.extra: 1 })
         Assertions.signals(Error, () => { found.captureCount = 0 })
-        Array("program", "bounds", "texts", "before", "after", "capturesHistory", "iterator", "replace").each((name) => {
+        for(name in Array("program", "bounds", "texts", "before", "after", "capturesHistory", "iterator", "replace")) {
             Assertions.require(found.hasSlot(name) == false)
-        })
+        }
         again: pattern.search("ab")
         Assertions.require((again === found) == false)
         Assertions.require(again.group(1) == "a")

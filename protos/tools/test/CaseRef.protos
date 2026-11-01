@@ -91,10 +91,10 @@ derive: (sourceAssociation, selector) => {
         )
 
     output: Encoding.UTF8.encode(versionPrefix)
-    Encoding.UTF8.encode(payload).each((octet) => {
+    for(octet in Encoding.UTF8.encode(payload)) {
         output.add(hexDigit(octet.div(16)))
         output.add(hexDigit(octet.mod(16)))
-    })
+    }
 
     Encoding.UTF8.decode(output)
 }

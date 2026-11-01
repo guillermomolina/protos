@@ -58,7 +58,7 @@ constructors: (facility) => {
         snapshot: Array(...certificates)
         total: 0
         selected: []
-        snapshot.each((element) => {
+        for(element in snapshot) {
             facility.isBytes(element).ifFalse(() => {
                 Error().signal()
             })
@@ -79,7 +79,7 @@ constructors: (facility) => {
             })
             // facts.der is the backend's fresh frozen copy of the octets.
             selected = Array(...selected, facts.der)
-        })
+        }
         selected.freeze()
         family.seal({}, Array("anchors", selected).freeze())
     }
@@ -119,14 +119,14 @@ resolve: (facility, TlsError, trust) => {
             material: facility.javaCacerts()
             if(material !== null) {
                 selected = []
-                material.each((der) => {
+                for(der in material) {
                     facts: facility.certificate(der)
                     if(facts !== null) {
                         if(usableAnchor(facts)) {
                             selected = Array(...selected, facts.der)
                         }
                     }
-                })
+                }
             }
         }
         // "system": no operating-system trust adapter exists; selected stays null.

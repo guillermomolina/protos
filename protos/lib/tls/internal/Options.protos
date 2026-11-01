@@ -53,7 +53,7 @@ exactly: (value, text) => {
 capture: (facility, options) => {
     valid: facility.ordinaryObject(options)
     if(valid) {
-        options.slotNames().each((name) => {
+        for(name in options.slotNames()) {
             if(valid) {
                 value: options.slotValue(name)
                 if(name == "minimumVersion") {
@@ -70,18 +70,18 @@ capture: (facility, options) => {
                     }
                 }
             }
-        })
+        }
     }
     // A recognized field obtained only by delegation is inadmissible (§6);
     // ancestors are inspected reflectively, never read.
     if(valid) {
         ancestor: options.parent()
         while(valid && (ancestor !== Object)) {
-            optionNames.each((name) => {
+            for(name in optionNames) {
                 if(ancestor.hasSlot(name) && !options.hasSlot(name)) {
                     valid = false
                 }
-            })
+            }
             ancestor = ancestor.parent()
         }
     }

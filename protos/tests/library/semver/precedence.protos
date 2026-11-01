@@ -30,9 +30,9 @@ requireOrder: (left, right, expected) => {
 
 requireIncreasing: (...texts) => {
     versions: Map()
-    texts.each((text) => {
+    for(text in texts) {
         versions[versions.size()] = SemVer.parse(text)
-    })
+    }
     i: 0
     while(i < versions.size()) {
         j: 0

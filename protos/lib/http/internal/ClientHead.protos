@@ -66,17 +66,17 @@ prepareRequest: (facility, request) => {
     valid: facility.ordinaryObject(request)
     if(valid) {
         names: request.slotNames()
-        requestSlots.each((slotName) => {
+        for(slotName in requestSlots) {
             present: false
-            names.each((name) => {
+            for(name in names) {
                 if(name == slotName) {
                     present = true
                 }
-            })
+            }
             if(!present) {
                 valid = false
             }
-        })
+        }
     }
 
     // Snapshot: method, target octets, each name and value in order, and the
@@ -101,7 +101,7 @@ prepareRequest: (facility, request) => {
         rawHeaders: request.slotValue("headers")
         valid = Array.recognizes(rawHeaders)
         if(valid) {
-            Array(...rawHeaders).each((pair) => {
+            for(pair in Array(...rawHeaders)) {
                 if(valid) {
                     wellShaped: Array.recognizes(pair)
                     if(wellShaped) {
@@ -121,7 +121,7 @@ prepareRequest: (facility, request) => {
                         valid = false
                     }
                 }
-            })
+            }
         }
     }
     if(valid) {
@@ -157,17 +157,17 @@ prepareRequest: (facility, request) => {
     }
     hostCount: 0
     if(valid) {
-        fields.each((field) => {
+        for(field in fields) {
             nameBytes: field[0]
             valueBytes: field[1]
             if(!MessageSyntax.isToken(nameBytes, 0, nameBytes.size())) {
                 valid = false
             }
-            prohibitedNames.each((prohibited) => {
+            for(prohibited in prohibitedNames) {
                 if(MessageSyntax.bytesEqualIgnoringCase(nameBytes, prohibited)) {
                     valid = false
                 }
-            })
+            }
             if(!isRequestFieldValue(valueBytes)) {
                 valid = false
             }
@@ -184,7 +184,7 @@ prepareRequest: (facility, request) => {
                     valid = false
                 }
             }
-        })
+        }
         if(hostCount != 1) {
             valid = false
         }
@@ -195,15 +195,15 @@ prepareRequest: (facility, request) => {
         output: Encoding.UTF8.encode("")
 
         appendAscii: (text) => {
-            Encoding.Latin1.encode(text).each((octet) => {
+            for(octet in Encoding.Latin1.encode(text)) {
                 output.add(octet)
-            })
+            }
         }
 
         appendBytes: (bytes) => {
-            bytes.each((octet) => {
+            for(octet in bytes) {
                 output.add(octet)
-            })
+            }
         }
 
         appendDecimal: null
@@ -224,12 +224,12 @@ prepareRequest: (facility, request) => {
         appendAscii(" ")
         appendBytes(target)
         appendAscii(" HTTP/1.1\r\n")
-        fields.each((field) => {
+        for(field in fields) {
             appendBytes(field[0])
             appendAscii(": ")
             appendBytes(field[1])
             appendAscii("\r\n")
-        })
+        }
         appendAscii("Content-Length: ")
         appendDecimal(bodyLength)
         appendAscii("\r\nConnection: close\r\n\r\n")
@@ -439,7 +439,7 @@ responseHeadParser: (limits) => {
         transferEncodingCount: 0
         codings: []
 
-        fieldLines.each((pair) => {
+        for(pair in fieldLines) {
             name: pair[0]
             value: pair[1]
             if(MessageSyntax.nameIs(name, "content-length")) {
@@ -452,11 +452,11 @@ responseHeadParser: (limits) => {
                 if(parsed === null) {
                     malformed()
                 }
-                parsed.each((coding) => {
+                for(coding in parsed) {
                     codings = Array(...codings, coding)
-                })
+                }
             }
-        })
+        }
 
         // Only syntax, duplication, and framing conflicts are judged here; the
         // body budget belongs to the session, after the effective framing is
@@ -491,11 +491,11 @@ responseHeadParser: (limits) => {
         // A Transfer-Encoding without any coding is malformed.
         if(chunked) {
             hasCoding: false
-            codings.each((coding) => {
+            for(coding in codings) {
                 if(coding[0] !== null) {
                     hasCoding = true
                 }
-            })
+            }
             if(!hasCoding) {
                 malformed()
             }

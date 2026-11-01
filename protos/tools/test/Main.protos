@@ -87,14 +87,14 @@ while(resolveIndex < leaves.size()) {
         Error().signal()
     })
     corpusBinding: testCorpusBindings.slotValue(corpus)
-    Array(
+    for(slotName in Array(
         "filesystem",
         "planLoader"
-    ).each((slotName) => {
+    )) {
         corpusBinding.hasSlot(slotName).ifFalse(() => {
             Error().signal()
         })
-    })
+    }
 
     planLoader: corpusBinding.planLoader
     supportedLoader: planLoader === "manifest"
@@ -209,7 +209,7 @@ selectorMatchesAnyPlan: (
 ) => {
     matched: false
 
-    plannedSuites.each((planned) => {
+    for(planned in plannedSuites) {
         if(FileSelection.planHasMatch(
             planned.leaf.corpus,
             planned.plan,
@@ -218,13 +218,13 @@ selectorMatchesAnyPlan: (
         )) {
             matched = true
         }
-    })
+    }
 
     matched
 }
 
 fileAssociations: []
-filePaths.each((filePath) => {
+for(filePath in filePaths) {
     resolvedAssociations: fileSourceResolver(filePath)
 
     selectorMatchesAnyPlan(
@@ -238,11 +238,11 @@ filePaths.each((filePath) => {
         ...fileAssociations,
         ...resolvedAssociations
     ]
-})
+}
 fileAssociations.freeze()
 
 directoryAssociations: []
-directoryPaths.each((directoryPath) => {
+for(directoryPath in directoryPaths) {
     resolvedAssociations:
         directorySourceResolver(directoryPath)
 
@@ -257,7 +257,7 @@ directoryPaths.each((directoryPath) => {
         ...directoryAssociations,
         ...resolvedAssociations
     ]
-})
+}
 directoryAssociations.freeze()
 
 selectorsActive:
@@ -270,7 +270,7 @@ executionSuites: plannedSuites
 if(selectorsActive) {
     selectedSuites: []
 
-    plannedSuites.each((planned) => {
+    for(planned in plannedSuites) {
         selectedPlan:
             FileSelection.selectPlanWithDirectories(
                 planned.leaf.corpus,
@@ -292,7 +292,7 @@ if(selectorsActive) {
                 selected
             ]
         }
-    })
+    }
 
     // Every explicit selector was already required to match independently.
     // Retain this as a fail-closed aggregate invariant before progress or
@@ -341,14 +341,14 @@ corpusExecutionRequirements: Map()
 caseSelection: CaseSelection.begin(caseRefs)
 
 executionSuiteIndex: 0
-executionSuites.each((planned) => {
+for(planned in executionSuites) {
     corpusExecutionRequirements[planned.leaf.corpus] =
         planned.leaf.executionRequirement
 
     logicalCaseCount: 0
     suiteProgressCaseKeysAccumulator: ArrayAccumulator.create()
 
-    Manifest.planCases(planned.plan).each((spec) => {
+    for(spec in Manifest.planCases(planned.plan)) {
         (Manifest.caseExpectation(spec) == "suite-native").ifFalse(() => {
             Error().signal()
         })
@@ -468,7 +468,7 @@ executionSuites.each((planned) => {
             )
         }
 
-        retainedCases.each((retainedCase) => {
+        for(retainedCase in retainedCases) {
             ArrayAccumulator.append(
                 logicalCaseReferencesAccumulator,
                 CaseRef.display(retainedCase)
@@ -500,8 +500,8 @@ executionSuites.each((planned) => {
 
             logicalCaseCount =
                 logicalCaseCount + 1
-        })
-    })
+        }
+    }
 
     // A suite none of whose Cases were exactly selected takes no part in
     // progress or scheduling, as with source scopes.
@@ -537,7 +537,7 @@ executionSuites.each((planned) => {
         executionSuiteIndex =
             executionSuiteIndex + 1
     }
-})
+}
 
 CaseSelection.requireComplete(caseSelection)
 
@@ -580,7 +580,7 @@ listCases.ifFalse(() => {
     // group names and each retained Case's group index.
     suiteGroupAssignments: Array()
     namesSuiteIndex: 0
-    executionSuites.each((suite) => {
+    for(suite in executionSuites) {
         suiteCaseKeys: logicalSuiteProgressCaseKeys[namesSuiteIndex]
         suiteGroupAssignments =
             Array(
@@ -588,7 +588,7 @@ listCases.ifFalse(() => {
                 RepositorySuite.progressGroupAssignment(suite.leaf, suiteCaseKeys)
             )
         namesSuiteIndex = namesSuiteIndex + 1
-    })
+    }
     suiteGroupNames: Arrays.map(
         suiteGroupAssignments,
         (assignment) => assignment.names
@@ -827,9 +827,9 @@ listCases.ifFalse(() => {
             )
     })
 
-    failedCaseLines.each((line) => {
+    for(line in failedCaseLines) {
         emitProgress(line)
-    })
+    }
 
     Progress.finishInvocation(
         progressPhases,

@@ -19,9 +19,9 @@ Regex: import("std:regex/Regex")
 
 // Requires `operation(value)` to signal an Error for every value of `values`.
 requireEachSignals: (values, operation) => {
-    values.each((value) => {
+    for(value in values) {
         Assertions.signals(Error, () => { operation(value) })
-    })
+    }
     true
 }
 
@@ -98,10 +98,10 @@ tests: [
     }),
     Test("references to absent groups signal an Error", () => {
         pattern: Regex.compile("(?<n>a)")
-        Array("${2}", "${missing}", "${N}", "${99999999999999999999}").each((replacement) => {
+        for(replacement in Array("${2}", "${missing}", "${N}", "${99999999999999999999}")) {
             Assertions.signals(Error, () => { pattern.replaceAll("a", replacement) })
             Assertions.signals(Error, () => { pattern.replaceFirst("a", replacement) })
-        })
+        }
         Assertions.signals(Error, () => { Regex.compile("a").replaceAll("a", "${1}") })
     }),
     Test("replacements are validated before matching", () => {

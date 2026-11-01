@@ -19,9 +19,9 @@ Root: import("self:ResolutionRoot")
 SHA256: import("std:crypto/SHA256")
 
 appendBytes: (target, source) => {
-    source.each((octet) => {
+    for(octet in source) {
         target.add(octet)
-    })
+    }
     target
 }
 
@@ -54,12 +54,12 @@ lowerHex: (digestBytes) => {
     )
 
     result: ""
-    digestBytes.each((octet) => {
+    for(octet in digestBytes) {
         result =
             result +
             digits[octet.div(16)] +
             digits[octet.mod(16)]
-    })
+    }
     result
 }
 
@@ -94,7 +94,7 @@ canonicalStream: (projectTreeFilesystem, members) => {
         )
     appendRecord(stream, "protos.toml", rootManifestContent)
 
-    canonicalMembers.each((member) => {
+    for(member in canonicalMembers) {
         pathText: member.location + "/protos.toml"
         memberManifestContent:
             readBytes(
@@ -102,7 +102,7 @@ canonicalStream: (projectTreeFilesystem, members) => {
                 Root.memberManifestPath(member.location)
             )
         appendRecord(stream, pathText, memberManifestContent)
-    })
+    }
 
     lockContent:
         readBytes(

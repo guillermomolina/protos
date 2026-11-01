@@ -254,9 +254,9 @@ rowParser: (emit) => {
                 fail()
             }
 
-            Encoding.UTF8.encode(text).each((octet) => {
+            for(octet in Encoding.UTF8.encode(text)) {
                 consumeOctet(octet)
-            })
+            }
 
             parser
         }
@@ -358,7 +358,7 @@ encode: (rows) => {
         output.add(octet)
     }
 
-    table.each((row) => {
+    for(row in table) {
         fields: Array(...row)
 
         if(fields.size() == 0) {
@@ -367,7 +367,7 @@ encode: (rows) => {
 
         index: 0
 
-        fields.each((field) => {
+        for(field in fields) {
             if(index > 0) {
                 appendByte(44)
             }
@@ -375,33 +375,33 @@ encode: (rows) => {
             bytes: Encoding.UTF8.encode(field)
             quoteNeeded: false
 
-            bytes.each((octet) => {
+            for(octet in bytes) {
                 if((octet == 44) || (octet == 34) || (octet == 13) || (octet == 10)) {
                     quoteNeeded = true
                 }
-            })
+            }
 
             if(quoteNeeded) {
                 appendByte(34)
             }
 
-            bytes.each((octet) => {
+            for(octet in bytes) {
                 if(quoteNeeded && (octet == 34)) {
                     appendByte(34)
                 }
                 appendByte(octet)
-            })
+            }
 
             if(quoteNeeded) {
                 appendByte(34)
             }
 
             index = index + 1
-        })
+        }
 
         appendByte(13)
         appendByte(10)
-    })
+    }
 
     Encoding.UTF8.decode(output)
 }

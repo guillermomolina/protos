@@ -95,18 +95,18 @@ concat: ((facility) => (...fragments) => {
         }
     }
 
-    fragments.each((fragment) => {
+    for(fragment in fragments) {
         if(String.recognizes(fragment)) {
             append(fragment, Style("default"))
         } else {
             StyledText.recognizes(fragment).ifFalse(() => {
                 Error().signal()
             })
-            facility.state(fragment).each((run) => {
+            for(run in facility.state(fragment)) {
                 append(run[0], run[1])
-            })
+            }
         }
-    })
+    }
 
     result: Array(...runs)
     result.freeze()

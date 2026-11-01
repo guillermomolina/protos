@@ -57,7 +57,7 @@ poolExclusiveHeld: (poolValue) => {
 newState: (catalog) => {
     pools: Map()
 
-    catalog.each((entry) => {
+    for(entry in catalog) {
         key: ResourceCatalog.entryKey(entry)
         if(pools.containsKey(key)) {
             fail()
@@ -72,7 +72,7 @@ newState: (catalog) => {
         })
 
         pools[key] = pool(entry)
-    })
+    }
 
     frozenTuple(pools, IdentityMap())
 }
@@ -172,13 +172,13 @@ reservation: (bindings) => {
 tryReserve: (bindings, state) => {
     available: true
 
-    bindings.each((bindingValue) => {
+    for(bindingValue in bindings) {
         if(available) {
             canReserveBinding(state, bindingValue).ifFalse(() => {
                 available = false
             })
         }
-    })
+    }
 
     result: null
     if(available) {
@@ -187,9 +187,9 @@ tryReserve: (bindings, state) => {
         // Resource-free cases remain pay-for-use: there is no live occupancy
         // and no active-reservation registry entry for an empty reservation.
         if(bindings.size() > 0) {
-            bindings.each((bindingValue) => {
+            for(bindingValue in bindings) {
                 commitBinding(state, bindingValue)
-            })
+            }
             stateActiveReservations(state)[result] = true
         }
     }
@@ -253,13 +253,13 @@ release: (reservationValue, state) => {
         })
 
         // Validate the complete release before mutating any pool.
-        reservationValue.each((bindingValue) => {
+        for(bindingValue in reservationValue) {
             validateReleaseBinding(state, bindingValue)
-        })
+        }
 
-        reservationValue.each((bindingValue) => {
+        for(bindingValue in reservationValue) {
             releaseBinding(state, bindingValue)
-        })
+        }
 
         active.remove(reservationValue)
     }

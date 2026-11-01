@@ -319,11 +319,11 @@ httpProgressGroupName: (casePath) => {
         policyError()
     })
     name: null
-    httpProgressGroups.each((entry) => {
+    for(entry in httpProgressGroups) {
         if(casePath == entry[0]) {
             name = entry[1]
         }
-    })
+    }
     if(name === null) {
         policyError()
     }
@@ -399,19 +399,19 @@ pathDirectory: (casePath) => {
 
 groupOwnsDirectory: (group, directory) => {
     owns: false
-    group.subtrees.each((subtree) => {
+    for(subtree in group.subtrees) {
         if(directory == subtree) {
             owns = true
         }
         if(hasPrefix(directory, subtree + "/")) {
             owns = true
         }
-    })
-    group.directories.each((exact) => {
+    }
+    for(exact in group.directories) {
         if(directory == exact) {
             owns = true
         }
-    })
+    }
     owns
 }
 
@@ -433,12 +433,12 @@ conformanceDescriptorIndex: (casePath) => {
     matches: Array()
     descriptorIndex: 0
 
-    conformanceProgressGroups.each((group) => {
+    for(group in conformanceProgressGroups) {
         if(groupOwnsDirectory(group, directory)) {
             matches = Array(...matches, descriptorIndex)
         }
         descriptorIndex = descriptorIndex + 1
-    })
+    }
 
     (matches.size() == 1).ifFalse(() => {
         policyError()
@@ -484,7 +484,7 @@ progressGroupAssignment: (leaf, caseKeys) => {
         descriptorSeen: Arrays.map(conformanceProgressGroups, (ignored) => Map())
 
         caseIndex: 0
-        caseKeys.each((key) => {
+        for(key in caseKeys) {
             caseDescriptorIndex: caseDescriptorIndexes[caseIndex]
             caseGroup: conformanceProgressGroups[caseDescriptorIndex]
             (ignoredPath, selector): key
@@ -499,14 +499,14 @@ progressGroupAssignment: (leaf, caseKeys) => {
                 })
             }
             caseIndex = caseIndex + 1
-        })
+        }
 
         // Descriptor order, deduplicated against every earlier name exactly
         // as the former linear search over the accumulated names did.
         names = Array()
         known: Map()
         descriptorIndex: 0
-        conformanceProgressGroups.each((group) => {
+        for(group in conformanceProgressGroups) {
             group.subdivided.ifFalse(() => {
                 names = Array(...names, group.name)
                 // The lowest index answers a repeated name, as findIndex did.
@@ -515,15 +515,15 @@ progressGroupAssignment: (leaf, caseKeys) => {
                 })
             })
             if(group.subdivided) {
-                descriptorSubgroups[descriptorIndex].each((name) => {
+                for(name in descriptorSubgroups[descriptorIndex]) {
                     known.containsKey(name).ifFalse(() => {
                         names = Array(...names, name)
                         known[name] = names.size() - 1
                     })
-                })
+                }
             }
             descriptorIndex = descriptorIndex + 1
-        })
+        }
 
         caseGroupIndexes = Arrays.map(caseNames, (name) => {
             known.containsKey(name).ifFalse(() => {
@@ -542,12 +542,12 @@ progressGroupAssignment: (leaf, caseKeys) => {
             (casePath, ignoredSelector): key
             httpProgressGroupName(casePath)
         })
-        caseNames.each((name) => {
+        for(name in caseNames) {
             known.containsKey(name).ifFalse(() => {
                 names = Array(...names, name)
                 known[name] = names.size() - 1
             })
-        })
+        }
         caseGroupIndexes = Arrays.map(caseNames, (name) => known[name])
     }
     (isConformanceLeaf(leaf) || isHttpLeaf(leaf)).ifFalse(() => {

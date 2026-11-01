@@ -54,11 +54,11 @@ validateDigest: (digest, expectedMethod) => {
     (hex.size() == 64).ifFalse(() => {
         fail()
     })
-    hex.each((octet) => {
+    for(octet in hex) {
         lowerHexDigit(octet).ifFalse(() => {
             fail()
         })
-    })
+    }
 
     {
         method: digest.method
@@ -73,7 +73,7 @@ bytesLess: (left, right) => {
     result: false
     rightSize: right.size()
 
-    left.each((leftOctet) => {
+    for(leftOctet in left) {
         decided.ifFalse(() => {
             if(index < rightSize) {
                 rightOctet: right[index]
@@ -92,7 +92,7 @@ bytesLess: (left, right) => {
             }
         })
         index = index + 1
-    })
+    }
 
     decided.ifFalse(() => {
         result = left.size() < right.size()
@@ -131,7 +131,7 @@ normalizeMembers: (members) => {
     seenPackageIds: Map()
     copied: Array()
 
-    members.each((member) => {
+    for(member in members) {
         location: Root.canonicalMemberLocation(member.location)
         (location == member.location).ifFalse(() => {
             fail()
@@ -156,7 +156,7 @@ normalizeMembers: (members) => {
                 packageId: packageId
             }
         )
-    })
+    }
 
     Arrays.sort(copied, memberLess)
 }
@@ -173,11 +173,11 @@ normalize: (model) => {
         validateDigest(model.metadataContent, "protos-project-metadata-v1")
     members: normalizeMembers(model.members)
 
-    members.each((member) => {
+    for(member in members) {
         if(member.packageId == rootPackageId) {
             fail()
         }
-    })
+    }
 
     {
         projectFormat: 1
@@ -204,7 +204,7 @@ write: (model) => {
         "root workspace " +
         Syntax.renderQstring(canonical.rootPackageId) + "\n"
 
-    canonical.members.each((member) => {
+    for(member in canonical.members) {
         result =
             result +
             "workspace-member " +
@@ -212,7 +212,7 @@ write: (model) => {
             " workspace " +
             Syntax.renderQstring(member.packageId) +
             "\n"
-    })
+    }
 
     result
 }

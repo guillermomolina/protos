@@ -85,9 +85,9 @@ duplexOf: (chunks) => {
             }
             failure: writeFailure
             if(failure === null) {
-                bytes.each((octet) => {
+                for(octet in bytes) {
                     output.add(octet)
-                })
+                }
             }
             (() => {
                 if(failure !== null) {
@@ -214,9 +214,9 @@ drain: (body, size) => {
         } else {
             Assertions.require(chunk.size() > 0)
             Assertions.require(chunk.size() <= size)
-            chunk.each((octet) => {
+            for(octet in chunk) {
                 collected.add(octet)
-            })
+            }
         }
     }
     text(collected)
@@ -322,14 +322,14 @@ unconfigured: (duplex) => {
 
 tests: [
     Test("a borrowed duplex is never closed or half-closed", () => {
-        [
+        for(outcome in [
             exchange([ascii(ok)], status),
             exchange([ascii("BAD\r\n\r\n")], status),
             exchange([ascii(ok)], failingCallback)
-        ].each((outcome) => {
+        ]) {
             Assertions.require(outcome.duplex.closeCount() == 0)
             Assertions.require(outcome.duplex.shutdownCount() == 0)
-        })
+        }
         null
     }),
     Test("an owned duplex is closed exactly once after normal completion", () => {
@@ -353,12 +353,12 @@ tests: [
                 duplex.failWritesWith(writeError)
             })
         ]
-        outcomes.each((outcome) => {
+        for(outcome in outcomes) {
             Assertions.require(outcome.failure !== null)
             Assertions.require(outcome.duplex.closeCount() == 1)
             Assertions.require(outcome.duplex.closeDone())
             Assertions.require(outcome.duplex.shutdownCount() == 0)
-        })
+        }
         Assertions.require(outcomes[0].failure.parent() === http.ClientError)
         Assertions.require(outcomes[2].failure === readError)
         Assertions.require(outcomes[3].failure === writeError)

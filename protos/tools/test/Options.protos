@@ -24,11 +24,11 @@ parsePositiveInteger: (text) => {
     if(source.size() == 0) { optionError() }
 
     value: 0
-    source.each((octet) => {
+    for(octet in source) {
         digit: (octet >= 48) && (octet <= 57)
         digit.ifFalse(() => { optionError() })
         value = value * 10 + (octet - 48)
-    })
+    }
 
     (value > 0).ifFalse(() => { optionError() })
     value
@@ -182,7 +182,7 @@ projectArguments: (arguments) => {
     builder: newBuilder()
     expectingSelectedValue: false
 
-    arguments.each((argument) => {
+    for(argument in arguments) {
         wasExpectingSelectedValue: expectingSelectedValue
 
         if(wasExpectingSelectedValue) {
@@ -207,7 +207,7 @@ projectArguments: (arguments) => {
                 appendBuilt(builder, argument)
             }
         })
-    })
+    }
 
     collectChunks(builder, builder.maxLevel, Array())
 }
@@ -230,7 +230,7 @@ parse: (arguments) => {
     listCasesValue: false
     caseRefValues: []
 
-    parsed.command.options.each((occurrence) => {
+    for(occurrence in parsed.command.options) {
         if(occurrence.key == "jobs") {
             jobsValue = parsePositiveInteger(occurrence.value)
         }
@@ -263,7 +263,7 @@ parse: (arguments) => {
                 occurrence.value
             ]
         }
-    })
+    }
 
     filePathValues.freeze()
     directoryPathValues.freeze()

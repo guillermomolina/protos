@@ -151,9 +151,9 @@ textLess: (left, right) => {
 
 textSet: (values) => {
     set: Map()
-    values.each((value) => {
+    for(value in values) {
         set[requireText(value)] = true
-    })
+    }
     set
 }
 
@@ -207,7 +207,7 @@ audit: (physicalSources, intendedSources, exclusions, registrations) => {
     pathAuthorityCounts: Map()
     distinctRegistrations: ArrayAccumulator.create()
 
-    registrations.each((record) => {
+    for(record in registrations) {
         path: requireText(record.path)
         identity: record.identity
         identityText: identityKey(identity)
@@ -244,11 +244,11 @@ audit: (physicalSources, intendedSources, exclusions, registrations) => {
         if(physical.containsKey(path) && (intended.containsKey(path) == false)) {
             emit(authorityMismatch, path, identity)
         }
-    })
+    }
 
     // A source shared by several distinct registrations is accepted only when
     // every one carries its own D133 project authority.
-    ArrayAccumulator.finish(distinctRegistrations).each((record) => {
+    for(record in ArrayAccumulator.finish(distinctRegistrations)) {
         path: record.path
         if(pathIdentityCounts[path] > 1) {
             authority: record.identity.authority
@@ -260,10 +260,10 @@ audit: (physicalSources, intendedSources, exclusions, registrations) => {
                 emit(authorityMismatch, path, record.identity)
             }
         }
-    })
+    }
 
     excluded: Map()
-    exclusions.each((pair) => {
+    for(pair in exclusions) {
         (pair.size() == 2).ifFalse(() => {
             fail()
         })
@@ -284,9 +284,9 @@ audit: (physicalSources, intendedSources, exclusions, registrations) => {
         valid.ifFalse(() => {
             emit(invalidExclusion, path, null)
         })
-    })
+    }
 
-    intendedSources.each((path) => {
+    for(path in intendedSources) {
         if(physical.containsKey(path)) {
             registeredPaths.containsKey(path).ifFalse(() => {
                 emit(missingRegistration, path, null)
@@ -295,9 +295,9 @@ audit: (physicalSources, intendedSources, exclusions, registrations) => {
         physical.containsKey(path).ifFalse(() => {
             emit(authorityMismatch, path, null)
         })
-    })
+    }
 
-    physicalSources.each((path) => {
+    for(path in physicalSources) {
         classified:
             registeredPaths.containsKey(path) ||
             intended.containsKey(path) ||
@@ -305,7 +305,7 @@ audit: (physicalSources, intendedSources, exclusions, registrations) => {
         classified.ifFalse(() => {
             emit(unclassifiedSource, path, null)
         })
-    })
+    }
 
     ordered: Arrays.sort(
         ArrayAccumulator.finish(diagnostics),
@@ -346,8 +346,8 @@ diagnosticLine: (entry) => {
 /// diagnostics answers "".
 report: (result) => {
     text: ""
-    result.diagnostics.each((entry) => {
+    for(entry in result.diagnostics) {
         text = text + diagnosticLine(entry) + "\n"
-    })
+    }
     text
 }

@@ -256,9 +256,9 @@ serviceBody: (facility, ClientError, duplex, prepared, onResponse, limits, ownin
 
         bodyReader: BufferedReader(framedSource)
         responseHeaders: []
-        head.headers.each((pair) => {
+        for(pair in head.headers) {
             responseHeaders = Array(...responseHeaders, [pair[0], sliceFrom(pair[1], 0)])
-        })
+        }
         publicBody: {
             read: (maxBytes) => {
                 answer: null

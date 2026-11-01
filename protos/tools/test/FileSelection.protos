@@ -100,7 +100,7 @@ caseMatches: (
 ) => {
     selected: false
 
-    fileAssociations.each((association) => {
+    for(association in fileAssociations) {
         if(associationMatches(
             association,
             corpusId,
@@ -108,9 +108,9 @@ caseMatches: (
         )) {
             selected = true
         }
-    })
+    }
 
-    directoryAssociations.each((association) => {
+    for(association in directoryAssociations) {
         if(directoryAssociationMatches(
             association,
             corpusId,
@@ -118,7 +118,7 @@ caseMatches: (
         )) {
             selected = true
         }
-    })
+    }
 
     selected
 }
@@ -131,7 +131,7 @@ planHasMatch: (
 ) => {
     matched: false
 
-    Manifest.planCases(plan).each((spec) => {
+    for(spec in Manifest.planCases(plan)) {
         if(caseMatches(
             corpusId,
             Manifest.casePath(spec),
@@ -140,7 +140,7 @@ planHasMatch: (
         )) {
             matched = true
         }
-    })
+    }
 
     matched
 }
@@ -156,7 +156,7 @@ selectPlanWithDirectories: (
 ) => {
     selectedCases: []
 
-    Manifest.planCases(plan).each((spec) => {
+    for(spec in Manifest.planCases(plan)) {
         if(caseMatches(
             corpusId,
             Manifest.casePath(spec),
@@ -168,7 +168,7 @@ selectPlanWithDirectories: (
                 spec
             ]
         }
-    })
+    }
 
     selectedCases.freeze()
 

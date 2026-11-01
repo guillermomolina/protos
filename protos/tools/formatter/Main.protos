@@ -28,17 +28,17 @@ acceptSourceLayout: (layout) => {
 
     layout.program.kind
     layout.program.path.root
-    layout.program.expressions.each((expression) => {
+    for(expression in layout.program.expressions) {
         expression.kind
         expression.path.root
-    })
+    }
 
-    layout.tokens.each((token) => {
+    for(token in layout.tokens) {
         token.type
         token.rawText
-    })
+    }
 
-    layout.comments.each((comment) => {
+    for(comment in layout.comments) {
         comment.kind
         comment.rawText
         comment.placement
@@ -46,36 +46,36 @@ acceptSourceLayout: (layout) => {
         comment.following
         comment.boundaryKind
         comment.sequenceSeparatorKind
-    })
+    }
 
-    layout.structuralForms.each((form) => {
+    for(form in layout.structuralForms) {
         form.path.root
         form.path.steps
         form.kind
-    })
+    }
 
-    layout.sequenceSeparators.each((separator) => {
+    for(separator in layout.sequenceSeparators) {
         separator.context
         separator.preceding
         separator.kind
         separator.following
-    })
+    }
 
-    layout.closureForms.each((closureForm) => {
+    for(closureForm in layout.closureForms) {
         closureForm.closure
         closureForm.form
-    })
+    }
 
-    layout.trailingClosures.each((trailingClosure) => {
+    for(trailingClosure in layout.trailingClosures) {
         trailingClosure.call
         trailingClosure.closure
-    })
+    }
 
-    layout.contextualElses.each((contextualElse) => {
+    for(contextualElse in layout.contextualElses) {
         contextualElse.conditional
         contextualElse.elseToken
         contextualElse.falseBranch
-    })
+    }
 
     layout
 }

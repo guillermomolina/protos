@@ -133,16 +133,16 @@ tests: [
     }),
     Test("matching operations reject invalid subjects and offsets", () => {
         pattern: Regex.compile("a")
-        Array(null, 5, true, ["a"]).each((subject) => {
+        for(subject in Array(null, 5, true, ["a"])) {
             Assertions.signals(Error, () => { pattern.fullMatch(subject) })
             Assertions.signals(Error, () => { pattern.search(subject) })
             Assertions.signals(Error, () => { pattern.searchFrom(subject, 0) })
             Assertions.signals(Error, () => { pattern.eachMatch(subject, (found) => null) })
             Assertions.signals(Error, () => { pattern.findAll(subject) })
-        })
-        Array(-1, 3, 99999999999999999999, "1", null, true).each((offset) => {
+        }
+        for(offset in Array(-1, 3, 99999999999999999999, "1", null, true)) {
             Assertions.signals(Error, () => { pattern.searchFrom("ab", offset) })
-        })
+        }
         Assertions.signals(Error, () => { pattern.searchFrom("😀", 2) })
         Assertions.require(pattern.searchFrom("😀", 1) === null)
     })

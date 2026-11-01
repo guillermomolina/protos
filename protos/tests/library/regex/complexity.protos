@@ -34,11 +34,11 @@ repeated: (text, doublings) => {
 tests: [
     Test("classic catastrophic forms fail without exponential backtracking", () => {
         subject: repeated("a", 7)
-        Array("(a+)+b", "(a|aa)*b", "(a?)*b", "(?:a*)*b", "(a|a)*b", "((a*)*)*b", "(?:a+?)+?b").each((source) => {
+        for(source in Array("(a+)+b", "(a|aa)*b", "(a?)*b", "(?:a*)*b", "(a|a)*b", "((a*)*)*b", "(?:a+?)+?b")) {
             pattern: Regex.compile(source)
             Assertions.require(pattern.search(subject) === null)
             Assertions.require(pattern.fullMatch(subject) === null)
-        })
+        }
         found: Regex.compile("(a+)+b").search(subject + "b")
         Assertions.require(found.end(0) == 129)
         Assertions.require(found.group(1) == subject)

@@ -55,12 +55,12 @@ tests: [
         Assertions.require(Regex.escape("a😀.") == "a😀\\.")
     }),
     Test("escaped text compiles under every flag without captures", () => {
-        Array("", "i", "m", "s", "x", "imsx").each((flags) => {
-            samples.each((text) => {
+        for(flags in Array("", "i", "m", "s", "x", "imsx")) {
+            for(text in samples) {
                 pattern: Regex.compileWithFlags(Regex.escape(text), flags)
                 Assertions.require(pattern.captureCount == 0)
-            })
-        })
+            }
+        }
         null
     }),
     Test("escapeReplacement doubles every dollar sign", () => {

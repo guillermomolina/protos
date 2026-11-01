@@ -56,20 +56,20 @@ tests: [
     Test("format many identifiers", () => {
         // 1024 repetitions built by doubling: 1.0.0-0.1.1...1+b.b...b
         repetitions: Array(1)
-        Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10).each((ignored) => {
+        for(ignored in Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)) {
             repetitions = Array(...repetitions, ...repetitions)
-        })
+        }
         source: Encoding.UTF8.encode("1.0.0-0")
-        repetitions.each((ignored) => {
+        for(ignored in repetitions) {
             source.add(46)
             source.add(49)
-        })
+        }
         source.add(43)
         source.add(98)
-        repetitions.each((ignored) => {
+        for(ignored in repetitions) {
             source.add(46)
             source.add(98)
-        })
+        }
         requireRoundTrip(Encoding.UTF8.decode(source))
     }),
     Test("format rejects non-versions", () => {

@@ -18,9 +18,9 @@
 /// Answers a fresh IdentitySet containing `elements`.
 call: (...elements) => {
     result: IdentityMap()
-    elements.each((element) => {
+    for(element in elements) {
         result[element] = true
-    })
+    }
     result
 }
 

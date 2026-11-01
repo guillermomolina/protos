@@ -35,11 +35,11 @@ odt: (year, month, dayOfMonth, hour, minute, seconds, nanosecond, offsetSeconds)
 
 // Requires every text in `texts` to be rejected by `parse`.
 requireRejected: (parse, texts) => {
-    texts.each((text) => {
+    for(text in texts) {
         Assertions.signals(Error, () => {
             parse(text)
         })
-    })
+    }
     true
 }
 
@@ -55,11 +55,11 @@ tests: [
             [Date(-9999, 1, 1), "-9999-01-01"],
             [Date(9999, 12, 31), "9999-12-31"]
         ]
-        cases.each((entry) => {
+        for(entry in cases) {
             Assertions.require(ISO8601.formatDate(entry[0]) == entry[1])
             Assertions.require(ISO8601.parseDate(entry[1]) == entry[0])
             Assertions.require(ISO8601.parseDate(ISO8601.formatDate(entry[0])) == entry[0])
-        })
+        }
         null
     }),
     Test("unsupported date forms are rejected", () => {
@@ -90,11 +90,11 @@ tests: [
             [Time(1, 2, 3, 1000), "01:02:03.000001"],
             [Time(1, 2, 3, 500000), "01:02:03.0005"]
         ]
-        cases.each((entry) => {
+        for(entry in cases) {
             Assertions.require(ISO8601.formatTime(entry[0]) == entry[1])
             Assertions.require(ISO8601.parseTime(entry[1]) == entry[0])
             Assertions.require(ISO8601.parseTime(ISO8601.formatTime(entry[0])) == entry[0])
-        })
+        }
         null
     }),
     Test("accepted non-canonical fractions format shortened", () => {
@@ -121,10 +121,10 @@ tests: [
             [LocalDateTime(Date(0, 1, 1), Time(0, 0, 0, 0)), "0000-01-01T00:00:00"],
             [LocalDateTime(Date(-1, 12, 31), Time(23, 59, 59, 999999999)), "-0001-12-31T23:59:59.999999999"]
         ]
-        cases.each((entry) => {
+        for(entry in cases) {
             Assertions.require(ISO8601.formatLocalDateTime(entry[0]) == entry[1])
             Assertions.require(ISO8601.parseLocalDateTime(ISO8601.formatLocalDateTime(entry[0])) == entry[0])
-        })
+        }
         requireRejected((text) => ISO8601.parseLocalDateTime(text), [
             "2024-02-29t12:34:56", "2024-02-29 12:34:56", "2024-02-2912:34:56",
             "2024-02-29T12:34:56Z", "2024-02-29T12:34:56+01:00", "2024-02-29T12:34:56[UTC]",
@@ -145,11 +145,11 @@ tests: [
             [odt(2024, 2, 29, 12, 34, 56, 0, -64800), "2024-02-29T12:34:56-18:00"],
             [odt(-1, 12, 31, 23, 59, 59, 999999999, -19800), "-0001-12-31T23:59:59.999999999-05:30"]
         ]
-        cases.each((entry) => {
+        for(entry in cases) {
             Assertions.require(ISO8601.formatOffsetDateTime(entry[0]) == entry[1])
             Assertions.require(ISO8601.parseOffsetDateTime(entry[1]) == entry[0])
             Assertions.require(ISO8601.parseOffsetDateTime(ISO8601.formatOffsetDateTime(entry[0])) == entry[0])
-        })
+        }
         // The same instant through different offsets keeps its own text.
         utc: odt(1970, 1, 1, 0, 0, 0, 0, 0)
         shifted: OffsetDateTime.withOffsetSameInstant(utc, Offset(3600))
@@ -162,9 +162,9 @@ tests: [
             ["Z", 0], ["+00:00", 0], ["+00:00:00", 0], ["+01:00", 3600], ["-05:30", -19800],
             ["+00:00:01", 1], ["-00:00:01", -1], ["+18:00", 64800], ["-18:00:00", -64800]
         ]
-        cases.each((entry) => {
+        for(entry in cases) {
             Assertions.require(ISO8601.parseOffsetDateTime(local + entry[0]).offset == Offset(entry[1]))
-        })
+        }
         // Accepted non-canonical spellings format canonically.
         Assertions.require(ISO8601.formatOffsetDateTime(ISO8601.parseOffsetDateTime(local + "+00:00")) == local + "Z")
         Assertions.require(ISO8601.formatOffsetDateTime(ISO8601.parseOffsetDateTime(local + "+01:00:00")) == local + "+01:00")
@@ -177,11 +177,11 @@ tests: [
             "+01", "+1:00", "+01:0", "+01:00:0", "+01:60", "+01:00:60", "+01:00:00.5",
             "Z ", " Z", "ZZ", "Z+01:00", "+01:00Z", "+01:00 ", "UTC", "[Europe/Paris]"
         ]
-        suffixes.each((suffix) => {
+        for(suffix in suffixes) {
             Assertions.signals(Error, () => {
                 ISO8601.parseOffsetDateTime(local + suffix)
             })
-        })
+        }
         requireRejected((text) => ISO8601.parseOffsetDateTime(text), [
             " 2024-02-29T12:34:56Z", "2024-02-29t12:34:56Z", "2024-02-29 12:34:56Z",
             "2024-02-29T24:00:00Z", "2024-02-29T23:59:60Z", "2024-02-29T12:34Z",
@@ -200,11 +200,11 @@ tests: [
             [Instant(-4371587 * day), "-9999-01-01T00:00:00Z"],
             [Instant(2932897 * day - 1), "9999-12-31T23:59:59.999999999Z"]
         ]
-        cases.each((entry) => {
+        for(entry in cases) {
             Assertions.require(ISO8601.formatInstant(entry[0]) == entry[1])
             Assertions.require(ISO8601.parseInstant(entry[1]) == entry[0])
             Assertions.require(ISO8601.parseInstant(ISO8601.formatInstant(entry[0])) == entry[0])
-        })
+        }
         // Any offset form identifies its instant; formatting always uses Z.
         Assertions.require(ISO8601.parseInstant("1970-01-01T01:00:00+01:00") == Instant(0))
         Assertions.require(ISO8601.parseInstant("1969-12-31T23:59:59-00:00:01") == Instant(0))

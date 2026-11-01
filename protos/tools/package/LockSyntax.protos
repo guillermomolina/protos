@@ -90,7 +90,7 @@ lineTokens: (text) => {
     unicodeRemaining: 0
     unicodeValue: 0
 
-    source.each((octet) => {
+    for(octet in source) {
         before: state
 
         if(before == 0) {
@@ -213,7 +213,7 @@ lineTokens: (text) => {
             })
             state = 0
         }
-    })
+    }
 
     if(state == 1) {
         tokens = appendToken(tokens, current, false)
@@ -257,7 +257,7 @@ renderQstring: (text) => {
     result: emptyBytes()
     result.add(34)
 
-    source.each((octet) => {
+    for(octet in source) {
         if(octet == 34) {
             result.add(92)
             result.add(34)
@@ -289,7 +289,7 @@ renderQstring: (text) => {
                 })
             })
         })
-    })
+    }
 
     result.add(34)
     Encoding.UTF8.decode(result)
@@ -312,12 +312,12 @@ parseDecimalToken: (token) => {
     }
 
     value: 0
-    source.each((octet) => {
+    for(octet in source) {
         isDigit(octet).ifFalse(() => {
             fail()
         })
         value = value * 10 + (octet - 48)
-    })
+    }
 
     {
         value: value
@@ -332,7 +332,7 @@ validateMethodText: (text) => {
     }
 
     index: 0
-    source.each((octet) => {
+    for(octet in source) {
         valid: isLowerAlpha(octet)
 
         if(index > 0) {
@@ -349,7 +349,7 @@ validateMethodText: (text) => {
         })
 
         index = index + 1
-    })
+    }
 
     text
 }
@@ -371,7 +371,7 @@ parseDigestToken: (token) => {
     hexBytes: emptyBytes()
     inHex: false
 
-    source.each((octet) => {
+    for(octet in source) {
         if(octet == 58) {
             if(inHex) {
                 fail()
@@ -391,7 +391,7 @@ parseDigestToken: (token) => {
                 algorithmBytes.add(octet)
             })
         })
-    })
+    }
 
     inHex.ifFalse(() => {
         fail()
@@ -426,7 +426,7 @@ headerLines: (text) => {
     lines: Array()
     current: emptyBytes()
 
-    source.each((octet) => {
+    for(octet in source) {
         if(octet == 10) {
             line: ""
             if(current.size() > 0) {
@@ -442,7 +442,7 @@ headerLines: (text) => {
             }
             current.add(octet)
         })
-    })
+    }
 
     (current.size() == 0).ifFalse(() => {
         fail()

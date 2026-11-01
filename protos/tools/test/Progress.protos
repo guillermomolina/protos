@@ -64,11 +64,11 @@ countText: (value) => {
 selectedCount: (plan) => {
     count: 0
 
-    Manifest.planCases(plan).each((spec) => {
+    for(spec in Manifest.planCases(plan)) {
         if(Runner.isDExpectation(spec)) {
             count = count + 1
         }
-    })
+    }
 
     count
 }
@@ -161,11 +161,11 @@ lifecycleObserver: (state, displayReference) => {
         if(kind === "started") {
             duplicate: false
 
-            state[0].each((running) => {
+            for(running in state[0]) {
                 if(running === caseRef) {
                     duplicate = true
                 }
-            })
+            }
 
             if(duplicate) {
                 policyError()
@@ -201,7 +201,7 @@ lifecycleObserver: (state, displayReference) => {
             token: null
             index: 0
 
-            state[0].each((running) => {
+            for(running in state[0]) {
                 if(running === caseRef) {
                     if(found) {
                         policyError()
@@ -224,7 +224,7 @@ lifecycleObserver: (state, displayReference) => {
                 })
 
                 index = index + 1
-            })
+            }
 
             found.ifFalse(() => {
                 policyError()
@@ -337,10 +337,10 @@ finishInvocation: (states, status, emitLine) => {
     completed: 0
     failed: 0
 
-    states.each((state) => {
+    for(state in states) {
         completed = completed + state[2]
         failed = failed + state[3]
-    })
+    }
 
     if(status === "completed") {
         emitLine(

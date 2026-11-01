@@ -98,9 +98,9 @@ connectionOf: (request) => {
             answer
         }
         write: (bytes) => {
-            bytes.each((octet) => {
+            for(octet in bytes) {
                 output.add(octet)
-            })
+            }
             (() => {
                 null
             }).future()

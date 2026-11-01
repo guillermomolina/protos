@@ -64,11 +64,11 @@ compilePath: (bytes) => {
             valid = (bytes[segmentEnd - 1] == 125) && isIdentifier(bytes, segmentStart + 1, segmentEnd - 1)
             if(valid) {
                 name: Encoding.Latin1.decode(MessageSyntax.copyRange(bytes, segmentStart + 1, segmentEnd - 1))
-                names.each((other) => {
+                for(other in names) {
                     if(other == name) {
                         valid = false
                     }
-                })
+                }
                 names = Array(...names, name)
                 segment = {
                     literal: null
@@ -106,17 +106,17 @@ compileEntry: (facility, entry, order) => {
     valid: facility.ordinaryObject(entry)
     if(valid) {
         names: entry.slotNames()
-        entrySlots.each((slotName) => {
+        for(slotName in entrySlots) {
             present: false
-            names.each((name) => {
+            for(name in names) {
                 if(name == slotName) {
                     present = true
                 }
-            })
+            }
             if(!present) {
                 valid = false
             }
-        })
+        }
     }
     method: null
     path: null
@@ -228,24 +228,24 @@ compile: (facility, routes) => {
     valid: Array.recognizes(routes)
     compiled: []
     if(valid) {
-        Array(...routes).each((entry) => {
+        for(entry in Array(...routes)) {
             if(valid) {
                 route: compileEntry(facility, entry, compiled.size())
                 if(route === null) {
                     valid = false
                 } else {
-                    compiled.each((earlier) => {
+                    for(earlier in compiled) {
                         if(earlier.method == route.method) {
                             kind: relation(earlier, route)
                             if((kind == "duplicate") || (kind == "crossing")) {
                                 valid = false
                             }
                         }
-                    })
+                    }
                     compiled = Array(...compiled, route)
                 }
             }
-        })
+        }
     }
     table: null
     if(valid) {
@@ -304,22 +304,22 @@ dispatch: (table, method, target) => {
     split: RouteTarget.split(target)
     pathMatches: []
     if(split !== null) {
-        table.each((route) => {
+        for(route in table) {
             if(matches(route, split)) {
                 pathMatches = Array(...pathMatches, route)
             }
-        })
+        }
     }
 
     best: (candidateMethod) => {
         chosen: null
-        pathMatches.each((route) => {
+        for(route in pathMatches) {
             if(route.method == candidateMethod) {
                 if((chosen === null) || moreSpecific(route, chosen)) {
                     chosen = route
                 }
             }
-        })
+        }
         chosen
     }
 
@@ -339,28 +339,28 @@ dispatch: (table, method, target) => {
             methods: []
             add: (name) => {
                 present: false
-                methods.each((other) => {
+                for(other in methods) {
                     if(other == name) {
                         present = true
                     }
-                })
+                }
                 if(!present) {
                     methods = Array(...methods, name)
                 }
             }
-            pathMatches.each((route) => {
+            for(route in pathMatches) {
                 add(route.method)
                 if(route.method == "GET") {
                     add("HEAD")
                 }
-            })
+            }
             allow = ""
-            methods.each((name) => {
+            for(name in methods) {
                 if(allow != "") {
                     allow = allow + ", "
                 }
                 allow = allow + name
-            })
+            }
         } else {
             kind = "match"
             params = Map()

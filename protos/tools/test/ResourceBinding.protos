@@ -50,13 +50,13 @@ bindingCatalogEntry: (bindingValue) => {
 catalogByKey: (catalog) => {
     byKey: Map()
 
-    catalog.each((entry) => {
+    for(entry in catalog) {
         key: ResourceCatalog.entryKey(entry)
         if(byKey.containsKey(key)) {
             fail()
         }
         byKey[key] = entry
-    })
+    }
 
     byKey
 }
@@ -66,7 +66,7 @@ bindRequirements: (requirements, catalog) => {
     seenRequirementKeys: Map()
     bindings: Array()
 
-    requirements.each((requirementValue) => {
+    for(requirementValue in requirements) {
         key: Manifest.requirementKey(requirementValue)
 
         if(seenRequirementKeys.containsKey(key)) {
@@ -110,7 +110,7 @@ bindRequirements: (requirements, catalog) => {
             ...bindings,
             binding(requirementValue, entry)
         )
-    })
+    }
 
     frozenTuple(...bindings)
 }
@@ -146,13 +146,13 @@ providerRequestBinding: (bindingValue) => {
 providerRequestSnapshot: (bindings) => {
     rows: Array()
 
-    bindings.each((bindingValue) => {
+    for(bindingValue in bindings) {
         rows =
             Array(
                 ...rows,
                 providerRequestBinding(bindingValue)
             )
-    })
+    }
 
     frozenTuple(...rows)
 }

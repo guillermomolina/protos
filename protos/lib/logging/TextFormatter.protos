@@ -75,9 +75,9 @@ format: ((numeric) => (event) => {
     output: Encoding.UTF8.encode("")
 
     appendAscii: (text) => {
-        Encoding.UTF8.encode(text).each((octet) => {
+        for(octet in Encoding.UTF8.encode(text)) {
             output.add(octet)
-        })
+        }
     }
 
     // Digits of a non-negative Integer, most significant first, in `radix`
@@ -329,13 +329,13 @@ format: ((numeric) => (event) => {
         if((handled == false) && Array.recognizes(value)) {
             output.add(91)
             first: true
-            value.each((element) => {
+            for(element in value) {
                 first.ifFalse(() => {
                     appendAscii(", ")
                 })
                 first = false
                 appendValue(element)
-            })
+            }
             output.add(93)
             handled = true
         }
@@ -348,7 +348,7 @@ format: ((numeric) => (event) => {
             sorted: Arrays.sort(entries, (left, right) => precedes(left[0], right[0]))
             output.add(123)
             first: true
-            sorted.each((entry) => {
+            for(entry in sorted) {
                 first.ifFalse(() => {
                     appendAscii(", ")
                 })
@@ -356,7 +356,7 @@ format: ((numeric) => (event) => {
                 appendString(entry[1])
                 output.add(61)
                 appendValue(entry[2])
-            })
+            }
             output.add(125)
         })
     }

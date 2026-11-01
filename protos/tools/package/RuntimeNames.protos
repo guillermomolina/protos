@@ -59,14 +59,14 @@ equalsAsciiIgnoreCase: (left, right) => {
     equal: leftBytes.size() == rightBytes.size()
     index: 0
 
-    leftBytes.each((octet) => {
+    for(octet in leftBytes) {
         if(equal) {
             (asciiLower(octet) == asciiLower(rightBytes[index])).ifFalse(() => {
                 equal = false
             })
         }
         index = index + 1
-    })
+    }
 
     equal
 }
@@ -81,11 +81,11 @@ isReserved: (segment) => {
         "LPT6", "LPT7", "LPT8", "LPT9"
     )
 
-    reserved.each((name) => {
+    for(name in reserved) {
         if(equalsAsciiIgnoreCase(segment, name)) {
             result = true
         }
-    })
+    }
 
     result
 }
@@ -97,7 +97,7 @@ requireSegment: (segment) => {
     }
 
     first: true
-    bytes.each((octet) => {
+    for(octet in bytes) {
         valid: false
 
         if(first) {
@@ -119,7 +119,7 @@ requireSegment: (segment) => {
         })
 
         first = false
-    })
+    }
 
     if(isReserved(segment)) {
         fail()
@@ -135,7 +135,7 @@ requireLogicalName: (name) => {
     }
 
     current: Encoding.UTF8.encode("")
-    source.each((octet) => {
+    for(octet in source) {
         if(octet == 47) {
             requireSegment(Encoding.UTF8.decode(current))
             current = Encoding.UTF8.encode("")
@@ -144,7 +144,7 @@ requireLogicalName: (name) => {
         (octet == 47).ifFalse(() => {
             current.add(octet)
         })
-    })
+    }
 
     requireSegment(Encoding.UTF8.decode(current))
     name

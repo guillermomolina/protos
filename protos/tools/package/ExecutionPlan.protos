@@ -40,11 +40,11 @@ workspaceRefMatches: (ref, packageId) => {
 packageAt: (packages, location) => {
     found: null
 
-    packages.each((package) => {
+    for(package in packages) {
         if(package.location == location) {
             found = package
         }
-    })
+    }
 
     if(found === null) {
         fail()
@@ -68,11 +68,11 @@ copyExports: (manifest) => {
 lockMemberAt: (lock, declaration) => {
     found: null
 
-    lock.workspaceMembers.each((member) => {
+    for(member in lock.workspaceMembers) {
         if(member.declaration == declaration) {
             found = member
         }
-    })
+    }
 
     found
 }
@@ -80,7 +80,7 @@ lockMemberAt: (lock, declaration) => {
 lockDependencyAt: (lock, declaringPackageId, alias) => {
     found: null
 
-    lock.dependencies.each((dependency) => {
+    for(dependency in lock.dependencies) {
         if(workspaceRefMatches(
             dependency.declaring,
             declaringPackageId
@@ -89,7 +89,7 @@ lockDependencyAt: (lock, declaringPackageId, alias) => {
                 found = dependency
             }
         }
-    })
+    }
 
     found
 }
@@ -97,14 +97,14 @@ lockDependencyAt: (lock, declaringPackageId, alias) => {
 countLockDependencies: (lock, declaringPackageId) => {
     count: 0
 
-    lock.dependencies.each((dependency) => {
+    for(dependency in lock.dependencies) {
         if(workspaceRefMatches(
             dependency.declaring,
             declaringPackageId
         )) {
             count = count + 1
         }
-    })
+    }
 
     count
 }
@@ -118,7 +118,7 @@ validatePackageDependencies: (lock, package) => {
 
     planDependencies: Array()
 
-    currentDependencies.each((dependency) => {
+    for(dependency in currentDependencies) {
         Names.requireAlias(dependency.alias)
 
         (dependency.kind == "path").ifFalse(() => {
@@ -152,7 +152,7 @@ validatePackageDependencies: (lock, package) => {
                     target: workspaceRef(dependency.targetPackageId)
                 }
             )
-    })
+    }
 
     planDependencies
 }
@@ -200,17 +200,17 @@ lockedExternalNodeAt: (lock, ref) => {
     found: null
     key: nodeRefKey(ref)
 
-    lock.registryNodes.each((node) => {
+    for(node in lock.registryNodes) {
         if(nodeRefKey(node.ref) == key) {
             found = node
         }
-    })
+    }
 
-    lock.gitNodes.each((node) => {
+    for(node in lock.gitNodes) {
         if(nodeRefKey(node.ref) == key) {
             found = node
         }
-    })
+    }
 
     found
 }
@@ -224,7 +224,7 @@ validateV2WorkspaceDependencies: (lock, package) => {
 
     result: Array()
 
-    currentDependencies.each((dependency) => {
+    for(dependency in currentDependencies) {
         Names.requireAlias(dependency.alias)
 
         locked:
@@ -309,7 +309,7 @@ validateV2WorkspaceDependencies: (lock, package) => {
                     target: copyNodeRef(locked.target)
                 }
             )
-    })
+    }
 
     result
 }
@@ -322,7 +322,7 @@ lockDependencyAtRef: (lock, declaringRef, alias) => {
     found: null
     count: 0
 
-    lock.dependencies.each((dependency) => {
+    for(dependency in lock.dependencies) {
         if(sameNodeRef(
             dependency.declaring,
             declaringRef
@@ -332,7 +332,7 @@ lockDependencyAtRef: (lock, declaringRef, alias) => {
                 count = count + 1
             }
         }
-    })
+    }
 
     if(count > 1) {
         fail()
@@ -344,14 +344,14 @@ lockDependencyAtRef: (lock, declaringRef, alias) => {
 countLockDependenciesAtRef: (lock, declaringRef) => {
     count: 0
 
-    lock.dependencies.each((dependency) => {
+    for(dependency in lock.dependencies) {
         if(sameNodeRef(
             dependency.declaring,
             declaringRef
         )) {
             count = count + 1
         }
-    })
+    }
 
     count
 }
@@ -548,7 +548,7 @@ buildV2FromVerifiedLeaves: (projectTreeFilesystem, verifiedExternalPackages) => 
         fail()
     })
 
-    resolutionRoot.members.each((member) => {
+    for(member in resolutionRoot.members) {
         locked: lockMemberAt(lock, member.location)
 
         if(locked === null) {
@@ -561,37 +561,37 @@ buildV2FromVerifiedLeaves: (projectTreeFilesystem, verifiedExternalPackages) => 
         ).ifFalse(() => {
             fail()
         })
-    })
+    }
 
     // This bounded slice admits only external leaves. A later F2E3 slice will
     // validate dependencies declared by the same verified external captures.
-    lock.dependencies.each((dependency) => {
+    for(dependency in lock.dependencies) {
         (dependency.declaring.kind == "workspace").ifFalse(() => {
             fail()
         })
-    })
+    }
 
     lockedExternal: Map()
 
-    lock.registryNodes.each((node) => {
+    for(node in lock.registryNodes) {
         key: nodeRefKey(node.ref)
         if(lockedExternal.containsKey(key)) {
             fail()
         }
         lockedExternal[key] = node
-    })
+    }
 
-    lock.gitNodes.each((node) => {
+    for(node in lock.gitNodes) {
         key: nodeRefKey(node.ref)
         if(lockedExternal.containsKey(key)) {
             fail()
         }
         lockedExternal[key] = node
-    })
+    }
 
     verifiedByRef: Map()
 
-    verifiedExternalPackages.each((verified) => {
+    for(verified in verifiedExternalPackages) {
         kind: verified.ref.kind
         external: kind == "registry"
         if(kind == "git") {
@@ -619,7 +619,7 @@ buildV2FromVerifiedLeaves: (projectTreeFilesystem, verifiedExternalPackages) => 
         })
 
         verifiedByRef[key] = verified
-    })
+    }
 
     (verifiedByRef.size() == lockedExternal.size()).ifFalse(() => {
         fail()
@@ -635,7 +635,7 @@ buildV2FromVerifiedLeaves: (projectTreeFilesystem, verifiedExternalPackages) => 
             }
         )
 
-    lock.workspaceMembers.each((lockedMember) => {
+    for(lockedMember in lock.workspaceMembers) {
         package:
             packageAt(
                 state.packages,
@@ -655,7 +655,7 @@ buildV2FromVerifiedLeaves: (projectTreeFilesystem, verifiedExternalPackages) => 
                     exports: copyExports(package.manifest)
                 }
             )
-    })
+    }
 
     appendExternal: (lockedNode) => {
         key: nodeRefKey(lockedNode.ref)
@@ -675,30 +675,30 @@ buildV2FromVerifiedLeaves: (projectTreeFilesystem, verifiedExternalPackages) => 
             )
     }
 
-    lock.registryNodes.each((node) => {
+    for(node in lock.registryNodes) {
         appendExternal(node)
-    })
-    lock.gitNodes.each((node) => {
+    }
+    for(node in lock.gitNodes) {
         appendExternal(node)
-    })
+    }
 
     planDependencies: Array()
 
-    state.packages.each((package) => {
+    for(package in state.packages) {
         packageDependencies:
             validateV2WorkspaceDependencies(
                 lock,
                 package
             )
 
-        packageDependencies.each((dependency) => {
+        for(dependency in packageDependencies) {
             planDependencies =
                 Array(
                     ...planDependencies,
                     dependency
                 )
-        })
-    })
+        }
+    }
 
     (planDependencies.size() == lock.dependencies.size()).ifFalse(() => {
         fail()
@@ -735,7 +735,7 @@ loadCurrentV2Lock: (projectTreeFilesystem) => {
         fail()
     })
 
-    resolutionRoot.members.each((member) => {
+    for(member in resolutionRoot.members) {
         locked: lockMemberAt(lock, member.location)
 
         if(locked === null) {
@@ -748,7 +748,7 @@ loadCurrentV2Lock: (projectTreeFilesystem) => {
         ).ifFalse(() => {
             fail()
         })
-    })
+    }
 
     {
         state: state
@@ -760,21 +760,21 @@ loadCurrentV2Lock: (projectTreeFilesystem) => {
 indexLockedExternalNodes: (lock) => {
     lockedExternal: Map()
 
-    lock.registryNodes.each((node) => {
+    for(node in lock.registryNodes) {
         key: nodeRefKey(node.ref)
         if(lockedExternal.containsKey(key)) {
             fail()
         }
         lockedExternal[key] = node
-    })
+    }
 
-    lock.gitNodes.each((node) => {
+    for(node in lock.gitNodes) {
         key: nodeRefKey(node.ref)
         if(lockedExternal.containsKey(key)) {
             fail()
         }
         lockedExternal[key] = node
-    })
+    }
 
     lockedExternal
 }
@@ -782,21 +782,21 @@ indexLockedExternalNodes: (lock) => {
 collectV2WorkspaceDependencies: (lock, state) => {
     result: Array()
 
-    state.packages.each((package) => {
+    for(package in state.packages) {
         packageDependencies:
             validateV2WorkspaceDependencies(
                 lock,
                 package
             )
 
-        packageDependencies.each((dependency) => {
+        for(dependency in packageDependencies) {
             result =
                 Array(
                     ...result,
                     dependency
                 )
-        })
-    })
+        }
+    }
 
     result
 }
@@ -827,12 +827,12 @@ exactExternalRequirements: (projectTreeFilesystem) => {
             )
     }
 
-    lock.registryNodes.each((node) => {
+    for(node in lock.registryNodes) {
         appendRequirement(node)
-    })
-    lock.gitNodes.each((node) => {
+    }
+    for(node in lock.gitNodes) {
         appendRequirement(node)
-    })
+    }
 
     requirements
 }
@@ -852,7 +852,7 @@ buildV2FromVerifiedCaptures: (
 
     preparedByRef: Map()
 
-    verifiedExternalPackages.each((verified) => {
+    for(verified in verifiedExternalPackages) {
         key: nodeRefKey(verified.ref)
 
         if(preparedByRef.containsKey(key)) {
@@ -870,7 +870,7 @@ buildV2FromVerifiedCaptures: (
             )
 
         preparedByRef[key] = prepared
-    })
+    }
 
     (preparedByRef.size() == lockedExternal.size()).ifFalse(() => {
         fail()
@@ -886,7 +886,7 @@ buildV2FromVerifiedCaptures: (
             }
         )
 
-    lock.workspaceMembers.each((lockedMember) => {
+    for(lockedMember in lock.workspaceMembers) {
         package:
             packageAt(
                 state.packages,
@@ -906,7 +906,7 @@ buildV2FromVerifiedCaptures: (
                     exports: copyExports(package.manifest)
                 }
             )
-    })
+    }
 
     appendExternal: (lockedNode) => {
         key: nodeRefKey(lockedNode.ref)
@@ -927,16 +927,16 @@ buildV2FromVerifiedCaptures: (
             )
     }
 
-    lock.registryNodes.each((node) => {
+    for(node in lock.registryNodes) {
         appendExternal(node)
-    })
-    lock.gitNodes.each((node) => {
+    }
+    for(node in lock.gitNodes) {
         appendExternal(node)
-    })
+    }
 
     planDependencies: collectV2WorkspaceDependencies(lock, state)
 
-    lock.registryNodes.each((node) => {
+    for(node in lock.registryNodes) {
         prepared: preparedByRef[nodeRefKey(node.ref)]
         packageDependencies:
             validateV2ExternalDependencies(
@@ -944,16 +944,16 @@ buildV2FromVerifiedCaptures: (
                 prepared
             )
 
-        packageDependencies.each((dependency) => {
+        for(dependency in packageDependencies) {
             planDependencies =
                 Array(
                     ...planDependencies,
                     dependency
                 )
-        })
-    })
+        }
+    }
 
-    lock.gitNodes.each((node) => {
+    for(node in lock.gitNodes) {
         prepared: preparedByRef[nodeRefKey(node.ref)]
         packageDependencies:
             validateV2ExternalDependencies(
@@ -961,14 +961,14 @@ buildV2FromVerifiedCaptures: (
                 prepared
             )
 
-        packageDependencies.each((dependency) => {
+        for(dependency in packageDependencies) {
             planDependencies =
                 Array(
                     ...planDependencies,
                     dependency
                 )
-        })
-    })
+        }
+    }
 
     (planDependencies.size() == lock.dependencies.size()).ifFalse(() => {
         fail()
@@ -1009,7 +1009,7 @@ build: (projectTreeFilesystem) => {
         fail()
     })
 
-    resolutionRoot.members.each((member) => {
+    for(member in resolutionRoot.members) {
         locked: lockMemberAt(lock, member.location)
 
         if(locked === null) {
@@ -1022,7 +1022,7 @@ build: (projectTreeFilesystem) => {
         ).ifFalse(() => {
             fail()
         })
-    })
+    }
 
     rootPackage: packageAt(state.packages, "")
     planPackages:
@@ -1034,7 +1034,7 @@ build: (projectTreeFilesystem) => {
             }
         )
 
-    lock.workspaceMembers.each((lockedMember) => {
+    for(lockedMember in lock.workspaceMembers) {
         package:
             packageAt(
                 state.packages,
@@ -1054,24 +1054,24 @@ build: (projectTreeFilesystem) => {
                     exports: copyExports(package.manifest)
                 }
             )
-    })
+    }
 
     planDependencies: Array()
-    state.packages.each((package) => {
+    for(package in state.packages) {
         packageDependencies:
             validatePackageDependencies(
                 lock,
                 package
             )
 
-        packageDependencies.each((dependency) => {
+        for(dependency in packageDependencies) {
             planDependencies =
                 Array(
                     ...planDependencies,
                     dependency
                 )
-        })
-    })
+        }
+    }
 
     (planDependencies.size() == lock.dependencies.size()).ifFalse(() => {
         fail()

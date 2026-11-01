@@ -45,24 +45,24 @@ readAllBytes: (filesystem, path) => {
             readBatch = () => {
                 pending: Array(...batchTemplate)
                 issueIndex: 0
-                batchTemplate.each((ignored) => {
+                for(ignored in batchTemplate) {
                     pending[issueIndex] = file.read(65536)
                     issueIndex = issueIndex + 1
-                })
+                }
 
                 chunks: Future.all(...pending).value()
-                chunks.each((chunk) => {
+                for(chunk in chunks) {
                     done.ifFalse(() => {
                         if(chunk === null) {
                             done = true
                         }
                         (chunk === null).ifFalse(() => {
-                            chunk.each((octet) => {
+                            for(octet in chunk) {
                                 bytes.add(octet)
-                            })
+                            }
                         })
                     })
-                })
+                }
 
                 done.ifFalse(() => {
                     readBatch()

@@ -85,9 +85,9 @@ duplexOf: (chunks) => {
             }
             failure: writeFailure
             if(failure === null) {
-                bytes.each((octet) => {
+                for(octet in bytes) {
                     output.add(octet)
-                })
+                }
             }
             (() => {
                 if(failure !== null) {
@@ -214,9 +214,9 @@ drain: (body, size) => {
         } else {
             Assertions.require(chunk.size() > 0)
             Assertions.require(chunk.size() <= size)
-            chunk.each((octet) => {
+            for(octet in chunk) {
                 collected.add(octet)
-            })
+            }
         }
     }
     text(collected)

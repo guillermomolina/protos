@@ -416,7 +416,7 @@ tests: [
     // ------------------------------------------------------------ extensions
 
     Test("valid chunk extensions are accepted and discarded", () => {
-        [
+        for(message in [
             "3;name\r\nabc\r\n0\r\n\r\n",
             "3;name=value\r\nabc\r\n0\r\n\r\n",
             "3;a;b=c;d=\"e\"\r\nabc\r\n0\r\n\r\n",
@@ -424,22 +424,22 @@ tests: [
             "3\t; \tname \t= \tvalue\r\nabc\r\n0\r\n\r\n",
             "3 ; a = b ; c\r\nabc\r\n0\r\n\r\n",
             "3;!#$%&'*+-.^_`|~=x\r\nabc\r\n0\r\n\r\n"
-        ].each((message) => {
+        ]) {
             Assertions.require(chunkedContent(message) == "abc")
-        })
+        }
         null
     }),
     Test("quoted-string extension values", () => {
-        [
+        for(message in [
             "3;q=\"hello world\"\r\nabc\r\n0\r\n\r\n",
             "3;q=\"\"\r\nabc\r\n0\r\n\r\n",
             "3;q=\"a\\\"b\"\r\nabc\r\n0\r\n\r\n",
             "3;q=\"a\\\\b\"\r\nabc\r\n0\r\n\r\n",
             "3;q=\"tab\tand !#[]~\u{80}\u{FF}\"\r\nabc\r\n0\r\n\r\n",
             "3;q=\"\\\t\\ \\\u{FF}\"\r\nabc\r\n0\r\n\r\n"
-        ].each((message) => {
+        ]) {
             Assertions.require(chunkedContent(message) == "abc")
-        })
+        }
         null
     }),
     Test("fragmentation inside a quoted-string extension", () => {
@@ -547,7 +547,7 @@ tests: [
         chunkedRejects("0\r\n\r\r")
     }),
     Test("invalid hexadecimal sizes are rejected", () => {
-        [
+        for(message in [
             "\r\n",
             ";a\r\n",
             "+3\r\nabc\r\n0\r\n\r\n",
@@ -556,9 +556,9 @@ tests: [
             "g\r\n",
             "3g\r\nabc\r\n0\r\n\r\n",
             " 3\r\nabc\r\n0\r\n\r\n"
-        ].each((message) => {
+        ]) {
             chunkedRejects(message)
-        })
+        }
         null
     }),
     Test("maximum signed 64-bit size is parsed without overflow", () => {
@@ -652,7 +652,7 @@ tests: [
     Test("invalid ranges signal Error and leave the framer unchanged", () => {
         bytes: ascii("3\r\nabc\r\n0\r\n\r\n")
         size: bytes.size()
-        [
+        for(range in [
             [size + 1, 0],
             [size, 1],
             [0, size + 1],
@@ -661,7 +661,7 @@ tests: [
             [null, 0],
             [0, "1"],
             [1.5, 0]
-        ].each((range) => {
+        ]) {
             framer: chunkedFramer()
             Assertions.require(framer.feed(bytes, 0, 2, 1024).state == "NEED_MORE")
             Assertions.signals(Error, () => { framer.feed(bytes, range[0], range[1], 1024) })
@@ -669,18 +669,18 @@ tests: [
             rest: drain(framer, bytes, 2, size, 1024)
             Assertions.require(rest.state == "COMPLETE")
             Assertions.require(text(rest.content) == "abc")
-        })
+        }
         null
     }),
     Test("maxContentBytes zero, negative, or non-Integer signals Error", () => {
         bytes: ascii("abc")
-        [0, -1, null, "1", 1.0].each((maxContent) => {
+        for(maxContent in [0, -1, null, "1", 1.0]) {
             framer: lengthFramer(3)
             Assertions.signals(Error, () => { framer.feed(bytes, 0, 3, maxContent) })
             Assertions.require(framer.state() == "OPEN")
             result: framer.feed(bytes, 0, 3, 1024)
             Assertions.require(text(result.content) == "abc")
-        })
+        }
         null
     }),
     Test("range checks precede computing offset plus length", () => {

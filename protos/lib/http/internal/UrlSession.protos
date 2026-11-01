@@ -159,9 +159,9 @@ serviceBody: (facility, prepared, limits) => {
     // Client bounds the decoded body by limits.maxResponseBodyBytes.
     onResponse: (response) => {
         headers: []
-        response.headers.each((pair) => {
+        for(pair in response.headers) {
             headers = Array(...headers, [pair[0], MessageSyntax.copyRange(pair[1], 0, pair[1].size())])
-        })
+        }
         body: Encoding.UTF8.encode("")
         done: false
         while(!done) {
@@ -169,9 +169,9 @@ serviceBody: (facility, prepared, limits) => {
             if(chunk === null) {
                 done = true
             } else {
-                chunk.each((octet) => {
+                for(octet in chunk) {
                     body.add(octet)
-                })
+                }
             }
         }
         buffered: {

@@ -85,9 +85,9 @@ duplexOf: (chunks) => {
             }
             failure: writeFailure
             if(failure === null) {
-                bytes.each((octet) => {
+                for(octet in bytes) {
                     output.add(octet)
-                })
+                }
             }
             (() => {
                 if(failure !== null) {
@@ -214,9 +214,9 @@ drain: (body, size) => {
         } else {
             Assertions.require(chunk.size() > 0)
             Assertions.require(chunk.size() <= size)
-            chunk.each((octet) => {
+            for(octet in chunk) {
                 collected.add(octet)
-            })
+            }
         }
     }
     text(collected)
@@ -344,34 +344,34 @@ tests: [
     }),
     Test("valid Host syntax is admitted", () => {
         valid: ["example.org:8080", "a", "192.0.2.1", "192.0.2.1:80", "[::1]", "[::1]:80", "[2001:db8::7]", "[v1.x]", "ex%41mple", "a:"]
-        valid.each((value) => {
+        for(value in valid) {
             Assertions.require(sent(withHost(value)) ==
                 headOf("GET / HTTP/1.1", "Host: " + value + "\r\n", "0"))
-        })
+        }
         null
     }),
     Test("invalid Host syntax is rejected", () => {
         invalid: ["", "exa mple", "a:b", "[::1", "[::1]x", "a/b", "a@b", "[1::2::3]", "%zz", "user@host"]
-        invalid.each((value) => {
+        for(value in invalid) {
             assertInadmissible(withHost(value))
-        })
+        }
         null
     }),
     Test("outer SP and HTAB around Host are admitted and sent exactly", () => {
         padded: [" example.org", "example.org ", "\t example.org \t", "[::1]\t", " example.org:8080 "]
-        padded.each((value) => {
+        for(value in padded) {
             Assertions.require(sent(withHost(value)) ==
                 headOf("GET / HTTP/1.1", "Host: " + value + "\r\n", "0"))
-        })
+        }
         Assertions.require(sent(withHost("\t example.org \t")) ==
             "GET / HTTP/1.1\r\nHost: \t example.org \t\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
         null
     }),
     Test("an empty or invalid semantic Host value is rejected despite outer whitespace", () => {
         invalid: ["", " ", "\t \t", " exa mple.org ", " example.org:abc ", " [::1 "]
-        invalid.each((value) => {
+        for(value in invalid) {
             assertInadmissible(withHost(value))
-        })
+        }
         null
     }),
     Test("caller headers keep order, duplicates, casing, and binary values", () => {
@@ -413,9 +413,9 @@ tests: [
             headOf("POST /a HTTP/1.1", "Host: example.org\r\nX: v\r\n", "2") + "xy")
     }),
     Test("invalid methods are rejected", () => {
-        ["", "G T", "GET\r", "GE:T", "G\u{E9}T", "CONNECT"].each((method) => {
+        for(method in ["", "G T", "GET\r", "GE:T", "G\u{E9}T", "CONNECT"]) {
             assertInadmissible(requestOf(method, "/", [hostField()], null))
-        })
+        }
         Assertions.require(sent(requestOf("connect", "/", [hostField()], null)) ==
             headOf("connect / HTTP/1.1", "Host: example.org\r\n", "0"))
         Assertions.require(sent(requestOf("X-CUSTOM!", "/", [hostField()], null)) ==
@@ -429,16 +429,16 @@ tests: [
         assertInadmissible(requestOf("OPTIONS", "http://example.org", [hostField()], null))
     }),
     Test("malformed origin-form targets are rejected", () => {
-        ["", "a/b", "/a b", "/a#f", "/%zz", "/%4", "/a\r", "/\u{E9}", "/a\"b", "/a<b"].each((target) => {
+        for(target in ["", "a/b", "/a b", "/a#f", "/%zz", "/%4", "/a\r", "/\u{E9}", "/a\"b", "/a<b"]) {
             assertInadmissible(requestOf("GET", target, [hostField()], null))
-        })
+        }
         Assertions.require(sent(requestOf("GET", "/%41;a=b@c:d/?q?=/", [hostField()], null)) ==
             headOf("GET /%41;a=b@c:d/?q?=/ HTTP/1.1", "Host: example.org\r\n", "0"))
     }),
     Test("malformed header names are rejected", () => {
-        ["", "Bad Name", "X:", "X\r", "Na\u{EF}ve", "(x)"].each((name) => {
+        for(name in ["", "Bad Name", "X:", "X\r", "Na\u{EF}ve", "(x)"]) {
             assertInadmissible(withHeaders([hostField(), [name, ascii("v")]]))
-        })
+        }
         null
     }),
     Test("malformed header values are rejected", () => {
@@ -448,9 +448,9 @@ tests: [
             value.add(98)
             value
         }
-        [0, 10, 13, 127, 1, 31].each((octet) => {
+        for(octet in [0, 10, 13, 127, 1, 31]) {
             assertInadmissible(withHeaders([hostField(), ["X", withOctet(octet)]]))
-        })
+        }
         null
     }),
     Test("outer SP and HTAB in header values are sent exactly as supplied", () => {
@@ -482,9 +482,9 @@ tests: [
             "Keep-Alive",
             "proxy-connection"
         ]
-        names.each((name) => {
+        for(name in names) {
             assertInadmissible(withHeaders([hostField(), [name, ascii("x")]]))
-        })
+        }
         null
     }),
     Test("Strings are never coerced to Bytes", () => {

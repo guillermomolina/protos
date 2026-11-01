@@ -391,13 +391,13 @@ tests: [
         })
         Assertions.require(nullClock.state.calls == 1)
 
-        [0, "1970-01-01T00:00:00Z", Instant, { nanoseconds: 0 }].each((result) => {
+        for(result in [0, "1970-01-01T00:00:00Z", Instant, { nanoseconds: 0 }]) {
             clock: answering(result)
             Assertions.signals(Error, () => {
                 Logger(Level.INFO, sink, clock.source).warn("m")
             })
             Assertions.require(clock.state.calls == 1)
-        })
+        }
         Assertions.require(sink.events.size() == 0)
     }),
     Test("a time-source failure is not contained as a sink failure", () => {
