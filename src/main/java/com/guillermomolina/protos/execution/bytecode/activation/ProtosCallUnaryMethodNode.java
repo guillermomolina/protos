@@ -112,14 +112,27 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             @Cached("cachedFacts.target()")
                     RootCallTarget cachedTarget,
             @Cached("createDirectCallNodeOrNull(cachedTarget)")
-                    DirectCallNode call) {
+                    DirectCallNode call,
+            @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
+                    ProtosBytecodeRootNode cachedCallee,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
 
         Object caller =
                 ProtosBytecodeRootNode.InvokeClosureOneTail.callerReference(frame);
 
+        /*
+         * I115 (GraalPy CallContext.prepareCall): the deferred caller as is,
+         * unless the callee root registered NEEDS_CALLER_PRELUDE, in which
+         * case the caller's Prelude travels in a ProtosCallerFrameReference.
+         */
         Object[] args =
                 ProtosFrameArguments.compactAdmittedTerminalClosureCallOneNoHome(
-                        callable, caller, argument);
+                        callable,
+                        cachedCallee == null
+                                ? caller
+                                : ProtosBytecodeRootNode.InvokeClosureOneTail.callerArgument(
+                                        root, cachedCallee, callable, caller),
+                        argument);
 
         Object outcome;
         try {
@@ -196,6 +209,14 @@ abstract class ProtosCallUnaryMethodNode extends Node {
         }
         return ProtosGuardedSendSelection.fastOrdinarySendTarget(
                 function, context);
+    }
+
+    /* Installation only: the target's root, whose caller needs are read. */
+    static ProtosBytecodeRootNode calleeRootOrNull(RootCallTarget target) {
+        return target != null
+                        && target.getRootNode() instanceof ProtosBytecodeRootNode callee
+                ? callee
+                : null;
     }
 
     static BytecodeNode bytecodeOf(Node node) {

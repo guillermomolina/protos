@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
@@ -66,8 +67,15 @@ import com.oracle.truffle.api.strings.TruffleString;
  *       another DSL operation tree.</li>
  * </ul>
  *
- * <p>Suspension: the direct and indirect tiers enter only roots proven
- * non-suspending. When the send is the root's terminal expression ({@code
+ * <p>Suspension: the direct and indirect tiers enter admitted H7 roots
+ * (CopyArguments, unobservable ReturnHome) without requiring the global
+ * non-suspension proof of their body (GraalPy callPFunction admits by
+ * target identity, not by such a proof; RECORDED I115 DIVERGENCE). As in
+ * GraalPy, an admitted entry returns the callee's result directly, with no
+ * suspension test after the call: an admitted H7 body completes its own
+ * generic sends non-terminally, and an exceptional continuation of such a
+ * body may diverge from the ordinary semantics (owner-accepted). For the
+ * generic route: when the send is the root's terminal expression ({@code
  * terminal}), a suspended generic outcome is returned as the existing
  * terminal transport, exactly as {@code InvokeMethodOneTail}. A non-terminal
  * site has no continuation in the compact root: a suspended generic outcome
@@ -115,14 +123,9 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                     RootCallTarget cachedTarget,
             @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
                     ProtosBytecodeRootNode cachedCallee,
-            @Cached("createDirectCallNodeOrNull(cachedTarget)") DirectCallNode call) {
-        Object[] arguments =
-                cachedCallee.experimentalUnaryNeedsCapturedOwner()
-                        ? ProtosFrameArguments.experimentalCapturedUnaryCall(
-                                cachedClosure, argument)
-                        : ProtosFrameArguments.experimentalMinimalUnaryCall(
-                                argument);
-        return call.call(arguments);
+            @Cached("createDirectCallNodeOrNull(cachedTarget)") DirectCallNode call,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
+        return call.call(unaryArguments(root, frame, cachedCallee, cachedClosure, argument));
     }
 
     @Specialization(replaces = "doDirect")
@@ -141,13 +144,8 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             return sendOne(root, callerReference(frame), terminal,
                     receiver, selector.toJavaStringUncached(), argument);
         }
-        ProtosBytecodeRootNode callee = calleeRootOrNull(target);
         Object[] arguments =
-                callee.experimentalUnaryNeedsCapturedOwner()
-                        ? ProtosFrameArguments.experimentalCapturedUnaryCall(
-                                callable, argument)
-                        : ProtosFrameArguments.experimentalMinimalUnaryCall(
-                                argument);
+                unaryArguments(root, frame, calleeRootOrNull(target), callable, argument);
         try {
             return call.call(target, arguments);
         } catch (ProtosBytecodeControlTransferException bridged) {
@@ -165,10 +163,8 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
         ProtosClosureValue closure = (ProtosClosureValue) selected.value();
         RootCallTarget target = admittedTargetOrNull(closure, ProtosLanguageContext.current(root));
         if (target != null) {
-            ProtosBytecodeRootNode callee = calleeRootOrNull(target);
-            Object[] args = callee.experimentalUnaryNeedsCapturedOwner()
-                    ? ProtosFrameArguments.experimentalCapturedUnaryCall(closure, argument)
-                    : ProtosFrameArguments.experimentalMinimalUnaryCall(argument);
+            Object[] args =
+                    unaryArguments(root, frame, calleeRootOrNull(target), closure, argument);
             try {
                 return IndirectCallNode.getUncached().call(target, args);
             } catch (ProtosBytecodeControlTransferException bridged) {
@@ -206,6 +202,66 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                 receiver, selector.toJavaStringUncached(), argument);
     }
 
+    /**
+     * I115-H11 unary ABI of an admitted callee, with I115 on-demand Prelude
+     * transport (GraalPy CallContext.prepareCall). Exactly two callee root
+     * facts decide it, both constant under their compilation-final state:
+     *
+     * <pre>
+     * owner needed | Prelude requested | entry
+     * no           | no                | {supplied0}
+     * yes          | no                | {closure, supplied0}
+     * no           | yes               | {MARKER, supplied0, prelude}
+     * yes          | yes               | {closure, supplied0, prelude}
+     * </pre>
+     *
+     * Without a registered NEEDS_CALLER_PRELUDE nothing about Preludes,
+     * callers or activations is read. Once requested, the transported
+     * Prelude is the selected Closure's own, else this caller's effective
+     * one (registering this caller's need and recovering it cold once when
+     * it was not given it either, so the need propagates up the chain).
+     *
+     * <p>RECORDED I115 DIVERGENCE: a Closure's own Prelude is not retained
+     * by the minimal entry; the first recovery from {@code {supplied0}} may
+     * use the caller's effective Prelude.
+     */
+    static Object[] unaryArguments(
+            ProtosBytecodeRootNode root,
+            VirtualFrame frame,
+            ProtosBytecodeRootNode callee,
+            ProtosClosureValue closure,
+            Object argument) {
+        boolean captured = callee.experimentalUnaryNeedsCapturedOwner();
+        if (!callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE)) {
+            return captured
+                    ? ProtosFrameArguments.experimentalCapturedUnaryCall(closure, argument)
+                    : ProtosFrameArguments.experimentalMinimalUnaryCall(argument);
+        }
+        return preludeArguments(root, frame, captured, closure, argument);
+    }
+
+    /* The extended entries, only once the callee requested the Prelude. */
+    private static Object[] preludeArguments(
+            ProtosBytecodeRootNode root,
+            VirtualFrame frame,
+            boolean captured,
+            ProtosClosureValue closure,
+            Object argument) {
+        ProtosPrelude own = closure.preludeOrNullForRuntime();
+        ProtosPrelude prelude = own != null
+                ? own
+                : ProtosBytecodeRootNode.experimentalEffectivePrelude(root, frame.getArguments());
+        if (prelude == null) {
+            // An extended entry always carries a Prelude.
+            return captured
+                    ? ProtosFrameArguments.experimentalCapturedUnaryCall(closure, argument)
+                    : ProtosFrameArguments.experimentalMinimalUnaryCall(argument);
+        }
+        return captured
+                ? ProtosFrameArguments.experimentalCapturedUnaryCall(closure, argument, prelude)
+                : ProtosFrameArguments.experimentalMinimalUnaryCall(argument, prelude);
+    }
+
     static boolean isClosure(Object callable) {
         return callable instanceof ProtosClosureValue;
     }
@@ -217,10 +273,12 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
 
     /**
      * Installation (direct tier) or megamorphic (indirect tier): the
-     * Context-owned Bytecode target of a source Closure whose root proves
-     * non-suspension, whose invocation ReturnHome is unobservable and which
-     * the experimental lowering entered with {@code CopyArguments} (a compact
-     * H7 root using only its argument local), or null. The experimental B5
+     * Context-owned Bytecode target of a source Closure whose invocation
+     * ReturnHome is unobservable and which the experimental lowering entered
+     * with {@code CopyArguments} (a compact H7 root using only its argument
+     * local), or null. I115: the root's global non-suspension proof is not
+     * required (its facts still describe the general semantics); an
+     * arithmetic H7 root whose NumberAdd keeps a generic send is admitted. The experimental B5
      * header carries no method home and the primitive-result unobservable
      * marker, so every other callee must use the ordinary send path.
      */
@@ -236,7 +294,6 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                 ProtosGuardedSendSelection.fastOrdinarySendTarget(closure, enteredContext);
         return target != null
                         && target.getRootNode() instanceof ProtosBytecodeRootNode root
-                        && root.provablyNonSuspendingBody()
                         && root.isExperimentalPrimitiveArgumentRoot()
                 ? target
                 : null;

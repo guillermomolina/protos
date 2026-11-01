@@ -53,27 +53,22 @@ abstract class ProtosExperimentalLessNode extends Node {
     abstract boolean execute(VirtualFrame frame, Object left, Object right);
 
     @Specialization
-    static boolean doII(int left, int right) {
-        return left < right;
-    }
-
-    @Specialization
     static boolean doLL(long left, long right) {
         return left < right;
     }
 
     @Specialization
-    static boolean doIL(int left, long right) {
-        return left < right;
-    }
-
-    @Specialization
-    static boolean doLI(long left, int right) {
-        return left < right;
-    }
-
-    @Specialization
     static boolean doDD(double left, double right) {
+        return left < right;
+    }
+
+    @Specialization
+    static boolean doDL(double left, long right) {
+        return left < right;
+    }
+
+    @Specialization
+    static boolean doLD(long left, double right) {
         return left < right;
     }
 

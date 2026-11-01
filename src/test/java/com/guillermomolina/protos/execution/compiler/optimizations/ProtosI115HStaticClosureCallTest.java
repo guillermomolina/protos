@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -26,26 +27,32 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
+import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeTier;
 import com.oracle.truffle.api.source.Source;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.Test;
 
 /**
  * I115-H1: the local unary Closure calls once admitted by the retired I115-H
  * static invocation now take the ordinary lowering: the Closure is created
- * and bound ({@code MaterializeCurrentClosure}) and called through {@code
- * InvokeClosureOneTail}, whose dynamic {@code Object.call} selection, caches
- * and Assumptions decide the target, with B5+ frame arguments.
+ * and bound ({@code MaterializeCurrentClosure}) and, since I115-H11, called
+ * through the GraalPy-style {@code CallUnaryMethod}, whose dynamic {@code
+ * Object.call} selection, caches and Assumptions decide the target, with B5+
+ * frame arguments.
  *
  * <p>{@link #experimentalLightweightClosureDropsCreatorMetadata} still pins
  * the separate lightweight Closure representation divergence.
@@ -53,7 +60,7 @@ import org.junit.jupiter.api.Test;
 final class ProtosI115HStaticClosureCallTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final int PAST_CACHE_LIMITS = 12;
-    private static final String TERMINAL_CALL = "c.InvokeClosureOneTail";
+    private static final String TERMINAL_CALL = "c.CallUnaryMethod";
     private static final String MATERIALIZE = "c.MaterializeCurrentClosure";
 
     private static final String RUN = """
@@ -127,14 +134,14 @@ final class ProtosI115HStaticClosureCallTest {
 
     /**
      * The former static case creates and binds its Closure through the
-     * ordinary lowering and calls it through {@code InvokeClosureOneTail}.
+     * ordinary lowering and calls it through one {@code CallUnaryMethod}.
      */
     @Test
     void unaryCallUsesOrdinaryCreationAndTerminalCall() throws Exception {
         withCore(module -> {
             evaluate(RUN, "i115h-shape-run-define.protos", module);
             ProtosBytecodeRootNode run = functionRoot("run", module);
-            List<String> names = names(run);
+            List<String> names = unquickened(names(run));
             assertTrue(names.contains(MATERIALIZE), names::toString);
             assertEquals(1, names.stream().filter(TERMINAL_CALL::equals).count(),
                     names::toString);
@@ -402,7 +409,265 @@ final class ProtosI115HStaticClosureCallTest {
         });
     }
 
+    // ---- I115 recursive signed-64 lane ---------------------------------------
+
+    private static final String FIBONACCI = """
+            fibonacci: (n) => {
+                result: n
+
+                (n >= 2).ifTrue() {
+                    result = fibonacci(n - 1) + fibonacci(n - 2)
+                }
+
+                result
+            }
+
+            run: () => { fibonacci(20) }
+
+            grow: (n) => {
+                result: 4611686018427387904
+
+                (n > 0).ifTrue() {
+                    result = grow(n - 1) + grow(n - 1)
+                }
+
+                result
+            }
+
+            runGrow: () => { grow(3) }
+            """;
+
+    /**
+     * EXPERIMENTAL: recursive fibonacci in the compact lane. Both recursive
+     * sends reuse the static unary call sites of the one fibonacci root, no
+     * Closure or activation is materialized per call, and the primitive
+     * signed-64 result is returned as a raw Long between the recursive
+     * calls, across repeated (specializing) executions.
+     */
+    @Test
+    void recursiveFibonacciKeepsSigned64Results() throws Exception {
+        try (ProtosStandaloneHostedSession session = openHosted("i115-fibonacci", FIBONACCI)) {
+            ProtosBytecodeRootNode fibonacci = hostedRoot(session, "fibonacci");
+            List<String> names = names(fibonacci);
+            assertEquals(2, names.stream()
+                            .filter(name -> name.contains("InvokeStaticClosureOneTail")).count(),
+                    names::toString);
+            assertTrue(names.stream().anyMatch(name -> name.contains("ExperimentalLongArgument0")),
+                    names::toString);
+            for (String forbidden : List.of(MATERIALIZE, "BindUnaryFrameParameter",
+                    "PrepareClosureCall", "InstallFrameLexicalAuthority", "TryPrimitiveNumeric")) {
+                assertTrue(names.stream().noneMatch(name -> name.contains(forbidden)),
+                        forbidden + ": " + names);
+            }
+            int roots = fibonacci.getRootNodes().getNodes().size();
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                Value result = session.prepareTopLevel("run").executable().execute();
+                assertTrue(result.fitsInLong(), result::toString);
+                assertEquals(6765L, result.asLong());
+            }
+            assertEquals(roots, fibonacci.getRootNodes().getNodes().size(),
+                    "repeated recursion adds no physical root");
+            // Quickening (for example store.local$Long) is allowed; re-lowering is not.
+            assertEquals(unquickened(names), unquickened(names(fibonacci)),
+                    "the call sites are reused, not re-lowered");
+
+            /*
+             * The recursive callee boundary: the fibonacci root entered with
+             * the static unary ABI its own recursion uses returns the raw
+             * signed-64 Long. (run is not an H7 raw-return root; its epilogue
+             * materializes the guest Integer for the host, as before.)
+             */
+            RootCallTarget target = session.prepareTopLevel("fibonacci")
+                    .hostExecutableForTesting().target;
+            assertSame(fibonacci, target.getRootNode());
+            Object raw = session.processContextForTesting().callForRuntime(() ->
+                    target.call(ProtosFrameArguments.experimentalStaticUnaryCall(20L, null)));
+            assertEquals(6765L, assertInstanceOf(Long.class, raw,
+                    "the recursive result stays a raw signed-64 Long").longValue());
+        }
+    }
+
+    /**
+     * EXPERIMENTAL: a recursive sum that overflows signed-64 takes the
+     * exact Integer fallback and later sums a large operand there, never
+     * truncated to a 32-bit or 64-bit value.
+     */
+    @Test
+    void recursiveOverflowKeepsExactLargeInteger() throws Exception {
+        try (ProtosStandaloneHostedSession session = openHosted("i115-grow", FIBONACCI)) {
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                Value result = session.prepareTopLevel("runGrow").executable().execute();
+                assertTrue(result.isNumber(), result::toString);
+                assertFalse(result.fitsInLong(), result::toString);
+                // 2^62 * 2^3 = 2^65.
+                assertTrue(result.toString().contains("36893488147419103232"),
+                        result::toString);
+            }
+        }
+    }
+
+    // ---- I115 on-demand Prelude transport (GraalPy caller flags) ----------
+
+    /**
+     * A recursion that never overflows never requests the caller Prelude:
+     * its static calls keep slot 1 null (nothing is prepared) and its caller
+     * needs Assumption is never invalidated.
+     */
+    @Test
+    void noOverflowNeverRequestsCallerPrelude() throws Exception {
+        try (ProtosStandaloneHostedSession session = openHosted("i115-no-need", FIBONACCI)) {
+            ProtosBytecodeRootNode fibonacci = hostedRoot(session, "fibonacci");
+            Assumption stability = fibonacci.callerNeedsStability();
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertEquals(6765L,
+                        session.prepareTopLevel("run").executable().execute().asLong());
+            }
+            assertFalse(fibonacci.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertTrue(stability.isValid(), "no need was registered");
+            assertSame(stability, fibonacci.callerNeedsStability());
+            List<String> names = unquickened(names(fibonacci));
+            assertEquals(2, names.stream()
+                            .filter("c.InvokeStaticClosureOneTail"::equals).count(),
+                    names::toString);
+            assertTrue(names.stream().noneMatch(name -> name.contains(MATERIALIZE)),
+                    names::toString);
+        }
+    }
+
+    /**
+     * The first signed-64 overflow registers NEEDS_CALLER_PRELUDE once
+     * (invalidating the previous Assumption), still completes exactly, and
+     * later executions receive the Prelude explicitly with a stable
+     * Assumption. A result that fits keeps its raw long carrier.
+     */
+    @Test
+    void firstOverflowRegistersCallerPreludeOnce() throws Exception {
+        try (ProtosStandaloneHostedSession session = openHosted("i115-need", FIBONACCI)) {
+            ProtosBytecodeRootNode grow = hostedRoot(session, "grow");
+            assertFalse(grow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            Assumption before = grow.callerNeedsStability();
+
+            // The first overflow already mints with grow's own Prelude.
+            Object first = rawRunGrow(session);
+            assertSame(prelude(session, "grow").bigIntegerPrototype(),
+                    assertInstanceOf(ProtosLargeIntegerValue.class, first)
+                            .parent().orElseThrow(),
+                    "the first overflow uses the invocation's Prelude");
+            List<String> namesAfterFirst = unquickened(names(grow));
+
+            assertTrue(grow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertFalse(before.isValid(), "the first request invalidates the Assumption");
+            Assumption after = grow.callerNeedsStability();
+            assertTrue(after.isValid());
+
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertGrow(session);
+            }
+            assertTrue(grow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertSame(after, grow.callerNeedsStability(), "no further need was registered");
+            assertTrue(after.isValid());
+            assertSame(grow, hostedRoot(session, "grow"), "the same root and call sites");
+            assertEquals(namesAfterFirst, unquickened(names(grow)));
+            assertEquals(2, namesAfterFirst.stream()
+                            .filter("c.InvokeStaticClosureOneTail"::equals).count(),
+                    namesAfterFirst::toString);
+
+            // A result that fits still returns the raw long (grow(0) = 2^62).
+            RootCallTarget target = session.prepareTopLevel("grow")
+                    .hostExecutableForTesting().target;
+            Object raw = session.processContextForTesting().callForRuntime(() ->
+                    target.call(ProtosFrameArguments.experimentalStaticUnaryCall(0L, null)));
+            assertEquals(4611686018427387904L, assertInstanceOf(Long.class, raw).longValue());
+        }
+    }
+
+    /**
+     * Two independent Contexts: each overflow mints its large Integer with
+     * its own Prelude, and each target keeps its own caller needs.
+     */
+    @Test
+    void overflowPreludeIsIsolatedPerContext() throws Exception {
+        try (ProtosStandaloneHostedSession first = openHosted("i115-context-a", FIBONACCI);
+                ProtosStandaloneHostedSession second = openHosted("i115-context-b", FIBONACCI)) {
+            ProtosBytecodeRootNode firstGrow = hostedRoot(first, "grow");
+            ProtosBytecodeRootNode secondGrow = hostedRoot(second, "grow");
+            assertNotSame(firstGrow, secondGrow, "each Context owns its target");
+
+            Object firstLarge = rawRunGrow(first);
+            assertTrue(firstGrow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertFalse(secondGrow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE),
+                    "a need registered in one Context does not reach the other");
+            Object secondLarge = rawRunGrow(second);
+            assertTrue(secondGrow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+
+            ProtosPrelude firstPrelude = prelude(first, "grow");
+            ProtosPrelude secondPrelude = prelude(second, "grow");
+            assertNotSame(firstPrelude, secondPrelude);
+            assertSame(firstPrelude.bigIntegerPrototype(),
+                    assertInstanceOf(ProtosLargeIntegerValue.class, firstLarge)
+                            .parent().orElseThrow());
+            assertSame(secondPrelude.bigIntegerPrototype(),
+                    assertInstanceOf(ProtosLargeIntegerValue.class, secondLarge)
+                            .parent().orElseThrow());
+            assertGrow(first);
+            assertGrow(second);
+        }
+    }
+
+    private static void assertGrow(ProtosStandaloneHostedSession session) throws Exception {
+        Value result = session.prepareTopLevel("runGrow").executable().execute();
+        assertFalse(result.fitsInLong(), result::toString);
+        assertTrue(result.toString().contains("36893488147419103232"), result::toString);
+    }
+
+    /* runGrow's raw result inside its own Context. */
+    private static Object rawRunGrow(ProtosStandaloneHostedSession session) throws Exception {
+        ProtosHostExecutableClosure host =
+                session.prepareTopLevel("runGrow").hostExecutableForTesting();
+        return session.processContextForTesting().callForRuntime(() ->
+                host.target.call(ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
+                        host.closure, host.caller)));
+    }
+
+    private static ProtosPrelude prelude(ProtosStandaloneHostedSession session, String name)
+            throws Exception {
+        ProtosClosureValue closure = session.prepareTopLevel(name).closureForTesting();
+        ProtosPrelude prelude = session.processContextForTesting().callForRuntime(
+                closure::preludeOrNullForRuntime);
+        assertNotNull(prelude, name + " has its own Prelude");
+        return prelude;
+    }
+
     // ---- Helpers -----------------------------------------------------------
+
+    private static ProtosStandaloneHostedSession openHosted(String name, String source)
+            throws Exception {
+        Path file = Path.of("target", "i115-h-static", name + ".protos");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, source, StandardCharsets.UTF_8);
+        ProtosStandaloneHostedSession session = ProtosStandaloneHostedSession.open(CORE, file);
+        if (session.initialOutcome().state() != ProtosExecutionOutcome.State.COMPLETED) {
+            session.close();
+            throw new AssertionError("Module initialization failed: " + name);
+        }
+        return session;
+    }
+
+    /* Instruction names without their quickening suffix. */
+    private static List<String> unquickened(List<String> names) {
+        return names.stream()
+                .map(name -> {
+                    int quickened = name.indexOf('$');
+                    return quickened < 0 ? name : name.substring(0, quickened);
+                })
+                .toList();
+    }
+
+    private static ProtosBytecodeRootNode hostedRoot(
+            ProtosStandaloneHostedSession session, String name) throws Exception {
+        return assertInstanceOf(ProtosBytecodeRootNode.class,
+                session.prepareTopLevel(name).hostExecutableForTesting().target.getRootNode());
+    }
 
     private static void assertResult(String definition, String call, long expected)
             throws Exception {
@@ -414,10 +679,20 @@ final class ProtosI115HStaticClosureCallTest {
         });
     }
 
+    /*
+     * The local Closure is materialized and called through CallUnaryMethod;
+     * neither retired Call1 nor the recursive-lane static call is emitted.
+     */
     private static void assertOrdinaryCall(ProtosBytecodeRootNode root) {
-        List<String> names = names(root);
+        List<String> names = unquickened(names(root));
         assertTrue(names.contains(MATERIALIZE), names::toString);
         assertTrue(names.contains(TERMINAL_CALL), names::toString);
+        for (String retired : List.of(
+                "c.InvokeClosureOneTail",
+                "c.InvokeExperimentalClosureOneTail",
+                "c.InvokeStaticClosureOneTail")) {
+            assertTrue(!names.contains(retired), () -> retired + ": " + names);
+        }
     }
 
     private static List<String> names(ProtosBytecodeRootNode root) {

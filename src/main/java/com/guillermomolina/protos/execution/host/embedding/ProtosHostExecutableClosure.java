@@ -343,18 +343,22 @@ final class ProtosHostExecutableClosure implements TruffleObject {
 
         /*
          * I115-H7-R5 EXPERIMENTAL: the same compilation-final root fact
-         * controls the epilogue and this Polyglot boundary. Otherwise,
-         * hostResult would recreate the guest allocation removed from
-         * EpilogForReturn. Other source roots retain their old conversion.
+         * controls the epilogue and this Polyglot boundary. The signed-64
+         * long carrier of an admitted H7 root crosses as is, so hostResult
+         * does not recreate the guest allocation removed from
+         * EpilogForReturn. A Java Integer is never an I115 carrier: it keeps
+         * the ordinary normalization to a guest Integer (there is no 32-bit
+         * guest integer). Other source roots retain their old conversion.
          */
         private static Object hostResult(
                 ProtosHostExecutableClosure receiver, Object result) {
+            if (result instanceof Long carrier
+                    && receiver.target.getRootNode()
+                            instanceof ProtosBytecodeRootNode root
+                    && root.isExperimentalH7RawIntegerReturn()) {
+                return carrier;
+            }
             if (result instanceof Integer small) {
-                if (receiver.target.getRootNode()
-                        instanceof ProtosBytecodeRootNode root
-                        && root.isExperimentalH7RawIntegerReturn()) {
-                    return small;
-                }
                 return ProtosNumericValueSupport.guestValue(small);
             }
             return result;
