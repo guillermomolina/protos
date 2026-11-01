@@ -22,25 +22,25 @@ import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain.HostEntryExtent;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.oracle.truffle.api.nodes.IndirectCallNode;
+import com.guillermomolina.protos.runtime.ProtosTask;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Host-side synchronous Closure invocation (standard protocols implemented
+ * in Java, embedding and tooling). I115: every invocation enters the shared
+ * dispatcher ({@link ProtosFunctionCallDispatchers}); this class owns no
+ * CallTarget selection, activation preparation or ReturnHome: the callee
+ * root captures its own non-local returns and closes its own home.
+ *
+ * <p>A synchronous invocation cannot drive a suspension: a pending outcome is
+ * abandoned (closing the homes its frames own) and rejected.
+ */
 public final class ProtosClosureInvoker {
     private ProtosClosureInvoker() {}
-
-    static void requireNativeTaskFallbackForRuntime(ProtosClosureValue closure) {
-        Objects.requireNonNull(closure, "closure");
-        if (closure.nativeBody().isEmpty()) {
-            throw new IllegalStateException(
-                    "B6B-C retired Task-owned source Closure AST/replay fallback; "
-                            + "source-backed Task execution must enter through C-prime");
-        }
-    }
 
     public static Object invoke(
             ProtosClosureValue closure,
@@ -48,40 +48,18 @@ public final class ProtosClosureInvoker {
         return invoke(closure, supplied, null);
     }
 
+    /** A Task-owned entry of {@code closure}, driven by the Task C-prime driver. */
     public static void executeInTaskForRuntime(
             ProtosClosureValue closure,
             List<?> supplied,
             ProtosActivation creator,
-            com.guillermomolina.protos.runtime.ProtosTask task) {
+            ProtosTask task) {
         Objects.requireNonNull(closure, "closure");
         Objects.requireNonNull(supplied, "supplied");
         Objects.requireNonNull(creator, "creator");
         Objects.requireNonNull(task, "task");
-
-        ProtosPreparedCalls.PreparedClosureCall prepared =
-                ProtosClosureCallPreparation.prepareTaskOwnedDirectClosureIfBytecode(
-                        closure,
-                        supplied,
-                        creator,
-                        task);
-        if (prepared != null) {
-            ProtosBytecodeTaskExecution.executePreparedClosure(task, prepared);
-            return;
-        }
-
-        /*
-         * B6B-E2: native Task execution is prepared with the same native/control
-         * provenance used by composed Bytecode calls, then enters the shared
-         * Context-cached C-prime root. No evaluator replay state is allocated.
-         */
-        requireNativeTaskFallbackForRuntime(closure);
-        ProtosPreparedCalls.PreparedClosureCall nativePrepared =
-                ProtosClosureCallPreparation.prepareTaskOwnedDirectNativeForCPrime(
-                        closure,
-                        supplied,
-                        creator,
-                        task);
-        ProtosTaskCPrimeEntryExecution.execute(task, nativePrepared);
+        ProtosBytecodeTaskExecution.executeRequest(
+                task, ProtosCallRequest.taskEntry(closure, task, supplied, creator));
     }
 
     public static Object invoke(
@@ -90,31 +68,16 @@ public final class ProtosClosureInvoker {
             ProtosActivation caller) {
         Objects.requireNonNull(closure, "closure");
         Objects.requireNonNull(supplied, "supplied");
-        com.guillermomolina.protos.runtime.ProtosPrelude fallbackPrelude =
-                caller == null ? null : caller.prelude().orElse(null);
-        java.util.function.Supplier<ProtosActivation> activationFactory =
-                () -> {
-                    ProtosActivation created =
-                            caller == null
-                                    ? ProtosActivation.forClosureInvocation(
-                                            closure, supplied, fallbackPrelude)
-                                    : ProtosActivation.forClosureInvocation(
-                                            closure,
-                                            supplied,
-                                            fallbackPrelude,
-                                            caller.actorModuleState(),
-                                            caller.currentModuleKey().orElse(null),
-                                            caller.executionDomain());
-                    if (caller != null && caller.task().isEmpty()) {
-                        created.inheritDynamicControlState(caller);
-                    }
-                    return created;
-                };
-        if (caller != null && caller.task().isPresent()) {
-            throw new IllegalStateException(
-                    "synchronous Closure invocation cannot execute inside a Task; use C-prime");
+        if (caller == null) {
+            ProtosActivation activation =
+                    ProtosActivation.forClosureInvocation(closure, supplied, null);
+            return synchronous(activation, () -> callPublished(closure, activation));
         }
-        return invokePrepared(closure, supplied, activationFactory.get());
+        requireOutsideTask(caller, "synchronous Closure invocation");
+        return synchronous(
+                caller,
+                () -> ProtosFunctionCallDispatchers.callFunctionUncached(
+                        closure, supplied.toArray(), caller));
     }
 
     public static Object invokeImmediateMethod(
@@ -128,177 +91,86 @@ public final class ProtosClosureInvoker {
         Objects.requireNonNull(methodHome, "methodHome");
         Objects.requireNonNull(supplied, "supplied");
         Objects.requireNonNull(caller, "caller");
-
-        com.guillermomolina.protos.runtime.ProtosPrelude fallbackPrelude =
-                caller.prelude().orElse(null);
-        java.util.function.Supplier<ProtosActivation> activationFactory =
-                () -> {
-                    ProtosActivation created =
-                            ProtosActivation.forImmediateMethodInvocation(
-                                    closure,
-                                    supplied,
-                                    receiver,
-                                    methodHome,
-                                    fallbackPrelude,
-                                    caller.actorModuleState(),
-                                    caller.currentModuleKey().orElse(null),
-                                    caller.executionDomain());
-                    if (caller.task().isEmpty()) {
-                        created.inheritDynamicControlState(caller);
-                    }
-                    return created;
-                };
-
-        if (caller.task().isPresent()) {
-            throw new IllegalStateException(
-                    "synchronous method invocation cannot execute inside a Task; use C-prime");
-        }
-        return invokePrepared(closure, supplied, activationFactory.get());
+        requireOutsideTask(caller, "synchronous method invocation");
+        return synchronous(
+                caller,
+                () -> ProtosFunctionCallDispatchers.callMethodUncached(
+                        closure, receiver, methodHome, supplied.toArray(), caller));
     }
 
-    private static Object invokePrepared(ProtosClosureValue closure, List<?> supplied, ProtosActivation activation) {
-        /*
-         * PLAT054-3E2: a C-prime continuation cannot cross this synchronous Java boundary, so the
-         * suspendible host-entry extent ends here. Below it the ordinary non-Task rules apply, as
-         * a Task forbids this path outright ("use C-prime"): Bytecode reaches structured natives
-         * only through structured dispatch, and the outermost generic entry uses the C-prime entry
-         * root. A foreign callback marks its own synchronous extent before arriving here.
-         */
-        ProtosActorExecutionDomain domain = activation.executionDomain();
-        // I158: the suspendible Actor bootstrap extent ends at this boundary exactly the same way.
-        HostEntryExtent extent = domain == null ? HostEntryExtent.NONE : domain.hostEntryExtentForRuntime();
-        if (extent != HostEntryExtent.SUSPENDIBLE && extent != HostEntryExtent.BOOTSTRAP) {
-            return invokePreparedInExtent(closure, supplied, activation);
+    /*
+     * A published entry through the shared dispatcher. Outside an entered
+     * Process Context, a bounded host is created solely for this synchronous
+     * invocation (closed on every exit, including a non-local return); a
+     * source Closure's plan then requires destination-Context projection.
+     * The same activation, hence the same ReturnHome, is entered either way.
+     */
+    private static Object callPublished(ProtosClosureValue closure, ProtosActivation activation) {
+        if (ProtosLanguageContext.currentIfEnteredForRuntime() != null) {
+            return ProtosFunctionCallDispatchers.callPublishedUncached(closure, activation);
+        }
+        if (closure.nativeBody().isEmpty()) {
+            closure.requireContextLocalExecutionProjectionForRuntime();
+        }
+        try (ProtosPolyglotExecutionContext temporaryHost =
+                ProtosPolyglotExecutionContext.open(
+                        java.io.InputStream.nullInputStream(),
+                        java.io.OutputStream.nullOutputStream(),
+                        java.io.OutputStream.nullOutputStream())) {
+            return temporaryHost.callEntered(
+                    () -> ProtosFunctionCallDispatchers.callPublishedUncached(closure, activation));
+        }
+    }
+
+    /** Any callable value, invoked through the shared dispatcher by {@code caller}. */
+    static Object invokeCallable(Object callable, List<?> supplied, ProtosActivation caller) {
+        Objects.requireNonNull(callable, "callable");
+        Objects.requireNonNull(caller, "caller");
+        requireOutsideTask(caller, "synchronous invocation");
+        return synchronous(
+                caller,
+                () -> ProtosFunctionCallDispatchers.callFunctionUncached(
+                        callable, supplied.toArray(), caller));
+    }
+
+    private static void requireOutsideTask(ProtosActivation caller, String what) {
+        if (caller.task().isPresent()) {
+            throw new IllegalStateException(what + " cannot execute inside a Task; use C-prime");
+        }
+    }
+
+    /*
+     * A synchronous host invocation never suspends: a suspendible host-entry
+     * extent is narrowed to NONE for its duration.
+     */
+    private static Object synchronous(
+            ProtosActivation site, java.util.function.Supplier<Object> invocation) {
+        ProtosActorExecutionDomain domain = site.executionDomain();
+        if (domain == null || domain.hostEntryExtentForRuntime() != HostEntryExtent.SUSPENDIBLE) {
+            return complete(site, invocation);
         }
         domain.swapHostEntryExtentForRuntime(HostEntryExtent.NONE);
         try {
-            return invokePreparedInExtent(closure, supplied, activation);
+            return complete(site, invocation);
         } finally {
             domain.swapHostEntryExtentForRuntime(extent);
         }
     }
 
-    private static Object invokePreparedInExtent(
-            ProtosClosureValue closure, List<?> supplied, ProtosActivation activation) {
-        ProtosReturnHome returnHome =
-                activation.returnHome()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "Closure invocation requires a return home"));
-        // PERF025: an owned non-materialized home has no lifecycle to close.
-        boolean ownsMaterializedReturnHome =
-                activation.ownsReturnHome() && returnHome.isMaterialized();
-
+    private static Object complete(
+            ProtosActivation site, java.util.function.Supplier<Object> invocation) {
+        Object outcome;
         try {
-            if (closure.nativeBody().isPresent()) {
-                return closure.nativeBody().orElseThrow().execute(activation, supplied);
-            }
-            if (activation.task().isPresent()) {
-                throw new IllegalStateException(
-                        "B6B-C retired Task-owned source Closure AST/replay fallback; "
-                                + "source-backed Task execution must enter through C-prime");
-            }
-            ProtosClosureExecutionPlan template =
-                    closure.executionPlanForRuntimeInvocation();
-            /*
-             * This synchronous path is now non-Task only. Entered-Context projection remains
-             * selective for the retained AST equivalence/oracle surface. A direct host invocation
-             * outside an entered Context may still rebuild one fresh AST plan, but no Task may use
-             * that path or acquire evaluator replay state through it.
-             */
-            ProtosLanguageContext enteredContext =
-                    ProtosLanguageContext.currentIfEnteredForRuntime();
-            boolean hostedEnteredContext =
-                    enteredContext != null
-                            && ProtosPolyglotExecutionContext.hasEnteredContextForRuntime();
-
-            if (hostedEnteredContext) {
-                if (template.source().isEmpty()) {
-                    throw new UnsupportedOperationException(
-                            "source-less legacy Closure cannot execute through "
-                                    + "the Bytecode-only runtime");
-                }
-                return invokePreparedSourceBytecode(
-                        closure,
-                        supplied,
-                        activation);
-            }
-
-            if (template.source().isEmpty()) {
-                throw new UnsupportedOperationException(
-                        "unhosted source-less legacy Closure cannot execute after "
-                                + "AST backend retirement");
-            }
-
-            /*
-             * Outside an entered Process Context, create a bounded host solely
-             * for this synchronous source-backed invocation. Any Bytecode plan
-             * observed here necessarily belongs to no currently entered host,
-             * so require destination-Context projection before entry.
-             */
-            closure.requireContextLocalExecutionProjectionForRuntime();
-
-            try (ProtosPolyglotExecutionContext temporaryHost =
-                    ProtosPolyglotExecutionContext.open(
-                            java.io.InputStream.nullInputStream(),
-                            java.io.OutputStream.nullOutputStream(),
-                            java.io.OutputStream.nullOutputStream())) {
-                return temporaryHost.callEntered(
-                        () ->
-                                invokePreparedSourceBytecode(
-                                        closure,
-                                        supplied,
-                                        activation));
-            }
+            outcome = invocation.get();
         } catch (ProtosSignalException transfer) {
-            ProtosCoreErrors.selectHandlerIfNeeded(activation, transfer);
+            ProtosCoreErrors.selectHandlerIfNeeded(site, transfer);
             throw transfer;
-        } catch (ProtosNonLocalReturnException transfer) {
-            if (ownsMaterializedReturnHome
-                    && transfer.target() == returnHome) {
-                return transfer.value();
-            }
-            throw transfer;
-        } catch (ProtosTaskCancellationException transfer) {
-            throw transfer;
-        } finally {
-            if (ownsMaterializedReturnHome
-                    && returnHome.isActive()) {
-                returnHome.complete();
-            }
         }
-    }
-
-    private static Object invokePreparedSourceBytecode(
-            ProtosClosureValue closure,
-            List<?> supplied,
-            ProtosActivation activation) {
-        // A non-native synchronous source preparation is always an ordinary source call.
-        ProtosPreparedCalls.OrdinarySourceCall prepared =
-                (ProtosPreparedCalls.OrdinarySourceCall)
-                        ProtosClosureCallPreparation.prepareSynchronousSourceClosureForRuntime(
-                                closure,
-                                supplied,
-                                activation);
-
-        Object entered =
-                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        prepared,
-                        IndirectCallNode.create());
-
-        if (entered instanceof ProtosTailCallContinuation) {
-            /*
-             * I112: a synchronous extent has no authority to resume a suspended terminal
-             * invocation, and its backend-private transport is never a guest value. Its deferred
-             * owners are closed, innermost first, before this call's own ReturnHome (completed by
-             * invokePreparedInExtent).
-             */
-            ProtosTailCallContinuation.abandon(entered);
-            prepared.complete();
+        if (ProtosTailCallContinuation.isSuspended(outcome)) {
+            ProtosTailCallContinuation.abandon(outcome);
             throw new IllegalStateException(
-                    "synchronous Closure invocation cannot drive a suspended terminal continuation");
+                    "synchronous Closure invocation cannot drive a suspended continuation");
         }
-        return prepared.finish(entered);
+        return ProtosNumericValueSupport.guestValue(outcome);
     }
 }

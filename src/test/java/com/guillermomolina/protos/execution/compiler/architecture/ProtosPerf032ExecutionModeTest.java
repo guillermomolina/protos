@@ -251,7 +251,7 @@ final class ProtosPerf032ExecutionModeTest {
         try (ProtosStandaloneHostedSession session = open("prepared")) {
             ProtosHostExecutableClosure adapter =
                     session.prepareTopLevel("run").hostExecutableForTesting();
-            ProtosPreparedCalls.OrdinarySourceCall prepared =
+            ProtosDispatchTestSupport.DirectEntry prepared =
                     session.processContextForTesting()
                             .callForRuntime(() -> prepareNoArguments(adapter));
             assertB5ZeroArgumentHeader(adapter, prepared.targetArguments());
@@ -262,11 +262,7 @@ final class ProtosPerf032ExecutionModeTest {
                         session.processContextForTesting()
                                 .callForRuntime(
                                         () ->
-                                                prepared.finish(
-                                                        ProtosBytecodeRootNode.EnterClosureCall
-                                                                .ordinaryIndirect(
-                                                                        prepared,
-                                                                        IndirectCallNode.create())));
+                                                ProtosDispatchTestSupport.enter(prepared));
                 assertEquals(1, InteropLibrary.getUncached().asInt(result));
             }
             observation.assertObserved("perf032-marker");
@@ -630,13 +626,10 @@ final class ProtosPerf032ExecutionModeTest {
         assertEquals(0, ProtosFrameArguments.compactSuppliedArgumentCount(arguments));
     }
 
-    private static ProtosPreparedCalls.OrdinarySourceCall prepareNoArguments(
+    private static ProtosDispatchTestSupport.DirectEntry prepareNoArguments(
             ProtosHostExecutableClosure adapter) {
-        try {
-            return adapter.prepare(new Object[0], null);
-        } catch (ArityException unexpected) {
-            throw new AssertionError(unexpected);
-        }
+        // I115: the B5 function header the host entry's dispatcher writes.
+        return ProtosDispatchTestSupport.direct(adapter.closure, adapter.caller);
     }
 
     private static void assertNoTask(ProtosStandaloneHostedSession session) {

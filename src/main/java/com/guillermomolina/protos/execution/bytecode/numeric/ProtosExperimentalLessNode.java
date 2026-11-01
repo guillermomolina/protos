@@ -84,8 +84,8 @@ abstract class ProtosExperimentalLessNode extends Node {
         if (bothIntegers(receiver, argument)) {
             return compareIntegers(receiver, argument) < 0;
         }
-        Object caller = ProtosExperimentalCallBinaryMethodNode.callerReference(frame);
-        Object result = ProtosExperimentalCallBinaryMethodNode.sendOne(
+        Object caller = ProtosFunctionCallDispatchers.callerReference(frame);
+        Object result = ProtosFunctionCallDispatchers.sendOne(
                 root, caller, false, receiver, "<", argument);
         return canonicalCondition(root, caller, result);
     }
@@ -113,7 +113,7 @@ abstract class ProtosExperimentalLessNode extends Node {
             return condition.value();
         }
         ProtosActivation activation =
-                ProtosBytecodeRootNode.InvokeClosureOneTail.exactCaller(root, caller);
+                ProtosFunctionCallDispatchers.exactCaller(root, caller);
         throw ProtosCoreErrors.signal(activation, ProtosCoreErrors.newError(activation));
     }
 

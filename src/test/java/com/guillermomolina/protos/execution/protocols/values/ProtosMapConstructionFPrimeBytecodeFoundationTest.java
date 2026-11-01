@@ -28,12 +28,16 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
         ProtosObjectValue inherited =
                 new ProtosObjectValue(prelude.mapPrototype());
 
-        ProtosPreparedCalls.PreparedClosureCall prepared =
-                (ProtosPreparedCalls.PreparedClosureCall)
+        // I115: the factory call is a request for the shared dispatcher; its
+        // selected method is bound to the inherited receiver.
+        ProtosCallRequest prepared =
+                (ProtosCallRequest)
                         ProtosBytecodeRootNode.MapConstructionFactoryCall
                                 .perform(false, activation, inherited);
 
-        assertSame(inherited, prepared.activation().receiver());
+        assertSame(
+                inherited,
+                ((ProtosBoundMethod) prepared.callable()).receiver());
 
         ProtosMapValue produced = new ProtosMapValue(inherited);
 

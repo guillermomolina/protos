@@ -45,6 +45,15 @@ final class ProtosLanguageContext {
      */
     private final ConcurrentMap<ProtosClosureExecutionPlan, ProtosClosureExecutionPlan>
             sharedBytecodeExecutionPlans = new ConcurrentHashMap<>();
+    /*
+     * I115 (GraalPy builtin call targets): one stable ProtosBuiltinCallRootNode
+     * CallTarget per native body, keyed by body identity, never shared between
+     * Contexts. Native bodies do not override equals, so the key is identity.
+     */
+    private final ConcurrentMap<
+                    com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody,
+                    RootCallTarget>
+            builtinCallTargets = new ConcurrentHashMap<>();
     private volatile ProtosModuleResolver boundModuleResolver;
     /*
      * PERF033-A: the host wrapper owning this Context, bound once when the wrapper opens. It
@@ -424,6 +433,15 @@ final class ProtosLanguageContext {
 
     int projectedBytecodeExecutionPlanCountForTesting() {
         return sharedBytecodeExecutionPlans.size();
+    }
+
+    /** I115: the Context-local builtin CallTarget of {@code body}. */
+    @TruffleBoundary
+    RootCallTarget builtinCallTarget(
+            com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody body) {
+        Objects.requireNonNull(body, "body");
+        return builtinCallTargets.computeIfAbsent(
+                body, key -> new ProtosBuiltinCallRootNode(language, key).getCallTarget());
     }
 
     ProtosLanguage languageForRuntime() {

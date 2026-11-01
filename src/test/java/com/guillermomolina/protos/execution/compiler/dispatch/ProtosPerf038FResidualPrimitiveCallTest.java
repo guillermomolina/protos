@@ -80,15 +80,16 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
                     assertTrue(ProtosFrameArguments.isUnmaterializedInheritingFullHeader(arguments));
                     assertSame(module, ProtosFrameArguments.unmaterializedFullHeaderCaller(arguments));
                     boolean split =
-                            ProtosBytecodeRootNode.PrepareSendArguments.ownPreludeAbsent(arguments)
-                                    || ProtosBytecodeRootNode.PrepareSendArguments
-                                            .ownPreludeIsCallers(arguments);
+                            // I115: the split decision, read through the B5 accessors.
+                            ProtosFrameArguments.unmaterializedFullHeaderOwnPrelude(arguments) == null
+                                    || ProtosFrameArguments.unmaterializedFullHeaderOwnPrelude(arguments)
+                                            == ProtosFrameArguments.unmaterializedFullHeaderCaller(arguments)
+                                                    .preludeOrNullForRuntime();
                     ProtosActivation general = inherited(arguments);
                     assertEquals(general != null, split);
                     if (general != null) {
                         assertSame(general,
-                                ProtosBytecodeRootNode.PrepareSendArguments.fullHeaderCaller(
-                                        arguments));
+                                ProtosFrameArguments.unmaterializedFullHeaderCaller(arguments));
                     }
                 }
                 ProtosFrameArguments.activation(method);

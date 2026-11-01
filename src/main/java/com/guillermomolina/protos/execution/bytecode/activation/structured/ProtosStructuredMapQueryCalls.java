@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -113,13 +112,13 @@ final class ProtosStructuredMapQueryCalls {
             comparisonEntered = false;
         }
 
-        PreparedClosureCall prepareHash() {
+        ProtosCallRequest prepareHash() {
             if (!hasRequirement() || hashAccepted) {
                 throw new IllegalStateException(
                         "Map.match hash requested in an invalid state");
             }
 
-            return ProtosSendPreparation.prepareSend(
+            return ProtosCallRequest.send(
                     matcherSnapshot.get(requirementIndex).key(),
                     "hash",
                     activation,
@@ -162,13 +161,13 @@ final class ProtosStructuredMapQueryCalls {
             return candidateIndex < subjectSnapshot.size();
         }
 
-        PreparedClosureCall prepareEquality() {
+        ProtosCallRequest prepareEquality() {
             if (!needsEquality()) {
                 throw new IllegalStateException(
                         "Map.match equality requested without a candidate");
             }
 
-            return ProtosSendPreparation.prepareSend(
+            return ProtosCallRequest.send(
                     matcherSnapshot.get(requirementIndex).key(),
                     "==",
                     activation,
@@ -232,13 +231,13 @@ final class ProtosStructuredMapQueryCalls {
             return !mismatch && childIndex < childMatchers.size();
         }
 
-        PreparedClosureCall prepareChildMatcher() {
+        ProtosCallRequest prepareChildMatcher() {
             if (!hasChildMatcher()) {
                 throw new IllegalStateException(
                         "Map.match child matcher requested after terminal outcome");
             }
 
-            return ProtosSendPreparation.prepareSend(
+            return ProtosCallRequest.send(
                     childMatchers.get(childIndex),
                     "match",
                     activation,
@@ -381,12 +380,12 @@ final class ProtosStructuredMapQueryCalls {
             comparisonEntered = false;
         }
 
-        PreparedClosureCall prepareHash() {
+        ProtosCallRequest prepareHash() {
             if (hashAccepted) {
                 throw new IllegalStateException(
                         "Map read lookup hash callback prepared after hash acceptance");
             }
-            return ProtosSendPreparation.prepareSend(
+            return ProtosCallRequest.send(
                     key,
                     "hash",
                     activation,
@@ -418,12 +417,12 @@ final class ProtosStructuredMapQueryCalls {
             return index < candidates.size();
         }
 
-        PreparedClosureCall prepareEquality() {
+        ProtosCallRequest prepareEquality() {
             if (!needsEquality()) {
                 throw new IllegalStateException(
                         "Map read lookup equality callback requested without a candidate");
             }
-            return ProtosSendPreparation.prepareSend(
+            return ProtosCallRequest.send(
                     key,
                     "==",
                     activation,
@@ -456,13 +455,13 @@ final class ProtosStructuredMapQueryCalls {
                     && match == null;
         }
 
-        PreparedClosureCall prepareFallback() {
+        ProtosCallRequest prepareFallback() {
             if (!needsFallback() || fallbackPrepared) {
                 throw new IllegalStateException(
                         "Map.atIfAbsent fallback requested in an invalid state");
             }
             fallbackPrepared = true;
-            return ProtosClosureCallPreparation.prepareClosureCall(
+            return ProtosCallRequest.call(
                     fallback,
                     List.of(),
                     activation);

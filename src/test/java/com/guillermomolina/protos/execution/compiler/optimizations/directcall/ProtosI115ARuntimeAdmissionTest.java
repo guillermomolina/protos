@@ -27,14 +27,12 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.execution.ProtosClosureCallPreparation.DirectClosureExecutableFacts;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureOneTail;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
@@ -64,6 +62,48 @@ final class ProtosI115ARuntimeAdmissionTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final int PAST_CACHE_LIMITS = 12;
 
+    /**
+     * I115: one call site through the shared dispatcher's three tiers
+     * (FunctionCachedCallNode): a repeated Closure (identity), fresh Closures
+     * of one definition (code root, each with its own captures) and distinct
+     * definitions past the cache limits (megamorphic, IndirectCallNode). The
+     * selected CallTarget belongs to the entered Context.
+     */
+    @Test
+    void sharedDispatcherPicKeepsResultsAcrossIdentityRootAndMegamorphicTiers()
+            throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    callOne: (f, value) => { f(value) }
+                    make: (seed) => { (value) => { seed + value } }
+                    same: make(1)
+                    """, "i115-pic-define.protos", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(11, evaluate("callOne(same, 10)\n", "i115-pic-identity.protos", module));
+            }
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(10 + i,
+                        evaluate("callOne(make(" + i + "), 10)\n", "i115-pic-root.protos", module));
+            }
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(1 + i,
+                        evaluate("callOne((value) => { value + " + i + " }, 1)\n",
+                                "i115-pic-megamorphic.protos", module));
+            }
+            assertInteger(11, evaluate("callOne(same, 10)\n", "i115-pic-after.protos", module));
+
+            ProtosLanguageContext context = ProtosLanguageContext.current();
+            RootCallTarget target =
+                    ProtosClosureCallPreparation.functionCallTarget(closure("same\n", module), context);
+            assertNotNull(target);
+            assertSame(
+                    context.languageForRuntime(),
+                    target.getRootNode().getLanguage(ProtosLanguage.class),
+                    "the CallTarget belongs to the entered Context");
+            assertTrue(closure("same\n", module).codeStableAssumptionForRuntime().isValid());
+        });
+    }
+
     @Test
     void freshClosuresOfOneDefinitionShareExecutableFactsButNotCaptures() throws Exception {
         withCore(module -> {
@@ -83,11 +123,11 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertSame(first.definition(), template.definitionForRuntime());
 
             ProtosLanguageContext context = ProtosLanguageContext.current();
-            DirectClosureExecutableFacts firstFacts =
-                    ProtosClosureCallPreparation.establishDirectClosureExecutableFactsOrNull(
+            DispatchFacts firstFacts =
+                    dispatchFacts(
                             first, context);
-            DirectClosureExecutableFacts secondFacts =
-                    ProtosClosureCallPreparation.establishDirectClosureExecutableFactsOrNull(
+            DispatchFacts secondFacts =
+                    dispatchFacts(
                             second, context);
             assertNotNull(firstFacts);
             assertNotNull(secondFacts);
@@ -98,10 +138,8 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertFalse(firstFacts.projectionRequired());
             assertSame(template.bytecodeActivationTargetForComposition(), firstFacts.target());
             assertSame(firstFacts.target(), secondFacts.target());
-            assertSame(
-                    ProtosStandardObjectProtocol.canonicalRootCallAssumptionOrNullForRuntime(),
-                    firstFacts.rootCallStability());
-            assertTrue(firstFacts.rootCallStability().isValid());
+            // I115: the dispatcher's function path does not depend on the root
+            // Object.call certificate (approved D013 divergence).
 
             // Captures and receivers stay per instance.
             assertNotSame(first.capturedLexicalContexts(), second.capturedLexicalContexts());
@@ -109,16 +147,6 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertInteger(12, evaluate("second(10)\n", "i115a-fresh-second.protos", module));
         });
     }
-
-    @Test
-    void executableFactsRetainNoClosureInstance() {
-        for (RecordComponent component : DirectClosureExecutableFacts.class.getRecordComponents()) {
-            assertFalse(
-                    ProtosObjectValue.class.isAssignableFrom(component.getType()),
-                    component.toString());
-        }
-    }
-
 
     @Test
     void localCallAbsenceCertificateInvalidatesAndRestores()
@@ -237,14 +265,13 @@ final class ProtosI115ARuntimeAdmissionTest {
             ProtosLanguageContext context =
                     ProtosLanguageContext.current();
 
-            DirectClosureExecutableFacts facts =
-                    ProtosClosureCallPreparation
-                            .establishDirectClosureExecutableFactsOrNull(
+            DispatchFacts facts =
+                    dispatchFacts(
                                     ordinary, context);
 
             assertNotNull(facts);
             assertTrue(
-                    InvokeClosureOneTail.stableUnobservableReturnHome(
+                    stableUnobservableHome(
                             ordinary, facts));
 
             ProtosReturnHome home = new ProtosReturnHome();
@@ -264,7 +291,7 @@ final class ProtosI115ARuntimeAdmissionTest {
                     captured.invocationReturnHomeForRuntime());
 
             assertFalse(
-                    InvokeClosureOneTail.stableUnobservableReturnHome(
+                    stableUnobservableHome(
                             captured, facts));
         });
     }
@@ -370,16 +397,16 @@ final class ProtosI115ARuntimeAdmissionTest {
             // Definition-tier admission must be established
             // before caching the executable target.
             assertTrue(
-                    InvokeClosureOneTail.definitionHomeAdmitted(
+                    templateHomeAdmitted(
                             owning, template));
             assertFalse(
-                    InvokeClosureOneTail.definitionHomeAdmitted(
+                    templateHomeAdmitted(
                             observable, template));
             assertTrue(
-                    InvokeClosureOneTail.definitionHomeAdmitted(
+                    templateHomeAdmitted(
                             marker, template));
             assertFalse(
-                    InvokeClosureOneTail.definitionHomeAdmitted(
+                    templateHomeAdmitted(
                             owning, null));
 
         });
@@ -392,14 +419,8 @@ final class ProtosI115ARuntimeAdmissionTest {
             ProtosClosureValue source = closure("make()\n", module);
             ProtosLanguageContext context = ProtosLanguageContext.current();
 
-            assertSame(source, ProtosClosureCallPreparation
-                    .directClosureCallSelectionWithoutPreludeOrNull(source));
-            assertSame(source, ProtosClosureCallPreparation
-                    .directClosureCallSelectionForPreludeOrNull(source, module.prelude().orElseThrow()));
-            assertSame(source, ProtosClosureCallPreparation
-                    .directClosureCallSelectionOrNull(source, module));
-            assertSame(source, ProtosClosureCallPreparation
-                    .directClosureInstanceUnderGuardedRootCallOrNull(source));
+            assertSame(source, functionSelection(source));
+            assertSame(source, functionSelection(source));
 
             Object standardCall =
                     ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow();
@@ -417,12 +438,9 @@ final class ProtosI115ARuntimeAdmissionTest {
             source.assignLocalSlot("call", standardCall);
             assertRejected(source, context);
             source.removeLocalSlot("call");
-            assertSame(source, ProtosClosureCallPreparation
-                    .directClosureCallSelectionWithoutPreludeOrNull(source));
-            assertNotNull(ProtosClosureCallPreparation
-                    .establishDirectClosureExecutableFactsOrNull(source, context));
-            assertNull(ProtosClosureCallPreparation
-                    .establishDirectClosureExecutableFactsOrNull(source, null));
+            assertSame(source, functionSelection(source));
+            assertNotNull(dispatchFacts(source, context));
+            assertNull(dispatchFacts(source, null));
         });
     }
 
@@ -539,10 +557,10 @@ final class ProtosI115ARuntimeAdmissionTest {
                     first.definition(), first.capturedLexicalContexts(), first.capturedReceiver(),
                     null, null, module.prelude().orElseThrow(), otherTemplate);
 
-            DirectClosureExecutableFacts firstFacts =
-                    ProtosClosureCallPreparation.establishDirectClosureExecutableFactsOrNull(first, context);
-            DirectClosureExecutableFacts otherFacts =
-                    ProtosClosureCallPreparation.establishDirectClosureExecutableFactsOrNull(other, context);
+            DispatchFacts firstFacts =
+                    dispatchFacts(first, context);
+            DispatchFacts otherFacts =
+                    dispatchFacts(other, context);
             assertSame(firstFacts.definition(), otherFacts.definition());
             assertSame(template.bytecodeActivationTargetForComposition(), firstFacts.target());
             assertSame(otherTemplate.bytecodeActivationTargetForComposition(), otherFacts.target());
@@ -560,8 +578,8 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertProjectedInto(first, secondClosure);
 
             first.run(() -> {
-                DirectClosureExecutableFacts own =
-                        ProtosClosureCallPreparation.establishDirectClosureExecutableFactsOrNull(
+                DispatchFacts own =
+                        dispatchFacts(
                                 firstClosure, ProtosLanguageContext.current());
                 assertFalse(own.projectionRequired());
                 assertSame(own.template(), own.effectivePlan());
@@ -606,10 +624,8 @@ final class ProtosI115ARuntimeAdmissionTest {
                         return plan;
                     });
             assertNull(deferred.preparedExecutionPlanOrNullForRuntime());
-            assertSame(deferred, ProtosClosureCallPreparation
-                    .directClosureCallSelectionWithoutPreludeOrNull(deferred));
-            assertNull(ProtosClosureCallPreparation
-                    .establishDirectClosureExecutableFactsOrNull(deferred, context));
+            assertSame(deferred, functionSelection(deferred));
+            assertNull(dispatchFacts(deferred, context));
             assertFalse(deferred.hasUnobservableInvocationReturnHomeForRuntime());
             assertEquals(0, rematerializations[0]);
 
@@ -620,18 +636,16 @@ final class ProtosI115ARuntimeAdmissionTest {
                         throw new IllegalStateException("I115-A: admission must not prepare a plan");
                     });
             overridden.createLocalSlot("call", prepared);
-            assertNull(ProtosClosureCallPreparation
-                    .directClosureCallSelectionWithoutPreludeOrNull(overridden));
-            assertNull(ProtosClosureCallPreparation
-                    .establishDirectClosureExecutableFactsOrNull(overridden, context));
+            assertNull(functionSelection(overridden));
+            assertNull(dispatchFacts(overridden, context));
             assertEquals(0, rematerializations[0]);
 
             // Lazy rematerialization still happens when an invocation needs it.
             assertSame(plan, deferred.executionPlanForRuntimeInvocation());
             assertEquals(1, rematerializations[0]);
             assertSame(plan, deferred.preparedExecutionPlanOrNullForRuntime());
-            DirectClosureExecutableFacts facts =
-                    ProtosClosureCallPreparation.establishDirectClosureExecutableFactsOrNull(deferred, context);
+            DispatchFacts facts =
+                    dispatchFacts(deferred, context);
             assertNotNull(facts);
             assertSame(plan.bytecodeActivationTargetForComposition(), facts.target());
             assertEquals(1, rematerializations[0]);
@@ -644,8 +658,8 @@ final class ProtosI115ARuntimeAdmissionTest {
         RootCallTarget foreignTarget = template.bytecodeActivationTargetForComposition();
         destination.run(() -> {
             ProtosLanguageContext context = ProtosLanguageContext.current();
-            DirectClosureExecutableFacts facts =
-                    ProtosClosureCallPreparation.establishDirectClosureExecutableFactsOrNull(foreign, context);
+            DispatchFacts facts =
+                    dispatchFacts(foreign, context);
             assertNotNull(facts);
             assertTrue(facts.projectionRequired());
             assertSame(template, facts.template());
@@ -656,18 +670,18 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertNotSame(foreignTarget, facts.target());
             assertSame(facts.effectivePlan().bytecodeActivationTargetForComposition(), facts.target());
 
-            DirectClosureExecutableFacts again =
-                    ProtosClosureCallPreparation.establishDirectClosureExecutableFactsOrNull(foreign, context);
+            DispatchFacts again =
+                    dispatchFacts(foreign, context);
             assertSame(facts.effectivePlan(), again.effectivePlan());
             assertSame(facts.target(), again.target());
         });
     }
 
     private static void assertRejected(Object receiver, ProtosLanguageContext context) {
-        assertNull(ProtosClosureCallPreparation.directClosureCallSelectionWithoutPreludeOrNull(receiver));
-        assertNull(ProtosClosureCallPreparation.directClosureInstanceUnderGuardedRootCallOrNull(receiver));
+        assertNull(functionSelection(receiver));
+        assertNull(functionSelection(receiver));
         if (receiver instanceof ProtosClosureValue closure) {
-            assertNull(ProtosClosureCallPreparation.establishDirectClosureExecutableFactsOrNull(closure, context));
+            assertNull(dispatchFacts(closure, context));
         }
     }
 
@@ -703,13 +717,13 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertTrue(a.isValid());
             assertSame(a, certificate());
             assertSame(sourceShaped,
-                    ProtosClosureCallPreparation.directClosureCallSelectionWithoutPreludeOrNull(sourceShaped));
+                    functionSelection(sourceShaped));
 
             root.assignLocalSlot("call", ProtosNullValue.INSTANCE);
             assertFalse(a.isValid());
             assertNull(certificate());
             assertFalse(ProtosStandardObjectProtocol.isCanonicalRootCallSelectionForRuntime());
-            assertNull(ProtosClosureCallPreparation.directClosureCallSelectionWithoutPreludeOrNull(sourceShaped));
+            assertNull(functionSelection(sourceShaped));
 
             root.assignLocalSlot("call", standardCall);
             Assumption b = certificate();
@@ -720,7 +734,7 @@ final class ProtosI115ARuntimeAdmissionTest {
             root.removeLocalSlot("call");
             assertFalse(b.isValid());
             assertNull(certificate());
-            assertNull(ProtosClosureCallPreparation.directClosureCallSelectionWithoutPreludeOrNull(sourceShaped));
+            assertNull(functionSelection(sourceShaped));
 
             root.createLocalSlot("call", standardCall);
             Assumption c = certificate();
@@ -739,7 +753,7 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertTrue(d.isValid());
             assertNotSame(c, d);
             assertSame(sourceShaped,
-                    ProtosClosureCallPreparation.directClosureCallSelectionWithoutPreludeOrNull(sourceShaped));
+                    functionSelection(sourceShaped));
         }
 
         private static Assumption certificate() {
@@ -866,4 +880,62 @@ final class ProtosI115ARuntimeAdmissionTest {
                 Long.toString(expected),
                 com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(actual));
     }
+
+    /*
+     * I115: the facts the shared dispatcher's function path uses for one
+     * source Closure in the entered Context (ProtosFunctionCallDispatchers):
+     * the effective plan and CallTarget, never the Closure instance.
+     */
+    private record DispatchFacts(
+            com.guillermomolina.protos.semantic.ast.CanonicalClosure definition,
+            ProtosClosureExecutionPlan template,
+            ProtosClosureExecutionPlan effectivePlan,
+            ProtosLanguageContext enteredContext,
+            boolean projectionRequired,
+            RootCallTarget target) {}
+
+    private static DispatchFacts dispatchFacts(
+            ProtosClosureValue closure, ProtosLanguageContext context) {
+        if (!ProtosFunctionCallDispatchers.CallNode.isSourceFunction(closure)) {
+            return null;
+        }
+        RootCallTarget target = ProtosClosureCallPreparation.functionCallTarget(closure, context);
+        if (target == null) {
+            return null;
+        }
+        ProtosClosureExecutionPlan template = closure.preparedExecutionPlanOrNullForRuntime();
+        boolean projectionRequired =
+                closure.requiresContextLocalExecutionProjectionForRuntime()
+                        || template.language().orElseThrow() != context.languageForRuntime();
+        ProtosClosureExecutionPlan effective =
+                projectionRequired
+                        ? context.bytecodeExecutionPlanForDefinition(closure.definition(), template)
+                        : template;
+        return new DispatchFacts(
+                closure.definition(), template, effective, context, projectionRequired, target);
+    }
+
+    /** The function-path selection: a source Closure by representation only. */
+    private static Object functionSelection(Object value) {
+        return value instanceof ProtosClosureValue closure
+                        && ProtosFunctionCallDispatchers.CallNode.isSourceFunction(closure)
+                ? closure
+                : null;
+    }
+
+    private static boolean templateHomeAdmitted(
+            ProtosClosureValue closure, ProtosClosureExecutionPlan template) {
+        return closure != null
+                && template != null
+                && closure.hasUnobservableReturnHomeUnderTemplateProofForRuntime(
+                        template.returnHomeProvenUnobservableForRuntime());
+    }
+
+    private static boolean stableUnobservableHome(ProtosClosureValue closure, DispatchFacts facts) {
+        return closure != null
+                && facts != null
+                && closure.preparedExecutionPlanOrNullForRuntime() == facts.template()
+                && closure.hasUnobservableInvocationReturnHomeForRuntime();
+    }
+
 }

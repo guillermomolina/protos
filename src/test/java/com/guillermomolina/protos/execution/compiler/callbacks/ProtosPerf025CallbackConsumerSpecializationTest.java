@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 
-import com.guillermomolina.protos.execution.ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -411,9 +410,13 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
                                         .guestValue(value)));
     }
 
-    /** The live inline callback region observed at one breakpoint hit. */
+    /**
+     * The callback invocation observed at one breakpoint hit. I115: the
+     * callback is an ordinary invocation through the shared dispatcher; its
+     * identity is its B5 frame arguments.
+     */
     private record Stop(
-            PreparedInlineLiteralCall call,
+            Object call,
             boolean materialized,
             boolean durable,
             Map<String, Object> bindings,
@@ -546,38 +549,29 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         BytecodeNode bytecode = node.getBytecodeNode();
         int bytecodeIndex = node.getEnterBytecodeIndex();
         Object[] names = bytecode.getLocalNames(bytecodeIndex);
-        PreparedInlineLiteralCall call = null;
+        Object[] call = frame.getArguments();
         Map<String, Object> bindings = new HashMap<>();
         for (int offset = 0; offset < names.length; offset++) {
-            Object value = bytecode.getLocalValue(bytecodeIndex, frame, offset);
-            String name = String.valueOf(names[offset]);
-            if (CanonicalToBytecodeLowerer.INLINE_CALLBACK_CALL_LOCAL.equals(name)
-                    && value instanceof PreparedInlineLiteralCall live) {
-                call = live;
-            } else if (name.startsWith(
-                    CanonicalToBytecodeLowerer.INLINE_CALLBACK_BINDING_LOCAL_PREFIX)) {
+            if (names[offset] != null) {
                 bindings.put(
-                        name.substring(
-                                CanonicalToBytecodeLowerer.INLINE_CALLBACK_BINDING_LOCAL_PREFIX
-                                        .length()),
-                        value);
+                        String.valueOf(names[offset]),
+                        bytecode.getLocalValue(bytecodeIndex, frame, offset));
             }
         }
-        assertTrue(call != null, () -> "no live inline callback carrier at the breakpoint");
-        if (call.frameBindingsTransferred()) {
-            // Transferred bindings, and any established afterwards, live in the
-            // durable authority installed on the materialized activation.
-            ProtosLexicalBindingAuthority durable =
-                    call.activation().currentLexicalBindingAuthorityForRuntime();
-            bindings.replaceAll((name, value) -> durable.readBinding(name).orElse(null));
+        assertTrue(ProtosFrameArguments.hasActivation(call),
+                () -> "the breakpoint is not inside a callback invocation");
+        boolean materialized = ProtosFrameArguments.hasPublishedActivation(call);
+        if (materialized) {
+            // Bindings established on the materialized activation's authority.
+            ProtosLexicalBindingAuthority authority =
+                    ProtosFrameArguments.activation(call).currentLexicalBindingAuthorityForRuntime();
+            if (authority != null) {
+                bindings.replaceAll((name, value) -> authority.readBinding(name).orElse(value));
+            }
         }
         List<String> instructions =
                 bytecode.getInstructionsAsList().stream().map(ProtosInstructionNames::of).toList();
-        return new Stop(
-                call,
-                call.isActivationMaterialized(),
-                call.frameBindingsTransferred(),
-                bindings,
-                instructions);
+        // I115: no carrier transfers bindings to a durable authority.
+        return new Stop(call, materialized, false, bindings, instructions);
     }
 }

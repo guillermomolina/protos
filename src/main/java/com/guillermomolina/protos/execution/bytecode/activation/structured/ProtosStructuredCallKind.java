@@ -17,7 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
+import com.guillermomolina.protos.execution.ProtosPreparedCalls.StructuredNativeInvocation;
 
 /**
  * I113: the structured-dispatch protocols a lowered site can test a prepared
@@ -29,36 +29,36 @@ import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureC
 public enum ProtosStructuredCallKind {
     BOOLEAN {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredBoolean();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredBoolean();
         }
     },
 
     CASE_OF {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredCaseOf();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredCaseOf();
         }
     },
 
     OBJECT {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredObjectCall();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredObjectCall();
         }
     },
@@ -81,43 +81,43 @@ public enum ProtosStructuredCallKind {
 
     IMPORT {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredImportCall();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredImportCall();
         }
     },
 
     ENSURE {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredEnsure();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredEnsure();
         }
     },
 
     WHILE {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredWhile();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredWhile();
         }
     },
 
     LOCAL_EACH {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredArrayEach()
                     || prepared.isStructuredBytesEach()
                     || prepared.isStructuredEnvironmentEach()
@@ -126,7 +126,7 @@ public enum ProtosStructuredCallKind {
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             if (prepared.isStructuredArrayEach()) {
                 return prepared.prepareStructuredArrayEach();
             }
@@ -149,96 +149,96 @@ public enum ProtosStructuredCallKind {
 
     ARRAY_MATCH {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredArrayMatch();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredArrayMatch();
         }
     },
 
     FOREIGN_EACH {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredForeignEach();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredForeignEach();
         }
     },
 
     IDENTITY_MAP_AT_IF_ABSENT {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredIdentityMapAtIfAbsent();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredIdentityMapAtIfAbsent();
         }
     },
 
     MAP_MATCH {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredMapMatch();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredMapMatch();
         }
     },
 
     MAP_READ_LOOKUP {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredMapReadLookup();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredMapReadLookup();
         }
     },
 
     MAP_AT_PUT {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredMapAtPut();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredMapAtPut();
         }
     },
 
     MAP_REMOVE {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredMapRemove();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredMapRemove();
         }
     },
 
     ERROR_HANDLER {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredErrorHandler();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredErrorHandler();
         }
     },
@@ -250,12 +250,12 @@ public enum ProtosStructuredCallKind {
      */
     INDEXED_EACH {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredArrayEach() || prepared.isStructuredBytesEach();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             return prepared.isStructuredArrayEach()
                     ? prepared.prepareStructuredArrayEach()
                     : prepared.prepareStructuredBytesEach();
@@ -272,14 +272,14 @@ public enum ProtosStructuredCallKind {
      */
     TWO_PARAMETER_EACH {
         @Override
-        boolean admits(PreparedClosureCall prepared) {
+        boolean admits(StructuredNativeInvocation prepared) {
             return prepared.isStructuredEnvironmentEach()
                     || prepared.isStructuredMapEach()
                     || prepared.isStructuredIdentityMapEach();
         }
 
         @Override
-        Object prepare(PreparedClosureCall prepared) {
+        Object prepare(StructuredNativeInvocation prepared) {
             if (prepared.isStructuredEnvironmentEach()) {
                 return prepared.prepareStructuredEnvironmentEach();
             }
@@ -290,11 +290,11 @@ public enum ProtosStructuredCallKind {
     };
 
     /** The exact capability predicate of the protocol this constant names. */
-    abstract boolean admits(PreparedClosureCall prepared);
+    abstract boolean admits(StructuredNativeInvocation prepared);
 
     /**
      * The structured state this protocol prepares from an admitted call;
      * precondition {@link #admits}.
      */
-    abstract Object prepare(PreparedClosureCall prepared);
+    abstract Object prepare(StructuredNativeInvocation prepared);
 }

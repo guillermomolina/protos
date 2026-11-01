@@ -97,7 +97,7 @@ import java.util.Objects;
 final class CanonicalToBytecodeLowerer {
     /**
      * Name of the Bytecode local holding the {@link
-     * ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall} of a PLAT044 B′ inline
+     * Object} carrier of a retired PLAT044 B′ inline
      * literal callback region: the carrier of that invocation's one fresh
      * semantic activation, materialized lazily by its first semantic or
      * tooling observer. Tooling reads it back by name ({@link
@@ -120,41 +120,6 @@ final class CanonicalToBytecodeLowerer {
      * grows the caller root by an unbounded staging and parameter prologue.
      */
     static final int MAX_INLINE_CLOSURE_CALL_ARGUMENTS = 8;
-
-    /**
-     * A send site's PLAT044 B′ inline candidate: the literal's definition, its
-     * supplied argument position, the argument local holding its materialized
-     * value, and its own plan cell.
-     */
-    private record InlineLiteralCallback(
-            CanonicalClosure definition,
-            int position,
-            BytecodeLocal literal,
-            ProtosClosureExecutionPlanCell literalPlan) {}
-
-    /**
-     * A send site's PLAT044 B′ (PERF026-C1) inline pre-test loop candidate
-     * pair, admitted only for the standard {@code whileTrue} or (D212)
-     * {@code whileFalse}: the receiver literal staged as the condition and the
-     * sole supplied literal staged as the body. Post-test {@code untilTrue}
-     * and {@code untilFalse} are never admitted. The condition's
-     * {@code position} is unused.
-     */
-    private record InlineLiteralWhile(
-            InlineLiteralCallback condition,
-            InlineLiteralCallback body) {}
-
-    /**
-     * A send site's PLAT044 B′ inline standard each candidate: the sole
-     * supplied literal and whether it is the two-parameter {@code
-     * block(a, b)} shape (Map.each/IdentityMap.each, PERF026-D2;
-     * Environment.each, PERF026-D3) rather than the PERF026-D1 one-parameter
-     * indexed shape (Array.each/Bytes.each). The shape only selects which
-     * standard capabilities may admit it.
-     */
-    private record InlineLiteralEach(
-            InlineLiteralCallback callback,
-            boolean twoParameter) {}
 
     private final ProtosLanguage language;
     private final Source source;
@@ -424,24 +389,7 @@ final class CanonicalToBytecodeLowerer {
      */
     private BytecodeLocal currentActivationLocal;
 
-    /**
-     * PERF025 lazy inline callback activation. True while {@link
-     * #currentActivationLocal} holds the {@link
-     * ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall} carrier of a PLAT044
-     * B-prime inline callback region rather than an activation; {@link
-     * #emitCurrentActivation} then materializes the callback activation
-     * through that carrier only where an operation needs it.
-     */
-    private boolean currentActivationLocalIsInlineCallbackCall;
 
-    /**
-     * PERF025 inline-callback lexical slice. True only while an admitted
-     * PLAT044 B-prime callback uses its statically proven bindings directly
-     * from block-local frame storage, through the carrier-operand inline
-     * operations that never materialize the callback activation on their
-     * ordinary path.
-     */
-    private boolean currentInlineCallbackFrameNative;
 
     /**
      * PERF013 Slice B1 backend-private registry of the frame-backed {@link
@@ -636,7 +584,7 @@ final class CanonicalToBytecodeLowerer {
                 currentRootTopScope,
                 currentRootFrameLocals.keySet(),
                 currentRootFrameLayout != null,
-                currentInlineCallbackFrameNative,
+                false,
                 currentActivationLocal != null);
     }
 
@@ -986,10 +934,6 @@ final class CanonicalToBytecodeLowerer {
         java.util.Map<String, BytecodeLocal> savedFrameLocals =
                 currentRootFrameLocals;
         BytecodeLocal savedActivationLocal = currentActivationLocal;
-        boolean savedActivationLocalIsInlineCallbackCall =
-                currentActivationLocalIsInlineCallbackCall;
-        boolean savedInlineCallbackFrameNative =
-                currentInlineCallbackFrameNative;
         ProtosFrameLexicalLayout savedFrameLayout = currentRootFrameLayout;
         BytecodeLocal[] savedFrameNativeLocals = currentRootFrameNativeLocals;
         ProtosFrameLexicalLayout savedFrameNativeLayout = currentRootFrameNativeLayout;
@@ -1034,8 +978,6 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameLocals = java.util.Map.of();
             currentRootFrameLayout = null;
             currentActivationLocal = null;
-            currentActivationLocalIsInlineCallbackCall = false;
-            currentInlineCallbackFrameNative = false;
             currentRootFrameNativeLocals = null;
             currentRootFrameNativeLayout = null;
             currentRootIndexedParameterLayout = null;
@@ -1058,10 +1000,6 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameLocals = savedFrameLocals;
             currentRootFrameLayout = savedFrameLayout;
             currentActivationLocal = savedActivationLocal;
-            currentActivationLocalIsInlineCallbackCall =
-                    savedActivationLocalIsInlineCallbackCall;
-            currentInlineCallbackFrameNative =
-                    savedInlineCallbackFrameNative;
             currentRootFrameNativeLocals = savedFrameNativeLocals;
             currentRootFrameNativeLayout = savedFrameNativeLayout;
             currentRootIndexedParameterLayout = savedIndexedParameterLayout;
@@ -1593,7 +1531,7 @@ final class CanonicalToBytecodeLowerer {
                      * PERF038-I: the final immediate Send1 is the root's
                      * terminal invocation, exactly as a terminal Call1. No
                      * sequenceResult, prepared-call or miss local and no
-                     * TryDirectSendOne: InvokeMethodOneTail owns selection,
+                     * direct send: GetMethod and CallUnaryMethod own selection,
                      * its fallback and the terminal execution. A retained
                      * numeric carrier is projected by the return epilogue.
                      */
@@ -1836,13 +1774,6 @@ final class CanonicalToBytecodeLowerer {
         }
 
         return known.keySet().equals(scope.declaredNames());
-    }
-
-    private static boolean directScalarCarrier(Object value) {
-        return value instanceof Long
-                || value instanceof Double
-                || value instanceof ProtosBooleanValue
-                || value == ProtosNullValue.INSTANCE;
     }
 
     /**
@@ -2854,8 +2785,7 @@ final class CanonicalToBytecodeLowerer {
      */
     private int frameNativeOrdinal(String name) {
         if (currentRootFrameNativeLayout == null
-                || (currentActivationLocal != null
-                        && !currentInlineCallbackFrameNative)
+                || currentActivationLocal != null
                 || !currentRootFrameLocals.containsKey(name)) {
             return -1;
         }
@@ -3251,33 +3181,9 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder) {
         if (currentActivationLocal == null) {
             builder.emitCurrentActivation(false);
-        } else if (currentInlineCallbackFrameNative) {
-            builder.beginLoadInlineCallbackContext(false,
-                    currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout);
-            builder.emitLoadLocal(currentActivationLocal);
-            builder.endLoadInlineCallbackContext();
-        } else if (currentActivationLocalIsInlineCallbackCall) {
-            builder.beginLoadInlineLiteralCallPart(false);
-            builder.emitLoadLocal(currentActivationLocal);
-            builder.endLoadInlineLiteralCallPart();
         } else {
             builder.emitLoadLocal(currentActivationLocal);
         }
-    }
-
-    /**
-     * Loads the {@link ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall}
-     * carrier operand of an inline frame-native operation; only valid while
-     * {@link #currentInlineCallbackFrameNative}.
-     */
-    private void emitCurrentInlineCallbackCall(
-            ProtosBytecodeRootNodeGen.Builder builder) {
-        if (!currentInlineCallbackFrameNative
-                || !currentActivationLocalIsInlineCallbackCall) {
-            throw new AssertionError("no frame-native inline callback region is active");
-        }
-        builder.emitLoadLocal(currentActivationLocal);
     }
 
     /*
@@ -3289,56 +3195,10 @@ final class CanonicalToBytecodeLowerer {
      * emitted within one region, so the selection is the same for both.
      */
 
-    private void beginPrepareSend(
-            ProtosBytecodeRootNodeGen.Builder builder, int arity) {
-        if (currentInlineCallbackFrameNative) {
-            if (arity == 0) {
-                builder.beginPrepareInlineSendZero(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-            } else if (arity == 1) {
-                builder.beginPrepareInlineSendOne(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-            } else {
-                builder.beginPrepareInlineSendArguments(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-            }
-        } else if (arity == 0) {
-            builder.beginPrepareSendZero();
-        } else if (arity == 1) {
-            builder.beginPrepareSendOne();
-        } else {
-            builder.beginPrepareSendArguments();
-        }
-    }
-
-    private void endPrepareSend(
-            ProtosBytecodeRootNodeGen.Builder builder, int arity) {
-        if (currentInlineCallbackFrameNative) {
-            if (arity == 0) {
-                builder.endPrepareInlineSendZero();
-            } else if (arity == 1) {
-                builder.endPrepareInlineSendOne();
-            } else {
-                builder.endPrepareInlineSendArguments();
-            }
-        } else if (arity == 0) {
-            builder.endPrepareSendZero();
-        } else if (arity == 1) {
-            builder.endPrepareSendOne();
-        } else {
-            builder.endPrepareSendArguments();
-        }
-    }
-
     /** The caller operand of a send/Closure-call preparation opened above. */
     private void emitInvocationCallerOperand(
             ProtosBytecodeRootNodeGen.Builder builder) {
-        if (currentInlineCallbackFrameNative) {
-            emitCurrentInlineCallbackCall(builder);
-        } else {
+        {
             emitCurrentActivation(builder);
         }
     }
@@ -3352,7 +3212,7 @@ final class CanonicalToBytecodeLowerer {
      */
     private void emitSendCallerOperand(
             ProtosBytecodeRootNodeGen.Builder builder) {
-        if (!currentInlineCallbackFrameNative && currentActivationLocal == null) {
+        if (currentActivationLocal == null) {
             builder.emitCurrentActivation(true);
         } else {
             emitInvocationCallerOperand(builder);
@@ -3367,13 +3227,7 @@ final class CanonicalToBytecodeLowerer {
     private void beginMemberRead(
             ProtosBytecodeRootNodeGen.Builder builder,
             String name) {
-        if (currentInlineCallbackFrameNative) {
-            builder.beginReadInlineMember(
-                    currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout,
-                    name);
-            emitCurrentInlineCallbackCall(builder);
-        } else if (currentActivationLocal == null) {
+        if (currentActivationLocal == null) {
             builder.beginReadMemberAtRoot(name);
         } else {
             builder.beginReadMember(name);
@@ -3382,9 +3236,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void endMemberRead(ProtosBytecodeRootNodeGen.Builder builder) {
-        if (currentInlineCallbackFrameNative) {
-            builder.endReadInlineMember();
-        } else if (currentActivationLocal == null) {
+        if (currentActivationLocal == null) {
             builder.endReadMemberAtRoot();
         } else {
             builder.endReadMember();
@@ -3401,42 +3253,26 @@ final class CanonicalToBytecodeLowerer {
             CanonicalBindingResolution.CapturedResolved captured,
             BytecodeLocal capturedOwnerLocal) {
         if (capturedOwnerLocal != null) {
-            if (currentInlineCallbackFrameNative) {
-                builder.beginAccessInlineCapturedMaterializedLocal(true,
-                        capturedOwnerLocal,
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                emitCurrentInlineCallbackCall(builder);
-            } else {
+            {
                 builder.beginAccessCapturedMaterializedLocal(true,
                         capturedOwnerLocal);
                 emitCurrentActivation(builder);
             }
             builder.emitLoadConstant(assign.name());
             builder.emitLoadConstant(captured.lexicalDepth());
-            if (currentInlineCallbackFrameNative) {
-                builder.endAccessInlineCapturedMaterializedLocal();
-            } else {
+            {
                 builder.endAccessCapturedMaterializedLocal();
             }
             return;
         }
         int frameOrdinal = frameBackedOrdinal(captured.identity());
-        if (currentInlineCallbackFrameNative) {
-            builder.beginAccessInlineCapturedFrameLocal(true,
-                    currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout,
-                    frameOrdinal);
-            emitCurrentInlineCallbackCall(builder);
-        } else {
+        {
             builder.beginAccessCapturedFrameLocal(true, frameOrdinal);
             emitCurrentActivation(builder);
         }
         builder.emitLoadConstant(assign.name());
         builder.emitLoadConstant(captured.lexicalDepth());
-        if (currentInlineCallbackFrameNative) {
-            builder.endAccessInlineCapturedFrameLocal();
-        } else {
+        {
             builder.endAccessCapturedFrameLocal();
         }
     }
@@ -3453,22 +3289,10 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal mutationTarget,
             BytecodeLocal value) {
         if (capturedOwnerLocal != null) {
-            if (currentInlineCallbackFrameNative) {
-                builder.beginAssignInlineCapturedMaterializedLocal(
-                        capturedOwnerLocal,
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                emitCurrentInlineCallbackCall(builder);
-            } else {
+            {
                 builder.beginAssignCapturedMaterializedLocal(capturedOwnerLocal);
                 emitCurrentActivation(builder);
             }
-        } else if (currentInlineCallbackFrameNative) {
-            builder.beginAssignInlineCapturedFrameLocal(
-                    currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout,
-                    frameBackedOrdinal(captured.identity()));
-            emitCurrentInlineCallbackCall(builder);
         } else {
             builder.beginAssignCapturedFrameLocal(
                     frameBackedOrdinal(captured.identity()));
@@ -3478,13 +3302,9 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadConstant(assign.name());
         builder.emitLoadLocal(value);
         if (capturedOwnerLocal != null) {
-            if (currentInlineCallbackFrameNative) {
-                builder.endAssignInlineCapturedMaterializedLocal();
-            } else {
+            {
                 builder.endAssignCapturedMaterializedLocal();
             }
-        } else if (currentInlineCallbackFrameNative) {
-            builder.endAssignInlineCapturedFrameLocal();
         } else {
             builder.endAssignCapturedFrameLocal();
         }
@@ -3504,7 +3324,6 @@ final class CanonicalToBytecodeLowerer {
             CanonicalLexicalScope scope,
             boolean requiresPersistentFrameAuthority) {
         if (currentActivationLocal != null
-                || currentInlineCallbackFrameNative
                 || currentRootAnalysis == null
                 || scope == null
                 || currentRootFrameNativeLocals == null
@@ -3743,15 +3562,6 @@ final class CanonicalToBytecodeLowerer {
         String name = parameter.name();
         int ordinal = frameNativeOrdinal(name);
         if (ordinal >= 0) {
-            if (currentInlineCallbackFrameNative) {
-                builder.beginBindInlineClosureFrameParameter(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout,
-                        ordinal);
-                emitCurrentInlineCallbackCall(builder);
-                builder.emitLoadConstant(name);
-                return ParameterBindingForm.INLINE_FRAME_NATIVE;
-            }
             builder.beginBindClosureFrameParameter(
                     currentRootFrameNativeLocals,
                     currentRootFrameNativeLayout,
@@ -3801,12 +3611,6 @@ final class CanonicalToBytecodeLowerer {
         String name = create.name();
         int ordinal = frameNativeOrdinal(name);
         if (ordinal >= 0) {
-            if (currentInlineCallbackFrameNative) {
-                emitCreateInlineCurrentFrameLocal(builder, ordinal, name);
-                builder.emitLoadLocal(value);
-                builder.endCreateInlineCurrentFrameLocal();
-                return;
-            }
             emitCreateCurrentFrameLocal(builder, ordinal, name);
             builder.emitLoadLocal(value);
             builder.endCreateCurrentFrameLocal();
@@ -3875,23 +3679,6 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * Opens a frame-native {@code CreateInlineCurrentFrameLocal} of {@code
-     * name} at {@code ordinal}, a constant operand, leaving only its value
-     * operand to emit.
-     */
-    private void emitCreateInlineCurrentFrameLocal(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            int ordinal,
-            String name) {
-        builder.beginCreateInlineCurrentFrameLocal(
-                currentRootFrameNativeLocals,
-                currentRootFrameNativeLayout,
-                ordinal);
-        emitCurrentInlineCallbackCall(builder);
-        builder.emitLoadConstant(name);
-    }
-
-    /**
      * Opens a frame-native {@code CreateCurrentFrameLocal} of {@code name} at
      * {@code ordinal}, a constant operand, leaving only its value operand to
      * emit.
@@ -3940,52 +3727,33 @@ final class CanonicalToBytecodeLowerer {
             builder.endCreateCurrentLocalSlot();
             return;
         }
-        boolean inline = currentInlineCallbackFrameNative;
         builder.beginBlock();
         BytecodeLocal observed = builder.createLocal("multipleCreateObserved", null);
         builder.beginStoreLocal(observed);
-        if (inline) {
-            builder.beginObserveInlineMultipleCreatePrefix(
-                    currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout);
-            emitCurrentInlineCallbackCall(builder);
-        } else {
+        {
             builder.beginObserveMultipleCreatePrefix();
             emitCurrentActivation(builder);
         }
         builder.emitLoadConstant(ordinals.length);
         builder.emitLoadLocal(source);
-        if (inline) {
-            builder.endObserveInlineMultipleCreatePrefix();
-        } else {
+        {
             builder.endObserveMultipleCreatePrefix();
         }
         builder.endStoreLocal();
         for (int index = 0; index < ordinals.length; index++) {
-            if (inline) {
-                emitCreateInlineCurrentFrameLocal(builder, ordinals[index], names.get(index));
-            } else {
+            {
                 emitCreateCurrentFrameLocal(builder, ordinals[index], names.get(index));
             }
             builder.beginObservedMultipleCreateValue();
             builder.emitLoadLocal(observed);
             builder.emitLoadConstant(index);
             builder.endObservedMultipleCreateValue();
-            if (inline) {
-                builder.endCreateInlineCurrentFrameLocal();
-            } else {
+            {
                 builder.endCreateCurrentFrameLocal();
             }
         }
         builder.emitLoadLocal(source);
         builder.endBlock();
-    }
-
-    private static boolean hasComposedArgument(
-            java.util.List<CanonicalExpression> arguments) {
-        return arguments.stream()
-                .map(CanonicalToBytecodeLowerer::suppliedArgumentExpression)
-                .anyMatch(CanonicalToBytecodeLowerer::requiresComposedInvocation);
     }
 
     /**
@@ -4168,7 +3936,6 @@ final class CanonicalToBytecodeLowerer {
                 && create.target().isEmpty()
                 && create.value() instanceof CanonicalClosure
                 && currentActivationLocal == null
-                && !currentInlineCallbackFrameNative
                 && currentNormalCallbackScalarLocals.isEmpty()
                 && !currentRootScalarLocals.contains(create.name())
                 && frameNativeOrdinal(create.name()) >= 0;
@@ -4375,7 +4142,6 @@ final class CanonicalToBytecodeLowerer {
     private boolean admitsTerminalClosureCall(CanonicalExpression last) {
         if (!(last instanceof CanonicalCall call)
                 || currentActivationLocal != null
-                || currentInlineCallbackFrameNative
                 || currentInlineClosureCallBody
                 || !currentNormalCallbackScalarLocals.isEmpty()
                 || hasVectorArgument(call.arguments())
@@ -4389,8 +4155,7 @@ final class CanonicalToBytecodeLowerer {
         // Decided before the prefix materializes its literals: every other
         // I096 candidate keeps its inline lowering.
         if (!lexicalC1BindingCandidate
-                && (inlineClosureLiteralCallCandidate(call) != null
-                        || currentRootBindingCallCandidates.containsKey(call))) {
+                && currentRootBindingCallCandidates.containsKey(call)) {
             return false;
         }
         for (CanonicalExpression argument : call.arguments()) {
@@ -4411,7 +4176,6 @@ final class CanonicalToBytecodeLowerer {
     private boolean admitsTerminalMethodSend(CanonicalExpression last) {
         if (!(last instanceof CanonicalSend send)
                 || currentActivationLocal != null
-                || currentInlineCallbackFrameNative
                 || currentInlineClosureCallBody
                 || !currentNormalCallbackScalarLocals.isEmpty()
                 || send.arguments().size() != 1
@@ -4425,14 +4189,11 @@ final class CanonicalToBytecodeLowerer {
 
 
     /**
-     * Shared fixed-arity call emission.
-     *
-     * Closure calls and selected method calls use the same lowering
-     * entry point. Terminal position is a property of the enclosing
-     * Return, not a reason to select a different direct-call PIC.
-     *
-     * The remaining zero/variadic operations are migration dependencies
-     * and will be replaced when their consumers are moved.
+     * I115: a terminal call or send whose operands are direct terminal
+     * values: the same arity-selected {@code Call*Method} (terminal form) of
+     * the shared dispatcher; a send first selects through {@code GetMethod}
+     * on the receiver, evaluated once. A suspended callee returns the
+     * terminal transport.
      */
     private void emitCall(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -4446,57 +4207,42 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginSourceSection(span.startOffset(), span.length());
         builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
 
+        BytecodeLocal callable = builder.createLocal("terminalCallable", null);
+        java.util.List<CanonicalExpression> arguments;
         if (expression instanceof CanonicalCall call) {
-            java.util.List<CanonicalExpression> arguments = call.arguments();
-
-            if (arguments.isEmpty()) {
-                builder.beginCallNilaryMethod(true);
-                emitTerminalCallOperand(builder, call.receiver());
-                builder.endCallNilaryMethod();
-            } else if (arguments.size() == 1) {
-                builder.beginCallUnaryMethod(true);
-                emitTerminalCallOperand(builder, call.receiver());
-                emitTerminalCallOneArgument(builder, arguments.get(0));
-                builder.endCallUnaryMethod();
-            } else {
-                builder.beginCallVarargsMethod(true);
-                emitTerminalCallOperand(builder, call.receiver());
-                builder.beginCollectClosureCallArguments();
-                for (CanonicalExpression argument : arguments) {
-                    emitExpression(builder, argument);
-                }
-                builder.endCollectClosureCallArguments();
-                builder.endCallVarargsMethod();
-            }
+            arguments = call.arguments();
+            builder.beginStoreLocal(callable);
+            emitTerminalCallOperand(builder, call.receiver());
+            builder.endStoreLocal();
         } else if (expression instanceof CanonicalSend send) {
-            TruffleString selector = TruffleString.fromJavaStringUncached(
-                    send.message(), TruffleString.Encoding.UTF_16);
-
-            builder.beginBlock();
-            builder.beginBindStackValue();
+            arguments = send.arguments();
+            BytecodeLocal receiver = builder.createLocal("terminalReceiver", null);
+            builder.beginStoreLocal(receiver);
             emitTerminalCallOperand(builder, send.receiver());
-            StackValue receiver = builder.endBindStackValue();
-
-            builder.beginCallBinaryMethod(selector, true);
-
-            builder.beginGetMethod(selector);
-            builder.emitLoadStackValue(receiver);
-            builder.endGetMethod();
-
-            builder.emitLoadStackValue(receiver);
-            emitTerminalCallOneArgument(builder, send.arguments().get(0));
-
-            builder.endCallBinaryMethod();
-            builder.endBlock();
+            builder.endStoreLocal();
+            emitGetMethod(builder, send.message(), receiver, callable);
         } else {
             throw new AssertionError(
                     "Unsupported fixed-arity call: " + expression.getClass());
         }
+        java.util.List<BytecodeLocal> argumentValues = new java.util.ArrayList<>(arguments.size());
+        for (CanonicalExpression argument : arguments) {
+            BytecodeLocal argumentValue = builder.createLocal("terminalArgument", null);
+            builder.beginStoreLocal(argumentValue);
+            emitTerminalCallOneArgument(builder, argument);
+            builder.endStoreLocal();
+            argumentValues.add(argumentValue);
+        }
+        // The block's value: the terminal call result or transport.
+        emitCallOperation(builder, true, callable, argumentValues, null);
 
+        builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
     }
+
 
     /**
      * I115 EXPERIMENTAL: whether the terminal Call1 invokes an ordinary
@@ -4654,25 +4400,14 @@ final class CanonicalToBytecodeLowerer {
                     childResult,
                     resumeValue);
 
-            if (argument instanceof CanonicalNamedArgument named) {
-                builder.beginAppendNamedSuppliedArgument(named.name());
-                builder.emitLoadLocal(suppliedVector);
-                builder.emitLoadLocal(value);
-                builder.endAppendNamedSuppliedArgument();
-            } else if (argument instanceof CanonicalSpread) {
-                if (currentInlineCallbackFrameNative) {
-                    builder.beginAppendInlineSpreadSuppliedArgument(
-                            currentRootFrameNativeLocals,
-                            currentRootFrameNativeLayout);
-                } else {
+            if (argument instanceof CanonicalSpread) {
+                {
                     builder.beginAppendSpreadSuppliedArgument();
                 }
                 builder.emitLoadLocal(suppliedVector);
                 builder.emitLoadLocal(value);
                 emitSendCallerOperand(builder);
-                if (currentInlineCallbackFrameNative) {
-                    builder.endAppendInlineSpreadSuppliedArgument();
-                } else {
+                {
                     builder.endAppendSpreadSuppliedArgument();
                 }
             } else {
@@ -4712,25 +4447,14 @@ final class CanonicalToBytecodeLowerer {
                     childResult,
                     resumeValue);
 
-            if (argument instanceof CanonicalNamedArgument named) {
-                builder.beginAppendNamedSuppliedArgument(named.name());
-                builder.emitLoadLocal(suppliedVector);
-                builder.emitLoadLocal(value);
-                builder.endAppendNamedSuppliedArgument();
-            } else if (argument instanceof CanonicalSpread) {
-                if (currentInlineCallbackFrameNative) {
-                    builder.beginAppendInlineSpreadSuppliedArgument(
-                            currentRootFrameNativeLocals,
-                            currentRootFrameNativeLayout);
-                } else {
+            if (argument instanceof CanonicalSpread) {
+                {
                     builder.beginAppendSpreadSuppliedArgument();
                 }
                 builder.emitLoadLocal(suppliedVector);
                 builder.emitLoadLocal(value);
                 emitSendCallerOperand(builder);
-                if (currentInlineCallbackFrameNative) {
-                    builder.endAppendInlineSpreadSuppliedArgument();
-                } else {
+                {
                     builder.endAppendSpreadSuppliedArgument();
                 }
             } else {
@@ -5233,7 +4957,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endMapConstructionFactoryCall();
         builder.endStoreLocal();
 
-        emitPreparedInvocation(
+        emitRequestInvocation(
                 builder,
                 factoryResult,
                 preparedCall,
@@ -5333,7 +5057,7 @@ final class CanonicalToBytecodeLowerer {
             builder.endStructuredPrepareChildCall();
             builder.endStoreLocal();
 
-            emitPreparedInvocation(
+            emitRequestInvocation(
                     builder,
                     callbackResult,
                     preparedCall,
@@ -5375,7 +5099,7 @@ final class CanonicalToBytecodeLowerer {
             builder.endStructuredPrepareChildCall();
             builder.endStoreLocal();
 
-            emitPreparedInvocation(
+            emitRequestInvocation(
                     builder,
                     callbackResult,
                     preparedCall,
@@ -5400,50 +5124,6 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(result);
         builder.emitLoadLocal(mapValue);
-        builder.endStoreLocal();
-    }
-
-    private void emitBodySequenceToLocal(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalSequence sequence,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        if (sequence.expressions().isEmpty()) {
-            builder.beginStoreLocal(result);
-            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
-            builder.endStoreLocal();
-            return;
-        }
-
-        for (CanonicalExpression expression : sequence.expressions()) {
-            SourceSpan span = expression.span();
-            builder.beginSourceSection(span.startOffset(), span.length());
-            builder.beginTag(
-                    StandardTags.StatementTag.class,
-                    StandardTags.ExpressionTag.class);
-            builder.beginBlock();
-            emitBodyExpressionToLocal(
-                    builder,
-                    expression,
-                    result,
-                    preparedCall,
-                    childResult,
-                    resumeValue);
-            builder.endBlock();
-            builder.endTag(
-                    StandardTags.StatementTag.class,
-                    StandardTags.ExpressionTag.class);
-            builder.endSourceSection();
-        }
-    }
-
-    private static void emitLocalNoop(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal local) {
-        builder.beginStoreLocal(local);
-        builder.emitLoadLocal(local);
         builder.endStoreLocal();
     }
 
@@ -5578,17 +5258,11 @@ final class CanonicalToBytecodeLowerer {
             java.util.Map<String, BytecodeLocal> savedFrameLocals =
                     currentRootFrameLocals;
             BytecodeLocal savedActivationLocal = currentActivationLocal;
-            boolean savedActivationLocalIsInlineCallbackCall =
-                    currentActivationLocalIsInlineCallbackCall;
-            boolean savedInlineCallbackFrameNative =
-                    currentInlineCallbackFrameNative;
             try {
                 currentRootAnalysis = null;
                 currentRootTopScope = null;
                 currentRootFrameLocals = java.util.Map.of();
                 currentActivationLocal = constructionActivation;
-                currentActivationLocalIsInlineCallbackCall = false;
-                currentInlineCallbackFrameNative = false;
                 BytecodeLocal bodyResult =
                         builder.createLocal("objectBodyResult", null);
                 emitStatementsToLocal(builder, object.body(), bodyResult);
@@ -5597,10 +5271,6 @@ final class CanonicalToBytecodeLowerer {
                 currentRootTopScope = savedTopScope;
                 currentRootFrameLocals = savedFrameLocals;
                 currentActivationLocal = savedActivationLocal;
-                currentActivationLocalIsInlineCallbackCall =
-                        savedActivationLocalIsInlineCallbackCall;
-                currentInlineCallbackFrameNative =
-                        savedInlineCallbackFrameNative;
             }
         }
 
@@ -5931,14 +5601,6 @@ final class CanonicalToBytecodeLowerer {
                 builder.beginResolveRootFrameLocalWriteTarget(currentFrameLocal);
                 builder.emitLoadConstant(assign.name());
                 builder.endResolveRootFrameLocalWriteTarget();
-            } else if (currentInlineCallbackFrameNative) {
-                builder.beginResolveInlineFrameLocalWriteTarget(
-                        currentFrameLocal,
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                emitCurrentInlineCallbackCall(builder);
-                builder.emitLoadConstant(assign.name());
-                builder.endResolveInlineFrameLocalWriteTarget();
             } else {
                 builder.beginResolveCurrentFrameLocalWriteTarget(currentFrameLocal);
                 emitCurrentActivation(builder);
@@ -5999,16 +5661,6 @@ final class CanonicalToBytecodeLowerer {
                 builder.emitLoadConstant(assign.name());
                 builder.emitLoadLocal(value);
                 builder.endAssignRootFrameLocal();
-            } else if (currentInlineCallbackFrameNative) {
-                builder.beginAssignInlineFrameLocal(
-                        currentFrameLocal,
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                emitCurrentInlineCallbackCall(builder);
-                builder.emitLoadLocal(mutationTarget);
-                builder.emitLoadConstant(assign.name());
-                builder.emitLoadLocal(value);
-                builder.endAssignInlineFrameLocal();
             } else {
                 builder.beginAssignCurrentFrameLocal(currentFrameLocal);
                 emitCurrentActivation(builder);
@@ -6066,21 +5718,9 @@ final class CanonicalToBytecodeLowerer {
                 childResult,
                 resumeValue);
 
-        builder.beginStoreLocal(preparedCall);
-        beginPrepareSend(builder, 2);
-        builder.emitLoadLocal(receiver);
-        builder.emitLoadConstant("atPut");
-        emitSendCallerOperand(builder);
-        builder.emitLoadLocal(index);
-        builder.emitLoadLocal(value);
-        endPrepareSend(builder, 2);
-        builder.endStoreLocal();
-        emitPreparedInvocation(
-                builder,
-                dispatchResult,
-                preparedCall,
-                childResult,
-                resumeValue);
+        emitDispatchedSendOfLocals(
+                builder, "atPut", receiver, java.util.List.of(index, value),
+                dispatchResult, childResult, resumeValue);
 
         /* Indexed assignment returns the exact RHS, never the atPut result. */
         builder.beginStoreLocal(result);
@@ -6197,14 +5837,6 @@ final class CanonicalToBytecodeLowerer {
                 builder.beginResolveRootFrameLocalWriteTarget(currentFrameLocal);
                 builder.emitLoadConstant(assign.name());
                 builder.endResolveRootFrameLocalWriteTarget();
-            } else if (currentInlineCallbackFrameNative) {
-                builder.beginResolveInlineFrameLocalWriteTarget(
-                        currentFrameLocal,
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                emitCurrentInlineCallbackCall(builder);
-                builder.emitLoadConstant(assign.name());
-                builder.endResolveInlineFrameLocalWriteTarget();
             } else {
                 builder.beginResolveCurrentFrameLocalWriteTarget(currentFrameLocal);
                 emitCurrentActivation(builder);
@@ -6246,16 +5878,6 @@ final class CanonicalToBytecodeLowerer {
                 builder.emitLoadConstant(assign.name());
                 builder.emitLoadLocal(value);
                 builder.endAssignRootFrameLocal();
-            } else if (currentInlineCallbackFrameNative) {
-                builder.beginAssignInlineFrameLocal(
-                        currentFrameLocal,
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                emitCurrentInlineCallbackCall(builder);
-                builder.emitLoadLocal(mutationTarget);
-                builder.emitLoadConstant(assign.name());
-                builder.emitLoadLocal(value);
-                builder.endAssignInlineFrameLocal();
             } else {
                 builder.beginAssignCurrentFrameLocal(currentFrameLocal);
                 emitCurrentActivation(builder);
@@ -6309,21 +5931,9 @@ final class CanonicalToBytecodeLowerer {
                 childResult,
                 resumeValue);
 
-        builder.beginStoreLocal(preparedCall);
-        beginPrepareSend(builder, 2);
-        builder.emitLoadLocal(receiver);
-        builder.emitLoadConstant("atPut");
-        emitSendCallerOperand(builder);
-        builder.emitLoadLocal(index);
-        builder.emitLoadLocal(value);
-        endPrepareSend(builder, 2);
-        builder.endStoreLocal();
-        emitPreparedInvocation(
-                builder,
-                dispatchResult,
-                preparedCall,
-                childResult,
-                resumeValue);
+        emitDispatchedSendOfLocals(
+                builder, "atPut", receiver, java.util.List.of(index, value),
+                dispatchResult, childResult, resumeValue);
 
         builder.beginStoreLocal(result);
         builder.emitLoadLocal(value);
@@ -6334,1439 +5944,333 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSuperSend send,
             BytecodeLocal result,
-            BytecodeLocal preparedCall,
+            BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        requireDefaultScratch(result, preparedCall, childResult, resumeValue);
-        boolean stageArguments = hasComposedArgument(send.arguments());
-        boolean spreadArguments = hasSpreadArgument(send.arguments());
-        boolean namedArguments = hasNamedArgument(send.arguments());
-        boolean vectorArguments = spreadArguments || namedArguments;
-        boolean stageInputs = stageArguments || vectorArguments;
-        BytecodeLocal suppliedVector = null;
-        java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
-
-        builder.beginTag(StandardTags.CallTag.class);
-        builder.beginBlock();
-
-        if (stageInputs) {
-            if (vectorArguments) {
-                suppliedVector = builder.createLocal("superSuppliedArgumentVector", null);
-                emitBodySpreadArgumentVector(
-                        builder,
-                        send.arguments(),
-                        suppliedVector,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
-            } else {
-                argumentValues = new java.util.ArrayList<>(send.arguments().size());
-                for (CanonicalExpression argument : send.arguments()) {
-                    BytecodeLocal argumentValue = builder.createLocal("superArgument", null);
-                    emitBodyExpressionToLocal(
-                            builder,
-                            argument,
-                            argumentValue,
-                            preparedCall,
-                            childResult,
-                            resumeValue);
-                    argumentValues.add(argumentValue);
-                }
-            }
-        }
-
-        builder.beginStoreLocal(preparedCall);
-        if (vectorArguments) {
-            builder.beginPrepareClosureCallVector(true);
-            builder.emitLoadConstant(send.message());
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(suppliedVector);
-            builder.endPrepareClosureCallVector();
-        } else {
-            builder.beginPrepareClosureCallArguments(true);
-            builder.emitLoadConstant(send.message());
-            emitCurrentActivation(builder);
-            if (stageInputs) {
-                for (BytecodeLocal argumentValue : argumentValues) {
-                    builder.emitLoadLocal(argumentValue);
-                }
-            } else {
-                for (CanonicalExpression argument : send.arguments()) {
-                    emitExpression(builder, argument);
-                }
-            }
-            builder.endPrepareClosureCallArguments();
-        }
-        builder.endStoreLocal();
-
-        emitPreparedInvocation(
-                builder,
-                result,
-                preparedCall,
-                childResult,
-                resumeValue);
-        builder.endBlock();
-        builder.endTag(StandardTags.CallTag.class);
+        emitDispatchedInvocation(
+                builder, InvocationShape.SUPER_SEND, null, send.message(), send.arguments(),
+                result, scratch, childResult, resumeValue,
+                this::emitBodyExpressionToLocal, this::emitBodySpreadArgumentVector, false);
     }
+
 
     private void emitComposedDefaultSuperSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSuperSend send,
             BytecodeLocal result,
-            BytecodeLocal preparedCall,
+            BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        requireDefaultScratch(result, preparedCall, childResult, resumeValue);
-        boolean stageArguments = hasComposedArgument(send.arguments());
-        boolean spreadArguments = hasSpreadArgument(send.arguments());
-        boolean namedArguments = hasNamedArgument(send.arguments());
-        boolean vectorArguments = spreadArguments || namedArguments;
-        boolean stageInputs = stageArguments || vectorArguments;
-        BytecodeLocal suppliedVector = null;
-        java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
-
-        builder.beginSourceSection(
-                send.span().startOffset(),
-                send.span().length());
-        builder.beginTag(StandardTags.CallTag.class);
-        builder.beginBlock();
-
-        if (stageInputs) {
-            if (vectorArguments) {
-                suppliedVector = builder.createLocal("defaultSuperSuppliedArgumentVector", null);
-                emitDefaultSpreadArgumentVector(
-                        builder,
-                        send.arguments(),
-                        suppliedVector,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
-            } else {
-                argumentValues = new java.util.ArrayList<>(send.arguments().size());
-                for (CanonicalExpression argument : send.arguments()) {
-                    BytecodeLocal argumentValue = builder.createLocal("defaultSuperArgument", null);
-                    emitDefaultExpressionToLocal(
-                            builder,
-                            argument,
-                            argumentValue,
-                            preparedCall,
-                            childResult,
-                            resumeValue);
-                    argumentValues.add(argumentValue);
-                }
-            }
-        }
-
-        builder.beginStoreLocal(preparedCall);
-        if (vectorArguments) {
-            builder.beginPrepareClosureCallVector(true);
-            builder.emitLoadConstant(send.message());
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(suppliedVector);
-            builder.endPrepareClosureCallVector();
-        } else {
-            builder.beginPrepareClosureCallArguments(true);
-            builder.emitLoadConstant(send.message());
-            emitCurrentActivation(builder);
-            if (stageInputs) {
-                for (BytecodeLocal argumentValue : argumentValues) {
-                    builder.emitLoadLocal(argumentValue);
-                }
-            } else {
-                for (CanonicalExpression argument : send.arguments()) {
-                    emitExpression(builder, argument);
-                }
-            }
-            builder.endPrepareClosureCallArguments();
-        }
-        builder.endStoreLocal();
-
-        emitPreparedInvocation(
-                builder,
-                result,
-                preparedCall,
-                childResult,
-                resumeValue);
-        builder.endBlock();
-        builder.endTag(StandardTags.CallTag.class);
+        builder.beginSourceSection(send.span().startOffset(), send.span().length());
+        emitDispatchedInvocation(
+                builder, InvocationShape.SUPER_SEND, null, send.message(), send.arguments(),
+                result, scratch, childResult, resumeValue,
+                this::emitDefaultExpressionToLocal, this::emitDefaultSpreadArgumentVector, false);
         builder.endSourceSection();
     }
+
 
     private void emitComposedDefaultCall(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCall call,
             BytecodeLocal result,
-            BytecodeLocal preparedCall,
+            BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        requireDefaultScratch(
-                result,
-                preparedCall,
-                childResult,
-                resumeValue);
-        CanonicalExpression receiver = call.receiver();
-        boolean stageReceiver = requiresComposedInvocation(receiver);
-        boolean stageArguments =
-                hasComposedArgument(call.arguments());
-        boolean spreadArguments = hasSpreadArgument(call.arguments());
-        boolean namedArguments = hasNamedArgument(call.arguments());
-        boolean vectorArguments = spreadArguments || namedArguments;
-        boolean stageInputs =
-                stageReceiver
-                        || stageArguments
-                        || vectorArguments;
-        BytecodeLocal receiverValue = null;
-        BytecodeLocal suppliedVector = null;
-        java.util.List<BytecodeLocal> argumentValues =
-                java.util.List.of();
-
-        builder.beginSourceSection(
-                call.span().startOffset(),
-                call.span().length());
-        builder.beginTag(StandardTags.CallTag.class);
-        builder.beginBlock();
-
-        if (stageInputs) {
-            receiverValue =
-                    builder.createLocal(
-                            "defaultCallReceiver",
-                            null);
-            if (stageReceiver) {
-                emitDefaultExpressionToLocal(
-                        builder,
-                        receiver,
-                        receiverValue,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
-            } else {
-                builder.beginStoreLocal(receiverValue);
-                emitExpression(builder, receiver);
-                builder.endStoreLocal();
-            }
-
-            if (vectorArguments) {
-                suppliedVector =
-                        builder.createLocal(
-                                "defaultSuppliedArgumentVector",
-                                null);
-                emitDefaultSpreadArgumentVector(
-                        builder,
-                        call.arguments(),
-                        suppliedVector,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
-            } else {
-                argumentValues =
-                        new java.util.ArrayList<>(
-                                call.arguments().size());
-                for (CanonicalExpression argument :
-                        call.arguments()) {
-                    BytecodeLocal argumentValue =
-                            builder.createLocal(
-                                    "defaultCallArgument",
-                                    null);
-                    emitDefaultExpressionToLocal(
-                            builder,
-                            argument,
-                            argumentValue,
-                            preparedCall,
-                            childResult,
-                            resumeValue);
-                    argumentValues.add(argumentValue);
-                }
-            }
-        }
-
-        builder.beginStoreLocal(preparedCall);
-        if (vectorArguments) {
-            builder.beginPrepareClosureCallVector(false);
-            builder.emitLoadLocal(receiverValue);
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(suppliedVector);
-            builder.endPrepareClosureCallVector();
-        } else {
-            builder.beginPrepareClosureCallArguments(false);
-            if (stageInputs) {
-                builder.emitLoadLocal(receiverValue);
-            } else {
-                emitExpression(builder, receiver);
-            }
-            emitCurrentActivation(builder);
-            if (stageInputs) {
-                for (BytecodeLocal argumentValue :
-                        argumentValues) {
-                    builder.emitLoadLocal(argumentValue);
-                }
-            } else {
-                for (CanonicalExpression argument :
-                        call.arguments()) {
-                    emitExpression(builder, argument);
-                }
-            }
-            builder.endPrepareClosureCallArguments();
-        }
-        builder.endStoreLocal();
-        emitComposedPreparedDefaultInvocation(
-                builder,
-                result,
-                preparedCall,
-                childResult,
-                resumeValue);
-        builder.endBlock();
-        builder.endTag(StandardTags.CallTag.class);
+        builder.beginSourceSection(call.span().startOffset(), call.span().length());
+        emitDispatchedInvocation(
+                builder, InvocationShape.CALL, call.receiver(), null, call.arguments(),
+                result, scratch, childResult, resumeValue,
+                this::emitDefaultExpressionToLocal, this::emitDefaultSpreadArgumentVector, false);
         builder.endSourceSection();
     }
+
 
     private void emitComposedDefaultSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
-            BytecodeLocal preparedCall,
+            BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        requireDefaultScratch(
-                result,
-                preparedCall,
-                childResult,
-                resumeValue);
-        CanonicalExpression receiver = send.receiver();
-        boolean stageReceiver = requiresComposedInvocation(receiver);
-        boolean stageArguments =
-                hasComposedArgument(send.arguments());
-        boolean spreadArguments = hasSpreadArgument(send.arguments());
-        boolean namedArguments = hasNamedArgument(send.arguments());
-        boolean vectorArguments = spreadArguments || namedArguments;
-        boolean tryNativeIfTrue =
-                !namedArguments
-                        && admitsNativeIfTrue(send, spreadArguments);
-        boolean stageInputs =
-                stageReceiver || stageArguments || vectorArguments
-                        || tryNativeIfTrue;
-        BytecodeLocal receiverValue = null;
-        BytecodeLocal suppliedVector = null;
-        java.util.List<BytecodeLocal> argumentValues =
-                java.util.List.of();
+        builder.beginSourceSection(send.span().startOffset(), send.span().length());
+        emitDispatchedInvocation(
+                builder, InvocationShape.SEND, send.receiver(), send.message(), send.arguments(),
+                result, scratch, childResult, resumeValue,
+                this::emitDefaultExpressionToLocal, this::emitDefaultSpreadArgumentVector, false);
+        builder.endSourceSection();
+    }
 
-        builder.beginSourceSection(
-                send.span().startOffset(),
-                send.span().length());
+
+    /** I115: how an invocation operand is staged in the current lowering context. */
+    @FunctionalInterface
+    private interface OperandStager {
+        void stage(
+                ProtosBytecodeRootNodeGen.Builder builder,
+                CanonicalExpression expression,
+                BytecodeLocal target,
+                BytecodeLocal scratch,
+                BytecodeLocal childResult,
+                BytecodeLocal resumeValue);
+    }
+
+    /** I115: how a spread argument vector is staged in the current lowering context. */
+    @FunctionalInterface
+    private interface SpreadStager {
+        void stage(
+                ProtosBytecodeRootNodeGen.Builder builder,
+                java.util.List<CanonicalExpression> arguments,
+                BytecodeLocal vector,
+                BytecodeLocal scratch,
+                BytecodeLocal childResult,
+                BytecodeLocal resumeValue);
+    }
+
+    /** I115: the three invocation shapes of the canonical AST. */
+    private enum InvocationShape { CALL, SEND, SUPER_SEND }
+
+    /**
+     * I115 (GraalPy call lowering): the single lowering of every ordinary
+     * call, send and super send.
+     *
+     * <ol>
+     *   <li>CALL: the callee expression is evaluated into the callable.
+     *   <li>SEND: the receiver is evaluated once and kept; {@code GetMethod}
+     *       selects the method on it (a bound method carrying the receiver
+     *       and methodHome).
+     *   <li>SUPER_SEND: {@code GetSuperMethod} selects from the parent of the
+     *       current methodHome.
+     *   <li>The arguments are evaluated left to right (a spread argument
+     *       builds the positional vector).
+     *   <li>{@code Call*Method} by arity (0..4, otherwise or with spread
+     *       {@code CallVarargsMethod}) enters the shared dispatcher.
+     *   <li>A pending result is composed: {@code IsResultKind(CONTINUATION)
+     *       -> Yield -> ResumeDispatchedContinuation}.
+     * </ol>
+     * The call is wrapped once in {@link StandardTags.CallTag}.
+     */
+    private void emitDispatchedInvocation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            InvocationShape shape,
+            CanonicalExpression receiver,
+            String selector,
+            java.util.List<CanonicalExpression> arguments,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            OperandStager stager,
+            SpreadStager spreadStager,
+            boolean primitiveCarrierResult) {
+        if (result == null || scratch == null || childResult == null || resumeValue == null) {
+            throw new AssertionError("Bytecode invocation result/scratch locals were not allocated");
+        }
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
 
-        if (stageInputs) {
-            receiverValue =
-                    builder.createLocal(
-                            "defaultSendReceiver",
-                            null);
-            if (stageReceiver) {
-                emitDefaultExpressionToLocal(
-                        builder,
-                        receiver,
-                        receiverValue,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
-            } else {
-                builder.beginStoreLocal(receiverValue);
-                emitExpression(builder, receiver);
+        BytecodeLocal callable = builder.createLocal("invocationCallable", null);
+        switch (shape) {
+            case CALL -> stageOperand(builder, receiver, callable, scratch, childResult, resumeValue, stager);
+            case SEND -> {
+                BytecodeLocal receiverValue = builder.createLocal("invocationReceiver", null);
+                stageOperand(builder, receiver, receiverValue, scratch, childResult, resumeValue, stager);
+                emitGetMethod(builder, selector, receiverValue, callable);
+            }
+            case SUPER_SEND -> {
+                builder.beginStoreLocal(callable);
+                builder.emitGetSuperMethod(selector);
                 builder.endStoreLocal();
             }
-
-            if (vectorArguments) {
-                suppliedVector =
-                        builder.createLocal(
-                                "defaultSuppliedArgumentVector",
-                                null);
-                emitDefaultSpreadArgumentVector(
-                        builder,
-                        send.arguments(),
-                        suppliedVector,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
-            } else {
-                argumentValues =
-                        new java.util.ArrayList<>(
-                                send.arguments().size());
-                for (CanonicalExpression argument :
-                        send.arguments()) {
-                    BytecodeLocal argumentValue =
-                            builder.createLocal(
-                                    "defaultSendArgument",
-                                    null);
-                    emitDefaultExpressionToLocal(
-                            builder,
-                            argument,
-                            argumentValue,
-                            preparedCall,
-                            childResult,
-                            resumeValue);
-                    argumentValues.add(argumentValue);
-                }
-            }
         }
 
-        BytecodeLocal nativeIfTrue = null;
-        if (tryNativeIfTrue) {
-            nativeIfTrue = builder.createLocal("defaultNativeIfTrue", null);
-
-            if (!spreadArguments && !currentInlineCallbackFrameNative) {
-                emitCanonicalIfTrueOneCandidate(
-                        builder,
-                        receiver,
-                        receiverValue,
-                        argumentValues.get(0),
-                        null,
-                        nativeIfTrue);
-            } else {
-                emitNativeIfTrueCandidate(
-                        builder,
-                        receiverValue,
-                        spreadArguments,
-                        suppliedVector,
-                        spreadArguments ? null : argumentValues.get(0),
-                        null,
-                        nativeIfTrue);
-            }
-
-            builder.beginIfThenElse();
-            builder.beginIsResultKind(ProtosResultKind.COMPACT_BOOLEAN_MISS);
-            builder.emitLoadLocal(nativeIfTrue);
-            builder.endIsResultKind();
-            builder.beginBlock();
-        }
-
-        builder.beginStoreLocal(preparedCall);
-        if (vectorArguments) {
-            builder.beginPrepareSendVector();
-            builder.emitLoadLocal(receiverValue);
-            builder.emitLoadConstant(send.message());
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(suppliedVector);
-            builder.endPrepareSendVector();
+        BytecodeLocal suppliedVector = null;
+        java.util.List<BytecodeLocal> argumentValues = new java.util.ArrayList<>(arguments.size());
+        if (hasSpreadArgument(arguments)) {
+            suppliedVector = builder.createLocal("suppliedArgumentVector", null);
+            spreadStager.stage(builder, arguments, suppliedVector, scratch, childResult, resumeValue);
         } else {
-            beginPrepareSend(builder, send.arguments().size());
-            if (stageInputs) {
-                builder.emitLoadLocal(receiverValue);
-            } else {
-                emitExpression(builder, receiver);
+            for (CanonicalExpression argument : arguments) {
+                BytecodeLocal argumentValue = builder.createLocal("invocationArgument", null);
+                stageOperand(builder, argument, argumentValue, scratch, childResult, resumeValue, stager);
+                argumentValues.add(argumentValue);
             }
-            builder.emitLoadConstant(send.message());
-            emitSendCallerOperand(builder);
-            if (stageInputs) {
-                for (BytecodeLocal argumentValue :
-                        argumentValues) {
-                    builder.emitLoadLocal(argumentValue);
-                }
-            } else {
-                for (CanonicalExpression argument :
-                        send.arguments()) {
-                    emitExpression(builder, argument);
-                }
-            }
-            endPrepareSend(builder, send.arguments().size());
         }
-        builder.endStoreLocal();
-        emitComposedPreparedDefaultInvocation(
-                builder,
-                result,
-                preparedCall,
-                childResult,
-                resumeValue);
-        if (tryNativeIfTrue) {
-            builder.endBlock();
-            builder.beginBlock();
-            emitCanonicalIfTrueNative(
-                    builder, nativeIfTrue, result,
-                    childResult, resumeValue);
-            builder.endBlock();
-            builder.endIfThenElse();
-        }
+
+        emitDispatchedCall(builder, callable, argumentValues, suppliedVector, childResult, result,
+                resumeValue, primitiveCarrierResult);
+
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
-        builder.endSourceSection();
     }
 
-    private void emitComposedPreparedDefaultInvocation(
+    private void stageOperand(
             ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        emitPreparedInvocation(
-                builder,
-                result,
-                preparedCall,
-                childResult,
-                resumeValue);
-    }
-
-    /**
-     * PLAT042 Candidate B′ source-root prepared invocation.
-     *
-     * <p>A structured prepared call (while, each, ensure, Error.handle,
-     * match/case, import, structured collection callbacks, ...) enters the
-     * untagged structured-dispatch root exactly once for this invocation and
-     * composes its C-prime continuation through this semantic root; the
-     * structured root then performs every callback call itself. Any other
-     * prepared call is invoked locally, exactly as the final ordinary branch of
-     * the structured dispatcher does.
-     *
-     * <p>PLAT043 narrows the structured case: a prepared standard Boolean call
-     * (IF_TRUE, IF_FALSE, IF_TRUE_IF_FALSE, AND, OR, IF, ELSE) is sequenced in this root
-     * (see {@link #emitLocalBooleanInvocation}), so a reached callback is
-     * entered directly from this root without an intermediate helper root.
-     */
-    private void emitPreparedInvocation(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        emitPreparedInvocation(
-                builder,
-                result,
-                preparedCall,
-                childResult,
-                resumeValue,
-                java.util.List.of(),
-                null,
-                null);
-    }
-
-    /**
-     * {@code inlineCallbacks} are the send site's PLAT044 B′ candidate
-     * literals (see {@link #inlineLiteralCallbackCandidates}); they only add
-     * guarded inline alternatives to the selected Boolean callback invocation
-     * and never change selection.
-     *
-     * <p>{@code inlineWhile}, when non-null, is the send site's PERF026-C1
-     * whileTrue literal pair ({@link #isInlineLiteralWhileCandidate}): a
-     * prepared call that admits exactly that pair is sequenced by {@link
-     * #emitLocalInlineLiteralWhile}; every other prepared call keeps the
-     * dispatch below unchanged.
-     *
-     * <p>{@code inlineEach}, when non-null, is the send site's PERF026-D1
-     * one-parameter ({@link #isInlineLiteralIndexedEachCandidate}) or
-     * PERF026-D2/D3 two-parameter ({@link
-     * #isInlineLiteralTwoParameterEachCandidate}) literal argument: a prepared
-     * standard Array.each or Bytes.each, respectively Map.each,
-     * IdentityMap.each or Environment.each, that admits exactly that literal is sequenced by
-     * {@link #emitLocalInlineLiteralEach}; every other prepared call keeps the
-     * dispatch below unchanged.
-     */
-    private void emitPreparedInvocation(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
+            CanonicalExpression expression,
+            BytecodeLocal target,
+            BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
-            java.util.List<InlineLiteralCallback> inlineCallbacks,
-            InlineLiteralWhile inlineWhile,
-            InlineLiteralEach inlineEach) {
-        requireDefaultScratch(
-                result,
-                preparedCall,
-                childResult,
-                resumeValue);
-
-
-        if (inlineWhile != null) {
-            builder.beginIfThenElse();
-            builder.beginAdmitsInlineLiteralWhile();
-            builder.emitLoadLocal(preparedCall);
-            builder.emitLoadLocal(inlineWhile.condition().literal());
-            builder.emitLoadLocal(inlineWhile.body().literal());
-            builder.endAdmitsInlineLiteralWhile();
-
-            emitLocalInlineLiteralWhile(
-                    builder,
-                    result,
-                    preparedCall,
-                    childResult,
-                    resumeValue,
-                    inlineWhile);
-
-            builder.beginBlock();
-        }
-
-        if (inlineEach != null) {
-            builder.beginIfThenElse();
-            if (inlineEach.twoParameter()) {
-                builder.beginAdmitsInlineLiteralEach(true);
-            } else {
-                builder.beginAdmitsInlineLiteralEach(false);
-            }
-            builder.emitLoadLocal(preparedCall);
-            builder.emitLoadLocal(inlineEach.callback().literal());
-            if (inlineEach.twoParameter()) {
-                builder.endAdmitsInlineLiteralEach();
-            } else {
-                builder.endAdmitsInlineLiteralEach();
-            }
-
-            emitLocalInlineLiteralEach(
-                    builder,
-                    result,
-                    preparedCall,
-                    childResult,
-                    resumeValue,
-                    inlineEach);
-
-            builder.beginBlock();
-        }
-
-        builder.beginIfThenElse();
-
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.BOOLEAN);
-        builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredCall();
-
-        emitLocalBooleanInvocation(
-                builder,
-                result,
-                preparedCall,
-                childResult,
-                resumeValue,
-                inlineCallbacks);
-
-        builder.beginBlock();
-        emitDispatchedPreparedInvocation(
-                builder,
-                result,
-                preparedCall,
-                childResult,
-                resumeValue);
-        builder.endBlock();
-
-        builder.endIfThenElse();
-
-        if (inlineEach != null) {
-            builder.endBlock();
-            builder.endIfThenElse();
-        }
-
-        if (inlineWhile != null) {
-            builder.endBlock();
-            builder.endIfThenElse();
-        }
-    }
-
-    /**
-     * PLAT044 B′ (PERF026-C1) local standard pre-test loop ({@code whileTrue}
-     * or, D212, {@code whileFalse}) over an admitted literal pair: the
-     * original receiver is the condition Closure and the sole argument the
-     * body Closure. The prepared loop's immutable kind decides which canonical
-     * Boolean continues the loop; post-test {@code untilTrue} and
-     * {@code untilFalse} are not admitted here and keep the
-     * structured-dispatch loop.
-     *
-     * <p>Mirrors the while branch of {@code ProtosStructuredDispatchLowerer}
-     * against the same {@code PreparedWhileCall} state machine, so the outer
-     * prepared call is completed exactly once by the enclosing TryFinally,
-     * the receiver/body are validated before the first condition activation,
-     * each condition and (only after a canonical {@code true}) each body
-     * activation is prepared fresh at the same point, the condition result
-     * keeps its strict canonical Boolean authority, and normal completion
-     * yields {@code PreparedWhileCall#result}: the exact last normally
-     * completed body result, or canonical {@code null} when no body ran
-     * (D210/D212). The loop phase
-     * lives in this root's Bytecode control state, so suspension resumes at
-     * the exact loop PC through this root's continuation (PLAT014/PLAT021).
-     *
-     * <p>Each fresh child that {@code PreparedWhileCall} admits for its
-     * staged literal runs inline ({@link #emitInlineLiteralCallback}); a
-     * child that is not admitted keeps the helper's exact scoped invocation
-     * ({@link #emitLocalInlineLiteralChild}).
-     */
-    private void emitLocalInlineLiteralWhile(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue,
-            InlineLiteralWhile inlineWhile) {
-        builder.beginBlock();
-        BytecodeLocal structuredWhile =
-                builder.createLocal("structuredWhile", null);
-        BytecodeLocal structuredWhileChild =
-                builder.createLocal("structuredWhileChild", null);
-        BytecodeLocal structuredWhileConditionResult =
-                builder.createLocal("structuredWhileConditionResult", null);
-        BytecodeLocal structuredWhileBodyResult =
-                builder.createLocal("structuredWhileBodyResult", null);
-
-        builder.beginTryFinally(
-                () -> {
-                    builder.beginCompleteClosureCall();
-                    builder.emitLoadLocal(preparedCall);
-                    builder.endCompleteClosureCall();
-                });
-        builder.beginBlock();
-
-        builder.beginStoreLocal(structuredWhile);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.WHILE);
-        builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredCall();
-        builder.endStoreLocal();
-
-        /*
-         * D210/D212: the last normal body result of the inline pre-test loop
-         * (whileTrue or whileFalse). It starts as canonical null (zero
-         * iterations) and is overwritten only by a body invocation that
-         * completes normally; an abnormal condition/body exit propagates
-         * without reaching the result store below.
-         */
-        builder.beginStoreLocal(structuredWhileBodyResult);
-        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
-        builder.endStoreLocal();
-
-        builder.beginWhile();
-
-        builder.beginBlock();
-        builder.beginStoreLocal(structuredWhileChild);
-        builder.beginStructuredPrepareInlineChildCall(false);
-        builder.emitLoadLocal(structuredWhile);
-        builder.endStructuredPrepareInlineChildCall();
-        builder.endStoreLocal();
-        emitLocalInlineLiteralChild(
-                builder,
-                structuredWhileConditionResult,
-                structuredWhileChild,
-                childResult,
-                resumeValue,
-                inlineWhile.condition().definition(),
-                () -> {
-                    builder.beginAdmitsInlineLiteralWhileChild(false);
-                    emitInlineLiteralChildAdmissionOperands(
-                            builder,
-                            structuredWhile,
-                            structuredWhileChild,
-                            inlineWhile.condition());
-                    builder.endAdmitsInlineLiteralWhileChild();
-                });
-        builder.beginStructuredWhileCondition();
-        builder.emitLoadLocal(structuredWhile);
-        builder.emitLoadLocal(structuredWhileConditionResult);
-        builder.endStructuredWhileCondition();
-        builder.endBlock();
-
-        builder.beginBlock();
-        builder.beginStoreLocal(structuredWhileChild);
-        builder.beginStructuredPrepareInlineChildCall(true);
-        builder.emitLoadLocal(structuredWhile);
-        builder.endStructuredPrepareInlineChildCall();
-        builder.endStoreLocal();
-        emitLocalInlineLiteralChild(
-                builder,
-                structuredWhileBodyResult,
-                structuredWhileChild,
-                childResult,
-                resumeValue,
-                inlineWhile.body().definition(),
-                () -> {
-                    builder.beginAdmitsInlineLiteralWhileChild(true);
-                    emitInlineLiteralChildAdmissionOperands(
-                            builder,
-                            structuredWhile,
-                            structuredWhileChild,
-                            inlineWhile.body());
-                    builder.endAdmitsInlineLiteralWhileChild();
-                });
-        builder.beginStoreLocal(structuredWhileBodyResult);
-        builder.beginStructuredWhileRetainBodyResult();
-        builder.emitLoadLocal(structuredWhile);
-        builder.emitLoadLocal(structuredWhileBodyResult);
-        builder.endStructuredWhileRetainBodyResult();
-        builder.endStoreLocal();
-        builder.endBlock();
-
-        builder.endWhile();
-
-        builder.beginStoreLocal(result);
-        builder.beginStructuredFinishWithChildResult();
-        builder.emitLoadLocal(structuredWhile);
-        builder.emitLoadLocal(structuredWhileBodyResult);
-        builder.endStructuredFinishWithChildResult();
-        builder.endStoreLocal();
-
-        builder.endBlock();
-        builder.endTryFinally();
-        builder.endBlock();
-    }
-
-    /**
-     * PLAT044 B′ local standard each over an admitted literal callback:
-     * Array.each or Bytes.each with a one-parameter literal (PERF026-D1), or
-     * Map.each or IdentityMap.each (PERF026-D2) or Environment.each
-     * (PERF026-D3) with a two-parameter literal.
-     *
-     * <p>Mirrors the corresponding each branches of {@code
-     * ProtosStructuredDispatchLowerer} against the same prepared loop state
-     * ({@code PreparedArrayEachCall}/{@code PreparedBytesEachCall} or {@code
-     * PreparedMapEachCall}/{@code PreparedIdentityMapEachCall} or {@code
-     * PreparedEnvironmentEachCall}, viewed as {@code PreparedLocalEachCall}),
-     * so the outer prepared call is completed exactly once by the enclosing
-     * TryFinally, the receiver and callback callability are validated before
-     * the single snapshot is established (for Environment.each, the complete
-     * portable, canonically ordered String snapshot), each child is prepared
-     * fresh with exactly its snapshot arguments (the element or octet, the
-     * representative key and value, or the portable name and value) as
-     * supplied arguments, the cursor advances only after that child
-     * completes normally, an Error or non-local return unwinds without a
-     * later visit, and normal completion returns the original receiver. The
-     * loop phase lives in this root's Bytecode control state, so suspension
-     * resumes the same child through this root's continuation
-     * (PLAT014/PLAT021) without replaying completed visits.
-     *
-     * <p>An admitted child runs inline ({@link #emitInlineLiteralCallback}),
-     * whose ordinary parameter binding reads every formal's value from the
-     * child's own fresh activation; a child that is not admitted keeps its
-     * exact physical invocation ({@link #emitLocalInlineLiteralChild}).
-     */
-    private void emitLocalInlineLiteralEach(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue,
-            InlineLiteralEach inlineEach) {
-        InlineLiteralCallback callback = inlineEach.callback();
-        builder.beginBlock();
-        BytecodeLocal structuredEach =
-                builder.createLocal("structuredLocalEach", null);
-        BytecodeLocal structuredEachChild =
-                builder.createLocal("structuredLocalEachChild", null);
-
-        builder.beginTryFinally(
-                () -> {
-                    builder.beginCompleteClosureCall();
-                    builder.emitLoadLocal(preparedCall);
-                    builder.endCompleteClosureCall();
-                });
-        builder.beginBlock();
-
-        builder.beginStoreLocal(structuredEach);
-        if (inlineEach.twoParameter()) {
-            builder.beginPrepareStructuredCall(ProtosStructuredCallKind.TWO_PARAMETER_EACH);
-            builder.emitLoadLocal(preparedCall);
-            builder.endPrepareStructuredCall();
+            OperandStager stager) {
+        if (requiresComposedInvocation(expression)) {
+            stager.stage(builder, expression, target, scratch, childResult, resumeValue);
         } else {
-            builder.beginPrepareStructuredCall(ProtosStructuredCallKind.INDEXED_EACH);
-            builder.emitLoadLocal(preparedCall);
-            builder.endPrepareStructuredCall();
+            builder.beginStoreLocal(target);
+            emitExpression(builder, expression);
+            builder.endStoreLocal();
+        }
+    }
+
+    /** {@code GetMethod(selector)} on the staged receiver, stored in {@code callable}. */
+    private static void emitGetMethod(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            String selector,
+            BytecodeLocal receiver,
+            BytecodeLocal callable) {
+        builder.beginStoreLocal(callable);
+        builder.beginGetMethod(
+                TruffleString.fromJavaStringUncached(selector, TruffleString.Encoding.UTF_16));
+        builder.emitLoadLocal(receiver);
+        builder.endGetMethod();
+        builder.endStoreLocal();
+    }
+
+    /**
+     * The {@code Call*Method} of the staged callable and arguments, its
+     * continuation composition and the result store. Shared by every
+     * invocation shape so all arities reach the same dispatcher.
+     */
+    private void emitDispatchedCall(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal callable,
+            java.util.List<BytecodeLocal> argumentValues,
+            BytecodeLocal suppliedVector,
+            BytecodeLocal outcome,
+            BytecodeLocal result,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        builder.beginStoreLocal(outcome);
+        emitCallOperation(builder, false, callable, argumentValues, suppliedVector);
+        builder.endStoreLocal();
+
+        emitDispatchedContinuationComposition(builder, outcome, resumeValue);
+
+        builder.beginStoreLocal(result);
+        if (primitiveCarrierResult) {
+            builder.emitLoadLocal(outcome);
+        } else {
+            builder.beginMaterializePrimitiveNumericCarrier();
+            builder.emitLoadLocal(outcome);
+            builder.emitLoadConstant(true);
+            builder.endMaterializePrimitiveNumericCarrier();
         }
         builder.endStoreLocal();
+    }
+
+    /** The arity-selected {@code Call*Method} operation over staged locals. */
+    private static void emitCallOperation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            boolean terminal,
+            BytecodeLocal callable,
+            java.util.List<BytecodeLocal> argumentValues,
+            BytecodeLocal suppliedVector) {
+        int arity = suppliedVector != null ? -1 : argumentValues.size();
+        switch (arity) {
+            case 0 -> builder.beginCallNilaryMethod(terminal);
+            case 1 -> builder.beginCallUnaryMethod(terminal);
+            case 2 -> builder.beginCallBinaryMethod(terminal);
+            case 3 -> builder.beginCallTernaryMethod(terminal);
+            case 4 -> builder.beginCallQuaternaryMethod(terminal);
+            default -> builder.beginCallVarargsMethod(terminal);
+        }
+        builder.emitLoadLocal(callable);
+        if (arity >= 0 && arity <= 4) {
+            for (BytecodeLocal argumentValue : argumentValues) {
+                builder.emitLoadLocal(argumentValue);
+            }
+        } else if (suppliedVector != null) {
+            builder.beginSnapshotClosureCallArguments();
+            builder.emitLoadLocal(suppliedVector);
+            builder.endSnapshotClosureCallArguments();
+        } else {
+            builder.beginCollectClosureCallArguments();
+            for (BytecodeLocal argumentValue : argumentValues) {
+                builder.emitLoadLocal(argumentValue);
+            }
+            builder.endCollectClosureCallArguments();
+        }
+        switch (arity) {
+            case 0 -> builder.endCallNilaryMethod();
+            case 1 -> builder.endCallUnaryMethod();
+            case 2 -> builder.endCallBinaryMethod();
+            case 3 -> builder.endCallTernaryMethod();
+            case 4 -> builder.endCallQuaternaryMethod();
+            default -> builder.endCallVarargsMethod();
+        }
+    }
+
+    /** I115: a send of already staged locals: GetMethod, then the dispatched call. */
+    private void emitDispatchedSendOfLocals(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            String selector,
+            BytecodeLocal receiver,
+            java.util.List<BytecodeLocal> argumentValues,
+            BytecodeLocal result,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal callable = builder.createLocal("sendMethod", null);
+        emitGetMethod(builder, selector, receiver, callable);
+        emitDispatchedCall(
+                builder, callable, argumentValues, null, childResult, result, resumeValue, false);
+    }
+
+    /**
+     * I115: a {@link ProtosCallRequest} produced by a protocol operation
+     * (Map construction factory, Map hashing/equality), made through the
+     * shared dispatcher and composed like any call.
+     */
+    private void emitRequestInvocation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal request,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+        builder.beginStoreLocal(childResult);
+        builder.beginCallRequest(false);
+        builder.emitLoadLocal(request);
+        builder.endCallRequest();
+        builder.endStoreLocal();
+        emitDispatchedContinuationComposition(builder, childResult, resumeValue);
+        builder.beginStoreLocal(result);
+        builder.beginMaterializePrimitiveNumericCarrier();
+        builder.emitLoadLocal(childResult);
+        builder.emitLoadConstant(true);
+        builder.endMaterializePrimitiveNumericCarrier();
+        builder.endStoreLocal();
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /**
+     * Composes a pending result from a direct source-function dispatch.
+     * The callee frames own their ReturnHomes.
+     */
+    private void emitDispatchedContinuationComposition(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+
+        currentRootEmittedContinuationPath = true;
 
         builder.beginWhile();
-        builder.beginStructuredHasNext(ProtosStructuredPhase.STEP);
-        builder.emitLoadLocal(structuredEach);
-        builder.endStructuredHasNext();
 
-        builder.beginBlock();
-        builder.beginStoreLocal(structuredEachChild);
-        builder.beginStructuredPrepareInlineChildCall(false);
-        builder.emitLoadLocal(structuredEach);
-        builder.endStructuredPrepareInlineChildCall();
-        builder.endStoreLocal();
-        emitLocalInlineLiteralChild(
-                builder,
-                childResult,
-                structuredEachChild,
-                childResult,
-                resumeValue,
-                callback.definition(),
-                () -> {
-                    builder.beginAdmitsInlineLiteralLocalEachChild();
-                    emitInlineLiteralChildAdmissionOperands(
-                            builder,
-                            structuredEach,
-                            structuredEachChild,
-                            callback);
-                    builder.endAdmitsInlineLiteralLocalEachChild();
-                });
-        builder.beginStructuredAdvance(ProtosStructuredPhase.STEP);
-        builder.emitLoadLocal(structuredEach);
-        builder.endStructuredAdvance();
-        builder.endBlock();
-
-        builder.endWhile();
-
-        builder.beginStoreLocal(result);
-        builder.beginStructuredFinish();
-        builder.emitLoadLocal(structuredEach);
-        builder.endStructuredFinish();
-        builder.endStoreLocal();
-
-        builder.endBlock();
-        builder.endTryFinally();
-        builder.endBlock();
-    }
-
-    /**
-     * One fresh callback child of a locally sequenced loop (a while condition
-     * or body, or a standard each element, association or entry).
-     *
-     * <p>Preparation has already performed authoritative ordinary
-     * {@code call} selection, but an eligible canonical source callback is
-     * still represented only by its compact invocation carrier. PLAT044
-     * admission therefore happens before rich activation or physical
-     * PreparedClosureCall construction. Only an admission miss materializes
-     * the exact physical fallback.
-     */
-    private void emitLocalInlineLiteralChild(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal result,
-            BytecodeLocal child,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue,
-            CanonicalClosure definition,
-            Runnable emitAdmission) {
-        builder.beginIfThenElse();
-        emitAdmission.run();
-
-        emitInlineLiteralCallback(
-                builder,
-                definition,
-                child,
-                result);
-
-        builder.beginBlock();
-        emitInlineLiteralFallbackInvocation(
-                builder,
-                result,
-                child,
-                childResult,
-                resumeValue);
-        builder.endBlock();
-
-        builder.endIfThenElse();
-    }
-
-    /**
-     * Materializes a PLAT044 carrier's physical fallback only after inline
-     * admission has failed. A structured fallback retains the existing
-     * structured-dispatch helper boundary; an ordinary fallback retains the
-     * existing scoped completion discipline.
-     */
-    private void emitInlineLiteralFallbackInvocation(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal result,
-            BytecodeLocal child,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        builder.beginBlock();
-
-        BytecodeLocal fallback =
-                builder.createLocal("inlineCallbackFallback", null);
-
-        builder.beginStoreLocal(fallback);
-        builder.beginLoadInlineLiteralCallPart(true);
-        builder.emitLoadLocal(child);
-        builder.endLoadInlineLiteralCallPart();
-        builder.endStoreLocal();
-
-        builder.beginIfThenElse();
-
-        builder.beginRequiresStructuredDispatch();
-        builder.emitLoadLocal(fallback);
-        builder.endRequiresStructuredDispatch();
-
-        builder.beginBlock();
-        emitNestedStructuredInvocation(
-                builder,
-                result,
-                fallback,
-                childResult,
-                resumeValue);
-        builder.endBlock();
-
-        builder.beginBlock();
-        builder.beginTryFinally(
-                () -> {
-                    builder.beginCompleteClosureCall();
-                    builder.emitLoadLocal(fallback);
-                    builder.endCompleteClosureCall();
-                });
-
-        builder.beginBlock();
-        emitOrdinaryPreparedInvocation(
-                builder,
-                result,
-                fallback,
-                childResult,
-                resumeValue);
-        builder.endBlock();
-
-        builder.endTryFinally();
-        builder.endBlock();
-
-        builder.endIfThenElse();
-        builder.endBlock();
-    }
-
-    /** Operands of a per-child admission: loop state, child, staged literal and plan. */
-    private static void emitInlineLiteralChildAdmissionOperands(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal loop,
-            BytecodeLocal child,
-            InlineLiteralCallback literal) {
-        builder.emitLoadLocal(loop);
-        builder.emitLoadLocal(child);
-        builder.emitLoadLocal(literal.literal());
-        builder.emitLoadConstant(literal.literalPlan());
-    }
-
-    /**
-     * Invokes a prepared call that is not sequenced in this root: a structured
-     * call enters the untagged structured root (PLAT042), any other call is
-     * invoked locally.
-     */
-    private void emitDispatchedPreparedInvocation(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        builder.beginIfThenElse();
-
-        builder.beginRequiresStructuredDispatch();
-        builder.emitLoadLocal(preparedCall);
-        builder.endRequiresStructuredDispatch();
-
-        builder.beginBlock();
-        emitNestedStructuredInvocation(builder, result, preparedCall, childResult, resumeValue);
-        builder.endBlock();
-
-        builder.beginBlock();
-        emitOrdinaryPreparedInvocation(builder, result, preparedCall, childResult, resumeValue);
-        builder.endBlock();
-
-        builder.endIfThenElse();
-    }
-
-    private void emitNestedStructuredInvocation(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        builder.beginStoreLocal(childResult);
-        builder.beginEnterNestedStructuredDispatch();
-        builder.emitLoadLocal(preparedCall);
-        builder.endEnterNestedStructuredDispatch();
-        builder.endStoreLocal();
-        emitContinuationComposition(
-                builder,
-                preparedCall,
-                childResult,
-                resumeValue);
-        builder.beginStoreLocal(result);
+        builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
         builder.emitLoadLocal(childResult);
-        builder.endStoreLocal();
-    }
-
-    private void emitOrdinaryPreparedInvocation(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        /*
-         * I108-A: admission and entry are owned by one semantic
-         * operation. Only a returned PreparedClosureCall requires
-         * the structural continuation/finalization protocol.
-         */
-        builder.beginStoreLocal(result);
-        builder.beginEnterStraightLineSourceCall();
-        builder.emitLoadLocal(preparedCall);
-        builder.endEnterStraightLineSourceCall();
-        builder.endStoreLocal();
-
-        builder.beginIfThenElse();
-        builder.beginIsResultKind(ProtosResultKind.PREPARED_CLOSURE_INVOCATION);
-        builder.emitLoadLocal(result);
         builder.endIsResultKind();
 
         builder.beginBlock();
-        builder.beginStoreLocal(childResult);
-        builder.beginEnterClosureCall();
-        builder.emitLoadLocal(preparedCall);
-        builder.endEnterClosureCall();
-        builder.endStoreLocal();
-        emitContinuationComposition(
-                builder,
-                preparedCall,
-                childResult,
-                resumeValue);
-        builder.beginStoreLocal(result);
-        builder.beginFinishClosureCall(false);
-        builder.emitLoadLocal(preparedCall);
-        builder.emitLoadLocal(childResult);
-        builder.endFinishClosureCall();
-        builder.endStoreLocal();
-        builder.endBlock();
 
-        // An admitted invocation has already produced its final result.
-        builder.beginBlock();
-        builder.endBlock();
-
-        builder.endIfThenElse();
-    }
-
-    /**
-     * PLAT043 standard Boolean orchestration in the semantic source root.
-     *
-     * <p>Mirrors the Boolean branch of {@code ProtosStructuredDispatchLowerer}
-     * against the same {@code PreparedBooleanCall} state machine: the outer
-     * prepared call is completed exactly once by the enclosing TryFinally on
-     * normal, Error, control-transfer and cancellation exits, an unselected
-     * callback is neither validated nor invoked, and the selected callback is
-     * prepared through ordinary polymorphic Closure-call preparation. The
-     * callback child keeps the helper's scoped shape: a child that itself
-     * requires structured dispatch enters the untagged root, and any other
-     * child is completed by its own TryFinally. C-prime continuations of the
-     * child are composed through this root (PLAT014); no new continuation
-     * kind, Task, handler or return home is introduced.
-     *
-     * <p>PLAT044 B′ (PERF026-B1/B3): for each {@code inlineCallbacks}
-     * candidate, a non-structured selected child that {@code
-     * PreparedBooleanCall} admits for that candidate's exact position,
-     * literal value and plan runs that candidate's body inline ({@link
-     * #emitInlineLiteralCallback}) instead of entering the callback's
-     * RootCallTarget; every other child keeps the exact ordinary invocation.
-     * Admission follows the prepared selection, so at most one candidate can
-     * match. The child TryFinally completes either form.
-     */
-    private void emitLocalBooleanInvocation(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue,
-            java.util.List<InlineLiteralCallback> inlineCallbacks) {
-        builder.beginBlock();
-        BytecodeLocal structuredBoolean =
-                builder.createLocal("structuredBoolean", null);
-        BytecodeLocal structuredBooleanChild =
-                builder.createLocal("structuredBooleanChild", null);
-
-        builder.beginTryFinally(
-                () -> {
-                    builder.beginCompleteClosureCall();
-                    builder.emitLoadLocal(preparedCall);
-                    builder.endCompleteClosureCall();
-                });
-        builder.beginBlock();
-
-        builder.beginStoreLocal(structuredBoolean);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.BOOLEAN);
-        builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredCall();
-        builder.endStoreLocal();
-
-        builder.beginIfThenElse();
-        builder.beginStructuredHasNext(ProtosStructuredPhase.CHILD);
-        builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredHasNext();
-
-        builder.beginBlock();
-        builder.beginStoreLocal(structuredBooleanChild);
-        builder.beginStructuredPrepareInlineChildCall(false);
-        builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredPrepareInlineChildCall();
-        builder.endStoreLocal();
-
-        for (InlineLiteralCallback inlineCallback : inlineCallbacks) {
-            builder.beginIfThenElse();
-            builder.beginAdmitsInlineLiteralCallback();
-            builder.emitLoadLocal(structuredBoolean);
-            builder.emitLoadLocal(structuredBooleanChild);
-            builder.emitLoadLocal(inlineCallback.literal());
-            builder.emitLoadConstant(inlineCallback.literalPlan());
-            builder.emitLoadConstant(inlineCallback.position());
-            builder.endAdmitsInlineLiteralCallback();
-
-            emitInlineLiteralCallback(
-                    builder,
-                    inlineCallback.definition(),
-                    structuredBooleanChild,
-                    childResult);
-
-            builder.beginBlock();
-        }
-
-        emitInlineLiteralFallbackInvocation(
-                builder,
-                childResult,
-                structuredBooleanChild,
-                childResult,
-                resumeValue);
-
-        for (int i = 0; i < inlineCallbacks.size(); i++) {
-            builder.endBlock();
-            builder.endIfThenElse();
-        }
-
-        builder.beginStoreLocal(result);
-        builder.beginStructuredFinishWithChildResult();
-        builder.emitLoadLocal(structuredBoolean);
-        builder.emitLoadLocal(childResult);
-        builder.endStructuredFinishWithChildResult();
-        builder.endStoreLocal();
-        builder.endBlock();
-
-        builder.beginBlock();
-        builder.beginStoreLocal(result);
-        builder.beginStructuredFinish();
-        builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredFinish();
-        builder.endStoreLocal();
-        builder.endBlock();
-
-        builder.endIfThenElse();
-        builder.endBlock();
-        builder.endTryFinally();
-        builder.endBlock();
-    }
-
-    /**
-     * PLAT044 B′ inline callback region for an admitted literal callback.
-     *
-     * <p>The region keeps the invocation's {@link
-     * ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall} in {@link
-     * #INLINE_CALLBACK_CALL_LOCAL}; entering the region materializes no
-     * activation. The callback's fresh semantic activation is materialized
-     * from that carrier, exactly once, by the first operation or tooling
-     * query that needs it ({@link #emitCurrentActivation}), and every later
-     * observer of the invocation shares it. In a frame-native region the
-     * block-local bindings are made durable on the activation before it
-     * reaches that first consumer.
-     *
-     * <p>When whole-tree binding analysis proves that the callback does not
-     * require a persistent frame authority, its current-scope parameters and
-     * locals use block-local frame storage in the enclosing physical root,
-     * through carrier-operand operations ({@link
-     * ProtosInlineCallbackFrameBindings}). Reads use the exact {@link
-     * ProtosFrameLexicalLayout#presentContinuityAt} Assumption owned by the
-     * callback's canonical lexical scope, including across Bytecode parser
-     * reparses.
-     *
-     * <p>A callback requiring observable/escaping current-context authority
-     * keeps the named runtime-authority path, whose first operation
-     * materializes the activation. No authority over ephemeral block locals is
-     * retained, B-prime admission is unchanged, and no callback
-     * RootCallTarget/FrameInstance is fabricated.
-     */
-    /*
-     * I095-B1: shared emission of the complete canonical body.
-     *
-     * B-prime owns a prepared callback and binds its parameters.
-     * The activation-transparent lane has a proven zero-argument
-     * block and needs neither parameter binding nor a carrier.
-     *
-     * All statements, including ordinary sends and their
-     * continuations, use the existing canonical Bytecode lowering.
-     */
-    private void emitInlinedClosureBodyStatements(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalClosure definition,
-            BytecodeLocal result,
-            boolean bindParameters) {
-        if (bindParameters) {
-            emitClosureParameterBindings(
-                    builder, definition, null, null, null, null);
-        }
-
-        if (definition.body().expressions().isEmpty()) {
-            emitStoreConstant(
-                    builder, result, ProtosNullValue.INSTANCE);
-        } else if (!bindParameters
-                && definition.body().expressions().size() > 1
-                && definition.body().expressions().subList(
-                        0,
-                        definition.body().expressions().size() - 1
-                ).stream().allMatch(
-                        this::isNormalPureControlExpression)
-                && isDirectTerminalValue(
-                        definition.body().expressions().get(
-                                definition.body().expressions().size() - 1))
-                && !requiresComposedInvocation(
-                        definition.body().expressions().get(
-                                definition.body().expressions().size() - 1))) {
-            /*
-             * Preserve A3's dead-prefix elimination.
-             * This is an optimization AFTER block admission,
-             * not the criterion deciding inlineability. PLAT067-B: the
-             * eliminated prefix has no location; the surviving terminal
-             * keeps its passive statement tags.
-             */
-            CanonicalExpression terminal =
-                    definition.body().expressions().get(
-                            definition.body().expressions().size() - 1);
-            beginStatement(builder, terminal);
-            builder.beginStoreLocal(result);
-            emitExpression(builder, terminal);
-            builder.endStoreLocal();
-            endStatement(builder);
-        } else {
-            emitStatementsToLocal(
-                    builder, definition.body(), result);
-        }
-    }
-
-    private void emitInlineLiteralCallback(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalClosure definition,
-            BytecodeLocal child,
-            BytecodeLocal result) {
-        CanonicalCompilationFacts.RootFacts callbackFacts =
-                prepareRootFacts(
-                        definition.body(),
-                        definition,
-                        bindingAnalysisForNestedClosure(definition));
-        CanonicalBindingAnalysis callbackAnalysis = callbackFacts.bindingAnalysis();
-        CanonicalLexicalScope callbackScope = callbackFacts.scope();
-        boolean frameNativeCallback =
-                !callbackFacts.requiresPersistentFrameAuthority();
-
-        builder.beginBlock();
-        BytecodeLocal callbackCall =
-                builder.createLocal(INLINE_CALLBACK_CALL_LOCAL, null);
-        BytecodeLocal bodyResult =
-                builder.createLocal("inlineCallbackResult", null);
-
-        java.util.Map<String, BytecodeLocal> callbackFrameLocals =
-                java.util.Map.of();
-        BytecodeLocal[] callbackFrameLocalRange = null;
-        ProtosFrameLexicalLayout callbackFrameLocalLayout = null;
-
-        /*
-         * A frame-native callback always has a (possibly empty) range and
-         * layout: its activation is only ever materialized through them.
-         */
-        if (frameNativeCallback) {
-            java.util.LinkedHashMap<String, BytecodeLocal> frameLocals =
-                    new java.util.LinkedHashMap<>();
-            for (String name : callbackScope.declaredNames()) {
-                frameLocals.put(
-                        name,
-                        builder.createLocal(
-                                INLINE_CALLBACK_BINDING_LOCAL_PREFIX + name,
-                                null));
-            }
-
-            callbackFrameLocals = java.util.Map.copyOf(frameLocals);
-            callbackFrameLocalRange =
-                    frameLocals.values().toArray(BytecodeLocal[]::new);
-            callbackFrameLocalLayout =
-                    frameLexicalLayoutForScope(
-                            callbackScope,
-                            frameLocals.keySet().toArray(String[]::new),
-                            null);
-        }
-
-        builder.beginStoreLocal(callbackCall);
-        builder.emitLoadLocal(child);
-        builder.endStoreLocal();
-
-        SourceSpan bodySpan = definition.body().span();
-        builder.beginSourceSection(bodySpan.startOffset(), bodySpan.length());
-        builder.beginTag(StandardTags.RootTag.class);
-        builder.beginBlock();
-
-        CanonicalBindingAnalysis savedAnalysis = currentRootAnalysis;
-        CanonicalLexicalScope savedTopScope = currentRootTopScope;
-        java.util.Map<String, BytecodeLocal> savedFrameLocals =
-                currentRootFrameLocals;
-        ProtosFrameLexicalLayout savedFrameLayout =
-                currentRootFrameLayout;
-        BytecodeLocal savedActivationLocal = currentActivationLocal;
-        boolean savedActivationLocalIsInlineCallbackCall =
-                currentActivationLocalIsInlineCallbackCall;
-        boolean savedInlineCallbackFrameNative =
-                currentInlineCallbackFrameNative;
-        BytecodeLocal[] savedFrameNativeLocals =
-                currentRootFrameNativeLocals;
-        ProtosFrameLexicalLayout savedFrameNativeLayout =
-                currentRootFrameNativeLayout;
-        ProtosFrameLexicalLayout savedIndexedParameterLayout =
-                currentRootIndexedParameterLayout;
-
-        try {
-            if (frameNativeCallback) {
-                currentRootAnalysis = callbackAnalysis;
-                currentRootTopScope = callbackScope;
-                currentRootFrameLocals = callbackFrameLocals;
-                currentRootFrameLayout = callbackFrameLocalLayout;
-                currentActivationLocal = callbackCall;
-                currentActivationLocalIsInlineCallbackCall = true;
-                currentInlineCallbackFrameNative = true;
-                currentRootFrameNativeLocals = callbackFrameLocalRange;
-                currentRootFrameNativeLayout = callbackFrameLocalLayout;
-                currentRootIndexedParameterLayout = null;
-            } else {
-                currentRootAnalysis = null;
-                currentRootTopScope = null;
-                currentRootFrameLocals = java.util.Map.of();
-                currentRootFrameLayout = null;
-                currentActivationLocal = callbackCall;
-                currentActivationLocalIsInlineCallbackCall = true;
-                currentInlineCallbackFrameNative = false;
-                currentRootFrameNativeLocals = null;
-                currentRootFrameNativeLayout = null;
-                currentRootIndexedParameterLayout = null;
-            }
-
-            emitInlinedClosureBodyStatements(
-                    builder, definition, bodyResult, true);
-        } finally {
-            currentRootAnalysis = savedAnalysis;
-            currentRootTopScope = savedTopScope;
-            currentRootFrameLocals = savedFrameLocals;
-            currentRootFrameLayout = savedFrameLayout;
-            currentActivationLocal = savedActivationLocal;
-            currentActivationLocalIsInlineCallbackCall =
-                    savedActivationLocalIsInlineCallbackCall;
-            currentInlineCallbackFrameNative =
-                    savedInlineCallbackFrameNative;
-            currentRootFrameNativeLocals = savedFrameNativeLocals;
-            currentRootFrameNativeLayout = savedFrameNativeLayout;
-            currentRootIndexedParameterLayout =
-                    savedIndexedParameterLayout;
-        }
-
-        builder.endBlock();
-        builder.endTag(StandardTags.RootTag.class);
-        builder.endSourceSection();
-
-        builder.beginStoreLocal(result);
-        builder.emitLoadLocal(bodyResult);
-        builder.endStoreLocal();
-        builder.endBlock();
-    }
-
-    /**
-     * Re-yields every nested C-prime continuation of {@code childResult}
-     * through this root and resumes it with the value this root is resumed
-     * with, until the child completes (PLAT014; no replay, no new
-     * continuation kind).
-     */
-    private void emitContinuationComposition(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        currentRootEmittedContinuationPath = true;
-        builder.beginWhile();
-        builder.beginIsContinuationForCall();
-        builder.emitLoadLocal(preparedCall);
-        builder.emitLoadLocal(childResult);
-        builder.endIsContinuationForCall();
-
-        builder.beginBlock();
         builder.beginStoreLocal(resumeValue);
         builder.beginYield();
         builder.emitLoadLocal(childResult);
@@ -7774,14 +6278,13 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
         builder.beginStoreLocal(childResult);
-        builder.beginResumeContinuation();
-        builder.emitLoadLocal(preparedCall);
+        builder.beginResumeDispatchedContinuation();
         builder.emitLoadLocal(childResult);
         builder.emitLoadLocal(resumeValue);
-        builder.endResumeContinuation();
+        builder.endResumeDispatchedContinuation();
         builder.endStoreLocal();
-        builder.endBlock();
 
+        builder.endBlock();
         builder.endWhile();
     }
 
@@ -7816,13 +6319,6 @@ final class CanonicalToBytecodeLowerer {
                 builder.emitLoadConstant(true);
                 builder.endMaterializePrimitiveNumericCarrier();
             }
-        } else if (currentInlineCallbackFrameNative) {
-            builder.beginLoadInlineClosureArgument(
-                    currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout);
-            emitCurrentInlineCallbackCall(builder);
-            builder.emitLoadConstant(positionalIndex);
-            builder.endLoadInlineClosureArgument();
         } else {
             builder.beginLoadClosureArgument();
             emitCurrentActivation(builder);
@@ -8055,16 +6551,6 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalIntrinsic intrinsic) {
-            if (intrinsic.kind() == CanonicalIntrinsic.Kind.THIS
-                    && currentInlineCallbackFrameNative) {
-                // CONTEXT is a real observer and keeps LoadIntrinsic.
-                builder.beginLoadInlineCallbackContext(true,
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                emitCurrentInlineCallbackCall(builder);
-                builder.endLoadInlineCallbackContext();
-                return;
-            }
             builder.beginLoadIntrinsic();
             emitCurrentActivation(builder);
             builder.emitLoadConstant(intrinsic.kind());
@@ -8240,19 +6726,6 @@ final class CanonicalToBytecodeLowerer {
                     }
                     return;
                 }
-                if (local != null
-                        && ordinal != null
-                        && currentInlineCallbackFrameNative) {
-                    builder.beginReadInlineFrameLocal(
-                            local,
-                            currentRootFrameLayout.presentContinuityAt(ordinal),
-                            currentRootFrameNativeLocals,
-                            currentRootFrameNativeLayout);
-                    emitCurrentInlineCallbackCall(builder);
-                    builder.emitLoadConstant(resolvedName);
-                    builder.endReadInlineFrameLocal();
-                    return;
-                }
                 if (local != null && ordinal != null) {
                     builder.beginReadFrameLocal(
                             local,
@@ -8269,7 +6742,7 @@ final class CanonicalToBytecodeLowerer {
                             instanceof CanonicalBindingResolution.CapturedResolved captured
                     && captured.identity().owner().kind()
                             == CanonicalLexicalScope.Kind.ROOT
-                    && !currentInlineCallbackFrameNative) {
+) {
                 /*
                  * I115-R6 (experimental): a read proven to a module
                  * declaration reads the module scope directly
@@ -8293,22 +6766,6 @@ final class CanonicalToBytecodeLowerer {
                     && resolution.orElseThrow()
                             instanceof CanonicalBindingResolution.CapturedResolved captured) {
                 BytecodeLocal ownerLocal = capturedOwnerBytecodeLocal(captured);
-                if (ownerLocal != null && currentInlineCallbackFrameNative) {
-                    emitGuestCapturedMaterializedRead(
-                            builder, captured, ownerLocal, true, carrierOperand);
-                    return;
-                }
-                if (currentInlineCallbackFrameNative) {
-                    builder.beginAccessInlineCapturedFrameLocal(false,
-                            currentRootFrameNativeLocals,
-                            currentRootFrameNativeLayout,
-                            frameBackedOrdinal(captured.identity()));
-                    emitCurrentInlineCallbackCall(builder);
-                    builder.emitLoadConstant(captured.identity().name());
-                    builder.emitLoadConstant(captured.lexicalDepth());
-                    builder.endAccessInlineCapturedFrameLocal();
-                    return;
-                }
                 /*
                  * I115-R5: a statically identified captured owner uses the
                  * generated materialized-local read below. Its owner-frame
@@ -8392,16 +6849,7 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("capturedOwnerFrame", null);
 
         builder.beginStoreLocal(selectedOwnerFrame);
-        if (inlineCallback) {
-            builder.beginAccessInlineCapturedMaterializedLocal(false,
-                    ownerLocal,
-                    currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout);
-            emitCurrentInlineCallbackCall(builder);
-            builder.emitLoadConstant(name);
-            builder.emitLoadConstant(captured.lexicalDepth());
-            builder.endAccessInlineCapturedMaterializedLocal();
-        } else if (currentActivationLocal == null) {
+        if (currentActivationLocal == null) {
             builder.emitSelectCapturedMaterializedOwnerFrameAtRoot(
                     ownerLocal, name, captured.lexicalDepth());
         } else {
@@ -8422,14 +6870,7 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadLocal(selectedOwnerFrame);
         builder.endLoadLocalMaterialized();
 
-        if (inlineCallback) {
-            builder.beginLoadInlineClosureArgument(
-                    currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout);
-            emitCurrentInlineCallbackCall(builder);
-            builder.emitLoadConstant(name);
-            builder.endLoadInlineClosureArgument();
-        } else if (currentActivationLocal == null) {
+        if (currentActivationLocal == null) {
             builder.emitReadCapturedFallbackAtRoot(name);
         } else {
             builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.CAPTURED_FALLBACK);
@@ -8593,19 +7034,6 @@ final class CanonicalToBytecodeLowerer {
         };
     }
 
-    /*
-     * I091: an argument worth staging as a carrier for an admitted direct
-     * source call (whose frame-native parameter binding retains it).
-     */
-    private boolean primitiveNumericCarrierArgument(CanonicalExpression argument) {
-        if (argument instanceof CanonicalLiteral literal) {
-            return primitiveNumberLiteralOrNull(literal) != null;
-        }
-        return argument instanceof CanonicalLookup
-                || (argument instanceof CanonicalSend send && primitiveResultSend(send))
-                || (argument instanceof CanonicalCall call && primitiveResultCall(call));
-    }
-
     /* I091: a binding value the guarded chain or a raw binding read may yield as a carrier. */
     private boolean primitiveNumericCarrierValue(CanonicalExpression value) {
         if (value instanceof CanonicalLiteral literal) {
@@ -8616,21 +7044,6 @@ final class CanonicalToBytecodeLowerer {
         }
         return (value instanceof CanonicalSend send && primitiveResultSend(send))
                 || (value instanceof CanonicalCall call && primitiveResultCall(call));
-    }
-
-    /*
-     * Whether the staged operand may hold a primitive carrier. A binding read
-     * may: frame storage retains carriers written by the chain (I091).
-     */
-    private boolean primitiveNumericCarrierSource(CanonicalExpression expression) {
-        if (expression instanceof CanonicalLookup) {
-            return true;
-        }
-        if (expression instanceof CanonicalLiteral literal) {
-            return primitiveNumberLiteralOrNull(literal) != null;
-        }
-        return (expression instanceof CanonicalSend send && primitiveResultSend(send))
-                || (expression instanceof CanonicalCall call && primitiveResultCall(call));
     }
 
     private void emitPrimitiveNumericOperandToLocal(
@@ -8680,455 +7093,6 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I092 / D049: an ordinary ifTrue send with one supplied position is lowered
-     * natively only once the standard root Object is published. FROZEN is
-     * irreversible and publication validates its ifTrue and call behaviors, so
-     * the canonical-Boolean selection proven here holds for every execution of
-     * the site. Sources lowered during unpublished bootstrap stay generic.
-     * I101-A: publication is the lowerer's snapshot, stable across reparses.
-     */
-    private boolean admitsNativeIfTrue(
-            CanonicalSend send, boolean spreadArguments) {
-        return "ifTrue".equals(send.message())
-                && (spreadArguments || send.arguments().size() == 1)
-                && standardObjectPublished;
-    }
-
-    /**
-     * PERF041-D1: the ordinary non-inline One site classifies a
-     * canonical receiver before preparing any callback.
-     *
-     * Receiver and argument staging have already completed.
-     */
-    private void emitCanonicalIfTrueOneCandidate(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalExpression sourceReceiver,
-            BytecodeLocal receiverValue,
-            BytecodeLocal argument,
-            ProtosClosureExecutionPlanCell literalPlan,
-            BytecodeLocal candidate) {
-
-        /*
-         * I095-A1: after frozen-standard-control admission, a
-         * canonical Boolean literal cannot miss this native path.
-         *
-         * Source arguments have already been evaluated in order.
-         * This changes physical classification only; the selected
-         * callback still follows the established B-prime protocol.
-         */
-        if (sourceReceiver instanceof CanonicalLiteral literal) {
-            if (literal.kind() == CanonicalLiteral.Kind.FALSE) {
-                emitStoreConstant(
-                        builder, candidate, ProtosNullValue.INSTANCE);
-                return;
-            }
-
-            if (literal.kind() == CanonicalLiteral.Kind.TRUE) {
-                builder.beginStoreLocal(candidate);
-                builder.beginPrepareCanonicalIfTrueCallback();
-                emitSendCallerOperand(builder);
-                builder.emitLoadLocal(argument);
-                builder.emitLoadConstant(
-                        literalPlan == null
-                                ? ProtosNullValue.INSTANCE
-                                : literalPlan);
-                builder.endPrepareCanonicalIfTrueCallback();
-                builder.endStoreLocal();
-                return;
-            }
-        }
-
-        BytecodeLocal classification =
-                builder.createLocal("canonicalIfTrueClass", null);
-
-        builder.beginStoreLocal(classification);
-        builder.beginTryCompactCanonicalBooleanOne();
-        builder.emitLoadLocal(receiverValue);
-        builder.endTryCompactCanonicalBooleanOne();
-        builder.endStoreLocal();
-
-        builder.beginIfThenElse();
-        builder.beginIsCanonicalBooleanClass(ProtosCanonicalBooleanOneNode.CLASS_TRUE);
-        builder.emitLoadLocal(classification);
-        builder.endIsCanonicalBooleanClass();
-
-        // TRUE: only this branch prepares a callback and observes caller.
-        builder.beginBlock();
-        builder.beginStoreLocal(candidate);
-        builder.beginPrepareCanonicalIfTrueCallback();
-        emitSendCallerOperand(builder);
-        builder.emitLoadLocal(argument);
-        builder.emitLoadConstant(
-                literalPlan == null ? ProtosNullValue.INSTANCE : literalPlan);
-        builder.endPrepareCanonicalIfTrueCallback();
-        builder.endStoreLocal();
-        builder.endBlock();
-
-        // FALSE -> guest null; MISS -> Java null for ordinary dispatch.
-        builder.beginBlock();
-        builder.beginStoreLocal(candidate);
-        builder.beginCanonicalIfTrueNonTrueResult();
-        builder.emitLoadLocal(classification);
-        builder.endCanonicalIfTrueNonTrueResult();
-        builder.endStoreLocal();
-        builder.endBlock();
-
-        builder.endIfThenElse();
-    }
-
-    /**
-     * Existing spread and frame-native canonical Boolean candidates.
-     */
-    /**
-     * PERF041-D2: primitive classification and deferred callback
-     * preparation for spread and frame-native Boolean sends.
-     *
-     * Ordinary One is handled by emitCanonicalIfTrueOneCandidate.
-     */
-    private void emitNativeIfTrueCandidate(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal receiverValue,
-            boolean spreadArguments,
-            BytecodeLocal suppliedVector,
-            BytecodeLocal argument,
-            ProtosClosureExecutionPlanCell literalPlan,
-            BytecodeLocal candidate) {
-
-        BytecodeLocal classification =
-                builder.createLocal("canonicalIfTrueClass", null);
-
-        builder.beginStoreLocal(classification);
-
-        if (spreadArguments) {
-            if (currentInlineCallbackFrameNative) {
-                builder.beginTryCompactCanonicalBooleanVector();
-            } else {
-                builder.beginTryCompactCanonicalBooleanVector();
-            }
-
-            builder.emitLoadLocal(receiverValue);
-            builder.emitLoadLocal(suppliedVector);
-
-            if (currentInlineCallbackFrameNative) {
-                builder.endTryCompactCanonicalBooleanVector();
-            } else {
-                builder.endTryCompactCanonicalBooleanVector();
-            }
-        } else {
-            if (!currentInlineCallbackFrameNative) {
-                throw new AssertionError(
-                        "Ordinary One uses its dedicated classifier");
-            }
-
-            builder.beginTryCompactCanonicalBooleanInlineOne();
-            builder.emitLoadLocal(receiverValue);
-            builder.endTryCompactCanonicalBooleanInlineOne();
-        }
-
-        builder.endStoreLocal();
-
-        builder.beginIfThenElse();
-        builder.beginIsCanonicalBooleanClass(ProtosCanonicalBooleanOneNode.CLASS_TRUE);
-        builder.emitLoadLocal(classification);
-        builder.endIsCanonicalBooleanClass();
-
-        // TRUE: prepare a callback only after canonical selection.
-        builder.beginBlock();
-        builder.beginStoreLocal(candidate);
-
-        if (currentInlineCallbackFrameNative) {
-            if (spreadArguments) {
-                builder.beginPrepareCanonicalIfTrueInlineVectorCallback(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                emitSendCallerOperand(builder);
-                builder.emitLoadLocal(suppliedVector);
-                builder.endPrepareCanonicalIfTrueInlineVectorCallback();
-            } else {
-                builder.beginPrepareCanonicalIfTrueInlineCallback(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                emitSendCallerOperand(builder);
-                builder.emitLoadLocal(argument);
-                builder.emitLoadConstant(
-                        literalPlan == null
-                                ? ProtosNullValue.INSTANCE
-                                : literalPlan);
-                builder.endPrepareCanonicalIfTrueInlineCallback();
-            }
-        } else {
-            builder.beginPrepareCanonicalIfTrueVectorCallback();
-            emitSendCallerOperand(builder);
-            builder.emitLoadLocal(suppliedVector);
-            builder.endPrepareCanonicalIfTrueVectorCallback();
-        }
-
-        builder.endStoreLocal();
-        builder.endBlock();
-
-        // FALSE or MISS: no callback preparation or caller observation.
-        builder.beginBlock();
-        builder.beginStoreLocal(candidate);
-        builder.beginCanonicalIfTrueNonTrueResult();
-        builder.emitLoadLocal(classification);
-        builder.endCanonicalIfTrueNonTrueResult();
-        builder.endStoreLocal();
-        builder.endBlock();
-
-        builder.endIfThenElse();
-    }
-
-    /** Native hit of an ifTrue site without an inline literal candidate. */
-    private void emitCanonicalIfTrueNative(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal candidate,
-            BytecodeLocal result,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        builder.beginIfThenElse();
-        builder.beginIsResultKind(ProtosResultKind.COMPACT_BOOLEAN_NO_CALLBACK);
-        builder.emitLoadLocal(candidate);
-        builder.endIsResultKind();
-
-        builder.beginBlock();
-        builder.beginStoreLocal(result);
-        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
-        builder.endStoreLocal();
-        builder.endBlock();
-
-        // Selected callback, invoked from the send's caller: no ifTrue activation to complete.
-        builder.beginBlock();
-        emitInlineLiteralFallbackInvocation(
-                builder, result, candidate, childResult, resumeValue);
-        builder.endBlock();
-        builder.endIfThenElse();
-    }
-
-    private static void emitStoreConstant(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal target,
-            Object value) {
-        builder.beginStoreLocal(target);
-        builder.emitLoadConstant(value);
-        builder.endStoreLocal();
-    }
-
-    private static void emitCopyLocal(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal target,
-            BytecodeLocal source) {
-        builder.beginStoreLocal(target);
-        builder.emitLoadLocal(source);
-        builder.endStoreLocal();
-    }
-
-    /**
-     * I092 / PLAT044 B-prime: an ifTrue site whose sole argument is an
-     * immediate literal callback. The native hit and the generic selection
-     * converge on one inline region, so the site has one callback RootTag,
-     * source span and debugger scope.
-     *
-     * <p>Argument staging, the native attempt and generic PrepareSend stay
-     * outside the TryFinally. Inside it, the outer call is recorded before
-     * anything can exit (the generic structured Boolean call); the native
-     * path owns no ifTrue activation and records none. The
-     * finally completes it once, after the callback, on normal, Error,
-     * non-local-return and cancellation exits. A non-Boolean generic selection
-     * keeps the unchanged prepared-invocation dispatch and its own completion.
-     * The generic result still passes StructuredFinishWithChildResult.
-     */
-    private void emitCanonicalIfTrueLiteralSite(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalClosure definition,
-            BytecodeLocal compact,
-            BytecodeLocal receiverValue,
-            String selector,
-            BytecodeLocal literal,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        ProtosClosureExecutionPlanCell literalPlan =
-                bytecodeClosurePlans.get(definition);
-        BytecodeLocal outer = builder.createLocal("ifTrueSiteOuter", null);
-        BytecodeLocal inlineChild =
-                builder.createLocal("ifTrueSiteInlineChild", null);
-        BytecodeLocal structuredBoolean =
-                builder.createLocal("ifTrueSiteBoolean", null);
-        BytecodeLocal child = builder.createLocal("ifTrueSiteChild", null);
-        BytecodeLocal genericMiss = builder.createLocal("ifTrueSiteGenericMiss", null);
-
-        builder.beginBlock();
-        emitStoreConstant(builder, outer, ProtosNullValue.INSTANCE);
-        emitStoreConstant(builder, inlineChild, ProtosNullValue.INSTANCE);
-
-        builder.beginStoreLocal(genericMiss);
-        builder.beginIsResultKind(ProtosResultKind.COMPACT_BOOLEAN_MISS);
-        builder.emitLoadLocal(compact);
-        builder.endIsResultKind();
-        builder.endStoreLocal();
-
-        // Generic selection: same lifecycle position as the ordinary send.
-        builder.beginIfThen();
-        builder.emitLoadLocal(genericMiss);
-        builder.beginBlock();
-        builder.beginStoreLocal(preparedCall);
-        beginPrepareSend(builder, 1);
-        builder.emitLoadLocal(receiverValue);
-        builder.emitLoadConstant(selector);
-        emitSendCallerOperand(builder);
-        builder.emitLoadLocal(literal);
-        endPrepareSend(builder, 1);
-        builder.endStoreLocal();
-        builder.endBlock();
-        builder.endIfThen();
-
-        builder.beginTryFinally(
-                () -> {
-                    builder.beginCompleteClosureCall();
-                    builder.emitLoadLocal(outer);
-                    builder.endCompleteClosureCall();
-                });
-        builder.beginBlock();
-
-        builder.beginIfThenElse();
-        builder.emitLoadLocal(genericMiss);
-
-        // Generic: emitLocalBooleanInvocation, with admission deferred.
-        builder.beginBlock();
-        builder.beginIfThenElse();
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.BOOLEAN);
-        builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredCall();
-
-        builder.beginBlock();
-        emitCopyLocal(builder, outer, preparedCall);
-        builder.beginStoreLocal(structuredBoolean);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.BOOLEAN);
-        builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredCall();
-        builder.endStoreLocal();
-
-        builder.beginIfThenElse();
-        builder.beginStructuredHasNext(ProtosStructuredPhase.CHILD);
-        builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredHasNext();
-
-        builder.beginBlock();
-        builder.beginStoreLocal(child);
-        builder.beginStructuredPrepareInlineChildCall(false);
-        builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredPrepareInlineChildCall();
-        builder.endStoreLocal();
-
-        builder.beginIfThenElse();
-        builder.beginAdmitsInlineLiteralCallback();
-        builder.emitLoadLocal(structuredBoolean);
-        builder.emitLoadLocal(child);
-        builder.emitLoadLocal(literal);
-        builder.emitLoadConstant(literalPlan);
-        builder.emitLoadConstant(0);
-        builder.endAdmitsInlineLiteralCallback();
-
-        builder.beginBlock();
-        emitCopyLocal(builder, inlineChild, child);
-        builder.endBlock();
-
-        builder.beginBlock();
-        emitInlineLiteralFallbackInvocation(
-                builder, childResult, child, childResult, resumeValue);
-        builder.beginStoreLocal(result);
-        builder.beginStructuredFinishWithChildResult();
-        builder.emitLoadLocal(structuredBoolean);
-        builder.emitLoadLocal(childResult);
-        builder.endStructuredFinishWithChildResult();
-        builder.endStoreLocal();
-        builder.endBlock();
-        builder.endIfThenElse();
-        builder.endBlock();
-
-        builder.beginBlock();
-        builder.beginStoreLocal(result);
-        builder.beginStructuredFinish();
-        builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredFinish();
-        builder.endStoreLocal();
-        builder.endBlock();
-        builder.endIfThenElse();
-        builder.endBlock();
-
-        builder.beginBlock();
-        emitPreparedInvocation(
-                builder, result, preparedCall, childResult, resumeValue);
-        builder.endBlock();
-        builder.endIfThenElse();
-        builder.endBlock();
-
-        // Native: no PreparedBooleanCall, PrepareSend or generic dispatch.
-        builder.beginBlock();
-        builder.beginIfThenElse();
-        builder.beginIsResultKind(ProtosResultKind.COMPACT_BOOLEAN_NO_CALLBACK);
-        builder.emitLoadLocal(compact);
-        builder.endIsResultKind();
-
-        builder.beginBlock();
-        emitStoreConstant(builder, result, ProtosNullValue.INSTANCE);
-        builder.endBlock();
-
-        // The selected callback; outer stays null, no ifTrue activation exists.
-        builder.beginBlock();
-        builder.beginIfThenElse();
-        builder.beginAdmitsInlineClosureLiteralCall();
-        builder.emitLoadLocal(compact);
-        builder.emitLoadConstant(literalPlan);
-        builder.endAdmitsInlineClosureLiteralCall();
-
-        builder.beginBlock();
-        emitCopyLocal(builder, inlineChild, compact);
-        builder.endBlock();
-
-        builder.beginBlock();
-        emitInlineLiteralFallbackInvocation(
-                builder, result, compact, childResult, resumeValue);
-        builder.endBlock();
-        builder.endIfThenElse();
-        builder.endBlock();
-        builder.endIfThenElse();
-        builder.endBlock();
-        builder.endIfThenElse();
-
-        // The site's only inline callback region.
-        builder.beginIfThen();
-        builder.beginIsResultKind(ProtosResultKind.INLINE_LITERAL_CALL);
-        builder.emitLoadLocal(inlineChild);
-        builder.endIsResultKind();
-
-        builder.beginBlock();
-        emitInlineLiteralCallback(builder, definition, inlineChild, childResult);
-        builder.beginIfThenElse();
-        builder.emitLoadLocal(genericMiss);
-        builder.beginBlock();
-        builder.beginStoreLocal(result);
-        builder.beginStructuredFinishWithChildResult();
-        builder.emitLoadLocal(structuredBoolean);
-        builder.emitLoadLocal(childResult);
-        builder.endStructuredFinishWithChildResult();
-        builder.endStoreLocal();
-        builder.endBlock();
-        builder.beginBlock();
-        emitCopyLocal(builder, result, childResult);
-        builder.endBlock();
-        builder.endIfThenElse();
-        builder.endBlock();
-        builder.endIfThen();
-
-        builder.endBlock();
-        builder.endTryFinally();
-        builder.endBlock();
-    }
-
-
-    /**
      * PERF043-A2: recognize literal Integer additions in any send position.
      * This descriptor never authorizes dispatch by itself. The certified
      * lane of the per-selector numeric operation remains authoritative.
@@ -9150,12 +7114,24 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
-            BytecodeLocal preparedCall,
+            BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        emitComposedSend(builder, send, result, preparedCall,
-                childResult, resumeValue, false);
+        emitComposedSend(builder, send, result, scratch, childResult, resumeValue, false);
     }
+
+    private void emitComposedSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        emitComposedSendUnfolded(
+                builder, send, result, scratch, childResult, resumeValue, primitiveCarrierResult);
+    }
+
 
     /**
      * PERF040-E1: the selector is known here, so the site emits the one
@@ -9286,46 +7262,6 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
         builder.endBlock();
         builder.endIfThenElse();
-    }
-
-    /*
-     * I095-A2: open-code an admitted constant Boolean-control site
-     * ({@link #normalBooleanControlSite}); every non-admitted send emits the
-     * established ordinary send.
-     */
-    private void emitComposedSend(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalSend send,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue,
-            boolean primitiveCarrierResult) {
-        if (result == null
-                || preparedCall == null
-                || childResult == null
-                || resumeValue == null) {
-            throw new AssertionError(
-                    "Bytecode send result/scratch locals were not allocated");
-        }
-
-        NormalBooleanControlSite booleanControl =
-                normalBooleanControlSite(send);
-        if (booleanControl != null && stagesNormalBooleanControlOperands(send)) {
-            emitNormalBooleanControl(
-                    builder, send, booleanControl, result, preparedCall,
-                    childResult, resumeValue);
-            return;
-        }
-        if (booleanControl != null) {
-            emitNormalBooleanControlLiteral(
-                    builder, send, booleanControl, result);
-            return;
-        }
-
-        emitComposedSendUnfolded(
-                builder, send, result, preparedCall,
-                childResult, resumeValue, primitiveCarrierResult);
     }
 
     /*
@@ -9787,318 +7723,6 @@ final class CanonicalToBytecodeLowerer {
         }
 
         return false;
-    }
-
-    /**
-     * I095-D: whether the site evaluates a receiver or argument expression.
-     * Such operands are evaluated exactly once, before classification, and
-     * shared by every canonical path and the MISS ordinary send. A canonical
-     * literal receiver with only literal Closure arguments evaluates nothing
-     * and keeps the I095-C shape.
-     */
-    private static boolean stagesNormalBooleanControlOperands(
-            CanonicalSend send) {
-        return !(send.receiver() instanceof CanonicalLiteral)
-                || !send.arguments().stream()
-                        .allMatch(CanonicalClosure.class::isInstance);
-    }
-
-    /** I095-C: the open-coded lowering of a literal receiver with only literal Closures. */
-    private void emitNormalBooleanControlLiteral(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalSend send,
-            NormalBooleanControlSite site,
-            BytecodeLocal result) {
-        builder.beginTag(StandardTags.CallTag.class);
-        builder.beginBlock();
-        emitNormalBooleanControlPath(
-                builder, send, site,
-                ((CanonicalLiteral) send.receiver()).kind()
-                        == CanonicalLiteral.Kind.TRUE,
-                result);
-        builder.endBlock();
-        builder.endTag(StandardTags.CallTag.class);
-    }
-
-    /*
-     * I095-C/D: the receiver and then every non-Closure argument expression
-     * are evaluated once, in source order, before any selection. A literal
-     * Closure argument has no evaluation effect: it is materialized only by
-     * the ordinary send, so an inline or unselected literal never becomes a
-     * physical Closure. A literal receiver selects its path statically
-     * (admission guarantees it is not ORDINARY), so it needs neither a
-     * classification nor the ordinary send. Any other receiver is classified
-     * by the I092 canonical Boolean classifier; a canonical receiver whose
-     * path is IMMEDIATE or INLINE completes here, while MISS and an ORDINARY
-     * canonical path share one ordinary send with the staged operands, which
-     * keeps PLAT043 sequencing and the B-prime literal candidates.
-     *
-     * I101-A: the classifier and its MISS fallback remain the necessary
-     * semantic guard of a dynamic receiver.
-     */
-    private void emitNormalBooleanControl(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalSend send,
-            NormalBooleanControlSite site,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        builder.beginTag(StandardTags.CallTag.class);
-        builder.beginBlock();
-
-        BytecodeLocal receiverValue = null;
-        if (!(send.receiver() instanceof CanonicalLiteral)) {
-            receiverValue =
-                    builder.createLocal("normalBooleanControlReceiver", null);
-            emitBodyExpressionToLocal(
-                    builder, send.receiver(), receiverValue,
-                    preparedCall, childResult, resumeValue);
-        }
-
-        java.util.List<BytecodeLocal> argumentValues =
-                new java.util.ArrayList<>(send.arguments().size());
-        for (CanonicalExpression argument : send.arguments()) {
-            if (argument instanceof CanonicalClosure) {
-                argumentValues.add(null);
-                continue;
-            }
-            BytecodeLocal argumentValue =
-                    builder.createLocal("normalBooleanControlArgument", null);
-            emitBodyExpressionToLocal(
-                    builder, argument, argumentValue,
-                    preparedCall, childResult, resumeValue);
-            argumentValues.add(argumentValue);
-        }
-
-        if (send.receiver() instanceof CanonicalLiteral receiver) {
-            emitNormalBooleanControlPath(
-                    builder, send, site,
-                    receiver.kind() == CanonicalLiteral.Kind.TRUE, result);
-        } else {
-            BytecodeLocal classification =
-                    builder.createLocal("normalBooleanControlClass", null);
-            builder.beginStoreLocal(classification);
-            builder.beginTryCompactCanonicalBooleanOne();
-            builder.emitLoadLocal(receiverValue);
-            builder.endTryCompactCanonicalBooleanOne();
-            builder.endStoreLocal();
-
-            java.util.List<Boolean> selecting =
-                    new java.util.ArrayList<>(java.util.List.of(true, false));
-            selecting.removeIf(receiver ->
-                    site.path(receiver) == NormalBooleanControlPath.ORDINARY);
-            emitNormalBooleanControlSelection(
-                    builder, send, site, selecting, 0, classification,
-                    receiverValue, argumentValues, result,
-                    preparedCall, childResult, resumeValue);
-        }
-
-        builder.endBlock();
-        builder.endTag(StandardTags.CallTag.class);
-    }
-
-    /** One classification test per canonical receiver completing here; then the ordinary send. */
-    private void emitNormalBooleanControlSelection(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalSend send,
-            NormalBooleanControlSite site,
-            java.util.List<Boolean> selecting,
-            int index,
-            BytecodeLocal classification,
-            BytecodeLocal receiverValue,
-            java.util.List<BytecodeLocal> argumentValues,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        if (index == selecting.size()) {
-            emitNormalBooleanControlOrdinarySend(
-                    builder, send, receiverValue, argumentValues,
-                    result, preparedCall, childResult, resumeValue);
-            return;
-        }
-        boolean receiver = selecting.get(index);
-        builder.beginIfThenElse();
-        if (receiver) {
-            builder.beginIsCanonicalBooleanClass(ProtosCanonicalBooleanOneNode.CLASS_TRUE);
-            builder.emitLoadLocal(classification);
-            builder.endIsCanonicalBooleanClass();
-        } else {
-            builder.beginIsCanonicalBooleanClass(ProtosCanonicalBooleanOneNode.CLASS_FALSE);
-            builder.emitLoadLocal(classification);
-            builder.endIsCanonicalBooleanClass();
-        }
-        builder.beginBlock();
-        emitNormalBooleanControlPath(builder, send, site, receiver, result);
-        builder.endBlock();
-        builder.beginBlock();
-        emitNormalBooleanControlSelection(
-                builder, send, site, selecting, index + 1, classification,
-                receiverValue, argumentValues, result,
-                preparedCall, childResult, resumeValue);
-        builder.endBlock();
-        builder.endIfThenElse();
-    }
-
-    /*
-     * One canonical receiver. An unselected callback value is neither
-     * validated nor invoked. A selected inline body runs normally and its
-     * normal result follows the row's policy; abrupt exits propagate
-     * unchanged and skip the policy, exactly as from the standard
-     * behavior. A selected callback without the inline proof (ORDINARY)
-     * never reaches here: it takes the shared ordinary send, which still
-     * reaches the PLAT043/B-prime sequencing.
-     */
-    private void emitNormalBooleanControlPath(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalSend send,
-            NormalBooleanControlSite site,
-            boolean receiver,
-            BytecodeLocal result) {
-        NormalBooleanControl control = site.control();
-        int selected = control.selectedIndex(receiver);
-        switch (site.path(receiver)) {
-            case IMMEDIATE -> emitStoreConstant(
-                    builder, result, control.unselectedResult(receiver));
-            case ORDINARY -> throw new AssertionError(
-                    "an ORDINARY Boolean-control path uses the shared send");
-            case INLINE -> {
-                CanonicalClosure closure =
-                        (CanonicalClosure) send.arguments().get(selected);
-                switch (control.selectedResult) {
-                    case EXACT -> emitNormalInlineControlBody(
-                            builder, closure, result);
-                    case CANONICAL_BOOLEAN -> {
-                        emitNormalInlineControlBody(builder, closure, result);
-                        builder.beginStoreLocal(result);
-                        builder.beginRequireCanonicalBooleanControlResult();
-                        builder.emitLoadLocal(result);
-                        emitSendCallerOperand(builder);
-                        builder.endRequireCanonicalBooleanControlResult();
-                        builder.endStoreLocal();
-                    }
-                }
-            }
-        }
-    }
-
-    /*
-     * The ordinary send of an admitted site with its staged operands; a
-     * literal Closure argument is materialized here, in argument order, and
-     * remains a PLAT044 B-prime candidate exactly as in the unfolded
-     * lowering (admitted at run time only when actually selected).
-     */
-    private void emitNormalBooleanControlOrdinarySend(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalSend send,
-            BytecodeLocal receiverValue,
-            java.util.List<BytecodeLocal> argumentValues,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        int arity = send.arguments().size();
-        java.util.List<BytecodeLocal> supplied =
-                new java.util.ArrayList<>(arity);
-        java.util.List<InlineLiteralCallback> inlineCallbacks =
-                new java.util.ArrayList<>(1);
-        for (int position = 0; position < arity; position++) {
-            BytecodeLocal value = argumentValues.get(position);
-            if (value == null) {
-                CanonicalClosure literal =
-                        (CanonicalClosure) send.arguments().get(position);
-                value = builder.createLocal(
-                        "normalBooleanControlLiteral", null);
-                builder.beginStoreLocal(value);
-                emitExpression(builder, literal);
-                builder.endStoreLocal();
-                if (isInlineLiteralCallbackCandidate(literal)) {
-                    inlineCallbacks.add(new InlineLiteralCallback(
-                            literal,
-                            position,
-                            value,
-                            bytecodeClosurePlans.get(literal)));
-                }
-            }
-            supplied.add(value);
-        }
-
-        builder.beginStoreLocal(preparedCall);
-        beginPrepareSend(builder, arity);
-        if (receiverValue == null) {
-            emitExpression(builder, send.receiver());
-        } else {
-            builder.emitLoadLocal(receiverValue);
-        }
-        builder.emitLoadConstant(send.message());
-        emitSendCallerOperand(builder);
-        for (BytecodeLocal value : supplied) {
-            builder.emitLoadLocal(value);
-        }
-        endPrepareSend(builder, arity);
-        builder.endStoreLocal();
-        emitPreparedInvocation(
-                builder, result, preparedCall, childResult, resumeValue,
-                inlineCallbacks, null, null);
-    }
-
-    private void emitNormalInlineControlBody(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalClosure closure,
-            BytecodeLocal result) {
-        SourceSpan bodySpan = closure.body().span();
-        builder.beginSourceSection(
-                bodySpan.startOffset(), bodySpan.length());
-        builder.beginTag(StandardTags.RootTag.class);
-        builder.beginBlock();
-
-        boolean savedDirectParentReads =
-                currentNormalDirectParentCaptureReads;
-        java.util.Map<String, BytecodeLocal> savedCallbackScalars =
-                currentNormalCallbackScalarLocals;
-        CanonicalBindingAnalysis savedCallbackScalarAnalysis =
-                currentNormalCallbackScalarAnalysis;
-        CanonicalLexicalScope savedCallbackScalarScope =
-                currentNormalCallbackScalarScope;
-        try {
-            // The same isolated analysis admitsNormalInlineControlBody proved.
-            CanonicalBindingAnalysis callbackAnalysis =
-                    compilationFacts.isolatedClosureAnalysis(closure);
-            CanonicalLexicalScope callbackScope =
-                    callbackAnalysis.scopeOf(closure).orElseThrow();
-            if (!callbackScope.declaredNames().isEmpty()) {
-                java.util.Set<String> admitted = scalarLocalNamesForRoot(
-                        closure.body(), closure, callbackAnalysis, callbackScope);
-                if (!admitted.equals(callbackScope.declaredNames())
-                        && !admitsNormalMixedCallbackOwnCreations(
-                                closure.body(), callbackAnalysis, callbackScope)) {
-                    throw new AssertionError(
-                            "I095-B6 inline callback lost its lexical proof");
-                }
-                java.util.LinkedHashMap<String, BytecodeLocal> own =
-                        new java.util.LinkedHashMap<>();
-                for (String name : callbackScope.declaredNames()) {
-                    own.put(name, builder.createLocal(
-                            NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + name, null));
-                }
-                currentNormalCallbackScalarLocals = java.util.Map.copyOf(own);
-                currentNormalCallbackScalarAnalysis = callbackAnalysis;
-                currentNormalCallbackScalarScope = callbackScope;
-            }
-            currentNormalDirectParentCaptureReads = true;
-            emitInlinedClosureBodyStatements(
-                    builder, closure, result, false);
-        } finally {
-            currentNormalDirectParentCaptureReads = savedDirectParentReads;
-            currentNormalCallbackScalarLocals = savedCallbackScalars;
-            currentNormalCallbackScalarAnalysis = savedCallbackScalarAnalysis;
-            currentNormalCallbackScalarScope = savedCallbackScalarScope;
-        }
-
-        builder.endBlock();
-        builder.endTag(StandardTags.RootTag.class);
-        builder.endSourceSection();
     }
 
     /**
@@ -10777,15 +8401,9 @@ final class CanonicalToBytecodeLowerer {
             return admitExperimentalCompactBinding(
                     expression, scope, kinds, callback);
         }
-        if (expression instanceof CanonicalCall call) {
-            return currentExperimentalRecursiveIntegerAdmission
-                            && experimentalRecursiveSelfCall(call)
-                            && admitExperimentalCompactExpression(
-                                            call.arguments().get(0),
-                                            scope, kinds, callback)
-                                    == ExperimentalCompactKind.INTEGER
-                    ? ExperimentalCompactKind.INTEGER
-                    : null;
+        if (expression instanceof CanonicalCall) {
+            // I115: calls are made only through the shared dispatcher.
+            return null;
         }
         if (!(expression instanceof CanonicalSend send)) {
             return null;
@@ -11409,18 +9027,7 @@ final class CanonicalToBytecodeLowerer {
             emitExperimentalCompactStore(builder, expression, name, value);
             builder.emitLoadLocal(experimentalCompactLocal(name));
             builder.endBlock();
-        } else if (expression instanceof CanonicalCall call
-                && currentExperimentalRecursiveIntegerEmission
-                && experimentalRecursiveSelfCall(call)) {
-            ProtosClosureExecutionPlanCell plan =
-                    bytecodeClosurePlans.get(currentExperimentalRootDefinition);
-            if (plan == null) {
-                throw new AssertionError(
-                        "I115-H2 recursive plan cell missing");
-            }
-            builder.beginInvokeStaticClosureOneTail(plan);
-            emitExperimentalCompactValue(builder, call.arguments().get(0));
-            builder.endInvokeStaticClosureOneTail();
+
         } else {
             CanonicalSend send = (CanonicalSend) expression;
             if ("whileTrue".equals(send.message())) {
@@ -11511,13 +9118,13 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBindStackValue();
         emitExperimentalCompactValue(builder, send.receiver());
         StackValue receiver = builder.endBindStackValue();
-        builder.beginCallBinaryMethod(selector, terminal);
+        // I115: GetMethod binds the receiver; the call has one argument.
+        builder.beginCallUnaryMethod(terminal);
         builder.beginGetMethod(selector);
         builder.emitLoadStackValue(receiver);
         builder.endGetMethod();
-        builder.emitLoadStackValue(receiver);
         emitExperimentalCompactValue(builder, send.arguments().get(0));
-        builder.endCallBinaryMethod();
+        builder.endCallUnaryMethod();
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
@@ -11587,7 +9194,7 @@ final class CanonicalToBytecodeLowerer {
      * into staged locals; the selector's TryPrimitiveNumeric operation
      * (guarded on the actual operands and the standard numeric protocol)
      * either produces the result, or MISSes into the ordinary
-     * PrepareSendOne and prepared invocation, with its continuation,
+     * GetMethod and the dispatched call, with its continuation,
      * ReturnHome and Error paths, over the materialized operands; before
      * that send the root's frame locals become its activation's lexical
      * authority, so the selected method observes the same bindings. Both
@@ -11621,20 +9228,9 @@ final class CanonicalToBytecodeLowerer {
                 builder, send, receiverValue, argumentValue, true, true);
         // The selected method may observe this activation.
         emitExperimentalCompactAuthorityPromotion(builder);
-        builder.beginStoreLocal(scratch.preparedCall());
-        beginPrepareSend(builder, 1);
-        builder.emitLoadLocal(receiverValue);
-        builder.emitLoadConstant(send.message());
-        emitSendCallerOperand(builder);
-        builder.emitLoadLocal(argumentValue);
-        endPrepareSend(builder, 1);
-        builder.endStoreLocal();
-        emitPreparedInvocation(
-                builder,
-                result,
-                scratch.preparedCall(),
-                scratch.childResult(),
-                scratch.resumeValue());
+        emitDispatchedSendOfLocals(
+                builder, send.message(), receiverValue, java.util.List.of(argumentValue),
+                result, scratch.childResult(), scratch.resumeValue());
         endPrimitiveNumericMiss(builder, attempt, result, true);
 
         builder.endBlock();
@@ -11856,25 +9452,12 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
             callbacks.add(callback);
         }
-        builder.beginStoreLocal(scratch.preparedCall());
-        beginPrepareSend(builder, arguments.size());
-        builder.emitLoadLocal(receiverValue);
-        builder.emitLoadConstant(send.message());
-        emitSendCallerOperand(builder);
-        for (BytecodeLocal callback : callbacks) {
-            builder.emitLoadLocal(callback);
-        }
-        endPrepareSend(builder, arguments.size());
-        builder.endStoreLocal();
         BytecodeLocal sendResult = result != null
                 ? result
                 : builder.createLocal("compactBooleanSendResult", null);
-        emitPreparedInvocation(
-                builder,
-                sendResult,
-                scratch.preparedCall(),
-                scratch.childResult(),
-                scratch.resumeValue());
+        emitDispatchedSendOfLocals(
+                builder, send.message(), receiverValue, callbacks,
+                sendResult, scratch.childResult(), scratch.resumeValue());
         builder.endBlock();
         builder.endIfThenElse();
 
@@ -12021,516 +9604,48 @@ final class CanonicalToBytecodeLowerer {
         endStatement(builder);
     }
 
+    /**
+     * PERF040-E1 numeric operator sends keep their primitive attempt over the
+     * staged operands; its MISS branch (and every other send) is the
+     * dispatched GraalPy send: GetMethod on the staged receiver, then the
+     * arity-selected Call*Method.
+     */
     private void emitComposedSendUnfolded(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
-            BytecodeLocal preparedCall,
+            BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
-        CanonicalExpression receiver = send.receiver();
-        boolean tryPrimitiveNumericSend =
-                !hasNamedArgument(send.arguments())
-                        && primitiveNumericSendCandidate(send);
-        boolean stageReceiver = requiresComposedInvocation(receiver);
-        boolean stageArguments =
-                hasComposedArgument(send.arguments());
-        boolean spreadArguments = hasSpreadArgument(send.arguments());
-        boolean namedArguments = hasNamedArgument(send.arguments());
-        boolean vectorArguments = spreadArguments || namedArguments;
-        java.util.List<Integer> inlineCallbackPositions =
-                vectorArguments
-                        ? java.util.List.of()
-                        : inlineLiteralCallbackCandidates(send.arguments());
-        boolean tryCompactCanonicalIfTrue =
-                !namedArguments
-                        && admitsNativeIfTrue(send, spreadArguments);
-        boolean inlineIndexedEachCandidate =
-                !vectorArguments
-                        && isInlineLiteralIndexedEachCandidate(send.arguments());
-        boolean inlineTwoParameterEachCandidate =
-                !vectorArguments
-                        && isInlineLiteralTwoParameterEachCandidate(send.arguments());
-        /*
-         * PLAT044 B′: candidate literals are staged in ordinary argument
-         * locals (still evaluated exactly once, in order) so the prepared
-         * Boolean call can compare its selected callback with them.
-         */
-        /*
-         * PERF038-H: attempt a fused Send1 only when the call site
-         * can retain its operands for the unchanged fallback.
-         * Admission of the actual selected method is runtime-guarded.
-         */
-        boolean tryDirectSendZero =
-                !vectorArguments
-                        && send.arguments().isEmpty()
-                        && !currentInlineCallbackFrameNative
-                        && inlineCallbackPositions.isEmpty()
-                        && !inlineIndexedEachCandidate
-                        && !inlineTwoParameterEachCandidate;
-
-        boolean tryDirectSendOne =
-                !vectorArguments
-                        && send.arguments().size() == 1
-                        && !currentInlineCallbackFrameNative
-                        && inlineCallbackPositions.isEmpty()
-                        && !inlineIndexedEachCandidate
-                        && !inlineTwoParameterEachCandidate;
-
-        boolean stageInputs =
-                stageReceiver
-                        || stageArguments
-                        || vectorArguments
-                        || !inlineCallbackPositions.isEmpty()
-                        || inlineIndexedEachCandidate
-                        || inlineTwoParameterEachCandidate
-                        || tryDirectSendZero
-                        || tryDirectSendOne
-                        || tryPrimitiveNumericSend
-                        || tryCompactCanonicalIfTrue;
-        BytecodeLocal receiverValue = null;
-        BytecodeLocal suppliedVector = null;
-        boolean carrierDirectArgument = false;
-        java.util.List<BytecodeLocal> argumentValues =
-                java.util.List.of();
-
+        if (!primitiveNumericSendCandidate(send)) {
+            emitDispatchedInvocation(
+                    builder, InvocationShape.SEND, send.receiver(), send.message(), send.arguments(),
+                    result, scratch, childResult, resumeValue,
+                    this::emitBodyExpressionToLocal, this::emitBodySpreadArgumentVector,
+                    primitiveCarrierResult);
+            return;
+        }
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
-        if (stageInputs) {
-            receiverValue =
-                    builder.createLocal(
-                            "sendReceiver",
-                            null);
-            if (tryPrimitiveNumericSend) {
-                emitPrimitiveNumericOperandToLocal(
-                        builder, receiver, receiverValue,
-                        preparedCall, childResult, resumeValue);
-            } else if (stageReceiver) {
-                emitBodyExpressionToLocal(
-                        builder,
-                        receiver,
-                        receiverValue,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
-            } else {
-                builder.beginStoreLocal(receiverValue);
-                emitExpression(builder, receiver);
-                builder.endStoreLocal();
-            }
-
-            if (vectorArguments) {
-                suppliedVector =
-                        builder.createLocal(
-                                "suppliedArgumentVector",
-                                null);
-                emitBodySpreadArgumentVector(
-                        builder,
-                        send.arguments(),
-                        suppliedVector,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
-            } else {
-                argumentValues =
-                        new java.util.ArrayList<>(
-                                send.arguments().size());
-                for (CanonicalExpression argument :
-                        send.arguments()) {
-                    BytecodeLocal argumentValue =
-                            builder.createLocal(
-                                    "sendArgument",
-                                    null);
-                    if (tryPrimitiveNumericSend) {
-                        emitPrimitiveNumericOperandToLocal(
-                                builder, argument, argumentValue,
-                                preparedCall, childResult, resumeValue);
-                    } else if (tryDirectSendOne
-                            && primitiveNumericCarrierArgument(argument)) {
-                        /*
-                         * I091: a fused direct source call may pass a
-                         * primitive carrier; the miss path materializes it.
-                         */
-                        carrierDirectArgument = true;
-                        emitPrimitiveNumericOperandToLocal(
-                                builder, argument, argumentValue,
-                                preparedCall, childResult, resumeValue);
-                    } else {
-                        emitBodyExpressionToLocal(
-                                builder, argument, argumentValue,
-                                preparedCall, childResult, resumeValue);
-                    }
-                    argumentValues.add(argumentValue);
-                }
-            }
-        }
-
-        BytecodeLocal primitiveNumericAttempt = null;
-        if (tryPrimitiveNumericSend) {
-            primitiveNumericAttempt = beginPrimitiveNumericMiss(
-                    builder, send, receiverValue, argumentValues.get(0),
-                    primitiveNumericCarrierSource(receiver),
-                    primitiveNumericCarrierSource(send.arguments().get(0)));
-        }
-
-        /*
-         * I092: receiver and callback-producing expression have already
-         * been evaluated once, in source order. Selection comes afterward.
-         * The entire original pipeline remains on the miss branch.
-         */
-        BytecodeLocal compactBooleanResult = null;
-        CanonicalClosure compactBooleanDefinition = null;
-
-        if (tryCompactCanonicalIfTrue) {
-            compactBooleanDefinition =
-                    inlineCallbackPositions.size() == 1
-                                    && inlineCallbackPositions.get(0) == 0
-                                    && !isInlineLiteralWhileCandidate(send)
-                            ? (CanonicalClosure) send.arguments().get(0)
-                            : null;
-            compactBooleanResult =
-                    builder.createLocal("compactCanonicalBoolean", null);
-
-            ProtosClosureExecutionPlanCell candidatePlan =
-                    compactBooleanDefinition == null
-                            ? null
-                            : bytecodeClosurePlans.get(compactBooleanDefinition);
-
-            if (!spreadArguments && !currentInlineCallbackFrameNative) {
-                emitCanonicalIfTrueOneCandidate(
-                        builder,
-                        receiver,
-                        receiverValue,
-                        argumentValues.get(0),
-                        candidatePlan,
-                        compactBooleanResult);
-            } else {
-                emitNativeIfTrueCandidate(
-                        builder, receiverValue, spreadArguments, suppliedVector,
-                        spreadArguments ? null : argumentValues.get(0),
-                        candidatePlan, compactBooleanResult);
-            }
-
-            if (compactBooleanDefinition != null) {
-                emitCanonicalIfTrueLiteralSite(
-                        builder,
-                        compactBooleanDefinition,
-                        compactBooleanResult,
-                        receiverValue,
-                        send.message(),
-                        argumentValues.get(0),
-                        result,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
-                builder.endBlock();
-                builder.endTag(StandardTags.CallTag.class);
-                return;
-            }
-
-            builder.beginIfThenElse();
-            builder.beginIsResultKind(ProtosResultKind.COMPACT_BOOLEAN_MISS);
-            builder.emitLoadLocal(compactBooleanResult);
-            builder.endIsResultKind();
-            builder.beginBlock();
-        }
-
-        BytecodeLocal directSendResult = null;
-        if (tryDirectSendZero || tryDirectSendOne) {
-            directSendResult =
-                    builder.createLocal("directSendOneResult", null);
-
-            builder.beginStoreLocal(directSendResult);
-            if (tryDirectSendZero) {
-                builder.beginTryDirectSendZero();
-            } else {
-                builder.beginTryDirectSendOne();
-            }
-
-            builder.emitLoadLocal(receiverValue);
-            builder.emitLoadConstant(send.message());
-            emitSendCallerOperand(builder);
-
-            if (tryDirectSendZero) {
-                builder.endTryDirectSendZero();
-            } else {
-                builder.emitLoadLocal(argumentValues.get(0));
-                builder.endTryDirectSendOne();
-            }
-            builder.endStoreLocal();
-
-            builder.beginIfThenElse();
-            builder.beginIsResultKind(ProtosResultKind.DIRECT_SEND_MISS);
-            builder.emitLoadLocal(directSendResult);
-            builder.endIsResultKind();
-
-            /*
-             * Miss: the original prepared-call protocol, including
-             * native/structured calls, suspension and Error paths.
-             */
-            builder.beginBlock();
-            if (carrierDirectArgument) {
-                BytecodeLocal stagedArgument = argumentValues.get(0);
-                builder.beginStoreLocal(stagedArgument);
-                builder.beginMaterializePrimitiveNumericCarrier();
-                builder.emitLoadLocal(stagedArgument);
-                builder.emitLoadConstant(true);
-                builder.endMaterializePrimitiveNumericCarrier();
-                builder.endStoreLocal();
-            }
-        }
-
-        builder.beginStoreLocal(preparedCall);
-        if (vectorArguments) {
-            builder.beginPrepareSendVector();
-            builder.emitLoadLocal(receiverValue);
-            builder.emitLoadConstant(send.message());
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(suppliedVector);
-            builder.endPrepareSendVector();
-        } else {
-            beginPrepareSend(builder, send.arguments().size());
-            if (stageInputs) {
-                builder.emitLoadLocal(receiverValue);
-            } else {
-                emitExpression(builder, receiver);
-            }
-            builder.emitLoadConstant(send.message());
-            emitSendCallerOperand(builder);
-            if (stageInputs) {
-                for (BytecodeLocal argumentValue :
-                        argumentValues) {
-                    builder.emitLoadLocal(argumentValue);
-                }
-            } else {
-                for (CanonicalExpression argument :
-                        send.arguments()) {
-                    emitExpression(builder, argument);
-                }
-            }
-            endPrepareSend(builder, send.arguments().size());
-        }
-        builder.endStoreLocal();
-
-        java.util.List<InlineLiteralCallback> inlineCallbacks =
-                new java.util.ArrayList<>(inlineCallbackPositions.size());
-        for (int position : inlineCallbackPositions) {
-            CanonicalClosure candidate =
-                    (CanonicalClosure) send.arguments().get(position);
-            inlineCallbacks.add(
-                    new InlineLiteralCallback(
-                            candidate,
-                            position,
-                            argumentValues.get(position),
-                            bytecodeClosurePlans.get(candidate)));
-        }
-
-        /*
-         * PERF026-C1: a while pair candidate always has its body at supplied
-         * position 0 among the Boolean candidates, so both literals are
-         * already staged; the receiver literal is staged in receiverValue.
-         */
-        InlineLiteralWhile inlineWhile = null;
-        if (!spreadArguments && isInlineLiteralWhileCandidate(send)) {
-            CanonicalClosure condition = (CanonicalClosure) receiver;
-            inlineWhile =
-                    new InlineLiteralWhile(
-                            new InlineLiteralCallback(
-                                    condition,
-                                    -1,
-                                    receiverValue,
-                                    bytecodeClosurePlans.get(condition)),
-                            inlineCallbacks.get(0));
-            /*
-             * A Closure-literal receiver can never be admitted by a selected
-             * standard Boolean capability (PreparedBooleanCall rejects a
-             * non-Boolean receiver before preparing any callback), so no
-             * unreachable Boolean inline region is emitted for this site.
-             */
-            inlineCallbacks = java.util.List.of();
-        }
-
-        /*
-         * PERF026-D1/D2/D3: disjoint from each other (one versus two
-         * parameters) and from the Boolean and while candidates, which
-         * require zero-parameter literals.
-         */
-        InlineLiteralEach inlineEach = null;
-        if (inlineIndexedEachCandidate || inlineTwoParameterEachCandidate) {
-            CanonicalClosure callback =
-                    (CanonicalClosure) send.arguments().get(0);
-            inlineEach =
-                    new InlineLiteralEach(
-                            new InlineLiteralCallback(
-                                    callback,
-                                    0,
-                                    argumentValues.get(0),
-                                    bytecodeClosurePlans.get(callback)),
-                            inlineTwoParameterEachCandidate);
-        }
-
-        emitPreparedInvocation(
-                builder,
-                result,
-                preparedCall,
-                childResult,
-                resumeValue,
-                inlineCallbacks,
-                inlineWhile,
-                inlineEach);
-
-        if (tryDirectSendZero || tryDirectSendOne) {
-            builder.endBlock();
-
-            /*
-             * Fused hit: no PreparedClosureCall, continuation scratch
-             * or ReturnHome completion was required.
-             */
-            builder.beginBlock();
-            builder.beginStoreLocal(result);
-            /*
-             * I091: an admitted callee may return a primitive carrier; only
-             * a carrier-permitting consumer receives it unmaterialized.
-             */
-            if (!primitiveCarrierResult) {
-                builder.beginMaterializePrimitiveNumericCarrier();
-            }
-            builder.emitLoadLocal(directSendResult);
-            if (!primitiveCarrierResult) {
-                builder.emitLoadConstant(true);
-                builder.endMaterializePrimitiveNumericCarrier();
-            }
-            builder.endStoreLocal();
-            builder.endBlock();
-
-            builder.endIfThenElse();
-        }
-
-        if (tryCompactCanonicalIfTrue) {
-            builder.endBlock();
-            builder.beginBlock();
-            emitCanonicalIfTrueNative(
-                    builder,
-                    compactBooleanResult,
-                    result,
-                    childResult,
-                    resumeValue);
-            builder.endBlock();
-            builder.endIfThenElse();
-        }
-
-        if (tryPrimitiveNumericSend) {
-            endPrimitiveNumericMiss(
-                    builder, primitiveNumericAttempt, result, primitiveCarrierResult);
-        }
-
+        BytecodeLocal receiverValue = builder.createLocal("numericReceiver", null);
+        BytecodeLocal argumentValue = builder.createLocal("numericArgument", null);
+        emitPrimitiveNumericOperandToLocal(
+                builder, send.receiver(), receiverValue, scratch, childResult, resumeValue);
+        emitPrimitiveNumericOperandToLocal(
+                builder, send.arguments().get(0), argumentValue, scratch, childResult, resumeValue);
+        BytecodeLocal attempt =
+                beginPrimitiveNumericMiss(builder, send, receiverValue, argumentValue, true, true);
+        BytecodeLocal callable = builder.createLocal("numericMethod", null);
+        emitGetMethod(builder, send.message(), receiverValue, callable);
+        emitDispatchedCall(
+                builder, callable, java.util.List.of(argumentValue), null, childResult, result,
+                resumeValue, primitiveCarrierResult);
+        endPrimitiveNumericMiss(builder, attempt, result, primitiveCarrierResult);
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
 
-    /**
-     * PLAT044 B′ (PERF026-B1/B3) compile-time candidates: the supplied
-     * positions, of a send with one or two non-spread arguments (the arities
-     * of the standard Boolean callback capabilities), that hold an immediate
-     * zero-parameter Closure literal whose body creates no nested Closure.
-     * The literal's own root and plan cell exist (it is materialized as the
-     * argument), so the body can also be lowered inline. Nested Closures are
-     * excluded because capturing a callback-owned binding would need lexical
-     * machinery B1 does not establish. Nothing here consults the selector:
-     * whether, and for which position, the inline path is taken is decided at
-     * run time, after ordinary selection, by {@link
-     * ProtosStructuredControlCalls.PreparedBooleanCall#admitsInlineLiteralCallback}.
-     */
-    private static java.util.List<Integer> inlineLiteralCallbackCandidates(
-            java.util.List<CanonicalExpression> arguments) {
-        if (arguments.size() > 2) {
-            return java.util.List.of();
-        }
-        java.util.List<Integer> positions = new java.util.ArrayList<>(2);
-        for (int position = 0; position < arguments.size(); position++) {
-            if (isInlineLiteralCallbackCandidate(arguments.get(position))) {
-                positions.add(position);
-            }
-        }
-        return positions;
-    }
-
-    /**
-     * PLAT044 B′ (PERF026-C1) compile-time whileTrue pair candidate: the
-     * receiver and the sole supplied argument are both inline literal
-     * callback candidates ({@link #isInlineLiteralCallbackCandidate}). As for
-     * Boolean candidates the selector is never consulted; the local loop is
-     * taken only after ordinary selection prepared the canonical standard
-     * whileTrue with exactly these two staged values ({@link
-     * ProtosPreparedCalls.PreparedClosureCall#admitsInlineLiteralWhile}).
-     */
-    private static boolean isInlineLiteralWhileCandidate(CanonicalSend send) {
-        return send.arguments().size() == 1
-                && isInlineLiteralCallbackCandidate(send.receiver())
-                && isInlineLiteralCallbackCandidate(send.arguments().get(0));
-    }
-
-    /**
-     * PLAT044 B′ (PERF026-D1) compile-time indexed each candidate: the sole
-     * supplied argument is an immediate Closure literal with exactly one
-     * ordinary required positional parameter (no default, not rest) whose
-     * body creates no nested Closure. This is deliberately separate from
-     * {@link #isInlineLiteralCallbackCandidate}, so no Boolean or while site
-     * gains a parameterized inline region. The selector is never consulted:
-     * the local loop is taken only after ordinary selection prepared the
-     * canonical standard Array.each or Bytes.each with exactly this staged
-     * value ({@link
-     * ProtosPreparedCalls.PreparedClosureCall#admitsInlineLiteralIndexedEach}),
-     * and the formal is then bound by the ordinary parameter binding from the
-     * prepared per-element activation.
-     */
-    private static boolean isInlineLiteralIndexedEachCandidate(
-            java.util.List<CanonicalExpression> arguments) {
-        return isInlineLiteralEachCandidate(arguments, 1);
-    }
-
-    /**
-     * PLAT044 B′ (PERF026-D2/D3) compile-time two-parameter each candidate:
-     * as {@link #isInlineLiteralIndexedEachCandidate}, but the literal has
-     * exactly two ordinary required positional parameters (neither with a
-     * default nor rest), matching the two arguments of a standard
-     * {@code block(key, value)} or {@code block(name, value)} invocation. It
-     * is disjoint from the one-parameter indexed candidate and from the
-     * zero-parameter Boolean and while candidates. The source shape is only a
-     * candidate: the local loop is taken only after ordinary selection
-     * prepared the canonical standard Map.each, IdentityMap.each or
-     * Environment.each with exactly this staged value ({@link
-     * ProtosPreparedCalls.PreparedClosureCall#admitsInlineLiteralAssociationEach},
-     * {@link
-     * ProtosPreparedCalls.PreparedClosureCall#admitsInlineLiteralEnvironmentEach}),
-     * and both formals are then bound by the ordinary parameter binding from
-     * the prepared per-position activation. Any other shape keeps the
-     * ordinary path, including its ordinary callback arity behavior.
-     */
-    private static boolean isInlineLiteralTwoParameterEachCandidate(
-            java.util.List<CanonicalExpression> arguments) {
-        return isInlineLiteralEachCandidate(arguments, 2);
-    }
-
-    private static boolean isInlineLiteralEachCandidate(
-            java.util.List<CanonicalExpression> arguments,
-            int parameterCount) {
-        return arguments.size() == 1
-                && arguments.get(0) instanceof CanonicalClosure closure
-                && closure.parameters().size() == parameterCount
-                && closure.parameters().stream()
-                        .allMatch(parameter -> !parameter.rest()
-                                && parameter.defaultValue().isEmpty())
-                && !containsClosure(closure.body());
-    }
-
-    private static boolean isInlineLiteralCallbackCandidate(
-            CanonicalExpression expression) {
-        return expression instanceof CanonicalClosure closure
-                && closure.parameters().isEmpty()
-                && !containsClosure(closure.body());
-    }
 
     private static boolean containsClosure(CanonicalExpression expression) {
         return switch (expression) {
@@ -12591,455 +9706,27 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCall call,
             BytecodeLocal result,
-            BytecodeLocal preparedCall,
+            BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        emitComposedCall(
-                builder, call, result, preparedCall,
-                childResult, resumeValue, false);
+        emitComposedCall(builder, call, result, scratch, childResult, resumeValue, false);
     }
 
     private void emitComposedCall(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCall call,
             BytecodeLocal result,
-            BytecodeLocal preparedCall,
+            BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
-        if (result == null
-                || preparedCall == null
-                || childResult == null
-                || resumeValue == null) {
-            throw new AssertionError(
-                    "Bytecode call result/scratch locals were not allocated");
-        }
-
-        CanonicalExpression receiver = call.receiver();
-        boolean stageReceiver = requiresComposedInvocation(receiver);
-        boolean stageArguments = hasComposedArgument(call.arguments());
-        boolean spreadArguments = hasSpreadArgument(call.arguments());
-        boolean namedArguments = hasNamedArgument(call.arguments());
-        boolean vectorArguments = spreadArguments || namedArguments;
-        boolean positionalCall =
-                !vectorArguments && !currentInlineCallbackFrameNative;
-        boolean semanticCall =
-                positionalCall && call.arguments().size() <= 1;
-        CanonicalClosure inlineLiteral =
-                positionalCall
-                        ? inlineClosureLiteralCallCandidate(call)
-                        : null;
-
-        /*
-         * I108-B: keep Call0/Call1's scalar-carrier policy unchanged.
-         * CallN/spread use the same result/fallback protocol, but
-         * only after their full argument vector has been constructed.
-         */
-        /*
-         * I108-B frame-native boundary: while an I096 inline callback
-         * executes, its invocation caller operand is a
-         * PreparedInlineLiteralCall, not a ProtosActivation.
-         *
-         * PrepareInlineClosureCall{,One,Arguments} owns conversion of
-         * that carrier into the exact caller authority through
-         * ProtosInlineCallbackFrameBindings.invocationCaller(), using
-         * the live BytecodeNode, VirtualFrame and lexical layout.
-         *
-         * InvokeClosureArguments currently accepts a ProtosActivation
-         * and cannot replace this path without changing that operand
-         * contract. Preserve the existing inline-specific preparation
-         * and structured continuation/finalization here.
-         *
-         * This is a bounded frame-native carrier exception, not a
-         * general permission to retain duplicate ordinary dispatch.
-         */
-        boolean semanticCallN =
-                !currentInlineCallbackFrameNative
-                        && !namedArguments
-                        && (spreadArguments || call.arguments().size() >= 2);
-        boolean semanticInlineZero =
-                currentInlineCallbackFrameNative
-                        && !spreadArguments
-                        && call.arguments().isEmpty();
-        boolean semanticInlineOne =
-                currentInlineCallbackFrameNative
-                        && !vectorArguments
-                        && call.arguments().size() == 1;
-        boolean semanticInlineArguments =
-                currentInlineCallbackFrameNative
-                        && !namedArguments
-                        && (spreadArguments
-                                || call.arguments().size() >= 2);
-
-        boolean stageInputs =
-                stageReceiver
-                        || stageArguments
-                        || vectorArguments
-                        || semanticCall
-                        || semanticCallN
-                        || semanticInlineZero
-                        || semanticInlineOne
-                        || semanticInlineArguments
-                        || inlineLiteral != null;
-        BytecodeLocal receiverValue = null;
-        BytecodeLocal suppliedVector = null;
-        java.util.List<BytecodeLocal> argumentValues =
-                java.util.List.of();
-
-        builder.beginTag(StandardTags.CallTag.class);
-        builder.beginBlock();
-
-        if (stageInputs) {
-            receiverValue =
-                    builder.createLocal(
-                            "callReceiver",
-                            null);
-            if (stageReceiver) {
-                emitBodyExpressionToLocal(
-                        builder,
-                        receiver,
-                        receiverValue,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
-            } else {
-                builder.beginStoreLocal(receiverValue);
-                emitExpression(builder, receiver);
-                builder.endStoreLocal();
-            }
-
-            if (vectorArguments) {
-                suppliedVector =
-                        builder.createLocal(
-                                "suppliedArgumentVector",
-                                null);
-                emitBodySpreadArgumentVector(
-                        builder,
-                        call.arguments(),
-                        suppliedVector,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
-            } else {
-                argumentValues =
-                        new java.util.ArrayList<>(
-                                call.arguments().size());
-                for (CanonicalExpression argument :
-                        call.arguments()) {
-                    BytecodeLocal argumentValue =
-                            builder.createLocal(
-                                    "callArgument",
-                                    null);
-                    if (semanticCall
-                            && inlineLiteral == null
-                            && primitiveNumericCarrierArgument(argument)) {
-                        // I091-F2: direct entry retains a primitive
-                        // carrier; InvokeClosureOne projects it when
-                        // preparing an ordinary fallback.
-                        emitPrimitiveNumericOperandToLocal(
-                                builder,
-                                argument,
-                                argumentValue,
-                                preparedCall,
-                                childResult,
-                                resumeValue);
-                    } else {
-                        emitBodyExpressionToLocal(
-                                builder,
-                                argument,
-                                argumentValue,
-                                preparedCall,
-                                childResult,
-                                resumeValue);
-                    }
-                    argumentValues.add(argumentValue);
-                }
-            }
-        }
-
-        /*
-         * I096-A/B1: the receiver (the literal, or the ordinary lookup of a
-         * candidate binding) was staged above exactly once and the inline
-         * region consumes those locals, so it never repeats an evaluation or
-         * a binding read. The region of a candidate
-         * ({@link #inlineClosureLiteralCallCandidate}) is the
-         * complete lowering of the call, because the run-time admission of
-         * the canonical Object.call selection and the carrier's exact
-         * physical fallback inside it remain the necessary semantic guard.
-         */
-        ProtosClosureExecutionPlanCell inlineLiteralPlan =
-                inlineLiteral == null
-                        ? null
-                        : bytecodeClosurePlans.get(inlineLiteral);
-        if (inlineLiteralPlan != null) {
-            emitInlineClosureLiteralCall(
-                    builder,
-                    inlineLiteral,
-                    inlineLiteralPlan,
-                    receiverValue,
-                    argumentValues,
-                    result,
-                    childResult,
-                    resumeValue);
-            builder.endBlock();
-            builder.endTag(StandardTags.CallTag.class);
-            return;
-        }
-
-        /*
-         * I108-A: the arity-specialized operation owns direct
-         * admission, its bounded PIC and ordinary fallback
-         * preparation. The caller retains only the structural
-         * continuation/finalization path for a prepared result.
-         */
-        BytecodeLocal closureInvocationOutcome = null;
-
-        if (semanticCall || semanticCallN || semanticInlineZero || semanticInlineOne || semanticInlineArguments) {
-            closureInvocationOutcome =
-                    builder.createLocal("closureInvocationOutcome", null);
-
-            builder.beginStoreLocal(closureInvocationOutcome);
-            if (semanticInlineZero) {
-                builder.beginInvokeInlineClosureZero(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                builder.emitLoadLocal(receiverValue);
-                emitCurrentInlineCallbackCall(builder);
-                builder.endInvokeInlineClosureZero();
-            } else if (semanticInlineOne) {
-                builder.beginInvokeInlineClosureOne(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                builder.emitLoadLocal(receiverValue);
-                emitCurrentInlineCallbackCall(builder);
-                builder.emitLoadLocal(argumentValues.get(0));
-                builder.endInvokeInlineClosureOne();
-            } else if (semanticInlineArguments) {
-                builder.beginInvokeInlineClosureArguments(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                builder.emitLoadLocal(receiverValue);
-                emitCurrentInlineCallbackCall(builder);
-
-                if (spreadArguments) {
-                    builder.beginSnapshotClosureCallArguments();
-                    builder.emitLoadLocal(suppliedVector);
-                    builder.endSnapshotClosureCallArguments();
-                } else {
-                    builder.beginCollectClosureCallArguments();
-                    for (BytecodeLocal argumentValue : argumentValues) {
-                        builder.emitLoadLocal(argumentValue);
-                    }
-                    builder.endCollectClosureCallArguments();
-                }
-
-                builder.endInvokeInlineClosureArguments();
-            } else if (semanticCall && call.arguments().isEmpty()) {
-                builder.beginCallNilaryMethod(false);
-                builder.emitLoadLocal(receiverValue);
-                builder.endCallNilaryMethod();
-            } else if (semanticCall) {
-                builder.beginCallUnaryMethod(false);
-                builder.emitLoadLocal(receiverValue);
-                builder.emitLoadLocal(argumentValues.get(0));
-                builder.endCallUnaryMethod();
-            } else {
-                builder.beginCallVarargsMethod(false);
-                builder.emitLoadLocal(receiverValue);
-
-                if (spreadArguments) {
-                    builder.beginSnapshotClosureCallArguments();
-                    builder.emitLoadLocal(suppliedVector);
-                    builder.endSnapshotClosureCallArguments();
-                } else {
-                    builder.beginCollectClosureCallArguments();
-                    for (BytecodeLocal argumentValue : argumentValues) {
-                        builder.emitLoadLocal(argumentValue);
-                    }
-                    builder.endCollectClosureCallArguments();
-                }
-
-                builder.endCallVarargsMethod();
-            }
-            builder.endStoreLocal();
-
-            builder.beginIfThenElse();
-            builder.beginIsResultKind(ProtosResultKind.PREPARED_CLOSURE_INVOCATION);
-            builder.emitLoadLocal(closureInvocationOutcome);
-            builder.endIsResultKind();
-
-            builder.beginBlock();
-            builder.beginStoreLocal(preparedCall);
-            builder.emitLoadLocal(closureInvocationOutcome);
-            builder.endStoreLocal();
-        }
-
-        emitPreparedInvocation(
-                builder,
-                result,
-                preparedCall,
-                childResult,
-                resumeValue);
-
-        if (semanticCall || semanticCallN || semanticInlineZero || semanticInlineOne || semanticInlineArguments) {
-            builder.endBlock();
-
-            builder.beginBlock();
-            builder.beginStoreLocal(result);
-            if (!primitiveCarrierResult) {
-                builder.beginMaterializePrimitiveNumericCarrier();
-            }
-            builder.emitLoadLocal(closureInvocationOutcome);
-            if (!primitiveCarrierResult) {
-                builder.emitLoadConstant(true);
-                builder.endMaterializePrimitiveNumericCarrier();
-            }
-            builder.endStoreLocal();
-            builder.endBlock();
-
-            builder.endIfThenElse();
-        }
-
-        builder.endBlock();
-        builder.endTag(StandardTags.CallTag.class);
+        emitDispatchedInvocation(
+                builder, InvocationShape.CALL, call.receiver(), null, call.arguments(),
+                result, scratch, childResult, resumeValue,
+                this::emitBodyExpressionToLocal, this::emitBodySpreadArgumentVector,
+                primitiveCarrierResult);
     }
 
-    /**
-     * I096-A (PLAT057-B) compile-time candidate for lexical inlining of an
-     * ordinary Closure call: the receiver is an immediate Closure literal, so
-     * its body is known while lowering this caller. I096-B1 extends this to a
-     * receiver lookup that {@link
-     * CanonicalCompilationFacts#bindingClosureCallCandidates} associates
-     * with the single Closure literal created in its binding, when this
-     * parse of the root has already materialized that literal (so its plan
-     * is registered before the site). For a binding the candidate is only an
-     * expected body: the binding may be reassigned, removed or shadowed, and
-     * its value may be another instance of the same definition.
-     *
-     * <p>Every parameter is ordinary required positional and the supplied
-     * count matches exactly, so no default or rest binding is involved. Any such arity up to {@link
-     * #MAX_INLINE_CLOSURE_CALL_ARGUMENTS} is admitted through the same
-     * variadic carrier and positional parameter binding: the staged
-     * arguments, evaluated once left to right, become the compact supplied
-     * arguments of the callee's own activation.
-     *
-     * <p>Unlike the PLAT044 B′ callback candidates, a body creating a nested
-     * Closure (directly, or as a method of an object it constructs) is
-     * admitted. Such a body always requires persistent frame authority
-     * ({@link CanonicalCompilationFacts#rootFacts}), so {@link #emitInlineLiteralCallback}
-     * never gives it frame-native block-local bindings: its parameters and
-     * locals are bound by name on the invocation's own fresh activation,
-     * materialized from the carrier before the first binding, and every
-     * nested Closure is created over that heap activation by the ordinary
-     * capture operation. The capture is therefore by reference to the
-     * callee's own context, whose lifetime is independent of the caller's
-     * frame, as in a physical call. The nested root, lowered once inside the
-     * callee's own root, reads that context through its ordinary captured
-     * access, which takes the generic lexical path whenever the owner is not
-     * a frame-backed authority.
-     *
-     * <p>Expansion stays bounded: binding candidates are only calls of this
-     * root's own sequence, never calls inside a candidate body, so recursion
-     * through a binding inlines one body once; a literal call inside an
-     * admitted body is a strictly smaller subtree; and nested Closure roots
-     * are never duplicated ({@link #bytecodeClosurePlan}).
-     *
-     * <p>The selector, the receiver's prototype, the binding resolution and
-     * the body's contents are not proofs of selection: the inline region is
-     * entered only after the run-time admission in {@link
-     * #emitInlineClosureLiteralCall}.
-     */
-    private CanonicalClosure inlineClosureLiteralCallCandidate(
-            CanonicalCall call) {
-        CanonicalClosure candidate =
-                call.receiver() instanceof CanonicalClosure literal
-                        ? literal
-                        : currentRootBindingCallCandidates.get(call);
-        if (candidate != null
-                && !(call.receiver() instanceof CanonicalClosure)
-                && !currentRootMaterializedClosures.contains(candidate)) {
-            return null;
-        }
-        if (candidate != null
-                && !hasVectorArgument(call.arguments())
-                && candidate.parameters().size() == call.arguments().size()
-                && call.arguments().size() <= MAX_INLINE_CLOSURE_CALL_ARGUMENTS
-                && candidate.parameters().stream()
-                        .allMatch(parameter -> !parameter.rest()
-                                && parameter.defaultValue().isEmpty())) {
-            return candidate;
-        }
-        return null;
-    }
-
-    /**
-     * I096-A (PLAT057-B) lowering of an admitted candidate ({@link
-     * #inlineClosureLiteralCallCandidate}).
-     *
-     * <p>Ordinary {@code call} selection happens exactly once, on the already
-     * staged receiver and arguments, through the PLAT044 B′ carrier seam
-     * ({@link ProtosClosureCallPreparation#prepareInlineClosureLiteralCall}). The
-     * body lowered into this root is entered only when the carrier proves that the
-     * selection is the canonical standard {@code Object.call} of this
-     * literal's own plan target with an unobservable ReturnHome; a nearer or
-     * replaced {@code call}, a missing plan, or an owned ReturnHome
-     * (non-local return) takes the carrier's exact physical fallback without
-     * re-evaluating any operand or re-selecting.
-     *
-     * <p>The admitted body runs in {@link #emitInlineLiteralCallback}, which
-     * keeps the callee's own semantic activation and lexical scope: its
-     * parameters and locals use separate block-local storage of this root
-     * only when binding analysis proves no persistent frame authority is
-     * required, reads keep the D179 presence assumptions, and any Context
-     * observer materializes the callee's own fresh activation from the
-     * carrier. Captured outer bindings keep their existing by-reference
-     * access paths. A body creating nested Closures always takes the named
-     * activation path, and reuses their already lowered roots.
-     */
-    private void emitInlineClosureLiteralCall(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalClosure definition,
-            ProtosClosureExecutionPlanCell literalPlan,
-            BytecodeLocal receiverValue,
-            java.util.List<BytecodeLocal> argumentValues,
-            BytecodeLocal result,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-
-        BytecodeLocal child =
-                builder.createLocal("inlineClosureLiteralCall", null);
-
-        builder.beginStoreLocal(child);
-        builder.beginPrepareInlineClosureLiteralCall();
-        builder.emitLoadLocal(receiverValue);
-        emitCurrentActivation(builder);
-        for (BytecodeLocal argumentValue : argumentValues) {
-            builder.emitLoadLocal(argumentValue);
-        }
-        builder.endPrepareInlineClosureLiteralCall();
-        builder.endStoreLocal();
-
-        builder.beginIfThenElse();
-        builder.beginAdmitsInlineClosureLiteralCall();
-        builder.emitLoadLocal(child);
-        builder.emitLoadConstant(literalPlan);
-        builder.endAdmitsInlineClosureLiteralCall();
-
-        boolean savedInlineClosureCallBody = currentInlineClosureCallBody;
-        currentInlineClosureCallBody = true;
-        try {
-            emitInlineLiteralCallback(builder, definition, child, result);
-        } finally {
-            currentInlineClosureCallBody = savedInlineClosureCallBody;
-        }
-
-        builder.beginBlock();
-        emitInlineLiteralFallbackInvocation(
-                builder, result, child, childResult, resumeValue);
-        builder.endBlock();
-
-        builder.endIfThenElse();
-    }
 
     /*
      * I091: a literal is a guest constant unless it is an Integer outside the signed-64 range,

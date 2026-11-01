@@ -39,6 +39,7 @@ import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
@@ -299,31 +300,34 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
             for (ProtosBooleanValue receiver :
                     new ProtosBooleanValue[] {ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE}) {
                 for (int i = 0; i < selectors.length; i++) {
-                    var send = ProtosBytecodeRootNode.PrepareSendArguments
-                            .createGuardedStructuredSend(receiver, selectors[i], module);
-                    assertNotNull(send, selectors[i]);
+                    // I115: GetMethod selects the standard behavior; its structured
+                    // Boolean classification is the implementation's identity.
+                    ProtosBoundMethod send = assertInstanceOf(
+                            ProtosBoundMethod.class,
+                            ProtosExperimentalGetMethodNode.select(
+                                    receiver, selectors[i], null, module));
                     var generic = ProtosValueLookup.lookup(
                             receiver, selectors[i], prelude).orElseThrow();
-                    assertSame(generic.value(), send.closure());
+                    assertSame(generic.value(), send.callable());
                     assertSame(generic.home(), send.methodHome());
                     assertSame(ProtosObjectValue.rootObject(), send.methodHome());
                     assertEquals(
-                            ProtosBytecodeRootNode.PrepareSendArguments
-                                    .GuardedStructuredKind.BOOLEAN,
-                            send.kind());
-                    assertEquals(kinds[i], send.booleanKind());
-                    assertTrue(send.stability().isValid());
+                            kinds[i],
+                            ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(
+                                    send.callable()));
                 }
-                // Not a Boolean callback: no guarded admission, generic path remains.
-                assertNull(ProtosBytecodeRootNode.PrepareSendArguments
-                        .createGuardedStructuredSend(receiver, "not", module));
-                assertNull(ProtosBytecodeRootNode.PrepareSendArguments
-                        .createGuardedStructuredSend(receiver, "ensure", module));
+                // Not a Boolean callback: no structured Boolean classification.
+                assertNull(ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(
+                        ((ProtosBoundMethod) ProtosExperimentalGetMethodNode.select(
+                                receiver, "not", null, module)).callable()));
+                assertNull(ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(
+                        ((ProtosBoundMethod) ProtosExperimentalGetMethodNode.select(
+                                receiver, "ensure", null, module)).callable()));
                 // D211: no standard if/else exists to select.
-                assertNull(ProtosBytecodeRootNode.PrepareSendArguments
-                        .createGuardedStructuredSend(receiver, "if", module));
-                assertNull(ProtosBytecodeRootNode.PrepareSendArguments
-                        .createGuardedStructuredSend(receiver, "else", module));
+                assertThrows(ProtosSignalException.class,
+                        () -> ProtosExperimentalGetMethodNode.select(receiver, "if", null, module));
+                assertThrows(ProtosSignalException.class,
+                        () -> ProtosExperimentalGetMethodNode.select(receiver, "else", null, module));
             }
         }
         System.out.println("PERF015_CANONICAL_BOOLEAN_REPRESENTED_GUARD=PASS");
@@ -360,14 +364,18 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
             }
             assertEquals(4, callbackCalls.get());
 
-            var warmed = ProtosBytecodeRootNode.PrepareSendArguments
-                    .createGuardedStructuredSend(ProtosBooleanValue.TRUE, "ifTrue", module);
-            assertNotNull(warmed);
+            // I115: the selection GetMethod caches is the root's guarded slot.
+            ProtosBoundMethod warmed = assertInstanceOf(
+                    ProtosBoundMethod.class,
+                    ProtosExperimentalGetMethodNode.select(
+                            ProtosBooleanValue.TRUE, "ifTrue", null, module));
+            var guarded = ProtosValueLookup.lookupGuardedSlotSelection(root, "ifTrue", null);
+            assertNotNull(guarded);
             assertTrue(root.isFrozen());
             assertThrows(
                     IllegalStateException.class,
-                    () -> root.assignLocalSlot("ifTrue", warmed.closure()));
-            assertTrue(warmed.stability().isValid());
+                    () -> root.assignLocalSlot("ifTrue", warmed.callable()));
+            assertTrue(guarded.stability().isValid());
             assertSame(ProtosBooleanValue.TRUE, site.getCallTarget().call(module));
             assertEquals(5, callbackCalls.get());
         }

@@ -37,18 +37,8 @@ public final class ProtosInvocation {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(supplied, "supplied");
         Objects.requireNonNull(caller, "caller");
-        com.guillermomolina.protos.runtime.ProtosPrelude prelude =
-                caller.prelude()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "polymorphic invocation requires an owning Core prelude"));
-        return invokeSelected(
-                receiver,
-                ProtosValueLookup.lookup(receiver, "call", prelude).orElseThrow(
-                        () -> new ProtosSignalException(ProtosCoreErrors.newError(caller))),
-                supplied,
-                caller);
+        // I115: the shared dispatcher (GraalPy CallNode) selects the behavior.
+        return ProtosClosureInvoker.invokeCallable(receiver, supplied, caller);
     }
 
     public static Object invokeMessage(
@@ -93,40 +83,10 @@ public final class ProtosInvocation {
         if (task == null) {
             return invokeForeignCallbackOutsideTask(receiver, supplied, caller);
         }
-        com.guillermomolina.protos.runtime.ProtosPrelude prelude =
-                caller.prelude()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "polymorphic invocation requires an owning Core prelude"));
-        ProtosSlotLookupResult selected =
-                ProtosValueLookup.lookup(receiver, "call", prelude)
-                        .orElseThrow(
-                                () -> new ProtosSignalException(ProtosCoreErrors.newError(caller)));
-        if (!(selected.value() instanceof ProtosClosureValue closure)) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
-        }
-        ProtosPreparedCalls.PreparedClosureCall prepared =
-                ProtosClosureCallPreparation.prepareTaskOwnedSelectedCallIfBytecode(
-                        receiver, selected, supplied, caller, task);
-        if (prepared != null) {
-            return ProtosBytecodeTaskExecution.invokeNestedSynchronous(
-                    task, prepared, false, caller);
-        }
-        ProtosClosureValue nativeTarget = closure;
-        if (receiver instanceof ProtosClosureValue targetClosure
-                && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
-                        closure, selected.home())) {
-            nativeTarget = targetClosure;
-        }
-        ProtosClosureInvoker.requireNativeTaskFallbackForRuntime(nativeTarget);
         return ProtosBytecodeTaskExecution.invokeNestedSynchronous(
-                task,
-                ProtosClosureCallPreparation.prepareTaskOwnedSelectedNativeForCPrime(
-                        receiver, selected, supplied, caller, task),
-                true,
-                caller);
+                task, ProtosCallRequest.call(receiver, supplied, caller), caller);
     }
+
 
     /**
      * PLAT054-3E2: a foreign callback reached inside a suspendible host entry runs in a
@@ -165,28 +125,14 @@ public final class ProtosInvocation {
         Objects.requireNonNull(caller, "caller");
         Objects.requireNonNull(task, "task");
 
-        com.guillermomolina.protos.runtime.ProtosPrelude prelude =
-                caller.prelude()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "polymorphic invocation requires an owning Core prelude"));
-        ProtosSlotLookupResult selected;
+        ProtosCallRequest request;
         try {
-            selected =
-                    ProtosValueLookup.lookup(receiver, "call", prelude)
-                            .orElseThrow(
-                                    () ->
-                                            new ProtosSignalException(
-                                                    ProtosCoreErrors.newError(caller)));
-        } catch (UnsupportedOperationException unsupportedRepresentation) {
-            task.fail(ProtosCoreErrors.newError(caller));
-            return;
+            request = ProtosCallRequest.taskEntry(receiver, task, supplied, caller);
         } catch (ProtosSignalException signalled) {
             task.fail(signalled.error(), ProtosDiagnosticTraceCapture.capture(signalled));
             return;
         }
-        executeSelectedInTaskForRuntime(receiver, selected, supplied, caller, task);
+        ProtosBytecodeTaskExecution.executeRequest(task, request);
     }
 
     public static void executeMessageInTaskForRuntime(
@@ -263,21 +209,6 @@ public final class ProtosInvocation {
                 beforeBytecodeExecution);
     }
 
-    private static void executeSelectedInTaskForRuntime(
-            Object receiver,
-            ProtosSlotLookupResult selected,
-            List<?> supplied,
-            ProtosActivation caller,
-            ProtosTask task) {
-        executeSelectedInTaskForRuntime(
-                receiver,
-                selected,
-                supplied,
-                caller,
-                task,
-                () -> {});
-    }
-
     private static boolean executeSelectedInTaskForRuntime(
             Object receiver,
             ProtosSlotLookupResult selected,
@@ -290,51 +221,20 @@ public final class ProtosInvocation {
             task.fail(ProtosCoreErrors.newError(caller));
             return false;
         }
-
-        ProtosPreparedCalls.PreparedClosureCall prepared =
-                ProtosClosureCallPreparation.prepareTaskOwnedSelectedCallIfBytecode(
-                        receiver,
-                        selected,
-                        supplied,
-                        caller,
-                        task);
-        if (prepared != null) {
-            beforeBytecodeExecution.run();
-            ProtosBytecodeTaskExecution.executePreparedClosure(task, prepared);
-            return true;
-        }
-
-        /*
-         * B6B-E2 removes the final production native Task replay branch.
-         * The preparer preserves PLAT017's exact canonical Object.call target,
-         * ordinary method receiver/home, PLAT021/028 structured provenance and
-         * PLAT025 canonical import lifecycle ownership.
-         */
-        ProtosClosureValue nativeTarget = closure;
-        if (receiver instanceof ProtosClosureValue targetClosure
-                && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
-                        closure,
-                        selected.home())) {
-            nativeTarget = targetClosure;
-        }
-        ProtosClosureInvoker.requireNativeTaskFallbackForRuntime(nativeTarget);
-
-        ProtosPreparedCalls.PreparedClosureCall nativePrepared;
+        ProtosCallRequest request;
         try {
-            nativePrepared =
-                    ProtosClosureCallPreparation.prepareTaskOwnedSelectedNativeForCPrime(
-                            receiver,
-                            selected,
+            request =
+                    ProtosCallRequest.taskEntry(
+                            new ProtosBoundMethod(closure, receiver, selected.home()),
+                            task,
                             supplied,
-                            caller,
-                            task);
+                            caller);
         } catch (ProtosSignalException signalled) {
             task.fail(signalled.error(), ProtosDiagnosticTraceCapture.capture(signalled));
             return false;
         }
-
         beforeBytecodeExecution.run();
-        ProtosTaskCPrimeEntryExecution.execute(task, nativePrepared);
+        ProtosBytecodeTaskExecution.executeRequest(task, request);
         return true;
     }
 

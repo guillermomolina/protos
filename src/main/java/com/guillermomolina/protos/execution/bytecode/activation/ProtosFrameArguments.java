@@ -50,7 +50,7 @@ final class ProtosFrameArguments {
      *   [3] exact caller while unpublished; after publication, the
      *       retained exact caller or null for an already-rich entry.
      *       I115-B: only the admitted terminal direct Call1
-     *       (InvokeClosureOneTail, PROVEN or UNKNOWN) may instead store the
+     *       (the shared dispatcher) may instead store the
      *       caller's own B5 frame-argument array (a deferred caller);
      *       PERF038-I extends the same deferred caller to the admitted
      *       terminal immediate method Send1 (InvokeMethodOneTail); every
@@ -123,7 +123,7 @@ final class ProtosFrameArguments {
 
     /*
      * I115-H (EXPERIMENTAL, PLAT066-C): a second, reduced layout used only by
-     * InvokeStaticClosureOneTail, distinct from B5+:
+     * the retired static unary tier, distinct from B5+:
      *
      *   [0] EXPERIMENTAL_STATIC_UNARY_CALL (private marker, never a guest value)
      *   [1] the transported Prelude: null while the callee root has not
@@ -410,7 +410,7 @@ final class ProtosFrameArguments {
 
     /**
      * I115-D: trusted B5+ construction for the already admitted
-     * InvokeClosureOneTail direct specialization.
+     * direct terminal specialization.
      *
      * The receiver and executable have passed the direct-call
      * guards. callerReference(frame) supplies either the exact
@@ -431,6 +431,162 @@ final class ProtosFrameArguments {
             ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
             supplied0
         };
+    }
+
+    /**
+     * B5 direct source-call header with an exact invocation ReturnHome.
+     *
+     * The caller is transported without publication. The invocation
+     * home is selected once by the caller and retained by identity.
+     */
+    static Object[] compactDispatchedClosureCallOne(
+            ProtosClosureValue closure,
+            Object callerReference,
+            ProtosReturnHome returnHome,
+            Object supplied0) {
+        return new Object[] {
+            closure,
+            DIRECT_CLOSURE_CALL,
+            null,
+            callerReference,
+            returnHome,
+            supplied0
+        };
+    }
+
+    /*
+     * I115 (GraalPy PArguments.create): the single B5 construction of every
+     * call entered through ProtosFunctionCallDispatchers. A function call
+     * writes the direct-call marker and no Task/methodHome; a selected method
+     * writes its receiver and methodHome. The caller is transported as is
+     * (exact or deferred) and the ReturnHome is the exact object selected by
+     * the dispatcher: captured, freshly owned, or the unobservable marker.
+     */
+    static Object[] dispatchedCall0(
+            ProtosClosureValue closure, Object receiverSlot, Object methodHomeSlot,
+            Object callerReference, ProtosReturnHome returnHome) {
+        return new Object[] {closure, receiverSlot, methodHomeSlot, callerReference, returnHome};
+    }
+
+    static Object[] dispatchedCall1(
+            ProtosClosureValue closure, Object receiverSlot, Object methodHomeSlot,
+            Object callerReference, ProtosReturnHome returnHome, Object a0) {
+        return new Object[] {closure, receiverSlot, methodHomeSlot, callerReference, returnHome, a0};
+    }
+
+    static Object[] dispatchedCall2(
+            ProtosClosureValue closure, Object receiverSlot, Object methodHomeSlot,
+            Object callerReference, ProtosReturnHome returnHome, Object a0, Object a1) {
+        return new Object[] {
+            closure, receiverSlot, methodHomeSlot, callerReference, returnHome, a0, a1
+        };
+    }
+
+    static Object[] dispatchedCall3(
+            ProtosClosureValue closure, Object receiverSlot, Object methodHomeSlot,
+            Object callerReference, ProtosReturnHome returnHome,
+            Object a0, Object a1, Object a2) {
+        return new Object[] {
+            closure, receiverSlot, methodHomeSlot, callerReference, returnHome, a0, a1, a2
+        };
+    }
+
+    static Object[] dispatchedCall4(
+            ProtosClosureValue closure, Object receiverSlot, Object methodHomeSlot,
+            Object callerReference, ProtosReturnHome returnHome,
+            Object a0, Object a1, Object a2, Object a3) {
+        return new Object[] {
+            closure, receiverSlot, methodHomeSlot, callerReference, returnHome, a0, a1, a2, a3
+        };
+    }
+
+    static Object[] dispatchedCallN(
+            ProtosClosureValue closure, Object receiverSlot, Object methodHomeSlot,
+            Object callerReference, ProtosReturnHome returnHome, Object[] supplied) {
+        Object[] arguments = new Object[HEADER_LENGTH + supplied.length];
+        arguments[CLOSURE_INDEX] = closure;
+        arguments[RECEIVER_INDEX] = receiverSlot;
+        arguments[METHOD_HOME_INDEX] = methodHomeSlot;
+        arguments[CALLER_INDEX] = callerReference;
+        arguments[RETURN_HOME_INDEX] = returnHome;
+        System.arraycopy(supplied, 0, arguments, SUPPLIED_ARGUMENT_OFFSET, supplied.length);
+        return arguments;
+    }
+
+    /** A B5 function-call array with the dispatcher-owned slots still empty. */
+    static Object[] functionCallArguments(Object[] supplied) {
+        return dispatchedCallN(null, DIRECT_CLOSURE_CALL, null, null, null, supplied);
+    }
+
+    /** A B5 method-call array with the dispatcher-owned slots still empty. */
+    static Object[] methodCallArguments(
+            Object receiver, ProtosObjectValue methodHome, Object[] supplied) {
+        return dispatchedCallN(null, receiver, methodHome, null, null, supplied);
+    }
+
+    /**
+     * I115: a Task-owned function call (GraalPy task entry): slot 2 carries
+     * the exact owning Task.
+     */
+    static Object[] taskFunctionCallArguments(ProtosTask task, Object[] supplied) {
+        return dispatchedCallN(null, DIRECT_CLOSURE_CALL, task, null, null, supplied);
+    }
+
+    /** Whether a B5 array built for the dispatcher is an unbound function call. */
+    static boolean isFunctionCall(Object[] arguments) {
+        return arguments[RECEIVER_INDEX] == DIRECT_CLOSURE_CALL;
+    }
+
+    /** Writes the receiver and methodHome of a selected method (GraalPy PMethod). */
+    static void bindMethod(Object[] arguments, Object receiver, ProtosObjectValue methodHome) {
+        arguments[RECEIVER_INDEX] = receiver;
+        arguments[METHOD_HOME_INDEX] = methodHome;
+    }
+
+    /** Writes the dispatcher-owned header slots. */
+    static void completeDispatchedHeader(
+            Object[] arguments,
+            ProtosClosureValue closure,
+            Object callerReference,
+            ProtosReturnHome returnHome) {
+        arguments[CLOSURE_INDEX] = closure;
+        arguments[CALLER_INDEX] = callerReference;
+        arguments[RETURN_HOME_INDEX] = returnHome;
+    }
+
+    /** The receiver slot value of an unbound function call. */
+    static Object functionCallMarker() {
+        return DIRECT_CLOSURE_CALL;
+    }
+
+    /**
+     * I115 (TruffleRuby RubyMethodRootNode): the materialized ReturnHome this
+     * activation owns, or {@code null} when its home is captured from an
+     * outer activation, is the unobservable marker, or the arguments are not
+     * a B5 Closure header. Read from the header, so the identity is exactly
+     * the one the dispatcher wrote.
+     */
+    static ProtosReturnHome ownedReturnHomeOrNull(Object[] arguments) {
+        if (arguments.length < HEADER_LENGTH) {
+            return null;
+        }
+        Object owner = arguments[CLOSURE_INDEX];
+        ProtosReturnHome home;
+        if (owner instanceof ProtosActivation activation) {
+            if (!activation.ownsReturnHome()) {
+                return null;
+            }
+            home = activation.returnHomeOrNullForRuntime();
+        } else if (owner instanceof ProtosClosureValue closure
+                && arguments[RETURN_HOME_INDEX] instanceof ProtosReturnHome slot) {
+            if (closure.returnHome().isPresent()) {
+                return null;
+            }
+            home = slot;
+        } else {
+            return null;
+        }
+        return home != null && home.isMaterialized() ? home : null;
     }
 
     /**
@@ -1127,7 +1283,7 @@ final class ProtosFrameArguments {
      * array, not an ABI validator. Every such array is a B5 array whose
      * argument 0 is either the invoked Closure or the published activation,
      * built by one of this class's constructors and validated by its
-     * {@code OrdinarySourceCall} or {@code PreparedInlineLiteralCall} carrier
+     * call carrier
      * before entry; the only later write of argument 0 is {@link
      * #materializeCompactActivation}, which replaces the Closure with the
      * published activation. Argument 0 alone therefore distinguishes the two

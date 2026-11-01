@@ -36,6 +36,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.graalvm.polyglot.Context;
@@ -69,12 +70,15 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
                                 null,
                                 current -> {
                                     module.attachTask(current);
-                                    ProtosPreparedCalls.PreparedClosureCall prepared =
-                                            ProtosBytecodeRootNode.PrepareClosureCall.perform(
-                                                    child,
-                                                    module);
-                                    preparedActivation.set(prepared.activation());
-                                    assertFalse(prepared.isNative());
+                                    // I115: the shared dispatcher's call; the
+                                    // callee activation is read from its B5 header.
+                                    ProtosCallRequest prepared =
+                                            ProtosCallRequest.call(child, List.of(), module);
+                                    assertTrue(ProtosFunctionCallDispatchers.CallNode
+                                            .isSourceFunction(child));
+                                    prepared.callUncached();
+                                    preparedActivation.set(
+                                            ProtosFrameArguments.activation(prepared.arguments()));
                                     current.complete(ProtosNullValue.INSTANCE);
                                 });
 
@@ -169,13 +173,12 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
                                 null,
                                 current -> {
                                     module.attachTask(current);
-                                    ProtosPreparedCalls.PreparedClosureCall prepared =
-                                            ProtosBytecodeRootNode.PrepareClosureCall.perform(
-                                                    nativeClosure,
-                                                    module);
-                                    assertTrue(prepared.isNative());
-                                    Object value = prepared.enterNative();
-                                    current.complete(prepared.finish(value));
+                                    // I115: a builtin call through the shared dispatcher.
+                                    assertTrue(nativeClosure.nativeBody().isPresent());
+                                    Object value =
+                                            ProtosCallRequest.call(nativeClosure, List.of(), module)
+                                                    .callUncached();
+                                    current.complete(value);
                                 });
 
                 assertTrue(domain.dispatchOne());
@@ -191,27 +194,31 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
 
     @Test
     void directNonTaskNativeFastPathRemainsOrdinary() {
-        ProtosActivation module = moduleActivation();
-        AtomicInteger nativeExecutions = new AtomicInteger();
-        ProtosClosureValue nativeClosure =
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            nativeExecutions.incrementAndGet();
-                            assertTrue(activation.task().isEmpty());
-                            return ProtosNullValue.INSTANCE;
-                        });
+        // I115: a builtin's CallTarget is Context-local, so the call is made
+        // inside an entered Context; the native body runs exactly once.
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosActivation module = moduleActivation();
+                AtomicInteger nativeExecutions = new AtomicInteger();
+                ProtosClosureValue nativeClosure =
+                        ProtosClosureValue.nativeClosure(
+                                (activation, supplied) -> {
+                                    nativeExecutions.incrementAndGet();
+                                    assertTrue(activation.task().isEmpty());
+                                    return ProtosNullValue.INSTANCE;
+                                });
 
-        ProtosPreparedCalls.PreparedClosureCall prepared =
-                ProtosBytecodeRootNode.PrepareClosureCall.perform(
-                        nativeClosure,
-                        module);
-
-        assertTrue(prepared.isNative());
-        assertSame(
-                ProtosNullValue.INSTANCE,
-                ProtosBytecodeRootNode.EnterClosureCall.nativeCall(
-                        assertInstanceOf(ProtosPreparedCalls.NativeCall.class, prepared)));
-        assertEquals(1, nativeExecutions.get());
+                assertTrue(nativeClosure.nativeBody().isPresent());
+                assertSame(
+                        ProtosNullValue.INSTANCE,
+                        ProtosCallRequest.call(nativeClosure, List.of(), module).callUncached());
+                assertEquals(1, nativeExecutions.get());
+            } finally {
+                context.leave();
+            }
+        }
         System.out.println("PERF006_B3B_ORDINARY_NATIVE_FAST_PATH=PASS");
     }
 

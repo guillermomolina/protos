@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosDispatchTestSupport.DirectEntry;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -80,12 +81,12 @@ final class ProtosPerf025VirtualReturnHomeTest {
     void nlrDeadInvocationsDoNotMaterializeAReturnHome() throws Exception {
         withCore(module -> {
             ProtosClosureValue constant = parsedClosure("() => 42", module);
-            ProtosPreparedCalls.PreparedClosureCall first = fastDirect(constant, module);
+            DirectEntry first = fastDirect(constant, module);
             assertVirtualHome(first);
             assertInteger(42, enter(first));
 
             ProtosClosureValue identity = parsedClosure("(value) => value", module);
-            ProtosPreparedCalls.PreparedClosureCall second =
+            DirectEntry second =
                     fastDirect(identity, module, integer(5));
             assertVirtualHome(second);
             assertInteger(5, enter(second));
@@ -102,7 +103,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
             throws Exception {
         withCore(module -> {
             ProtosClosureValue outer = parsedClosure("() => {\n    () => 42\n}", module);
-            ProtosPreparedCalls.PreparedClosureCall prepared = fastDirect(outer, module);
+            DirectEntry prepared = fastDirect(outer, module);
             assertVirtualHome(prepared);
             ProtosClosureValue child =
                     assertInstanceOf(ProtosClosureValue.class, enter(prepared));
@@ -124,13 +125,13 @@ final class ProtosPerf025VirtualReturnHomeTest {
     void directAndDefaultReturnKeepPhysicalHomeLifecycle() throws Exception {
         withCore(module -> {
             ProtosClosureValue direct = parsedClosure("() => ^42", module);
-            ProtosPreparedCalls.PreparedClosureCall call = fastDirect(direct, module);
+            DirectEntry call = fastDirect(direct, module);
             ProtosReturnHome home = assertPhysicalActiveHome(call);
             assertInteger(42, enter(call));
             assertFalse(home.isActive(), "the owned physical home completes with the call");
 
             ProtosClosureValue defaulted = parsedClosure("(x: ^42) => x", module);
-            ProtosPreparedCalls.PreparedClosureCall defaultCall =
+            DirectEntry defaultCall =
                     fastDirect(defaulted, module);
             ProtosReturnHome defaultHome = assertPhysicalActiveHome(defaultCall);
             assertInteger(42, enter(defaultCall));
@@ -144,7 +145,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
     void descendantReturnRetainsOwnerHomeAtAnyDepth() throws Exception {
         withCore(module -> {
             ProtosClosureValue outer = parsedClosure("() => {\n    () => ^42\n}", module);
-            ProtosPreparedCalls.PreparedClosureCall call = fastDirect(outer, module);
+            DirectEntry call = fastDirect(outer, module);
             ProtosReturnHome home = assertPhysicalActiveHome(call);
             ProtosClosureValue child =
                     assertInstanceOf(ProtosClosureValue.class, enter(call));
@@ -152,7 +153,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
 
             ProtosClosureValue transitive =
                     parsedClosure("() => {\n    () => {\n        () => ^42\n    }\n}", module);
-            ProtosPreparedCalls.PreparedClosureCall transitiveCall =
+            DirectEntry transitiveCall =
                     fastDirect(transitive, module);
             ProtosReturnHome transitiveHome = assertPhysicalActiveHome(transitiveCall);
             ProtosClosureValue middle =
@@ -207,7 +208,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
             ProtosClosureValue run =
                     parsedClosure("() => {\n    true.ifTrue(() => {\n        41 + 1\n    })\n}", module);
             assertTrue(planOf(run).returnHomeProvenUnobservableForRuntime());
-            ProtosPreparedCalls.PreparedClosureCall call = fastDirect(run, module);
+            DirectEntry call = fastDirect(run, module);
             assertVirtualHome(call);
             assertInteger(42, enter(call));
         });
@@ -265,16 +266,13 @@ final class ProtosPerf025VirtualReturnHomeTest {
             ProtosClosureValue nativeClosure =
                     ProtosClosureValue.nativeClosure((activation, supplied) -> ProtosNullValue.INSTANCE);
             assertFalse(nativeClosure.hasUnobservableInvocationReturnHomeForRuntime());
-            assertEquals(null, ProtosClosureCallPreparation
-                    .establishDirectClosureExecutableFactsOrNull(nativeClosure, context));
-            assertEquals(null, ProtosClosureCallPreparation
-                    .directClosureCallSelectionWithoutPreludeOrNull(nativeClosure));
+            // I115: a native Closure has no source CallTarget and is not a source function.
+            assertEquals(null, ProtosClosureCallPreparation.functionCallTarget(nativeClosure, context));
+            assertFalse(ProtosFunctionCallDispatchers.CallNode.isSourceFunction(nativeClosure));
 
             ProtosClosureValue unprepared =
                     new ProtosClosureValue(prepared.definition(), List.of(), prepared.capturedReceiver());
             assertFalse(unprepared.hasUnobservableInvocationReturnHomeForRuntime());
-            assertEquals(null, ProtosClosureCallPreparation
-                    .establishDirectClosureExecutableFactsOrNull(unprepared, context));
         });
     }
 
@@ -318,11 +316,9 @@ final class ProtosPerf025VirtualReturnHomeTest {
             ProtosLanguageContext context) {
         ProtosReturnHome before = closure.returnHome().orElse(null);
         assertEquals(unobservable, closure.hasUnobservableInvocationReturnHomeForRuntime());
-        assertSame(closure, ProtosClosureCallPreparation
-                .directClosureCallSelectionWithoutPreludeOrNull(closure));
-        ProtosClosureCallPreparation.DirectClosureExecutableFacts facts =
-                ProtosClosureCallPreparation.establishDirectClosureExecutableFactsOrNull(closure, context);
-        assertSame(target, facts.target());
+        // I115: selected by representation; the CallTarget ignores the ReturnHome.
+        assertTrue(ProtosFunctionCallDispatchers.CallNode.isSourceFunction(closure));
+        assertSame(target, ProtosClosureCallPreparation.functionCallTarget(closure, context));
         assertSame(before, closure.returnHome().orElse(null));
     }
 
@@ -358,7 +354,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
         return closure.executionPlan().orElseThrow();
     }
 
-    private static void assertVirtualHome(ProtosPreparedCalls.PreparedClosureCall call) {
+    private static void assertVirtualHome(DirectEntry call) {
         assertSame(
                 ProtosReturnHome.unobservable(),
                 ProtosFrameArguments.compactReturnHome(call.targetArguments()),
@@ -367,7 +363,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
     }
 
     private static ProtosReturnHome assertPhysicalActiveHome(
-            ProtosPreparedCalls.PreparedClosureCall call) {
+            DirectEntry call) {
         ProtosReturnHome home = ProtosFrameArguments.compactReturnHome(call.targetArguments());
         assertTrue(home.isMaterialized());
         assertTrue(home.isActive());
@@ -379,34 +375,14 @@ final class ProtosPerf025VirtualReturnHomeTest {
         return enter(fastDirect(parsedClosure(characters, module), module));
     }
 
-    private static ProtosPreparedCalls.PreparedClosureCall fastDirect(
+    private static DirectEntry fastDirect(
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
-        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
-        ProtosClosureValue selected =
-                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
-        assertSame(closure, selected, "canonical direct Closure-call selection");
-        RootCallTarget target =
-                ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
-                        closure, entered);
-        return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
-                false,
-                closure,
-                caller,
-                supplied,
-                selected,
-                selected.definition(),
-                entered,
-                selected.definition(),
-                entered,
-                target);
+        // I115: the B5 header the shared dispatcher writes for a function call.
+        return ProtosDispatchTestSupport.direct(closure, caller, supplied);
     }
 
-    private static Object enter(ProtosPreparedCalls.PreparedClosureCall prepared) {
-        Object entered =
-                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
-                        IndirectCallNode.create());
-        return prepared.finish(entered);
+    private static Object enter(DirectEntry prepared) {
+        return ProtosDispatchTestSupport.enter(prepared);
     }
 
     private static ProtosActivation coreModule() throws Exception {

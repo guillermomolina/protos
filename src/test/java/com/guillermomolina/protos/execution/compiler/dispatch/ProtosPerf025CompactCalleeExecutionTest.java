@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosDispatchTestSupport.DirectEntry;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -96,7 +97,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertSame(identity, method[0], "no activation was materialized or published");
 
             ProtosIntegerValue two = integer(2);
-            ProtosPreparedCalls.PreparedClosureCall direct = fastDirect(identity, module, two);
+            DirectEntry direct = fastDirect(identity, module, two);
             assertSame(two, enter(direct));
             assertSame(identity, direct.targetArguments()[0]);
         });
@@ -117,7 +118,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosIntegerValue value = integer(42);
 
             for (int attempt = 0; attempt < 8; attempt++) {
-                ProtosPreparedCalls.PreparedClosureCall compact =
+                DirectEntry compact =
                         fastDirect(identity, module, value);
                 assertSame(value, enter(compact));
                 assertSame(identity, compact.targetArguments()[0]);
@@ -141,12 +142,12 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     observedContext.readLocalSlot("value").orElseThrow());
 
             // D203/I105: missing binds null and excess is ignored, both compactly.
-            ProtosPreparedCalls.PreparedClosureCall missing =
+            DirectEntry missing =
                     fastDirect(identity, module);
             assertSame(ProtosNullValue.INSTANCE, enter(missing));
             assertSame(identity, missing.targetArguments()[0]);
 
-            ProtosPreparedCalls.PreparedClosureCall excess =
+            DirectEntry excess =
                     fastDirect(identity, module, value, integer(99));
             assertSame(value, enter(excess));
             assertSame(identity, excess.targetArguments()[0]);
@@ -177,7 +178,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue plus = closure("(value) => { value + 1 }", module);
             List<String> plusNames = instructionNames(plus);
             assertContains(plusNames, "TryPrimitiveNumericAdd");
-            assertContains(plusNames, "PrepareSendOne");
+            // I115: the ordinary send fallback selects through GetMethod.
+            assertContains(plusNames, "GetMethod");
             assertNone(plusNames, "ExperimentalInteger");
             assertNone(plusNames, "InvokeStaticClosureOneTail");
             assertEquals("42", integerValue(enter(fastDirect(plus, module, integer(41)))));
@@ -199,7 +201,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue plus = closure("(value) => { value + 1 }", module);
             List<String> plusNames = instructionNames(plus);
             assertContains(plusNames, "TryPrimitiveNumericAdd");
-            assertContains(plusNames, "PrepareSendOne");
+            // I115: the ordinary send fallback selects through GetMethod.
+            assertContains(plusNames, "GetMethod");
             assertNone(plusNames, "ExperimentalInteger");
             assertNone(plusNames, "InvokeStaticClosureOneTail");
             assertEquals("18", integerValue(enter(fastDirect(plus, module, value))));
@@ -452,16 +455,16 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosIntegerValue a = integer(1);
             ProtosIntegerValue b = integer(2);
             ProtosIntegerValue c = integer(3);
-            ProtosPreparedCalls.PreparedClosureCall ordinary = fastDirect(middle, module, a, b, c);
+            DirectEntry ordinary = fastDirect(middle, module, a, b, c);
             assertSame(b, enter(ordinary));
             assertSame(middle, ordinary.targetArguments()[0]);
 
             // D203/I105: no argument-count Error; neither call materializes.
-            ProtosPreparedCalls.PreparedClosureCall missing = fastDirect(middle, module, a);
+            DirectEntry missing = fastDirect(middle, module, a);
             assertSame(ProtosNullValue.INSTANCE, enter(missing));
             assertSame(middle, missing.targetArguments()[0]);
 
-            ProtosPreparedCalls.PreparedClosureCall excess =
+            DirectEntry excess =
                     fastDirect(middle, module, a, b, c, integer(4));
             assertSame(b, enter(excess));
             assertSame(middle, excess.targetArguments()[0]);
@@ -489,7 +492,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertNone(instructions, "InstallFrameLexicalAuthority");
 
             for (int iteration = 0; iteration < 3; iteration++) {
-                ProtosPreparedCalls.PreparedClosureCall prepared =
+                DirectEntry prepared =
                         fastDirect(run, module);
                 assertEquals("1", integerValue(enter(prepared)));
                 assertSame(
@@ -516,7 +519,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
             ProtosClosureValue duplicate =
                     closure("() => { value: 1\nvalue: 2\nvalue }", module);
-            ProtosPreparedCalls.PreparedClosureCall invalid =
+            DirectEntry invalid =
                     fastDirect(duplicate, module);
 
             assertThrows(
@@ -550,7 +553,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertNone(instructions, "InstallFrameLexicalAuthority");
 
             for (int i = 0; i < 3; i++) {
-                ProtosPreparedCalls.PreparedClosureCall prepared =
+                DirectEntry prepared =
                         fastDirect(scalar, module);
                 assertEquals("7", integerValue(enter(prepared)));
                 assertSame(
@@ -715,7 +718,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 }
 
                 for (int iteration = 0; iteration < 3; iteration++) {
-                    ProtosPreparedCalls.PreparedClosureCall prepared =
+                    DirectEntry prepared =
                             fastDirect(scalar, module);
                     assertEquals(Long.toString(body.expected()), integerValue(enter(prepared)), body.characters());
                     assertSame(
@@ -870,7 +873,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
              * compact-frame test.
              */
             for (ProtosClosureValue candidate : List.of(direct, locals, aliases)) {
-                ProtosPreparedCalls.PreparedClosureCall prepared =
+                DirectEntry prepared =
                         fastDirect(candidate, module);
                 assertEquals("3", integerValue(enter(prepared)));
                 // The site's lazy caller reference answers the compact arguments.
@@ -878,7 +881,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         "the numeric HIT materializes no activation");
                 List<String> names = instructionNames(candidate);
                 assertEquals(1, countOf(names, "c.TryPrimitiveNumericAdd"));
-                assertContains(names, "PrepareSendOne");
+                assertContains(names, "GetMethod");
                 assertNone(names, "ExperimentalInteger");
                 assertNone(names, "IsCompactLocalFrame");
                 assertNone(names, "InstallFrameLexicalAuthority");
@@ -1245,7 +1248,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertTrue(published.context().readLocalSlot("result").isPresent());
 
             // A HIT at the same site publishes nothing.
-            ProtosPreparedCalls.PreparedClosureCall hit =
+            DirectEntry hit =
                     fastDirect(run, module, integer(1));
             // seen = 5 + (1 + 5).
             assertEquals("11", integerValue(enter(hit)));
@@ -1274,7 +1277,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertContains(names, "CreateCurrentFrameLocal");
 
             // E: the HIT path stays compact; 1 + (3 + 2).
-            ProtosPreparedCalls.PreparedClosureCall hit =
+            DirectEntry hit =
                     fastDirect(run, module, integer(3));
             assertEquals("6", integerValue(enter(hit)));
             assertSame(run, hit.targetArguments()[0],
@@ -1580,7 +1583,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 assertContains(instructions, "load.local");
 
                 for (int iteration = 0; iteration < 3; iteration++) {
-                    ProtosPreparedCalls.PreparedClosureCall prepared =
+                    DirectEntry prepared =
                             fastDirect(scalar, module);
                     assertEquals(Long.toString(body.expected()), integerValue(enter(prepared)), body.characters());
                     assertSame(
@@ -1779,7 +1782,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertNone(names, "ResolveRootFrameLocalWriteTarget");
             assertNone(names, "AssignRootFrameLocal");
             ProtosIntegerValue a = integer(4);
-            ProtosPreparedCalls.PreparedClosureCall prepared = fastDirect(locals, module, a);
+            DirectEntry prepared = fastDirect(locals, module, a);
             assertSame(a, enter(prepared));
             assertSame(locals, prepared.targetArguments()[0], "no activation was materialized");
 
@@ -1792,7 +1795,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     "PERF029: the parameter index is an instruction constant");
             assertSame(a, enter(fastDirect(single, module, a)));
 
-            ProtosPreparedCalls.PreparedClosureCall duplicate =
+            DirectEntry duplicate =
                     fastDirect(closure("(a) => { b: a\nb: a }", module), module, a);
             assertThrows(ProtosSignalException.class, () -> enter(duplicate));
             assertInstanceOf(ProtosActivation.class, duplicate.targetArguments()[0]);
@@ -1831,7 +1834,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     constantOrdinalOf(run, "CreateCurrentIndexedLocalSlot"));
             assertEquals("1", integerValue(enter(fastDirect(run, module))));
 
-            ProtosPreparedCalls.PreparedClosureCall duplicate =
+            DirectEntry duplicate =
                     fastDirect(
                             closure("() => {\nf: (value) => { value }\nf: 2\n}", module),
                             module);
@@ -1927,7 +1930,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue earlier = closure("(a, b: a) => { b }", module);
             assertNone(instructionNames(earlier), "CurrentActivation");
             ProtosIntegerValue a = integer(5);
-            ProtosPreparedCalls.PreparedClosureCall prepared = fastDirect(earlier, module, a);
+            DirectEntry prepared = fastDirect(earlier, module, a);
             assertSame(a, enter(prepared));
             assertSame(earlier, prepared.targetArguments()[0]);
 
@@ -1973,7 +1976,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     void slotCreationConflictAndD179PresenceArePreserved() throws Exception {
         withCore(module -> {
             ProtosClosureValue recreate = closure("(a) => { a: 2 }", module);
-            ProtosPreparedCalls.PreparedClosureCall conflict =
+            DirectEntry conflict =
                     fastDirect(recreate, module, integer(1));
             assertThrows(
                     ProtosSignalException.class,
@@ -1981,7 +1984,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     "creating an already PRESENT parameter name is a slot-creation conflict");
 
             ProtosClosureValue identity = closure("(value) => { value }", module);
-            ProtosPreparedCalls.PreparedClosureCall nullCall =
+            DirectEntry nullCall =
                     fastDirect(identity, module, ProtosNullValue.INSTANCE);
             assertSame(ProtosNullValue.INSTANCE, enter(nullCall), "PRESENT(null) is not ABSENT");
             assertSame(identity, nullCall.targetArguments()[0]);
@@ -2066,32 +2069,32 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     void taskOwnedCompactCalleeKeepsItsExactTask() throws Exception {
         withCore(module -> {
             ProtosClosureValue identity = closure("(value) => { value }", module);
-            AtomicReference<ProtosPreparedCalls.PreparedClosureCall> preparedRef =
+            AtomicReference<ProtosCallRequest> preparedRef =
                     new AtomicReference<>();
             ProtosTask task =
                     module.executionDomain()
                             .createTask(
                                     null,
                                     current -> {
-                                        ProtosPreparedCalls.PreparedClosureCall prepared =
-                                                ProtosClosureCallPreparation.prepareTaskOwnedDirectClosureIfBytecode(
-                                                                identity,
-                                                                List.of(integer(8)),
-                                                                module,
-                                                                current);
+                                        ProtosCallRequest prepared =
+                                                ProtosCallRequest.taskEntry(
+                                                        identity,
+                                                        current,
+                                                        List.of(integer(8)),
+                                                        module);
                                         preparedRef.set(prepared);
-                                        ProtosBytecodeTaskExecution.executePreparedClosure(
+                                        ProtosBytecodeTaskExecution.executeRequest(
                                                 current, prepared);
                                     });
             assertTrue(module.executionDomain().dispatchOne());
             assertEquals(ProtosTask.State.COMPLETED, task.state());
             assertEquals("8", integerValue(task.result().orElseThrow()));
 
-            Object[] arguments = preparedRef.get().targetArguments();
+            Object[] arguments = preparedRef.get().arguments();
             assertSame(identity, arguments[0], "the Task-owned callee stayed compact");
-            assertSame(task, preparedRef.get().taskForRuntime());
+            assertSame(task, ProtosFrameArguments.compactTask(arguments));
             assertSame(task, ProtosFrameArguments.activation(arguments).task().orElseThrow());
-            assertSame(task, preparedRef.get().taskForRuntime(), "same Task after materialization");
+            assertSame(task, ProtosFrameArguments.compactTask(arguments), "same Task after materialization");
             assertTrue(module.task().isEmpty());
         });
         System.out.println("TASK_DYNAMIC_CONTROL=PASS");
@@ -2169,35 +2172,17 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     }
 
     private static RootCallTarget target(ProtosClosureValue closure) {
-        return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
-                closure, ProtosLanguageContext.currentIfEnteredForRuntime());
+        return ProtosDispatchTestSupport.target(closure);
     }
 
-    private static ProtosPreparedCalls.PreparedClosureCall fastDirect(
+    private static DirectEntry fastDirect(
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
-        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
-        ProtosClosureValue selected =
-                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
-        assertSame(closure, selected, "canonical direct Closure-call selection");
-        return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
-                false,
-                closure,
-                caller,
-                supplied,
-                selected,
-                selected.definition(),
-                entered,
-                selected.definition(),
-                entered,
-                target(closure));
+        // I115: the B5 header the shared dispatcher writes for a function call.
+        return ProtosDispatchTestSupport.direct(closure, caller, supplied);
     }
 
-    private static Object enter(ProtosPreparedCalls.PreparedClosureCall prepared) {
-        Object entered =
-                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
-                        IndirectCallNode.create());
-        return prepared.finish(entered);
+    private static Object enter(DirectEntry prepared) {
+        return ProtosDispatchTestSupport.enter(prepared);
     }
 
     private static List<String> instructionNames(ProtosClosureValue closure) {

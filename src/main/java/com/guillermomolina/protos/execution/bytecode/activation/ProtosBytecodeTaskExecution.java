@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.CallTarget;
@@ -62,171 +63,16 @@ final class ProtosBytecodeTaskExecution {
                 () -> target.call(activation));
     }
 
-    static void executePreparedClosure(
-            ProtosTask task,
-            ProtosPreparedCalls.PreparedClosureCall prepared) {
+    /**
+     * I115: a Task-owned entry made through the shared dispatcher. The
+     * driver receives the dispatcher's outcome and resumes its continuation
+     * without repeating the initial invocation; the callee roots own their
+     * ReturnHomes.
+     */
+    static void executeRequest(ProtosTask task, ProtosCallRequest request) {
         Objects.requireNonNull(task, "task");
-        Objects.requireNonNull(prepared, "prepared");
-        if (prepared.isNative() || prepared.isImmediate()) {
-            throw new IllegalArgumentException(
-                    "Task-owned C-prime Closure entry requires a source-backed Bytecode call");
-        }
-        // PLAT070: the entered invocation's own home belongs to this Task before it runs.
-        ProtosFrameArguments.bindOwnedReturnHomeForTaskEntry(prepared.targetArguments(), task);
-        runPreparedSegment(
-                task,
-                prepared,
-                () -> prepared.bodyTarget().call(prepared.targetArguments()));
-    }
-
-    static void executePreparedEntry(
-            ProtosTask task,
-            CallTarget target,
-            ProtosPreparedCalls.PreparedClosureCall prepared) {
-        Objects.requireNonNull(task, "task");
-        Objects.requireNonNull(target, "target");
-        Objects.requireNonNull(prepared, "prepared");
-
-        if (!prepared.isImmediate()
-                && prepared.activation().task().orElse(null) != task) {
-            throw new IllegalArgumentException(
-                    "Task C-prime entry prepared call belongs to another Task");
-        }
-        if (!prepared.isImmediate()) {
-            // PLAT070: idempotent; binds the invocation-owned home to this Task before entry.
-            prepared.activation().attachTask(task);
-        }
-
-        runSegment(
-                task,
-                prepared.activation(),
-                () -> target.call(
-                        prepared.activation(),
-                        prepared));
-    }
-
-    private static void resumePreparedPublished(
-            ProtosTask task,
-            ProtosPreparedCalls.PreparedClosureCall prepared,
-            Object continuation,
-            ProtosTask.WaitDependency dependency) {
-        runPreparedSegment(
-                task,
-                prepared,
-                () -> {
-                    if (task.cancellationRequested()) {
-                        return ProtosTailCallContinuation.resume(
-                                continuation,
-                                beginCancellationTransfer(
-                                        task,
-                                        "published Task-owned Closure C-prime resume"));
-                    }
-                    if (!task.consumeResume(dependency)) {
-                        throw new IllegalStateException(
-                                "published Task-owned Closure continuation resumed without its dependency");
-                    }
-                    return ProtosTailCallContinuation.resume(
-                            continuation, ProtosNullValue.INSTANCE);
-                });
-    }
-
-    private static void runPreparedSegment(
-            ProtosTask task,
-            ProtosPreparedCalls.PreparedClosureCall prepared,
-            java.util.function.Supplier<Object> segment) {
-        try {
-            Object outcome =
-                    Objects.requireNonNull(
-                            segment.get(),
-                            "Task-owned Closure C-prime segment returned null");
-            drivePreparedOutcome(task, prepared, outcome);
-        } catch (ControlFlowException transfer) {
-            /*
-             * PLAT070: the original transfer reaches the Task boundary directly. The prepared
-             * call consumes a non-local return of its own home; anything else escapes it.
-             */
-            try {
-                Object handled = prepared.handleControlTransfer(transfer);
-                drivePreparedOutcome(task, prepared, handled);
-            } catch (ProtosTaskCancellationException cancelled) {
-                prepared.complete();
-                finishCancellationUnwind(task);
-            } catch (ProtosNonLocalReturnException escaped) {
-                /*
-                 * D177 defensive boundary: a cross-Task return is normally signalled as
-                 * InvalidReturn at its ^ (PLAT070). A transfer still escaping this Task is
-                 * treated exactly like a completed home per CALLABLES.md §14: an ordinary
-                 * Task failure instead of an uncaught escape. It carries no trace.
-                 */
-                prepared.complete();
-                /*
-                 * PERF025: a compact source call has no pre-target activation;
-                 * the callee's own (published, or materialized here) activation
-                 * supplies the same Prelude the eager shape did.
-                 */
-                task.fail(
-                        ProtosCoreErrors.newInvalidReturn(
-                                ProtosFrameArguments.activation(prepared.targetArguments())));
-            }
-        } catch (ProtosSignalException signalled) {
-            prepared.complete();
-            task.fail(signalled.error(), ProtosDiagnosticTraceCapture.capture(signalled));
-        } catch (RuntimeException failure) {
-            prepared.complete();
-            throw failure;
-        } catch (Error failure) {
-            prepared.complete();
-            throw failure;
-        }
-    }
-
-    private static void drivePreparedOutcome(
-            ProtosTask task,
-            ProtosPreparedCalls.PreparedClosureCall prepared,
-            Object initialOutcome) {
-        Object outcome = initialOutcome;
-        while (true) {
-            if (!ProtosTailCallContinuation.isPending(outcome)) {
-                task.complete(prepared.finish(outcome));
-                return;
-            }
-            Object continuation = outcome;
-
-            ProtosNativeSuspension leaf =
-                    nativeSuspensionLeaf(continuation);
-            ProtosTask.WaitDependency dependency =
-                    leaf.dependency();
-
-            if (!task.beginSuspensionCapture(dependency)) {
-                if (task.cancellationRequested()) {
-                    outcome =
-                            Objects.requireNonNull(
-                                    ProtosTailCallContinuation.resume(
-                                            continuation,
-                                            beginCancellationTransfer(
-                                                    task,
-                                                    "pre-publication Task-owned Closure C-prime suspension")),
-                                    "cancelled Task-owned Closure continuation returned null");
-                    continue;
-                }
-                outcome =
-                        Objects.requireNonNull(
-                                ProtosTailCallContinuation.resume(
-                                        continuation, ProtosNullValue.INSTANCE),
-                                "ready Task-owned Closure continuation returned null");
-                continue;
-            }
-
-            task.publishSuspensionContinuation(
-                    dependency,
-                    resumedTask ->
-                            resumePreparedPublished(
-                                    resumedTask,
-                                    prepared,
-                                    continuation,
-                                    dependency));
-            return;
-        }
+        Objects.requireNonNull(request, "request");
+        runSegment(task, request.caller(), request::callUncached);
     }
 
     private static void resumePublished(
@@ -286,7 +132,7 @@ final class ProtosBytecodeTaskExecution {
         Object outcome = initialOutcome;
         while (true) {
             if (!ProtosTailCallContinuation.isPending(outcome)) {
-                task.complete(outcome);
+                task.complete(ProtosNumericValueSupport.guestValue(outcome));
                 return;
             }
             Object continuation = outcome;
@@ -335,37 +181,21 @@ final class ProtosBytecodeTaskExecution {
     }
 
     /**
-     * D189: runs one prepared call of {@code task} nested on the host stack inside a live
-     * synchronous foreign operation and returns its result.
-     *
-     * <p>Unlike a Task segment this never publishes a continuation, because foreign/host frames
-     * below it cannot be captured. Readiness and the cancellation-first rule resume synchronously
-     * exactly as at the top level; a suspension that would actually commit is rejected by the
-     * Task gate and resumed as a fresh {@code Error} signaled at the suspension point. Errors and
-     * control transfers leaving the call propagate to the caller unchanged. No cancellation is
-     * observed merely because the call is entered.
-     *
-     * @param entryRoot whether {@code prepared} runs through the Task C-prime entry root, which
-     *     already owns its finish and own-return-home handling
+     * A synchronous foreign callback inside {@code task}: the request runs
+     * through the shared dispatcher and any suspension is resolved in place
+     * (or rejected with an Error) without publishing a continuation.
      */
     static Object invokeNestedSynchronous(
             ProtosTask task,
-            ProtosPreparedCalls.PreparedClosureCall prepared,
-            boolean entryRoot,
+            ProtosCallRequest request,
             ProtosActivation errorSite) {
         Objects.requireNonNull(task, "task");
-        Objects.requireNonNull(prepared, "prepared");
+        Objects.requireNonNull(request, "request");
         Objects.requireNonNull(errorSite, "errorSite");
         task.enterSynchronousForeignCallbackForRuntime();
         try {
-            Object outcome =
-                    entryRoot
-                            ? ProtosTaskCPrimeEntryExecution.planForEnteredContext()
-                                    .target()
-                                    .call(prepared.activation(), prepared)
-                            : prepared.bodyTarget().call(prepared.targetArguments());
+            Object outcome = request.callUncached();
             while (ProtosTailCallContinuation.isPending(outcome)) {
-                // I112: a terminal transport finishes its inner owners before this call's own.
                 outcome =
                         ProtosTailCallContinuation.resume(
                                 outcome,
@@ -375,25 +205,9 @@ final class ProtosBytecodeTaskExecution {
                                         errorSite));
             }
             Objects.requireNonNull(outcome, "nested synchronous C-prime call returned null");
-            return entryRoot ? outcome : prepared.finish(outcome);
-        } catch (ControlFlowException transfer) {
-            // The entry root already owns its finish and own-return-home handling.
-            if (entryRoot) {
-                throw transfer;
-            }
-            Object handled;
-            try {
-                handled = prepared.handleControlTransfer(transfer);
-            } catch (RuntimeException | Error escaped) {
-                prepared.complete();
-                throw escaped;
-            }
-            return prepared.finish(handled);
-        } catch (RuntimeException | Error failure) {
-            if (!entryRoot) {
-                prepared.complete();
-            }
-            throw failure;
+            return ProtosNumericValueSupport.guestValue(outcome);
+        } catch (ProtosBytecodeControlTransferException bridged) {
+            throw bridged.transfer();
         } finally {
             task.exitSynchronousForeignCallbackForRuntime();
         }

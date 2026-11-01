@@ -103,6 +103,52 @@ final class ProtosI115UnaryPICConvergenceTest {
         });
     }
 
+    /**
+     * Fresh Closures of two definitions alternate at one unary call site far
+     * past the identity PIC limit. Only results are checked: the definition
+     * of the called Closure decides them, never a previously cached object.
+     * The internal cache state is verified separately with DSL captures.
+     */
+    @Test
+    void freshFunctionObjectsShareCachedCodeRoot() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    makeA: () => { (v) => { v } }
+                    makeB: () => { (v) => { v + 1 } }
+                    callOne: (f, v) => { f(v) }
+                    """, "i115-pic-root-define.protos", module);
+            ProtosClosureValue a1 = closure("makeA()\n", module);
+            ProtosClosureValue a2 = closure("makeA()\n", module);
+            ProtosClosureValue b1 = closure("makeB()\n", module);
+            ProtosClosureValue b2 = closure("makeB()\n", module);
+            assertNotSame(a1, a2);
+            assertNotSame(b1, b2);
+            assertSame(a1.definition(), a2.definition());
+            assertSame(b1.definition(), b2.definition());
+            assertNotSame(a1.definition(), b1.definition());
+            assertSame(
+                    a1.preparedExecutionPlanOrNullForRuntime(),
+                    a2.preparedExecutionPlanOrNullForRuntime());
+            assertSame(
+                    b1.preparedExecutionPlanOrNullForRuntime(),
+                    b2.preparedExecutionPlanOrNullForRuntime());
+
+            for (int i = 0; i < 4 * PAST_CACHE_LIMITS; i++) {
+                assertInteger(i, evaluate(
+                        "callOne(makeA(), " + i + ")\n",
+                        "i115-pic-root-a.protos",
+                        module));
+                assertInteger(i + 1, evaluate(
+                        "callOne(makeB(), " + i + ")\n",
+                        "i115-pic-root-b.protos",
+                        module));
+            }
+            // After saturation, each definition still decides its result.
+            assertInteger(10, evaluate("callOne(makeA(), 10)\n", "i115-pic-root-a-after.protos", module));
+            assertInteger(11, evaluate("callOne(makeB(), 10)\n", "i115-pic-root-b-after.protos", module));
+        });
+    }
+
     @Test
     void megamorphicUnaryCallRetainsGenericBehavior() throws Exception {
         withCore(module -> {
@@ -143,6 +189,38 @@ final class ProtosI115UnaryPICConvergenceTest {
                 assertInteger(107, evaluate("callWith(late, arm)\n", "i115-pic-argument-arm.protos", module));
                 evaluate("late.removeSlot(\"call\")\n", "i115-pic-argument-remove.protos", module);
                 assertInteger(7, evaluate("callWith(late, plain)\n", "i115-pic-argument-plain.protos", module));
+            }
+        });
+    }
+
+    /**
+     * Each evaluation calls a fresh {@code f} whose {@code ^} targets the
+     * observable ReturnHome captured from its enclosing invocation, so the
+     * call sites run uncached first and then past the identity PIC limit.
+     * The {@code f} invocation must not capture or complete that home; the
+     * enclosing invocation that owns it must capture the return by identity,
+     * terminal and non-terminal.
+     */
+    @Test
+    void observableReturnHomeWorksAcrossDirectAndMegamorphicDispatch() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    earlyTerminal: (v) => {
+                        f: (x) => { ^ x + 1 }
+                        f(v)
+                    }
+
+                    earlyInner: (v) => {
+                        f: (x) => { ^ x + 1 }
+                        f(v)
+                        0
+                    }
+                    """, "i115-pic-observable-home-define.protos", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(5, evaluate(
+                        "earlyTerminal(4)\n", "i115-pic-observable-home-terminal.protos", module));
+                assertInteger(5, evaluate(
+                        "earlyInner(4)\n", "i115-pic-observable-home-inner.protos", module));
             }
         });
     }

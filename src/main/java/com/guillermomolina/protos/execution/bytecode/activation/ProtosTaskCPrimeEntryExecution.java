@@ -14,16 +14,12 @@ import java.util.Objects;
 /**
  * Backend-private B6B entry root for one already-prepared Task-owned call.
  *
- * <p>The root owns no semantic dispatch policy. Argument 0 remains the semantic
- * invocation activation and argument 1 is the same PreparedClosureCall carrier
- * used by ordinary canonical Bytecode lowering. The root executes the exact
- * shared prepared-call dispatcher, including structured control, native-leaf
- * suspension, nested C-prime yield/resume and ReturnHome completion.
- *
- * <p>B6B-E2 routes Task-backed native Closure/method entries through this
- * Context-local plan. Source-backed Task Closures keep their already-established
- * direct prepared-root path; both routes share the same C-prime continuation
- * publication machinery.
+ * <p>I115: the root owns no semantic dispatch policy. Argument 0 is the
+ * activation of a structured standard native and argument 1 its
+ * {@link ProtosPreparedCalls.StructuredNativeInvocation} state; it is entered
+ * only by {@link ProtosBuiltinCallRootNode}. Every callback the structured
+ * protocol makes goes through the shared dispatcher; its suspensions compose
+ * through this root's own Bytecode DSL continuation.
  */
 final class ProtosTaskCPrimeEntryExecution {
     static final class Plan {
@@ -51,25 +47,12 @@ final class ProtosTaskCPrimeEntryExecution {
     }
 
     /**
-     * I112 / PLAT062-T: the existing Context-local C-prime dispatcher entered
-     * by a terminal invocation that selected a structured call, with the
-     * same {@code (activation, prepared)} arguments as {@code
-     * EnterNestedStructuredDispatch}. The dispatcher root keeps ownership of
-     * the call's structured regions, cleanup and finish.
+     * The Context-local structured-protocol root, entered with {@code
+     * (activation, structured)}; it keeps ownership of the protocol's
+     * regions, cleanup and finish.
      */
     static RootCallTarget structuredDispatchTargetForEnteredContext() {
         return planForEnteredContext().target();
-    }
-
-    static void execute(
-            ProtosTask task,
-            ProtosPreparedCalls.PreparedClosureCall prepared) {
-        Objects.requireNonNull(task, "task");
-        Objects.requireNonNull(prepared, "prepared");
-        ProtosBytecodeTaskExecution.executePreparedEntry(
-                task,
-                planForEnteredContext().target(),
-                prepared);
     }
 
     static Plan createPlan(ProtosLanguage language) {
@@ -82,8 +65,8 @@ final class ProtosTaskCPrimeEntryExecution {
                         builder -> {
                             builder.beginRoot();
 
-                            BytecodeLocal prepared =
-                                    builder.createLocal("taskEntryPreparedCall", null);
+                            BytecodeLocal structured =
+                                    builder.createLocal("structuredNativeInvocation", null);
                             BytecodeLocal result =
                                     builder.createLocal("taskEntryResult", null);
                             BytecodeLocal childResult =
@@ -91,14 +74,14 @@ final class ProtosTaskCPrimeEntryExecution {
                             BytecodeLocal resumeValue =
                                     builder.createLocal("taskEntryResumeValue", null);
 
-                            builder.beginStoreLocal(prepared);
+                            builder.beginStoreLocal(structured);
                             builder.emitLoadArgument(1);
                             builder.endStoreLocal();
 
-                            ProtosStructuredDispatchLowerer.emitPreparedInvocationForRuntime(
+                            ProtosStructuredDispatchLowerer.emitStructuredInvocationForRuntime(
                                     builder,
                                     result,
-                                    prepared,
+                                    structured,
                                     childResult,
                                     resumeValue);
 

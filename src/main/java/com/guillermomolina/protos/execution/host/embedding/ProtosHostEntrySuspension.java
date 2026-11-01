@@ -20,17 +20,12 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain.HostEntryExtent;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosTask;
-import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.TruffleSafepoint;
-import com.oracle.truffle.api.exception.AbstractTruffleException;
-import com.oracle.truffle.api.nodes.ControlFlowException;
 import java.util.List;
 import java.util.Objects;
 
@@ -92,24 +87,20 @@ final class ProtosHostEntrySuspension {
     }
 
     /**
-     * Drives a compact host-entry call whose body yielded {@code outcome} until it produces its
-     * ordinary result, mirroring the control-transfer and failure mapping of the initial entry.
+     * Drives a host-entry call whose body yielded {@code outcome} until it
+     * produces its ordinary result. I115: the pending result belongs to the
+     * callee frames, whose roots own their ReturnHomes; the driver only waits
+     * and resumes.
      */
     @TruffleBoundary
-    static Object resumeAfterWaits(
-            ProtosEmbeddedProcess embedding,
-            ProtosPreparedCalls.OrdinarySourceCall prepared,
-            Object outcome) {
-        return drive(embedding, prepared, outcome, false);
+    static Object resumeAfterWaits(ProtosEmbeddedProcess embedding, Object outcome) {
+        return drive(embedding, outcome);
     }
 
     /**
-     * An outermost host entry of a Closure without a compact target (a native body, or a
-     * non-canonical {@code call} selection). The ordinary D013 {@code call} selection is prepared
-     * Task-free and executed by the Context's shared C-prime entry root, which owns finish and
-     * own-ReturnHome handling, so the entry suspends exactly like the compact path instead of
-     * entering native Java bodies synchronously. No second invocation semantics is introduced: the
-     * selection, binding, and structured-control provenance are those of a composed send.
+     * An outermost host entry of a Closure through the shared dispatcher,
+     * suspendible exactly like a source entry: the host-entry extent of the
+     * caller's domain lets suspension-capable builtins yield.
      */
     @TruffleBoundary
     static Object executeSelected(
@@ -117,79 +108,39 @@ final class ProtosHostEntrySuspension {
             ProtosClosureValue closure,
             Object[] supplied,
             ProtosActivation caller) {
-        ProtosSlotLookupResult selected =
-                ProtosValueLookup.lookup(
-                                closure,
-                                "call",
-                                caller.prelude()
-                                        .orElseThrow(
-                                                () ->
-                                                        new IllegalStateException(
-                                                                "host entry requires an owning Core prelude")))
-                        .orElseThrow(
-                                () -> new ProtosSignalException(ProtosCoreErrors.newError(caller)));
-        ProtosPreparedCalls.PreparedClosureCall prepared =
-                ProtosClosureCallPreparation.prepareHostEntrySelectedCall(
-                        closure, selected, List.of(supplied), caller);
-        // A control transfer leaving the entry root propagates as the original object.
-        Object outcome =
-                Objects.requireNonNull(
-                        ProtosTaskCPrimeEntryExecution.planForEnteredContext()
-                                .target()
-                                .call(prepared.activation(), prepared),
-                        "host-entry C-prime entry returned null");
-        return drive(embedding, prepared, outcome, true);
+        Object outcome;
+        try {
+            outcome =
+                    Objects.requireNonNull(
+                            ProtosCallRequest.call(closure, List.of(supplied), caller).callUncached(),
+                            "host entry returned null");
+        } catch (ProtosBytecodeControlTransferException bridged) {
+            throw bridged.transfer();
+        }
+        return drive(embedding, outcome);
     }
 
-    /**
-     * @param entryRoot whether {@code prepared} runs through the C-prime entry root, which already
-     *     owns its finish and own-ReturnHome handling (as in {@link
-     *     ProtosBytecodeTaskExecution#invokeNestedSynchronous})
-     */
-    private static Object drive(
-            ProtosEmbeddedProcess embedding,
-            ProtosPreparedCalls.PreparedClosureCall prepared,
-            Object outcome,
-            boolean entryRoot) {
+    private static Object drive(ProtosEmbeddedProcess embedding, Object outcome) {
         Objects.requireNonNull(embedding, "embedding");
-        // I112: the pending result is a ContinuationResult or a terminal transport.
         while (ProtosTailCallContinuation.isPending(outcome)) {
             Object continuation = outcome;
-            awaitReady(
-                    embedding,
-                    suspensionLeaf(continuation).dependency(),
-                    prepared,
-                    entryRoot,
-                    continuation);
+            awaitReady(embedding, suspensionLeaf(continuation).dependency(), continuation);
             try {
                 outcome =
                         Objects.requireNonNull(
                                 ProtosTailCallContinuation.resume(
                                         continuation, ProtosNullValue.INSTANCE),
                                 "resumed host-entry continuation returned null");
-            } catch (ControlFlowException transfer) {
-                // An entry root already owns its finish and own-ReturnHome handling.
-                if (entryRoot) {
-                    throw transfer;
-                }
-                outcome = prepared.handleControlTransfer(transfer);
-            } catch (AbstractTruffleException transfer) {
-                throw transfer;
-            } catch (RuntimeException failure) {
-                if (entryRoot) {
-                    throw failure;
-                }
-                throw prepared.mapRuntimeFailure(failure);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
             }
         }
-        return outcome;
+        return ProtosNumericValueSupport.guestValue(outcome);
     }
 
     private static void awaitReady(
             ProtosEmbeddedProcess embedding,
             ProtosTask.WaitDependency dependency,
-            ProtosPreparedCalls.PreparedClosureCall prepared,
-            boolean entryRoot,
             Object continuation) {
         ProtosActorExecutionDomain domain = embedding.rootExecutionDomain();
         // Actor-local work dispatched while waiting is not inside this entry's Bytecode extent.
@@ -232,11 +183,8 @@ final class ProtosHostEntrySuspension {
                 if (dependency instanceof FutureDependency observer) {
                     observer.release();
                 }
-                // I112: deferred terminal owners close first, innermost first.
+                // Inner continuations first, then the homes their frames own.
                 ProtosTailCallContinuation.abandon(continuation);
-                if (!entryRoot) {
-                    prepared.complete();
-                }
             }
         }
     }

@@ -8,6 +8,42 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.33-SNAPSHOT
+
+- **I116 — experimental unification of Bytecode DSL semantic execution and on-demand Truffle tooling**
+  in the chronological I115 source branch. This is the original implementation
+  state, not a certification of semantic or performance equivalence.
+  - Replace the separate prepared-call, guarded-send and callback entry
+    mechanisms with `ProtosFunctionCallDispatchers`, `ProtosCallRequest`,
+    `ProtosBoundMethod` and fixed-arity `CallNilaryMethod`, `CallUnaryMethod`,
+    `CallTernaryMethod`, `CallQuaternaryMethod` and `CallVarargsMethod` nodes.
+    Add Context-owned builtin call roots and dispatch source/native Closures
+    through the shared B5 argument protocol, including selected method homes.
+  - Route structured Boolean/control, collection and Map protocols, Task-owned
+    execution, host-entry continuation and I/O C-prime through shared call
+    requests and dispatcher-owned invocation handling. The revised continuation
+    transport intends to resume a suspended callee without repeating its
+    original call; cancellation and ReturnHome ownership require independent
+    behavioral conformance checks.
+  - Reconcile Truffle tag-tree and debugger scope access with on-demand
+    activation materialization. Remove historical inline callback binding
+    preparation/tooling, guarded send helpers and other superseded code.
+    The removal of inline-specific scope projection is a tooling-behavior
+    change requiring explicit debugger and instrumentation verification.
+  - Original source delta: 87 files (9 added, 71 modified, 7 deleted).
+    The entire implementation, test and source file tree delta is copied
+    byte-for-byte from the original commit. The historical tests were not
+    run while constructing this versioned replay; no tests, Tier 1/Tier 2
+    graphs or timing results are claimed for this reconstructed version.
+  - **Historical semantic limitations:** unification alone does not prove
+    `Object.call` override selection, frozen-state or lexical authority,
+    exactly-once ReturnHome completion, Task cancellation, C-prime ownership,
+    suspension/resumption, structured cleanup, non-local transfers or D179 C0.
+    The signed-64 `long` numeric contract and specialized internal message
+    execution still require independent regression gates across all paths;
+    compatibility of on-demand Truffle tooling remains unverified here.
+  - Original implementation: `0c1df650522717a390089eaeac111135935a7862`.
+
 ## 0.4.32-SNAPSHOT
 
 - **I115 — experimental convergence of the unary Closure PIC and local `run` root**

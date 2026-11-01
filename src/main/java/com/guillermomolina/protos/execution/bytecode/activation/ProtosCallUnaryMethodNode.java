@@ -17,254 +17,103 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
-import com.guillermomolina.protos.execution.ProtosClosureCallPreparation.DirectClosureExecutableFacts;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
-import com.oracle.truffle.api.Assumption;
-import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
-import com.oracle.truffle.api.bytecode.BytecodeTier;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
-import com.oracle.truffle.api.bytecode.ForceQuickening;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
-import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
-import com.oracle.truffle.api.nodes.DirectCallNode;
-import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * Fixed-arity unary callable invocation.
+ * I115 (GraalPy {@code Call*Method}): the {@code CallUnaryMethod} operation, a call
+ * of an evaluated callable with 1 positional argument. The callable is a source Closure, a
+ * native Closure, a {@link ProtosBoundMethod} produced by {@code GetMethod}
+ * (its receiver is not counted among the arguments) or any other object.
  *
- * A single direct specialization owns the source-function call site. Its
- * PIC is keyed by Closure identity (weakly cached, limit 3) under the
- * existing root-call, code and Context-projection assumptions. Saturation
- * replaces it with the generic specialization, which reports the
- * megamorphic transition to the runtime once per cached installation.
- * There is no definition-keyed direct specialization or lowering-time
- * recursion-specific call operation.
+ * <p>The B5 frame-argument array is built once here and becomes the callee
+ * frame's arguments. A source function goes straight to the shared
+ * function PIC; a bound source method writes its receiver and methodHome
+ * and uses the same PIC; every other callable takes {@link
+ * ProtosFunctionCallDispatchers.CallNode}. No call is prepared.
  */
 @GenerateUncached
 @GenerateInline(false)
 @ConstantOperand(type = boolean.class, name = "terminal")
-@OperationProxy.Proxyable(
-        allowUncached = true,
-        storeBytecodeIndex = true)
+@OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = true)
 abstract class ProtosCallUnaryMethodNode extends Node {
 
-    abstract Object execute(
-            VirtualFrame frame, boolean terminal,
-            Object callable, Object argument);
+    abstract Object execute(VirtualFrame frame, boolean terminal, Object callable, Object a0);
 
-    /*
-     * I115 (GraalPy CallUnaryMethodNode.callPFunction): the entry is keyed
-     * by the identity of the concrete Closure object, held weakly. Under the
-     * canonical root Object.call assumption only the instance check runs on
-     * a hit, after the argument was evaluated, so a local call slot created
-     * meanwhile is still observed.
-     */
-    @NonIdempotent
-    static boolean directInstance(ProtosClosureValue callable) {
-        return ProtosClosureCallPreparation
-                .directClosureInstanceUnderGuardedRootCallOrNull(callable)
-                == callable;
-    }
-
-    @ForceQuickening
-    @Specialization(
-            guards = {
-                "terminal",
-                "callable == cachedCallable",
-                "enteredContext == cachedContext",
-                "directInstance(callable)",
-                "cachedUnobservableHome",
-                "cachedFacts != null",
-                "cachedTarget != null"
-            },
-            assumptions = {
-                "rootCallStabilityOrNull(cachedFacts)",
-                "cachedCodeStable",
-                "cachedProjectionStable"
-            },
-            excludeForUncached = true,
-            limit = "3")
-    static Object callPFunction(
+    @Specialization(guards = "isSourceFunction(callable)")
+    static Object callFunction(
             VirtualFrame frame,
             boolean terminal,
             ProtosClosureValue callable,
-            Object argument,
-            @Bind("bytecodeOf($node)") BytecodeNode bytecodeNode,
-            @Bind("currentContext($node)")
-                    ProtosLanguageContext enteredContext,
-            @Cached(value = "callable", weak = true)
-                    ProtosClosureValue cachedCallable,
-            @Cached("enteredContext")
-                    ProtosLanguageContext cachedContext,
-            @Cached("callable.hasUnobservableInvocationReturnHomeForRuntime()")
-                    boolean cachedUnobservableHome,
-            @Cached("callable.codeStableAssumptionForRuntime()")
-                    Assumption cachedCodeStable,
-            @Cached("callable.contextProjectionStabilityForRuntime()")
-                    Assumption cachedProjectionStable,
-            @Cached("factsFor(callable, enteredContext)")
-                    DirectClosureExecutableFacts cachedFacts,
-            @Cached("targetOrNull(cachedFacts)")
-                    RootCallTarget cachedTarget,
-            @Cached("createDirectCallNodeOrNull(cachedTarget)")
-                    DirectCallNode call,
-            @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
-                    ProtosBytecodeRootNode cachedCallee,
-            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
-
-        Object caller =
-                ProtosBytecodeRootNode.InvokeClosureOneTail.callerReference(frame);
-
-        /*
-         * I115 (GraalPy CallContext.prepareCall): the deferred caller as is,
-         * unless the callee root registered NEEDS_CALLER_PRELUDE, in which
-         * case the caller's Prelude travels in a ProtosCallerFrameReference.
-         */
-        Object[] args =
-                ProtosFrameArguments.compactAdmittedTerminalClosureCallOneNoHome(
-                        callable,
-                        cachedCallee == null
-                                ? caller
-                                : ProtosBytecodeRootNode.InvokeClosureOneTail.callerArgument(
-                                        root, cachedCallee, callable, caller),
-                        argument);
-
-        Object outcome;
-        try {
-            outcome = call.call(args);
-        } catch (ProtosBytecodeControlTransferException bridged) {
-            throw bridged.transfer();
-        }
-
-        if (ProtosTailCallContinuation.isSuspended(outcome)) {
-            return ProtosTailCallContinuation.deferDirect(
-                    outcome, bytecodeNode, bytecodeNode.getBytecodeIndex(frame));
-        }
-
-        // The root epilogue owns guest-boundary projection.
-        // Preserve primitive carriers for accepting callers.
-        return outcome;
+            Object a0,
+            @Bind("$node") Node inliningTarget,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
+        return call.execute(
+                frame, inliningTarget, terminal, callable,
+                ProtosFrameArguments.dispatchedCall1(
+                null, ProtosFrameArguments.functionCallMarker(), null, null, null, a0),
+                ProtosFunctionCallDispatchers.callerReference(frame), root,
+                ProtosFunctionCallDispatchers.currentContext(inliningTarget));
     }
 
-    /*
-     * replaces retires the identity PIC on saturation. GraalPy declares
-     * @Megamorphic here; for this operation the generated polymorphism check
-     * reads a state field (state_0_) the generated node does not have, so the
-     * same runtime notification is sent through the explicit Truffle API:
-     * reportMegamorphicInstallation runs once, as the initializer of this
-     * specialization's instance in the cached interpreter.
-     */
-    @Specialization(replaces = "callPFunction")
+    @Specialization(guards = "isSourceFunction(method.callable())")
+    static Object callBoundMethod(
+            VirtualFrame frame,
+            boolean terminal,
+            ProtosBoundMethod method,
+            Object a0,
+            @Bind("$node") Node inliningTarget,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
+        Object[] arguments = ProtosFrameArguments.dispatchedCall1(
+                null, ProtosFrameArguments.functionCallMarker(), null, null, null, a0);
+        ProtosFrameArguments.bindMethod(arguments, method.receiver(), method.methodHome());
+        return call.execute(
+                frame, inliningTarget, terminal, method.callable(), arguments,
+                ProtosFunctionCallDispatchers.callerReference(frame), root,
+                ProtosFunctionCallDispatchers.currentContext(inliningTarget));
+    }
+
+    /* Builtins, bound builtins and generic callables: GraalPy CallNode. */
+    @Specialization(guards = "!isSourceCallable(callable)")
     @InliningCutoff
     static Object call(
             VirtualFrame frame,
             boolean terminal,
             Object callable,
-            Object argument,
+            Object a0,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Bind("bytecodeOf($node)") BytecodeNode bytecodeNode,
-            @Cached IndirectCallNode indirectCall,
-            @Cached(value = "reportMegamorphicInstallation($node)",
-                    uncached = "false")
-                    boolean megamorphicReported) {
-
-        Object caller =
-                ProtosBytecodeRootNode.InvokeClosureOneTail.callerReference(frame);
-
-        PreparedClosureCall prepared =
-                ProtosClosureCallPreparation.prepareClosureCallOneFallback(
-                        ProtosNumericValueSupport.guestValue(callable),
-                        ProtosBytecodeRootNode.InvokeClosureOneTail.exactCaller(
-                                root, caller),
-                        ProtosNumericValueSupport.guestValue(argument));
-
-        if (!terminal) {
-            return prepared;
-        }
-
-        return ProtosTailCallContinuation.executeTerminalPreparedCall(
-                prepared,
-                indirectCall,
-                bytecodeNode,
-                bytecodeNode.getBytecodeIndex(frame));
+            @Cached ProtosFunctionCallDispatchers.CallNode call) {
+        return call.execute(
+                frame, terminal, callable,
+                ProtosFrameArguments.dispatchedCall1(
+                null, ProtosFrameArguments.functionCallMarker(), null, null, null, a0),
+                ProtosFunctionCallDispatchers.callerReference(frame), root);
     }
 
-
-    /*
-     * Installation only. ProtosClosureCallPreparation owns
-     * executable target selection and Context projection.
-     */
-    static DirectClosureExecutableFacts factsFor(
-            ProtosClosureValue closure,
-            ProtosLanguageContext context) {
-        return ProtosClosureCallPreparation
-                .establishDirectClosureExecutableFactsOrNull(
-                        closure, context);
+    static boolean isSourceFunction(ProtosClosureValue callable) {
+        return ProtosFunctionCallDispatchers.CallNode.isSourceFunction(callable);
     }
 
-    static RootCallTarget targetOrNull(
-            DirectClosureExecutableFacts facts) {
-        return facts == null ? null : facts.target();
-    }
-
-    static DirectCallNode createDirectCallNodeOrNull(
-            RootCallTarget target) {
-        return target == null ? null : DirectCallNode.create(target);
-    }
-
-    /*
-     * Installation only. A rejected entry has no facts: the null assumption
-     * is invalid for the DSL (Assumption.isValidAssumption), so the direct
-     * entry is never installed and the call takes the generic fallback.
-     */
-    static Assumption rootCallStabilityOrNull(
-            DirectClosureExecutableFacts facts) {
-        return facts == null ? null : facts.rootCallStability();
-    }
-
-    /* Installation only: the target's root, whose caller needs are read. */
-    static ProtosBytecodeRootNode calleeRootOrNull(RootCallTarget target) {
-        return target != null
-                        && target.getRootNode() instanceof ProtosBytecodeRootNode callee
-                ? callee
-                : null;
-    }
-
-    /*
-     * Installation only. The uncached interpreter uses the constant uncached
-     * value instead and has no specialization to split; the tier check keeps
-     * any non-cached evaluation from reporting.
-     */
-    static boolean reportMegamorphicInstallation(Node node) {
-        if (BytecodeNode.get(node).getTier() != BytecodeTier.CACHED) {
-            return false;
-        }
-        node.reportPolymorphicSpecialize();
-        return true;
-    }
-
-    static BytecodeNode bytecodeOf(Node node) {
-        return BytecodeNode.get(node);
+    static boolean isSourceCallable(Object callable) {
+        return callable instanceof ProtosClosureValue closure
+                        ? isSourceFunction(closure)
+                        : callable instanceof ProtosBoundMethod method
+                                && isSourceFunction(method.callable());
     }
 
     static ProtosBytecodeRootNode rootOf(Node node) {
-        return (ProtosBytecodeRootNode)
-                BytecodeNode.get(node).getBytecodeRootNode();
-    }
-
-    @NonIdempotent
-    static ProtosLanguageContext currentContext(Node node) {
-        return ProtosLanguageContext.current(node);
+        return (ProtosBytecodeRootNode) BytecodeNode.get(node).getBytecodeRootNode();
     }
 }

@@ -35,332 +35,85 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * I072 Phase D structural discriminator: an ordinary source-backed,
- * nonsuspending call must use a lean call representation that never
- * physically carries native-body, structured-control-capability, or
- * module-initialization state, and {@link ProtosPreparedCalls.PreparedClosureCall}
- * itself must be a small dispatch surface rather than a universal carrier
- * class. See PLAT040 Candidate F' and the I072 Phase D implementation report.
+ * I072 Phase D structural discriminator, I115 form: an ordinary source call is
+ * a {@link ProtosCallRequest} (callable, B5 arguments, caller) that never
+ * physically carries native-body, structured-control-capability or
+ * module-initialization state; structured capability is owned only by
+ * {@link ProtosPreparedCalls.StructuredNativeInvocation}, and module
+ * initialization only by {@link ProtosPreparedCalls.ModuleInitializationCall}.
+ * The PreparedClosureCall hierarchy and its lifecycle operations no longer
+ * exist (I115): ReturnHome completion belongs to the callee root.
  */
 class ProtosI072PhaseDPreparedCallSeparationTest {
     @Test
-    void preparedClosureCallIsADispatchInterfaceNotAUniversalCarrier() {
-        assertTrue(ProtosPreparedCalls.PreparedClosureCall.class.isInterface());
-        assertNotEquals(
-                ProtosPreparedCalls.OrdinarySourceCall.class,
-                ProtosPreparedCalls.NativeCall.class);
-        assertNotEquals(
-                ProtosPreparedCalls.OrdinarySourceCall.class,
-                ProtosPreparedCalls.ModuleInitializationCall.class);
-    }
-
-    /**
-     * TEST009-H: the terminal lifecycle operations must preserve the concrete
-     * prepared-call representation instead of erasing it to a single
-     * {@link ProtosPreparedCalls.PreparedClosureCall} specialization, in both
-     * generated interpreters that declare them. PERF038-E: the semantic
-     * {@code FinishClosureCall} specializes ordinary source calls twice, with and
-     * without a return-home lifecycle; every other operation has exactly one
-     * specialization per representation.
-     */
-    @Test
-    void terminalLifecycleOperationsSpecializeOnConcreteRepresentations() {
-        Set<Class<?>> representations =
-                Set.of(
-                        ProtosPreparedCalls.OrdinarySourceCall.class,
-                        ProtosPreparedCalls.NativeCall.class,
-                        ProtosPreparedCalls.ImmediateResultCall.class,
-                        ProtosPreparedCalls.ModuleInitializationCall.class);
-        for (Class<?> representation : representations) {
-            assertTrue(Modifier.isFinal(representation.getModifiers()), representation.getName());
-            assertTrue(
-                    ProtosPreparedCalls.PreparedClosureCall.class.isAssignableFrom(
-                            representation),
-                    representation.getName());
-        }
-
-        for (Class<?> operation :
-                List.of(
-                        ProtosBytecodeRootNode.CompleteClosureCall.class,
-                        ProtosBytecodeRootNode.FinishClosureCall.class,
-                        ProtosBytecodeRootNode.CompleteClosureCall.class,
-                        ProtosBytecodeRootNode.FinishClosureCall.class)) {
-            List<Class<?>> receivers =
-                    Arrays.stream(operation.getDeclaredMethods())
-                            .filter(method -> Modifier.isStatic(method.getModifiers()))
-                            .filter(method -> Modifier.isPublic(method.getModifiers()))
-                            // I113: skip FinishClosureCall's projectGuestBoundary constant.
-                            .map(method -> method.getParameterTypes()[0] == boolean.class
-                                    ? method.getParameterTypes()[1]
-                                    : method.getParameterTypes()[0])
-                            .collect(java.util.stream.Collectors.toList());
-
-            assertFalse(
-                    receivers.contains(ProtosPreparedCalls.PreparedClosureCall.class),
-                    operation.getName()
-                            + " must not specialize on the PreparedClosureCall interface");
-            Set<Class<?>> expectedReceivers =
-                    new java.util.HashSet<>(representations);
-            int expectedCount =
-                    operation == ProtosBytecodeRootNode.CompleteClosureCall.class
-                                    || operation == ProtosBytecodeRootNode.FinishClosureCall.class
-                            ? representations.size() + 1
-                            : representations.size();
-            if (operation == ProtosBytecodeRootNode.CompleteClosureCall.class) {
-                // I113: the former CompleteIfTrueSiteOuter, an ifTrue site with no outer call.
-                expectedReceivers.add(com.guillermomolina.protos.runtime.ProtosNullValue.class);
-                expectedCount++;
-            }
-            assertEquals(
-                    expectedCount,
-                    receivers.size(),
-                    operation.getName() + " specializations: " + receivers);
-            assertEquals(expectedReceivers, Set.copyOf(receivers), operation.getName());
+    void callRequestIsDataNotAUniversalCarrier() {
+        assertNotEquals(ProtosCallRequest.class, ProtosPreparedCalls.StructuredNativeInvocation.class);
+        assertNotEquals(ProtosCallRequest.class, ProtosPreparedCalls.ModuleInitializationCall.class);
+        Set<String> declared = declaredMethodNames(ProtosCallRequest.class);
+        for (String lifecycle : List.of(
+                "finish", "complete", "handleControlTransfer", "mapRuntimeFailure",
+                "enterNative", "enterImmediate")) {
+            assertFalse(declared.contains(lifecycle),
+                    "a call request has no invocation protocol: " + lifecycle);
         }
     }
 
     /**
-     * TEST009-I: closure-call entry must likewise specialize on concrete
-     * representations in both generated interpreters. Immediate entry has one
-     * specialization; native entry (TEST009-Q) has one generic entry with no
-     * native-body identity cache; the two source-backed
-     * representations each keep a direct-call cache with an indirect fallback,
-     * and module initialization additionally keeps its immediate-hit entry.
-     */
-    @Test
-    void entryOperationSpecializesOnConcreteRepresentations() {
-        java.util.Map<Class<?>, Long> expected =
-                java.util.Map.of(
-                        ProtosPreparedCalls.ImmediateResultCall.class, 1L,
-                        ProtosPreparedCalls.NativeCall.class, 1L,
-                        ProtosPreparedCalls.OrdinarySourceCall.class, 2L,
-                        ProtosPreparedCalls.ModuleInitializationCall.class, 3L);
-
-        for (Class<?> operation :
-                List.of(
-                        ProtosBytecodeRootNode.EnterClosureCall.class,
-                        ProtosBytecodeRootNode.EnterClosureCall.class)) {
-            List<java.lang.reflect.Method> specializations =
-                    Arrays.stream(operation.getDeclaredMethods())
-                            .filter(
-                                    method ->
-                                            method.isAnnotationPresent(
-                                                    com.oracle.truffle.api.dsl.Specialization
-                                                            .class))
-                            .collect(java.util.stream.Collectors.toList());
-            java.util.Map<Class<?>, Long> receivers =
-                    specializations.stream()
-                            .collect(
-                                    java.util.stream.Collectors.groupingBy(
-                                            method -> method.getParameterTypes()[0],
-                                            java.util.stream.Collectors.counting()));
-
-            assertFalse(
-                    receivers.containsKey(ProtosPreparedCalls.PreparedClosureCall.class),
-                    operation.getName()
-                            + " must not specialize on the PreparedClosureCall interface");
-            java.util.Map<Class<?>, Long> expectedForOperation =
-                    new java.util.HashMap<>(expected);
-            expectedForOperation.put(
-                    ProtosPreparedCalls.OrdinarySourceCall.class, 3L);
-
-            assertEquals(expectedForOperation, receivers, operation.getName());
-
-            assertEquals(
-                    List.of(
-                            List.of(ProtosPreparedCalls.NativeCall.class)),
-                    specializations.stream()
-                            .filter(
-                                    method ->
-                                            method.getParameterTypes()[0]
-                                                    == ProtosPreparedCalls.NativeCall.class)
-                            .map(method -> List.of(method.getParameterTypes()))
-                            .sorted(java.util.Comparator.comparingInt(List::size))
-                            .collect(java.util.stream.Collectors.toList()),
-                    operation.getName() + " NativeCall");
-
-            for (Class<?> source :
-                    List.of(
-                            ProtosPreparedCalls.OrdinarySourceCall.class,
-                            ProtosPreparedCalls.ModuleInitializationCall.class)) {
-                List<Class<?>> sourceCallNodes =
-                        specializations.stream()
-                                .filter(method -> method.getParameterTypes()[0] == source)
-                                .map(method -> method.getParameterTypes())
-                                .filter(parameters -> parameters.length > 1)
-                                .map(parameters -> parameters[parameters.length - 1])
-                                .collect(java.util.stream.Collectors.toList());
-                List<Class<?>> expectedSourceCallNodes =
-                        source == ProtosPreparedCalls.OrdinarySourceCall.class
-                                ? List.of(
-                                        com.oracle.truffle.api.nodes.DirectCallNode.class,
-                                        com.oracle.truffle.api.nodes.DirectCallNode.class,
-                                        com.oracle.truffle.api.nodes.IndirectCallNode.class)
-                                : List.of(
-                                        com.oracle.truffle.api.nodes.DirectCallNode.class,
-                                        com.oracle.truffle.api.nodes.IndirectCallNode.class);
-
-                assertEquals(
-                        expectedSourceCallNodes,
-                        sourceCallNodes.stream()
-                                .sorted(java.util.Comparator.comparing(Class::getName))
-                                .collect(java.util.stream.Collectors.toList()),
-                        operation.getName() + " " + source.getSimpleName());
-            }
-        }
-    }
-
-    /**
-     * TEST009-J: no Bytecode DSL operation of the generated interpreter
-     * (I111-B: the single one, which now declares every operation) erases the prepared call to the {@link
-     * ProtosPreparedCalls.PreparedClosureCall} interface, except the
-     * still-pending continuation family. Structured-dispatch selection and
-     * preparation cover exactly the four concrete representations, and
-     * nested structured entry accepts only {@link ProtosPreparedCalls.NativeCall}.
+     * TEST009-H/I successor: the structured operations specialize on the
+     * concrete structured state, never on a generic call carrier.
      */
     @Test
     void structuredDispatchOperationsSpecializeOnConcreteRepresentations() {
-        Set<String> pendingGenericOperations = Set.of("ResumeContinuation");
-        Set<Class<?>> representations =
-                Set.of(
-                        ProtosPreparedCalls.OrdinarySourceCall.class,
-                        ProtosPreparedCalls.NativeCall.class,
-                        ProtosPreparedCalls.ImmediateResultCall.class,
-                        ProtosPreparedCalls.ModuleInitializationCall.class);
-
-        for (Class<?> root : List.of(ProtosBytecodeRootNode.class)) {
-            List<String> structuredFamily = new java.util.ArrayList<>();
-            for (Class<?> operation : root.getDeclaredClasses()) {
-                List<java.lang.reflect.Method> specializations = specializations(operation);
-                if (specializations.isEmpty()) {
-                    continue;
-                }
-                boolean generic =
-                        specializations.stream()
-                                .flatMap(method -> Arrays.stream(method.getParameterTypes()))
-                                .anyMatch(
-                                        type ->
-                                                type
-                                                        == ProtosPreparedCalls.PreparedClosureCall.class);
-                if (!pendingGenericOperations.contains(operation.getSimpleName())) {
-                    assertFalse(
-                            generic,
-                            operation.getName()
-                                    + " must not specialize on the PreparedClosureCall interface");
-                }
-
-                Set<Class<?>> receivers =
-                        specializations.stream()
-                                .filter(method -> method.getParameterCount() > 0)
-                                // I113: skip a leading discriminating constant operand.
-                                .map(method -> method.getParameterTypes()[0]
-                                                                == ProtosStructuredCallKind.class
-                                                        || method.getParameterTypes()[0]
-                                                                == boolean.class
-                                                ? method.getParameterTypes()[1]
-                                                : method.getParameterTypes()[0])
-                                .collect(java.util.stream.Collectors.toSet());
-                if (operation.getSimpleName().equals("EnterNestedStructuredDispatch")) {
-                    assertEquals(
-                            Set.of(ProtosPreparedCalls.NativeCall.class),
-                            receivers,
-                            operation.getName());
-                } else if (operation.getSimpleName().matches(
-                                "RequiresStructuredDispatch|IsStructured\\w+"
-                                        + "|PrepareStructured\\w+|AdmitsInlineLiteral\\w+")
-                        && receivers.stream().anyMatch(representations::contains)) {
-                    Set<Class<?>> expectedReceivers =
-                            new java.util.HashSet<>(representations);
-                    assertEquals(expectedReceivers, receivers, operation.getName());
-                    structuredFamily.add(operation.getSimpleName());
-                }
-            }
-            assertTrue(
-                    structuredFamily.contains("RequiresStructuredDispatch"),
-                    root.getName() + " " + structuredFamily);
-            assertTrue(
-                    structuredFamily.stream().anyMatch(name -> name.startsWith("IsStructured")),
-                    root.getName() + " " + structuredFamily);
-            assertTrue(
-                    structuredFamily.stream()
-                            .anyMatch(name -> name.startsWith("PrepareStructured")),
-                    root.getName() + " " + structuredFamily);
+        for (Class<?> operation : List.of(
+                ProtosBytecodeRootNode.IsStructuredCall.class,
+                ProtosBytecodeRootNode.PrepareStructuredCall.class)) {
+            List<java.lang.reflect.Method> specializations = specializations(operation);
+            assertEquals(1, specializations.size(), operation.getName());
+            assertEquals(
+                    ProtosPreparedCalls.StructuredNativeInvocation.class,
+                    specializations.get(0).getParameterTypes()[1],
+                    operation.getName());
         }
     }
 
     /**
-     * TEST009-J: only {@link ProtosPreparedCalls.NativeCall} owns the
-     * structured capability surface; the other representations neither
-     * override it nor physically carry structured state.
+     * TEST009-J: only the structured native state owns the structured
+     * capability surface; a call request and the module state neither declare
+     * it nor physically carry structured state.
      */
     @Test
-    void onlyNativeCallOwnsStructuredCapabilities() {
-        List<String> capabilityMethods =
-                Arrays.stream(ProtosPreparedCalls.PreparedClosureCall.class.getDeclaredMethods())
-                        .filter(java.lang.reflect.Method::isDefault)
-                        .map(java.lang.reflect.Method::getName)
-                        .filter(
-                                name ->
-                                        name.equals("requiresStructuredDispatch")
-                                                || name.startsWith("isStructured")
-                                                || name.startsWith("prepareStructured")
-                                                || name.startsWith("admitsInlineLiteral"))
-                        .collect(java.util.stream.Collectors.toList());
-        assertFalse(capabilityMethods.isEmpty());
+    void onlyStructuredNativeInvocationOwnsStructuredCapabilities() {
+        Set<String> nativeDeclared =
+                declaredMethodNames(ProtosPreparedCalls.StructuredNativeInvocation.class);
+        assertTrue(nativeDeclared.contains("requiresStructuredDispatch"));
+        assertTrue(nativeDeclared.stream().anyMatch(name -> name.startsWith("isStructured")));
+        assertTrue(nativeDeclared.stream().anyMatch(name -> name.startsWith("prepareStructured")));
 
-        Set<String> nativeDeclared = declaredMethodNames(ProtosPreparedCalls.NativeCall.class);
-        assertTrue(
-                nativeDeclared.containsAll(capabilityMethods),
-                "NativeCall must own every structured capability: " + capabilityMethods);
-
-        for (Class<?> absent :
-                List.of(
-                        ProtosPreparedCalls.OrdinarySourceCall.class,
-                        ProtosPreparedCalls.ImmediateResultCall.class,
-                        ProtosPreparedCalls.ModuleInitializationCall.class)) {
+        for (Class<?> absent : List.of(
+                ProtosCallRequest.class,
+                ProtosPreparedCalls.ModuleInitializationCall.class)) {
             Set<String> declared = declaredMethodNames(absent);
             assertTrue(
-                    capabilityMethods.stream().noneMatch(declared::contains),
+                    declared.stream().noneMatch(name -> name.equals("requiresStructuredDispatch")
+                            || name.startsWith("isStructured")
+                            || name.startsWith("prepareStructured")),
                     absent.getName() + " must not acquire a structured capability");
             assertTrue(
                     Arrays.stream(absent.getDeclaredFields())
-                            .noneMatch(
-                                    field ->
-                                            field.getName().toLowerCase().contains("structured")),
+                            .noneMatch(field -> field.getName().toLowerCase().contains("structured")),
                     absent.getName() + " must not carry structured state");
         }
     }
 
-    /**
-     * TEST009-J: a representation without the capability keeps the absent
-     * answer and the previous {@link IllegalStateException} through the
-     * specialized operations of both interpreters.
-     */
+    /** TEST009-J: an ordinary builtin has no structured state at all. */
     @Test
-    void specializedStructuredOperationsPreserveAbsentCapabilityBehavior() {
-        ProtosPreparedCalls.ImmediateResultCall immediate =
-                assertInstanceOf(
-                        ProtosPreparedCalls.ImmediateResultCall.class,
-                        ProtosPreparedCalls.PreparedClosureCall.immediateResult("result"));
-
-        assertFalse(ProtosBytecodeRootNode.RequiresStructuredDispatch.immediate(immediate));
-        assertFalse(ProtosBytecodeRootNode.RequiresStructuredDispatch.immediate(immediate));
-        assertFalse(ProtosBytecodeRootNode.IsStructuredCall.immediate(
-                ProtosStructuredCallKind.BOOLEAN, immediate));
-        assertFalse(ProtosBytecodeRootNode.IsStructuredCall.immediate(
-                ProtosStructuredCallKind.BOOLEAN, immediate));
-        assertThrows(
-                IllegalStateException.class,
-                () -> ProtosBytecodeRootNode.PrepareStructuredCall.immediate(
-                        ProtosStructuredCallKind.ENSURE, immediate));
-        assertThrows(
-                IllegalStateException.class,
-                () -> ProtosBytecodeRootNode.PrepareStructuredCall.immediate(
-                        ProtosStructuredCallKind.BOOLEAN, immediate));
-        assertThrows(
-                IllegalStateException.class,
-                () -> ProtosBytecodeRootNode.PrepareStructuredCall.immediate(
-                        ProtosStructuredCallKind.INDEXED_EACH, immediate));
+    void ordinaryBuiltinHasNoStructuredState() {
+        ProtosClosureValue builtin =
+                ProtosClosureValue.nativeClosure((activation, supplied) -> supplied.size());
+        assertEquals(
+                null,
+                ProtosPreparedCalls.StructuredNativeInvocation.forBodyOrNull(
+                        builtin, List.of(), moduleActivation()));
     }
 
     private static List<java.lang.reflect.Method> specializations(Class<?> operation) {
@@ -379,48 +132,35 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
     }
 
     @Test
-    void ordinarySourceCallNeverPhysicallyDeclaresSpecialCallState() {
+    void callRequestNeverPhysicallyDeclaresSpecialCallState() {
         Set<String> fieldNames =
-                Arrays.stream(
-                                ProtosPreparedCalls.OrdinarySourceCall.class
-                                        .getDeclaredFields())
+                Arrays.stream(ProtosCallRequest.class.getDeclaredFields())
                         .map(Field::getName)
                         .collect(java.util.stream.Collectors.toSet());
 
         assertFalse(
                 fieldNames.stream().anyMatch(name -> name.toLowerCase().contains("native")),
-                "ordinary source call must not carry native-mode state: " + fieldNames);
+                "a call request must not carry native-mode state: " + fieldNames);
         assertFalse(
                 fieldNames.stream().anyMatch(name -> name.toLowerCase().contains("structured")),
-                "ordinary source call must not carry structured-control capabilities: "
-                        + fieldNames);
+                "a call request must not carry structured-control capabilities: " + fieldNames);
         assertFalse(
-                fieldNames.stream()
-                        .anyMatch(name -> name.toLowerCase().contains("moduleinitialization")),
-                "ordinary source call must not carry module-initialization state: "
-                        + fieldNames);
+                fieldNames.stream().anyMatch(name -> name.toLowerCase().contains("moduleinitialization")),
+                "a call request must not carry module-initialization state: " + fieldNames);
     }
 
     @Test
-    void ordinaryPreparedCallUsesLeanRepresentationAndHasNoSpecialCapabilities() {
+    void ordinarySourceCallRunsThroughTheSharedDispatcher() {
         ProtosClosureValue closure = closure("() => null");
         ProtosActivation activation =
                 ProtosActivation.forClosureInvocation(closure, List.of());
 
-        ProtosPreparedCalls.PreparedClosureCall prepared =
+        assertTrue(ProtosFunctionCallDispatchers.CallNode.isSourceFunction(closure));
+        assertEquals(
+                com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
                 ProtosTestExecutionSupport.callEntered(
-                        () ->
-                                ProtosClosureCallPreparation.prepareSynchronousSourceClosureForRuntime(
-                                        closure,
-                                        List.of(),
-                                        activation));
-
-        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared);
-        assertFalse(prepared.isNative());
-        assertFalse(prepared.isImmediate());
-        assertFalse(prepared.requiresStructuredDispatch());
-        assertThrows(IllegalStateException.class, prepared::prepareStructuredEnsure);
-        assertThrows(IllegalStateException.class, prepared::enterNative);
+                        () -> ProtosFunctionCallDispatchers.callPublishedUncached(
+                                closure, activation)));
     }
 
     @Test
@@ -434,11 +174,7 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                 activation.dynamicControlStateIfPresent());
 
         ProtosTestExecutionSupport.callEntered(
-                () ->
-                        ProtosClosureCallPreparation.prepareSynchronousSourceClosureForRuntime(
-                                closure,
-                                List.of(),
-                                activation));
+                () -> ProtosFunctionCallDispatchers.callPublishedUncached(closure, activation));
 
         assertEquals(
                 java.util.Optional.empty(),

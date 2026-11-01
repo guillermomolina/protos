@@ -111,4 +111,15 @@ public final class ProtosReturnHome {
         // PLAT070: release the owner after deactivation; see ownerTask.
         ownerTask = null;
     }
+
+    /**
+     * I115: idempotent close used only by the owning activation scope when it
+     * is definitively left (TruffleRuby FrameOnStackMarker). Has no effect on
+     * an already-completed home or on the unobservable markers.
+     */
+    public void closeOwned() {
+        if (active && isMaterialized()) {
+            active = false;
+        }
+    }
 }

@@ -122,25 +122,17 @@ final class ProtosPerf033CanonicalCallableInteropTest {
                     session.processContextForTesting()
                             .callForRuntime(
                                     () -> {
-                                        ProtosPreparedCalls.OrdinarySourceCall call;
-                                        try {
-                                            call = adapter.prepare(new Object[0], null);
-                                        } catch (ArityException unexpected) {
-                                            throw new AssertionError(unexpected);
-                                        }
+                                        ProtosDispatchTestSupport.DirectEntry call =
+                                                ProtosDispatchTestSupport.direct(adapter.closure, adapter.caller);
                                         Object result =
-                                                call.finish(
-                                                        ProtosBytecodeRootNode.EnterClosureCall
-                                                                .ordinaryIndirect(
-                                                                        call,
-                                                                        IndirectCallNode.create()));
+                                                ProtosDispatchTestSupport.enter(call);
                                         try {
                                             assertEquals(
                                                     1, InteropLibrary.getUncached().asInt(result));
                                         } catch (UnsupportedMessageException unexpected) {
                                             throw new AssertionError(unexpected);
                                         }
-                                        assertSame(adapter.target, call.bodyTarget());
+                                        assertSame(adapter.target, call.target());
                                         return call.targetArguments();
                                     });
             // I102: entry uses the single B5 header, never materialized.
@@ -159,15 +151,10 @@ final class ProtosPerf033CanonicalCallableInteropTest {
         System.out.println("PROTOS_TASK_CREATED=NO");
     }
 
-    private static ProtosPreparedCalls.OrdinarySourceCall prepareNoArguments(
+    private static ProtosDispatchTestSupport.DirectEntry prepareNoArguments(
             ProtosHostExecutableClosure adapter) {
-        try {
-            return adapter.prepare(new Object[0], null);
-        } catch (ArityException unexpected) {
-            throw new AssertionError(
-                    "Call0 unexpectedly rejected zero arguments",
-                    unexpected);
-        }
+        // I115: the B5 function header the host entry's dispatcher writes.
+        return ProtosDispatchTestSupport.direct(adapter.closure, adapter.caller);
     }
 
     /**
@@ -215,7 +202,7 @@ final class ProtosPerf033CanonicalCallableInteropTest {
                                 TagTreeNode location =
                                         (TagTreeNode) root.getBytecodeNode().getTagTree();
 
-                                ProtosPreparedCalls.OrdinarySourceCall prepared =
+                                ProtosDispatchTestSupport.DirectEntry prepared =
                                         prepareNoArguments(adapter);
                                 Object[] arguments = prepared.targetArguments();
 
@@ -261,11 +248,7 @@ final class ProtosPerf033CanonicalCallableInteropTest {
                                 }
 
                                 Object result =
-                                        prepared.finish(
-                                                ProtosBytecodeRootNode.EnterClosureCall
-                                                        .ordinaryIndirect(
-                                                                prepared,
-                                                                IndirectCallNode.create()));
+                                        ProtosDispatchTestSupport.enter(prepared);
 
                                 try {
                                     assertEquals(

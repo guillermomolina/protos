@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -1001,8 +1002,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 assertTrue(identity.hasUnobservableInvocationReturnHomeForRuntime(),
                         "identity retains the unobservable-home fast path");
                 assertTrue(
-                        ProtosExperimentalCallBinaryMethodNode.admittedTargetOrNull(
-                                identity, context) != null,
+                        ProtosClosureCallPreparation.functionCallTarget(identity, context) != null,
                         "identity must still admit a direct target");
 
                 ProtosReturnHome capturedHome = new ProtosReturnHome();
@@ -1019,9 +1019,11 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 assertFalse(
                         captured.hasUnobservableInvocationReturnHomeForRuntime(),
                         "a real captured ReturnHome is observable");
-                assertNull(
-                        ProtosExperimentalCallBinaryMethodNode.admittedTargetOrNull(
-                                captured, context),
+                // I115: the dispatcher's B5 header carries the captured home by
+                // identity, never the unobservable marker.
+                assertSame(
+                        capturedHome,
+                        ProtosDispatchTestSupport.direct(captured, null).targetArguments()[4],
                         "the unobservable B5 header must not receive a real home");
                 assertTrue(capturedHome.isActive(),
                         "rejected admission must not complete the captured home");
@@ -1046,8 +1048,11 @@ final class ProtosI115H7MethodCallConvergenceTest {
                         anchor.capturedLexicalEnvironmentForRuntime()
                                 .readLocalSlotForRuntime("receiver").orElseThrow());
                 Object identity = receiver.readLocalSlot("identity").orElseThrow();
-                assertSame(identity,
-                        ProtosExperimentalGetMethodNode.selectGeneric(receiver, "identity", null));
+                // I115: GetMethod answers a bound method on the receiver.
+                ProtosBoundMethod bound = assertInstanceOf(ProtosBoundMethod.class,
+                        ProtosExperimentalGetMethodNode.select(receiver, "identity", null,
+                                anchor.prelude().orElseThrow().newModuleActivation()));
+                assertSame(identity, bound.callable());
                 assertSame(identity, ProtosExperimentalGetMethodNode.selectOrNull(
                                 receiver,
                                 com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
@@ -1055,13 +1060,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
                                         com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_16))
                         .currentValue(),
                         "the cached selection is installed without a prelude");
-                Object selected = ProtosExperimentalGetMethodNode.selectGenericWithHome(receiver, "identity", null);
-                var result = assertInstanceOf(
-                        com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult.class,
-                        selected);
-                assertSame(identity, result.value());
-                assertSame(receiver, result.home());
-                assertNull(ProtosExperimentalGetMethodNode.selectGeneric(receiver, "absent", null));
+                assertSame(receiver, bound.receiver());
+                assertSame(receiver, bound.methodHome());
                 return null;
             });
         }
@@ -1191,24 +1191,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 assertEquals(captured, template.experimentalUnaryNeedsCapturedOwner(), selector);
                 assertFalse(template.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
 
-                // Before any need: the entry this callee receives (no frame is read).
-                Object argument = Long.valueOf(1L);
-                Object[] entry = ProtosExperimentalCallBinaryMethodNode.unaryArguments(
-                        caller, null, template, closure, argument);
-                if (captured) {
-                    assertEquals(2, entry.length, selector);
-                    assertSame(closure, entry[0]);
-                    assertSame(argument, entry[1]);
-                } else {
-                    assertEquals(1, entry.length, "minimal even with an own Prelude");
-                    assertSame(argument, entry[0]);
-                }
-                for (Object element : entry) {
-                    assertFalse(element instanceof ProtosPrelude, selector + ": no Prelude");
-                    assertFalse(element instanceof ProtosCallerFrameReference,
-                            selector + ": no caller reference");
-                }
-
+                // I115: the reduced H11 entry is retired; the callee is entered
+                // with the dispatcher's B5 method header.
                 // First overflow: exact, through the admitted direct H7 entry.
                 Object first = rawResult(session, run);
                 ProtosLargeIntegerValue large =
@@ -1236,16 +1220,6 @@ final class ProtosI115H7MethodCallConvergenceTest {
                                     != large.parent().orElseThrow()) {
                         System.out.println("I115_H7_RECORDED_DIVERGENCE[" + selector
                                 + "]=first recovery used the caller Prelude");
-                    }
-                    if (ownPrelude != null) {
-                        // From now on the extended entry transports the Closure's own Prelude.
-                        Object[] extended = ProtosExperimentalCallBinaryMethodNode.unaryArguments(
-                                caller, null, callee, closure, argument);
-                        assertEquals(3, extended.length, selector);
-                        assertSame(ownPrelude,
-                                ProtosFrameArguments.experimentalTransportedPreludeOrNull(extended));
-                        assertSame(argument,
-                                ProtosFrameArguments.experimentalSuppliedArgument0(extended));
                     }
                 }
 
@@ -1277,11 +1251,6 @@ final class ProtosI115H7MethodCallConvergenceTest {
             ProtosBytecodeRootNode callee = admittedCallee(session, closure);
             assertFalse(callee.experimentalUnaryNeedsCapturedOwner());
             ProtosBytecodeRootNode caller = root(session, "runKeep");
-            Object argument = Long.valueOf(41L);
-            Object[] entry = ProtosExperimentalCallBinaryMethodNode.unaryArguments(
-                    caller, null, callee, closure, argument);
-            assertEquals(1, entry.length, "minimal even with an own Prelude");
-            assertSame(argument, entry[0]);
 
             Assumption calleeStable = callee.callerNeedsStability();
             Assumption callerStable = caller.callerNeedsStability();
@@ -1330,11 +1299,6 @@ final class ProtosI115H7MethodCallConvergenceTest {
             assertTrue(callee.isExperimentalPrimitiveArgumentRoot());
             assertFalse(callee.experimentalUnaryNeedsCapturedOwner());
             assertEquals(calleeNames, unquickened(names(callee)), "the expected H7 root");
-            Object argument = Long.valueOf(41L);
-            Object[] entry = ProtosExperimentalCallBinaryMethodNode.unaryArguments(
-                    caller, null, callee, closure, argument);
-            assertEquals(1, entry.length, "minimal entry");
-            assertSame(argument, entry[0]);
 
             Assumption stable = callee.callerNeedsStability();
             for (int call = 0; call < WARM; call++) {
@@ -1373,10 +1337,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
             assertNumber(session, "runPlusOne", 42L);
             ProtosClosureValue escape = methodClosure(session, "runEscape", "holder", "escape");
             ProtosClosureValue plusOne = methodClosure(session, "runPlusOne", "holder", "plusOne");
-            assertNull(session.processContextForTesting().callForRuntime(() ->
-                            ProtosExperimentalCallBinaryMethodNode.admittedTargetOrNull(
-                                    escape, ProtosLanguageContext.current())),
-                    "a non-H7 method is not admitted");
+            // I115: the H7 admission tier is retired; every source method is
+            // dispatched by the shared function PIC. The results stay checked.
             assertTrue(admittedCallee(session, plusOne).isExperimentalPrimitiveArgumentRoot());
             for (int call = 0; call < WARM; call++) {
                 assertNumber(session, "runEscape", 5L);
@@ -1902,12 +1864,10 @@ final class ProtosI115H7MethodCallConvergenceTest {
         try (ProtosStandaloneHostedSession session =
                 open("generic-unadmitted", METHOD_CALL)) {
             ProtosClosureValue anchor = session.prepareTopLevel("run").closureForTesting();
-            session.processContextForTesting().callForRuntime(() -> {
-                assertNull(ProtosExperimentalCallBinaryMethodNode.admittedTargetOrNull(
-                                anchor, ProtosLanguageContext.current()),
-                        "run is not a CopyArguments root: the ordinary send handles it");
-                return null;
-            });
+            // I115: no H7 admission exists; run keeps its own root.
+            assertNotNull(session.processContextForTesting().callForRuntime(() ->
+                    ProtosClosureCallPreparation.functionCallTarget(
+                            anchor, ProtosLanguageContext.current())));
         }
     }
 
@@ -1999,7 +1959,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
             ProtosStandaloneHostedSession session, ProtosClosureValue closure) {
         return session.processContextForTesting().callForRuntime(() ->
                 assertInstanceOf(ProtosBytecodeRootNode.class,
-                        ProtosExperimentalCallBinaryMethodNode.admittedTargetOrNull(
+                        ProtosClosureCallPreparation.functionCallTarget(
                                         closure, ProtosLanguageContext.current())
                                 .getRootNode()));
     }

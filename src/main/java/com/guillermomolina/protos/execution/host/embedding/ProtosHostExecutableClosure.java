@@ -36,7 +36,6 @@ import com.oracle.truffle.api.interop.UnsupportedTypeException;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
 import com.oracle.truffle.api.nodes.DirectCallNode;
-import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 import java.util.List;
 import java.util.Objects;
@@ -147,7 +146,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
             throw new IllegalStateException("host executable preparation requires an entered Context");
         }
         RootCallTarget target =
-                ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(closure, owner);
+                ProtosClosureCallPreparation.functionCallTarget(closure, owner);
         if (target == null) {
             throw new IllegalArgumentException(
                     "Closure has no Bytecode target in the owning Context");
@@ -175,8 +174,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         RootCallTarget target =
                 closure.nativeBody().isPresent()
                         ? null
-                        : ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
-                                closure, owner);
+                        : ProtosClosureCallPreparation.functionCallTarget(closure, owner);
         return new ProtosHostExecutableClosure(closure, caller, owner, target, embedding);
     }
 
@@ -214,120 +212,40 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         }
 
         /*
-         * I115-H6: the admitted source-backed host entry has exactly one
-         * guest invocation. No Process admission, RootActor ownership,
-         * host-entry extent, ReturnHome completion, continuation driver,
-         * failure mapping, or guest-result projection runs here; the raw
-         * guest-call result crosses the Polyglot boundary unchanged.
+         * I115: a source-backed host entry goes through the shared dispatcher
+         * (GraalPy CallNode). The callee root owns its ReturnHome; a pending
+         * outcome is driven by the host-entry suspension driver.
          */
-        @Specialization(
-                guards = {
-                    "receiver.target != null",
-                    "receiver.target == cachedTarget",
-                    "arguments.length <= 1",
-                    "receiver.closure.hasUnobservableInvocationReturnHomeForRuntime()"
-                },
-                limit = "3")
-        static Object direct(
-                ProtosHostExecutableClosure receiver,
-                Object[] arguments,
-                @Cached("receiver.target") RootCallTarget cachedTarget,
-                @Cached("create(cachedTarget)") DirectCallNode call)
-                throws UnsupportedTypeException {
-            Object supplied0 = receiver.admitSmallFastHostArgument(arguments);
-            Object[] frame =
-                    arguments.length == 0
-                            ? ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
-                                    receiver.closure, receiver.caller)
-                            : ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                                    receiver.closure, receiver.caller, supplied0);
-            return hostResult(receiver, call.call(frame));
-        }
-
-        /** I115-H6: megamorphic physical target dispatch with the same single invocation. */
-        @Specialization(
-                guards = {"receiver.target != null", "arguments.length <= 1",
-                    "receiver.closure.hasUnobservableInvocationReturnHomeForRuntime()"},
-                replaces = "direct")
-        static Object indirect(
-                ProtosHostExecutableClosure receiver,
-                Object[] arguments,
-                @Cached IndirectCallNode call)
-                throws UnsupportedTypeException {
-            Object supplied0 = receiver.admitSmallFastHostArgument(arguments);
-            Object[] frame =
-                    arguments.length == 0
-                            ? ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
-                                    receiver.closure, receiver.caller)
-                            : ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                                    receiver.closure, receiver.caller, supplied0);
-            return hostResult(receiver, call.call(receiver.target, frame));
-        }
-
-        /*
-         * I115_C5F_OBSERVABLE_HOME_FALLBACK
-         *
-         * H6 remains the direct, allocation-minimal host entry for
-         * a Closure whose ReturnHome is proven unobservable.
-         * An owning observable home needs ordinary B5 admission
-         * and completion; it must not enter through NoHome.
-         */
-        @Specialization(guards = {
-                "receiver.target != null",
-                "arguments.length <= 1",
-                "!receiver.closure.hasUnobservableInvocationReturnHomeForRuntime()"
-        })
-        static Object observableHome(
+        @Specialization(guards = "receiver.target != null")
+        static Object source(
                 ProtosHostExecutableClosure receiver,
                 Object[] arguments,
                 @Bind("$node") Node node,
-                @Cached IndirectCallNode call)
+                @Cached ProtosFunctionCallDispatchers.CallNode callNode)
                 throws ArityException, UnsupportedTypeException {
             Object[] supplied = receiver.admitArguments(arguments, node);
-            return executeObservableHome(receiver, supplied, call);
-        }
-
-        /*
-         * Cold semantic fallback. The specialized H6 direct/indirect
-         * paths never enter this helper or allocate a prepared call.
-         */
-        @TruffleBoundary
-        private static Object executeObservableHome(
-                ProtosHostExecutableClosure receiver,
-                Object[] supplied,
-                IndirectCallNode call) {
             ProtosEmbeddedProcess embedding = receiver.embedding;
-            Thread token =
-                    embedding == null ? null : embedding.enterRootActor();
+            Thread token = embedding == null ? null : embedding.enterRootActor();
             HostEntryExtent previous =
-                    embedding == null
-                            ? null
-                            : embedding.beginHostEntryExtent(token);
-
+                    embedding == null ? null : embedding.beginHostEntryExtent(token);
             try {
-                ProtosPreparedCalls.OrdinarySourceCall prepared =
-                        receiver.prepare(supplied);
-
+                Object outcome;
                 try {
-                    Object outcome =
-                            ProtosBytecodeRootNode.EnterClosureCall
-                                    .ordinaryIndirect(prepared, call);
-
-                    if (ProtosTailCallContinuation.isPending(outcome)) {
-                        if (embedding == null) {
-                            ProtosTailCallContinuation.abandon(outcome);
-                            throw new IllegalStateException(
-                                    "a session host executable cannot drive"
-                                            + " a suspended continuation");
-                        }
-                        outcome = ProtosHostEntrySuspension.resumeAfterWaits(
-                                embedding, prepared, outcome);
-                    }
-
-                    return hostResult(receiver, prepared.finish(outcome));
-                } finally {
-                    prepared.complete();
+                    outcome =
+                            callNode.execute(
+                                    null,
+                                    false,
+                                    receiver.closure,
+                                    ProtosFrameArguments.functionCallArguments(supplied),
+                                    receiver.caller,
+                                    null);
+                } catch (ProtosBytecodeControlTransferException bridged) {
+                    throw bridged.transfer();
                 }
+                if (ProtosTailCallContinuation.isPending(outcome)) {
+                    outcome = drivePending(embedding, outcome);
+                }
+                return hostResult(receiver, outcome);
             } catch (ProtosSignalException failure) {
                 if (embedding != null) {
                     embedding.outermostEntryFailed(token, failure);
@@ -339,6 +257,16 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                     embedding.exitRootActor(token);
                 }
             }
+        }
+
+        @TruffleBoundary
+        private static Object drivePending(ProtosEmbeddedProcess embedding, Object outcome) {
+            if (embedding == null) {
+                ProtosTailCallContinuation.abandon(outcome);
+                throw new IllegalStateException(
+                        "a session host executable cannot drive a suspended continuation");
+            }
+            return ProtosHostEntrySuspension.resumeAfterWaits(embedding, outcome);
         }
 
         /*
@@ -400,23 +328,6 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         return admitted.length == 0 ? NO_SUPPLIED_ARGUMENTS : admitted;
     }
 
-    /**
-     * I115: admit Call0/Call1 without copying the host argument array.
-     * The null result denotes Call0 only; it is never a guest value.
-     */
-    private Object admitSmallFastHostArgument(Object[] arguments)
-            throws UnsupportedTypeException {
-        Object admitted = null;
-        if (arguments.length == 1) {
-            Object argument = arguments[0];
-            admitted =
-                    ProtosValueLookup.isProtosValue(argument)
-                            ? argument
-                            : admitHostScalar(arguments, argument);
-        }
-        return admitted;
-    }
-
     private void requireOwningContext(Node node) {
         if (ProtosLanguageContext.current(node) != owner) {
             CompilerDirectives.transferToInterpreterAndInvalidate();
@@ -462,31 +373,5 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         throw UnsupportedTypeException.create(
                 arguments,
                 "Protos host execution accepts only Protos values, Java integers, and Java Strings");
-    }
-
-    /**
-     * The compact prepared call one session-adapter execution enters; package-visible for
-     * structural tests. A session adapter never raises {@link UnsupportedTypeException}.
-     */
-    ProtosPreparedCalls.OrdinarySourceCall prepare(Object[] arguments, Node node)
-            throws ArityException {
-        try {
-            return prepare(admitArguments(arguments, node));
-        } catch (UnsupportedTypeException unexpected) {
-            throw new IllegalStateException("session adapter rejected a Protos argument", unexpected);
-        }
-    }
-
-    /**
-     * I102: the B5 direct Closure call of this adapter's Closure from its caller provenance.
-     */
-    private ProtosPreparedCalls.OrdinarySourceCall prepare(Object[] supplied) {
-        ProtosPreparedCalls.OrdinarySourceCall prepared =
-                (ProtosPreparedCalls.OrdinarySourceCall)
-                        ProtosClosureCallPreparation.finishDirectClosureCall(
-                                closure, target, supplied, caller);
-
-
-        return prepared;
     }
 }

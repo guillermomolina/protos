@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosDispatchTestSupport.DirectEntry;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -334,12 +335,12 @@ final class ProtosI115NCompactBooleanTest {
                     "the root keeps the compact lowering");
 
             // HIT: canonical true, then canonical false, both inline.
-            ProtosPreparedCalls.PreparedClosureCall taken =
+            DirectEntry taken =
                     fastDirect(run, module, new ProtosIntegerValue(1));
             assertEquals("1", integerValue(enter(taken)));
             assertSame(run, taken.targetArguments()[0],
                     "the inline path creates no Closure and publishes nothing");
-            ProtosPreparedCalls.PreparedClosureCall skipped =
+            DirectEntry skipped =
                     fastDirect(run, module, new ProtosIntegerValue(5));
             assertEquals("0", integerValue(enter(skipped)));
             assertSame(run, skipped.targetArguments()[0]);
@@ -463,35 +464,17 @@ final class ProtosI115NCompactBooleanTest {
     }
 
     private static RootCallTarget target(ProtosClosureValue closure) {
-        return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
-                closure, ProtosLanguageContext.currentIfEnteredForRuntime());
+        return ProtosDispatchTestSupport.target(closure);
     }
 
-    private static ProtosPreparedCalls.PreparedClosureCall fastDirect(
+    private static DirectEntry fastDirect(
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
-        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
-        ProtosClosureValue selected =
-                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
-        assertSame(closure, selected, "canonical direct Closure-call selection");
-        return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
-                false,
-                closure,
-                caller,
-                supplied,
-                selected,
-                selected.definition(),
-                entered,
-                selected.definition(),
-                entered,
-                target(closure));
+        // I115: the B5 header the shared dispatcher writes for a function call.
+        return ProtosDispatchTestSupport.direct(closure, caller, supplied);
     }
 
-    private static Object enter(ProtosPreparedCalls.PreparedClosureCall prepared) {
-        Object entered =
-                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
-                        IndirectCallNode.create());
-        return prepared.finish(entered);
+    private static Object enter(DirectEntry prepared) {
+        return ProtosDispatchTestSupport.enter(prepared);
     }
 
     private static List<String> instructionNames(ProtosClosureValue closure) {

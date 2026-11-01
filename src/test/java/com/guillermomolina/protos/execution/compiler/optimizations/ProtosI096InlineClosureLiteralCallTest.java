@@ -952,54 +952,6 @@ final class ProtosI096InlineClosureLiteralCallTest {
     }
 
     /**
-     * Carrier admission on legitimately constructed instances: a Closure with
-     * the canonical selection is admitted for its own plan; a mutable Closure
-     * instance whose own {@code call} slot overrides the selection, and a
-     * canonical instance checked against another definition's plan, are not,
-     * and both keep the ordinary prepared fallback.
-     */
-    @Test
-    void carrierAdmitsOnlyCanonicalSelectionOfTheLiteralsOwnPlan() throws Exception {
-        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
-            context.initialize(ProtosLanguage.ID);
-            context.enter();
-            try {
-                ProtosActivation module = new Probe().module();
-                // Created inside a maker Closure, as at a real inline site: a
-                // module-level literal owns a fresh ReturnHome and is never
-                // admitted. The instance override follows PERF042. All
-                // fixtures share one module, so each creates distinct names.
-                ProtosClosureValue canonical =
-                        closure("makeCanonical: () => { (v) => { v + 1 } }\nmakeCanonical()", module);
-                ProtosClosureValue other =
-                        closure("makeOther: () => { (v) => { v + 2 } }\nmakeOther()", module);
-                ProtosClosureValue overridden = closure("""
-                        makeOverridden: () => { (v) => { v + 1 } }
-                        f: makeOverridden()
-                        f.call: (v) => { 100 + v }
-                        f
-                        """, module);
-
-                var admitted = ProtosClosureCallPreparation.prepareInlineClosureLiteralCall(
-                        canonical, module, new Object[] {integerArgument(module)});
-                assertTrue(admitted.admits(planCell(canonical)),
-                        "canonical selection of the literal's own plan is admitted");
-                assertFalse(admitted.admits(planCell(other)),
-                        "definition identity of another literal never admits");
-
-                var rejected = ProtosClosureCallPreparation.prepareInlineClosureLiteralCall(
-                        overridden, module, new Object[] {integerArgument(module)});
-                assertFalse(rejected.admits(planCell(overridden)),
-                        "an instance-level call override is never inlined");
-                assertTrue(rejected.fallbackCall() != null);
-            } finally {
-                context.leave();
-            }
-        }
-        System.out.println("I096_A_INSTANCE_OVERRIDE_FALLBACK=YES");
-    }
-
-    /**
      * PLAT067-B: with a debugger attached before lowering, the literal still
      * runs inline: no callee frame is fabricated and no ordinary call is
      * retained, while the callee keeps its semantic RootTag inside run.

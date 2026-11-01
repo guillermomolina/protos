@@ -479,17 +479,98 @@ public final class ProtosIoReleaseCPrimeExecution {
                             builder.beginStoreLocal(completed);
                             builder.emitLoadConstant(false);
                             builder.endStoreLocal();
-
-                            builder.beginTryFinally(
-                                    () -> emitTransferCleanup(builder, locals, completed, cleanupCompleted));
-                            builder.beginTryCatch();
                             builder.beginBlock();
 
-                            emitStepLoop(builder, locals, false);
-
-                            builder.beginStoreLocal(completed);
-                            builder.emitLoadConstant(true);
+                            builder.beginStoreLocal(child);
+                            builder.beginCallRequest(false);
+                            builder.emitLoadLocal(prepared);
+                            builder.endCallRequest();
                             builder.endStoreLocal();
+
+                            builder.beginWhile();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+                            builder.emitLoadLocal(child);
+                            builder.endIsResultKind();
+                            builder.beginBlock();
+                            builder.beginStoreLocal(resume);
+                            builder.beginYield();
+                            builder.emitLoadLocal(child);
+                            builder.endYield();
+                            builder.endStoreLocal();
+                            builder.beginStoreLocal(child);
+                            builder.beginResumeDispatchedContinuation();
+                            builder.emitLoadLocal(child);
+                            builder.emitLoadLocal(resume);
+                            builder.endResumeDispatchedContinuation();
+                            builder.endStoreLocal();
+                            builder.endBlock();
+                            builder.endWhile();
+
+                            builder.beginStoreLocal(targetResult);
+                            builder.beginMaterializePrimitiveNumericCarrier();
+                            builder.emitLoadLocal(child);
+                            builder.emitLoadConstant(true);
+                            builder.endMaterializePrimitiveNumericCarrier();
+                            builder.endStoreLocal();
+
+                            builder.endBlock();
+
+                            builder.beginStoreLocal(invocation);
+                            builder.beginIoInvocationSucceeded(false);
+                            builder.emitLoadArgument(1);
+                            builder.emitLoadLocal(targetResult);
+                            builder.endIoInvocationSucceeded();
+                            builder.endStoreLocal();
+                            builder.endBlock();
+
+                            builder.beginBlock();
+                            builder.beginStoreLocal(invocation);
+                            builder.beginIoInvocationFailed();
+                            builder.emitLoadArgument(1);
+                            builder.endIoInvocationFailed();
+                            builder.endStoreLocal();
+                            builder.endBlock();
+
+                            builder.endTryCatch();
+
+                            builder.beginStoreLocal(lowerOutcome);
+                            builder.beginIoInvocationSucceeded(true);
+                            builder.emitLoadArgument(1);
+                            builder.emitLoadLocal(invocation);
+                            builder.endIoInvocationSucceeded();
+                            builder.endStoreLocal();
+
+                            builder.beginWhile();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+                            builder.emitLoadLocal(lowerOutcome);
+                            builder.endIsResultKind();
+                            builder.beginBlock();
+                            builder.beginStoreLocal(yielded);
+                            builder.emitLoadLocal(lowerOutcome);
+                            builder.endStoreLocal();
+                            builder.beginStoreLocal(resume);
+                            builder.beginYield();
+                            builder.emitLoadLocal(yielded);
+                            builder.endYield();
+                            builder.endStoreLocal();
+                            builder.beginStoreLocal(lowerOutcome);
+                            builder.beginResumeIoReleaseTargetFutureWait();
+                            builder.emitLoadArgument(0);
+                            builder.emitLoadLocal(yielded);
+                            builder.emitLoadLocal(resume);
+                            builder.endResumeIoReleaseTargetFutureWait();
+                            builder.endStoreLocal();
+                            builder.endBlock();
+                            builder.endWhile();
+
+                            builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.CHILD);
+                            builder.emitLoadArgument(1);
+                            builder.emitLoadLocal(lowerOutcome);
+                            builder.endStructuredAcceptChildOutcome();
+
+                            builder.endBlock();
+                            builder.endWhile();
+
                             builder.beginReturn();
                             builder.beginStructuredFinish();
                             builder.emitLoadArgument(1);

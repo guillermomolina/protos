@@ -889,8 +889,9 @@ final class ProtosI112TailContinuationTest {
                             module.context().createLocalSlot("target", closure);
                             assertInteger(2, site[0].getCallTarget().call(module));
                         }
-                        firstTarget[0] = ProtosClosureCallPreparation.definitionTarget(
-                                closure, creator, ProtosLanguageContext.current());
+                        // I115: the effective CallTarget the dispatcher selects here.
+                        firstTarget[0] = ProtosClosureCallPreparation.functionCallTarget(
+                                closure, ProtosLanguageContext.current());
                         carried[0] = closure;
                         return null;
                     });
@@ -923,8 +924,8 @@ final class ProtosI112TailContinuationTest {
                                 ProtosLanguageContext.current()
                                         .projectedBytecodeExecutionPlanCountForTesting(),
                                 "the site projects one Context-local plan instead of reusing a target");
-                        RootCallTarget secondTarget = ProtosClosureCallPreparation.definitionTarget(
-                                rebound, module, ProtosLanguageContext.current());
+                        RootCallTarget secondTarget = ProtosClosureCallPreparation.functionCallTarget(
+                                rebound, ProtosLanguageContext.current());
                         if (secondTarget != null) {
                             assertNotSame(firstTarget[0], secondTarget,
                                     "a Context-local target is never the other Context's target");
@@ -1203,7 +1204,9 @@ final class ProtosI112TailContinuationTest {
                 // Removed: the canonical selection is restored and direct again.
                 target.removeLocalSlot("call");
                 assertInteger(2, callWithTarget(root, prelude, domain, target));
-                assertSame(target, ProtosClosureCallPreparation.admittedInstanceOrNull(target, creator));
+                // I115: the per-instance admission certificate no longer exists;
+                // the shared dispatcher classifies by representation only.
+                assertTrue(ProtosFunctionCallDispatchers.CallNode.isSourceFunction(target));
             }
         }
     }
@@ -1261,7 +1264,8 @@ final class ProtosI112TailContinuationTest {
             // instance is rejected before any target work and runs generically.
             ProtosReturnHome materialized = new ProtosReturnHome();
             ProtosClosureValue homed = sibling(template, creator.receiver(), materialized);
-            assertTrue(ProtosClosureCallPreparation.admittedInstanceOrNull(homed, creator) == null);
+            // I115: there is no per-instance admission to reject; the outcome
+            // assertions below still hold for the captured materialized home.
             for (int run = 0; run < 3; run++) {
                 assertInteger(2, callWithTarget(root, prelude, domain, homed));
                 assertInteger(2, callWithTarget(root, prelude, domain, template));
