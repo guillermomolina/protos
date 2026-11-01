@@ -16,7 +16,8 @@
  */
 
 Arrays: import("std:collections/Array")
-Range: import("std:collections/Range")
+Ranges: import("std:collections/Range")
+Range: Ranges.Range
 
 // Each factory invocation owns a separate activation context holding its own index.
 makeSquare: (index) => {
@@ -27,7 +28,7 @@ makeSquare: (index) => {
 
 functions: []
 
-Range.each(0, 10, (index) => {
+Range(0, 10).each((index) => {
     functions = Arrays.append(functions, makeSquare(index))
 })
 

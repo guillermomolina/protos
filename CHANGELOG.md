@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.430-SNAPSHOT
+
+- `I136` (D232): replace the LIB017 `std:collections/Range` helpers with
+  directed Integer range prototypes, implemented entirely in Protos.
+  - Remove the module helpers `each(start, stop, block)` and
+    `reverseEach(start, stop, block)` without compatibility aliases; the
+    module now exports exactly the ordinary prototypes `Range` and
+    `InvertedRange`.
+  - Construct instances through the inherited `Object.call` and an `init`
+    that requires exactly two Integer bounds in the prototype's direction
+    (`start <= stop` or `start >= stop`), rejects initialization of any
+    receiver whose immediate parent is not the prototype, stores local
+    `start`/`stop` slots and freezes the instance.
+  - Add `eachStep` with a strictly positive (`Range`) or strictly negative
+    (`InvertedRange`) Integer step, `each` delegating to a unit step,
+    `invert` (swap bounds and direction) and `reverse` (same elements,
+    opposite order), all over unbounded Integer arithmetic.
+  - Migrate the FizzBuzz, 100 doors, value-capture and first-class-functions
+    examples, and rewrite the `range-core`, `range-callbacks-and-control` and
+    `module-surface-and-imports` conformance sources.
+
 ## 0.3.429-SNAPSHOT
 
 - `I135` (#1012, D230-C1): add the standard Core Integer bitwise messages

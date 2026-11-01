@@ -15,127 +15,189 @@
 
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
+Ranges: import("std:collections/Range")
+Range: Ranges.Range
+InvertedRange: Ranges.InvertedRange
 
 tests: Array(
     Test("range callback argument contract", () => {
-        tool009LegacyCase: () => {
-            Ranges: import("std:collections/Range")
-            Assertions: import("std:test/Assertions")
+        calls: 0
 
-            forwardCalls: 0
-            reverseCalls: 0
-
-            Ranges.each(2, 5, (value, ...rest) => {
-                Assertions.require(rest.size() == 0)
-                Assertions.require(value.parent() === SmallInteger)
-                forwardCalls = forwardCalls + 1
-            })
-
-            Ranges.reverseEach(2, 5, (value, ...rest) => {
-                Assertions.require(rest.size() == 0)
-                Assertions.require(value.parent() === SmallInteger)
-                reverseCalls = reverseCalls + 1
-            })
-
-            (forwardCalls == 3) && (reverseCalls == 3)
+        probe: (value, ...rest) => {
+            Assertions.require(rest.size() == 0)
+            Assertions.require(Integer.recognizes(value))
+            calls = calls + 1
         }
-        Assertions.require(tool009LegacyCase())
+
+        Range(2, 5).each(probe)
+        InvertedRange(5, 2).each(probe)
+        Range(2, 5).eachStep(2, probe)
+        InvertedRange(5, 2).eachStep(-2, probe)
+
+        Assertions.require(calls == 10)
+    }),
+    Test("range callback result ignored and null returned", () => {
+        trace: 0
+        callback: (value) => {
+            trace = trace * 10 + value
+            999
+        }
+
+        Assertions.require(Range(2, 5).each(callback) === null)
+        Assertions.require(InvertedRange(5, 2).each(callback) === null)
+        Assertions.require(Range(1, 5).eachStep(3, callback) === null)
+        Assertions.require(InvertedRange(5, 1).eachStep(-3, callback) === null)
+        Assertions.require(trace == 2345431452)
     }),
     Test("range callback error propagation", () => {
-        tool009LegacyCase: () => {
-            Ranges: import("std:collections/Range")
-
-            forwardError: Error()
-            reverseError: Error()
-
-            forwardExact: Error.handle(
+        exact: (run) => {
+            failure: Error()
+            Error.handle(
                 () => {
-                    Ranges.each(1, 4, (value) => {
+                    run((value) => {
                         if(value == 2) {
-                            forwardError.signal()
+                            failure.signal()
                         }
                         null
                     })
                     false
                 },
                 (caught) => {
-                    caught === forwardError
+                    caught === failure
                 }
             )
-
-            reverseExact: Error.handle(
-                () => {
-                    Ranges.reverseEach(1, 4, (value) => {
-                        if(value == 2) {
-                            reverseError.signal()
-                        }
-                        null
-                    })
-                    false
-                },
-                (caught) => {
-                    caught === reverseError
-                }
-            )
-
-            forwardExact && reverseExact
         }
-        Assertions.require(tool009LegacyCase())
-    }),
-    Test("range empty does not inspect callback", () => {
-        tool009LegacyCase: () => {
-            Ranges: import("std:collections/Range")
 
-            (Ranges.each(4, 4, 42) === null) &&
-                (Ranges.reverseEach(4, 4, 42) === null) &&
-                (Ranges.each(5, 2, 42) === null) &&
-                (Ranges.reverseEach(5, 2, 42) === null)
-        }
-        Assertions.require(tool009LegacyCase())
+        Assertions.require(exact((block) => { Range(1, 4).each(block) }))
+        Assertions.require(exact((block) => { InvertedRange(4, 1).each(block) }))
+        Assertions.require(exact((block) => { Range(0, 4).eachStep(2, block) }))
+        Assertions.require(exact((block) => { InvertedRange(4, 0).eachStep(-2, block) }))
     }),
     Test("range nonlocal return propagation", () => {
-        tool009LegacyCase: () => {
-            Ranges: import("std:collections/Range")
-
-            forwardProbe: () => {
-                Ranges.each(1, 6, (value) => {
-                    if(value == 3) {
-                        ^value
-                    }
-                })
-                99
-            }
-
-            reverseProbe: () => {
-                Ranges.reverseEach(1, 6, (value) => {
-                    if(value == 3) {
-                        ^value
-                    }
-                })
-                99
-            }
-
-            (forwardProbe() == 3) &&
-                (reverseProbe() == 3)
+        forwardProbe: () => {
+            Range(1, 6).each((value) => {
+                if(value == 3) {
+                    ^value
+                }
+            })
+            99
         }
-        Assertions.require(tool009LegacyCase())
+
+        reverseProbe: () => {
+            InvertedRange(6, 1).each((value) => {
+                if(value == 3) {
+                    ^value
+                }
+            })
+            99
+        }
+
+        forwardStepProbe: () => {
+            Range(1, 10).eachStep(2, (value) => {
+                if(value == 5) {
+                    ^value
+                }
+            })
+            99
+        }
+
+        reverseStepProbe: () => {
+            InvertedRange(10, 0).eachStep(-3, (value) => {
+                if(value == 4) {
+                    ^value
+                }
+            })
+            99
+        }
+
+        Assertions.require(forwardProbe() == 3)
+        Assertions.require(reverseProbe() == 3)
+        Assertions.require(forwardStepProbe() == 5)
+        Assertions.require(reverseStepProbe() == 4)
+    }),
+    Test("range ensure cleanup under error and nonlocal return", () => {
+        cleanups: 0
+        visited: 0
+
+        returnProbe: () => {
+            (() => {
+                InvertedRange(5, 0).each((value) => {
+                    visited = visited + 1
+                    (() => {
+                        if(value == 3) {
+                            ^value
+                        }
+                    }).ensure(() => {
+                        cleanups = cleanups + 1
+                    })
+                })
+                99
+            }).ensure(() => {
+                cleanups = cleanups + 10
+            })
+        }
+
+        Assertions.require(returnProbe() == 3)
+        Assertions.require(visited == 3)
+        Assertions.require(cleanups == 13)
+
+        failure: Error()
+        errorCleanups: 0
+        caughtExact: Error.handle(
+            () => {
+                (() => {
+                    Range(0, 5).eachStep(2, (value) => {
+                        (() => {
+                            if(value == 2) {
+                                failure.signal()
+                            }
+                        }).ensure(() => {
+                            errorCleanups = errorCleanups + 1
+                        })
+                    })
+                    false
+                }).ensure(() => {
+                    errorCleanups = errorCleanups + 10
+                })
+            },
+            (caught) => {
+                caught === failure
+            }
+        )
+
+        Assertions.require(caughtExact)
+        Assertions.require(errorCleanups == 12)
+    }),
+    Test("range empty does not inspect callback", () => {
+        Assertions.require(Range(4, 4).each(42) === null)
+        Assertions.require(InvertedRange(4, 4).each(42) === null)
+        Assertions.require(Range(4, 4).eachStep(3, 42) === null)
+        Assertions.require(InvertedRange(4, 4).eachStep(-3, 42) === null)
+        Assertions.require(Range(-1, -1).each(null) === null)
+    }),
+    Test("range malformed bounds are errors not empty traversals", () => {
+        Assertions.signals(Error, () => { Range(5, 2).each(42) })
+        Assertions.signals(Error, () => { InvertedRange(2, 5).each(42) })
     }),
     Test("range reached noninvokable callback rejection", () => {
-        tool009LegacyCase: () => {
-            Ranges: import("std:collections/Range")
-            Assertions: import("std:test/Assertions")
-
-            Assertions.signals(Error, () => {
-                Ranges.each(1, 2, 42)
-            })
-
-            Assertions.signals(Error, () => {
-                Ranges.reverseEach(1, 2, 42)
-            })
-
-            true
+        Assertions.signals(Error, () => { Range(1, 2).each(42) })
+        Assertions.signals(Error, () => { InvertedRange(2, 1).each(42) })
+        Assertions.signals(Error, () => { Range(1, 2).eachStep(5, 42) })
+        Assertions.signals(Error, () => { InvertedRange(2, 1).eachStep(-5, 42) })
+    }),
+    Test("range polymorphic callable objects", () => {
+        observed: 0
+        callback: {
+            call: (value, ...rest) => {
+                Assertions.require(rest.size() == 0)
+                observed = observed * 10 + value
+                999
+            }
         }
-        Assertions.require(tool009LegacyCase())
+
+        Assertions.require(Range(1, 4).each(callback) === null)
+        Assertions.require(InvertedRange(3, 0).eachStep(-2, callback) === null)
+        Assertions.require(observed == 12331)
     })
 )
 tests.freeze()

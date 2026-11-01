@@ -1027,6 +1027,39 @@ This is a good example of the Protos design principle "mechanisms over
 institutions": higher-level collection abstractions can be written in ordinary
 Protos when Core already supplies the necessary semantic foundation.
 
+## Directed Integer ranges
+
+`std:collections/Range` exports two ordinary prototypes, `Range` (ascending)
+and `InvertedRange` (descending). Extract them from the module, then invoke
+them like any other prototype:
+
+```protos
+Ranges: import("std:collections/Range")
+Range: Ranges.Range
+InvertedRange: Ranges.InvertedRange
+
+Range(0, 10).each(i => print(i))                  // 0 .. 9
+Range(0, 10).eachStep(2, i => print(i))           // 0, 2, 4, 6, 8
+InvertedRange(10, 0).eachStep(-2, i => print(i))  // 10, 8, 6, 4, 2
+
+Range(0, 3).invert().each(i => print(i))          // 3, 2, 1
+Range(0, 3).reverse().each(i => print(i))         // 2, 1, 0
+```
+
+The first bound is included and the second excluded. Bounds must be Integers
+in the prototype's direction: `Range(3, 0)` and `InvertedRange(0, 3)` signal an
+`Error`, while equal bounds give an empty range. The direction belongs to the
+prototype, so `Range.eachStep` needs a positive step and
+`InvertedRange.eachStep` a negative one.
+
+`invert()` swaps the bounds and the direction, so it can visit different
+elements. `reverse()` keeps exactly the same elements and reverses their
+order. Both answer new ranges; instances are frozen, with reflectable `start`
+and `stop` slots, and compare by identity.
+
+The earlier module helpers `Ranges.each(start, stop, block)` and
+`Ranges.reverseEach(start, stop, block)` no longer exist.
+
 ## Vectors and matrices
 
 Arrays hold any values. For numeric linear algebra, the Standard Library module

@@ -15,147 +15,298 @@
 
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
+Arrays: import("std:collections/Array")
+Ranges: import("std:collections/Range")
+Range: Ranges.Range
+InvertedRange: Ranges.InvertedRange
+
+collect: (range) => {
+    visited: Array()
+    range.each((value) => {
+        visited = Arrays.append(visited, value)
+    })
+    visited
+}
+
+collectStep: (range, step) => {
+    visited: Array()
+    range.eachStep(step, (value) => {
+        visited = Arrays.append(visited, value)
+    })
+    visited
+}
+
+sameValues: (actual, expected) => {
+    same: actual.size() == expected.size()
+    index: 0
+    while(same && (index < actual.size())) {
+        same = Integer.recognizes(actual[index]) && (actual[index] == expected[index])
+        index = index + 1
+    }
+    same
+}
+
+sameRange: (actual, prototype, start, stop) => {
+    (actual.parent() === prototype) &&
+        (actual.start == start) &&
+        (actual.stop == stop)
+}
 
 tests: Array(
+    Test("range construction and reflection", () => {
+        r: Range(0, 10)
+        ir: InvertedRange(3, 0)
+
+        Assertions.require(r.parent() === Range)
+        Assertions.require(ir.parent() === InvertedRange)
+        Assertions.require(r !== Range)
+        Assertions.require(Range(0, 10) !== r)
+
+        Assertions.require(r.hasSlot("start") && r.hasSlot("stop"))
+        Assertions.require(ir.hasSlot("start") && ir.hasSlot("stop"))
+        Assertions.require((r.start === 0) && (r.stop === 10))
+        Assertions.require((ir.start === 3) && (ir.stop === 0))
+        Assertions.require((r.slotValue("start") === 0) && (r.slotValue("stop") === 10))
+        Assertions.require((ir.slotValue("start") === 3) && (ir.slotValue("stop") === 0))
+
+        names: r.slotNames()
+        Assertions.require((names.size() == 2) && (names[0] == "start") && (names[1] == "stop"))
+        invertedNames: ir.slotNames()
+        Assertions.require((invertedNames.size() == 2) &&
+            (invertedNames[0] == "start") &&
+            (invertedNames[1] == "stop"))
+
+        Assertions.require(Range.hasSlot("start") === false)
+        Assertions.require(InvertedRange.hasSlot("stop") === false)
+    }),
+    Test("range instances are frozen", () => {
+        r: Range(0, 3)
+        ir: InvertedRange(3, 0)
+
+        Assertions.signals(Error, () => { r.start = 1 })
+        Assertions.signals(Error, () => { r.removeSlot("stop") })
+        Assertions.signals(Error, () => { r.extra: 1 })
+        Assertions.signals(Error, () => { ir.stop = 1 })
+        Assertions.signals(Error, () => { ir.removeSlot("start") })
+        Assertions.signals(Error, () => { ir.extra: 1 })
+
+        Assertions.require(sameRange(r, Range, 0, 3))
+        Assertions.require(sameRange(ir, InvertedRange, 3, 0))
+    }),
+    Test("range prototypes cannot be initialized directly", () => {
+        Assertions.signals(Error, () => { Range.init(0, 3) })
+        Assertions.signals(Error, () => { InvertedRange.init(3, 0) })
+
+        Assertions.require(Range.hasSlot("start") === false)
+        Assertions.require(Range.hasSlot("stop") === false)
+        Assertions.require(InvertedRange.hasSlot("start") === false)
+        Assertions.require(InvertedRange.hasSlot("stop") === false)
+
+        // The prototypes stay usable, hence not frozen by a failed init.
+        Assertions.require(sameRange(Range(0, 3), Range, 0, 3))
+        Assertions.require(sameRange(InvertedRange(3, 0), InvertedRange, 3, 0))
+    }),
+    Test("range bound ordering", () => {
+        Assertions.require(sameValues(collect(Range(0, 3)), Array(0, 1, 2)))
+        Assertions.signals(Error, () => { Range(3, 0) })
+        Assertions.require(collect(Range(3, 3)).size() == 0)
+
+        Assertions.require(sameValues(collect(InvertedRange(3, 0)), Array(3, 2, 1)))
+        Assertions.signals(Error, () => { InvertedRange(0, 3) })
+        Assertions.require(collect(InvertedRange(3, 3)).size() == 0)
+    }),
+    Test("range argument count rejection", () => {
+        Assertions.signals(Error, () => { Range() })
+        Assertions.signals(Error, () => { Range(0) })
+        Assertions.signals(Error, () => { Range(0, 1, 2) })
+        Assertions.signals(Error, () => { InvertedRange() })
+        Assertions.signals(Error, () => { InvertedRange(1) })
+        Assertions.signals(Error, () => { InvertedRange(2, 1, 0) })
+    }),
     Test("range bound domain rejection", () => {
-        tool009LegacyCase: () => {
-            Ranges: import("std:collections/Range")
-            Assertions: import("std:test/Assertions")
+        delegatedIntegerLookalike: (1) {}
 
-            callback: (value) => { null }
-            delegatedIntegerLookalike: (1) {}
+        Assertions.signals(Error, () => { Range(1.0, 3) })
+        Assertions.signals(Error, () => { Range(1, 3.0) })
+        Assertions.signals(Error, () => { Range(1 / 3, 3) })
+        Assertions.signals(Error, () => { Range(1, Complex(3, 1)) })
+        Assertions.signals(Error, () => { Range(null, 3) })
+        Assertions.signals(Error, () => { Range(1, null) })
+        Assertions.signals(Error, () => { Range(delegatedIntegerLookalike, 3) })
 
-            Assertions.signals(Error, () => {
-                Ranges.each(1.0, 3, callback)
-            })
-            Assertions.signals(Error, () => {
-                Ranges.each(1, 3.0, callback)
-            })
-            Assertions.signals(Error, () => {
-                Ranges.each(delegatedIntegerLookalike, 3, callback)
-            })
-
-            true
-        }
-        Assertions.require(tool009LegacyCase())
+        Assertions.signals(Error, () => { InvertedRange(3.0, 1) })
+        Assertions.signals(Error, () => { InvertedRange(3, 1.0) })
+        Assertions.signals(Error, () => { InvertedRange(7 / 2, 1) })
+        Assertions.signals(Error, () => { InvertedRange(Complex(3, 1), 1) })
+        Assertions.signals(Error, () => { InvertedRange(null, 1) })
+        Assertions.signals(Error, () => { InvertedRange(3, delegatedIntegerLookalike) })
     }),
-    Test("range bounds evaluated once", () => {
-        tool009LegacyCase: () => {
-            Ranges: import("std:collections/Range")
+    Test("range arguments evaluated once left to right", () => {
+        trace: 0
 
-            startCalls: 0
-            stopCalls: 0
-
-            start: () => {
-                startCalls = startCalls + 1
-                2
-            }
-
-            stop: () => {
-                stopCalls = stopCalls + 1
-                5
-            }
-
-            forward: 0
-            Ranges.each(start(), stop(), (value) => {
-                forward = forward * 10 + value
-            })
-
-            reverse: 0
-            Ranges.reverseEach(start(), stop(), (value) => {
-                reverse = reverse * 10 + value
-            })
-
-            (startCalls == 2) &&
-                (stopCalls == 2) &&
-                (forward == 234) &&
-                (reverse == 432)
+        start: (value) => {
+            trace = trace * 10 + 1
+            value
         }
-        Assertions.require(tool009LegacyCase())
+        stop: (value) => {
+            trace = trace * 10 + 2
+            value
+        }
+
+        r: Range(start(2), stop(5))
+        Assertions.require(trace == 12)
+
+        trace = 0
+        ir: InvertedRange(start(5), stop(2))
+        Assertions.require(trace == 12)
+
+        trace = 0
+        Assertions.signals(Error, () => { Range(start(5), stop(2)) })
+        Assertions.require(trace == 12)
+
+        trace = 0
+        Assertions.signals(Error, () => { InvertedRange(start(2.0), stop(1)) })
+        Assertions.require(trace == 12)
+
+        Assertions.require(sameValues(collect(r), Array(2, 3, 4)))
+        Assertions.require(sameValues(collect(ir), Array(5, 4, 3)))
     }),
-    Test("range order and return", () => {
-        tool009LegacyCase: () => {
-            Ranges: import("std:collections/Range")
+    Test("range order and steps", () => {
+        Assertions.require(sameValues(collect(Range(0, 10)), Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)))
+        Assertions.require(sameValues(collectStep(Range(0, 10), 2), Array(0, 2, 4, 6, 8)))
+        Assertions.require(sameValues(collect(InvertedRange(10, 0)), Array(10, 9, 8, 7, 6, 5, 4, 3, 2, 1)))
+        Assertions.require(sameValues(collectStep(InvertedRange(10, 0), -2), Array(10, 8, 6, 4, 2)))
 
-            forward: 0
-            forwardResult: Ranges.each(2, 5, (value) => {
-                forward = forward * 10 + value
-                999
-            })
+        Assertions.require(sameValues(collectStep(Range(0, 11), 3), Array(0, 3, 6, 9)))
+        Assertions.require(sameValues(collectStep(InvertedRange(11, 0), -3), Array(11, 8, 5, 2)))
 
-            reverse: 0
-            reverseResult: Ranges.reverseEach(2, 5, (value) => {
-                reverse = reverse * 10 + value
-                999
-            })
+        // Unit magnitude matches each.
+        Assertions.require(sameValues(collectStep(Range(2, 5), 1), Array(2, 3, 4)))
+        Assertions.require(sameValues(collectStep(InvertedRange(5, 2), -1), Array(5, 4, 3)))
 
-            (forwardResult === null) &&
-                (reverseResult === null) &&
-                (forward == 234) &&
-                (reverse == 432)
-        }
-        Assertions.require(tool009LegacyCase())
+        // A step larger than the element count visits only start.
+        Assertions.require(sameValues(collectStep(Range(4, 7), 100), Array(4)))
+        Assertions.require(sameValues(collectStep(InvertedRange(7, 4), -100), Array(7)))
+
+        // The final bound is excluded exactly.
+        Assertions.require(sameValues(collectStep(Range(0, 4), 2), Array(0, 2)))
+        Assertions.require(sameValues(collectStep(InvertedRange(4, 0), -2), Array(4, 2)))
+
+        // Equal bounds are empty for every valid step.
+        Assertions.require(collectStep(Range(5, 5), 1).size() == 0)
+        Assertions.require(collectStep(InvertedRange(5, 5), -1).size() == 0)
+    }),
+    Test("range invalid step rejection", () => {
+        Assertions.signals(Error, () => { Range(0, 3).eachStep(0, (value) => { null }) })
+        Assertions.signals(Error, () => { Range(0, 3).eachStep(-1, (value) => { null }) })
+        Assertions.signals(Error, () => { Range(0, 0).eachStep(0, (value) => { null }) })
+        Assertions.signals(Error, () => { Range(0, 0).eachStep(-1, (value) => { null }) })
+        Assertions.signals(Error, () => { Range(0, 3).eachStep(1.0, (value) => { null }) })
+        Assertions.signals(Error, () => { Range(0, 3).eachStep(null, (value) => { null }) })
+
+        Assertions.signals(Error, () => { InvertedRange(3, 0).eachStep(0, (value) => { null }) })
+        Assertions.signals(Error, () => { InvertedRange(3, 0).eachStep(1, (value) => { null }) })
+        Assertions.signals(Error, () => { InvertedRange(0, 0).eachStep(0, (value) => { null }) })
+        Assertions.signals(Error, () => { InvertedRange(0, 0).eachStep(1, (value) => { null }) })
+        Assertions.signals(Error, () => { InvertedRange(3, 0).eachStep(-1.0, (value) => { null }) })
     }),
     Test("range unbounded integer endpoints", () => {
-        tool009LegacyCase: () => {
-            Ranges: import("std:collections/Range")
+        base: 10000000000000000000000000000000000000000
+        maxLong: 9223372036854775807
+        minLong: -9223372036854775808
 
-            base: 10000000000000000000000000000000000000000
+        Assertions.require(sameValues(collect(Range(base, base + 3)), Array(base, base + 1, base + 2)))
+        Assertions.require(sameValues(collect(InvertedRange(base + 3, base)), Array(base + 3, base + 2, base + 1)))
+        Assertions.require(sameValues(collectStep(Range(base, base + 7), 3), Array(base, base + 3, base + 6)))
 
-            forwardCount: 0
-            forwardFirst: null
-            forwardLast: null
+        // Crossing the long boundaries neither wraps nor converts to Float.
+        Assertions.require(sameValues(collect(Range(maxLong - 1, maxLong + 2)),
+            Array(maxLong - 1, maxLong, maxLong + 1)))
+        Assertions.require(sameValues(collect(InvertedRange(minLong + 1, minLong - 2)),
+            Array(minLong + 1, minLong, minLong - 1)))
+        Assertions.require(sameValues(collectStep(Range(maxLong - 1, maxLong + 5), 3),
+            Array(maxLong - 1, maxLong + 2)))
+        Assertions.require(sameValues(collectStep(InvertedRange(minLong + 1, minLong - 5), -3),
+            Array(minLong + 1, minLong - 2)))
 
-            Ranges.each(base, base + 3, (value) => {
-                if(forwardCount == 0) {
-                    forwardFirst = value
-                }
-                forwardLast = value
-                forwardCount = forwardCount + 1
-            })
+        // Steps larger than long.
+        Assertions.require(sameValues(collectStep(Range(0, base), base), Array(0)))
+        Assertions.require(sameValues(collectStep(Range(minLong, maxLong + base), base),
+            Array(minLong, minLong + base)))
+        Assertions.require(sameValues(collectStep(InvertedRange(base, -base), -base), Array(base, 0)))
 
-            reverseCount: 0
-            reverseFirst: null
-            reverseLast: null
+        Assertions.require(sameRange(Range(maxLong, maxLong + 1).invert(), InvertedRange, maxLong + 1, maxLong))
+        Assertions.require(sameRange(Range(maxLong, maxLong + 1).reverse(), InvertedRange, maxLong, maxLong - 1))
+        Assertions.require(sameRange(InvertedRange(minLong, minLong - 1).invert(), Range, minLong - 1, minLong))
+        Assertions.require(sameRange(InvertedRange(minLong, minLong - 1).reverse(), Range, minLong, minLong + 1))
+        Assertions.require(sameRange(Range(-base, base).reverse(), InvertedRange, base - 1, -base - 1))
+        Assertions.require(sameValues(collect(Range(maxLong, maxLong + 1).reverse()), Array(maxLong)))
+    }),
+    Test("range invert and reverse", () => {
+        source: Range(0, 3)
 
-            Ranges.reverseEach(base, base + 3, (value) => {
-                if(reverseCount == 0) {
-                    reverseFirst = value
-                }
-                reverseLast = value
-                reverseCount = reverseCount + 1
-            })
+        inverted: source.invert()
+        Assertions.require(sameRange(inverted, InvertedRange, 3, 0))
+        Assertions.require(sameValues(collect(inverted), Array(3, 2, 1)))
 
-            (forwardCount == 3) &&
-                (forwardFirst == base) &&
-                (forwardLast == base + 2) &&
-                (reverseCount == 3) &&
-                (reverseFirst == base + 2) &&
-                (reverseLast == base)
-        }
-        Assertions.require(tool009LegacyCase())
+        reversed: source.reverse()
+        Assertions.require(sameRange(reversed, InvertedRange, 2, -1))
+        Assertions.require(sameValues(collect(reversed), Array(2, 1, 0)))
+
+        descending: InvertedRange(3, 0)
+
+        descendingInverted: descending.invert()
+        Assertions.require(sameRange(descendingInverted, Range, 0, 3))
+        Assertions.require(sameValues(collect(descendingInverted), Array(0, 1, 2)))
+
+        descendingReversed: descending.reverse()
+        Assertions.require(sameRange(descendingReversed, Range, 1, 4))
+        Assertions.require(sameValues(collect(descendingReversed), Array(1, 2, 3)))
+
+        // Receivers are unchanged and results are fresh frozen instances.
+        Assertions.require(sameRange(source, Range, 0, 3))
+        Assertions.require(sameRange(descending, InvertedRange, 3, 0))
+        Assertions.require(inverted !== source)
+        Assertions.signals(Error, () => { inverted.start = 9 })
+        Assertions.signals(Error, () => { reversed.extra: 1 })
+
+        Assertions.require(sameRange(source.invert().invert(), Range, 0, 3))
+        Assertions.require(sameRange(source.reverse().reverse(), Range, 0, 3))
+        Assertions.require(sameRange(descending.invert().invert(), InvertedRange, 3, 0))
+        Assertions.require(sameRange(descending.reverse().reverse(), InvertedRange, 3, 0))
+
+        Assertions.require(sameRange(Range(0, 0).invert(), InvertedRange, 0, 0))
+        Assertions.require(sameRange(Range(0, 0).reverse(), InvertedRange, -1, -1))
+        Assertions.require(collect(Range(0, 0).reverse()).size() == 0)
+
+        Assertions.require(sameValues(
+            collectStep(Range(0, 11).invert(), -3),
+            Array(11, 8, 5, 2)
+        ))
+
+        Assertions.require(sameValues(
+            collectStep(Range(0, 11).reverse(), -3),
+            Array(10, 7, 4, 1)
+        ))
     }),
     Test("range polymorphic callable", () => {
-        tool009LegacyCase: () => {
-            Ranges: import("std:collections/Range")
+        observed: 0
 
-            observed: 0
-
-            callback: {
-                call: (value) => {
-                    observed = observed * 10 + value
-                    999
-                }
+        callback: {
+            call: (value) => {
+                observed = observed * 10 + value
+                999
             }
-
-            forwardResult: Ranges.each(1, 4, callback)
-            reverseResult: Ranges.reverseEach(1, 4, callback)
-
-            (forwardResult === null) &&
-                (reverseResult === null) &&
-                (observed == 123321)
         }
-        Assertions.require(tool009LegacyCase())
+
+        forwardResult: Range(1, 4).each(callback)
+        reverseResult: InvertedRange(3, 0).each(callback)
+        stepResult: Range(1, 4).eachStep(2, callback)
+
+        Assertions.require(forwardResult === null)
+        Assertions.require(reverseResult === null)
+        Assertions.require(stepResult === null)
+        Assertions.require(observed == 12332113)
     })
 )
 tests.freeze()

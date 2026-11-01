@@ -15,9 +15,10 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Range: import("std:collections/Range")
+Ranges: import("std:collections/Range")
+Range: Ranges.Range
 
-Range.each(1, 101, (number) => {
+Range(1, 101).each((number) => {
     if(number.mod(15) == 0) {
         print("FizzBuzz")
     } else {

@@ -23,6 +23,26 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.485] - 2026-11-01
+
+### D232 — Standard Library directed Integer Range and InvertedRange
+- `spec/semantics/VALUES_AND_COLLECTIONS.md` **Standard Library directed
+  Integer Range and InvertedRange (D232)**: `std:collections/Range` exports
+  exactly the ordinary prototypes `Range` and `InvertedRange`, constructed
+  through inherited `Object.call` and `init` with exactly two Integer bounds;
+  the first bound is included and the second excluded. Wrongly ordered bounds
+  signal an `Error`; equal bounds are empty. Instances have their prototype as
+  immediate parent, reflectable local `start`/`stop` slots and are frozen.
+- `each`, `eachStep` (strictly positive step for `Range`, strictly negative
+  for `InvertedRange`, invalid steps rejected even when empty), `invert`
+  (swap bounds and direction) and `reverse` (same elements, opposite order)
+  are defined with exact formulas over arbitrary-precision Integers, ordinary
+  callback, Error, non-local return and `ensure` propagation, no implicit
+  Future await, and identity equality.
+- Incompatibly replaces the LIB017 helpers `each(start, stop, block)` and
+  `reverseEach(start, stop, block)`. No operator, syntax, Iterator protocol or
+  Core family is added.
+
 ## [0.1.484] - 2026-11-01
 
 ### D230-C1 — Standard Integer bitwise messages

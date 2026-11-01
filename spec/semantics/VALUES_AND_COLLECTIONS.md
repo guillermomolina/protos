@@ -1267,6 +1267,115 @@ guest collection for that complete vector. This uses the existing Array and
 frozen-object mechanisms for rest bindings rather than defining a second
 privileged argument-collection object model.
 
+## Standard Library directed Integer Range and InvertedRange (D232)
+
+This section is the normative owner of the Standard Library directed Integer
+range contract. It uses only existing object-model, invocation, module, and
+error mechanisms; it introduces no operator, syntax, Iterator protocol, or Core
+value family.
+
+### Module and construction
+
+The importable module `std:collections/Range` exports exactly two public slots,
+`Range` and `InvertedRange`. Each holds an ordinary object used as a prototype.
+The module itself is not invocable as a range factory; clients extract a
+prototype before invoking it:
+
+```protos
+Ranges: import("std:collections/Range")
+Range: Ranges.Range
+InvertedRange: Ranges.InvertedRange
+
+r: Range(0, 10)
+ir: InvertedRange(3, 0)
+```
+
+Neither prototype defines its own `call`. Construction is the inherited
+`Object.call`: it creates a fresh object whose parent is the invoked prototype
+and sends it ordinary `init` with the supplied arguments. Each prototype's own
+messages are exactly `init`, `each`, `eachStep`, `invert`, and `reverse`.
+
+`init` requires exactly two arguments; zero, one, or three or more arguments
+signal `Error`. It then requires that the receiver's immediate parent is the
+corresponding prototype (`Range` or `InvertedRange`), signalling `Error` before
+any slot is modified otherwise; initializing a prototype itself or an unrelated
+receiver is therefore rejected. Both arguments, `start` and `stop`, must satisfy
+`Integer.recognizes`; Floats, Fractions, Complex values, `null`, and objects
+that merely delegate to an Integer are rejected with `Error` and are never
+converted. Arguments are evaluated once, left to right, by ordinary invocation,
+including when construction is subsequently rejected.
+
+- `Range(start, stop)` requires `start <= stop` and denotes the ascending
+  half-open interval `[start, stop)`.
+- `InvertedRange(start, stop)` requires `start >= stop` and denotes the
+  descending interval from `start` inclusive down to `stop` exclusive.
+
+Bounds in the wrong order signal `Error`; they are not an empty traversal.
+Equal bounds are valid and denote an empty range in both prototypes.
+
+A successfully constructed instance has ordinary object identity, its immediate
+parent is `Range` or `InvertedRange` respectively, and it carries exactly two
+local slots, `start` and `stop`, holding the supplied Integers unchanged (no
+normalization or swapping). They are observable through ordinary slot access
+and reflection (`hasSlot`, `slotValue`, `slotNames`). After the slots are
+created the instance is frozen, so slot reassignment, creation, and removal
+fail normally. The prototypes themselves are not frozen by this contract.
+
+### Traversal
+
+`Range.eachStep(step, block)` requires `Integer.recognizes(step)` and
+`step > 0`; `InvertedRange.eachStep(step, block)` requires
+`Integer.recognizes(step)` and `step < 0`. A zero step, a step of the wrong
+sign, or a non-Integer step signals `Error`, even when the range is empty.
+Traversal starts at `start` and invokes `block(current)` while
+`current < stop` (`Range`) or `current > stop` (`InvertedRange`), advancing by
+`current + step`. Completion answers `null`.
+
+`Range.each(block)` is `this.eachStep(1, block)`, and `InvertedRange.each(block)`
+is `this.eachStep(-1, block)`.
+
+Each callback invocation is an ordinary invocation with exactly one Integer
+argument. Its result is ignored. An `Error` signalled by the callback, a
+non-local `^` return, and ordinary `ensure` unwinding propagate unchanged. A
+callback that is never reached is never inspected; a non-invocable callback
+that is reached fails by ordinary invocation. Traversal performs no implicit
+Future await.
+
+All arithmetic is arbitrary-precision Integer arithmetic; bounds and steps
+outside any host word range neither wrap nor convert to Float. Traversal does
+not materialize storage proportional to the number of visited elements.
+
+### Transformations
+
+Both transformations answer fresh frozen instances and leave the receiver
+unchanged:
+
+```text
+Range(a, b).invert()           -> InvertedRange(b, a)
+Range(a, b).reverse()          -> InvertedRange(b - 1, a - 1)
+InvertedRange(a, b).invert()   -> Range(b, a)
+InvertedRange(a, b).reverse()  -> Range(b + 1, a + 1)
+```
+
+`invert` swaps bounds and direction and does not necessarily preserve the
+visited elements; `reverse` preserves the unit-step elements and reverses
+their order:
+
+```text
+Range(0,3).invert()   -> InvertedRange(3,0)    visits 3, 2, 1
+Range(0,3).reverse()  -> InvertedRange(2,-1)   visits 2, 1, 0
+```
+
+### Equality and compatibility
+
+Range instances use ordinary identity equality and hashing; two instances with
+equal bounds are not structurally equal. No `size`, `contains`, indexing,
+Array conversion, or general iterator is defined.
+
+This contract deliberately and incompatibly replaces the original LIB017
+module helpers `each(start, stop, block)` and `reverseEach(start, stop, block)`;
+no compatibility alias exists.
+
 ## Standard Library Vector and Matrix (D214-S1)
 
 This section is the normative owner of the Standard Library Vector and Matrix

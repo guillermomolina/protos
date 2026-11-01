@@ -16,7 +16,8 @@
  */
 
 Math: import("std:math/Math")
-Range: import("std:collections/Range")
+Ranges: import("std:collections/Range")
+Range: Ranges.Range
 
 compose: (f, g) => {
     (value) => {
@@ -28,6 +29,6 @@ compose: (f, g) => {
 functions: [Math.sqrt, (x) => { x * 2.0 }, (x) => { x + 4.0 }]
 inverses: [(x) => { x * x }, (x) => { x / 2.0 }, (x) => { x - 4.0 }]
 
-Range.each(0, functions.size(), (index) => {
+Range(0, functions.size()).each((index) => {
     print(compose(functions[index], inverses[index])(9.0))
 })

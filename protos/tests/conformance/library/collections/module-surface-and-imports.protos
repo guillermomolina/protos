@@ -80,6 +80,31 @@ tests: Array(
             first === second
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("i136 range module public surface", () => {
+        Ranges: import("std:collections/Range")
+
+        Assertions.require(Ranges.hasSlot("Range"))
+        Assertions.require(Ranges.hasSlot("InvertedRange"))
+        Assertions.require(Ranges.hasSlot("each") === false)
+        Assertions.require(Ranges.hasSlot("reverseEach") === false)
+
+        Range: Ranges.Range
+        InvertedRange: Ranges.InvertedRange
+
+        Assertions.require(Range === Ranges.slotValue("Range"))
+        Assertions.require(InvertedRange === Ranges.slotValue("InvertedRange"))
+        Assertions.require(Range !== InvertedRange)
+        Assertions.require(Range.parent() === Object)
+        Assertions.require(InvertedRange.parent() === Object)
+
+        Assertions.require(Range(0, 2).parent() === Range)
+        Assertions.require(InvertedRange(2, 0).parent() === InvertedRange)
+
+        again: import("std:collections/Range")
+        Assertions.require(again === Ranges)
+        Assertions.require(again.Range === Range)
+        Assertions.require(again.InvertedRange === InvertedRange)
     })
 )
 tests.freeze()

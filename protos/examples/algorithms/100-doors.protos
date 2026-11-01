@@ -16,12 +16,13 @@
  */
 
 Arrays: import("std:collections/Array")
-Range: import("std:collections/Range")
+Ranges: import("std:collections/Range")
+Range: Ranges.Range
 
 doorsAfterPasses: (passes) => {
     doors: []
 
-    Range.each(0, 100, (index) => {
+    Range(0, 100).each((index) => {
         doors = Arrays.append(doors, false)
     })
 
@@ -46,7 +47,7 @@ doorsAfterPasses: (passes) => {
 
 finalDoors: doorsAfterPasses(100)
 
-Range.each(0, 100, (index) => {
+Range(0, 100).each((index) => {
     if(finalDoors[index]) {
         print(index + 1)
     }
