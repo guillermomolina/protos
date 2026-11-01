@@ -17,7 +17,6 @@
 
 /// Answers a fresh 32-octet Bytes value holding the SHA-256 digest of `bytes`.
 digest: (bytes) => {
-    mod32: 4294967296
     maxBytes: 2305843009213693951
 
     originalSize: bytes.size()
@@ -30,101 +29,33 @@ digest: (bytes) => {
     // argument validation without changing the digest input or result.
     ignoredBytesDomainValidation: Encoding.Latin1.decode(bytes)
 
-    powers: Array(
-        1,
-        2,
-        4,
-        8,
-        16,
-        32,
-        64,
-        128,
-        256,
-        512,
-        1024,
-        2048,
-        4096,
-        8192,
-        16384,
-        32768,
-        65536,
-        131072,
-        262144,
-        524288,
-        1048576,
-        2097152,
-        4194304,
-        8388608,
-        16777216,
-        33554432,
-        67108864,
-        134217728,
-        268435456,
-        536870912,
-        1073741824,
-        2147483648,
-        4294967296
-    )
+    mask32: 4294967295
 
     word32: (value) => {
-        value.mod(mod32)
+        value.bitAnd(mask32)
     }
 
     logicalShiftRight: (value, count) => {
-        word32(value).div(powers[count])
+        word32(value).shiftRight(count)
     }
 
     rotateRight: (value, count) => {
         source: word32(value)
-        lowPower: powers[count]
-        wrapPower: powers[32 - count]
 
-        word32(
-            source.div(lowPower) +
-            source.mod(lowPower) * wrapPower
-        )
-    }
-
-    xor3Table: Array(0, 1, 2, 3, 1, 0, 3, 2, 2, 3, 0, 1, 3, 2, 1, 0, 1, 0, 3, 2, 0, 1, 2, 3, 3, 2, 1, 0, 2, 3, 0, 1, 2, 3, 0, 1, 3, 2, 1, 0, 0, 1, 2, 3, 1, 0, 3, 2, 3, 2, 1, 0, 2, 3, 0, 1, 1, 0, 3, 2, 0, 1, 2, 3)
-    chooseTable: Array(0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 0, 2, 2, 1, 1, 3, 3, 0, 0, 2, 2, 1, 1, 3, 3, 0, 1, 0, 1, 0, 1, 0, 1, 2, 3, 2, 3, 2, 3, 2, 3, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3)
-    majorityTable: Array(0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 0, 1, 2, 3, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 2, 3, 1, 1, 3, 3, 0, 0, 2, 2, 0, 1, 2, 3, 2, 2, 2, 2, 2, 3, 2, 3, 0, 1, 2, 3, 1, 1, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3)
-
-    bitwisePair3: (left, middle, right, table) => {
-        a: word32(left)
-        b: word32(middle)
-        c: word32(right)
-        place: 1
-        result: 0
-        remaining: 16
-
-        while(remaining > 0) {
-            aPair: a.mod(4)
-            bPair: b.mod(4)
-            cPair: c.mod(4)
-
-            index: aPair * 16 + bPair * 4 + cPair
-            result = result + table[index] * place
-
-            a = a.div(4)
-            b = b.div(4)
-            c = c.div(4)
-            place = place * 4
-            remaining = remaining - 1
-        }
-
-        result
+        source.shiftRight(count).bitOr(word32(source.shiftLeft(32 - count)))
     }
 
     xor3: (left, middle, right) => {
-        bitwisePair3(left, middle, right, xor3Table)
+        word32(left).bitXor(word32(middle)).bitXor(word32(right))
     }
 
+    // (x & y) ^ (~x & z); bitNot is unbounded, so the final AND restores 32 bits.
     choose: (x, y, z) => {
-        bitwisePair3(x, y, z, chooseTable)
+        word32(x.bitAnd(y).bitXor(x.bitNot().bitAnd(z)))
     }
 
     majority: (x, y, z) => {
-        bitwisePair3(x, y, z, majorityTable)
+        word32(x.bitAnd(y).bitXor(x.bitAnd(z)).bitXor(y.bitAnd(z)))
     }
 
     upperSigma0: (value) => {

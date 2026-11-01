@@ -745,6 +745,121 @@ public final class ProtosNumericValueSupport {
         return bigResult(Operation.REMAINDER, left, right, prelude);
     }
 
+    /*
+     * D230-C1 (I135): unbounded two's-complement bitwise operations with infinite sign
+     * extension. AND, OR, XOR and NOT of signed-64 operands always stay signed-64; only a large
+     * operand reaches arbitrary precision.
+     */
+
+    public static Object bitAndIntegers(Object left, Object right, ProtosPrelude prelude) {
+        if (left instanceof ProtosIntegerValue a && right instanceof ProtosIntegerValue b) {
+            return integer(a.longValue() & b.longValue());
+        }
+        return bigBitwiseResult(BitwiseOperation.AND, left, right, prelude);
+    }
+
+    public static Object bitOrIntegers(Object left, Object right, ProtosPrelude prelude) {
+        if (left instanceof ProtosIntegerValue a && right instanceof ProtosIntegerValue b) {
+            return integer(a.longValue() | b.longValue());
+        }
+        return bigBitwiseResult(BitwiseOperation.OR, left, right, prelude);
+    }
+
+    public static Object bitXorIntegers(Object left, Object right, ProtosPrelude prelude) {
+        if (left instanceof ProtosIntegerValue a && right instanceof ProtosIntegerValue b) {
+            return integer(a.longValue() ^ b.longValue());
+        }
+        return bigBitwiseResult(BitwiseOperation.XOR, left, right, prelude);
+    }
+
+    /** The complement {@code -x - 1}. */
+    public static Object bitNotInteger(Object value, ProtosPrelude prelude) {
+        if (value instanceof ProtosIntegerValue a) {
+            return integer(~a.longValue());
+        }
+        return bigBitNot(value, prelude);
+    }
+
+    /**
+     * Exact {@code value * 2^count} for a non-negative Integer {@code count}. A nonzero result
+     * the implementation cannot represent fails as a resource failure, never truncated.
+     */
+    public static Object shiftLeftInteger(Object value, Object count, ProtosPrelude prelude) {
+        if (integerSignum(value) == 0) {
+            return integer(0L);
+        }
+        if (value instanceof ProtosIntegerValue a && count instanceof ProtosIntegerValue c) {
+            long x = a.longValue();
+            long n = c.longValue();
+            // Java masks shift counts, so the round-trip check is valid only below 63.
+            if (0L <= n && n < Long.SIZE - 1) {
+                long shifted = x << n;
+                if ((shifted >> n) == x) {
+                    return integer(shifted);
+                }
+            }
+        }
+        return bigShiftLeft(value, count, prelude);
+    }
+
+    /**
+     * {@code value / 2^count} rounded toward negative infinity for a non-negative Integer
+     * {@code count}. The count is never reduced modulo a host word width.
+     */
+    public static Object shiftRightInteger(Object value, Object count, ProtosPrelude prelude) {
+        if (value instanceof ProtosIntegerValue a) {
+            long x = a.longValue();
+            if (count instanceof ProtosIntegerValue c && c.longValue() < Long.SIZE) {
+                return integer(x >> c.longValue());
+            }
+            return integer(x < 0L ? -1L : 0L);
+        }
+        return bigShiftRight(value, count, prelude);
+    }
+
+    private enum BitwiseOperation {
+        AND,
+        OR,
+        XOR
+    }
+
+    @TruffleBoundary
+    private static Object bigBitwiseResult(
+            BitwiseOperation operation, Object left, Object right, ProtosPrelude prelude) {
+        BigInteger x = exactBigInteger(left);
+        BigInteger y = exactBigInteger(right);
+        BigInteger result = switch (operation) {
+            case AND -> x.and(y);
+            case OR -> x.or(y);
+            case XOR -> x.xor(y);
+        };
+        return integer(result, prelude);
+    }
+
+    @TruffleBoundary
+    private static Object bigBitNot(Object value, ProtosPrelude prelude) {
+        return integer(large(value).exactValue().not(), prelude);
+    }
+
+    @TruffleBoundary
+    private static Object bigShiftLeft(Object value, Object count, ProtosPrelude prelude) {
+        // value is nonzero here; a count beyond the host shift range cannot be represented.
+        if (!(count instanceof ProtosIntegerValue c) || c.longValue() > Integer.MAX_VALUE) {
+            throw new ArithmeticException("Integer shift result exceeds implementation resources");
+        }
+        return integer(exactBigInteger(value).shiftLeft((int) c.longValue()), prelude);
+    }
+
+    @TruffleBoundary
+    private static Object bigShiftRight(Object value, Object count, ProtosPrelude prelude) {
+        BigInteger x = large(value).exactValue();
+        // A count at or beyond the bit length leaves only the infinite sign extension.
+        if (!(count instanceof ProtosIntegerValue c) || c.longValue() >= x.bitLength()) {
+            return integer(x.signum() < 0 ? -1L : 0L);
+        }
+        return integer(x.shiftRight((int) c.longValue()), prelude);
+    }
+
     private enum Operation {
         ADD,
         SUBTRACT,

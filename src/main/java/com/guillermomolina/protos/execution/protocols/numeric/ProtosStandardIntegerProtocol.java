@@ -51,6 +51,75 @@ public final class ProtosStandardIntegerProtocol {
         installCanonical(integerPrototype, CanonicalIntegerOperation.QUOTIENT);
         installCanonical(integerPrototype, CanonicalIntegerOperation.REMAINDER);
         installSourceBackedSelector(integerPrototype, "_coreIntegerPercent", "%");
+        for (BitwiseIntegerOperation operation : BitwiseIntegerOperation.values()) {
+            installBitwise(integerPrototype, operation);
+        }
+    }
+
+    /**
+     * D230-C1 (I135): the standard unbounded two's-complement bitwise messages. They are
+     * ordinary native slots of the common Integer prototype, dispatched and overridable like
+     * any other message; no guarded fast path admits them.
+     */
+    private enum BitwiseIntegerOperation {
+        AND("bitAnd", 1, false),
+        OR("bitOr", 1, false),
+        XOR("bitXor", 1, false),
+        NOT("bitNot", 0, false),
+        SHIFT_LEFT("shiftLeft", 1, true),
+        SHIFT_RIGHT("shiftRight", 1, true);
+
+        private final String selector;
+        private final int arity;
+        private final boolean shift;
+
+        BitwiseIntegerOperation(String selector, int arity, boolean shift) {
+            this.selector = selector;
+            this.arity = arity;
+            this.shift = shift;
+        }
+    }
+
+    private static void installBitwise(
+            ProtosObjectValue integerPrototype, BitwiseIntegerOperation operation) {
+        if (integerPrototype.hasLocalSlot(operation.selector)) {
+            throw new IllegalStateException(
+                    "Core Integer already defines a local " + operation.selector + " slot");
+        }
+        integerPrototype.createLocalSlot(
+                operation.selector,
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) ->
+                                executeBitwise(operation, activation, supplied)));
+    }
+
+    private static Object executeBitwise(
+            BitwiseIntegerOperation operation,
+            ProtosActivation activation,
+            List<?> supplied) {
+        Object receiver = requireIntegerReceiver(activation);
+        if (supplied.size() != operation.arity) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        }
+        Object argument = operation.arity == 1 ? supplied.get(0) : null;
+        if (operation.arity == 1
+                && (!ProtosNumericValueSupport.isCurrentInteger(argument)
+                        || (operation.shift
+                                && ProtosNumericValueSupport.integerSignum(argument) < 0))) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        }
+        ProtosPrelude prelude = activation.prelude().orElseThrow(
+                () -> new IllegalStateException("Integer bitwise operation requires Core prelude"));
+        return switch (operation) {
+            case AND -> ProtosNumericValueSupport.bitAndIntegers(receiver, argument, prelude);
+            case OR -> ProtosNumericValueSupport.bitOrIntegers(receiver, argument, prelude);
+            case XOR -> ProtosNumericValueSupport.bitXorIntegers(receiver, argument, prelude);
+            case NOT -> ProtosNumericValueSupport.bitNotInteger(receiver, prelude);
+            case SHIFT_LEFT ->
+                    ProtosNumericValueSupport.shiftLeftInteger(receiver, argument, prelude);
+            case SHIFT_RIGHT ->
+                    ProtosNumericValueSupport.shiftRightInteger(receiver, argument, prelude);
+        };
     }
 
     /**

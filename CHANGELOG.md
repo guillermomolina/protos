@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.429-SNAPSHOT
+
+- `I135` (#1012, D230-C1): add the standard Core Integer bitwise messages
+  `bitAnd`, `bitOr`, `bitXor`, `bitNot`, `shiftLeft` and `shiftRight`.
+  - Unbounded two's-complement semantics with infinite sign extension;
+    `shiftRight` rounds toward negative infinity and `shiftLeft` multiplies
+    exactly by a power of two, both with non-negative Integer counts of any
+    magnitude and canonical SmallInteger/BigInteger normalization.
+  - Install them as ordinary native slots of the common Integer prototype,
+    validating receiver, arity, Integer arguments and shift counts with the
+    standard Error; signed-64 operands stay on primitive paths and large
+    operands use arbitrary precision behind Truffle boundaries. No guarded
+    fast path, Bytecode DSL operation or grammar change.
+  - Migrate the private SHA-256 word operations to the new messages,
+    removing the power and bit-pair lookup tables while keeping explicit
+    32-bit normalization and the public `digest(Bytes)` contract.
+  - Add the `integer/bitwise-messages` conformance source and update the
+    Core native-boundary architecture expectations.
+
 ## 0.3.428-SNAPSHOT
 
 - `I134` (D228-A1): add REPL Tab completion of receiver selectors.

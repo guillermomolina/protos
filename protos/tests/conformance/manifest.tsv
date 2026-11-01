@@ -7,6 +7,7 @@ integer/floating-division-errors.protos	suite-native	-
 integer/prototype-and-receiver.protos	suite-native	-
 integer/family-boundaries.protos	suite-native	-
 integer/primitive-call-boundaries.protos	suite-native	-
+integer/bitwise-messages.protos	suite-native	-
 float/arithmetic.protos	suite-native	-
 float/special-values.protos	suite-native	-
 float/domain-and-receiver-errors.protos	suite-native	-

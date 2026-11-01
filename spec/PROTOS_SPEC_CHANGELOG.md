@@ -23,6 +23,26 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.484] - 2026-11-01
+
+### D230-C1 — Standard Integer bitwise messages
+- `spec/semantics/VALUES_AND_COLLECTIONS.md` **Standard Integer bitwise
+  messages**: the common `Integer` prototype defines `bitAnd`, `bitOr`,
+  `bitXor`, `bitNot`, `shiftLeft` and `shiftRight` over the infinite
+  two's-complement bit sequence of an unbounded Integer. `bitNot()` is
+  `-x - 1`, `shiftLeft(n)` is exactly `x * 2^n`, and `shiftRight(n)` is
+  `x / 2^n` rounded toward negative infinity.
+- Receivers and arguments must be Integer values of either concrete family;
+  delegating objects, non-Integer arguments, wrong arity and negative shift
+  counts signal an `Error`, with no implicit conversion. Shift counts are
+  never reduced modulo a host width; a nonzero `shiftLeft` beyond
+  implementation resources is a resource failure, never a truncated result.
+- Results follow canonical SmallInteger/BigInteger normalization; lookup,
+  dispatch, extraction and overriding are ordinary. The former exclusion of
+  Integer bit-manipulation protocols is replaced by this section; wrapping
+  protocols remain excluded. No grammar operator or fixed-width family is
+  added, and `div`, `mod`, equality and dispatch are unchanged.
+
 ## [0.1.483] - 2026-10-30
 
 ### D225-B1 — Optional RootActor message-service bootstrap

@@ -79,7 +79,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/protocols/io/ProtosStandardBufferedByteIoProtocol.java", 4),
                     Map.entry("execution/protocols/actors/ProtosStandardErrorProtocol.java", 2),
                     Map.entry("execution/protocols/actors/ProtosStandardImportProtocol.java", 1),
-                    Map.entry("execution/protocols/numeric/ProtosStandardIntegerProtocol.java", 2),
+                    Map.entry("execution/protocols/numeric/ProtosStandardIntegerProtocol.java", 3),
                     Map.entry("execution/protocols/actors/ProtosStandardFutureProtocol.java", 2),
                     Map.entry("execution/protocols/numeric/ProtosStandardFloatProtocol.java", 2),
                     Map.entry("execution/protocols/numeric/ProtosStandardFractionProtocol.java", 5),
@@ -188,7 +188,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(39, actualCore.size());
-        assertEquals(144, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(145, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -262,7 +262,21 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "Integer",
                 prelude.integerPrototype(),
-                Set.of("call", "+", "-", "*", "/", "div", "mod", "recognizes"));
+                Set.of(
+                        "call",
+                        "+",
+                        "-",
+                        "*",
+                        "/",
+                        "div",
+                        "mod",
+                        "recognizes",
+                        "bitAnd",
+                        "bitOr",
+                        "bitXor",
+                        "bitNot",
+                        "shiftLeft",
+                        "shiftRight"));
         assertSourceBacked(prelude.integerPrototype(), "negated");
         assertSourceBacked(prelude.integerPrototype(), "%");
         // D197-C: the concrete Integer families own only their trusted recognizers.

@@ -1591,9 +1591,10 @@ component is materialized for the destination, and the value delegates to the
 within one transfer remain repeated references to one destination value. No
 source prototype, Prelude, or other source-owned object crosses with it.
 
-Integer-only bit-manipulation or explicit wrapping protocols are not added by
-this section. Libraries may define such ordinary messages, but portable Core
-v0.1 code cannot infer an unstated wrapping, widening, or host-word behavior from
+The only standard Integer bit-manipulation protocol is **Standard Integer
+bitwise messages** below. Explicit wrapping protocols are not added by this
+section. Libraries may define such ordinary messages, but portable Core v0.1
+code cannot infer an unstated wrapping, widening, or host-word behavior from
 the standard arithmetic rules below.
 
 ### Numeric literals
@@ -1812,6 +1813,62 @@ For `div`, `mod`, and `%`:
 - the result is an exact `Integer`.
 
 `Float` has no standard `div`, `mod`, or `%` numeric behavior in Core v0.1.
+
+### Standard Integer bitwise messages
+
+The common `Integer` prototype defines six standard messages (D230-C1):
+
+| Message | Result |
+|---|---|
+| `x.bitAnd(y)` | bitwise AND of `x` and `y` |
+| `x.bitOr(y)` | bitwise OR of `x` and `y` |
+| `x.bitXor(y)` | bitwise exclusive OR of `x` and `y` |
+| `x.bitNot()` | the complement of `x`, equal to `-x - 1` |
+| `x.shiftLeft(n)` | `x * 2^n`, exactly |
+| `x.shiftRight(n)` | `x / 2^n` rounded toward negative infinity |
+
+Every Integer is interpreted as its infinite two's-complement bit sequence: a
+non-negative value has infinitely many leading zero bits and a negative value
+infinitely many leading one bits. `bitAnd`, `bitOr`, `bitXor`, and `bitNot`
+operate on those infinite sequences, so the results are mathematically
+unbounded and independent of the concrete family and of any physical
+representation. In particular, `(-1).bitAnd(y) == y`, `(-1).bitXor(y) ==
+y.bitNot()`, and `0.bitNot() == -1`.
+
+`shiftRight` is an arithmetic shift: `(-3).shiftRight(1) == -2`, whereas
+`(-3).div(2) == -1` under the truncating `div` rule above. A shift count at or
+beyond the significant width of the receiver yields `0` for a non-negative
+receiver and `-1` for a negative receiver; the count is never reduced modulo a
+host word width.
+
+Validation:
+
+- the receiver must be an `Integer` value of either concrete family; an
+  ordinary object that delegates to `Integer`, `SmallInteger`, `BigInteger`, or
+  to an Integer value is not an Integer and signals an `Error`;
+- `bitAnd`, `bitOr`, `bitXor`, `shiftLeft`, and `shiftRight` take exactly one
+  argument and `bitNot` takes none; any other argument count signals an
+  `Error`;
+- the argument must be an `Integer`; a Float, Fraction, Complex, Boolean,
+  String, `null`, or other non-Integer value signals an `Error`, and no
+  implicit conversion is performed;
+- a shift count must be a non-negative `Integer` of either concrete family; a
+  negative count signals an `Error` and never reverses the shift direction.
+
+There is no wrapping, saturation, truncation to a machine width, or semantic
+limit derived from a host integer width, for either the operands or the shift
+count. A `shiftRight` count of any magnitude, including one beyond the host
+integer range, produces the mathematical result. A `shiftLeft` of zero is `0`
+for every count. A nonzero `shiftLeft` whose exact result exceeds
+implementation resources is a resource failure under the general unbounded
+Integer rule above; it never produces a truncated or masked result.
+
+Results are exact Integers normalized to their concrete family, so a result
+that leaves the signed-64 range is a `BigInteger` and a result that returns
+into it is a `SmallInteger`. These messages are ordinary slots of the common
+`Integer` prototype: lookup, dispatch, extraction, and user overriding follow
+the ordinary rules, and the numeric rules of **Errors, effects, transfer, and
+optimization boundary** below apply. No grammar operator denotes them.
 
 ### Float format, precision, and arithmetic
 
