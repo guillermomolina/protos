@@ -1582,8 +1582,10 @@ final class CanonicalToBytecodeLowerer {
                     // Return is the root's last operation: no implicit fallthrough.
                     builder.beginReturn();
                     beginStatement(builder, last);
-                    experimentalCallRoot = emitCall(builder, last);
+                    emitCall(builder, last);
                     endStatement(builder);
+                    experimentalCallRoot =
+                            isExperimentalLocalUnaryClosureCall(sequence, last);
                     builder.endReturn();
                 } else if (admitsTerminalMethodSend(last)) {
                     /*
@@ -4427,7 +4429,7 @@ final class CanonicalToBytecodeLowerer {
      * The remaining zero/variadic operations are migration dependencies
      * and will be replaced when their consumers are moved.
      */
-    private boolean emitCall(
+    private void emitCall(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression) {
 
@@ -4489,8 +4491,41 @@ final class CanonicalToBytecodeLowerer {
 
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
+    }
 
-        return false;
+    /**
+     * I115 EXPERIMENTAL: whether the terminal Call1 invokes an ordinary
+     * Closure local created exactly once in this root's Sequence by a
+     * Closure that neither captures its creator's context nor may observe
+     * its ReturnHome. Only such a root runs the experimental callee context
+     * and returns the call result without carrier projection. Decided from
+     * compilation facts alone, never from a name.
+     */
+    private boolean isExperimentalLocalUnaryClosureCall(
+            CanonicalSequence sequence,
+            CanonicalExpression last) {
+        if (!(last instanceof CanonicalCall call)
+                || call.arguments().size() != 1
+                || !(call.receiver() instanceof CanonicalLookup lookup)
+                || !currentRootOrdinaryClosureLocals.contains(lookup.name())) {
+            return false;
+        }
+        CanonicalClosure created = null;
+        int creations = 0;
+        for (CanonicalExpression expression : sequence.expressions()) {
+            if (expression instanceof CanonicalCreate create
+                    && create.name().equals(lookup.name())) {
+                creations++;
+                created = create.value() instanceof CanonicalClosure closure
+                        ? closure
+                        : null;
+            }
+        }
+        return creations == 1
+                && created != null
+                && !CanonicalCompilationFacts.capturesCreatorContext(
+                        created, currentRootAnalysis)
+                && !compilationFacts.mayObserveReturnHome(created);
     }
 
     private static boolean isTerminalCallOperand(CanonicalExpression expression) {

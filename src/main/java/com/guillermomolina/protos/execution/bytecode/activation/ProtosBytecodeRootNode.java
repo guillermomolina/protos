@@ -3402,9 +3402,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      *
      * <p>I115-H (EXPERIMENTAL): when {@code mayObserveReturnHome} (the
      * lowering's {@code CanonicalCompilationFacts#mayObserveReturnHome}) is
-     * also false, both non-capturing specializations build the lightweight
-     * {@link ProtosClosureValue#experimentalNonCapturing} representation and
-     * consult neither the creator's activation nor its frame arguments. A
+     * also false, the single {@code nonCapturing} specialization builds the
+     * lightweight {@link ProtosClosureValue#experimentalNonCapturing}
+     * representation without binding the frame, so neither the creator's
+     * activation nor its frame arguments are consulted. A
      * definition that may observe its ReturnHome ({@code ^}) keeps the I115-G
      * construction with the creator's ReturnHome. The capturing
      * specializations are unchanged.
@@ -3416,6 +3417,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class MaterializeCurrentClosure {
         @Specialization(guards = {
                 "!capturesCreatorContext",
+                "!mayObserveReturnHome"})
+        public static ProtosClosureValue nonCapturing(
+                boolean compactCapture,
+                boolean capturesCreatorContext,
+                boolean mayObserveReturnHome,
+                CanonicalClosure definition,
+                ProtosClosureExecutionPlanCell executionPlanCell) {
+            return ProtosClosureValue.experimentalNonCapturing(
+                    definition, executionPlanCell.plan());
+        }
+
+        @Specialization(guards = {
+                "!capturesCreatorContext",
+                "mayObserveReturnHome",
                 "hasPublishedActivation(frame)"})
         public static ProtosClosureValue publishedWithoutCreatorContext(
                 boolean compactCapture,
@@ -3424,10 +3439,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {
-            if (!mayObserveReturnHome) {
-                return ProtosClosureValue.experimentalNonCapturing(
-                        definition, executionPlanCell.plan());
-            }
             ProtosActivation activation =
                     ProtosFrameArguments.publishedActivation(frame.getArguments());
             return new ProtosClosureValue(
@@ -3442,6 +3453,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(guards = {
                 "!capturesCreatorContext",
+                "mayObserveReturnHome",
                 "!hasPublishedActivation(frame)"})
         public static ProtosClosureValue compactWithoutCreatorContext(
                 boolean compactCapture,

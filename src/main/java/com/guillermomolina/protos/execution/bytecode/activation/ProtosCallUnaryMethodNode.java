@@ -19,11 +19,12 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
 import com.guillermomolina.protos.execution.ProtosClosureCallPreparation.DirectClosureExecutableFacts;
-import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
+import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
+import com.oracle.truffle.api.bytecode.BytecodeTier;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
 import com.oracle.truffle.api.bytecode.ForceQuickening;
 import com.oracle.truffle.api.bytecode.OperationProxy;
@@ -42,9 +43,13 @@ import com.oracle.truffle.api.nodes.Node;
 /**
  * Fixed-arity unary callable invocation.
  *
- * A single direct specialization owns the source-function call site.
- * There is no separate definition-keyed direct specialization, terminal
- * PIC or lowering-time recursion-specific call operation.
+ * A single direct specialization owns the source-function call site. Its
+ * PIC is keyed by Closure identity (weakly cached, limit 3) under the
+ * existing root-call, code and Context-projection assumptions. Saturation
+ * replaces it with the generic specialization, which reports the
+ * megamorphic transition to the runtime once per cached installation.
+ * There is no definition-keyed direct specialization or lowering-time
+ * recursion-specific call operation.
  */
 @GenerateUncached
 @GenerateInline(false)
@@ -58,31 +63,36 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             VirtualFrame frame, boolean terminal,
             Object callable, Object argument);
 
-        @NonIdempotent
-        static boolean canonicalCallSelection(
-                ProtosClosureValue callable) {
-            return ProtosClosureCallPreparation
-                    .directClosureCallSelectionWithoutPreludeOrNull(callable)
-                    == callable;
-        }
+    /*
+     * I115 (GraalPy CallUnaryMethodNode.callPFunction): the entry is keyed
+     * by the identity of the concrete Closure object, held weakly. Under the
+     * canonical root Object.call assumption only the instance check runs on
+     * a hit, after the argument was evaluated, so a local call slot created
+     * meanwhile is still observed.
+     */
+    @NonIdempotent
+    static boolean directInstance(ProtosClosureValue callable) {
+        return ProtosClosureCallPreparation
+                .directClosureInstanceUnderGuardedRootCallOrNull(callable)
+                == callable;
+    }
 
     @ForceQuickening
     @Specialization(
             guards = {
                 "terminal",
-                "canonicalCallSelection(callable)",
-                "callable.hasUnobservableInvocationReturnHomeForRuntime()",
-                "definition != null",
-                "definition == cachedDefinition",
-                "sourcePlan != null",
-                "sourcePlan == cachedPlan",
-                "enteredContext != null",
+                "callable == cachedCallable",
                 "enteredContext == cachedContext",
-                "projectionRequired == cachedProjection",
+                "directInstance(callable)",
+                "cachedUnobservableHome",
                 "cachedFacts != null",
                 "cachedTarget != null"
             },
-            assumptions = "cachedFacts.rootCallStability()",
+            assumptions = {
+                "rootCallStabilityOrNull(cachedFacts)",
+                "cachedCodeStable",
+                "cachedProjectionStable"
+            },
             excludeForUncached = true,
             limit = "3")
     static Object callPFunction(
@@ -91,25 +101,21 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             ProtosClosureValue callable,
             Object argument,
             @Bind("bytecodeOf($node)") BytecodeNode bytecodeNode,
-            @Bind("callable.definition()")
-                    CanonicalClosure definition,
-            @Bind("callable.preparedExecutionPlanOrNullForRuntime()")
-                    ProtosClosureExecutionPlan sourcePlan,
             @Bind("currentContext($node)")
                     ProtosLanguageContext enteredContext,
-            @Bind("callable.requiresContextLocalExecutionProjectionForRuntime()")
-                    boolean projectionRequired,
-            @Cached("definition")
-                    CanonicalClosure cachedDefinition,
-            @Cached("sourcePlan")
-                    ProtosClosureExecutionPlan cachedPlan,
+            @Cached(value = "callable", weak = true)
+                    ProtosClosureValue cachedCallable,
             @Cached("enteredContext")
                     ProtosLanguageContext cachedContext,
-            @Cached("projectionRequired")
-                    boolean cachedProjection,
+            @Cached("callable.hasUnobservableInvocationReturnHomeForRuntime()")
+                    boolean cachedUnobservableHome,
+            @Cached("callable.codeStableAssumptionForRuntime()")
+                    Assumption cachedCodeStable,
+            @Cached("callable.contextProjectionStabilityForRuntime()")
+                    Assumption cachedProjectionStable,
             @Cached("factsFor(callable, enteredContext)")
                     DirectClosureExecutableFacts cachedFacts,
-            @Cached("cachedFacts.target()")
+            @Cached("targetOrNull(cachedFacts)")
                     RootCallTarget cachedTarget,
             @Cached("createDirectCallNodeOrNull(cachedTarget)")
                     DirectCallNode call,
@@ -151,7 +157,15 @@ abstract class ProtosCallUnaryMethodNode extends Node {
         return outcome;
     }
 
-    @Specialization
+    /*
+     * replaces retires the identity PIC on saturation. GraalPy declares
+     * @Megamorphic here; for this operation the generated polymorphism check
+     * reads a state field (state_0_) the generated node does not have, so the
+     * same runtime notification is sent through the explicit Truffle API:
+     * reportMegamorphicInstallation runs once, as the initializer of this
+     * specialization's instance in the cached interpreter.
+     */
+    @Specialization(replaces = "callPFunction")
     @InliningCutoff
     static Object call(
             VirtualFrame frame,
@@ -160,7 +174,10 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             Object argument,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Bind("bytecodeOf($node)") BytecodeNode bytecodeNode,
-            @Cached IndirectCallNode indirectCall) {
+            @Cached IndirectCallNode indirectCall,
+            @Cached(value = "reportMegamorphicInstallation($node)",
+                    uncached = "false")
+                    boolean megamorphicReported) {
 
         Object caller =
                 ProtosBytecodeRootNode.InvokeClosureOneTail.callerReference(frame);
@@ -196,19 +213,24 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                         closure, context);
     }
 
+    static RootCallTarget targetOrNull(
+            DirectClosureExecutableFacts facts) {
+        return facts == null ? null : facts.target();
+    }
+
     static DirectCallNode createDirectCallNodeOrNull(
             RootCallTarget target) {
         return target == null ? null : DirectCallNode.create(target);
     }
 
-    static RootCallTarget targetFor(
-            ProtosClosureValue function,
-            ProtosLanguageContext context) {
-        if (function == null || function.nativeBody().isPresent()) {
-            return null;
-        }
-        return ProtosGuardedSendSelection.fastOrdinarySendTarget(
-                function, context);
+    /*
+     * Installation only. A rejected entry has no facts: the null assumption
+     * is invalid for the DSL (Assumption.isValidAssumption), so the direct
+     * entry is never installed and the call takes the generic fallback.
+     */
+    static Assumption rootCallStabilityOrNull(
+            DirectClosureExecutableFacts facts) {
+        return facts == null ? null : facts.rootCallStability();
     }
 
     /* Installation only: the target's root, whose caller needs are read. */
@@ -217,6 +239,19 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                         && target.getRootNode() instanceof ProtosBytecodeRootNode callee
                 ? callee
                 : null;
+    }
+
+    /*
+     * Installation only. The uncached interpreter uses the constant uncached
+     * value instead and has no specialization to split; the tier check keeps
+     * any non-cached evaluation from reporting.
+     */
+    static boolean reportMegamorphicInstallation(Node node) {
+        if (BytecodeNode.get(node).getTier() != BytecodeTier.CACHED) {
+            return false;
+        }
+        node.reportPolymorphicSpecialize();
+        return true;
     }
 
     static BytecodeNode bytecodeOf(Node node) {
