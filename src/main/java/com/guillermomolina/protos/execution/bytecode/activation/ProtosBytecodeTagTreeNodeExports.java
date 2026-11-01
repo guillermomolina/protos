@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.execution;
 
 
-import com.guillermomolina.protos.execution.ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
@@ -67,8 +66,7 @@ final class ProtosBytecodeTagTreeNodeExports {
         if (frame == null || !inSemanticActivationRoot(node)) {
             return false;
         }
-        return inlineCallbackCall(node, frame.materialize()) != null
-                || ProtosFrameArguments.hasActivation(frame);
+        return ProtosFrameArguments.hasActivation(frame);
     }
 
     @ExportMessage
@@ -79,17 +77,6 @@ final class ProtosBytecodeTagTreeNodeExports {
             throws UnsupportedMessageException {
         if (!hasScope(node, frame)) {
             throw UnsupportedMessageException.create();
-        }
-        PreparedInlineLiteralCall inline = inlineCallbackCall(node, frame.materialize());
-        if (inline != null) {
-            java.util.Map<String, Object> frameBindings =
-                    inlineCallbackFrameBindings(node, frame.materialize());
-            ProtosActivation activation =
-                    frameBindings == null
-                            ? inline.activation()
-                            : ProtosInlineCallbackFrameBindings.durableActivationForTooling(
-                                    inline, frameBindings);
-            return debuggerScope(activation);
         }
         ProtosActivation activation = ProtosFrameArguments.activation(frame);
         projectFrameNativeBindings(node, frame, activation);
@@ -197,108 +184,6 @@ final class ProtosBytecodeTagTreeNodeExports {
                     bytecode.getBytecodeLocation(node.getEnterBytecodeIndex()),
                     frame);
         }
-    }
-
-    /**
-     * PERF025 inline-callback lexical slice: returns the PRESENT block-local
-     * bindings of a frame-native callback region, in layout order, or
-     * {@code null} when this inline callback is using the unchanged
-     * activation/context authority path. They seed the invocation's durable
-     * authority when tooling is its first observer; once the bindings are
-     * durable they are ignored.
-     *
-     * <p>The prefixed Bytecode locals exist only for the statically admitted
-     * frame-native callback path. Their prefix is implementation metadata;
-     * the guest/debugger name is the suffix. A cleared local is ABSENT and is
-     * therefore omitted. Guest null is {@code ProtosNullValue}, never host
-     * {@code null}, so host null remains an unambiguous cleared-local marker.
-     *
-     * <p>No Frame is retained after the scope object has been constructed.
-     *
-     * <p>TEST009-C: a tooling-only local-table read at a runtime tag-tree
-     * bytecode index, so it never takes part in partial evaluation.
-     */
-    @TruffleBoundary
-    private static java.util.Map<String, Object> inlineCallbackFrameBindings(
-            TagTreeNode node,
-            MaterializedFrame frame) {
-        if (node == null) {
-            return null;
-        }
-
-        BytecodeNode bytecode = node.getBytecodeNode();
-        int bytecodeIndex = node.getEnterBytecodeIndex();
-        Object[] names = bytecode.getLocalNames(bytecodeIndex);
-
-        java.util.LinkedHashMap<String, Object> bindings = null;
-        boolean frameNativeRegion = false;
-
-        for (int offset = 0; offset < names.length; offset++) {
-            Object rawName = names[offset];
-            if (!(rawName instanceof String localName)
-                    || !localName.startsWith(
-                            CanonicalToBytecodeLowerer
-                                    .INLINE_CALLBACK_BINDING_LOCAL_PREFIX)) {
-                continue;
-            }
-
-            frameNativeRegion = true;
-            Object value =
-                    ProtosNumericValueSupport.guestValue(
-                            bytecode.getLocalValue(
-                                    bytecodeIndex,
-                                    frame,
-                                    offset));
-            if (value == null) {
-                continue;
-            }
-
-            if (bindings == null) {
-                bindings = new java.util.LinkedHashMap<>();
-            }
-            bindings.put(
-                    localName.substring(
-                            CanonicalToBytecodeLowerer
-                                    .INLINE_CALLBACK_BINDING_LOCAL_PREFIX
-                                    .length()),
-                    value);
-        }
-
-        if (!frameNativeRegion) {
-            return null;
-        }
-        if (bindings == null) {
-            return java.util.Map.of();
-        }
-        return java.util.Collections.unmodifiableMap(bindings);
-    }
-
-    /**
-     * The invocation carrier of the innermost inline callback region live at
-     * {@code node}'s location, or {@code null} outside every such region.
-     * Block scoping makes the region local visible only inside its own region;
-     * the last live match is the innermost one. Only reached from tooling
-     * scope queries, never from guest execution.
-     *
-     * <p>TEST009-C: a tooling-only local-table read at a runtime tag-tree
-     * bytecode index, so it never takes part in partial evaluation.
-     */
-    @TruffleBoundary
-    private static PreparedInlineLiteralCall inlineCallbackCall(TagTreeNode node, MaterializedFrame frame) {
-        if (node == null) {
-            return null;
-        }
-        BytecodeNode bytecode = node.getBytecodeNode();
-        int bytecodeIndex = node.getEnterBytecodeIndex();
-        Object[] names = bytecode.getLocalNames(bytecodeIndex);
-        for (int offset = names.length - 1; offset >= 0; offset--) {
-            if (CanonicalToBytecodeLowerer.INLINE_CALLBACK_CALL_LOCAL.equals(names[offset])
-                    && bytecode.getLocalValue(bytecodeIndex, frame, offset)
-                            instanceof PreparedInlineLiteralCall call) {
-                return call;
-            }
-        }
-        return null;
     }
 
     @TruffleBoundary

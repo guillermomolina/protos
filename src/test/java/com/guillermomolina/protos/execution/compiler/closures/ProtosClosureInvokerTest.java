@@ -57,20 +57,10 @@ class ProtosClosureInvokerTest {
 
         ProtosTestExecutionSupport.callEntered(
                 () -> {
-                    ProtosPreparedCalls.PreparedClosureCall prepared =
-                            ProtosClosureCallPreparation.prepareSynchronousSourceClosureForRuntime(
-                                    closure,
-                                    List.of(),
-                                    activation);
-
-                    Object entered =
-                            ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                                    assertInstanceOf(
-                                            ProtosPreparedCalls.OrdinarySourceCall.class,
-                                            prepared),
-                                    com.oracle.truffle.api.nodes.IndirectCallNode.create());
-
-                    return prepared.finish(entered);
+                    // I115: the shared dispatcher enters the published activation;
+                    // the callee root owns and closes its ReturnHome.
+                    return ProtosFunctionCallDispatchers.callPublishedUncached(
+                            closure, activation);
                 });
 
         assertFalse(home.isActive());

@@ -17,9 +17,13 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.runtime.ProtosValueLookup.GuardedSlotSelection;
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
@@ -39,22 +43,20 @@ import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.strings.TruffleString;
 
 /**
- * I115-H7 EXPERIMENTAL, proxied as the {@code GetMethod} operation (GraalPy
- * {@code GetMethod.doFastPath} shape): the selection half of an ordinary
- * one-argument send. The receiver is evaluated once by the caller bytecode
- * and kept on the stack as a separate operand of {@code CallBinaryMethod};
- * the selector is a constant operand. I115-H7-R3: the result is the selected
- * slot value itself (or {@code null} when nothing was selected), never a
- * descriptor; no prepared call is created.
+ * I115 (GraalPy {@code GetMethod}), proxied as the {@code GetMethod}
+ * operation: the selection half of every ordinary send. The receiver was
+ * evaluated once by the caller bytecode; the selector is a constant operand.
+ * The result is always a {@link ProtosBoundMethod} carrying the selected
+ * Closure, the original receiver and the methodHome, except for a D188
+ * foreign member, whose read value is returned to be invoked as a callable.
+ * Nothing is prepared or executed here.
  *
- * <p>{@link #doCached} is the monomorphic/polymorphic selection cache (at
- * most three entries), guarded by receiver identity and the selection's
- * stability {@link com.oracle.truffle.api.Assumption}. It reads the current
- * value of the cached physical slot location ({@link
- * GuardedSlotSelection#currentValue()}), so a reassignment of the same slot
- * is observed and a removal or recreation invalidates the entry. It reads
- * neither the caller reference nor the caller prelude. {@link #doGeneric} is
- * the separated fallback with the complete lookup.
+ * <p>{@link #doCached} is the selection cache (at most three entries),
+ * guarded by receiver identity and the selection's stability assumption; it
+ * reads the current value of the cached slot location, so a reassignment is
+ * observed and a removal or recreation invalidates the entry. A cached slot
+ * that no longer holds a Closure falls to {@link #doGeneric}, which performs
+ * the complete lookup and raises its Errors.
  *
  * <p>RECORDED DIVERGENCE (I115-H7-R3): the cached selection is installed
  * with a {@code null} prelude and is not re-validated against a later change
@@ -62,7 +64,7 @@ import com.oracle.truffle.api.strings.TruffleString;
  */
 @GenerateUncached
 @GenerateInline(false)
-@OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
+@OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = true)
 @ConstantOperand(type = TruffleString.class, name = "selector")
 abstract class ProtosExperimentalGetMethodNode extends Node {
 
@@ -72,7 +74,8 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             excludeForUncached = true,
             guards = {
                 "receiver == cachedReceiver",
-                "cachedSelection != null"
+                "cachedSelection != null",
+                "isClosure(cachedSelection.currentValue(getNode))"
             },
             assumptions = "cachedSelection.stability()",
             limit = "3")
@@ -85,7 +88,10 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             @Cached("selectOrNull(receiver, selector)")
                     GuardedSlotSelection cachedSelection,
             @Cached com.oracle.truffle.api.object.DynamicObject.GetNode getNode) {
-        return cachedSelection.currentValue(getNode);
+        return new ProtosBoundMethod(
+                (ProtosClosureValue) cachedSelection.currentValue(getNode),
+                receiver,
+                cachedSelection.home());
     }
 
     @Specialization(replaces = "doCached")
@@ -95,10 +101,16 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             TruffleString selector,
             Object receiver,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
-        Object caller = ProtosBytecodeRootNode.InvokeClosureOneTail.callerReference(frame);
-        ProtosPrelude prelude =
-                ProtosBytecodeRootNode.InvokeClosureOneTail.admittedCallerPrelude(root, caller);
-        return selectGenericWithHome(receiver, selector.toJavaStringUncached(), prelude);
+        Object caller = ProtosFunctionCallDispatchers.callerReference(frame);
+        return select(
+                ProtosNumericValueSupport.guestValue(receiver),
+                selector.toJavaStringUncached(),
+                root,
+                caller);
+    }
+
+    static boolean isClosure(Object value) {
+        return value instanceof ProtosClosureValue;
     }
 
     /* Installation only: the guarded physical selection without a prelude, or null. */
@@ -115,32 +127,80 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
         }
     }
 
-    /* The complete lookup; a missing or unsupported selection yields null. */
+    /**
+     * The complete D013 send selection: a missing slot is SlotNotFound, an
+     * unsupported representation or a non-Closure selection is Error, a D188
+     * foreign member is its read value.
+     */
     @TruffleBoundary
-    static Object selectGeneric(Object receiver, String selector, ProtosPrelude prelude) {
+    static Object select(
+            Object receiver, String selector, ProtosBytecodeRootNode root, Object caller) {
+        ProtosPrelude prelude = ProtosFunctionCallDispatchers.admittedCallerPrelude(root, caller);
+        ProtosSlotLookupResult selected;
         try {
-            return ProtosValueLookup.lookup(
-                            ProtosNumericValueSupport.guestValue(receiver), selector, prelude)
-                    .map(ProtosSlotLookupResult::value)
-                    .orElse(null);
+            var found = ProtosValueLookup.lookup(receiver, selector, prelude);
+            if (found.isEmpty()) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newSlotNotFound(exactCaller(root, caller)));
+            }
+            selected = found.orElseThrow();
         } catch (UnsupportedOperationException unsupportedRepresentation) {
-            return null;
+            throw new ProtosSignalException(ProtosCoreErrors.newError(exactCaller(root, caller)));
         }
+        return bind(receiver, selected, root, caller);
     }
 
-    /* I115-H11-B3: preserve the selected home only in the generic tier. */
+    /**
+     * The super-send selection (GraalPy {@code super().method}): the lookup
+     * starts at the parent of the caller's methodHome and the selected method
+     * is bound to the caller's receiver.
+     */
     @TruffleBoundary
-    static Object selectGenericWithHome(Object receiver, String selector, ProtosPrelude prelude) {
+    static Object selectSuper(String selector, ProtosBytecodeRootNode root, Object caller) {
+        ProtosActivation activation = exactCaller(root, caller);
+        ProtosObjectValue methodHome =
+                activation.methodHome()
+                        .orElseThrow(
+                                () -> new ProtosSignalException(
+                                        ProtosCoreErrors.newInvalidSuper(activation)));
+        Object lookupOrigin =
+                methodHome.parent()
+                        .orElseThrow(
+                                () -> new ProtosSignalException(
+                                        ProtosCoreErrors.newSlotNotFound(activation)));
+        ProtosSlotLookupResult selected;
         try {
-            var found = ProtosValueLookup.lookup(ProtosNumericValueSupport.guestValue(receiver), selector, prelude);
-            if (found.isEmpty()) return null;
-            ProtosSlotLookupResult selected = found.orElseThrow();
-            return receiver != null && receiver.getClass() == ProtosObjectValue.class
-                    && selected.value() instanceof com.guillermomolina.protos.runtime.ProtosClosureValue
-                    ? selected : selected.value();
-        } catch (UnsupportedOperationException unsupported) {
-            return null;
+            selected =
+                    ProtosValueLookup.lookup(lookupOrigin, selector, activation.preludeOrNullForRuntime())
+                            .orElseThrow(
+                                    () -> new ProtosSignalException(
+                                            ProtosCoreErrors.newSlotNotFound(activation)));
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }
+        if (!(selected.value() instanceof ProtosClosureValue closure)) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        }
+        return new ProtosBoundMethod(closure, activation.receiver(), selected.home());
+    }
+
+    private static Object bind(
+            Object receiver,
+            ProtosSlotLookupResult selected,
+            ProtosBytecodeRootNode root,
+            Object caller) {
+        if (ProtosForeignProjectedOperations.isForeignMemberSelection(selected)) {
+            // D188: the read foreign member is invoked as an ordinary callable.
+            return selected.value();
+        }
+        if (!(selected.value() instanceof ProtosClosureValue closure)) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(exactCaller(root, caller)));
+        }
+        return new ProtosBoundMethod(closure, receiver, selected.home());
+    }
+
+    private static ProtosActivation exactCaller(ProtosBytecodeRootNode root, Object caller) {
+        return ProtosFunctionCallDispatchers.exactCaller(root, caller);
     }
 
     /*

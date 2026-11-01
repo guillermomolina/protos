@@ -182,8 +182,7 @@ public final class ProtosTextWriterCPrimeExecution {
                             /*
                              * Map an ordinary guest Error/control transfer during target invocation
                              * to the writer's existing invocation-failure lane. The target Closure's
-                             * ReturnHome is still closed exactly once by the normal composed-call
-                             * TryFinally.
+                             * ReturnHome is owned and closed by its own root.
                              */
                             builder.beginTryCatch();
 
@@ -194,19 +193,12 @@ public final class ProtosTextWriterCPrimeExecution {
                             builder.emitLoadArgument(0);
                             builder.endIoPrepareTargetCall();
                             builder.endStoreLocal();
-
-                            builder.beginTryFinally(
-                                    () -> {
-                                        builder.beginCompleteClosureCall();
-                                        builder.emitLoadLocal(prepared);
-                                        builder.endCompleteClosureCall();
-                                    });
                             builder.beginBlock();
 
                             builder.beginStoreLocal(child);
-                            builder.beginEnterClosureCall();
+                            builder.beginCallRequest(false);
                             builder.emitLoadLocal(prepared);
-                            builder.endEnterClosureCall();
+                            builder.endCallRequest();
                             builder.endStoreLocal();
 
                             builder.beginWhile();
@@ -220,24 +212,22 @@ public final class ProtosTextWriterCPrimeExecution {
                             builder.endYield();
                             builder.endStoreLocal();
                             builder.beginStoreLocal(child);
-                            builder.beginResumeContinuation();
-                            builder.emitLoadLocal(prepared);
+                            builder.beginResumeDispatchedContinuation();
                             builder.emitLoadLocal(child);
                             builder.emitLoadLocal(resume);
-                            builder.endResumeContinuation();
+                            builder.endResumeDispatchedContinuation();
                             builder.endStoreLocal();
                             builder.endBlock();
                             builder.endWhile();
 
                             builder.beginStoreLocal(targetResult);
-                            builder.beginFinishClosureCall(true);
-                            builder.emitLoadLocal(prepared);
+                            builder.beginMaterializePrimitiveNumericCarrier();
                             builder.emitLoadLocal(child);
-                            builder.endFinishClosureCall();
+                            builder.emitLoadConstant(true);
+                            builder.endMaterializePrimitiveNumericCarrier();
                             builder.endStoreLocal();
 
                             builder.endBlock();
-                            builder.endTryFinally();
 
                             builder.beginStoreLocal(invocation);
                             builder.beginIoInvocationSucceeded(false);

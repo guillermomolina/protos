@@ -27,8 +27,8 @@ import java.util.Map;
  * one operation with a discriminating constant operand. Instruction-order and
  * absence oracles still need to identify that phase exactly, so for those
  * operations this answers the name of the phase the constant selects (for
- * example {@code c.IsPreparedClosureInvocation} for
- * {@code c.IsResultKind} with {@link ProtosResultKind#PREPARED_CLOSURE_INVOCATION}).
+ * example {@code c.IsContinuation} for
+ * {@code c.IsResultKind} with {@link ProtosResultKind#CONTINUATION}).
  * Every other instruction keeps {@link Instruction#getName()}.
  */
 public final class ProtosInstructionNames {
@@ -36,19 +36,11 @@ public final class ProtosInstructionNames {
 
     private static final Map<String, Map<Object, String>> PHASES = Map.ofEntries(
             Map.entry("IsResultKind", Map.of(
-                    ProtosResultKind.COMPACT_BOOLEAN_MISS, "IsCompactCanonicalBooleanMiss",
-                    ProtosResultKind.COMPACT_BOOLEAN_NO_CALLBACK, "IsCompactCanonicalBooleanNoCallback",
-                    ProtosResultKind.INLINE_LITERAL_CALL, "IsNativeIfTrueInlineCallback",
                     ProtosResultKind.PRIMITIVE_NUMERIC_SEND_MISS, "IsPrimitiveNumericSendMiss",
-                    ProtosResultKind.PREPARED_CLOSURE_INVOCATION, "IsPreparedClosureInvocation",
-                    ProtosResultKind.DIRECT_SEND_MISS, "IsDirectSendMiss",
                     ProtosResultKind.CAPTURED_OWNER_FRAME_SELECTED, "IsCapturedOwnerFrameSelected",
                     ProtosResultKind.BUFFERED_WRITER_STEP_REQUIRED, "IsBufferedByteWriterStepRequired",
                     ProtosResultKind.TEXT_READER_NEED_INPUT, "IsTextReaderNeedInput",
                     ProtosResultKind.CONTINUATION, "IsContinuation")),
-            Map.entry("IsCanonicalBooleanClass", Map.of(
-                    ProtosCanonicalBooleanOneNode.CLASS_TRUE, "IsCanonicalIfTrueTrue",
-                    ProtosCanonicalBooleanOneNode.CLASS_FALSE, "IsCanonicalBooleanFalseClass")),
             Map.entry("Identity", Map.of(false, "Identity", true, "NotIdentity")),
             Map.entry("MutateLocalSlot", Map.of(
                     ProtosSlotMutation.CREATE, "CreateLocalSlot",

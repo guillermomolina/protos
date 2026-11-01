@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
@@ -654,41 +655,9 @@ final class ProtosPerf037EDirectTerminalReturnTest {
     private static Object call(
             ProtosClosureValue closure,
             ProtosActivation caller) {
-        ProtosLanguageContext entered =
-                ProtosLanguageContext.currentIfEnteredForRuntime();
-
-        ProtosClosureValue selected =
-                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(
-                                closure, caller);
-        assertSame(closure, selected);
-
-        RootCallTarget target =
-                ProtosBytecodeRootNode.PrepareSendArguments
-                        .fastOrdinarySendTarget(closure, entered);
-
-        ProtosPreparedCalls.PreparedClosureCall prepared =
-                ProtosBytecodeRootNode.PrepareClosureCallArguments
-                        .fastDirect(
-                                false,
-                                closure,
-                                caller,
-                                new Object[0],
-                                selected,
-                                selected.definition(),
-                                entered,
-                                selected.definition(),
-                                entered,
-                                target);
-
-        Object result =
-                ProtosBytecodeRootNode.EnterClosureCall
-                        .ordinaryIndirect(
-                                assertInstanceOf(
-                                        ProtosPreparedCalls.OrdinarySourceCall.class,
-                                        prepared),
-                                IndirectCallNode.create());
-
-        return prepared.finish(result);
+        // I115: a direct function call through the shared dispatcher.
+        return ProtosNumericValueSupport.guestValue(
+                ProtosCallRequest.call(closure, java.util.List.of(), caller).callUncached());
     }
 
     private static String integerValue(Object value) {

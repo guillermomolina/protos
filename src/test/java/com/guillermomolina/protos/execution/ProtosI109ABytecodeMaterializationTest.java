@@ -66,7 +66,7 @@ final class ProtosI109ABytecodeMaterializationTest {
                     builder.endStoreLocal();
 
                     ProtosStructuredDispatchLowerer
-                            .emitPreparedInvocationForRuntime(
+                            .emitStructuredInvocationForRuntime(
                                     builder,
                                     result,
                                     preparedCall,

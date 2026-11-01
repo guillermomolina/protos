@@ -83,8 +83,10 @@ class ProtosAPlusExecutionProjectionTest {
                 assertThrows(
                         UnsupportedOperationException.class,
                         () ->
-                                ProtosBytecodeRootNode.PrepareClosureCall.perform(
-                                        init, prelude.newModuleActivation()));
+                                // I115: the call is made by the shared dispatcher.
+                                ProtosCallRequest.call(
+                                                init, List.of(), prelude.newModuleActivation())
+                                        .callUncached());
         assertSame(UnsupportedOperationException.class, failure.getClass());
         assertEquals(
                 "Context-local Closure projection requires an entered Protos Context",
@@ -116,24 +118,16 @@ class ProtosAPlusExecutionProjectionTest {
             Object result =
                     context.callEntered(
                             () -> {
-                                ProtosPreparedCalls.PreparedClosureCall prepared =
-                                        ProtosBytecodeRootNode.PrepareSendArguments.performForActivation(
-                                                receiver,
-                                                "match",
-                                                caller,
-                                                new Object[] {argument});
+                                // I115: GetMethod selection, then the shared dispatcher.
+                                ProtosCallRequest prepared =
+                                        ProtosCallRequest.send(
+                                                receiver, "match", caller, List.of(argument));
+                                ProtosBoundMethod method =
+                                        assertInstanceOf(
+                                                ProtosBoundMethod.class, prepared.callable());
+                                assertFalse(method.callable().nativeBody().isPresent());
 
-                                assertFalse(prepared.isNative());
-
-                                Object entered =
-                                        ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                                                assertInstanceOf(
-                                                        ProtosPreparedCalls.OrdinarySourceCall
-                                                                .class,
-                                                        prepared),
-                                                IndirectCallNode.create());
-
-                                return prepared.finish(entered);
+                                return prepared.callUncached();
                             });
 
             assertSame(ProtosBooleanValue.TRUE, result);

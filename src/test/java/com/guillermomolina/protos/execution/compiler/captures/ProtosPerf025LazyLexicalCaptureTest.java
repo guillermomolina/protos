@@ -29,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
@@ -555,36 +556,17 @@ final class ProtosPerf025LazyLexicalCaptureTest {
 
     private static Invocation invokeDirect(
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
-        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
-        ProtosClosureValue selected =
-                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
-        assertSame(closure, selected, "canonical direct Closure-call selection");
-        RootCallTarget target =
-                ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
-                        closure, entered);
-        ProtosPreparedCalls.PreparedClosureCall prepared =
-                ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
-                        false,
-                        closure,
-                        caller,
-                        supplied,
-                        selected,
-                        selected.definition(),
-                        entered,
-                        selected.definition(),
-                        entered,
-                        target);
-        Object entry =
-                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
-                        IndirectCallNode.create());
-        Object result = prepared.finish(entry);
+        // I115: a direct function call through the shared dispatcher; its B5
+        // array is the callee frame's arguments.
+        ProtosCallRequest request =
+                ProtosCallRequest.call(closure, java.util.List.of(supplied), caller);
+        Object result = ProtosNumericValueSupport.guestValue(request.callUncached());
         /*
          * PERF025-H1: a callee whose body never needs its rich activation
          * (for example a trivial Closure) leaves it unmaterialized.
          */
         ProtosActivation callee =
-                prepared.targetArguments()[0] instanceof ProtosActivation materialized
+                request.arguments()[0] instanceof ProtosActivation materialized
                         ? materialized
                         : null;
         assertNotNull(result);

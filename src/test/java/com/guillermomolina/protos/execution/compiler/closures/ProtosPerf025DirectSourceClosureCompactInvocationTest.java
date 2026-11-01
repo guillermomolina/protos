@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosDispatchTestSupport.DirectEntry;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -78,15 +79,14 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
 
                 ProtosIntegerValue two = integer(2);
                 ProtosIntegerValue three = integer(3);
-                ProtosPreparedCalls.PreparedClosureCall prepared =
+                DirectEntry prepared =
                         fastDirect(add, module, two, three);
 
                 RootCallTarget stableTarget =
-                        ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
-                                add, ProtosLanguageContext.currentIfEnteredForRuntime());
+                        ProtosDispatchTestSupport.target(add);
                 assertSame(
                         stableTarget,
-                        prepared.bodyTarget(),
+                        prepared.target(),
                         "the stable direct hit keeps the Context-owned source target");
                 Object[] targetArguments = prepared.targetArguments();
                 assertSame(add, targetArguments[0]);
@@ -95,7 +95,9 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                                 .filter(ProtosActivation.class::isInstance)
                                 .allMatch(candidate -> candidate == module),
                         "only the caller's provenance activation exists before the source target");
-                assertThrows(IllegalStateException.class, prepared::activation);
+                assertFalse(
+                        ProtosFrameArguments.hasPublishedActivation(targetArguments),
+                        "no activation is published before the source target runs");
 
                 Object result = enter(prepared);
                 assertEquals("5", integerValue(result));
@@ -147,9 +149,9 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 ProtosClosureValue identity =
                         parsedClosure("(value) => { value }", "perf025-identity.protos", module);
 
-                ProtosPreparedCalls.PreparedClosureCall first =
+                DirectEntry first =
                         fastDirect(identity, module, integer(1));
-                ProtosPreparedCalls.PreparedClosureCall second =
+                DirectEntry second =
                         fastDirect(identity, module, integer(2));
                 assertEquals("1", integerValue(enter(first)));
                 assertEquals("2", integerValue(enter(second)));
@@ -205,7 +207,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                         parsedClosure(
                                 "(first, ...rest) => { rest }", "perf025-rest.protos", module);
 
-                ProtosPreparedCalls.PreparedClosureCall prepared =
+                DirectEntry prepared =
                         fastDirect(rest, module, integer(1), integer(2), integer(3));
                 ProtosArrayValue bound =
                         assertInstanceOf(ProtosArrayValue.class, enter(prepared));
@@ -241,7 +243,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                                 "(a, b) => { b - a.negated() }",
                                 "perf025-task-add.protos",
                                 module);
-                AtomicReference<ProtosPreparedCalls.PreparedClosureCall> preparedRef =
+                AtomicReference<ProtosCallRequest> preparedRef =
                         new AtomicReference<>();
 
                 ProtosTask task =
@@ -249,18 +251,19 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                                 .createTask(
                                         null,
                                         current -> {
-                                            ProtosPreparedCalls.PreparedClosureCall prepared =
-                                                    ProtosClosureCallPreparation.prepareTaskOwnedDirectClosureIfBytecode(
-                                                                    add,
-                                                                    List.of(integer(4), integer(5)),
-                                                                    module,
-                                                                    current);
+                                            // I115: a Task-owned entry through the shared dispatcher.
+                                            ProtosCallRequest prepared =
+                                                    ProtosCallRequest.taskEntry(
+                                                            add,
+                                                            current,
+                                                            List.of(integer(4), integer(5)),
+                                                            module);
                                             preparedRef.set(prepared);
-                                            assertSame(current, prepared.taskForRuntime());
-                                            assertThrows(
-                                                    IllegalStateException.class,
-                                                    prepared::activation);
-                                            ProtosBytecodeTaskExecution.executePreparedClosure(
+                                            assertSame(
+                                                    current,
+                                                    prepared.arguments()[2],
+                                                    "the B5 Task slot of the entry");
+                                            ProtosBytecodeTaskExecution.executeRequest(
                                                     current, prepared);
                                         });
                 assertTrue(module.executionDomain().dispatchOne());
@@ -270,7 +273,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 ProtosActivation callee =
                         assertInstanceOf(
                                 ProtosActivation.class,
-                                preparedRef.get().targetArguments()[0]);
+                                preparedRef.get().arguments()[0]);
                 assertSame(task, callee.task().orElseThrow());
                 assertTrue(module.task().isEmpty(), "the creator is never mutated");
                 assertDeferred(callee);
@@ -379,7 +382,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 ProtosClosureValue returning =
                         parsedClosure("() => { ^ 5 }", "perf025-owned-nlr.protos", module);
 
-                ProtosPreparedCalls.PreparedClosureCall prepared =
+                DirectEntry prepared =
                         fastDirect(returning, module);
                 ProtosReturnHome home =
                         ProtosFrameArguments.compactReturnHome(prepared.targetArguments());
@@ -398,34 +401,14 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
         }
     }
 
-    private static ProtosPreparedCalls.PreparedClosureCall fastDirect(
+    private static DirectEntry fastDirect(
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
-        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
-        ProtosClosureValue selected =
-                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
-        assertSame(closure, selected, "canonical direct Closure-call selection");
-        RootCallTarget target =
-                ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
-                        closure, entered);
-        return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
-                false,
-                closure,
-                caller,
-                supplied,
-                selected,
-                selected.definition(),
-                entered,
-                selected.definition(),
-                entered,
-                target);
+        // I115: the B5 header the shared dispatcher writes for a function call.
+        return ProtosDispatchTestSupport.direct(closure, caller, supplied);
     }
 
-    private static Object enter(ProtosPreparedCalls.PreparedClosureCall prepared) {
-        Object entered =
-                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
-                        IndirectCallNode.create());
-        return prepared.finish(entered);
+    private static Object enter(DirectEntry prepared) {
+        return ProtosDispatchTestSupport.enter(prepared);
     }
 
     private static void assertDeferred(ProtosActivation callee) throws Exception {

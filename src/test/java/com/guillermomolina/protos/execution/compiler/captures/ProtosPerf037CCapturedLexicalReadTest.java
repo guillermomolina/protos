@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -610,30 +611,12 @@ final class ProtosPerf037CCapturedLexicalReadTest {
     }
 
     /** One compact direct source call of {@code closure}, as a guest call site makes it. */
-    private static Object call(ProtosClosureValue closure, ProtosActivation caller) {
-        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
-        ProtosClosureValue selected =
-                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
-        assertSame(closure, selected, "canonical direct Closure-call selection");
-        RootCallTarget target =
-                ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(closure, entered);
-        ProtosPreparedCalls.PreparedClosureCall prepared =
-                ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
-                        false,
-                        closure,
-                        caller,
-                        new Object[0],
-                        selected,
-                        selected.definition(),
-                        entered,
-                        selected.definition(),
-                        entered,
-                        target);
-        Object result =
-                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
-                        IndirectCallNode.create());
-        return prepared.finish(result);
+    private static Object call(
+            ProtosClosureValue closure,
+            ProtosActivation caller) {
+        // I115: a direct function call through the shared dispatcher.
+        return ProtosNumericValueSupport.guestValue(
+                ProtosCallRequest.call(closure, java.util.List.of(), caller).callUncached());
     }
 
     private static ProtosActivation invocationOf(

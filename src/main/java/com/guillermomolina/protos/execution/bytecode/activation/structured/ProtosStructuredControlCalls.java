@@ -17,8 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.execution.ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall;
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -74,13 +72,13 @@ final class ProtosStructuredControlCalls {
             return selectedAction == null && index < cases.size();
         }
 
-        PreparedClosureCall prepareMatcher() {
+        ProtosCallRequest prepareMatcher() {
             if (!needsMatcher()) {
                 throw new IllegalStateException(
                         "Object.caseOf matcher requested after selection or exhaustion");
             }
 
-            return ProtosSendPreparation.prepareSend(
+            return ProtosCallRequest.send(
                     cases.get(index).getKey(),
                     "match",
                     activation,
@@ -123,14 +121,14 @@ final class ProtosStructuredControlCalls {
                     ProtosCoreErrors.newError(activation));
         }
 
-        PreparedClosureCall prepareSelectedAction() {
+        ProtosCallRequest prepareSelectedAction() {
             if (selectedAction == null) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
 
-            return ProtosClosureCallPreparation.prepareClosureCall(
+            return ProtosCallRequest.call(
                     selectedAction,
                     selectedArguments,
                     activation);
@@ -138,23 +136,23 @@ final class ProtosStructuredControlCalls {
     }
 
     static final class PreparedStandardObjectCall {
-        private final PreparedClosureCall child;
+        private final ProtosCallRequest child;
         private final ProtosObjectValue constructedInstance;
 
         private PreparedStandardObjectCall(
-                PreparedClosureCall child,
+                ProtosCallRequest child,
                 ProtosObjectValue constructedInstance) {
             this.child = java.util.Objects.requireNonNull(child, "child");
             this.constructedInstance = constructedInstance;
         }
 
         static PreparedStandardObjectCall closure(
-                PreparedClosureCall child) {
+                ProtosCallRequest child) {
             return new PreparedStandardObjectCall(child, null);
         }
 
         static PreparedStandardObjectCall construction(
-                PreparedClosureCall child,
+                ProtosCallRequest child,
                 ProtosObjectValue constructedInstance) {
             return new PreparedStandardObjectCall(
                     child,
@@ -163,7 +161,7 @@ final class ProtosStructuredControlCalls {
                             "constructedInstance"));
         }
 
-        PreparedClosureCall child() {
+        ProtosCallRequest child() {
             return child;
         }
 
@@ -175,35 +173,35 @@ final class ProtosStructuredControlCalls {
     }
 
     static final class PreparedStandardImportCall {
-        private final PreparedClosureCall child;
+        private final ProtosPreparedCalls.ModuleInitializationCall child;
 
         PreparedStandardImportCall(
-                PreparedClosureCall child) {
+                ProtosPreparedCalls.ModuleInitializationCall child) {
             this.child = java.util.Objects.requireNonNull(child, "child");
         }
 
-        PreparedClosureCall child() {
+        ProtosPreparedCalls.ModuleInitializationCall child() {
             return child;
         }
 
         Object finish(Object childResult) {
-            return childResult;
+            return child.finish(childResult);
         }
     }
 
     static final class PreparedEnsureCall {
-        private final PreparedClosureCall body;
-        private final PreparedClosureCall cleanup;
+        private final ProtosCallRequest body;
+        private final ProtosCallRequest cleanup;
 
         PreparedEnsureCall(
-                PreparedClosureCall body,
-                PreparedClosureCall cleanup) {
+                ProtosCallRequest body,
+                ProtosCallRequest cleanup) {
             this.body = java.util.Objects.requireNonNull(body, "body");
             this.cleanup = java.util.Objects.requireNonNull(cleanup, "cleanup");
         }
 
-        PreparedClosureCall body() { return body; }
-        PreparedClosureCall cleanup() { return cleanup; }
+        ProtosCallRequest body() { return body; }
+        ProtosCallRequest cleanup() { return cleanup; }
     }
 
     /**
@@ -259,20 +257,12 @@ final class ProtosStructuredControlCalls {
             return bodyResult;
         }
 
-        PreparedClosureCall prepareCondition() {
-            return ProtosSendPreparation.prepareDirectClosureCall(condition, List.of(), activation);
+        ProtosCallRequest prepareCondition() {
+            return ProtosCallRequest.call(condition, List.of(), activation);
         }
 
-        PreparedClosureCall prepareBody() {
-            return ProtosSendPreparation.prepareDirectClosureCall(body, List.of(), activation);
-        }
-
-        PreparedInlineLiteralCall prepareInlineCondition() {
-            return ProtosClosureCallPreparation.prepareInlineLiteralCall(condition, List.of(), activation);
-        }
-
-        PreparedInlineLiteralCall prepareInlineBody() {
-            return ProtosClosureCallPreparation.prepareInlineLiteralCall(body, List.of(), activation);
+        ProtosCallRequest prepareBody() {
+            return ProtosCallRequest.call(body, List.of(), activation);
         }
 
         /**
@@ -289,30 +279,6 @@ final class ProtosStructuredControlCalls {
                     activation,
                     ProtosCoreErrors.newError(activation));
         }
-
-        /**
-         * PLAT044 B′ (PERF026-C1) inline eligibility of the freshly prepared
-         * condition invocation. The condition is exactly the staged literal
-         * and the invocation has already performed authoritative ordinary
-         * {@code call} selection, but has not materialized a rich activation
-         * or physical prepared source call merely to prove inline execution.
-         */
-        boolean admitsInlineLiteralCondition(
-                PreparedInlineLiteralCall child,
-                Object literal,
-                ProtosClosureExecutionPlanCell literalPlan) {
-            return condition == literal
-                    && child.admits(literalPlan);
-        }
-
-        /** As {@link #admitsInlineLiteralCondition}, for a fresh body invocation. */
-        boolean admitsInlineLiteralBody(
-                PreparedInlineLiteralCall child,
-                Object literal,
-                ProtosClosureExecutionPlanCell literalPlan) {
-            return body == literal
-                    && child.admits(literalPlan);
-        }
     }
 
     static final class PreparedErrorHandlerCall {
@@ -320,7 +286,7 @@ final class ProtosStructuredControlCalls {
         private final ProtosDynamicControlState.Frame frame;
         private final ProtosClosureValue handler;
         private final ProtosActivation activation;
-        private final PreparedClosureCall body;
+        private final ProtosCallRequest body;
         private boolean left;
 
         PreparedErrorHandlerCall(
@@ -328,7 +294,7 @@ final class ProtosStructuredControlCalls {
                 ProtosDynamicControlState.Frame frame,
                 ProtosClosureValue handler,
                 ProtosActivation activation,
-                PreparedClosureCall body) {
+                ProtosCallRequest body) {
             this.state = java.util.Objects.requireNonNull(state, "state");
             this.frame = java.util.Objects.requireNonNull(frame, "frame");
             this.handler = java.util.Objects.requireNonNull(handler, "handler");
@@ -336,13 +302,13 @@ final class ProtosStructuredControlCalls {
             this.body = java.util.Objects.requireNonNull(body, "body");
         }
 
-        PreparedClosureCall body() { return body; }
+        ProtosCallRequest body() { return body; }
 
-        PreparedClosureCall selectHandler(AbstractTruffleException exception) {
+        ProtosCallRequest selectHandler(AbstractTruffleException exception) {
             if (exception instanceof ProtosSignalException transfer
                     && transfer.selectedHandlerFrame().orElse(null) == frame) {
                 leave();
-                return ProtosSendPreparation.prepareDirectClosureCall(
+                return ProtosCallRequest.call(
                         handler,
                         List.of(transfer.error()),
                         activation);
@@ -401,23 +367,12 @@ final class ProtosStructuredControlCalls {
             };
         }
 
-        PreparedClosureCall prepareCallback() {
+        ProtosCallRequest prepareCallback() {
             if (!hasCallback()) {
                 throw new IllegalStateException(
                         "short-circuited Boolean operation has no selected callback");
             }
-            return ProtosClosureCallPreparation.prepareClosureCall(
-                    supplied.get(selectedIndex()),
-                    List.of(),
-                    activation);
-        }
-
-        PreparedInlineLiteralCall prepareInlineCallback() {
-            if (!hasCallback()) {
-                throw new IllegalStateException(
-                        "short-circuited Boolean operation has no selected callback");
-            }
-            return ProtosClosureCallPreparation.prepareInlineLiteralCall(
+            return ProtosCallRequest.call(
                     supplied.get(selectedIndex()),
                     List.of(),
                     activation);
@@ -460,35 +415,6 @@ final class ProtosStructuredControlCalls {
                                 activation);
                 case IF_TRUE, IF_FALSE, IF_TRUE_IF_FALSE -> result;
             };
-        }
-
-        /**
-         * PLAT044 B′ (PERF026-B1/B2/B3) inline eligibility of an already
-         * prepared selected callback {@code child}.
-         *
-         * <p>True only when this standard capability selected a callback, the
-         * selected supplied position ({@link #selectedIndex}) is exactly the
-         * send site's candidate {@code position}, the value supplied there is
-         * exactly {@code literal} (the immediate Closure literal value staged
-         * by the send site), and {@code child} is that literal's exact
-         * inline-equivalent invocation ({@link #isInlineLiteralInvocation}).
-         * For IF_TRUE_IF_FALSE both callbacks are eagerly evaluated and
-         * staged, but only the selected position can be admitted, so the
-         * unselected literal is never entered. Any other shape (including a
-         * different selected value or position) keeps the exact physical
-         * callback invocation. The inline result still completes through
-         * {@link #finishCallback}, so AND/OR Boolean-result validation is
-         * unchanged.
-         */
-        boolean admitsInlineLiteralCallback(
-                PreparedInlineLiteralCall child,
-                Object literal,
-                ProtosClosureExecutionPlanCell literalPlan,
-                int position) {
-            return hasCallback()
-                    && selectedIndex() == position
-                    && supplied.get(position) == literal
-                    && child.admits(literalPlan);
         }
     }
 }

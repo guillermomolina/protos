@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosDispatchTestSupport.DirectEntry;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -67,7 +68,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
     void zeroArgumentDirectCallRunsWithoutRichActivation() throws Exception {
         withCore(module -> {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "h1-zero.protos", module);
-            ProtosPreparedCalls.PreparedClosureCall prepared = fastDirect(one, module);
+            DirectEntry prepared = fastDirect(one, module);
 
             assertEquals("1", integerValue(enter(prepared)));
             assertSame(one, prepared.targetArguments()[0], "no activation was materialized");
@@ -82,7 +83,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "h1-identity.protos", module);
             ProtosIntegerValue supplied = integer(42);
-            ProtosPreparedCalls.PreparedClosureCall prepared =
+            DirectEntry prepared =
                     fastDirect(identity, module, supplied);
 
             assertSame(supplied, enter(prepared), "the exact supplied value");
@@ -98,12 +99,12 @@ final class ProtosPerf025H1LazyRootActivationTest {
             ProtosClosureValue defaulted =
                     parsedClosure("(value: 7) => { value }", "h1-default.protos", module);
 
-            ProtosPreparedCalls.PreparedClosureCall omitted = fastDirect(defaulted, module);
+            DirectEntry omitted = fastDirect(defaulted, module);
             assertEquals("7", integerValue(enter(omitted)));
             assertSame(defaulted, omitted.targetArguments()[0]);
 
             ProtosIntegerValue supplied = integer(3);
-            ProtosPreparedCalls.PreparedClosureCall given =
+            DirectEntry given =
                     fastDirect(defaulted, module, supplied);
             assertSame(supplied, enter(given));
             assertSame(defaulted, given.targetArguments()[0]);
@@ -116,9 +117,9 @@ final class ProtosPerf025H1LazyRootActivationTest {
         withCore(module -> {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "h1-repeated.protos", module);
-            List<ProtosPreparedCalls.PreparedClosureCall> calls = new java.util.ArrayList<>();
+            List<DirectEntry> calls = new java.util.ArrayList<>();
             for (int index = 0; index < 4; index++) {
-                ProtosPreparedCalls.PreparedClosureCall prepared =
+                DirectEntry prepared =
                         fastDirect(identity, module, integer(index));
                 assertEquals(Long.toString(index), integerValue(enter(prepared)));
                 assertSame(identity, prepared.targetArguments()[0]);
@@ -127,7 +128,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             assertNotSame(calls.get(0).targetArguments(), calls.get(1).targetArguments());
             // PERF025: `(value) => { value }` is proven return-home unobservable,
             // so no invocation materializes a home of its own.
-            for (ProtosPreparedCalls.PreparedClosureCall call : calls) {
+            for (DirectEntry call : calls) {
                 assertTrue(!ProtosFrameArguments.compactReturnHome(call.targetArguments())
                         .isMaterialized());
             }
@@ -141,7 +142,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "h1-on-demand.protos", module);
             ProtosIntegerValue supplied = integer(5);
-            ProtosPreparedCalls.PreparedClosureCall prepared =
+            DirectEntry prepared =
                     fastDirect(identity, module, supplied);
             Object[] arguments = prepared.targetArguments();
 
@@ -159,7 +160,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             // activation; the source-backed 'negated' send does.
             ProtosClosureValue sending =
                     parsedClosure("(value) => { 1 - value.negated() }", "h1-send.protos", module);
-            ProtosPreparedCalls.PreparedClosureCall send =
+            DirectEntry send =
                     fastDirect(sending, module, integer(1));
             assertEquals("2", integerValue(enter(send)));
             ProtosActivation callee =
@@ -227,12 +228,12 @@ final class ProtosPerf025H1LazyRootActivationTest {
 
             // D203/I105: excess is ignored and an absent argument binds null, compactly.
             ProtosIntegerValue first = integer(1);
-            ProtosPreparedCalls.PreparedClosureCall tooMany =
+            DirectEntry tooMany =
                     fastDirect(identity, module, first, integer(2));
             assertSame(first, enter(tooMany));
             assertSame(identity, tooMany.targetArguments()[0]);
 
-            ProtosPreparedCalls.PreparedClosureCall tooFew = fastDirect(identity, module);
+            DirectEntry tooFew = fastDirect(identity, module);
             assertSame(ProtosNullValue.INSTANCE, enter(tooFew));
             assertSame(identity, tooFew.targetArguments()[0]);
         });
@@ -264,28 +265,29 @@ final class ProtosPerf025H1LazyRootActivationTest {
         withCore(module -> {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "h1-task.protos", module);
-            AtomicReference<ProtosPreparedCalls.PreparedClosureCall> preparedRef =
+            AtomicReference<ProtosCallRequest> preparedRef =
                     new AtomicReference<>();
             ProtosTask task =
                     module.executionDomain()
                             .createTask(
                                     null,
                                     current -> {
-                                        ProtosPreparedCalls.PreparedClosureCall prepared =
-                                                ProtosClosureCallPreparation.prepareTaskOwnedDirectClosureIfBytecode(
-                                                                identity,
-                                                                List.of(integer(9)),
-                                                                module,
-                                                                current);
+                                        // I115: a Task-owned entry through the shared dispatcher.
+                                        ProtosCallRequest prepared =
+                                                ProtosCallRequest.taskEntry(
+                                                        identity,
+                                                        current,
+                                                        List.of(integer(9)),
+                                                        module);
                                         preparedRef.set(prepared);
-                                        ProtosBytecodeTaskExecution.executePreparedClosure(
+                                        ProtosBytecodeTaskExecution.executeRequest(
                                                 current, prepared);
                                     });
             assertTrue(module.executionDomain().dispatchOne());
 
             assertEquals(ProtosTask.State.COMPLETED, task.state());
             assertEquals("9", integerValue(task.result().orElseThrow()));
-            Object[] arguments = preparedRef.get().targetArguments();
+            Object[] arguments = preparedRef.get().arguments();
             assertSame(identity, arguments[0], "no activation was materialized");
             assertSame(task, ProtosFrameArguments.compactTask(arguments));
             assertSame(task, ProtosFrameArguments.activation(arguments).task().orElseThrow());
@@ -309,8 +311,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
                             module.currentModuleKey().orElse(null),
                             module.executionDomain());
             RootCallTarget target =
-                    ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
-                            identity, ProtosLanguageContext.currentIfEnteredForRuntime());
+                    ProtosDispatchTestSupport.target(identity);
             // I102: a rich ordinary entry uses the B5 header with its activation published.
             Object[] arguments = ProtosFrameArguments.publishedInvocation(activation);
             assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, arguments.length);
@@ -342,13 +343,9 @@ final class ProtosPerf025H1LazyRootActivationTest {
                             module.currentModuleKey().orElse(null),
                             module.executionDomain());
             RootCallTarget zeroTarget =
-                    ProtosBytecodeRootNode.PrepareSendArguments
-                            .fastOrdinarySendTarget(
-                                    zero,
-                                    ProtosLanguageContext.currentIfEnteredForRuntime());
-            ProtosPreparedCalls.PreparedClosureCall zeroCall =
-                    ProtosPreparedCalls.PreparedClosureCall.ordinary(
-                            zeroTarget, zeroActivation);
+                    ProtosDispatchTestSupport.target(zero);
+            DirectEntry zeroCall =
+                    ProtosDispatchTestSupport.rich(zeroTarget, zeroActivation);
             Object[] zeroArguments = zeroCall.targetArguments();
 
             assertEquals(ProtosFrameArguments.HEADER_LENGTH, zeroArguments.length);
@@ -368,10 +365,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
                     parsedClosure("(value) => { value }", "i102b-one.protos", module);
             ProtosIntegerValue supplied = integer(42);
             RootCallTarget identityTarget =
-                    ProtosBytecodeRootNode.PrepareSendArguments
-                            .fastOrdinarySendTarget(
-                                    identity,
-                                    ProtosLanguageContext.currentIfEnteredForRuntime());
+                    ProtosDispatchTestSupport.target(identity);
 
             ProtosActivation oneActivation =
                     ProtosActivation.forClosureInvocation(
@@ -381,9 +375,8 @@ final class ProtosPerf025H1LazyRootActivationTest {
                             module.actorModuleState(),
                             module.currentModuleKey().orElse(null),
                             module.executionDomain());
-            ProtosPreparedCalls.PreparedClosureCall oneCall =
-                    ProtosPreparedCalls.PreparedClosureCall.ordinary(
-                            identityTarget, oneActivation);
+            DirectEntry oneCall =
+                    ProtosDispatchTestSupport.rich(identityTarget, oneActivation);
             Object[] oneArguments = oneCall.targetArguments();
 
             assertEquals(
@@ -406,9 +399,8 @@ final class ProtosPerf025H1LazyRootActivationTest {
                             module.actorModuleState(),
                             module.currentModuleKey().orElse(null),
                             module.executionDomain());
-            ProtosPreparedCalls.PreparedClosureCall excessCall =
-                    ProtosPreparedCalls.PreparedClosureCall.ordinary(
-                            identityTarget, excessActivation);
+            DirectEntry excessCall =
+                    ProtosDispatchTestSupport.rich(identityTarget, excessActivation);
             Object[] excessArguments = excessCall.targetArguments();
 
             assertEquals(
@@ -447,13 +439,9 @@ final class ProtosPerf025H1LazyRootActivationTest {
                             module.executionDomain());
 
             RootCallTarget target =
-                    ProtosBytecodeRootNode.PrepareSendArguments
-                            .fastOrdinarySendTarget(
-                                    method,
-                                    ProtosLanguageContext.currentIfEnteredForRuntime());
-            ProtosPreparedCalls.PreparedClosureCall prepared =
-                    ProtosPreparedCalls.PreparedClosureCall.ordinary(
-                            target, activation);
+                    ProtosDispatchTestSupport.target(method);
+            DirectEntry prepared =
+                    ProtosDispatchTestSupport.rich(target, activation);
             Object[] arguments = prepared.targetArguments();
 
             assertEquals(
@@ -500,34 +488,14 @@ final class ProtosPerf025H1LazyRootActivationTest {
                 "only the caller's provenance activation exists");
     }
 
-    private static ProtosPreparedCalls.PreparedClosureCall fastDirect(
+    private static DirectEntry fastDirect(
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
-        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
-        ProtosClosureValue selected =
-                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
-        assertSame(closure, selected, "canonical direct Closure-call selection");
-        RootCallTarget target =
-                ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
-                        closure, entered);
-        return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
-                false,
-                closure,
-                caller,
-                supplied,
-                selected,
-                selected.definition(),
-                entered,
-                selected.definition(),
-                entered,
-                target);
+        // I115: the B5 header the shared dispatcher writes for a function call.
+        return ProtosDispatchTestSupport.direct(closure, caller, supplied);
     }
 
-    private static Object enter(ProtosPreparedCalls.PreparedClosureCall prepared) {
-        Object entered =
-                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
-                        IndirectCallNode.create());
-        return prepared.finish(entered);
+    private static Object enter(DirectEntry prepared) {
+        return ProtosDispatchTestSupport.enter(prepared);
     }
 
     private static Object evaluate(String characters, String name, ProtosActivation activation) {

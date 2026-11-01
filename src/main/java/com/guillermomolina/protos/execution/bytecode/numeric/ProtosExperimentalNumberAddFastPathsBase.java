@@ -118,9 +118,9 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
                 && ProtosNumericValueSupport.isCurrentInteger(argument)) {
             return addIntegers(receiver, argument, callerPrelude(root, frame));
         }
-        return ProtosExperimentalCallBinaryMethodNode.sendOne(
+        return ProtosFunctionCallDispatchers.sendOne(
                 root,
-                ProtosExperimentalCallBinaryMethodNode.callerReference(frame),
+                ProtosFunctionCallDispatchers.callerReference(frame),
                 false,
                 receiver,
                 "+",

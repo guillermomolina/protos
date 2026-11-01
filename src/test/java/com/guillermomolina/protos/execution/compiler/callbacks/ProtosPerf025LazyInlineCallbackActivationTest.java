@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.execution.ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -67,7 +66,7 @@ import org.junit.jupiter.api.Test;
  * focal evidence.
  *
  * <p>An admitted frame-native inline callback enters its region holding only
- * the invocation's {@link PreparedInlineLiteralCall} carrier. Its parameters
+ * the invocation's retired {@code PreparedInlineLiteralCall} carrier. Its parameters
  * and current locals are bound, read and written through carrier-operand
  * operations; the fresh semantic activation is materialized, once, by the
  * first operation or tooling query that needs it, and that materialization
@@ -454,109 +453,6 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
     }
 
     /**
-     * Runtime evidence for an invocation without observers. Suspended on the
-     * callback's last statement, the raw frame (read without requesting a
-     * debugger scope, which would itself be an observer) shows each
-     * invocation's live carrier still unmaterialized and without a durable
-     * authority, while its bindings are PRESENT in the block locals.
-     */
-    @Test
-    void unobservedInvocationNeverMaterializesNorCreatesDurableAuthority()
-            throws Exception {
-        Source source =
-                Source.newBuilder(
-                                ProtosLanguage.ID,
-                                """
-                                run: () => {
-                                    total: 0
-                                    Array(5, 6).each((element) => {
-                                        inner: element
-                                        inner = inner
-                                        inner
-                                    })
-                                    total
-                                }
-                                run()
-                                """,
-                                "perf025-lazy-inline-unobserved.protos")
-                        .uri(URI.create("memory:///perf025-lazy-inline-unobserved.protos"))
-                        .mimeType(ProtosLanguage.MIME_TYPE)
-                        .build();
-        ProtosActivation module = new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
-        AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
-        List<PreparedInlineLiteralCall> carriers = new ArrayList<>();
-        List<Boolean> materialized = new ArrayList<>();
-        List<Boolean> durable = new ArrayList<>();
-        List<Object> inners = new ArrayList<>();
-
-        try (ProtosPolyglotExecutionContext polyglot =
-                ProtosPolyglotExecutionContext.open(
-                        InputStream.nullInputStream(),
-                        OutputStream.nullOutputStream(),
-                        OutputStream.nullOutputStream())) {
-            Instrument instrument =
-                    polyglot.engineForTesting().getInstruments().get("debugger");
-            Debugger debugger = instrument.lookup(Debugger.class);
-            try (DebuggerSession session =
-                    debugger.startSession(
-                            event -> {
-                                try {
-                                    DebugStackFrame top = event.getTopStackFrame();
-                                    TagTreeNode node =
-                                            assertInstanceOf(
-                                                    TagTreeNode.class,
-                                                    top.getRawNode(ProtosLanguage.class));
-                                    Frame frame =
-                                            top.getRawFrame(
-                                                    ProtosLanguage.class,
-                                                    FrameInstance.FrameAccess.READ_ONLY);
-                                    BytecodeNode bytecode = node.getBytecodeNode();
-                                    int bytecodeIndex = node.getEnterBytecodeIndex();
-                                    Object[] names = bytecode.getLocalNames(bytecodeIndex);
-                                    for (int offset = 0; offset < names.length; offset++) {
-                                        Object value =
-                                                bytecode.getLocalValue(bytecodeIndex, frame, offset);
-                                        if (CanonicalToBytecodeLowerer.INLINE_CALLBACK_CALL_LOCAL
-                                                        .equals(names[offset])
-                                                && value instanceof PreparedInlineLiteralCall call) {
-                                            carriers.add(call);
-                                            materialized.add(call.isActivationMaterialized());
-                                            durable.add(call.frameBindingsTransferred());
-                                        } else if ((CanonicalToBytecodeLowerer
-                                                                .INLINE_CALLBACK_BINDING_LOCAL_PREFIX
-                                                        + "inner")
-                                                .equals(names[offset])) {
-                                            inners.add(value);
-                                        }
-                                    }
-                                } catch (Throwable failure) {
-                                    callbackFailure.compareAndSet(null, failure);
-                                } finally {
-                                    event.prepareContinue();
-                                }
-                            })) {
-                session.install(Breakpoint.newBuilder(source).lineIs(6).build());
-                ProtosExecutionOutcome outcome = polyglot.execute(source, module);
-                assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-                assertInteger(0, outcome.value());
-            }
-        }
-
-        if (callbackFailure.get() != null) {
-            throw new AssertionError("debugger callback failed", callbackFailure.get());
-        }
-        assertEquals(2, carriers.size(), "one suspension per invocation");
-        assertNotSame(carriers.get(0), carriers.get(1));
-        assertEquals(List.of(false, false), materialized);
-        assertEquals(List.of(false, false), durable);
-        assertEquals(2, inners.size());
-        assertInteger(5, inners.get(0));
-        assertInteger(6, inners.get(1));
-        System.out.println("PERF025_UNOBSERVED_INVOCATION_ACTIVATION_MATERIALIZED=NO");
-        System.out.println("PERF025_UNOBSERVED_INVOCATION_DURABLE_AUTHORITY_CREATED=NO");
-    }
-
-    /**
      * Suspended on a statement no guest operation has needed the activation
      * for yet, the debugger materializes it on demand, through the same
      * durable transfer, and sees the formal and the callback-owned local.
@@ -721,9 +617,13 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
         assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
     }
 
-    /** One probe call made from inside a live inline callback region. */
+    /**
+     * One probe call made from inside a callback. I115: the callback is an
+     * ordinary invocation through the shared dispatcher, so {@code call} is
+     * the identity of its B5 frame arguments (one per invocation).
+     */
     private record Observation(
-            PreparedInlineLiteralCall call,
+            Object call,
             boolean materializedAtProbe,
             boolean durableAtProbe,
             ProtosActivation activation) {}
@@ -783,7 +683,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
         }
 
         private Observation record() {
-            AtomicReference<PreparedInlineLiteralCall> found = new AtomicReference<>();
+            AtomicReference<Object[]> found = new AtomicReference<>();
             Truffle.getRuntime()
                     .iterateFrames(
                             frame -> {
@@ -797,59 +697,28 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                                     return null;
                                 }
                                 host.compareAndSet(null, semantic);
-                                found.set(liveCarrier(frame, semantic));
+                                Frame values =
+                                        sourceFrame(
+                                                frame.getFrame(FrameInstance.FrameAccess.READ_ONLY),
+                                                semantic);
+                                found.set(values == null ? null : values.getArguments());
                                 return semantic;
                             });
-            PreparedInlineLiteralCall call = found.get();
-            if (call == null) {
+            Object[] arguments = found.get();
+            if (arguments == null || !ProtosFrameArguments.hasActivation(arguments)) {
                 return null;
             }
-            boolean materialized = call.isActivationMaterialized();
-            boolean durable = call.frameBindingsTransferred();
+            boolean materialized = ProtosFrameArguments.hasPublishedActivation(arguments);
+            // I115: no carrier transfers bindings; the callee frame keeps them.
+            boolean durable = false;
             Observation observation =
-                    new Observation(call, materialized, durable, call.activation());
+                    new Observation(
+                            arguments,
+                            materialized,
+                            durable,
+                            ProtosFrameArguments.activation(arguments));
             calls.add(observation);
             return observation;
-        }
-
-        /**
-         * The carrier live in {@code frame}: read at the frame's own location
-         * when Truffle can resolve it, otherwise at the first instruction where
-         * the region's carrier local is in scope (each probed root here holds
-         * exactly one region; D203/I105 removed the former entry check).
-         */
-        private static PreparedInlineLiteralCall liveCarrier(
-                FrameInstance frame,
-                ProtosBytecodeRootNode semantic) {
-            BytecodeFrame located = BytecodeFrame.get(frame, FrameInstance.FrameAccess.READ_ONLY);
-            if (located != null) {
-                Object[] names = located.getLocalNames();
-                for (int offset = names.length - 1; offset >= 0; offset--) {
-                    if (CanonicalToBytecodeLowerer.INLINE_CALLBACK_CALL_LOCAL.equals(names[offset])
-                            && located.getLocalValue(offset)
-                                    instanceof PreparedInlineLiteralCall call) {
-                        return call;
-                    }
-                }
-                return null;
-            }
-            BytecodeNode bytecode = semantic.getBytecodeNode();
-            Frame values = sourceFrame(frame.getFrame(FrameInstance.FrameAccess.READ_ONLY), semantic);
-            if (values == null) {
-                return null;
-            }
-            for (Instruction instruction : bytecode.getInstructionsAsList()) {
-                int bytecodeIndex = instruction.getBytecodeIndex();
-                Object[] names = bytecode.getLocalNames(bytecodeIndex);
-                for (int offset = names.length - 1; offset >= 0; offset--) {
-                    if (CanonicalToBytecodeLowerer.INLINE_CALLBACK_CALL_LOCAL.equals(names[offset])
-                            && bytecode.getLocalValue(bytecodeIndex, values, offset)
-                                    instanceof PreparedInlineLiteralCall call) {
-                        return call;
-                    }
-                }
-            }
-            return null;
         }
 
         /**

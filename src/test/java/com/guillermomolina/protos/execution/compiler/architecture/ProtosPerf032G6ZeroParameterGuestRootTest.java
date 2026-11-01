@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosDispatchTestSupport.DirectEntry;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -78,11 +79,11 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
         withCore(module -> {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "g6-valid.protos", module);
             for (int index = 0; index < 4; index++) {
-                ProtosPreparedCalls.PreparedClosureCall prepared = fastDirect(one, module);
-                assertSame(target(one), prepared.bodyTarget());
+                DirectEntry prepared = fastDirect(one, module);
+                assertSame(target(one), prepared.target());
                 assertEquals("1", integerValue(enter(prepared)));
                 assertSame(one, prepared.targetArguments()[0], "no activation was materialized");
-                assertNull(prepared.taskForRuntime(), "no Task was initialized");
+                assertNull(ProtosFrameArguments.compactTask(prepared.targetArguments()), "no Task was initialized");
             }
             assertTrue(module.task().isEmpty());
         });
@@ -95,16 +96,16 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "g6-excess.protos", module);
 
             ProtosIntegerValue supplied = integer(5);
-            ProtosPreparedCalls.PreparedClosureCall single = fastDirect(one, module, supplied);
-            assertSame(target(one), single.bodyTarget());
+            DirectEntry single = fastDirect(one, module, supplied);
+            assertSame(target(one), single.target());
             assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, single.targetArguments().length);
             assertSame(supplied, single.targetArguments()[ProtosFrameArguments.HEADER_LENGTH]);
             assertEquals("1", integerValue(enter(single)));
             assertSame(one, single.targetArguments()[0], "excess arguments materialize nothing");
 
-            ProtosPreparedCalls.PreparedClosureCall several =
+            DirectEntry several =
                     fastDirect(one, module, integer(1), integer(2), integer(3));
-            assertSame(target(one), several.bodyTarget());
+            assertSame(target(one), several.target());
             assertEquals("1", integerValue(enter(several)));
         });
         System.out.println("I105_EXCESS_ARGUMENTS_IGNORED_COMPACT=PASS");
@@ -123,9 +124,9 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
                             richActivation(one, module, integer(1)))));
 
             ProtosActivation rich = richActivation(one, module, integer(2));
-            ProtosPreparedCalls.PreparedClosureCall prepared =
-                    ProtosPreparedCalls.PreparedClosureCall.ordinary(target(one), rich);
-            assertSame(target(one), prepared.bodyTarget());
+            DirectEntry prepared =
+                    ProtosDispatchTestSupport.rich(target(one), rich);
+            assertSame(target(one), prepared.target());
             assertEquals("1", integerValue(enter(prepared)));
             assertSame(rich, prepared.targetArguments()[0], "no second activation");
 
@@ -251,12 +252,14 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
             assertEquals(ProtosTask.State.COMPLETED, valid.state());
             assertEquals("1", integerValue(valid.result().orElseThrow()));
 
-            AtomicReference<ProtosPreparedCalls.PreparedClosureCall> prepared =
+            AtomicReference<ProtosCallRequest> prepared =
                     new AtomicReference<>();
             ProtosTask excess = runTaskOwned(one, module, List.of(integer(1)), prepared);
             assertEquals(ProtosTask.State.COMPLETED, excess.state());
             assertEquals("1", integerValue(excess.result().orElseThrow()));
-            assertSame(target(one), prepared.get().bodyTarget());
+            // I115: the dispatched Task entry ran the Closure with its exact Task.
+            assertSame(one, prepared.get().callable());
+            assertSame(excess, ProtosFrameArguments.compactTask(prepared.get().arguments()));
             assertTrue(module.task().isEmpty());
         });
         System.out.println("I105_TASK_OWNED_CONTRACT=PASS");
@@ -363,17 +366,17 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
             ProtosClosureValue closure,
             ProtosActivation module,
             List<?> supplied,
-            AtomicReference<ProtosPreparedCalls.PreparedClosureCall> preparedRef) {
+            AtomicReference<ProtosCallRequest> preparedRef) {
         ProtosTask task =
                 module.executionDomain()
                         .createTask(
                                 null,
                                 current -> {
-                                    ProtosPreparedCalls.PreparedClosureCall prepared =
-                                            ProtosClosureCallPreparation.prepareTaskOwnedDirectClosureIfBytecode(
-                                                            closure, supplied, module, current);
+                                    ProtosCallRequest prepared =
+                                            ProtosCallRequest.taskEntry(
+                                                    closure, current, supplied, module);
                                     preparedRef.set(prepared);
-                                    ProtosBytecodeTaskExecution.executePreparedClosure(
+                                    ProtosBytecodeTaskExecution.executeRequest(
                                             current, prepared);
                                 });
         assertTrue(module.executionDomain().dispatchOne());
@@ -399,35 +402,17 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
     }
 
     private static RootCallTarget target(ProtosClosureValue closure) {
-        return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
-                closure, ProtosLanguageContext.currentIfEnteredForRuntime());
+        return ProtosDispatchTestSupport.target(closure);
     }
 
-    private static ProtosPreparedCalls.PreparedClosureCall fastDirect(
+    private static DirectEntry fastDirect(
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
-        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
-        ProtosClosureValue selected =
-                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
-        assertSame(closure, selected, "canonical direct Closure-call selection");
-        return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
-                false,
-                closure,
-                caller,
-                supplied,
-                selected,
-                selected.definition(),
-                entered,
-                selected.definition(),
-                entered,
-                target(closure));
+        // I115: the B5 header the shared dispatcher writes for a function call.
+        return ProtosDispatchTestSupport.direct(closure, caller, supplied);
     }
 
-    private static Object enter(ProtosPreparedCalls.PreparedClosureCall prepared) {
-        Object entered =
-                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
-                        IndirectCallNode.create());
-        return prepared.finish(entered);
+    private static Object enter(DirectEntry prepared) {
+        return ProtosDispatchTestSupport.enter(prepared);
     }
 
     private static Object evaluate(String characters, String name, ProtosActivation activation) {

@@ -73,4 +73,15 @@ public final class ProtosReturnHome {
         }
         active = false;
     }
+
+    /**
+     * I115: idempotent close used only by the owning activation scope when it
+     * is definitively left (TruffleRuby FrameOnStackMarker). Has no effect on
+     * an already-completed home or on the unobservable markers.
+     */
+    public void closeOwned() {
+        if (active && isMaterialized()) {
+            active = false;
+        }
+    }
 }

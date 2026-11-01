@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
@@ -84,12 +83,12 @@ final class ProtosStructuredMapUpdateCalls {
             comparisonEntered = false;
         }
 
-        PreparedClosureCall prepareHash() {
+        ProtosCallRequest prepareHash() {
             if (hashAccepted) {
                 throw new IllegalStateException(
                         "Map initial-definition hash callback prepared after hash acceptance");
             }
-            return ProtosSendPreparation.prepareSend(
+            return ProtosCallRequest.send(
                     key,
                     "hash",
                     activation,
@@ -124,13 +123,13 @@ final class ProtosStructuredMapUpdateCalls {
             return index < candidates.size();
         }
 
-        PreparedClosureCall prepareEquality() {
+        ProtosCallRequest prepareEquality() {
             if (!needsEquality()) {
                 throw new IllegalStateException(
                         "Map initial-definition equality callback requested without a candidate");
             }
 
-            return ProtosSendPreparation.prepareSend(
+            return ProtosCallRequest.send(
                     key,
                     "==",
                     activation,
@@ -237,12 +236,12 @@ final class ProtosStructuredMapUpdateCalls {
             comparisonEntered = false;
         }
 
-        PreparedClosureCall prepareHash() {
+        ProtosCallRequest prepareHash() {
             if (hashAccepted) {
                 throw new IllegalStateException(
                         "Map.atPut hash callback prepared after hash acceptance");
             }
-            return ProtosSendPreparation.prepareSend(key, "hash", activation, List.of());
+            return ProtosCallRequest.send(key, "hash", activation, List.of());
         }
 
         void acceptHash(Object result) {
@@ -270,12 +269,12 @@ final class ProtosStructuredMapUpdateCalls {
             return index < candidates.size();
         }
 
-        PreparedClosureCall prepareEquality() {
+        ProtosCallRequest prepareEquality() {
             if (!needsEquality()) {
                 throw new IllegalStateException(
                         "Map.atPut equality callback requested without a candidate");
             }
-            return ProtosSendPreparation.prepareSend(
+            return ProtosCallRequest.send(
                     key,
                     "==",
                     activation,
@@ -388,12 +387,12 @@ final class ProtosStructuredMapUpdateCalls {
             comparisonEntered = false;
         }
 
-        PreparedClosureCall prepareHash() {
+        ProtosCallRequest prepareHash() {
             if (hashAccepted) {
                 throw new IllegalStateException(
                         "Map.remove hash callback prepared after hash acceptance");
             }
-            return ProtosSendPreparation.prepareSend(key, "hash", activation, List.of());
+            return ProtosCallRequest.send(key, "hash", activation, List.of());
         }
 
         void acceptHash(Object result) {
@@ -421,12 +420,12 @@ final class ProtosStructuredMapUpdateCalls {
             return index < candidates.size();
         }
 
-        PreparedClosureCall prepareEquality() {
+        ProtosCallRequest prepareEquality() {
             if (!needsEquality()) {
                 throw new IllegalStateException(
                         "Map.remove equality callback requested without a candidate");
             }
-            return ProtosSendPreparation.prepareSend(
+            return ProtosCallRequest.send(
                     key,
                     "==",
                     activation,

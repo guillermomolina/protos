@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureOneTail;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -80,15 +79,15 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             ProtosClosureValue second = closure("make()\n", module);
             assertNotSame(first, second);
             assertSame(first.definition(), second.definition());
-            assertSame(first.definition(), ProtosClosureCallPreparation.sourceDefinitionOrNull(second));
+            assertSame(first.definition(), sourceDefinition(second));
 
             ProtosLanguageContext context = ProtosLanguageContext.current();
-            RootCallTarget target = ProtosClosureCallPreparation.definitionTarget(first, module, context);
+            RootCallTarget target = effectiveTarget(first, context);
             assertNotNull(target);
-            assertSame(target, ProtosClosureCallPreparation.definitionTarget(second, module, context));
-            assertTrue(ProtosClosureCallPreparation.admittedTarget(target, 1));
-            assertSame(first, ProtosClosureCallPreparation.admittedInstanceOrNull(first, module));
-            assertSame(second, ProtosClosureCallPreparation.admittedInstanceOrNull(second, module));
+            assertSame(target, effectiveTarget(second, context));
+            assertTrue(nonSuspendingRoot(target));
+            assertSame(first, dispatchedAsFunction(first));
+            assertSame(second, dispatchedAsFunction(second));
         });
     }
 
@@ -111,13 +110,13 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             assertNotSame(first, second);
 
             ProtosLanguageContext context = ProtosLanguageContext.current();
-            RootCallTarget target = ProtosClosureCallPreparation.definitionTarget(first, module, context);
+            RootCallTarget target = effectiveTarget(first, context);
             assertNotNull(target);
-            assertSame(target, ProtosClosureCallPreparation.definitionTarget(second, module, context));
-            assertTrue(ProtosClosureCallPreparation.admittedTarget(target, 0));
+            assertSame(target, effectiveTarget(second, context));
+            assertTrue(nonSuspendingRoot(target));
             // D203/I105: an excess argument enters the same ordinary root.
-            assertTrue(ProtosClosureCallPreparation.admittedTarget(target, 1));
-            assertSame(second, ProtosClosureCallPreparation.admittedInstanceOrNull(second, module));
+            assertTrue(nonSuspendingRoot(target));
+            assertSame(second, dispatchedAsFunction(second));
         });
     }
 
@@ -209,7 +208,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             ProtosClosureValue late = assertInstanceOf(
                     ProtosClosureValue.class,
                     module.context().readLocalSlot("late").orElseThrow());
-            assertNull(ProtosClosureCallPreparation.admittedInstanceOrNull(late, module));
+            assertNull(dispatchedAsFunction(late));
         });
     }
 
@@ -234,20 +233,20 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             // Observable ReturnHome: the exact instance cannot prove the
             // unobservable marker.
             ProtosClosureValue escaper = closure("makeEscaper()\n", module);
-            assertNull(ProtosClosureCallPreparation.admittedInstanceOrNull(escaper, module));
+            assertNull(dispatchedAsFunction(escaper));
 
             // A body that may suspend (a dynamically selected send) is not
             // admitted at the target level.
             ProtosClosureValue adder = closure("makeAdder(1)\n", module);
-            RootCallTarget adderTarget = ProtosClosureCallPreparation.definitionTarget(adder, module, context);
+            RootCallTarget adderTarget = effectiveTarget(adder, context);
             assertNotNull(adderTarget);
-            assertFalse(ProtosClosureCallPreparation.admittedTarget(adderTarget, 1));
+            assertFalse(nonSuspendingRoot(adderTarget));
 
             // No entered Context, or a receiver that is not a Closure, yields
             // no target projection.
-            assertNull(ProtosClosureCallPreparation.definitionTarget(adder, module, null));
-            assertNull(ProtosClosureCallPreparation.definitionTarget(new Object(), module, context));
-            assertNull(ProtosClosureCallPreparation.sourceDefinitionOrNull(new Object()));
+            assertNull(effectiveTarget(adder, null));
+            assertNull(effectiveTarget(new Object(), context));
+            assertNull(sourceDefinition(new Object()));
 
             // A native Closure has no source definition for this tier.
             Object standardCall =
@@ -255,8 +254,8 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             ProtosClosureValue nativeClosure =
                     assertInstanceOf(ProtosClosureValue.class, standardCall);
             assertTrue(nativeClosure.nativeBody().isPresent());
-            assertNull(ProtosClosureCallPreparation.sourceDefinitionOrNull(nativeClosure));
-            assertNull(ProtosClosureCallPreparation.admittedInstanceOrNull(nativeClosure, module));
+            assertNull(sourceDefinition(nativeClosure));
+            assertNull(dispatchedAsFunction(nativeClosure));
         });
     }
 
@@ -321,13 +320,13 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             assertNotSame(template, rebuilt);
 
             RootCallTarget originalTarget =
-                    ProtosClosureCallPreparation.definitionTarget(original, module, context);
+                    effectiveTarget(original, context);
             RootCallTarget projectedTarget =
-                    ProtosClosureCallPreparation.definitionTarget(projected, module, context);
+                    effectiveTarget(projected, context);
             assertSame(template.bytecodeActivationTargetForComposition(), originalTarget);
             assertSame(rebuilt.bytecodeActivationTargetForComposition(), projectedTarget);
             assertNotSame(originalTarget, projectedTarget);
-            assertTrue(ProtosClosureCallPreparation.admittedTarget(projectedTarget, 1));
+            assertTrue(nonSuspendingRoot(projectedTarget));
 
             module.context().createLocalSlot("projected", projected);
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
@@ -353,8 +352,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                         new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
                 evaluate("make: () => { (value) => { value } }\n", "perf042-foreign-define.protos", module);
                 foreign = closure("make()\n", module);
-                foreignTarget = ProtosClosureCallPreparation.definitionTarget(
-                        foreign, module, ProtosLanguageContext.current());
+                foreignTarget = effectiveTarget(foreign, ProtosLanguageContext.current());
             } finally {
                 first.leave();
             }
@@ -369,8 +367,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                 // The derivation the definition tier caches per entered
                 // Context never yields the other Context's target.
                 RootCallTarget projected =
-                        ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
-                                foreign, entered);
+                        ProtosClosureCallPreparation.functionCallTarget(foreign, entered);
                 assertNotNull(projected);
                 assertNotSame(foreignTarget, projected);
                 assertSame(
@@ -378,8 +375,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                         projected.getRootNode().getLanguage(ProtosLanguage.class));
                 assertSame(
                         projected,
-                        ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
-                                foreign, entered));
+                        ProtosClosureCallPreparation.functionCallTarget(foreign, entered));
                 assertEquals(
                         projectionsBefore + 1,
                         entered.projectedBytecodeExecutionPlanCountForTesting());
@@ -420,8 +416,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             module.context().createLocalSlot("deferred", deferred);
             evaluate("deferred.call: (value) => { 100 + value }\n", "perf042-deferred-override.protos", module);
 
-            assertNull(ProtosClosureCallPreparation.definitionTarget(
-                    deferred, module, ProtosLanguageContext.current()));
+            assertNull(effectiveTarget(deferred, ProtosLanguageContext.current()));
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 assertInteger(107, evaluate("callOne(deferred, 7)\n", "perf042-deferred-call.protos", module));
                 assertInteger(7, evaluate("callOne(make(), 7)\n", "perf042-deferred-mixed.protos", module));
@@ -632,30 +627,30 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             assertTrue(ProtosStandardObjectProtocol.isCanonicalRootCallSelectionForRuntime());
 
             // The admitted instance is always the current one.
-            assertSame(first, InvokeClosureOneTail.admittedInstanceOrNull(first, module));
-            assertSame(second, InvokeClosureOneTail.admittedInstanceOrNull(second, module));
+            assertSame(first, dispatchedAsFunction(first));
+            assertSame(second, dispatchedAsFunction(second));
 
             ProtosLanguageContext context = ProtosLanguageContext.current();
             RootCallTarget target =
-                    InvokeClosureOneTail.admittedDefinitionTarget(first, context);
+                    effectiveTarget(first, context);
             assertNotNull(target);
-            assertSame(target, InvokeClosureOneTail.admittedDefinitionTarget(second, context));
+            assertSame(target, effectiveTarget(second, context));
             assertSame(
                     first.executionPlan().orElseThrow().bytecodeActivationTargetForComposition(),
                     target);
-            assertNull(InvokeClosureOneTail.admittedDefinitionTarget(first, null));
+            assertNull(effectiveTarget(first, null));
 
             // A local call on a fresh Closure: removed and re-created.
             module.context().createLocalSlot("local", first);
             evaluate("local.call: (value) => { 100 + value }\n", "i114-local.protos", module);
             assertTrue(first.hasLocalCallSlotForRuntime());
-            assertNull(InvokeClosureOneTail.admittedInstanceOrNull(first, module));
-            assertSame(second, InvokeClosureOneTail.admittedInstanceOrNull(second, module));
+            assertNull(dispatchedAsFunction(first));
+            assertSame(second, dispatchedAsFunction(second));
             evaluate("local.removeSlot(\"call\")\n", "i114-local-remove.protos", module);
             assertFalse(first.hasLocalCallSlotForRuntime());
-            assertSame(first, InvokeClosureOneTail.admittedInstanceOrNull(first, module));
+            assertSame(first, dispatchedAsFunction(first));
             evaluate("local.call: (value) => { 300 + value }\n", "i114-local-recreate.protos", module);
-            assertNull(InvokeClosureOneTail.admittedInstanceOrNull(first, module));
+            assertNull(dispatchedAsFunction(first));
             evaluate("local.removeSlot(\"call\")\n", "i114-local-remove-again.protos", module);
 
             // A local non-Closure call, and a local alias of STANDARD_CALL:
@@ -663,19 +658,19 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             Object standardCall =
                     ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow();
             second.createLocalSlot("call", ProtosNullValue.INSTANCE);
-            assertNull(InvokeClosureOneTail.admittedInstanceOrNull(second, module));
+            assertNull(dispatchedAsFunction(second));
             second.assignLocalSlot("call", standardCall);
-            assertNull(InvokeClosureOneTail.admittedInstanceOrNull(second, module));
+            assertNull(dispatchedAsFunction(second));
             second.removeLocalSlot("call");
-            assertSame(second, InvokeClosureOneTail.admittedInstanceOrNull(second, module));
+            assertSame(second, dispatchedAsFunction(second));
 
             // The bootstrapped root Object is frozen: its call selector cannot
             // change, so the certificate stays valid without registered
             // dependencies.
             assertTrue(ProtosObjectValue.rootObject().isFrozen());
             assertTrue(ProtosStandardObjectProtocol.isCanonicalRootCallSelectionForRuntime());
-            assertSame(first, InvokeClosureOneTail.admittedInstanceOrNull(first, module));
-            assertSame(second, InvokeClosureOneTail.admittedInstanceOrNull(second, module));
+            assertSame(first, dispatchedAsFunction(first));
+            assertSame(second, dispatchedAsFunction(second));
         });
     }
 
@@ -701,7 +696,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                     prepared.capturedReceiver(), null, new ProtosReturnHome(),
                     module.prelude().orElseThrow(), plan);
             assertEquivalentHomeProof(false, materializedCaptured);
-            assertNull(ProtosClosureCallPreparation.admittedInstanceOrNull(materializedCaptured, module));
+            assertNull(dispatchedAsFunction(materializedCaptured));
 
             // The ABI-only primitive marker is not the semantic marker.
             ProtosClosureValue primitiveMarker = new ProtosClosureValue(
@@ -740,8 +735,8 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                             });
             assertFalse(deferred.hasUnobservableInvocationReturnHomeForRuntime());
             deferred.createLocalSlot("call", prepared);
-            assertNull(InvokeClosureOneTail.admittedInstanceOrNull(deferred, module));
-            assertNull(ProtosClosureCallPreparation.admittedInstanceOrNull(deferred, module));
+            assertNull(dispatchedAsFunction(deferred));
+            assertNull(dispatchedAsFunction(deferred));
             assertEquals(0, rematerializations[0]);
             assertTrue(deferred.executionPlan().isEmpty());
         });
@@ -920,10 +915,42 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                             + (actual == null
                                     ? "null"
                                     : actual.getClass().getName())
-                            + ", preparedCall="
-                            + (actual instanceof ProtosPreparedCalls.PreparedClosureCall)
+                            + ", callRequest="
+                            + (actual instanceof ProtosCallRequest)
                             + ", value=" + String.valueOf(actual),
                     invalidType);
         }
     }
+
+    /*
+     * I115: the former admission facts, stated as properties of the shared
+     * dispatcher. A source Closure is dispatched as a function by
+     * representation (its local call slot is not consulted, the approved
+     * D013 divergence); its effective CallTarget is the Context's projection.
+     */
+    private static Object sourceDefinition(Object value) {
+        return value instanceof ProtosClosureValue closure && closure.nativeBody().isEmpty()
+                ? closure.definition()
+                : null;
+    }
+
+    private static RootCallTarget effectiveTarget(Object value, ProtosLanguageContext context) {
+        return context == null || !(value instanceof ProtosClosureValue closure)
+                ? null
+                : ProtosClosureCallPreparation.functionCallTarget(closure, context);
+    }
+
+    private static boolean nonSuspendingRoot(RootCallTarget target) {
+        return target != null
+                && target.getRootNode() instanceof ProtosBytecodeRootNode root
+                && root.provablyNonSuspendingBody();
+    }
+
+    private static ProtosClosureValue dispatchedAsFunction(ProtosClosureValue closure) {
+        return ProtosFunctionCallDispatchers.CallNode.isSourceFunction(closure)
+                        && closure.hasUnobservableInvocationReturnHomeForRuntime()
+                ? closure
+                : null;
+    }
+
 }

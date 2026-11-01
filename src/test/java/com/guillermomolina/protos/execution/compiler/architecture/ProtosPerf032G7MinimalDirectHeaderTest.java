@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosDispatchTestSupport.DirectEntry;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -65,7 +66,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
     void variantAUsesTwoSlotsWithTheUnobservableMarker() throws Exception {
         withCore(module -> {
             ProtosClosureValue literal = parsedClosure("() => { 1 }", "g7-a.protos", module);
-            ProtosPreparedCalls.PreparedClosureCall prepared = fastDirect(literal, module);
+            DirectEntry prepared = fastDirect(literal, module);
             Object[] arguments = prepared.targetArguments();
 
             assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
@@ -80,7 +81,8 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             assertNull(ProtosFrameArguments.compactTask(arguments));
             assertEquals(0, ProtosFrameArguments.compactSuppliedArgumentCount(arguments));
             assertSame(module, ProtosFrameArguments.compactInheritedProvenanceCaller(arguments));
-            assertThrows(IllegalStateException.class, prepared::activation);
+            assertFalse(ProtosFrameArguments.hasPublishedActivation(arguments),
+                    "no activation exists before the callee runs");
 
             assertEquals("1", integerValue(enter(prepared)));
             assertSame(literal, arguments[0], "execution creates no eager activation");
@@ -109,7 +111,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
         withCore(module -> {
             ProtosClosureValue returning =
                     parsedClosure("() => { ^ 42 }", "g7-b.protos", module);
-            ProtosPreparedCalls.PreparedClosureCall prepared = fastDirect(returning, module);
+            DirectEntry prepared = fastDirect(returning, module);
             Object[] arguments = prepared.targetArguments();
 
             assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
@@ -137,32 +139,29 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
         withCore(module -> {
             ProtosClosureValue literal = parsedClosure("() => { 1 }", "g7-c.protos", module);
             AtomicReference<Object[]> argumentsRef = new AtomicReference<>();
+            AtomicReference<ProtosTask> currentRef = new AtomicReference<>();
             ProtosTask task =
                     module.executionDomain().createTask(null, current -> {
-                        ProtosPreparedCalls.PreparedClosureCall prepared =
-                                ProtosClosureCallPreparation.prepareTaskOwnedDirectClosureIfBytecode(
-                                        literal, List.of(), module, current);
-                        Object[] arguments = prepared.targetArguments();
-                        argumentsRef.set(arguments);
-                        assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
-                        assertSame(literal, arguments[0]);
-                        assertSame(current, arguments[2]);
-                        assertSame(module, arguments[3]);
-                        assertSame(ProtosReturnHome.unobservable(), arguments[4]);
-                        assertSame(current, ProtosFrameArguments.compactTask(arguments));
-                        assertSame(module, ProtosFrameArguments.compactCaller(arguments));
-                        assertSame(ProtosReturnHome.unobservable(),
-                                ProtosFrameArguments.compactReturnHome(arguments));
-                        assertNull(
-                                ProtosFrameArguments.compactInheritedProvenanceCaller(arguments),
-                                "an explicit Task is never a no-Task invocation");
-                        ProtosBytecodeTaskExecution.executePreparedClosure(current, prepared);
+                        // I115: the Task-owned entry is made by the shared dispatcher,
+                        // which writes the B5 header; it is inspected after the call.
+                        ProtosCallRequest prepared =
+                                ProtosCallRequest.taskEntry(literal, current, List.of(), module);
+                        argumentsRef.set(prepared.arguments());
+                        currentRef.set(current);
+                        assertSame(current, prepared.arguments()[2]);
+                        ProtosBytecodeTaskExecution.executeRequest(current, prepared);
                     });
             assertTrue(module.executionDomain().dispatchOne());
 
             assertEquals(ProtosTask.State.COMPLETED, task.state());
             assertEquals("1", integerValue(task.result().orElseThrow()));
             Object[] arguments = argumentsRef.get();
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
+            assertSame(task, arguments[2]);
+            assertSame(module, arguments[3]);
+            assertSame(ProtosReturnHome.unobservable(),
+                    ProtosFrameArguments.compactReturnHome(arguments));
+            assertSame(module, ProtosFrameArguments.compactCaller(arguments));
             ProtosActivation callee = ProtosFrameArguments.activation(arguments);
             assertSame(task, callee.task().orElseThrow());
             assertSame(task, ProtosFrameArguments.compactTask(arguments));
@@ -181,22 +180,20 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             AtomicReference<ProtosReturnHome> homeRef = new AtomicReference<>();
             ProtosTask task =
                     module.executionDomain().createTask(null, current -> {
-                        ProtosPreparedCalls.PreparedClosureCall prepared =
-                                ProtosClosureCallPreparation.prepareTaskOwnedDirectClosureIfBytecode(
-                                        returning, List.of(), module, current);
-                        Object[] arguments = prepared.targetArguments();
+                        // I115: Task-owned entry through the shared dispatcher.
+                        ProtosCallRequest prepared =
+                                ProtosCallRequest.taskEntry(returning, current, List.of(), module);
+                        Object[] arguments = prepared.arguments();
                         argumentsRef.set(arguments);
-                        assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
-                        assertSame(returning, arguments[0]);
                         assertSame(current, arguments[2]);
+                        ProtosBytecodeTaskExecution.executeRequest(current, prepared);
+                        assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
                         assertSame(module, arguments[3]);
                         ProtosReturnHome home =
                                 assertInstanceOf(ProtosReturnHome.class, arguments[4]);
                         assertNotSame(ProtosReturnHome.unobservable(), home);
                         assertSame(home, ProtosFrameArguments.compactReturnHome(arguments));
-                        assertTrue(home.isActive());
                         homeRef.set(home);
-                        ProtosBytecodeTaskExecution.executePreparedClosure(current, prepared);
                     });
             assertTrue(module.executionDomain().dispatchOne());
 
@@ -305,7 +302,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "g7-full.protos", module);
             ProtosIntegerValue seven = integer(7);
-            ProtosPreparedCalls.PreparedClosureCall prepared =
+            DirectEntry prepared =
                     fastDirect(identity, module, seven);
             Object[] direct = prepared.targetArguments();
             assertEquals(6, direct.length);
@@ -353,13 +350,12 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
         withCore(module -> {
             ProtosClosureValue literal =
                     parsedClosure("() => { 1 }", "perf038h-call01.protos", module);
-            RootCallTarget target = fastDirect(literal, module).bodyTarget();
+            RootCallTarget target = fastDirect(literal, module).target();
 
-            ProtosPreparedCalls.PreparedClosureCall zero =
-                    ProtosClosureCallPreparation.finishDirectClosureCallZero(
-                            literal, target, module);
+            DirectEntry zero =
+                    ProtosDispatchTestSupport.direct(literal, module);
 
-            assertSame(target, zero.bodyTarget());
+            assertSame(target, zero.target());
             assertEquals(ProtosFrameArguments.HEADER_LENGTH, zero.targetArguments().length);
             assertSame(literal, zero.targetArguments()[0]);
             assertNull(zero.targetArguments()[2]);
@@ -370,12 +366,11 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             zero.targetArguments()));
 
             ProtosIntegerValue value = integer(9);
-            ProtosPreparedCalls.PreparedClosureCall one =
-                    ProtosClosureCallPreparation.finishDirectClosureCallOne(
-                            literal, target, value, module);
+            DirectEntry one =
+                    ProtosDispatchTestSupport.direct(literal, module, value);
 
             // D203/I105: excess arguments enter the ordinary body root.
-            assertSame(target, one.bodyTarget());
+            assertSame(target, one.target());
             assertEquals(6, one.targetArguments().length);
             assertSame(literal, one.targetArguments()[0]);
             assertSame(module, one.targetArguments()[3]);
@@ -391,10 +386,9 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             "perf038h-call0-home.protos",
                             module);
             RootCallTarget returningTarget =
-                    fastDirect(returning, module).bodyTarget();
-            ProtosPreparedCalls.PreparedClosureCall owned =
-                    ProtosClosureCallPreparation.finishDirectClosureCallZero(
-                            returning, returningTarget, module);
+                    fastDirect(returning, module).target();
+            DirectEntry owned =
+                    ProtosDispatchTestSupport.direct(returning, module);
 
             assertEquals(ProtosFrameArguments.HEADER_LENGTH, owned.targetArguments().length);
             ProtosReturnHome physicalHome =
@@ -402,10 +396,10 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             ProtosReturnHome.class,
                             owned.targetArguments()[4]);
             assertNotSame(ProtosReturnHome.unobservable(), physicalHome);
-            assertTrue(
-                    assertInstanceOf(
-                            ProtosPreparedCalls.OrdinarySourceCall.class,
-                            owned).hasReturnHomeLifecycle());
+            // I115: the callee root owns and closes this materialized home.
+            assertSame(
+                    physicalHome,
+                    ProtosFrameArguments.ownedReturnHomeOrNull(owned.targetArguments()));
         });
     }
 
@@ -413,12 +407,12 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
     void zeroParameterExcessArgumentsEnterTheBodyRoot() throws Exception {
         withCore(module -> {
             ProtosClosureValue literal = parsedClosure("() => { 1 }", "g7-arity.protos", module);
-            RootCallTarget normal = fastDirect(literal, module).bodyTarget();
-            ProtosPreparedCalls.PreparedClosureCall excess =
+            RootCallTarget normal = fastDirect(literal, module).target();
+            DirectEntry excess =
                     fastDirect(literal, module, integer(1));
             assertEquals(6, excess.targetArguments().length);
             // D203/I105: no arity-rejection root exists; the B5 header is unchanged.
-            assertSame(normal, excess.bodyTarget());
+            assertSame(normal, excess.target());
         });
     }
 
@@ -445,16 +439,15 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "i102-rich.protos", module);
             ProtosIntegerValue seven = integer(7);
-            ProtosPreparedCalls.PreparedClosureCall compact =
+            DirectEntry compact =
                     fastDirect(identity, module, seven);
             ProtosActivation activation =
                     ProtosFrameArguments.activation(
                             ProtosFrameArguments.compactDirectClosureCall(
                                     identity, module, null, new Object[] {seven}));
 
-            ProtosPreparedCalls.PreparedClosureCall rich =
-                    ProtosPreparedCalls.PreparedClosureCall.ordinary(
-                            compact.bodyTarget(), activation);
+            DirectEntry rich =
+                    ProtosDispatchTestSupport.rich(compact.target(), activation);
             Object[] arguments = rich.targetArguments();
 
             assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, arguments.length);
@@ -509,15 +502,12 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             "perf038h-literal-proof.protos",
                             module);
 
-            ProtosPreparedCalls.OrdinarySourceCall prepared =
+            DirectEntry prepared =
                     assertInstanceOf(
-                            ProtosPreparedCalls.OrdinarySourceCall.class,
+                            DirectEntry.class,
                             fastDirect(constant, module));
 
-            assertTrue(prepared.provablyNonSuspending());
-            assertFalse(
-                    ProtosBytecodeRootNode.IsContinuationForCall
-                            .provenNonSuspending(prepared, integer(1)));
+            assertTrue(provablyNonSuspending(prepared));
 
             assertEquals("1", integerValue(enter(prepared)));
         });
@@ -533,12 +523,12 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             "perf038h-dynamic-body.protos",
                             module);
 
-            ProtosPreparedCalls.OrdinarySourceCall dynamic =
+            DirectEntry dynamic =
                     assertInstanceOf(
-                            ProtosPreparedCalls.OrdinarySourceCall.class,
+                            DirectEntry.class,
                             fastDirect(withSend, module, integer(1)));
 
-            assertFalse(dynamic.provablyNonSuspending());
+            assertFalse(provablyNonSuspending(dynamic));
             assertEquals("3", integerValue(enter(dynamic)));
 
             ProtosClosureValue folded =
@@ -546,12 +536,12 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             "() => { 1 + 2 }",
                             "perf038h-folded-body.protos",
                             module);
-            ProtosPreparedCalls.OrdinarySourceCall foldedCall =
+            DirectEntry foldedCall =
                     assertInstanceOf(
-                            ProtosPreparedCalls.OrdinarySourceCall.class,
+                            DirectEntry.class,
                             fastDirect(folded, module));
             assertTrue(
-                    foldedCall.provablyNonSuspending(),
+                    provablyNonSuspending(foldedCall),
                     "Constant-folded arithmetic admits the static proof");
             assertEquals("3", integerValue(enter(foldedCall)));
 
@@ -561,12 +551,12 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             "perf038h-parameter-body.protos",
                             module);
 
-            ProtosPreparedCalls.OrdinarySourceCall parameterCall =
+            DirectEntry parameterCall =
                     assertInstanceOf(
-                            ProtosPreparedCalls.OrdinarySourceCall.class,
+                            DirectEntry.class,
                             fastDirect(withParameter, module, integer(9)));
 
-            assertTrue(parameterCall.provablyNonSuspending());
+            assertTrue(provablyNonSuspending(parameterCall));
             assertEquals("1", integerValue(enter(parameterCall)));
 
             ProtosClosureValue identity =
@@ -575,12 +565,12 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             "perf038h-parameter-read.protos",
                             module);
 
-            ProtosPreparedCalls.OrdinarySourceCall identityCall =
+            DirectEntry identityCall =
                     assertInstanceOf(
-                            ProtosPreparedCalls.OrdinarySourceCall.class,
+                            DirectEntry.class,
                             fastDirect(identity, module, integer(7)));
 
-            assertTrue(identityCall.provablyNonSuspending());
+            assertTrue(provablyNonSuspending(identityCall));
             assertEquals("7", integerValue(enter(identityCall)));
 
             ProtosClosureValue twoParameters =
@@ -589,14 +579,14 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             "perf038h-two-parameters.protos",
                             module);
 
-            ProtosPreparedCalls.OrdinarySourceCall twoArgumentCall =
+            DirectEntry twoArgumentCall =
                     assertInstanceOf(
-                            ProtosPreparedCalls.OrdinarySourceCall.class,
+                            DirectEntry.class,
                             fastDirect(
                                     twoParameters, module,
                                     integer(8), integer(9)));
 
-            assertTrue(twoArgumentCall.provablyNonSuspending());
+            assertTrue(provablyNonSuspending(twoArgumentCall));
             assertEquals("8", integerValue(enter(twoArgumentCall)));
 
             ProtosClosureValue dynamicParameter =
@@ -605,12 +595,12 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             "perf038h-dynamic-parameter.protos",
                             module);
 
-            ProtosPreparedCalls.OrdinarySourceCall dynamicParameterCall =
+            DirectEntry dynamicParameterCall =
                     assertInstanceOf(
-                            ProtosPreparedCalls.OrdinarySourceCall.class,
+                            DirectEntry.class,
                             fastDirect(dynamicParameter, module, integer(2)));
 
-            assertFalse(dynamicParameterCall.provablyNonSuspending());
+            assertFalse(provablyNonSuspending(dynamicParameterCall));
             assertEquals("3", integerValue(enter(dynamicParameterCall)));
         });
     }
@@ -625,19 +615,15 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             "perf038h-straight-line-zero.protos",
                             module);
 
-            ProtosPreparedCalls.OrdinarySourceCall zero =
+            DirectEntry zero =
                     assertInstanceOf(
-                            ProtosPreparedCalls.OrdinarySourceCall.class,
+                            DirectEntry.class,
                             fastDirect(literal, module));
 
             assertTrue(
-                    ProtosBytecodeRootNode
-                            .AdmitsStraightLineSourceCall.perform(zero));
+                    admitsStraightLine(zero));
             assertEquals("1", integerValue(
-                            ProtosBytecodeRootNode
-                                    .EnterStraightLineSourceCall
-                                    .ordinaryIndirect(
-                                            zero, IndirectCallNode.create())));
+                            enter(zero)));
 
             ProtosClosureValue identity =
                     parsedClosure(
@@ -645,19 +631,15 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             "perf038h-straight-line-one.protos",
                             module);
 
-            ProtosPreparedCalls.OrdinarySourceCall one =
+            DirectEntry one =
                     assertInstanceOf(
-                            ProtosPreparedCalls.OrdinarySourceCall.class,
+                            DirectEntry.class,
                             fastDirect(identity, module, integer(7)));
 
             assertTrue(
-                    ProtosBytecodeRootNode
-                            .AdmitsStraightLineSourceCall.perform(one));
+                    admitsStraightLine(one));
             assertEquals("7", integerValue(
-                            ProtosBytecodeRootNode
-                                    .EnterStraightLineSourceCall
-                                    .ordinaryIndirect(
-                                            one, IndirectCallNode.create())));
+                            enter(one)));
         });
     }
 
@@ -672,10 +654,9 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             module);
 
             assertFalse(
-                    ProtosBytecodeRootNode
-                            .AdmitsStraightLineSourceCall.perform(
+                    admitsStraightLine(
                                     assertInstanceOf(
-        ProtosPreparedCalls.OrdinarySourceCall.class,
+        DirectEntry.class,
         fastDirect(dynamic, module, integer(1)))));
 
             ProtosClosureValue folded =
@@ -684,10 +665,9 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             "perf038h-straight-line-folded.protos",
                             module);
             assertTrue(
-                    ProtosBytecodeRootNode
-                            .AdmitsStraightLineSourceCall.perform(
+                    admitsStraightLine(
                                     assertInstanceOf(
-                                            ProtosPreparedCalls.OrdinarySourceCall.class,
+                                            DirectEntry.class,
                                             fastDirect(folded, module))),
                     "Constant-folded arithmetic admits straight-line execution");
 
@@ -698,10 +678,9 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             module);
 
             assertFalse(
-                    ProtosBytecodeRootNode
-                            .AdmitsStraightLineSourceCall.perform(
+                    admitsStraightLine(
                                     assertInstanceOf(
-        ProtosPreparedCalls.OrdinarySourceCall.class,
+        DirectEntry.class,
         fastDirect(returning, module))));
 
             ProtosClosureValue literal =
@@ -712,10 +691,9 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
 
             // D203/I105: an excess argument enters the same straight-line root.
             assertTrue(
-                    ProtosBytecodeRootNode
-                            .AdmitsStraightLineSourceCall.perform(
+                    admitsStraightLine(
                                     assertInstanceOf(
-        ProtosPreparedCalls.OrdinarySourceCall.class,
+        DirectEntry.class,
         fastDirect(
                                             literal, module, integer(3)))));
         });
@@ -813,36 +791,27 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                     "perf038h-send-admission.protos",
                     module);
 
-            ProtosPrelude prelude = module.preludeOrNullForRuntime();
-            ProtosLanguageContext entered =
-                    ProtosLanguageContext.currentIfEnteredForRuntime();
-
-            var zero =
-                    ProtosGuardedSendSelection
-                            .createGuardedSendForPrelude(
-                                    receiver, "zero", prelude, entered);
-
-            var one =
-                    ProtosGuardedSendSelection
-                            .createGuardedSendForPrelude(
-                                    receiver, "one", prelude, entered);
-
-            assertTrue(zero != null, "Send0 guarded selection");
-            assertTrue(one != null, "Send1 guarded selection");
+            // I115: GetMethod selects a bound source method; the shared
+            // dispatcher's function path admits it whatever the arity.
+            ProtosBoundMethod zero =
+                    assertInstanceOf(
+                            ProtosBoundMethod.class,
+                            ProtosExperimentalGetMethodNode.select(receiver, "zero", null, module));
+            ProtosBoundMethod one =
+                    assertInstanceOf(
+                            ProtosBoundMethod.class,
+                            ProtosExperimentalGetMethodNode.select(receiver, "one", null, module));
 
             assertTrue(
-                    ProtosBytecodeRootNode
-                            .TryDirectSendZero.admitted(zero),
+                    ProtosFunctionCallDispatchers.CallNode.isSourceFunction(zero.callable()),
                     "zero-argument source method must be admitted");
-
-            assertTrue(
-                    ProtosBytecodeRootNode
-                            .TryDirectSendOne.admitted(zero),
+            assertEquals("7", integerValue(ProtosFunctionCallDispatchers.callUncached(
+                            zero,
+                            ProtosFrameArguments.functionCallArguments(new Object[] {integer(1)}),
+                            module)),
                     "D203/I105: Send1 to a zero-argument method enters its ordinary root");
-
             assertTrue(
-                    ProtosBytecodeRootNode
-                            .TryDirectSendOne.admitted(one),
+                    ProtosFunctionCallDispatchers.CallNode.isSourceFunction(one.callable()),
                     "one-argument source method must be admitted");
         });
     }
@@ -864,34 +833,29 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
         }
     }
 
-    private static ProtosPreparedCalls.PreparedClosureCall fastDirect(
-            ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
-        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
-        ProtosClosureValue selected =
-                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
-        assertSame(closure, selected, "canonical direct Closure-call selection");
-        RootCallTarget target =
-                ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
-                        closure, entered);
-        return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
-                false,
-                closure,
-                caller,
-                supplied,
-                selected,
-                selected.definition(),
-                entered,
-                selected.definition(),
-                entered,
-                target);
+    /** I115: the callee root's recorded non-suspension proof. */
+    private static boolean provablyNonSuspending(DirectEntry entry) {
+        return ((ProtosBytecodeRootNode) entry.target().getRootNode()).provablyNonSuspendingBody();
     }
 
-    private static Object enter(ProtosPreparedCalls.PreparedClosureCall prepared) {
-        Object entered =
-                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
-                        IndirectCallNode.create());
-        return prepared.finish(entered);
+    /**
+     * I115: the former straight-line admission as properties of the current
+     * architecture: a provably non-suspending root whose invocation owns no
+     * materialized ReturnHome.
+     */
+    private static boolean admitsStraightLine(DirectEntry entry) {
+        return provablyNonSuspending(entry)
+                && ProtosFrameArguments.ownedReturnHomeOrNull(entry.targetArguments()) == null;
+    }
+
+    private static DirectEntry fastDirect(
+            ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
+        // I115: the B5 header the shared dispatcher writes for a function call.
+        return ProtosDispatchTestSupport.direct(closure, caller, supplied);
+    }
+
+    private static Object enter(DirectEntry prepared) {
+        return ProtosDispatchTestSupport.enter(prepared);
     }
 
     private static Object evaluate(String characters, String name, ProtosActivation activation) {

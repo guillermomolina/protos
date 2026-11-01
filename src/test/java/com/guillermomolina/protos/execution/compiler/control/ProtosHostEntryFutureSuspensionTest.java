@@ -27,7 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.oracle.truffle.api.nodes.IndirectCallNode;
+import com.oracle.truffle.api.interop.InteropLibrary;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -345,24 +345,22 @@ final class ProtosHostEntryFutureSuspensionTest {
 
                 ProtosIntegerValue supplied = new ProtosIntegerValue(7);
 
-                ProtosPreparedCalls.OrdinarySourceCall prepared =
-                        adapter.prepare(new Object[] {supplied}, null);
+                // I115: the host entry calls through the shared dispatcher with
+                // exactly this B5 function header.
+                ProtosDispatchTestSupport.DirectEntry prepared =
+                        ProtosDispatchTestSupport.direct(adapter.closure, adapter.caller, supplied);
 
-                try {
-                    Object[] frame = prepared.targetArguments();
+                Object[] frame = prepared.targetArguments();
 
-                    assertEquals(
-                            ProtosFrameArguments.HEADER_LENGTH + 1,
-                            frame.length);
-                    assertSame(adapter.closure, frame[0]);
-                    assertSame(adapter.caller, frame[3]);
-                    assertSame(
-                            supplied,
-                            frame[ProtosFrameArguments.HEADER_LENGTH]);
-                    assertSame(adapter.target, prepared.bodyTarget());
-                } finally {
-                    prepared.complete();
-                }
+                assertEquals(
+                        ProtosFrameArguments.HEADER_LENGTH + 1,
+                        frame.length);
+                assertSame(adapter.closure, frame[0]);
+                assertSame(adapter.caller, frame[3]);
+                assertSame(
+                        supplied,
+                        frame[ProtosFrameArguments.HEADER_LENGTH]);
+                assertSame(adapter.target, prepared.target());
             } finally {
                 context.leave();
             }
@@ -447,11 +445,11 @@ final class ProtosHostEntryFutureSuspensionTest {
     }
 
     /**
-     * I115-H6: the megamorphic specialization builds the compact no-home B5 frame and performs one
-     * {@link IndirectCallNode} call for zero- and one-argument source-backed Closures.
+     * I115: the shared host entry (Polyglot execute through the shared dispatcher) performs one
+     * compact invocation for zero- and one-argument source-backed Closures.
      */
     @Test
-    void indirectHostEntryPerformsOneCompactInvocation() throws Exception {
+    void sharedHostEntryPerformsOneCompactInvocation() throws Exception {
         try (Context context = newContext()) {
             Fixture f =
                     new Fixture(
@@ -474,21 +472,14 @@ final class ProtosHostEntryFutureSuspensionTest {
                                         f.module,
                                         f.module.readLocalSlot("identity").orElseThrow());
 
-                IndirectCallNode indirect = IndirectCallNode.create();
-
-                Object literal =
-                        ProtosHostExecutableClosure.Execute.indirect(
-                                trivial, new Object[0], indirect);
+                Object literal = InteropLibrary.getUncached().execute(trivial);
                 assertEquals("1", decimal(literal));
 
-                Object forwarded =
-                        ProtosHostExecutableClosure.Execute.indirect(
-                                identity, new Object[] {37}, indirect);
+                Object forwarded = InteropLibrary.getUncached().execute(identity, 37);
                 assertEquals("37", decimal(forwarded));
 
-                Object guest =
-                        ProtosHostExecutableClosure.Execute.indirect(
-                                identity, new Object[] {new ProtosIntegerValue(-4)}, indirect);
+                Object guest = InteropLibrary.getUncached().execute(
+                        identity, new ProtosIntegerValue(-4));
                 assertEquals("-4", decimal(guest));
 
                 assertCompactState(f);

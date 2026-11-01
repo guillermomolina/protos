@@ -313,8 +313,10 @@ final class ProtosI107ContinuationEmissionTest {
     }
 
     /**
-     * I115: composed Call1 uses CallUnaryMethod(false), retaining the
-     * physical prepared-call continuation and execution semantics.
+     * I115: composed Call1 uses CallUnaryMethod(false). A pending result
+     * returned directly by a source CallTarget is composed through
+     * ResumeDispatchedContinuation; the physical prepared-call continuation
+     * remains for the operations that still return a PreparedClosureCall.
      */
     @Test
     void composedUnaryCallUsesPhysicalContinuation() throws Exception {
@@ -333,6 +335,12 @@ final class ProtosI107ContinuationEmissionTest {
                                 entry -> entry.split(" ", 2)[0]
                                         .equals("c.CallUnaryMethod")),
                         () -> "CallUnaryMethod missing in " + instructions);
+
+                assertTrue(
+                        instructions.stream().anyMatch(
+                                entry -> entry.split(" ", 2)[0]
+                                        .equals("c.ResumeDispatchedContinuation")),
+                        () -> "ResumeDispatchedContinuation missing in " + instructions);
 
                 assertFalse(
                         instructions.stream().anyMatch(

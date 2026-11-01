@@ -17,9 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.execution.ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall;
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
-import com.guillermomolina.protos.runtime.ProtosNullValue;
 
 /**
  * I113: the result classifications an {@code IsResultKind} instruction tests.
@@ -28,57 +25,12 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
  * under partial evaluation.
  */
 public enum ProtosResultKind {
-    /** The compact canonical Boolean selection missed. */
-    COMPACT_BOOLEAN_MISS {
-        @Override
-        boolean matches(Object value) {
-            return value == null;
-        }
-    },
-
-    /** The compact canonical Boolean selection needs no callback. */
-    COMPACT_BOOLEAN_NO_CALLBACK {
-        @Override
-        boolean matches(Object value) {
-            return value == ProtosNullValue.INSTANCE;
-        }
-    },
-
-    /** A prepared inline literal callback. */
-    INLINE_LITERAL_CALL {
-        @Override
-        boolean matches(Object value) {
-            return value instanceof PreparedInlineLiteralCall;
-        }
-    },
 
     /** The primitive numeric send fast path missed. */
     PRIMITIVE_NUMERIC_SEND_MISS {
         @Override
         boolean matches(Object value) {
             return value == ProtosPrimitiveNumericSendFastPathsBase.MISS;
-        }
-    },
-
-    /**
-     * I108-A: only a prepared invocation requires caller-side Bytecode DSL
-     * control composition. Direct invocation results remain ordinary guest
-     * values, without a wrapper allocation. PreparedClosureCall is an
-     * internal runtime interface and cannot be produced as a guest-language
-     * result.
-     */
-    PREPARED_CLOSURE_INVOCATION {
-        @Override
-        boolean matches(Object value) {
-            return value instanceof PreparedClosureCall;
-        }
-    },
-
-    /** The direct send fast path missed. */
-    DIRECT_SEND_MISS {
-        @Override
-        boolean matches(Object value) {
-            return value == ProtosBytecodeRootNode.TryDirectSendOne.MISS;
         }
     },
 

@@ -136,16 +136,24 @@ final class ProtosPerf038EResidualCallGraphTest {
     void returnHomeLifecycleOnlyForOwnedMaterializedHomes() throws Exception {
         withCore(module -> {
             ProtosClosureValue parsed = parsedClosure("(v) => { v }", "perf038e-home.protos", module);
-            Object[] arguments = methodCall(parsed, module);
-            ProtosPreparedCalls.OrdinarySourceCall unobservable =
-                    carrier(arguments, ProtosReturnHome.unobservable(), true);
-            ProtosPreparedCalls.OrdinarySourceCall owned =
-                    carrier(arguments, new ProtosReturnHome(), true);
-            ProtosPreparedCalls.OrdinarySourceCall captured =
-                    carrier(arguments, new ProtosReturnHome(), false);
-            assertFalse(unobservable.hasReturnHomeLifecycle());
-            assertTrue(owned.hasReturnHomeLifecycle());
-            assertFalse(captured.hasReturnHomeLifecycle());
+            // I115: the lifecycle belongs to the callee root, which closes the
+            // home its B5 header owns (ProtosFrameArguments.ownedReturnHomeOrNull).
+            ProtosReturnHome physical = new ProtosReturnHome();
+            ProtosClosureValue capturing =
+                    new ProtosClosureValue(
+                            parsed.definition(),
+                            parsed.capturedLexicalContexts(),
+                            parsed.capturedReceiver(),
+                            null,
+                            physical,
+                            parsed.preludeOrNullForRuntime(),
+                            parsed.executionPlan().orElse(null));
+            Object[] unobservable = methodCall(parsed, module, ProtosReturnHome.unobservable());
+            Object[] owned = methodCall(parsed, module, physical);
+            Object[] captured = methodCall(capturing, module, physical);
+            assertNull(ProtosFrameArguments.ownedReturnHomeOrNull(unobservable));
+            assertSame(physical, ProtosFrameArguments.ownedReturnHomeOrNull(owned));
+            assertNull(ProtosFrameArguments.ownedReturnHomeOrNull(captured));
         });
         System.out.println("PERF038E_RETURN_HOME_LIFECYCLE=PASS");
     }
@@ -287,6 +295,13 @@ final class ProtosPerf038EResidualCallGraphTest {
         System.out.println("PERF038E_OWNER_AND_SUPER=PASS");
     }
 
+    private static Object[] methodCall(
+            ProtosClosureValue closure, ProtosActivation caller, ProtosReturnHome home) {
+        return ProtosFrameArguments.compactImmediateMethodCall(
+                closure, closure, new ProtosObjectValue(closure), caller, home,
+                new Object[] {integer(1)});
+    }
+
     private static Object[] methodCall(ProtosClosureValue closure, ProtosActivation caller) {
         return ProtosFrameArguments.compactImmediateMethodCall(
                 closure, closure, new ProtosObjectValue(closure), caller, new Object[] {integer(1)});
@@ -297,18 +312,6 @@ final class ProtosPerf038EResidualCallGraphTest {
         return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
                 ? ProtosFrameArguments.unmaterializedInheritedProvenanceCaller(arguments)
                 : null;
-    }
-
-    /*
-     * The carrier is only inspected, never entered: with a zero supplied count
-     * no entry target is selected, so no body target is needed.
-     */
-    private static ProtosPreparedCalls.OrdinarySourceCall carrier(
-            Object[] arguments, ProtosReturnHome home, boolean owns) {
-        return assertInstanceOf(
-                ProtosPreparedCalls.OrdinarySourceCall.class,
-                ProtosPreparedCalls.PreparedClosureCall.ordinaryCompactPrepared(
-                        null, arguments, home, owns, 0));
     }
 
     private static ProtosClosureValue withPrelude(ProtosClosureValue source, ProtosPrelude prelude) {

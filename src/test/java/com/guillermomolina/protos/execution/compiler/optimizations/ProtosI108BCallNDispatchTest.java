@@ -92,7 +92,7 @@ final class ProtosI108BCallNDispatchTest {
                     ProtosClosureValue.class,
                     evaluate("make()", "i108-b-sample.protos", module));
 
-            RootCallTarget target = ProtosGuardedSendSelection.fastOrdinarySendTarget(
+            RootCallTarget target = ProtosClosureCallPreparation.functionCallTarget(
                     sample, ProtosLanguageContext.current());
 
             assertNotNull(target);
@@ -386,7 +386,7 @@ final class ProtosI108BCallNDispatchTest {
                                 "i108-b-origin-closure.protos",
                                 module));
 
-                originTarget = ProtosGuardedSendSelection.fastOrdinarySendTarget(
+                originTarget = ProtosClosureCallPreparation.functionCallTarget(
                         foreign,
                         ProtosLanguageContext.current());
 
@@ -406,7 +406,7 @@ final class ProtosI108BCallNDispatchTest {
                         ProtosLanguageContext.current();
 
                 RootCallTarget projected =
-                        ProtosGuardedSendSelection.fastOrdinarySendTarget(
+                        ProtosClosureCallPreparation.functionCallTarget(
                                 foreign, entered);
 
                 assertNotNull(projected);
@@ -421,7 +421,7 @@ final class ProtosI108BCallNDispatchTest {
 
                 assertSame(
                         projected,
-                        ProtosGuardedSendSelection.fastOrdinarySendTarget(
+                        ProtosClosureCallPreparation.functionCallTarget(
                                 foreign, entered));
 
                 module.context().createLocalSlot("foreign", foreign);

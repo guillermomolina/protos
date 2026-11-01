@@ -43,29 +43,25 @@ import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
-import com.guillermomolina.protos.runtime.callables.ProtosSuspensionCapableNativeClosureBody;
-import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
-import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.nodes.ControlFlowException;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The prepared Closure-call protocol: the {@link PreparedClosureCall} carrier
- * contract and its ordinary-source, native, immediate-result and module-initialization
- * representations, with the supplied-argument vector they are prepared from.
- *
- * <p>I111-B: formerly nested in the second generated interpreter; these representations
- * share one private ReturnHome-owning base and therefore stay together.</p>
+ * I115: the state carried into the structured-protocol root by a structured
+ * standard native ({@link StructuredNativeInvocation}), the module
+ * initialization handle of a standard import, and the supplied-argument
+ * vector of a spread call. None of these implements a call protocol: every
+ * Closure the structured protocols invoke goes through {@link
+ * ProtosFunctionCallDispatchers} as a {@link ProtosCallRequest}.
  */
 final class ProtosPreparedCalls {
     private ProtosPreparedCalls() {}
 
     /**
-     * Optional structured-control capability carried by a {@link NativeCall}.
+     * Optional structured-control capability carried by a {@link StructuredNativeInvocation}.
      *
      * <p>Ordinary source-backed and plain-native calls never allocate this holder
      * (PLAT040 Candidate F′: optional semantic capability must not force unrelated
@@ -199,732 +195,129 @@ final class ProtosPreparedCalls {
     }
 
     /**
-     * A prepared, about-to-execute Closure invocation.
-     *
-     * <p>I072 Phase D (PLAT040 Candidate F′): this is a small dispatch surface
-     * shared by every call shape, not a universal physical carrier. Exactly one
-     * of four leaf shapes implements it per call — {@link OrdinarySourceCall},
-     * {@link NativeCall}, {@link ImmediateResultCall}, or {@link
-     * ModuleInitializationCall} — and each leaf physically carries only the
-     * state its own shape actually uses. An
-     * ordinary source-backed call never allocates native-body, structured-
-     * control-capability, or module-initialization state; those remain
-     * exclusive to the two special shapes that actually need them. Interface
-     * default methods below only supply the "this capability is absent"
-     * answer for shapes that never own it; they add no per-instance state.
-     */
-    interface PreparedClosureCall {
-        RootCallTarget bodyTarget();
-
-        ProtosActivation activation();
-
-        Object[] targetArguments();
-
-        ProtosTask taskForRuntime();
-
-        default boolean isNative() { return false; }
-
-        default boolean isImmediate() { return false; }
-
-        default Object enterImmediate() {
-            throw new IllegalStateException("prepared call has no immediate result");
-        }
-
-        default Object enterNative() {
-            throw new IllegalStateException("prepared Closure call is not native");
-        }
-
-        default boolean requiresStructuredDispatch() { return false; }
-
-        default boolean isStructuredObjectCall() { return false; }
-        default boolean isStructuredCaseOf() { return false; }
-        default boolean isStructuredMapMatch() { return false; }
-        default boolean isStructuredImportCall() { return false; }
-        default boolean isStructuredEnsure() { return false; }
-        default boolean isStructuredErrorHandler() { return false; }
-        default boolean isStructuredWhile() { return false; }
-        default boolean isStructuredBoolean() { return false; }
-        default boolean isStructuredArrayEach() { return false; }
-        default boolean isStructuredArrayMatch() { return false; }
-        default boolean isStructuredBytesEach() { return false; }
-        default boolean isStructuredEnvironmentEach() { return false; }
-        default boolean isStructuredIdentityMapAtIfAbsent() { return false; }
-        default boolean isStructuredIdentityMapEach() { return false; }
-        default boolean isStructuredMapEach() { return false; }
-        default boolean isStructuredMapReadLookup() { return false; }
-        default boolean isStructuredMapAtPut() { return false; }
-        default boolean isStructuredMapRemove() { return false; }
-        default boolean isStructuredForeignEach() { return false; }
-
-        /**
-         * PLAT044 B′ (PERF026-C1) whole-pair admission of a selected standard
-         * whileTrue; see {@link NativeCall#admitsInlineLiteralWhile}.
-         */
-        default boolean admitsInlineLiteralWhile(Object condition, Object body) {
-            return false;
-        }
-
-        /**
-         * PLAT044 B′ (PERF026-D1) whole-call admission of a selected standard
-         * Array.each or Bytes.each; see {@link
-         * NativeCall#admitsInlineLiteralIndexedEach}.
-         */
-        default boolean admitsInlineLiteralIndexedEach(Object callback) {
-            return false;
-        }
-
-        /**
-         * PLAT044 B′ (PERF026-D2) whole-call admission of a selected standard
-         * Map.each or IdentityMap.each; see {@link
-         * NativeCall#admitsInlineLiteralAssociationEach}.
-         */
-        default boolean admitsInlineLiteralAssociationEach(Object callback) {
-            return false;
-        }
-
-        /**
-         * PLAT044 B′ (PERF026-D3) whole-call admission of a selected standard
-         * Environment.each; see {@link
-         * NativeCall#admitsInlineLiteralEnvironmentEach}.
-         */
-        default boolean admitsInlineLiteralEnvironmentEach(Object callback) {
-            return false;
-        }
-
-        default PreparedMapMatchCall prepareStructuredMapMatch() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured Map.match capability");
-        }
-
-        default PreparedCaseOfCall prepareStructuredCaseOf() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured Object.caseOf capability");
-        }
-
-        default PreparedStandardObjectCall prepareStructuredObjectCall() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no PLAT032 Object.call capability");
-        }
-
-        default PreparedStandardImportCall prepareStructuredImportCall() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no PLAT032 import capability");
-        }
-
-        default PreparedEnsureCall prepareStructuredEnsure() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured ensure capability");
-        }
-
-        default PreparedWhileCall prepareStructuredWhile() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured while capability");
-        }
-
-        default PreparedErrorHandlerCall prepareStructuredErrorHandler() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured Error.handle capability");
-        }
-
-        default PreparedBooleanCall prepareStructuredBoolean() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured Boolean callback capability");
-        }
-
-        default PreparedArrayEachCall prepareStructuredArrayEach() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured Array.each capability");
-        }
-
-        default PreparedArrayMatchCall prepareStructuredArrayMatch() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured Array.match capability");
-        }
-
-        default PreparedBytesEachCall prepareStructuredBytesEach() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured Bytes.each capability");
-        }
-
-        default PreparedEnvironmentEachCall prepareStructuredEnvironmentEach() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured Environment.each capability");
-        }
-
-        default PreparedIdentityMapAtIfAbsentCall prepareStructuredIdentityMapAtIfAbsent() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured IdentityMap.atIfAbsent capability");
-        }
-
-        default PreparedIdentityMapEachCall prepareStructuredIdentityMapEach() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured IdentityMap.each capability");
-        }
-
-        default PreparedMapEachCall prepareStructuredMapEach() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured Map.each capability");
-        }
-
-        default PreparedMapReadLookupCall prepareStructuredMapReadLookup() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured Map read-lookup capability");
-        }
-
-        default PreparedMapAtPutCall prepareStructuredMapAtPut() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured Map.atPut capability");
-        }
-
-        default PreparedMapRemoveCall prepareStructuredMapRemove() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured Map.remove capability");
-        }
-
-        default ProtosForeignEachCall prepareStructuredForeignEach() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured foreign each capability");
-        }
-
-        Object handleControlTransfer(ControlFlowException transfer);
-
-        void failIfModuleInitialization();
-
-        RuntimeException mapRuntimeFailure(RuntimeException failure);
-
-        void complete();
-
-        Object finish(Object result);
-
-        static PreparedClosureCall ordinary(RootCallTarget bodyTarget, ProtosActivation activation) {
-            return new OrdinarySourceCall(bodyTarget, activation);
-        }
-
-        static PreparedClosureCall ordinaryCompact(
-                RootCallTarget bodyTarget, Object[] compactTargetArguments) {
-            return new OrdinarySourceCall(bodyTarget, compactTargetArguments);
-        }
-
-        /**
-         * PERF038-D: {@link #ordinaryCompact} for frame arguments the caller
-         * has just built with {@link ProtosFrameArguments#compactImmediateMethodCall}
-         * from {@code returnHome} and {@code suppliedArgumentCount} supplied
-         * values; {@code ownsReturnHome} is exactly {@link
-         * ProtosFrameArguments#compactOwnsReturnHome} of that array.
-         */
-        static PreparedClosureCall ordinaryCompactSelected(
-                RootCallTarget selectedEntryTarget,
-                Object[] compactTargetArguments,
-                ProtosReturnHome returnHome,
-                boolean ownsReturnHome) {
-            return new OrdinarySourceCall(
-                    selectedEntryTarget,
-                    compactTargetArguments,
-                    returnHome,
-                    ownsReturnHome);
-        }
-
-        static PreparedClosureCall ordinaryCompactPrepared(
-                RootCallTarget bodyTarget,
-                Object[] compactTargetArguments,
-                ProtosReturnHome returnHome,
-                boolean ownsReturnHome,
-                int suppliedArgumentCount) {
-            return new OrdinarySourceCall(
-                    bodyTarget,
-                    compactTargetArguments,
-                    returnHome,
-                    ownsReturnHome,
-                    suppliedArgumentCount);
-        }
-
-        static PreparedClosureCall nativeCall(
-                ProtosNativeClosureBody nativeBody,
-                List<?> supplied,
-                ProtosActivation activation,
-                boolean structuredEnsure,
-                boolean structuredErrorHandler,
-                ProtosStandardObjectProtocol.StructuredLoopKind structuredWhile,
-                ProtosStandardBooleanProtocol.StructuredCallbackKind structuredBoolean,
-                boolean structuredArrayEach,
-                boolean structuredBytesEach,
-                boolean structuredEnvironmentEach,
-                boolean structuredIdentityMapEach,
-                boolean structuredMapEach,
-                ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup,
-                boolean structuredMapAtPut,
-                boolean structuredMapRemove,
-                boolean directControlNative,
-                boolean structuredObjectCall,
-                ProtosModuleRuntime structuredImportRuntime) {
-            return new NativeCall(
-                    java.util.Objects.requireNonNull(nativeBody, "nativeBody"),
-                    supplied,
-                    activation,
-                    StructuredCallCapabilities.of(
-                            structuredEnsure,
-                            structuredErrorHandler,
-                            structuredWhile,
-                            structuredBoolean,
-                            structuredArrayEach,
-                            structuredBytesEach,
-                            structuredEnvironmentEach,
-                            structuredIdentityMapEach,
-                            structuredMapEach,
-                            structuredMapReadLookup,
-                            structuredMapAtPut,
-                            structuredMapRemove,
-                            directControlNative,
-                            structuredObjectCall,
-                            structuredImportRuntime));
-        }
-
-        static PreparedClosureCall immediateResult(Object result) {
-            return new ImmediateResultCall(result);
-        }
-
-        static PreparedClosureCall moduleInitialization(
-                ProtosModuleRuntime.PreparedModuleInitialization moduleInitialization) {
-            return new ModuleInitializationCall(moduleInitialization);
-        }
-    }
-
-    /**
-     * Shared return-home ownership/completion behavior for the two prepared-call
-     * shapes that actually own a {@link ProtosReturnHome}: {@link
-     * OrdinarySourceCall} and {@link NativeCall}. {@link ModuleInitializationCall}
-     * has no return-home concept and implements {@link PreparedClosureCall}
-     * directly instead of extending this class.
-     */
-    private abstract static class ReturnHomeOwningCall implements PreparedClosureCall {
-        private final ProtosReturnHome returnHome;
-        /**
-         * PERF025: an owned but non-materialized home has no lifecycle and can
-         * never be a non-local-return target, so it is neither matched nor
-         * completed.
-         */
-        private final boolean ownsMaterializedReturnHome;
-
-        ReturnHomeOwningCall(ProtosReturnHome returnHome, boolean ownsReturnHome) {
-            /*
-             * PERF038-H: ordinary calls that cannot own a physical return
-             * home have no return-home lifecycle or target to retain.
-             * Captured homes still travel in the callee frame arguments,
-             * where their provenance remains observable when required.
-             */
-            boolean hasLifecycle = ownsReturnHome && returnHome.isMaterialized();
-            this.returnHome = hasLifecycle ? returnHome : null;
-            this.ownsMaterializedReturnHome = hasLifecycle;
-        }
-
-        /**
-         * PERF038-E: false when this call owns no materialized home, so
-         * {@link #complete} and {@link #finish} have no effect beyond answering
-         * the result and {@link #handleControlTransfer} rethrows every transfer.
-         * Final for the carrier.
-         */
-        final boolean ownsMaterializedReturnHome() {
-            return ownsMaterializedReturnHome;
-        }
-
-        @Override
-        public Object handleControlTransfer(ControlFlowException transfer) {
-            if (transfer instanceof ProtosNonLocalReturnException nonLocalReturn
-                    && ownsMaterializedReturnHome
-                    && returnHome.isActive()
-                    && nonLocalReturn.target() == returnHome) {
-                return nonLocalReturn.value();
-            }
-            throw transfer;
-        }
-
-        @Override
-        public void failIfModuleInitialization() {
-            // Neither shape extending this class owns module-initialization state.
-        }
-
-        @Override
-        public RuntimeException mapRuntimeFailure(RuntimeException failure) {
-            return failure;
-        }
-
-        @Override
-        public void complete() {
-            if (ownsMaterializedReturnHome && returnHome.isActive()) {
-                returnHome.complete();
-            }
-        }
-
-        @Override
-        public Object finish(Object result) {
-            complete();
-            return result;
-        }
-    }
-
-    /**
-     * The lean, pay-only-when-used representation of an ordinary source-backed
-     * Closure call. It carries exactly a selected target, the B5 frame
-     * arguments (for the pre-target rich-activation shape, with that
-     * activation already published in argument 0), and the
-     * return-home/ownership state that non-local return
-     * completion actually requires. It never carries native-body, structured-
-     * control-capability, or module-initialization state.
-     */
-    static final class OrdinarySourceCall extends ReturnHomeOwningCall {
-        private final RootCallTarget bodyTarget;
-        private final ProtosActivation activation;
-        private final Object[] targetArguments;
-
-        OrdinarySourceCall(RootCallTarget bodyTarget, ProtosActivation activation) {
-            super(
-                    java.util.Objects.requireNonNull(activation, "activation")
-                            .returnHome()
-                            .orElseThrow(
-                                    () ->
-                                            new IllegalStateException(
-                                                    "Closure invocation requires a return home")),
-                    activation.ownsReturnHome());
-            this.bodyTarget = java.util.Objects.requireNonNull(bodyTarget, "bodyTarget");
-            this.activation = activation;
-            // I102: a rich entry enters through the same B5 header, already published.
-            this.targetArguments = ProtosFrameArguments.publishedInvocation(activation);
-        }
-
-        OrdinarySourceCall(RootCallTarget bodyTarget, Object[] compactTargetArguments) {
-            super(
-                    ProtosFrameArguments.compactReturnHome(
-                            java.util.Objects.requireNonNull(
-                                    compactTargetArguments, "compactTargetArguments")),
-                    ProtosFrameArguments.compactOwnsReturnHome(compactTargetArguments));
-            this.bodyTarget = java.util.Objects.requireNonNull(bodyTarget, "bodyTarget");
-            this.activation = null;
-            this.targetArguments = compactTargetArguments;
-        }
-
-        /** PERF038-H: the guarded PIC has already selected the exact source entry target. */
-        OrdinarySourceCall(
-                RootCallTarget selectedEntryTarget,
-                Object[] compactTargetArguments,
-                ProtosReturnHome returnHome,
-                boolean ownsReturnHome) {
-            super(returnHome, ownsReturnHome);
-            this.bodyTarget = selectedEntryTarget;
-            this.activation = null;
-            this.targetArguments = compactTargetArguments;
-        }
-
-        /** PERF038-D: see {@link PreparedClosureCall#ordinaryCompactPrepared}. */
-        OrdinarySourceCall(
-                RootCallTarget bodyTarget,
-                Object[] compactTargetArguments,
-                ProtosReturnHome returnHome,
-                boolean ownsReturnHome,
-                int suppliedArgumentCount) {
-            super(returnHome, ownsReturnHome);
-            this.bodyTarget = bodyTarget;
-            this.activation = null;
-            this.targetArguments = compactTargetArguments;
-        }
-
-        /**
-         * PERF038-E: the {@code FinishClosureCall} guard; declared here because
-         * the DSL-generated node cannot see members of the private base class.
-         */
-        boolean hasReturnHomeLifecycle() {
-            return ownsMaterializedReturnHome();
-        }
-
-        /**
-         * PERF038-H: read the capability of the actual selected
-         * source entry. Unknown targets
-         * retain the general continuation protocol.
-         */
-
-
-        /** PERF038-H: capability of the selected source entry. */
-        boolean provablyNonSuspending() {
-            return bodyTarget.getRootNode()
-                    instanceof ProtosBytecodeRootNode root
-                    && root.provablyNonSuspendingBody();
-        }
-
-        @Override
-        public RootCallTarget bodyTarget() { return bodyTarget; }
-
-        @Override
-        public ProtosActivation activation() {
-            if (activation == null) {
-                throw new IllegalStateException(
-                        "compact source call has no pre-target rich activation");
-            }
-            return activation;
-        }
-
-        @Override
-        public Object[] targetArguments() { return targetArguments; }
-
-        /*
-         * I101-B: a minimal source root may return a primitive carrier.
-         * Do not expose it through an ordinary guest call. Fused callers
-         * that explicitly accept primitive results retain that fast path.
-         */
-        @Override
-        public Object finish(Object result) {
-            // I101-B: project only this NORMAL local-root carrier at a guest boundary.
-            if (bodyTarget.getRootNode() instanceof ProtosBytecodeRootNode root
-                    && root.directScalarLocalCarrierBody()
-                    && !ProtosFrameArguments.acceptsPrimitiveResult(targetArguments)) {
-                result = ProtosNumericValueSupport.guestValue(result);
-            }
-            return super.finish(
-                    ProtosFrameArguments.acceptsPrimitiveResult(targetArguments)
-                            ? result
-                            : ProtosNumericValueSupport.guestValue(result));
-        }
-
-        @Override
-        public ProtosTask taskForRuntime() {
-            if (activation != null) {
-                return activation.task().orElse(null);
-            }
-            // I115: targetArguments were built by an admitted B5 producer.
-            return ProtosFrameArguments.admittedCompactTask(targetArguments);
-        }
-    }
-
-    /**
      * The special-call representation for a native Closure body, optionally
      * carrying exactly one mutually exclusive {@link StructuredCallCapabilities}.
      * Ordinary source calls never instantiate this class.
      */
-    static final class NativeCall extends ReturnHomeOwningCall {
+    static final class StructuredNativeInvocation {
         private final ProtosNativeClosureBody nativeBody;
         private final List<?> supplied;
         private final ProtosActivation activation;
         private final StructuredCallCapabilities structured;
 
-        NativeCall(
+        private StructuredNativeInvocation(
                 ProtosNativeClosureBody nativeBody,
                 List<?> supplied,
                 ProtosActivation activation,
                 StructuredCallCapabilities structured) {
-            super(
-                    java.util.Objects.requireNonNull(activation, "activation")
-                            .returnHome()
-                            .orElseThrow(
-                                    () ->
-                                            new IllegalStateException(
-                                                    "Closure invocation requires a return home")),
-                    activation.ownsReturnHome());
             this.nativeBody = java.util.Objects.requireNonNull(nativeBody, "nativeBody");
             this.supplied = List.copyOf(supplied);
-            this.activation = activation;
+            this.activation = java.util.Objects.requireNonNull(activation, "activation");
             this.structured = structured;
         }
 
-        @Override
-        public RootCallTarget bodyTarget() { return null; }
-
-        @Override
-        public ProtosActivation activation() { return activation; }
-
-        @Override
-        public Object[] targetArguments() {
-            throw new IllegalStateException("prepared call has no source target arguments");
+        /**
+         * The structured state of a native body, or {@code null} when the
+         * body is an ordinary builtin. Classification is by the identity of
+         * the standard implementation, exactly as before I115.
+         */
+        static StructuredNativeInvocation forBodyOrNull(
+                ProtosClosureValue closure,
+                List<?> supplied,
+                ProtosActivation activation) {
+            ProtosNativeClosureBody nativeBody = closure.nativeBody().orElseThrow();
+            StructuredNativeInvocation invocation =
+                    new StructuredNativeInvocation(
+                            nativeBody,
+                            supplied,
+                            activation,
+                            StructuredCallCapabilities.of(
+                                    ProtosStandardObjectProtocol.isStandardEnsureImplementation(closure),
+                                    ProtosStandardErrorProtocol.isStandardHandleImplementation(closure),
+                                    ProtosStandardObjectProtocol.structuredLoopKindForImplementation(closure),
+                                    ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(closure),
+                                    ProtosStandardArrayProtocol.isStandardEachImplementation(closure),
+                                    ProtosStandardBytesProtocol.isStandardEachImplementation(closure),
+                                    ProtosStandardEnvironmentProtocol.isStandardEachImplementation(closure),
+                                    ProtosStandardIdentityMapProtocol.isStandardEachImplementation(closure),
+                                    ProtosStandardMapProtocol.isStandardEachImplementation(closure),
+                                    ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(closure),
+                                    ProtosStandardMapProtocol.isStandardAtPutImplementation(closure),
+                                    ProtosStandardMapProtocol.isStandardRemoveImplementation(closure),
+                                    ProtosStandardErrorProtocol.isStandardSignalImplementation(closure),
+                                    ProtosStandardObjectProtocol.isStandardCallImplementation(closure),
+                                    ProtosStandardImportProtocol.runtimeForImplementation(closure)));
+            return invocation.requiresStructuredDispatch() ? invocation : null;
         }
 
-        @Override
-        public ProtosTask taskForRuntime() { return activation.task().orElse(null); }
+        ProtosActivation activation() { return activation; }
 
-        @Override
-        public boolean isNative() { return true; }
+        boolean isStructuredObjectCall() { return structured != null && structured.objectCall; }
 
-        @Override
-        public boolean isStructuredObjectCall() { return structured != null && structured.objectCall; }
-
-        @Override
-        public boolean isStructuredCaseOf() {
+        boolean isStructuredCaseOf() {
             return ProtosStandardObjectProtocol.isStandardCaseOfImplementation(nativeBody);
         }
 
-        @Override
-        public boolean isStructuredMapMatch() {
+        boolean isStructuredMapMatch() {
             return ProtosStandardMapProtocol.isStandardMatchImplementation(nativeBody);
         }
 
-        @Override
-        public boolean isStructuredImportCall() {
+        boolean isStructuredImportCall() {
             return structured != null && structured.importRuntime != null;
         }
 
-        @Override
-        public boolean isStructuredEnsure() { return structured != null && structured.ensure; }
+        boolean isStructuredEnsure() { return structured != null && structured.ensure; }
 
-        @Override
-        public boolean isStructuredErrorHandler() {
+        boolean isStructuredErrorHandler() {
             return structured != null && structured.errorHandler;
         }
 
-        @Override
-        public boolean isStructuredWhile() { return structured != null && structured.whileLoop != null; }
+        boolean isStructuredWhile() { return structured != null && structured.whileLoop != null; }
 
-        /**
-         * PLAT044 B′ (PERF026-C1): true only when ordinary selection prepared
-         * the canonical standard whileTrue capability and its receiver and
-         * sole supplied value are exactly the send site's staged {@code
-         * condition} and {@code body} literal values, and neither literal
-         * would fail the per-child B′ proof for a reason already known now:
-         * an owned return home (no captured one) or a required Context-local
-         * plan projection. A pure read of the already prepared call and the
-         * literal values: no activation is prepared and nothing is validated,
-         * so condition/body preparation timing is unchanged, and any other
-         * shape keeps the structured-dispatch while. A per-child proof that
-         * still fails later (for example a foreign-Context plan) keeps that
-         * child's exact physical invocation.
-         */
-        @Override
-        public boolean admitsInlineLiteralWhile(Object condition, Object body) {
-            return isStructuredWhile()
-                    && !structured.whileLoop.postTest()
-                    && activation.receiver() == condition
-                    && supplied.size() == 1
-                    && supplied.get(0) == body
-                    && isInlineLiteralCallbackValue(condition)
-                    && isInlineLiteralCallbackValue(body);
-        }
-
-        /**
-         * PLAT044 B′ (PERF026-D1): true only when ordinary selection prepared
-         * the canonical standard Array.each or Bytes.each capability, its sole
-         * supplied value is exactly the send site's staged one-parameter
-         * {@code callback} literal value, and that literal would not fail the
-         * per-element B′ proof for a reason already known now (as in {@link
-         * #admitsInlineLiteralWhile}). A pure read: the receiver and callback
-         * are not validated here and no snapshot or activation is created, so
-         * {@code PreparedArrayEachCall}/{@code PreparedBytesEachCall} keep sole
-         * authority over validation order, the snapshot and every per-element
-         * activation.
-         */
-        @Override
-        public boolean admitsInlineLiteralIndexedEach(Object callback) {
-            return (isStructuredArrayEach() || isStructuredBytesEach())
-                    && supplied.size() == 1
-                    && supplied.get(0) == callback
-                    && isInlineLiteralCallbackValue(callback);
-        }
-
-        /**
-         * PLAT044 B′ (PERF026-D2): the {@link #admitsInlineLiteralIndexedEach}
-         * proof for the canonical standard Map.each or IdentityMap.each
-         * capability and the send site's staged two-parameter {@code
-         * callback} literal value. Equally a pure read: {@code
-         * PreparedMapEachCall}/{@code PreparedIdentityMapEachCall} keep sole
-         * authority over receiver and callability validation, the association
-         * snapshot and every per-entry activation, and callback arity is not
-         * examined here.
-         */
-        @Override
-        public boolean admitsInlineLiteralAssociationEach(Object callback) {
-            return (isStructuredMapEach() || isStructuredIdentityMapEach())
-                    && supplied.size() == 1
-                    && supplied.get(0) == callback
-                    && isInlineLiteralCallbackValue(callback);
-        }
-
-        /**
-         * PLAT044 B′ (PERF026-D3): the {@link #admitsInlineLiteralIndexedEach}
-         * proof for the canonical standard Environment.each capability and the
-         * send site's staged two-parameter {@code callback} literal value.
-         * Equally a pure read: no callability check, portable conversion,
-         * ordering or activation happens here, so {@code
-         * PreparedEnvironmentEachCall} keeps sole authority over receiver and
-         * callability validation, the complete portable canonically ordered
-         * snapshot established before callback #1 and every per-entry
-         * activation, and callback arity is not examined here.
-         *
-         * <p>The structured capability may have been classified by the
-         * standard each implementation alone (the generic preparation path),
-         * which a copy of that Closure at another home shares; admission
-         * therefore re-proves the canonical home from this call's own
-         * receiver and method home, so a copied each keeps its ordinary path.
-         */
-        @Override
-        public boolean admitsInlineLiteralEnvironmentEach(Object callback) {
-            return isStructuredEnvironmentEach()
-                    && activation.methodHome()
-                            .map(home ->
-                                    ProtosStandardEnvironmentProtocol.isCanonicalStandardEachHome(
-                                            activation.receiver(), home))
-                            .orElse(false)
-                    && supplied.size() == 1
-                    && supplied.get(0) == callback
-                    && isInlineLiteralCallbackValue(callback);
-        }
-
-        private static boolean isInlineLiteralCallbackValue(Object value) {
-            return value instanceof ProtosClosureValue closure
-                    && closure.returnHome().isPresent()
-                    && !closure.requiresContextLocalExecutionProjectionForRuntime();
-        }
-
-        @Override
-        public boolean isStructuredBoolean() {
+        boolean isStructuredBoolean() {
             return structured != null && structured.booleanKind != null;
         }
 
-        @Override
-        public boolean isStructuredArrayEach() { return structured != null && structured.arrayEach; }
+        boolean isStructuredArrayEach() { return structured != null && structured.arrayEach; }
 
-        @Override
-        public boolean isStructuredArrayMatch() {
+        boolean isStructuredArrayMatch() {
             return ProtosStandardArrayProtocol.isStandardMatchImplementation(nativeBody);
         }
 
-        @Override
-        public boolean isStructuredBytesEach() { return structured != null && structured.bytesEach; }
+        boolean isStructuredBytesEach() { return structured != null && structured.bytesEach; }
 
-        @Override
-        public boolean isStructuredEnvironmentEach() {
+        boolean isStructuredEnvironmentEach() {
             return structured != null && structured.environmentEach;
         }
 
-        @Override
-        public boolean isStructuredIdentityMapAtIfAbsent() {
+        boolean isStructuredIdentityMapAtIfAbsent() {
             return ProtosStandardIdentityMapProtocol.isStandardAtIfAbsentImplementation(nativeBody);
         }
 
-        @Override
-        public boolean isStructuredIdentityMapEach() {
+        boolean isStructuredIdentityMapEach() {
             return structured != null && structured.identityMapEach;
         }
 
-        @Override
-        public boolean isStructuredMapEach() { return structured != null && structured.mapEach; }
+        boolean isStructuredMapEach() { return structured != null && structured.mapEach; }
 
-        @Override
-        public boolean isStructuredMapReadLookup() {
+        boolean isStructuredMapReadLookup() {
             return structured != null && structured.mapReadLookup != null;
         }
 
-        @Override
-        public boolean isStructuredMapAtPut() { return structured != null && structured.mapAtPut; }
+        boolean isStructuredMapAtPut() { return structured != null && structured.mapAtPut; }
 
-        @Override
-        public boolean isStructuredMapRemove() { return structured != null && structured.mapRemove; }
+        boolean isStructuredMapRemove() { return structured != null && structured.mapRemove; }
 
         /**
          * D188 projected foreign {@code each}, recognized by its private projection body like
          * Array.match: the body is reachable only through the foreign projection, and the cursor
          * itself re-validates the receiver.
          */
-        @Override
-        public boolean isStructuredForeignEach() {
+        boolean isStructuredForeignEach() {
             return ProtosForeignProjectedOperations.isEachImplementation(nativeBody);
         }
 
-        @Override
-        public boolean requiresStructuredDispatch() {
+        boolean requiresStructuredDispatch() {
             if (structured != null
                     && (structured.objectCall
                             || structured.importRuntime != null
@@ -949,8 +342,7 @@ final class ProtosPreparedCalls {
                     || isStructuredForeignEach();
         }
 
-        @Override
-        public PreparedMapMatchCall prepareStructuredMapMatch() {
+        PreparedMapMatchCall prepareStructuredMapMatch() {
             if (!isStructuredMapMatch()) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Map.match capability");
@@ -961,8 +353,7 @@ final class ProtosPreparedCalls {
                     activation);
         }
 
-        @Override
-        public PreparedCaseOfCall prepareStructuredCaseOf() {
+        PreparedCaseOfCall prepareStructuredCaseOf() {
             if (!isStructuredCaseOf()) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Object.caseOf capability");
@@ -973,8 +364,7 @@ final class ProtosPreparedCalls {
                     activation);
         }
 
-        @Override
-        public PreparedStandardObjectCall prepareStructuredObjectCall() {
+        PreparedStandardObjectCall prepareStructuredObjectCall() {
             if (structured == null || !structured.objectCall) {
                 throw new IllegalStateException(
                         "prepared Closure call has no PLAT032 Object.call capability");
@@ -983,7 +373,7 @@ final class ProtosPreparedCalls {
             Object receiver = activation.receiver();
             if (receiver instanceof ProtosClosureValue targetClosure) {
                 return PreparedStandardObjectCall.closure(
-                        ProtosSendPreparation.prepareDirectClosureCall(
+                        ProtosCallRequest.call(
                                 targetClosure,
                                 supplied,
                                 activation));
@@ -992,7 +382,7 @@ final class ProtosPreparedCalls {
                     && !ProtosNumericValueSupport.isCurrentNumber(receiver)) {
                 ProtosObjectValue instance = new ProtosObjectValue(prototype);
                 return PreparedStandardObjectCall.construction(
-                        ProtosSendPreparation.prepareSend(
+                        ProtosCallRequest.send(
                                 instance,
                                 "init",
                                 activation,
@@ -1004,21 +394,19 @@ final class ProtosPreparedCalls {
                     ProtosCoreErrors.newError(activation));
         }
 
-        @Override
-        public PreparedStandardImportCall prepareStructuredImportCall() {
+        PreparedStandardImportCall prepareStructuredImportCall() {
             if (structured == null || structured.importRuntime == null) {
                 throw new IllegalStateException(
                         "prepared Closure call has no PLAT032 import capability");
             }
             return new PreparedStandardImportCall(
-                    PreparedClosureCall.moduleInitialization(
+                    new ModuleInitializationCall(
                             structured.importRuntime.prepareBytecodeImport(
                                     supplied,
                                     activation)));
         }
 
-        @Override
-        public PreparedEnsureCall prepareStructuredEnsure() {
+        PreparedEnsureCall prepareStructuredEnsure() {
             if (structured == null || !structured.ensure) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured ensure capability");
@@ -1032,12 +420,11 @@ final class ProtosPreparedCalls {
                         ProtosCoreErrors.newError(activation));
             }
             return new PreparedEnsureCall(
-                    ProtosSendPreparation.prepareDirectClosureCall(body, List.of(), activation),
-                    ProtosSendPreparation.prepareDirectClosureCall(cleanup, List.of(), activation));
+                    ProtosCallRequest.call(body, List.of(), activation),
+                    ProtosCallRequest.call(cleanup, List.of(), activation));
         }
 
-        @Override
-        public PreparedWhileCall prepareStructuredWhile() {
+        PreparedWhileCall prepareStructuredWhile() {
             if (structured == null || structured.whileLoop == null) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured while capability");
@@ -1055,8 +442,7 @@ final class ProtosPreparedCalls {
                     : new PreparedWhileCall(kind, receiver, argument, activation);
         }
 
-        @Override
-        public PreparedErrorHandlerCall prepareStructuredErrorHandler() {
+        PreparedErrorHandlerCall prepareStructuredErrorHandler() {
             if (structured == null || !structured.errorHandler) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Error.handle capability");
@@ -1081,15 +467,14 @@ final class ProtosPreparedCalls {
                         frame,
                         handler,
                         activation,
-                        ProtosSendPreparation.prepareDirectClosureCall(body, List.of(), activation));
+                        ProtosCallRequest.call(body, List.of(), activation));
             } catch (RuntimeException | Error preparationFailure) {
                 state.leaveFrame(frame);
                 throw preparationFailure;
             }
         }
 
-        @Override
-        public PreparedBooleanCall prepareStructuredBoolean() {
+        PreparedBooleanCall prepareStructuredBoolean() {
             if (structured == null || structured.booleanKind == null) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Boolean callback capability");
@@ -1101,8 +486,7 @@ final class ProtosPreparedCalls {
                     activation);
         }
 
-        @Override
-        public PreparedArrayEachCall prepareStructuredArrayEach() {
+        PreparedArrayEachCall prepareStructuredArrayEach() {
             if (structured == null || !structured.arrayEach) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Array.each capability");
@@ -1113,8 +497,7 @@ final class ProtosPreparedCalls {
                     activation);
         }
 
-        @Override
-        public PreparedArrayMatchCall prepareStructuredArrayMatch() {
+        PreparedArrayMatchCall prepareStructuredArrayMatch() {
             if (!isStructuredArrayMatch()) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Array.match capability");
@@ -1125,8 +508,7 @@ final class ProtosPreparedCalls {
                     activation);
         }
 
-        @Override
-        public PreparedBytesEachCall prepareStructuredBytesEach() {
+        PreparedBytesEachCall prepareStructuredBytesEach() {
             if (structured == null || !structured.bytesEach) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Bytes.each capability");
@@ -1137,8 +519,7 @@ final class ProtosPreparedCalls {
                     activation);
         }
 
-        @Override
-        public PreparedEnvironmentEachCall prepareStructuredEnvironmentEach() {
+        PreparedEnvironmentEachCall prepareStructuredEnvironmentEach() {
             if (structured == null || !structured.environmentEach) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Environment.each capability");
@@ -1149,8 +530,7 @@ final class ProtosPreparedCalls {
                     activation);
         }
 
-        @Override
-        public ProtosForeignEachCall prepareStructuredForeignEach() {
+        ProtosForeignEachCall prepareStructuredForeignEach() {
             if (!isStructuredForeignEach()) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured foreign each capability");
@@ -1158,8 +538,7 @@ final class ProtosPreparedCalls {
             return new ProtosForeignEachCall(activation.receiver(), supplied, activation);
         }
 
-        @Override
-        public PreparedIdentityMapAtIfAbsentCall prepareStructuredIdentityMapAtIfAbsent() {
+        PreparedIdentityMapAtIfAbsentCall prepareStructuredIdentityMapAtIfAbsent() {
             if (!isStructuredIdentityMapAtIfAbsent()) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured IdentityMap.atIfAbsent capability");
@@ -1170,8 +549,7 @@ final class ProtosPreparedCalls {
                     activation);
         }
 
-        @Override
-        public PreparedIdentityMapEachCall prepareStructuredIdentityMapEach() {
+        PreparedIdentityMapEachCall prepareStructuredIdentityMapEach() {
             if (structured == null || !structured.identityMapEach) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured IdentityMap.each capability");
@@ -1182,8 +560,7 @@ final class ProtosPreparedCalls {
                     activation);
         }
 
-        @Override
-        public PreparedMapEachCall prepareStructuredMapEach() {
+        PreparedMapEachCall prepareStructuredMapEach() {
             if (structured == null || !structured.mapEach) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Map.each capability");
@@ -1194,8 +571,7 @@ final class ProtosPreparedCalls {
                     activation);
         }
 
-        @Override
-        public PreparedMapReadLookupCall prepareStructuredMapReadLookup() {
+        PreparedMapReadLookupCall prepareStructuredMapReadLookup() {
             if (structured == null || structured.mapReadLookup == null) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Map read-lookup capability");
@@ -1207,8 +583,7 @@ final class ProtosPreparedCalls {
                     activation);
         }
 
-        @Override
-        public PreparedMapAtPutCall prepareStructuredMapAtPut() {
+        PreparedMapAtPutCall prepareStructuredMapAtPut() {
             if (structured == null || !structured.mapAtPut) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Map.atPut capability");
@@ -1219,8 +594,7 @@ final class ProtosPreparedCalls {
                     activation);
         }
 
-        @Override
-        public PreparedMapRemoveCall prepareStructuredMapRemove() {
+        PreparedMapRemoveCall prepareStructuredMapRemove() {
             if (structured == null || !structured.mapRemove) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Map.remove capability");
@@ -1230,101 +604,16 @@ final class ProtosPreparedCalls {
                     supplied,
                     activation);
         }
-
-        @Override
-        public Object enterNative() {
-            if (requiresStructuredDispatch()) {
-                throw new IllegalStateException(
-                        "structured control native must execute through Bytecode control operations");
-            }
-            if ((activation.task().isPresent()
-                            || activation.deferredCPrimeOperationForRuntime().isPresent()
-                            || activation.deferredCPrimeReleaseForRuntime().isPresent()
-                            || ProtosHostEntrySuspension.suspendible(activation))
-                    && nativeBody
-                            instanceof ProtosSuspensionCapableNativeClosureBody
-                                    suspensionCapable) {
-                return suspensionCapable
-                        .executeForBytecodeContinuation(
-                                activation,
-                                supplied);
-            }
-            return nativeBody.execute(
-                    activation,
-                    supplied);
-        }
     }
 
     /**
-     * PERF027: a result already produced by an exact guarded standard operation.
-     * This shape deliberately owns no semantic method Activation, ReturnHome,
-     * native body, supplied List or source target. Argument evaluation and D013
-     * selection have already happened before it is created; only the physically
-     * specialized implementation of that proven selection has executed.
+     * The state of a standard-import module initialization: the {@link
+     * ProtosModuleRuntime.PreparedModuleInitialization} lifecycle handle and
+     * the module body target. It is module state, not a Closure call: the
+     * structured import protocol runs the module body and applies {@code
+     * finish}/{@code fail} through it.
      */
-    static final class ImmediateResultCall implements PreparedClosureCall {
-        private final Object result;
-
-        ImmediateResultCall(Object result) {
-            this.result = java.util.Objects.requireNonNull(result, "result");
-        }
-
-        @Override
-        public RootCallTarget bodyTarget() { return null; }
-
-        @Override
-        public ProtosActivation activation() {
-            throw new IllegalStateException(
-                    "immediate guarded operation has no rich Activation");
-        }
-
-        @Override
-        public Object[] targetArguments() {
-            throw new IllegalStateException(
-                    "immediate guarded operation has no source target arguments");
-        }
-
-        @Override
-        public ProtosTask taskForRuntime() { return null; }
-
-        @Override
-        public boolean isImmediate() { return true; }
-
-        @Override
-        public Object enterImmediate() { return result; }
-
-        @Override
-        public Object handleControlTransfer(ControlFlowException transfer) {
-            throw transfer;
-        }
-
-        @Override
-        public void failIfModuleInitialization() {
-            // No module lifecycle belongs to this shape.
-        }
-
-        @Override
-        public RuntimeException mapRuntimeFailure(RuntimeException failure) {
-            return failure;
-        }
-
-        @Override
-        public void complete() {
-            // No ReturnHome or lifecycle state exists.
-        }
-
-        @Override
-        public Object finish(Object result) { return result; }
-    }
-
-    /**
-     * The special-call representation for a standard-import module
-     * initialization. It carries only the {@link
-     * ProtosModuleRuntime.PreparedModuleInitialization} lifecycle handle;
-     * ordinary source calls never instantiate this class and it has no
-     * return-home concept of its own.
-     */
-    static final class ModuleInitializationCall implements PreparedClosureCall {
+    static final class ModuleInitializationCall {
         private final ProtosModuleRuntime.PreparedModuleInitialization moduleInitialization;
         private final RootCallTarget bodyTarget;
         private final ProtosActivation activation;
@@ -1344,14 +633,11 @@ final class ProtosPreparedCalls {
                             : new Object[] {this.activation};
         }
 
-        @Override
-        public RootCallTarget bodyTarget() { return bodyTarget; }
+        RootCallTarget bodyTarget() { return bodyTarget; }
 
-        @Override
-        public ProtosActivation activation() { return activation; }
+        ProtosActivation activation() { return activation; }
 
-        @Override
-        public Object[] targetArguments() {
+        Object[] targetArguments() {
             if (targetArguments == null) {
                 throw new IllegalStateException(
                         "prepared call has no source target arguments");
@@ -1359,41 +645,51 @@ final class ProtosPreparedCalls {
             return targetArguments;
         }
 
-        @Override
-        public ProtosTask taskForRuntime() { return activation.task().orElse(null); }
+        boolean isImmediate() { return moduleInitialization.isImmediate(); }
 
-        @Override
-        public boolean isImmediate() { return moduleInitialization.isImmediate(); }
-
-        @Override
-        public Object enterImmediate() {
+        Object enterImmediate() {
             if (!isImmediate()) {
                 throw new IllegalStateException("prepared call is not an immediate module hit");
             }
             return moduleInitialization.immediateResult();
         }
 
-        @Override
-        public Object handleControlTransfer(ControlFlowException transfer) {
+        Object handleControlTransfer(ControlFlowException transfer) {
             moduleInitialization.fail();
             throw transfer;
         }
 
-        @Override
-        public void failIfModuleInitialization() { moduleInitialization.fail(); }
+        void failIfModuleInitialization() { moduleInitialization.fail(); }
 
-        @Override
-        public RuntimeException mapRuntimeFailure(RuntimeException failure) {
+        RuntimeException mapRuntimeFailure(RuntimeException failure) {
             return moduleInitialization.mapUnexpectedHostFailure(failure);
         }
 
-        @Override
-        public void complete() {
-            // Module-initialization lifecycle is finalized exclusively through finish()/fail().
-        }
+        Object finish(Object result) { return moduleInitialization.finish(result); }
 
-        @Override
-        public Object finish(Object result) { return moduleInitialization.finish(result); }
+        /**
+         * Runs the module body once (or answers an immediate module hit).
+         * A pending result is returned for the caller to compose; {@link
+         * #finish} is applied by the structured import protocol after it
+         * completes. An abrupt exit fails the initialization.
+         */
+        Object run(com.oracle.truffle.api.nodes.IndirectCallNode callNode) {
+            if (isImmediate()) {
+                return enterImmediate();
+            }
+            try {
+                return callNode.call(bodyTarget, targetArguments());
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                return handleControlTransfer(bridged.transfer());
+            } catch (ControlFlowException transfer) {
+                return handleControlTransfer(transfer);
+            } catch (com.oracle.truffle.api.exception.AbstractTruffleException failure) {
+                failIfModuleInitialization();
+                throw failure;
+            } catch (RuntimeException failure) {
+                throw mapRuntimeFailure(failure);
+            }
+        }
     }
 
     static final class PreparedArgumentVector {

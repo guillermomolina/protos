@@ -17,8 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.execution.ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall;
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -55,10 +53,6 @@ final class ProtosStructuredEachCalls {
                     PreparedEnvironmentEachCall {
         boolean hasNext();
 
-        PreparedClosureCall prepareCurrent();
-
-        PreparedInlineLiteralCall prepareInlineCurrent();
-
         void advance();
 
         Object finish();
@@ -66,20 +60,8 @@ final class ProtosStructuredEachCalls {
         /** The validated callback value supplied to this each invocation. */
         Object callback();
 
-        /**
-         * Inline eligibility of an already prepared per-position {@code
-         * child}: the callback is exactly the staged {@code literal} and
-         * {@code child} is its exact inline-equivalent invocation ({@link
-         * #isInlineLiteralInvocation}), whose activation already carries the
-         * snapshot arguments the inline region binds.
-         */
-        default boolean admitsInlineLiteralChild(
-                PreparedInlineLiteralCall child,
-                Object literal,
-                ProtosClosureExecutionPlanCell literalPlan) {
-            return callback() == literal
-                    && child.admits(literalPlan);
-        }
+        /** The call of the callback for the current position. */
+        ProtosCallRequest prepareCurrent();
     }
 
     /**
@@ -132,24 +114,12 @@ final class ProtosStructuredEachCalls {
         }
 
         @Override
-        public PreparedClosureCall prepareCurrent() {
+        public ProtosCallRequest prepareCurrent() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Array.each callback requested after snapshot exhaustion");
             }
-            return ProtosClosureCallPreparation.prepareClosureCall(
-                    block,
-                    List.of(snapshot.get(index)),
-                    activation);
-        }
-
-        @Override
-        public PreparedInlineLiteralCall prepareInlineCurrent() {
-            if (!hasNext()) {
-                throw new IllegalStateException(
-                        "Array.each callback requested after snapshot exhaustion");
-            }
-            return ProtosClosureCallPreparation.prepareInlineLiteralCall(
+            return ProtosCallRequest.call(
                     block,
                     List.of(snapshot.get(index)),
                     activation);
@@ -224,13 +194,13 @@ final class ProtosStructuredEachCalls {
             return !mismatch && index < matcherSnapshot.size();
         }
 
-        PreparedClosureCall prepareCurrent() {
+        ProtosCallRequest prepareCurrent() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Array.match child requested after terminal outcome");
             }
 
-            return ProtosSendPreparation.prepareSend(
+            return ProtosCallRequest.send(
                     matcherSnapshot.get(index),
                     "match",
                     activation,
@@ -333,24 +303,12 @@ final class ProtosStructuredEachCalls {
         }
 
         @Override
-        public PreparedClosureCall prepareCurrent() {
+        public ProtosCallRequest prepareCurrent() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Bytes.each callback requested after snapshot exhaustion");
             }
-            return ProtosClosureCallPreparation.prepareClosureCall(
-                    block,
-                    List.of(snapshot.get(index)),
-                    activation);
-        }
-
-        @Override
-        public PreparedInlineLiteralCall prepareInlineCurrent() {
-            if (!hasNext()) {
-                throw new IllegalStateException(
-                        "Bytes.each callback requested after snapshot exhaustion");
-            }
-            return ProtosClosureCallPreparation.prepareInlineLiteralCall(
+            return ProtosCallRequest.call(
                     block,
                     List.of(snapshot.get(index)),
                     activation);
@@ -429,26 +387,13 @@ final class ProtosStructuredEachCalls {
         }
 
         @Override
-        public PreparedClosureCall prepareCurrent() {
+        public ProtosCallRequest prepareCurrent() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Environment.each callback requested after snapshot exhaustion");
             }
             ProtosEnvironmentValue.PortableEntry entry = snapshot.get(index);
-            return ProtosClosureCallPreparation.prepareClosureCall(
-                    block,
-                    List.of(entry.name(), entry.value()),
-                    activation);
-        }
-
-        @Override
-        public PreparedInlineLiteralCall prepareInlineCurrent() {
-            if (!hasNext()) {
-                throw new IllegalStateException(
-                        "Environment.each callback requested after snapshot exhaustion");
-            }
-            ProtosEnvironmentValue.PortableEntry entry = snapshot.get(index);
-            return ProtosClosureCallPreparation.prepareInlineLiteralCall(
+            return ProtosCallRequest.call(
                     block,
                     List.of(entry.name(), entry.value()),
                     activation);
@@ -514,7 +459,7 @@ final class ProtosStructuredEachCalls {
             return match == null;
         }
 
-        PreparedClosureCall prepareFallback() {
+        ProtosCallRequest prepareFallback() {
             if (!needsFallback() || fallbackPrepared) {
                 throw new IllegalStateException(
                         "IdentityMap.atIfAbsent fallback requested in an invalid state");
@@ -522,7 +467,7 @@ final class ProtosStructuredEachCalls {
 
             fallbackPrepared = true;
 
-            return ProtosClosureCallPreparation.prepareClosureCall(
+            return ProtosCallRequest.call(
                     fallback,
                     List.of(),
                     activation);
@@ -582,26 +527,13 @@ final class ProtosStructuredEachCalls {
         }
 
         @Override
-        public PreparedClosureCall prepareCurrent() {
+        public ProtosCallRequest prepareCurrent() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "IdentityMap.each callback requested after snapshot exhaustion");
             }
             java.util.Map.Entry<Object, Object> entry = snapshot.get(index);
-            return ProtosClosureCallPreparation.prepareClosureCall(
-                    block,
-                    List.of(entry.getKey(), entry.getValue()),
-                    activation);
-        }
-
-        @Override
-        public PreparedInlineLiteralCall prepareInlineCurrent() {
-            if (!hasNext()) {
-                throw new IllegalStateException(
-                        "IdentityMap.each callback requested after snapshot exhaustion");
-            }
-            java.util.Map.Entry<Object, Object> entry = snapshot.get(index);
-            return ProtosClosureCallPreparation.prepareInlineLiteralCall(
+            return ProtosCallRequest.call(
                     block,
                     List.of(entry.getKey(), entry.getValue()),
                     activation);
@@ -663,26 +595,13 @@ final class ProtosStructuredEachCalls {
         }
 
         @Override
-        public PreparedClosureCall prepareCurrent() {
+        public ProtosCallRequest prepareCurrent() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Map.each callback requested after snapshot exhaustion");
             }
             java.util.Map.Entry<Object, Object> entry = snapshot.get(index);
-            return ProtosClosureCallPreparation.prepareClosureCall(
-                    block,
-                    List.of(entry.getKey(), entry.getValue()),
-                    activation);
-        }
-
-        @Override
-        public PreparedInlineLiteralCall prepareInlineCurrent() {
-            if (!hasNext()) {
-                throw new IllegalStateException(
-                        "Map.each callback requested after snapshot exhaustion");
-            }
-            java.util.Map.Entry<Object, Object> entry = snapshot.get(index);
-            return ProtosClosureCallPreparation.prepareInlineLiteralCall(
+            return ProtosCallRequest.call(
                     block,
                     List.of(entry.getKey(), entry.getValue()),
                     activation);
