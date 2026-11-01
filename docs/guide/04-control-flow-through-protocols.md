@@ -495,6 +495,61 @@ For runnable introductions, see
 [`02-pre-test-loops.protos`](../../protos/tutorials/04-control-flow/02-pre-test-loops.protos)
 and [`03-post-test-loops.protos`](../../protos/tutorials/04-control-flow/03-post-test-loops.protos).
 
+## The contextual `for` forms are `each` and `eachStep`
+
+Iterating a collection or a range of Integers has a short spelling too:
+
+```protos
+total: 0
+for(item in [1, 2, 3]) {
+    total = total + item
+}
+
+for(i, 0, 5) { visit(i) }        // 0, 1, 2, 3, 4
+for(i, 5, 0) { visit(i) }        // 5, 4, 3, 2, 1
+for(i, 0, 10, 2) { visit(i) }    // 0, 2, 4, 6, 8
+for(i, 10, 0, -2) { visit(i) }   // 10, 8, 6, 4, 2
+```
+
+Each form is exactly an ordinary send with a one-parameter body Closure:
+
+```protos
+[1, 2, 3].each(item => {
+    total = total + item
+})
+
+Range(0, 5).each(i => { visit(i) })
+Range(5, 0).each(i => { visit(i) })
+Range(0, 10).eachStep(2, i => { visit(i) })
+Range(10, 0).eachStep(-2, i => { visit(i) })
+```
+
+So `for` adds no second category of control:
+
+- the generic form sends `each` to whatever the expression after `in`
+  evaluates to, so an Array, a Map, a Range or any object with its own `each`
+  works; for a Map, whose `each` supplies `(key, value)`, the single binder
+  receives the key;
+- the numeric forms build `Range(start, stop)` through an ordinary lookup of
+  `Range`; the range itself chooses ascending or descending order from its
+  bounds, and `eachStep` validates the step: its sign must match the range
+  direction (it is never flipped for you), zero and non-Integer steps are
+  errors, and `Range(5, 5)` is an empty ascending range;
+- the result is whatever that `each` or `eachStep` returns: the Array for
+  `Array.each`, the Map for `Map.each`, and `null` for a Range;
+- the binder is the body Closure's own parameter, a fresh slot for each
+  element, while the body still captures and updates outer bindings normally.
+
+There is no `break` or `continue`. `^` and `return` inside the body are
+ordinary non-local returns: they leave the enclosing function or method, not
+just the loop.
+
+`for` and `in` are not reserved words. Only the bare spellings
+`for(name in expression) { ... }`, `for(name, start, stop) { ... }` and
+`for(name, start, stop, step) { ... }` with the body on the same line are read
+this way; `(for)(...)`, `holder.for(...)` and `for(i, a, b)` without a body are
+ordinary calls.
+
 ## Standard `whileTrue` has a strict contract
 
 The standard behavior is Closure-specific.
@@ -776,7 +831,10 @@ Representative loop cases include:
 - [`../../protos/tests/conformance/control/while-contextual-syntax.protos`](../../protos/tests/conformance/control/while-contextual-syntax.protos)
   checks the contextual pre-test spelling against `whileTrue`;
 - [`../../protos/tests/conformance/control/until-contextual-syntax.protos`](../../protos/tests/conformance/control/until-contextual-syntax.protos)
-  checks the suffix post-test spelling against `untilTrue`.
+  checks the suffix post-test spelling against `untilTrue`;
+- [`../../protos/tests/conformance/control/for-contextual-syntax.protos`](../../protos/tests/conformance/control/for-contextual-syntax.protos)
+  checks the generic and numeric `for` spellings against `each` and
+  `eachStep`.
 
 These files are conformance evidence, not additional normative authority.
 
@@ -795,7 +853,7 @@ For exact behavior, consult:
   extraction, shadowing, and activation;
 - [`../../spec/PROTOS_GRAMMAR.md`](../../spec/PROTOS_GRAMMAR.md) for ordinary
   call/message syntax, trailing Closures, and the exact contextual `if`,
-  `while`, and suffix `until` desugarings;
+  `while`, suffix `until`, and `for` desugarings;
 - [`../../spec/concurrency/FUTURES_AND_TASKS.md`](../../spec/concurrency/FUTURES_AND_TASKS.md)
   for structured task ownership and Future semantics;
 - [`03-closures-methods-and-receivers.md`](03-closures-methods-and-receivers.md)

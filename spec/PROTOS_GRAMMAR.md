@@ -2591,7 +2591,9 @@ valid (D199).
 Contextual `while` is specified by D210-Q2 (Contextual `while` expression).
 The contextual `return` spelling of non-local return is specified by
 D234-B2-S1 (Contextual `return` expression). There is no second return
-mechanism.
+mechanism. Contextual generic and numeric `for` are specified by
+D231-F2-PURE (Contextual `for` expression); they are iteration sugar over
+ordinary `each`/`eachStep` sends, not a second loop mechanism.
 
 ### Contextual `return` expression (D234-B2-S1)
 
@@ -2681,6 +2683,136 @@ the previous ordinary reading are exactly `return(x)`, `return - x`,
 `return ~ x`, `return[0]`, and `return { a: 1 }`. A `%` after `return` is not
 an operand start, so `return %{...}` keeps its ordinary binary reading; write
 `return (%{...})` to return a Map construction.
+
+### Contextual `for` expression (D231-F2-PURE)
+
+```ebnf
+contextual-for-expression =
+      "for", "(", [ layout ], identifier, "in", [ layout ], expression,
+          [ layout ], ")", braced-closure-body
+    | "for", "(", [ layout ], identifier, ",", [ layout ], expression,
+          ",", [ layout ], expression,
+          [ ",", [ layout ], expression ], [ layout ], ")",
+          braced-closure-body ;
+```
+
+The spellings `for` and `in` remain ordinary identifiers under the exact
+reserved-word rule above; the lexer tokenizes them as identifier tokens. The
+form is recognized only in the ordinary postfix call position, and only when:
+
+- the call receiver is the bare, ungrouped identifier `for` (not a member name
+  and not a parenthesized expression);
+- the header is exactly one of the three shapes below;
+- a braced Closure body (`braced-closure-body`) is attached under the ordinary
+  trailing-Closure rule (Trailing Closures): no logical `NEWLINE` token
+  intervenes between the closing `)` and the `{`. Comments that produce no
+  `NEWLINE` token remain ordinary lexical separation.
+
+The three header shapes are:
+
+- generic: `for(binder in iterable)`, where `binder` is one identifier, `in`
+  is the identifier `in` immediately following the binder (no logical
+  `NEWLINE` between them), and `iterable` is one syntactically present
+  expression containing no top-level `,`. Commas nested inside parentheses,
+  brackets, or braces belong to that expression;
+- numeric: `for(binder, start, stop)`, exactly three explicit arguments;
+- stepped numeric: `for(binder, start, stop, step)`, exactly four explicit
+  arguments.
+
+In the numeric shapes the first argument must be exactly one bare identifier,
+and no argument may be a `...` spread. The binder is a declaration, never a
+lexical read: it is the single plain parameter of the body Closure, with no
+default value and no rest marker. `in` is a contextual separator only; it is
+not a lexical read, an operator, or a message.
+
+For these exact shapes only, the contextual interpretation takes precedence
+over a lexical binding named `for`: such a binding is not consulted. Every
+other spelling keeps its ordinary meaning, including:
+
+```text
+(for)(i, a, b) { body }
+holder.for(i, a, b) { body }
+for(i, a, b)
+for(i, a, b)
+{ body }
+for(i, a) { body }
+for(i, a, b, c, d) { body }
+for(...args) { body }
+for(i, ...rest) { body }
+for(1, a, b) { body }
+```
+
+Because the generic header is not an ordinary argument list, `for(item in
+iterable)` without an attached braced body has no ordinary parse and is a
+syntax error; so is the same header followed by a logical `NEWLINE` before
+`{`.
+
+The form is an expression. The result is an ordinary postfix-foundation result,
+so later member, call, and index suffixes apply to the complete contextual
+expression.
+
+Mandatory desugaring:
+
+```js
+for(item in iterable) { body }
+```
+
+is the ordinary message send
+
+```js
+iterable.each(item => { body })
+```
+
+```js
+for(i, start, stop) { body }
+```
+
+is the ordinary message send
+
+```js
+Range(start, stop).each(i => { body })
+```
+
+and
+
+```js
+for(i, start, stop, step) { body }
+```
+
+is the ordinary message send
+
+```js
+Range(start, stop).eachStep(step, i => { body })
+```
+
+`Range` is an ordinary lexical lookup of the identifier `Range` in the
+surrounding context, followed by an ordinary call; a program-visible binding
+named `Range` that shadows the standard one is used. No Core identity is
+privileged. Evaluation follows the ordinary send order: in the numeric shapes,
+`Range` is looked up, `start` and then `stop` are evaluated once each, and the
+`Range` call completes before `step` is evaluated and before the body Closure
+is constructed; if the call signals, `step` is not evaluated and no iteration
+send occurs. In the generic shape `iterable` is evaluated once as the ordinary
+send receiver. Direction selection between ascending and descending ranges,
+validation of `step` (including its sign and the case of equal bounds),
+iteration order, and the result are entirely those of the ordinary `Range`
+call and of the `each`/`eachStep` behavior selected by ordinary lookup on the
+receiver, including user-defined overrides; the standard behaviors are owned
+by `semantics/VALUES_AND_COLLECTIONS.md`. The contextual form never reverses,
+negates, or validates `step` itself.
+
+The result of the whole expression is the result of the `each` or `eachStep`
+send. The body Closure is an ordinary one-parameter Closure created in the
+surrounding activation: the binder is a fresh parameter slot of each body
+invocation, `context`, `this`, `super`, `methodHome`, captures, `^`, `return`,
+`ensure`, Errors, and Futures inside the body keep their ordinary Closure
+semantics (`semantics/CALLABLES.md`), and ordinary flexible-arity rules govern
+how the receiver's callback arguments reach the single parameter. For example,
+`Map.each` invokes its callback with `(key, value)`, so the binder of
+`for(key in map) { ... }` receives the key. The `for` and `in` tokens are not
+lexical lookups, and no synthetic name is introduced. No loop-specific
+canonical node, `break`, `continue`, iterator protocol, or runtime primitive
+exists; `^` and `return` remain non-local returns, not loop exits.
 
 ## 37. Futures and Errors Require No New Grammar
 
@@ -2890,10 +3022,22 @@ postfix-expression =
 postfix-operation =
       ".", member-name
     | call-suffix
+    | contextual-for-suffix
     | "[", expression, "]" ;
 
 call-suffix =
     argument-list, [ trailing-closure ] ;
+
+(* D231-F2-PURE: on the bare identifier "for", the exact headers of
+   section 36, Contextual `for` expression, with an attached braced body are
+   reinterpreted contextually; "for" and "in" stay ordinary identifiers. *)
+contextual-for-suffix =
+      "(", [ layout ], identifier, "in", [ layout ], expression,
+          [ layout ], ")", braced-closure-body
+    | "(", [ layout ], identifier, ",", [ layout ], expression,
+          ",", [ layout ], expression,
+          [ ",", [ layout ], expression ], [ layout ], ")",
+          braced-closure-body ;
 
 primary-expression =
       literal

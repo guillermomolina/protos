@@ -29,6 +29,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
@@ -68,6 +69,155 @@ class ProtosSourceLayoutViewTest {
                         view.program().expressions().get(1));
 
         assertTrue(closure.expressionBody());
+    }
+
+    @Test
+    void contextualForRegistersHeaderAndBodyPathsWithASingleBinderPath() {
+        ProtosSourceLayoutView generic =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:i141-for-generic",
+                                1L,
+                                "for(item in items) { item }"));
+        SurfaceContextualFor genericLoop =
+                assertInstanceOf(
+                        SurfaceContextualFor.class,
+                        generic.program().expressions().get(0));
+        assertEquals(
+                "program/expression[0]",
+                generic.pathOf(genericLoop).orElseThrow().toString());
+        assertEquals(
+                "program/expression[0]/iterable",
+                generic.pathOf(genericLoop.iterable()).orElseThrow().toString());
+        assertEquals(
+                "program/expression[0]/body",
+                generic.pathOf(genericLoop.body()).orElseThrow().toString());
+        assertEquals(
+                "program/expression[0]/body/parameter[0]",
+                generic.pathOfNode(genericLoop.binder()).orElseThrow().toString());
+
+        ProtosSourceLayoutView numeric =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:i141-for-numeric",
+                                1L,
+                                "for(i, 0, 9, 3) { i }"));
+        SurfaceContextualFor numericLoop =
+                assertInstanceOf(
+                        SurfaceContextualFor.class,
+                        numeric.program().expressions().get(0));
+        assertEquals(
+                "program/expression[0]/start",
+                numeric.pathOf(numericLoop.start()).orElseThrow().toString());
+        assertEquals(
+                "program/expression[0]/stop",
+                numeric.pathOf(numericLoop.stop()).orElseThrow().toString());
+        assertEquals(
+                "program/expression[0]/step",
+                numeric.pathOf(numericLoop.step()).orElseThrow().toString());
+
+        ProtosSourceLayoutView.SourcePreservationProjection projection =
+                numeric.preservationProjection();
+        assertEquals(1, projection.trailingClosures().size());
+        assertEquals(
+                "program/expression[0]",
+                projection.trailingClosures().get(0).call().toString());
+        assertEquals(
+                "program/expression[0]/body",
+                projection.trailingClosures().get(0).closure().toString());
+        assertEquals(List.of(), projection.closureForms());
+    }
+
+    @Test
+    void contextualForHeaderCommentsAttachToTheirHeaderBoundaries() {
+        ProtosSourceLayoutView generic =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:i141-for-generic-comments",
+                                1L,
+                                "for /* a */ ( /* b */ item /* c */ in /* d */ items)"
+                                        + " /* e */ { item }"));
+        assertEquals(
+                List.of(
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_FOR_BEFORE_LPAREN,
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_FOR_AFTER_LPAREN,
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_FOR_BEFORE_IN,
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_FOR_AFTER_IN,
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .TRAILING_CLOSURE),
+                generic.commentAttachments().stream()
+                        .map(ProtosSourceLayoutView.CommentAttachment::boundaryKind)
+                        .toList());
+        assertTrue(
+                generic.commentAttachments().stream()
+                        .allMatch(
+                                attachment ->
+                                        attachment.preceding().orElseThrow().toString()
+                                                .equals("program/expression[0]")));
+        assertEquals(
+                "program/expression[0]/body/parameter[0]",
+                generic.commentAttachments().get(1).following().orElseThrow().toString());
+        assertEquals(
+                "program/expression[0]/iterable",
+                generic.commentAttachments().get(3).following().orElseThrow().toString());
+
+        ProtosSourceLayoutView numeric =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:i141-for-numeric-comments",
+                                1L,
+                                "for(i, /* s */ 0, /* t */ 3, /* u */ 1) { i }"));
+        assertEquals(
+                List.of(
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_FOR_BEFORE_START,
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_FOR_BEFORE_STOP,
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_FOR_BEFORE_STEP),
+                numeric.commentAttachments().stream()
+                        .map(ProtosSourceLayoutView.CommentAttachment::boundaryKind)
+                        .toList());
+        assertEquals(
+                "program/expression[0]/stop",
+                numeric.commentAttachments().get(1).following().orElseThrow().toString());
+
+        ProtosSourceLayoutView beforeCommas =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:i141-for-numeric-before-commas",
+                                1L,
+                                "for(i /* p */, 0 /* q */, 10 /* r */, -2) { i }"));
+        assertEquals(
+                List.of(
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_FOR_AFTER_BINDER,
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_FOR_AFTER_START,
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_FOR_AFTER_STOP),
+                beforeCommas.commentAttachments().stream()
+                        .map(ProtosSourceLayoutView.CommentAttachment::boundaryKind)
+                        .toList());
+
+        // Each comment ends before the comma token it precedes.
+        List<com.guillermomolina.protos.lexer.TokenOccurrence> commas =
+                beforeCommas.tokenOccurrences().stream()
+                        .filter(token -> token.token().type() == TokenType.COMMA)
+                        .toList();
+        assertEquals(3, commas.size());
+        for (int index = 0; index < 3; index++) {
+            SourceSpan comment =
+                    beforeCommas.commentAttachments().get(index).comment().span();
+            assertTrue(comment.endOffset() <= commas.get(index).span().startOffset());
+            if (index > 0) {
+                assertTrue(comment.startOffset() >= commas.get(index - 1).span().endOffset());
+            }
+        }
     }
 
     @Test

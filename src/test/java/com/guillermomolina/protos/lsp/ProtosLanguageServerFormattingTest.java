@@ -251,6 +251,27 @@ class ProtosLanguageServerFormattingTest {
         assertEquals(List.of(), format(server, URI, options(8, false)));
     }
 
+    @Test
+    void i141RealFormatterFormatsAllThreeContextualForFormsStably() {
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {});
+
+        server.textDocuments().didOpen(
+                open(URI, 1, "for(x in xs){x}\nfor(i,0,5){i}\nfor(i,10,0,-2){i}"));
+
+        List<? extends TextEdit> edits =
+                format(server, URI, options(8, false));
+
+        assertEquals(1, edits.size());
+        String formatted = edits.get(0).getNewText();
+        assertEquals(
+                "for(x in xs) { x }\nfor(i, 0, 5) { i }\nfor(i, 10, 0, -2) { i }\n",
+                formatted);
+
+        server.textDocuments().didChange(change(URI, 2, formatted));
+        assertEquals(List.of(), format(server, URI, options(8, false)));
+    }
+
     private static ProtosLanguageServer server(ProtosLspDocumentFormatter formatter) {
         return new ProtosLanguageServer(
                 code -> {}, new ProtosProjectFileBindingProvider(), formatter);

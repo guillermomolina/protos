@@ -23,6 +23,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
@@ -205,6 +206,29 @@ final class ProtosStaticDefinitions {
                     analyzeClosure(loop.body());
                     if (!done) {
                         analyze(loop.condition(), new Facts());
+                    }
+                    opaqueInvocationBarrier(facts);
+                }
+                case SurfaceContextualFor loop -> {
+                    // D231-F2-PURE lowers to an ordinary each/eachStep send. Header
+                    // expressions run in this activation; the numeric form first
+                    // invokes the ordinary Range(start, stop) constructor before step.
+                    // The binder is only the body Closure's parameter, and the send
+                    // itself is an opaque invocation.
+                    if (loop.kind() == SurfaceContextualFor.Kind.GENERIC) {
+                        analyze(loop.iterable(), facts);
+                    } else {
+                        analyze(loop.start(), facts);
+                        if (!done) {
+                            analyze(loop.stop(), facts);
+                        }
+                        opaqueInvocationBarrier(facts);
+                        if (!done && loop.step() != null) {
+                            analyze(loop.step(), facts);
+                        }
+                    }
+                    if (!done) {
+                        analyzeClosure(loop.body());
                     }
                     opaqueInvocationBarrier(facts);
                 }

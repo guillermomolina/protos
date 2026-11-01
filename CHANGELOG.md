@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.435-SNAPSHOT
+
+- `I141` (D231-F2-PURE): implement contextual generic and numeric `for` as
+  ordinary `each`/`eachStep` sugar.
+  - On the bare identifier `for`, `for(item in expression) { body }`,
+    `for(i, start, stop) { body }` and `for(i, start, stop, step) { body }`
+    parse to `SurfaceContextualFor` and canonicalize to
+    `expression.each(item => { body })`,
+    `Range(start, stop).each(i => { body })` and
+    `Range(start, stop).eachStep(step, i => { body })`. `Range` is an
+    ordinary lexical lookup built before `step`; the binder is the body
+    Closure's single parameter. No loop node, kernel or Bytecode operation.
+  - `for` and `in` stay identifiers; grouped, member, body-less, spread and
+    other argument-count spellings remain ordinary calls.
+  - Static definitions, references, hover (binder outside the Closure span),
+    lint, document symbols, source layout and the tooling bridge handle the
+    form; the Protos formatter preserves the sugar and header comments on
+    their original side of `(`, `in`, each comma and `{`.
+  - Grammar §36 and spec revision 0.1.490; guide section; parser,
+    canonicalizer, analysis, formatter and LSP tests; suite-native
+    `control/for-contextual-syntax.protos` conformance.
+
 ## 0.3.434-SNAPSHOT
 
 - `I140` (D236-B1): implement guarded bidirectional `Range` and

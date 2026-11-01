@@ -19,6 +19,7 @@ package com.guillermomolina.protos.parser;
 
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
@@ -116,8 +117,11 @@ public final class ProtosParserSourceFacts {
     /**
      * Attached trailing braced Closure and the exact Surface node that owns it:
      * an ordinary {@link SurfaceCall}, a D210-Q2 {@link SurfaceContextualWhile},
-     * or a D211 {@link SurfaceContextualIf} (whose true branch is the attached
-     * trailing Closure; its false branch is a {@link ContextualElseOrigin}).
+     * a D211 {@link SurfaceContextualIf} (whose true branch is the attached
+     * trailing Closure; its false branch is a {@link ContextualElseOrigin}),
+     * or a D231-F2-PURE {@link SurfaceContextualFor} (whose attached body is
+     * the owner's own one-parameter body Closure; the parameter is the
+     * binder spelled in the header, so its span precedes the Closure span).
      */
     public record TrailingClosureOrigin(
             SurfaceExpression owner,
@@ -125,12 +129,17 @@ public final class ProtosParserSourceFacts {
         public TrailingClosureOrigin {
             Objects.requireNonNull(owner, "owner");
             Objects.requireNonNull(closure, "closure");
-            if (!(owner instanceof SurfaceCall)
+            if (owner instanceof SurfaceContextualFor loop) {
+                if (loop.body() != closure) {
+                    throw new IllegalArgumentException(
+                            "contextual for Closure must be the owner's body");
+                }
+            } else if (!(owner instanceof SurfaceCall)
                     && !(owner instanceof SurfaceContextualWhile)
                     && !(owner instanceof SurfaceContextualIf)) {
                 throw new IllegalArgumentException(
                         "trailing Closure owner must be a call, contextual while,"
-                                + " or contextual if: "
+                                + " contextual if, or contextual for: "
                                 + owner.getClass().getSimpleName());
             }
         }

@@ -20,6 +20,7 @@ package com.guillermomolina.protos.parser;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.lexer.ProtosLexer;
@@ -29,6 +30,8 @@ import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SequenceContext
 import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SequenceSeparatorKind;
 import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SingleParameterClosureForm;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
@@ -432,6 +435,73 @@ class ProtosParserSourceFactsTest {
         assertEquals(new SourceSpan(8, 13), origins.get(0).untilSpan());
         assertSame(outer, origins.get(1).owner());
         assertEquals(new SourceSpan(19, 24), origins.get(1).untilSpan());
+    }
+
+    @Test
+    void contextualForRecordsOneTrailingOriginOnItsRealNode() {
+        String source = "for(item in items) { item }\nfor(i, 0, 5, 2) { i }";
+        Parsed parsed = parseWithFacts(source);
+
+        SurfaceContextualFor generic = assertInstanceOf(
+                SurfaceContextualFor.class,
+                parsed.program().expressions().get(0));
+        SurfaceContextualFor numeric = assertInstanceOf(
+                SurfaceContextualFor.class,
+                parsed.program().expressions().get(1));
+        List<ProtosParserSourceFacts.TrailingClosureOrigin> origins =
+                parsed.facts().trailingClosureOrigins();
+        assertEquals(2, origins.size());
+        assertSame(generic, origins.get(0).owner());
+        assertSame(generic.body(), origins.get(0).closure());
+        assertSame(numeric, origins.get(1).owner());
+        assertSame(numeric.body(), origins.get(1).closure());
+
+        assertEquals(1, generic.body().parameters().size());
+        assertEquals(new SourceSpan(4, 8), generic.binder().span());
+        assertEquals(new SourceSpan(19, 27), generic.body().span());
+        assertEquals(new SourceSpan(0, 27), generic.span());
+        int secondStart = source.lastIndexOf("for(");
+        assertEquals(
+                new SourceSpan(secondStart + 4, secondStart + 5),
+                numeric.binder().span());
+        assertEquals(new SourceSpan(secondStart, source.length()), numeric.span());
+
+        // The contextual body is not a recorded single-parameter Closure form.
+        assertEquals(List.of(), parsed.facts().singleParameterClosureForms());
+    }
+
+    @Test
+    void blockCommentNewlinesDoNotBreakContextualFor() {
+        String source = "for(i, 0, 3) /* one\n two */ { i }";
+        Parsed parsed = parseWithTrivia(source);
+
+        assertEquals(1, parsed.program().expressions().size());
+        SurfaceContextualFor loop = assertInstanceOf(
+                SurfaceContextualFor.class,
+                parsed.program().expressions().get(0));
+        List<ProtosParserSourceFacts.TrailingClosureOrigin> origins =
+                parsed.facts().trailingClosureOrigins();
+        assertEquals(1, origins.size());
+        assertSame(loop, origins.get(0).owner());
+        assertSame(loop.body(), origins.get(0).closure());
+    }
+
+    @Test
+    void trailingOriginRejectsAForeignClosureForAContextualFor() {
+        Parsed parsed = parseWithFacts("for(i, 0, 3) { i }\nfoo() { body }");
+        SurfaceContextualFor loop = assertInstanceOf(
+                SurfaceContextualFor.class,
+                parsed.program().expressions().get(0));
+        SurfaceCall call = assertInstanceOf(
+                SurfaceCall.class,
+                parsed.program().expressions().get(1));
+        SurfaceClosure foreign = assertInstanceOf(
+                SurfaceClosure.class,
+                call.arguments().get(0).expression());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ProtosParserSourceFacts.TrailingClosureOrigin(loop, foreign));
     }
 
     private Parsed parseWithTrivia(String source) {

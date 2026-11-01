@@ -34,6 +34,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
@@ -90,6 +91,16 @@ public final class ProtosSourceLayoutView {
         CONTEXTUAL_UNTIL_BEFORE_KEYWORD,
         CONTEXTUAL_UNTIL_BEFORE_LPAREN,
         CONTEXTUAL_UNTIL_AFTER_LPAREN,
+        CONTEXTUAL_FOR_BEFORE_LPAREN,
+        CONTEXTUAL_FOR_AFTER_LPAREN,
+        CONTEXTUAL_FOR_BEFORE_IN,
+        CONTEXTUAL_FOR_AFTER_IN,
+        CONTEXTUAL_FOR_AFTER_BINDER,
+        CONTEXTUAL_FOR_BEFORE_START,
+        CONTEXTUAL_FOR_AFTER_START,
+        CONTEXTUAL_FOR_BEFORE_STOP,
+        CONTEXTUAL_FOR_AFTER_STOP,
+        CONTEXTUAL_FOR_BEFORE_STEP,
         NON_LOCAL_RETURN_OPERAND,
         DOCUMENT_PREFIX,
         DOCUMENT_SUFFIX
@@ -888,6 +899,14 @@ public final class ProtosSourceLayoutView {
 
             if (boundary.isEmpty()) {
                 boundary =
+                        contextualForHeaderBoundary(
+                                occurrence.span(),
+                                tokenOccurrences,
+                                structuralIndex);
+            }
+
+            if (boundary.isEmpty()) {
+                boundary =
                         nonLocalReturnOperandBoundary(
                                 occurrence.span(),
                                 structuralIndex);
@@ -1078,6 +1097,145 @@ public final class ProtosSourceLayoutView {
     }
 
     /**
+     * D231-F2-PURE header comments of a contextual for, between header
+     * tokens but outside every header expression: between {@code for} and
+     * {@code (}, between {@code (} and the binder, between the binder and
+     * {@code in}, between {@code in} and the iterable, or (numeric form)
+     * before or after the exact {@code ,} token separating two consecutive
+     * header elements, with a distinct kind for each side. Each attaches
+     * from the contextual node to the header element that follows it; the
+     * binder is addressed by its single registration as the body Closure's
+     * parameter. Comments between {@code )} and {@code '{'} are
+     * {@link CommentBoundaryKind#TRAILING_CLOSURE} comments.
+     */
+    private static Optional<ResolvedBoundary>
+            contextualForHeaderBoundary(
+                    SourceSpan comment,
+                    List<TokenOccurrence> tokenOccurrences,
+                    StructuralIndex structuralIndex) {
+        for (StructuralNode structuralNode : structuralIndex.nodes) {
+            if (!(structuralNode.node()
+                    instanceof SurfaceContextualFor loop)) {
+                continue;
+            }
+
+            int ownerStart = loop.span().startOffset();
+            SurfaceParameter binder = loop.binder();
+            if (comment.startOffset() < ownerStart
+                    || comment.endOffset()
+                            > loop.body().span().startOffset()) {
+                continue;
+            }
+
+            TokenOccurrence open = null;
+            for (TokenOccurrence occurrence : tokenOccurrences) {
+                if (occurrence.span().startOffset() > ownerStart) {
+                    open = occurrence;
+                    break;
+                }
+            }
+            if (open == null
+                    || open.token().type() != TokenType.LPAREN) {
+                continue;
+            }
+
+            CommentBoundaryKind kind = null;
+            Object following = null;
+            if (comment.endOffset() <= open.span().startOffset()) {
+                kind = CommentBoundaryKind.CONTEXTUAL_FOR_BEFORE_LPAREN;
+                following = binder;
+            } else if (comment.startOffset() >= open.span().endOffset()
+                    && comment.endOffset() <= binder.span().startOffset()) {
+                kind = CommentBoundaryKind.CONTEXTUAL_FOR_AFTER_LPAREN;
+                following = binder;
+            } else if (loop.kind() == SurfaceContextualFor.Kind.GENERIC) {
+                TokenOccurrence separator = null;
+                for (TokenOccurrence occurrence : tokenOccurrences) {
+                    if (occurrence.span().startOffset()
+                            >= binder.span().endOffset()) {
+                        separator = occurrence;
+                        break;
+                    }
+                }
+                int iterableStart = loop.iterable().span().startOffset();
+                if (separator == null) {
+                    continue;
+                }
+                if (comment.startOffset() >= binder.span().endOffset()
+                        && comment.endOffset()
+                                <= separator.span().startOffset()) {
+                    kind = CommentBoundaryKind.CONTEXTUAL_FOR_BEFORE_IN;
+                    following = binder;
+                } else if (comment.startOffset()
+                                >= separator.span().endOffset()
+                        && comment.endOffset() <= iterableStart) {
+                    kind = CommentBoundaryKind.CONTEXTUAL_FOR_AFTER_IN;
+                    following = loop.iterable();
+                }
+            } else {
+                List<SurfaceExpression> elements = new ArrayList<>();
+                elements.add(loop.start());
+                elements.add(loop.stop());
+                if (loop.step() != null) {
+                    elements.add(loop.step());
+                }
+                List<CommentBoundaryKind> beforeComma = List.of(
+                        CommentBoundaryKind.CONTEXTUAL_FOR_AFTER_BINDER,
+                        CommentBoundaryKind.CONTEXTUAL_FOR_AFTER_START,
+                        CommentBoundaryKind.CONTEXTUAL_FOR_AFTER_STOP);
+                List<CommentBoundaryKind> afterComma = List.of(
+                        CommentBoundaryKind.CONTEXTUAL_FOR_BEFORE_START,
+                        CommentBoundaryKind.CONTEXTUAL_FOR_BEFORE_STOP,
+                        CommentBoundaryKind.CONTEXTUAL_FOR_BEFORE_STEP);
+                int previousEnd = binder.span().endOffset();
+                for (int index = 0; index < elements.size(); index++) {
+                    SurfaceExpression element = elements.get(index);
+                    int elementStart = element.span().startOffset();
+                    if (comment.startOffset() >= previousEnd
+                            && comment.endOffset() <= elementStart) {
+                        TokenOccurrence comma = firstTokenOfTypeBetween(
+                                tokenOccurrences,
+                                TokenType.COMMA,
+                                previousEnd,
+                                elementStart);
+                        if (comma == null) {
+                            break;
+                        }
+                        if (comment.endOffset() <= comma.span().startOffset()) {
+                            kind = beforeComma.get(index);
+                        } else if (comment.startOffset()
+                                >= comma.span().endOffset()) {
+                            kind = afterComma.get(index);
+                        }
+                        following = element;
+                        break;
+                    }
+                    previousEnd = element.span().endOffset();
+                }
+            }
+
+            if (kind == null) {
+                continue;
+            }
+
+            Optional<StructuralPath> ownerPath =
+                    structuralIndex.pathOf(loop);
+            Optional<StructuralPath> followingPath =
+                    structuralIndex.pathOf(following);
+            if (ownerPath.isPresent() && followingPath.isPresent()) {
+                return Optional.of(
+                        new ResolvedBoundary(
+                                ownerPath.orElseThrow(),
+                                followingPath.orElseThrow(),
+                                kind,
+                                Optional.empty()));
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    /**
      * I138: comments between a non-local return's {@code ^} or contextual
      * {@code return} and its operand attach from the return node to its
      * operand, so the formatter keeps them inside the return instead of
@@ -1233,6 +1391,23 @@ public final class ProtosSourceLayoutView {
         }
 
         return Optional.empty();
+    }
+
+    private static TokenOccurrence firstTokenOfTypeBetween(
+            List<TokenOccurrence> tokenOccurrences,
+            TokenType type,
+            int lowerBound,
+            int upperBound) {
+        for (TokenOccurrence occurrence : tokenOccurrences) {
+            if (occurrence.span().startOffset() >= upperBound) {
+                break;
+            }
+            if (occurrence.token().type() == type
+                    && occurrence.span().startOffset() >= lowerBound) {
+                return occurrence;
+            }
+        }
+        return null;
     }
 
     private static TokenOccurrence lastRightParenthesisBefore(
@@ -1656,6 +1831,30 @@ public final class ProtosSourceLayoutView {
                     registerExpression(
                             loop.condition(),
                             path.child("condition"));
+                }
+                case SurfaceContextualFor loop -> {
+                    // The binder is registered once, as the body Closure's
+                    // parameter, under body/parameter[0].
+                    if (loop.kind() == SurfaceContextualFor.Kind.GENERIC) {
+                        registerExpression(
+                                loop.iterable(),
+                                path.child("iterable"));
+                    } else {
+                        registerExpression(
+                                loop.start(),
+                                path.child("start"));
+                        registerExpression(
+                                loop.stop(),
+                                path.child("stop"));
+                        if (loop.step() != null) {
+                            registerExpression(
+                                    loop.step(),
+                                    path.child("step"));
+                        }
+                    }
+                    registerExpression(
+                            loop.body(),
+                            path.child("body"));
                 }
                 case SurfaceArrayConstruction array -> {
                     for (int index = 0;

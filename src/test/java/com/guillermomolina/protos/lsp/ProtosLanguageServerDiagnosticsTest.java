@@ -76,6 +76,35 @@ class ProtosLanguageServerDiagnosticsTest {
     }
 
     @Test
+    void genericForHeaderWithoutBodyPublishesDiagnosticAtTheInSeparator() {
+        List<PublishDiagnosticsParams> published = new ArrayList<>();
+        ProtosLanguageServer server = new ProtosLanguageServer(code -> {});
+        server.connect(recordingClient(published));
+        ProtosTextDocumentService documents = server.textDocuments();
+        String uri = "file:///workspace/for.protos";
+
+        documents.didOpen(open(uri, 1, "for(x in xs) { x }\nfor(i, 0, 3) { i }"));
+        assertEquals(1, published.size());
+        assertTrue(published.get(0).getDiagnostics().isEmpty());
+
+        documents.didChange(change(uri, 2, "for(x in xs)\n{ x }"));
+        assertEquals(2, published.size());
+        PublishDiagnosticsParams failure = published.get(1);
+        assertEquals(Integer.valueOf(2), failure.getVersion());
+        assertEquals(1, failure.getDiagnostics().size());
+        Diagnostic diagnostic = failure.getDiagnostics().get(0);
+        assertEquals(DiagnosticSeverity.Error, diagnostic.getSeverity());
+        assertEquals(
+                new Range(new Position(0, 6), new Position(0, 8)),
+                diagnostic.getRange());
+
+        // The numeric header without an attached body is an ordinary call.
+        documents.didChange(change(uri, 3, "for(i, 0, 3)\n{ i: 1 }"));
+        assertEquals(3, published.size());
+        assertTrue(published.get(2).getDiagnostics().isEmpty());
+    }
+
+    @Test
     void lexicalErrorsInEditedSourceAreDocumentDiagnosticsNotServerFaults() {
         List<PublishDiagnosticsParams> published = new ArrayList<>();
         ProtosLanguageServer server = new ProtosLanguageServer(code -> {});

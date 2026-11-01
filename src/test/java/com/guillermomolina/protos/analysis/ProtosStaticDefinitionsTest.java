@@ -159,6 +159,54 @@ class ProtosStaticDefinitionsTest {
     }
 
     @Test
+    void contextualForBodyReadResolvesToTheHeaderBinderParameter() {
+        String numeric = "for(i, 0, 3) { i }";
+        int binder = numeric.indexOf("i");
+        int bodyRead = numeric.lastIndexOf("i");
+        ProtosStaticDefinitionResult numericResult =
+                definition(numeric, bodyRead).orElseThrow();
+        assertEquals(new SourceSpan(bodyRead, bodyRead + 1), numericResult.referenceSpan());
+        assertEquals(
+                new SourceSpan(binder, binder + 1),
+                numericResult.targets().get(0).span());
+
+        String generic = "f: (xs) => {\n  for(item in xs) { item }\n}";
+        int itemDeclaration = generic.indexOf("item");
+        int itemRead = generic.lastIndexOf("item");
+        int iterableRead = generic.indexOf("xs", generic.indexOf(" in "));
+        assertEquals(
+                new SourceSpan(itemDeclaration, itemDeclaration + "item".length()),
+                definition(generic, itemRead).orElseThrow().targets().get(0).span());
+        assertEquals(
+                new SourceSpan(generic.indexOf("xs"), generic.indexOf("xs") + 2),
+                definition(generic, iterableRead).orElseThrow().targets().get(0).span());
+    }
+
+    @Test
+    void contextualForHeaderTokensAreNotLexicalReads() {
+        String source =
+                "f: (for, in, n) => {\n"
+                        + "  (for)(n)\n"
+                        + "  for(x in n) { x }\n"
+                        + "  for(i, 0, 1) { i }\n"
+                        + "}";
+        int forDeclaration = source.indexOf("for");
+        int groupedRead = source.indexOf("for", source.indexOf("(for)"));
+        int genericKeyword = source.indexOf("for(x");
+        int inSeparator = source.indexOf(" in ", genericKeyword) + 1;
+        int numericKeyword = source.lastIndexOf("for(");
+        int numericBinder = source.indexOf("i", numericKeyword + 3);
+
+        assertEquals(
+                new SourceSpan(forDeclaration, forDeclaration + "for".length()),
+                definition(source, groupedRead).orElseThrow().targets().get(0).span());
+        assertTrue(definition(source, genericKeyword).isEmpty());
+        assertTrue(definition(source, inSeparator).isEmpty());
+        assertTrue(definition(source, numericKeyword).isEmpty());
+        assertTrue(definition(source, numericBinder).isEmpty());
+    }
+
+    @Test
     void contextualUntilKeywordIsNotALexicalReadOfUntilBinding() {
         String source =
                 "f: (until, n) => {\n"

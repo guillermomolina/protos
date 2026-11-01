@@ -28,6 +28,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
@@ -667,6 +668,36 @@ class ProtosParserTrailingClosureTest {
         SurfaceContextualUntil loop =
                 assertInstanceOf(SurfaceContextualUntil.class, member.receiver());
         assertEquals(new SourceSpan(0, 14), loop.span());
+    }
+
+    @Test
+    void exactBareNumericForHeaderWithBodyTakesContextualPrecedence() {
+        assertInstanceOf(SurfaceContextualFor.class, only("for(i, a, b) { body }"));
+        assertInstanceOf(SurfaceContextualFor.class, only("for(i, a, b, c) { body }"));
+        assertInstanceOf(SurfaceContextualFor.class, only("for(item in items) { body }"));
+    }
+
+    @Test
+    void groupedAndMemberForWithTrailingClosureStayOrdinaryCalls() {
+        SurfaceCall grouped =
+                assertInstanceOf(SurfaceCall.class, only("(for)(i, a, b) { body }"));
+        assertInstanceOf(SurfaceGroup.class, grouped.receiver());
+        assertEquals(4, grouped.arguments().size());
+
+        SurfaceCall member =
+                assertInstanceOf(SurfaceCall.class, only("holder.for(i, a, b) { body }"));
+        assertEquals(
+                "for", assertInstanceOf(SurfaceMember.class, member.receiver()).name());
+        assertEquals(4, member.arguments().size());
+    }
+
+    @Test
+    void forWithOtherArgumentCountsKeepsOrdinaryTrailingClosure() {
+        SurfaceCall two = assertInstanceOf(SurfaceCall.class, only("for(i, a) { body }"));
+        assertEquals(3, two.arguments().size());
+        SurfaceCall five =
+                assertInstanceOf(SurfaceCall.class, only("for(i, a, b, c, d) { body }"));
+        assertEquals(6, five.arguments().size());
     }
 
     private SurfaceExpression only(String source) {

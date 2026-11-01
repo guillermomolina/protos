@@ -22,6 +22,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
@@ -125,6 +126,12 @@ final class ProtosStaticHover {
                 }
             }
         }
+        // D231-F2-PURE: the contextual for binder is spelled in the header,
+        // outside its body Closure's span, so the Closure branch cannot reach it.
+        if (expression instanceof SurfaceContextualFor loop
+                && loop.binder().span().equals(span)) {
+            return loop.binder();
+        }
         for (SurfaceExpression child : children(expression)) {
             SurfaceParameter found = findParameter(child, span);
             if (found != null) {
@@ -156,6 +163,15 @@ final class ProtosStaticHover {
                     return closureHover;
                 }
             }
+            if (expression instanceof SurfaceContextualFor loop) {
+                // D231-F2-PURE: the binder lies in the header, outside the
+                // body Closure's span.
+                ProtosStaticHoverResult binderHover =
+                        parameterDeclaration(loop.body(), loop.binder());
+                if (binderHover != null) {
+                    return binderHover;
+                }
+            }
             for (SurfaceExpression child : children(expression)) {
                 ProtosStaticHoverResult found = find(child);
                 if (found != null) {
@@ -165,16 +181,26 @@ final class ProtosStaticHover {
             return null;
         }
 
+        private ProtosStaticHoverResult parameterDeclaration(
+                SurfaceClosure closure,
+                SurfaceParameter parameter) {
+            Optional<SourceSpan> name = parameterNameSpan(snapshot.characters(), parameter);
+            if (name.isEmpty() || !contains(name.get(), sourceOffset)) {
+                return null;
+            }
+            List<String> facts = new ArrayList<>();
+            facts.add("Closure parameter declaration: " + parameter.name());
+            facts.addAll(parameterModifiers(parameter));
+            facts.add("Closure parameters: " + parameterList(closure));
+            return syntax(name.get(), facts);
+        }
+
         private ProtosStaticHoverResult findInClosureHead(SurfaceClosure closure) {
             String source = snapshot.characters();
             for (SurfaceParameter parameter : closure.parameters()) {
-                Optional<SourceSpan> name = parameterNameSpan(source, parameter);
-                if (name.isPresent() && contains(name.get(), sourceOffset)) {
-                    List<String> facts = new ArrayList<>();
-                    facts.add("Closure parameter declaration: " + parameter.name());
-                    facts.addAll(parameterModifiers(parameter));
-                    facts.add("Closure parameters: " + parameterList(closure));
-                    return syntax(name.get(), facts);
+                ProtosStaticHoverResult declaration = parameterDeclaration(closure, parameter);
+                if (declaration != null) {
+                    return declaration;
                 }
             }
 
@@ -295,6 +321,18 @@ final class ProtosStaticHover {
             case SurfaceContextualUntil loop -> {
                 children.add(loop.body());
                 children.add(loop.condition());
+            }
+            case SurfaceContextualFor loop -> {
+                if (loop.kind() == SurfaceContextualFor.Kind.GENERIC) {
+                    children.add(loop.iterable());
+                } else {
+                    children.add(loop.start());
+                    children.add(loop.stop());
+                    if (loop.step() != null) {
+                        children.add(loop.step());
+                    }
+                }
+                children.add(loop.body());
             }
             case SurfaceArrayConstruction array -> addArguments(children, array.arguments());
             case SurfaceMapConstruction map -> {

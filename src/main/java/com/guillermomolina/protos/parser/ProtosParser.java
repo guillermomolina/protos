@@ -28,6 +28,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceMultipleSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
@@ -769,6 +770,10 @@ public final class ProtosParser {
     }
 
     private SurfaceExpression parseCallSuffix(SurfaceExpression receiver) {
+        if (isBareName(receiver, "for") && cursor.contextualForInHeader()) {
+            return parseContextualForIn(receiver);
+        }
+
         cursor.consume(TokenType.LPAREN, "'('");
         consumeNewlines();
         List<SurfaceArgument> arguments = new ArrayList<>();
@@ -788,6 +793,11 @@ public final class ProtosParser {
         TokenOccurrence close = cursor.consume(TokenType.RPAREN, "')'");
         int endOffset = close.span().endOffset();
         SurfaceClosure trailingClosure = null;
+
+        if (cursor.at(TokenType.LBRACE)
+                && isContextualNumericForHeader(receiver, arguments)) {
+            return parseContextualNumericFor(receiver, arguments);
+        }
 
         if (cursor.at(TokenType.LBRACE)) {
             trailingClosure =
@@ -825,6 +835,101 @@ public final class ProtosParser {
             recordTrailingClosureOrigin(call, trailingClosure);
         }
         return call;
+    }
+
+    private static boolean isBareName(SurfaceExpression expression, String name) {
+        return expression instanceof SurfaceName surfaceName
+                && surfaceName.name().equals(name);
+    }
+
+    /**
+     * D231-F2-PURE: parses a recognized generic
+     * {@code for(binder in iterable) { body }} form. The binder becomes the
+     * single parameter of the body Closure, never an evaluable name, and the
+     * {@code in} separator is consumed as syntax.
+     */
+    private SurfaceExpression parseContextualForIn(SurfaceExpression keyword) {
+        cursor.consume(TokenType.LPAREN, "'('");
+        consumeNewlines();
+        TokenOccurrence binder =
+                cursor.consume(TokenType.IDENTIFIER, "a contextual for binder");
+        SurfaceParameter parameter = new SurfaceParameter(
+                binder.token().lexeme(),
+                Optional.empty(),
+                false,
+                binder.span());
+        cursor.consume(TokenType.IDENTIFIER, "'in'");
+        consumeNewlines();
+        SurfaceExpression iterable = parseExpressionFoundation();
+        consumeNewlines();
+        cursor.consume(TokenType.RPAREN, "')'");
+        SurfaceClosure body =
+                (SurfaceClosure) parseClosureBody(
+                        List.of(parameter),
+                        cursor.current().span().startOffset());
+        SurfaceContextualFor loop = new SurfaceContextualFor(
+                SurfaceContextualFor.Kind.GENERIC,
+                iterable,
+                null,
+                null,
+                null,
+                body,
+                new SourceSpan(
+                        keyword.span().startOffset(),
+                        body.span().endOffset()));
+        recordTrailingClosureOrigin(loop, body);
+        return loop;
+    }
+
+    /**
+     * D231-F2-PURE: only a bare, ungrouped {@code for} name with exactly
+     * three or four non-spread explicit arguments, the first being a bare
+     * name, is the numeric contextual header; the caller additionally
+     * requires an attached {@code '{'}. Every other shape stays an ordinary
+     * call, including the exact header without an attached block.
+     */
+    private static boolean isContextualNumericForHeader(
+            SurfaceExpression receiver,
+            List<SurfaceArgument> arguments) {
+        if (!isBareName(receiver, "for")
+                || arguments.size() < 3
+                || arguments.size() > 4
+                || !(arguments.get(0).expression() instanceof SurfaceName)) {
+            return false;
+        }
+        for (SurfaceArgument argument : arguments) {
+            if (argument.spread()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private SurfaceExpression parseContextualNumericFor(
+            SurfaceExpression keyword,
+            List<SurfaceArgument> arguments) {
+        SurfaceName binder = (SurfaceName) arguments.get(0).expression();
+        SurfaceParameter parameter = new SurfaceParameter(
+                binder.name(),
+                Optional.empty(),
+                false,
+                binder.span());
+        SurfaceClosure body =
+                (SurfaceClosure) parseClosureBody(
+                        List.of(parameter),
+                        cursor.current().span().startOffset());
+        SurfaceContextualFor loop = new SurfaceContextualFor(
+                SurfaceContextualFor.Kind.NUMERIC,
+                null,
+                arguments.get(1).expression(),
+                arguments.get(2).expression(),
+                arguments.size() == 4 ? arguments.get(3).expression() : null,
+                body,
+                new SourceSpan(
+                        keyword.span().startOffset(),
+                        body.span().endOffset()));
+        recordTrailingClosureOrigin(loop, body);
+        return loop;
     }
 
     /**

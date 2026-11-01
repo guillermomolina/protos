@@ -67,6 +67,34 @@ class ProtosStaticHoverTest {
     }
 
     @Test
+    void contextualForBinderOutsideTheClosureSpanHasHoverFacts() {
+        String source = "for(item in items) { item }";
+        int declaration = source.indexOf("item");
+
+        ProtosStaticHoverResult declared = hover(source, declaration + 1).orElseThrow();
+        assertEquals(span(declaration, "item"), declared.span());
+        assertEquals(
+                syntax(
+                        "Closure parameter declaration: item",
+                        "Closure parameters: (item)"),
+                declared.sections());
+
+        int reference = source.lastIndexOf("item");
+        ProtosStaticHoverResult proven = hover(source, reference).orElseThrow();
+        assertEquals(span(reference, "item"), proven.span());
+        assertEquals(
+                List.of(new Section(Kind.PROVEN_BINDING, List.of("Closure parameter: item"))),
+                proven.sections());
+
+        String numeric = "for(i, 0, 3) { i }";
+        ProtosStaticHoverResult numericDeclared =
+                hover(numeric, numeric.indexOf("i")).orElseThrow();
+        assertEquals(span(numeric.indexOf("i"), "i"), numericDeclared.span());
+        assertTrue(hover(numeric, numeric.indexOf("for")).isEmpty());
+        assertTrue(hover(source, source.indexOf(" in ") + 1).isEmpty());
+    }
+
+    @Test
     void parameterDeclarationsPublishOnlyTheExactIdentifierSpan() {
         String source = "f: (first, second: 2, ...rest) => { first }";
 

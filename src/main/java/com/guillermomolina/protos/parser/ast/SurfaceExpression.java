@@ -30,6 +30,7 @@ public sealed interface SurfaceExpression
                 SurfaceContextualWhile,
                 SurfaceContextualIf,
                 SurfaceContextualUntil,
+                SurfaceContextualFor,
                 SurfaceArrayConstruction,
                 SurfaceMapConstruction,
                 SurfaceIndex,

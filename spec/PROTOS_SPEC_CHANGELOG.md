@@ -23,6 +23,37 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.490] - 2026-11-01
+
+### D231-F2-PURE — contextual generic and numeric for as ordinary each/eachStep sugar
+- `PROTOS_GRAMMAR.md` §36 **Contextual `for` expression**: on the bare,
+  ungrouped identifier `for`, the exact headers `for(binder in iterable)`,
+  `for(binder, start, stop)` and `for(binder, start, stop, step)` with an
+  attached braced body (no logical NEWLINE before `{`) are reinterpreted
+  contextually. They desugar respectively to the ordinary sends
+  `iterable.each(binder => { body })`,
+  `Range(start, stop).each(binder => { body })` and
+  `Range(start, stop).eachStep(step, binder => { body })`. For these shapes
+  the contextual reading takes precedence over a lexical binding named `for`;
+  `(for)(...)`, `holder.for(...)`, `for(...)` without an attached body, other
+  argument counts, spread arguments and a non-identifier first argument keep
+  their ordinary call meaning. `for(item in iterable)` without an attached
+  body is a syntax error. The compact EBNF gains `contextual-for-suffix`.
+- `Range` is an ordinary lexical lookup and call; `start` and `stop` are
+  evaluated once, in order, and the `Range` call completes before `step` is
+  evaluated and the body Closure is constructed. Direction selection (D236),
+  `step` validation, traversal and the result are those of the ordinary
+  `Range` call and the receiver's `each`/`eachStep`; the result of the
+  expression is the result of that send. Through ordinary flexible arity, the
+  binder of `for(key in map)` receives the key.
+- Preserved: `for` and `in` stay ordinary identifiers and are never lexical
+  reads; the binder is the single plain parameter of an ordinary body
+  Closure, so `context`, `this`, `super`, `methodHome`, captures, `^`,
+  `return`, `ensure`, Errors and Futures keep ordinary Closure semantics. No
+  loop-specific canonical node, `break`, `continue`, iterator protocol,
+  reserved word or runtime primitive is added; `CALLABLES.md`,
+  `EXECUTION_AND_CONTROL.md` and `VALUES_AND_COLLECTIONS.md` are unchanged.
+
 ## [0.1.489] - 2026-11-01
 
 ### D236-B1 — Bidirectional guarded Range constructors

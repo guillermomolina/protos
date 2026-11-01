@@ -192,6 +192,61 @@ final class TokenCursor {
     }
 
     /**
+     * D231-F2-PURE: non-consuming recognition of the exact generic contextual
+     * header {@code (binder in expression)} plus attached {@code '{'}
+     * starting at the current
+     * {@code '('}. The binder and the contextual {@code in} separator must be
+     * identifiers, a syntactically present expression must follow
+     * {@code in} before the matching {@code ')'}, and that {@code ')'} must
+     * be immediately followed (no logical NEWLINE) by {@code '{'}. Nested
+     * delimiters are skipped, so commas inside them are not header
+     * separators. Any nonmatching or unbalanced candidate returns false so
+     * that ordinary call parsing and its error reporting keep authority.
+     */
+    boolean contextualForInHeader() {
+        if (!at(TokenType.LPAREN)) {
+            return false;
+        }
+
+        int close = matchingCloseOffset(index);
+        if (close < 0 || !typeAt(close + 1, TokenType.LBRACE)) {
+            return false;
+        }
+
+        int binder = skipNewlines(index + 1);
+        if (!typeAt(binder, TokenType.IDENTIFIER)) {
+            return false;
+        }
+
+        int separator = binder + 1;
+        if (!typeAt(separator, TokenType.IDENTIFIER)
+                || !tokens.get(separator).token().lexeme().equals("in")) {
+            return false;
+        }
+
+        int first = skipNewlines(separator + 1);
+        if (first >= close) {
+            return false;
+        }
+
+        int offset = first;
+        while (offset < close) {
+            TokenType type = tokens.get(offset).token().type();
+            if (type == TokenType.COMMA) {
+                return false;
+            }
+            if (closerFor(type) != null) {
+                offset = matchingCloseOffset(offset);
+                if (offset < 0) {
+                    return false;
+                }
+            }
+            offset++;
+        }
+        return true;
+    }
+
+    /**
      * I138 (D234-B2-S1): non-consuming recognition of the contextual
      * {@code return expression} alias of {@code ^expression} at the current
      * token. Recognition is purely structural: the current token must be the

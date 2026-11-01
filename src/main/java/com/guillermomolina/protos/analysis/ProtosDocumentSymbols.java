@@ -23,6 +23,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
@@ -98,6 +99,18 @@ public final class ProtosDocumentSymbols {
             case SurfaceContextualUntil loop -> {
                 collect(loop.body(), destination);
                 collect(loop.condition(), destination);
+            }
+            case SurfaceContextualFor loop -> {
+                if (loop.kind() == SurfaceContextualFor.Kind.GENERIC) {
+                    collect(loop.iterable(), destination);
+                } else {
+                    collect(loop.start(), destination);
+                    collect(loop.stop(), destination);
+                    if (loop.step() != null) {
+                        collect(loop.step(), destination);
+                    }
+                }
+                collect(loop.body(), destination);
             }
             case SurfaceArrayConstruction array ->
                     collectArguments(array.arguments(), destination);

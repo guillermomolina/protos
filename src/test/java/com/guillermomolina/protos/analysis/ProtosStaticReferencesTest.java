@@ -56,6 +56,41 @@ class ProtosStaticReferencesTest {
     }
 
     @Test
+    void contextualForBinderDeclarationAndBodyReadsAreReferences() {
+        String source = "for(item in items) {\n  item\n  item\n}";
+        int declaration = source.indexOf("item");
+        int firstRead = source.indexOf("item", source.indexOf("{"));
+        int secondRead = source.lastIndexOf("item");
+
+        ProtosStaticReferenceResult fromDeclaration =
+                references(source, declaration + 1).orElseThrow();
+        ProtosStaticReferenceResult fromReference =
+                references(source, secondRead).orElseThrow();
+
+        assertEquals(
+                new SourceSpan(declaration, declaration + "item".length()),
+                fromDeclaration.target().span());
+        assertEquals(fromDeclaration.target(), fromReference.target());
+        assertEquals(
+                List.of(
+                        new SourceSpan(firstRead, firstRead + "item".length()),
+                        new SourceSpan(secondRead, secondRead + "item".length())),
+                fromDeclaration.occurrences().stream()
+                        .map(ProtosStaticReferenceResult.Occurrence::span)
+                        .toList());
+
+        String numeric = "for(i, a, b) { i }";
+        ProtosStaticReferenceResult numericResult =
+                references(numeric, numeric.indexOf("i")).orElseThrow();
+        int numericRead = numeric.lastIndexOf("i");
+        assertEquals(
+                List.of(new SourceSpan(numericRead, numericRead + 1)),
+                numericResult.occurrences().stream()
+                        .map(ProtosStaticReferenceResult.Occurrence::span)
+                        .toList());
+    }
+
+    @Test
     void opaqueInvocationBarrierOmitsLaterUnprovenReadWithoutDeletingEarlierProofs() {
         String source =
                 "f: (value) => {\n"

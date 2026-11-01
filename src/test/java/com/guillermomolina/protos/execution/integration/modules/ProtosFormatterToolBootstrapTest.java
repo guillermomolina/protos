@@ -29,6 +29,7 @@ import com.guillermomolina.protos.analysis.ProtosSourceLayoutView;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore;
 import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
@@ -1442,6 +1443,67 @@ final class ProtosFormatterToolBootstrapTest {
                         + "    if(c) { d } else { e }\n"
                         + "} until(f)",
                 SurfaceContextualUntil.class);
+    }
+
+    @Test
+    void i141FormatsContextualForHeadersWithoutExpandingTheSugar()
+            throws Exception {
+        assertFormatsIdempotently(
+                "for(item in items){item}",
+                "for(item in items) { item }",
+                SurfaceContextualFor.class);
+        assertFormatsIdempotently(
+                "for( i ,0 , 5 ){ i }",
+                "for(i, 0, 5) { i }",
+                SurfaceContextualFor.class);
+        assertFormatsIdempotently(
+                "for(i,10,0,-2){visit(i)}",
+                "for(i, 10, 0, -2) { visit(i) }",
+                SurfaceContextualFor.class);
+        assertFormatsIdempotently(
+                "for(row in rows) {\n"
+                        + "  for(i,0,row){ a\nb }\n"
+                        + "  row\n"
+                        + "}",
+                "for(row in rows) {\n"
+                        + "    for(i, 0, row) {\n"
+                        + "        a\n"
+                        + "        b\n"
+                        + "    }\n"
+                        + "    row\n"
+                        + "}",
+                SurfaceContextualFor.class);
+        assertFormatsIdempotently(
+                "for /* a */ (/* b */ item /* c */ in /* d */ items) /* e */ {item}",
+                "for /* a */ (/* b */ item /* c */ in /* d */ items) /* e */ { item }",
+                SurfaceContextualFor.class);
+        assertFormatsIdempotently(
+                "for(i, /* s */ 0, /* t */ 3, /* u */ 1) { i }",
+                "for(i, /* s */ 0, /* t */ 3, /* u */ 1) { i }",
+                SurfaceContextualFor.class);
+        for (String sideOfComma : List.of(
+                "for(i /*a*/, 0, 3) { body }",
+                "for(i, /*a*/ 0, 3) { body }",
+                "for(i, 0 /*a*/, 3) { body }",
+                "for(i, 0, /*a*/ 3) { body }",
+                "for(i, 0, 10 /*a*/, -2) { body }",
+                "for(i, 0, 10, /*a*/ -2) { body }",
+                "for(item /*a*/ in items) { body }",
+                "for(item in /*a*/ items) { body }",
+                "for(item in items) /*a*/ { body }")) {
+            assertFormatsIdempotently(
+                    sideOfComma,
+                    sideOfComma,
+                    SurfaceContextualFor.class);
+        }
+        assertFormatsIdempotently(
+                "for(i/*a*/,0/*b*/,3){body}",
+                "for(i /*a*/, 0 /*b*/, 3) { body }",
+                SurfaceContextualFor.class);
+        assertFormatsIdempotently(
+                "(for)(i,a,b){body}",
+                "(for)(i, a, b) { body }",
+                SurfaceCall.class);
     }
 
     @Test

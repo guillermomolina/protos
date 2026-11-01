@@ -1332,6 +1332,33 @@ contextualHeaderComments: (
     result
 }
 
+// D231-F2-PURE: comments written before a header comma stay before it, each
+// preceded by one space and with no space before the comma itself.
+contextualCommentsBeforeSeparator: (
+    node,
+    boundaryKind,
+    layout
+) => {
+    result: ""
+
+    layout.comments.each((comment) => {
+        sameBoundary:
+            (comment.boundaryKind == boundaryKind) &&
+            (comment.preceding === node.path)
+
+        if(sameBoundary) {
+            (comment.placement ==
+                "EMBEDDED_BETWEEN_TOKENS").ifFalse(() => {
+                Error().signal()
+            })
+
+            result = result + " " + comment.rawText
+        }
+    })
+
+    result
+}
+
 // D211: comments between the true branch's closing brace and the paired
 // else, or between that else and the false branch's opening brace. The
 // separators are spaces only: a logical newline before else would end the
@@ -1707,6 +1734,130 @@ formatExpression = (node, level, layout) => {
             ")"
     }
 
+    // D231-F2-PURE: the binder is spelled once in the header, so the body is
+    // a bare braced block with no parameter list; the source form is kept
+    // rather than expanded to its each/eachStep equivalent.
+    if(kind == "CONTEXTUAL_FOR") {
+        header: null
+
+        if(node.forForm == "GENERIC") {
+            header =
+                node.binder +
+                " " +
+                contextualHeaderComments(
+                    node,
+                    "CONTEXTUAL_FOR_BEFORE_IN",
+                    false,
+                    layout
+                ) +
+                "in " +
+                contextualHeaderComments(
+                    node,
+                    "CONTEXTUAL_FOR_AFTER_IN",
+                    false,
+                    layout
+                ) +
+                formatExpression(
+                    node.iterable,
+                    level,
+                    layout
+                )
+        }
+
+        if(node.forForm == "NUMERIC") {
+            header =
+                node.binder +
+                contextualCommentsBeforeSeparator(
+                    node,
+                    "CONTEXTUAL_FOR_AFTER_BINDER",
+                    layout
+                ) +
+                ", " +
+                contextualHeaderComments(
+                    node,
+                    "CONTEXTUAL_FOR_BEFORE_START",
+                    false,
+                    layout
+                ) +
+                formatExpression(
+                    node.start,
+                    level,
+                    layout
+                ) +
+                contextualCommentsBeforeSeparator(
+                    node,
+                    "CONTEXTUAL_FOR_AFTER_START",
+                    layout
+                ) +
+                ", " +
+                contextualHeaderComments(
+                    node,
+                    "CONTEXTUAL_FOR_BEFORE_STOP",
+                    false,
+                    layout
+                ) +
+                formatExpression(
+                    node.stop,
+                    level,
+                    layout
+                )
+
+            (node.step === null).ifFalse(() => {
+                header =
+                    header +
+                    contextualCommentsBeforeSeparator(
+                        node,
+                        "CONTEXTUAL_FOR_AFTER_STOP",
+                        layout
+                    ) +
+                    ", " +
+                    contextualHeaderComments(
+                        node,
+                        "CONTEXTUAL_FOR_BEFORE_STEP",
+                        false,
+                        layout
+                    ) +
+                    formatExpression(
+                        node.step,
+                        level,
+                        layout
+                    )
+            })
+        }
+
+        if(header === null) {
+            Error().signal()
+        }
+
+        formatted =
+            "for" +
+            contextualHeaderComments(
+                node,
+                "CONTEXTUAL_FOR_BEFORE_LPAREN",
+                true,
+                layout
+            ) +
+            "(" +
+            contextualHeaderComments(
+                node,
+                "CONTEXTUAL_FOR_AFTER_LPAREN",
+                false,
+                layout
+            ) +
+            header +
+            ")" +
+            formatTrailingClosureSeparator(
+                node,
+                node.body,
+                layout
+            ) +
+            formatBracedSequence(
+                node.body.body,
+                level,
+                layout
+            )
+    }
+
     if(kind == "ARRAY_CONSTRUCTION") {
         formatted =
             formatArray(
@@ -1965,6 +2116,29 @@ formatBody: (layout) => {
                     "CONTEXTUAL_UNTIL_AFTER_LPAREN")) &&
             (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
 
+        contextualForComment:
+            ((comment.boundaryKind ==
+                "CONTEXTUAL_FOR_BEFORE_LPAREN") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_FOR_AFTER_LPAREN") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_FOR_BEFORE_IN") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_FOR_AFTER_IN") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_FOR_AFTER_BINDER") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_FOR_BEFORE_START") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_FOR_AFTER_START") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_FOR_BEFORE_STOP") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_FOR_AFTER_STOP") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_FOR_BEFORE_STEP")) &&
+            (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
+
         nonLocalReturnComment:
             (comment.boundaryKind ==
                 "NON_LOCAL_RETURN_OPERAND") &&
@@ -1982,6 +2156,7 @@ formatBody: (layout) => {
             contextualWhileHeaderComment ||
             contextualIfComment ||
             contextualUntilComment ||
+            contextualForComment ||
             nonLocalReturnComment ||
             embeddedComment).ifFalse(() => {
             Error().signal()

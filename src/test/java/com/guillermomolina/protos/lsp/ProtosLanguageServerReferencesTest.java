@@ -96,6 +96,39 @@ class ProtosLanguageServerReferencesTest {
     }
 
     @Test
+    void contextualForBinderReferencesIncludeTheHeaderDeclaration()
+            throws Exception {
+        ProjectFixture project = project("contextual-for");
+        ProtosLanguageServer server = initialized(
+                project,
+                candidate -> candidate.equals(project.root())
+                        ? Optional.of(project.binding())
+                        : Optional.empty());
+
+        String source =
+                "for(i, 0, 3) {\n"
+                        + "  i\n"
+                        + "  i\n"
+                        + "}\n";
+        String uri = project.source().toUri().toString();
+        server.textDocuments().didOpen(open(uri, 1, source));
+
+        List<Location> withDeclaration =
+                references(server, uri, 1, 2, true);
+        assertEquals(3, withDeclaration.size());
+        assertEquals(new Position(0, 4), withDeclaration.get(0).getRange().getStart());
+        assertEquals(new Position(0, 5), withDeclaration.get(0).getRange().getEnd());
+        assertEquals(new Position(1, 2), withDeclaration.get(1).getRange().getStart());
+        assertEquals(new Position(2, 2), withDeclaration.get(2).getRange().getStart());
+
+        List<Location> fromDeclaration =
+                references(server, uri, 0, 4, false);
+        assertEquals(2, fromDeclaration.size());
+        assertEquals(new Position(1, 2), fromDeclaration.get(0).getRange().getStart());
+        assertEquals(new Position(2, 2), fromDeclaration.get(1).getRange().getStart());
+    }
+
+    @Test
     void looseOrNonCanonicalOpenDocumentNeverGainsReferenceAuthority()
             throws Exception {
         ProjectFixture project = project("authority");

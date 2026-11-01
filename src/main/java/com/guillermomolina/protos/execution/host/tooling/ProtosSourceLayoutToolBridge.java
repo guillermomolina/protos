@@ -33,6 +33,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
@@ -285,6 +286,33 @@ public final class ProtosSourceLayoutToolBridge {
                                 paths,
                                 prelude));
             }
+            case SurfaceContextualFor loop -> {
+                value.createLocalSlot(
+                        "forForm",
+                        string(loop.kind().name()));
+                value.createLocalSlot(
+                        "binder",
+                        string(view.sourceText(loop.binder().span())));
+                value.createLocalSlot(
+                        "iterable",
+                        optionalExpression(loop.iterable(), view, paths, prelude));
+                value.createLocalSlot(
+                        "start",
+                        optionalExpression(loop.start(), view, paths, prelude));
+                value.createLocalSlot(
+                        "stop",
+                        optionalExpression(loop.stop(), view, paths, prelude));
+                value.createLocalSlot(
+                        "step",
+                        optionalExpression(loop.step(), view, paths, prelude));
+                value.createLocalSlot(
+                        "body",
+                        expression(
+                                loop.body(),
+                                view,
+                                paths,
+                                prelude));
+            }
             case SurfaceArrayConstruction array ->
                     value.createLocalSlot(
                             "arguments",
@@ -480,6 +508,8 @@ public final class ProtosSourceLayoutToolBridge {
                     "CONTEXTUAL_IF";
             case SurfaceContextualUntil ignored ->
                     "CONTEXTUAL_UNTIL";
+            case SurfaceContextualFor ignored ->
+                    "CONTEXTUAL_FOR";
             case SurfaceArrayConstruction ignored ->
                     "ARRAY_CONSTRUCTION";
             case SurfaceMapConstruction ignored ->
@@ -500,6 +530,16 @@ public final class ProtosSourceLayoutToolBridge {
             case SurfaceObject ignored -> "OBJECT";
             case SurfaceClosure ignored -> "CLOSURE";
         };
+    }
+
+    private static Object optionalExpression(
+            SurfaceExpression source,
+            ProtosSourceLayoutView view,
+            Map<StructuralPath, ProtosObjectValue> paths,
+            ProtosPrelude prelude) {
+        return source != null
+                ? expression(source, view, paths, prelude)
+                : ProtosNullValue.INSTANCE;
     }
 
     private static ProtosObjectValue expressionPath(

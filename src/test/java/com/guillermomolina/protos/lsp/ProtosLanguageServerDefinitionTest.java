@@ -122,6 +122,29 @@ class ProtosLanguageServerDefinitionTest {
         assertTrue(definitions(server, uri, 2, 2).isEmpty());
     }
 
+    @Test
+    void contextualForBodyReadDefinesToTheHeaderBinder() throws Exception {
+        ProjectFixture project = project("contextual-for");
+        ProtosLanguageServer server = initialized(
+                project,
+                candidate -> candidate.equals(project.root())
+                        ? Optional.of(project.binding())
+                        : Optional.empty());
+
+        String source = "for(item in items) {\n  item\n}\n";
+        String uri = project.source().toUri().toString();
+        server.textDocuments().didOpen(open(uri, 1, source));
+
+        List<Location> locations = definitions(server, uri, 1, 2);
+        assertEquals(1, locations.size());
+        assertEquals(uri, locations.get(0).getUri());
+        assertEquals(new Position(0, 4), locations.get(0).getRange().getStart());
+        assertEquals(new Position(0, 8), locations.get(0).getRange().getEnd());
+
+        // The contextual keyword is not a lexical read.
+        assertTrue(definitions(server, uri, 0, 0).isEmpty());
+    }
+
     private ProjectFixture project(String name) throws Exception {
         Path projectRoot = Files.createDirectory(temporary.resolve(name)).toRealPath();
         Path source = projectRoot.resolve("Main.protos");

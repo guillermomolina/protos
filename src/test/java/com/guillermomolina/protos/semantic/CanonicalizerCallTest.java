@@ -19,6 +19,7 @@ package com.guillermomolina.protos.semantic;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
@@ -118,6 +119,100 @@ class CanonicalizerCallTest {
 
         assertEquals(2, call.arguments().size());
         assertInstanceOf(CanonicalClosure.class, call.arguments().get(1));
+    }
+
+    @Test
+    void lowersGenericContextualForToOrdinaryEachSend() {
+        String source = "for(item in items) { item }";
+        CanonicalSend send =
+                assertInstanceOf(CanonicalSend.class, canonicalizeOnly(source));
+
+        assertEquals("each", send.message());
+        assertEquals(new SourceSpan(0, source.length()), send.span());
+        CanonicalLookup receiver = assertInstanceOf(CanonicalLookup.class, send.receiver());
+        assertEquals("items", receiver.name());
+        assertEquals(1, send.arguments().size());
+
+        CanonicalClosure body =
+                assertInstanceOf(CanonicalClosure.class, send.arguments().get(0));
+        assertEquals(1, body.parameters().size());
+        assertEquals("item", body.parameters().get(0).name());
+        assertEquals(new SourceSpan(4, 8), body.parameters().get(0).span());
+        assertEquals(new SourceSpan(19, source.length()), body.span());
+    }
+
+    @Test
+    void lowersNumericContextualForToRangeEachSend() {
+        String source = "for(i, a, b) { i }";
+        CanonicalSend send =
+                assertInstanceOf(CanonicalSend.class, canonicalizeOnly(source));
+
+        assertEquals("each", send.message());
+        assertEquals(new SourceSpan(0, source.length()), send.span());
+        CanonicalCall range = assertInstanceOf(CanonicalCall.class, send.receiver());
+        CanonicalLookup rangeLookup =
+                assertInstanceOf(CanonicalLookup.class, range.receiver());
+        assertEquals("Range", rangeLookup.name());
+        assertEquals(new SourceSpan(0, 3), rangeLookup.span());
+        assertEquals(new SourceSpan(0, 11), range.span());
+        assertEquals(2, range.arguments().size());
+        assertEquals(
+                "a", assertInstanceOf(CanonicalLookup.class, range.arguments().get(0)).name());
+        assertEquals(
+                "b", assertInstanceOf(CanonicalLookup.class, range.arguments().get(1)).name());
+
+        assertEquals(1, send.arguments().size());
+        CanonicalClosure body =
+                assertInstanceOf(CanonicalClosure.class, send.arguments().get(0));
+        assertEquals(1, body.parameters().size());
+        assertEquals("i", body.parameters().get(0).name());
+    }
+
+    @Test
+    void lowersSteppedNumericContextualForToRangeEachStepSend() {
+        String source = "for(i, a, b, s) { i }";
+        CanonicalSend send =
+                assertInstanceOf(CanonicalSend.class, canonicalizeOnly(source));
+
+        assertEquals("eachStep", send.message());
+        CanonicalCall range = assertInstanceOf(CanonicalCall.class, send.receiver());
+        assertEquals(
+                "Range", assertInstanceOf(CanonicalLookup.class, range.receiver()).name());
+        assertEquals(2, range.arguments().size());
+
+        assertEquals(2, send.arguments().size());
+        assertEquals(
+                "s", assertInstanceOf(CanonicalLookup.class, send.arguments().get(0)).name());
+        CanonicalClosure body =
+                assertInstanceOf(CanonicalClosure.class, send.arguments().get(1));
+        assertEquals(1, body.parameters().size());
+        assertEquals("i", body.parameters().get(0).name());
+    }
+
+    @Test
+    void contextualForBinderIsNeverAHeaderLookup() {
+        CanonicalSend send =
+                assertInstanceOf(CanonicalSend.class, canonicalizeOnly("for(i, 0, 3) { 1 }"));
+        CanonicalCall range = assertInstanceOf(CanonicalCall.class, send.receiver());
+        for (Object argument : range.arguments()) {
+            if (argument instanceof CanonicalLookup lookup) {
+                assertNotEquals("i", lookup.name());
+            }
+        }
+        CanonicalClosure body =
+                assertInstanceOf(CanonicalClosure.class, send.arguments().get(0));
+        assertEquals("i", body.parameters().get(0).name());
+    }
+
+    @Test
+    void groupedForRemainsOrdinaryCanonicalCall() {
+        CanonicalCall call = assertInstanceOf(
+                CanonicalCall.class, canonicalizeOnly("(for)(i, a, b) { body }"));
+
+        assertEquals(4, call.arguments().size());
+        assertEquals(
+                "i", assertInstanceOf(CanonicalLookup.class, call.arguments().get(0)).name());
+        assertInstanceOf(CanonicalClosure.class, call.arguments().get(3));
     }
 
     private Object canonicalizeOnly(String source) {

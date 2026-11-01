@@ -25,6 +25,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArgument;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
@@ -66,6 +67,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.semantic.ast.CanonicalSpread;
 import com.guillermomolina.protos.semantic.ast.CanonicalSuperSend;
+import com.guillermomolina.protos.source.SourceSpan;
 import java.util.List;
 
 public final class Canonicalizer {
@@ -89,6 +91,7 @@ public final class Canonicalizer {
             case SurfaceContextualWhile loop -> lowerContextualWhile(loop);
             case SurfaceContextualIf conditional -> lowerContextualIf(conditional);
             case SurfaceContextualUntil loop -> lowerContextualUntil(loop);
+            case SurfaceContextualFor loop -> lowerContextualFor(loop);
             case SurfaceArrayConstruction array -> lowerArrayConstruction(array);
             case SurfaceMapConstruction map -> lowerMapConstruction(map);
             case SurfaceClosure closure -> lowerClosure(closure);
@@ -242,6 +245,44 @@ public final class Canonicalizer {
                 "ifTrueIfFalse",
                 List.of(trueBranch, falseBranch),
                 conditional.span());
+    }
+
+    /**
+     * D231-F2-PURE: {@code for(item in iterable) { body }} is the ordinary
+     * {@code iterable.each(item => { body })} send,
+     * {@code for(i, start, stop) { body }} is
+     * {@code Range(start, stop).each(i => { body })}, and
+     * {@code for(i, start, stop, step) { body }} is
+     * {@code Range(start, stop).eachStep(step, i => { body })}. {@code Range}
+     * is an ordinary lexical lookup; the send's receiver-before-arguments
+     * order constructs the Range before {@code step} is evaluated. No
+     * loop-specific canonical node exists.
+     */
+    private CanonicalExpression lowerContextualFor(SurfaceContextualFor loop) {
+        CanonicalExpression body = lowerClosure(loop.body());
+        if (loop.kind() == SurfaceContextualFor.Kind.GENERIC) {
+            return new CanonicalSend(
+                    canonicalize(loop.iterable()),
+                    "each",
+                    List.of(body),
+                    loop.span());
+        }
+
+        int forStart = loop.span().startOffset();
+        CanonicalExpression range = new CanonicalCall(
+                new CanonicalLookup(
+                        "Range",
+                        new SourceSpan(forStart, forStart + "for".length())),
+                List.of(canonicalize(loop.start()), canonicalize(loop.stop())),
+                new SourceSpan(forStart, loop.stop().span().endOffset()));
+        if (loop.step() == null) {
+            return new CanonicalSend(range, "each", List.of(body), loop.span());
+        }
+        return new CanonicalSend(
+                range,
+                "eachStep",
+                List.of(canonicalize(loop.step()), body),
+                loop.span());
     }
 
     private List<CanonicalExpression> canonicalizeArguments(List<SurfaceArgument> arguments) {
