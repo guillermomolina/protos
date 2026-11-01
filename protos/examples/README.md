@@ -39,6 +39,7 @@ instead.
 | Simulate the 100 doors problem | `algorithms/100-doors.protos` |
 | Search a sorted integer Array with binary search | `algorithms/binary-search.protos` |
 | Sort an Array with bubble sort | `algorithms/bubble-sort.protos` |
+| Summarize threshold alerts and reconcile forward/reverse stride samples | `algorithms/stride-sampling-summary.protos` |
 | Store, compose and invert first-class functions | `closures/first-class-functions.protos` |
 | Capture independent values in a collection of Closures | `closures/value-capture.protos` |
 | Delegate optional behavior to a helper object | `objects/rosetta-delegates.protos` |
@@ -78,6 +79,15 @@ do not treat its contents as a stable output format.
 `numbers/bit-flags-and-masks.protos` runs with the standalone CLI
 (`bin/protos protos/examples/numbers/bit-flags-and-masks.protos`); it needs no
 imports and no host authority, and prints six true Boolean checks.
+
+The sensor-sampling example
+[`algorithms/stride-sampling-summary.protos`](algorithms/stride-sampling-summary.protos)
+also runs with the standalone CLI and needs no imports or host authorization.
+It exercises generic `for` traversal, positive stepping and descending negative
+stepping, and prints exactly three lines: `2`, `55` and `true`. It is paired
+with the
+[`04-control-flow/04-contextual-for.protos`](../tutorials/04-control-flow/04-contextual-for.protos)
+tutorial.
 
 The standalone CLI grants no `network`. The two `io/` examples marked "requires
 `network`" therefore contain no `print(...)` call and are not run by the CLI

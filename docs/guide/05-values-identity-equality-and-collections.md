@@ -1109,6 +1109,14 @@ Range(0, 3).invert().each(i => print(i))          // 3, 2, 1
 Range(0, 3).reverse().each(i => print(i))         // 2, 1, 0
 ```
 
+For ordinary collection traversal and counted iteration, the contextual
+[`for` expressions](04-control-flow-through-protocols.md#the-contextual-for-forms-are-each-and-eachstep)
+are often the shorter source spelling. The
+[executable `for` tutorial](../../protos/tutorials/04-control-flow/04-contextual-for.protos)
+demonstrates them. Explicit `Range`, `InvertedRange`, `each` and `eachStep`
+remain useful when working with the range objects or controlling their method
+dispatch directly.
+
 The first bound is included and the second excluded, so every range is
 half-open. Both bounds must be Integers. Each constructor picks the prototype
 that matches the order of its bounds, and keeps the bounds exactly as you wrote

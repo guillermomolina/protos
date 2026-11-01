@@ -53,6 +53,16 @@ and the
 Together they teach early return through callbacks without changing Closure
 invocation semantics.
 
+The
+[contextual `for` section of chapter 04](04-control-flow-through-protocols.md#the-contextual-for-forms-are-each-and-eachstep)
+is paired with the
+[progressive `for` tutorial](../../protos/tutorials/04-control-flow/04-contextual-for.protos)
+and the
+[stride-sampling summary example](../../protos/examples/algorithms/stride-sampling-summary.protos).
+Together they demonstrate ordinary `each` dispatch, ascending and descending
+half-open ranges, signed steps, and a practical collection-processing task
+without introducing a separate iteration protocol.
+
 ## Source style reference
 
 [`SOURCE_STYLE.md`](SOURCE_STYLE.md) records the non-normative project convention
