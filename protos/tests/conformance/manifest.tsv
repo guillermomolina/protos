@@ -72,6 +72,7 @@ library/collections/identity-set-iteration.protos	suite-native	-
 library/collections/module-surface-and-imports.protos	suite-native	-
 library/collections/range-core.protos	suite-native	-
 library/collections/range-callbacks-and-control.protos	suite-native	-
+library/collections/range-prelude-and-module.protos	suite-native	-
 library/test/assertions-require.protos	suite-native	-
 library/test/assertions-signals.protos	suite-native	-
 library/test/test-value.protos	suite-native	-

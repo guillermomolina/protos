@@ -16,8 +16,6 @@
  */
 
 Math: import("std:math/Math")
-Ranges: import("std:collections/Range")
-Range: Ranges.Range
 
 compose: (f, g) => {
     (value) => {

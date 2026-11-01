@@ -3,3 +3,4 @@ current-and-identity.protos	suite-native	-
 spawn.protos	suite-native	-
 request-order-and-state.protos	suite-native	-
 lifecycle-and-transfer.protos	suite-native	-
+range-identity-and-transfer.protos	suite-native	-

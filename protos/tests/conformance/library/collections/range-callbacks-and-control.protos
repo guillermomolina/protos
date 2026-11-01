@@ -15,9 +15,6 @@
 
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
-Ranges: import("std:collections/Range")
-Range: Ranges.Range
-InvertedRange: Ranges.InvertedRange
 
 tests: Array(
     Test("range callback argument contract", () => {

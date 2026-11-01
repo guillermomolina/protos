@@ -54,6 +54,8 @@ _corePreludeBindings: Context {
     Encoding: Encoding
     Map: Map
     IdentityMap: IdentityMap
+    Range: Range
+    InvertedRange: InvertedRange
     Path: Path
     Network: Network
     Future: Future

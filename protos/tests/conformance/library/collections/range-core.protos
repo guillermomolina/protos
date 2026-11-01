@@ -16,9 +16,6 @@
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 Arrays: import("std:collections/Array")
-Ranges: import("std:collections/Range")
-Range: Ranges.Range
-InvertedRange: Ranges.InvertedRange
 
 collect: (range) => {
     visited: Array()
@@ -102,7 +99,9 @@ tests: Array(
         Assertions.require(InvertedRange.hasSlot("start") === false)
         Assertions.require(InvertedRange.hasSlot("stop") === false)
 
-        // The prototypes stay usable, hence not frozen by a failed init.
+        // The canonical prototypes are frozen and stay usable after a failed init.
+        Assertions.signals(Error, () => { Range.extra: 1 })
+        Assertions.signals(Error, () => { InvertedRange.extra: 1 })
         Assertions.require(sameRange(Range(0, 3), Range, 0, 3))
         Assertions.require(sameRange(InvertedRange(3, 0), InvertedRange, 3, 0))
     }),

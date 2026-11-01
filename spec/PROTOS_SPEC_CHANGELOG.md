@@ -23,6 +23,27 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.488] - 2026-11-01
+
+### D235-B1-F — Frozen Core Range prototypes with module compatibility
+- `semantics/VALUES_AND_COLLECTIONS.md` **Standard directed Integer Range and
+  InvertedRange**: `Range` and `InvertedRange` become exactly two canonical
+  Core-owned, source-backed prototypes delegating to `Object`, published as
+  ordinary standard-prelude bindings and therefore available without import.
+  Both prototypes, their methods and reachable standard graph are frozen and
+  physically shared across Actor/P executions; ordinary prelude shadowing and
+  frozen-binding assignment rules apply. This replaces D232's module-only
+  placement and its statement that the prototypes are not frozen.
+- `std:collections/Range` remains an importable source-backed compatibility
+  module whose Actor-local instance holds exactly the two public slots
+  `Range` and `InvertedRange` from `moduleContext` creation, initially the
+  same canonical identities as the prelude bindings; rebinding a module slot
+  never affects the canonical prototypes. Module identity, caching, cycles and
+  failure semantics are unchanged.
+- The D232 constructor, bound, step, traversal, callback and transformation
+  contract is unchanged. No grammar, `for` syntax, Iterator protocol or Core
+  value family is introduced.
+
 ## [0.1.487] - 2026-11-01
 
 ### D234-B2-S1 — Contextual `return` spelling of non-local return

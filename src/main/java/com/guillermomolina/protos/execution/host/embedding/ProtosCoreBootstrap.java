@@ -180,6 +180,11 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("IdentityMap.protos"))
                 .call(bootstrapActivation);
+        // D235-B1-F: the source-backed Range and InvertedRange prototypes need only Object,
+        // Error, Integer and Array, all loaded above.
+        sourceLoader
+                .load(coreDirectory.resolve("Range.protos"))
+                .call(bootstrapActivation);
         sourceLoader
                 .load(coreDirectory.resolve("Path.protos"))
                 .call(bootstrapActivation);
@@ -362,6 +367,12 @@ public final class ProtosCoreBootstrap {
         ProtosStandardMapProtocol.install(mapPrototype);
         ProtosObjectValue identityMapPrototype = requirePrototype(bootstrapContext, "IdentityMap", ProtosObjectValue.rootObject());
         ProtosStandardIdentityMapProtocol.install(identityMapPrototype);
+        // D235-B1-F: ordinary source-backed prototypes; no native protocol is installed.
+        ProtosObjectValue rangePrototype =
+                requirePrototype(bootstrapContext, "Range", ProtosObjectValue.rootObject());
+        ProtosObjectValue invertedRangePrototype =
+                requirePrototype(
+                        bootstrapContext, "InvertedRange", ProtosObjectValue.rootObject());
         ProtosObjectValue pathPrototype = requirePrototype(bootstrapContext, "Path", ProtosObjectValue.rootObject());
         // The private kernel stays in the bootstrap context, where the Path source closures
         // resolve it; it is never published through the Prelude.
@@ -560,7 +571,9 @@ public final class ProtosCoreBootstrap {
                         bufferedReaderFactory,
                         bufferedWriterFactory,
                         vectorPrototype,
-                        matrixPrototype),
+                        matrixPrototype,
+                        rangePrototype,
+                        invertedRangePrototype),
                 semanticTransferFamilies,
                 lazyStandardModuleMembers(),
                 tcpAcceptorPrototype);
@@ -624,7 +637,7 @@ public final class ProtosCoreBootstrap {
 
     /**
      * Exact runtime-owned initial members of standard modules (D172, D167, AUD006-A3, D187,
-     * LIB015-B1, LIB015-C1, LIB020-A, LIB020-B, LIB021-A, I090-C, LIB024).
+     * LIB015-B1, LIB015-C1, LIB020-A, LIB020-B, LIB021-A, I090-C, LIB024, D235-B1-F).
      *
      * <p>This is configuration for the general module-member seam in {@link ProtosPrelude}; module
      * creation itself has no knowledge of these keys.
@@ -637,7 +650,9 @@ public final class ProtosCoreBootstrap {
             ProtosObjectValue bufferedReaderFactory,
             ProtosObjectValue bufferedWriterFactory,
             ProtosObjectValue vectorPrototype,
-            ProtosObjectValue matrixPrototype) {
+            ProtosObjectValue matrixPrototype,
+            ProtosObjectValue rangePrototype,
+            ProtosObjectValue invertedRangePrototype) {
         // std:text/ANSI receives the same facilities as the modules that mint their families.
         ProtosObjectValue styleFacility = ProtosSealedFamilyFacility.createFacility();
         ProtosObjectValue styledTextFacility = ProtosSealedFamilyFacility.createFacility();
@@ -662,6 +677,12 @@ public final class ProtosCoreBootstrap {
                 Map.entry(
                         new ProtosModuleKey("std:math/LinearAlgebra"),
                         Map.of("Vector", vectorPrototype, "Matrix", matrixPrototype)),
+                // D235-B1-F: the compatibility module exports the exact Core Prelude identities.
+                Map.entry(
+                        new ProtosModuleKey("std:collections/Range"),
+                        Map.of(
+                                "Range", rangePrototype,
+                                "InvertedRange", invertedRangePrototype)),
                 Map.entry(
                         ProtosCommandLineArrayConstructionFacility.MODULE_KEY,
                         Map.of(

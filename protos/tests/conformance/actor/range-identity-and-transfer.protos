@@ -1,0 +1,75 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// D235-B1-F: Actors share the frozen Core Range prototypes while each owns a
+// distinct std:collections/Range module instance.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("range actor module identity and rebinding isolation", () => {
+        tool009LegacyCase: () => {
+            Ranges: import("std:collections/Range")
+            worker: Actor.spawn("workers", "ranges")
+
+            worker.request("identity").then((sameInWorker) => {
+                worker.request("moduleRange").then((workerRange) => {
+                    worker.request("rebind").then((rebound) => {
+                        worker.request("moduleRange").then((afterRebind) => {
+                            ok: sameInWorker && rebound
+                            (workerRange === Range).ifFalse(() => { ok = false })
+                            (afterRebind == 7).ifFalse(() => { ok = false })
+                            (Ranges.Range === Range).ifFalse(() => { ok = false })
+                            (Range(0, 1).parent() === Range).ifFalse(() => { ok = false })
+                            worker.stop()
+                            ok
+                        })
+                    })
+                })
+            })
+        }
+        Assertions.require(tool009LegacyCase().value() === true)
+    }),
+    Test("range instance transfer by value", () => {
+        tool009LegacyCase: () => {
+            big: 100000000000000000000000000000
+            original: InvertedRange(big, -big)
+            worker: Actor.spawn("workers", "ranges")
+
+            worker.request("bounds", original).then((observed) => {
+                worker.stop()
+                observed[0] && (observed[1] == big) && (observed[2] == -big)
+            })
+        }
+        Assertions.require(tool009LegacyCase().value() === true)
+    }),
+    Test("range instance echo keeps canonical parent", () => {
+        tool009LegacyCase: () => {
+            original: Range(3, 9)
+            worker: Actor.spawn("workers", "echo")
+
+            worker.request("echo", original).then((copy) => {
+                worker.stop()
+                (copy !== original) &&
+                    (copy.parent() === Range) &&
+                    (copy.start == 3) &&
+                    (copy.stop == 9)
+            })
+        }
+        Assertions.require(tool009LegacyCase().value() === true)
+    })
+]
+tests.freeze()

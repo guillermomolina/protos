@@ -319,6 +319,105 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     }
 
     @Test
+    void standardMemberDeclarationsPublishSymbolsWithoutSlots() throws Exception {
+        writeModule(
+                "collections/Pair",
+                """
+                //! Pair compatibility module.
+
+                //% @standard-member Left | The left prototype.
+                  //% @standard-member Right |   The right prototype.
+                """);
+        writeModule(
+                "collections/Plain",
+                """
+                //! Plain module.
+                /// A value.
+                value: 1
+                """);
+
+        ProtosStandardLibraryDocumentationExtractor.Extraction extraction =
+                ProtosStandardLibraryDocumentationExtractor.extract(temp, REVISION);
+
+        assertEquals(2, extraction.artifact().modules().size());
+        assertEquals(1, extraction.artifact().modules().stream()
+                .filter(module -> ((StandardModuleIdentity) module.identity()).name()
+                        .equals("std:collections/Pair"))
+                .count());
+        List<Symbol> pair = extraction.artifact().symbols().stream()
+                .filter(symbol -> ((StandardModuleIdentity) symbol.identity().module()).name()
+                        .equals("std:collections/Pair"))
+                .toList();
+        assertEquals(2, pair.size());
+        assertEquals("Left", pair.get(0).identity().slotName());
+        assertEquals("Right", pair.get(1).identity().slotName());
+
+        Symbol left = pair.get(0);
+        assertEquals("The left prototype.", left.documentation());
+        assertNull(left.callable());
+        assertEquals("protos/lib/collections/Pair.protos", left.source().path());
+        assertEquals(3, left.source().range().startLine());
+        assertEquals(1, left.source().range().startColumn());
+        assertEquals(3, left.source().range().endLine());
+
+        Symbol right = pair.get(1);
+        assertEquals("The right prototype.", right.documentation());
+        assertNull(right.callable());
+        assertEquals(4, right.source().range().startLine());
+        assertEquals(3, right.source().range().startColumn());
+
+        Symbol value = symbol(extraction, "value");
+        assertEquals("A value.", value.documentation());
+        assertEquals(3, extraction.artifact().symbols().size());
+
+        ProtosStandardLibraryDocumentationExtractor.Coverage coverage = extraction.coverage();
+        assertEquals(3, coverage.symbolCount());
+        assertEquals(3, coverage.documentedSymbolCount());
+        assertEquals(List.of(), coverage.missingSymbolDocumentation());
+
+        byte[] first = ProtosDocumentationJson.serialize(extraction.artifact());
+        byte[] second = ProtosDocumentationJson.serialize(
+                ProtosStandardLibraryDocumentationExtractor.extract(temp, REVISION).artifact());
+        assertArrayEquals(first, second);
+    }
+
+    @Test
+    void malformedStandardMemberDeclarationsAreRejected() throws Exception {
+        assertStandardMemberRejected(
+                "//% @standard-member Left | One.\n//% @standard-member Left | Two.\n",
+                "duplicate `//% @standard-member` declaration");
+        assertStandardMemberRejected(
+                "//% @standard-member Left\n",
+                "requires `NAME | DOCUMENTATION`");
+        assertStandardMemberRejected(
+                "//% @standard-member  | Nameless.\n",
+                "name is not a slot identifier");
+        assertStandardMemberRejected(
+                "//% @standard-member 1x | Bad name.\n",
+                "name is not a slot identifier");
+        assertStandardMemberRejected(
+                "//% @standard-member Left |   \n",
+                "documentation is empty");
+        assertStandardMemberRejected(
+                "//% @standard-members Left | Typo.\n",
+                "malformed `//% @standard-member` declaration");
+        assertStandardMemberRejected(
+                "value: 1 //% @standard-member Left | Inline.\n",
+                "must begin its line");
+        assertStandardMemberRejected(
+                "//% @standard-member value | Collides.\nvalue: 1\n",
+                "collides with a module slot");
+    }
+
+    private void assertStandardMemberRejected(String source, String message) throws IOException {
+        writeModule("collections/Bad", source);
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosStandardLibraryDocumentationExtractor.extract(temp, REVISION));
+        assertTrue(error.getMessage().contains(message), error.getMessage());
+    }
+
+    @Test
     void inlineDocumentationMarkerIsRejected() throws Exception {
         writeModule(
                 "collections/Inline",

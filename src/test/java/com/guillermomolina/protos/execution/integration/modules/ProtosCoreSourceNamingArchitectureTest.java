@@ -70,7 +70,9 @@ class ProtosCoreSourceNamingArchitectureTest {
             Set.of(
                     "error_taxonomy.protos",
                     "import.protos",
-                    "prelude.protos");
+                    "prelude.protos",
+                    // D235-B1-F: one paired owner of Range and InvertedRange.
+                    "Range.protos");
 
     private static final Set<String> NETWORK_SOURCE_NAMES =
             Set.of(

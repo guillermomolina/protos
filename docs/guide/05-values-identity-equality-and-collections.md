@@ -1096,15 +1096,11 @@ Protos when Core already supplies the necessary semantic foundation.
 
 ## Directed Integer ranges
 
-`std:collections/Range` exports two ordinary prototypes, `Range` (ascending)
-and `InvertedRange` (descending). Extract them from the module, then invoke
-them like any other prototype:
+`Range` (ascending) and `InvertedRange` (descending) are two ordinary, frozen
+Core prototypes available in every module without an import, just like `Map`.
+Invoke them like any other prototype:
 
 ```protos
-Ranges: import("std:collections/Range")
-Range: Ranges.Range
-InvertedRange: Ranges.InvertedRange
-
 Range(0, 10).each(i => print(i))                  // 0 .. 9
 Range(0, 10).eachStep(2, i => print(i))           // 0, 2, 4, 6, 8
 InvertedRange(10, 0).eachStep(-2, i => print(i))  // 10, 8, 6, 4, 2
@@ -1123,6 +1119,10 @@ prototype, so `Range.eachStep` needs a positive step and
 elements. `reverse()` keeps exactly the same elements and reverses their
 order. Both answer new ranges; instances are frozen, with reflectable `start`
 and `stop` slots, and compare by identity.
+
+The `std:collections/Range` module still exists for compatibility: its
+`Range` and `InvertedRange` members are the very same objects
+(`import("std:collections/Range").Range === Range`).
 
 The earlier module helpers `Ranges.each(start, stop, block)` and
 `Ranges.reverseEach(start, stop, block)` no longer exist.

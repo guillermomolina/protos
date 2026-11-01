@@ -1267,28 +1267,60 @@ guest collection for that complete vector. This uses the existing Array and
 frozen-object mechanisms for rest bindings rather than defining a second
 privileged argument-collection object model.
 
-## Standard Library directed Integer Range and InvertedRange (D232)
+## Standard directed Integer Range and InvertedRange (D232, D235-B1-F)
 
-This section is the normative owner of the Standard Library directed Integer
-range contract. It uses only existing object-model, invocation, module, and
-error mechanisms; it introduces no operator, syntax, Iterator protocol, or Core
-value family.
+This section is the normative owner of the standard directed Integer range
+contract. It uses only existing object-model, invocation, module, and error
+mechanisms; it introduces no operator, syntax, `for` form, Iterator protocol, or
+Core value family.
 
-### Module and construction
+### Ownership, Prelude publication, and module compatibility
 
-The importable module `std:collections/Range` exports exactly two public slots,
-`Range` and `InvertedRange`. Each holds an ordinary object used as a prototype.
-The module itself is not invocable as a range factory; clients extract a
-prototype before invoking it:
+`Range` and `InvertedRange` are exactly two canonical standard prototypes owned
+by Core. Each is an ordinary source-backed object whose immediate parent is
+`Object`; neither is a host-backed range value. Both are published as ordinary
+standard-prelude bindings named `Range` and `InvertedRange`, so ordinary source
+reaches them through the standard lexical lookup without any import:
 
 ```protos
-Ranges: import("std:collections/Range")
-Range: Ranges.Range
-InvertedRange: Ranges.InvertedRange
-
 r: Range(0, 10)
 ir: InvertedRange(3, 0)
 ```
+
+Both canonical prototypes, their method Closures, and the standard graph those
+Closures reach are frozen before any guest code observes them, and are
+physically shared by every Actor and P execution of the same standard prelude
+(`MODULES.md` §72). Slot creation, reassignment, and removal on either
+canonical prototype therefore fail normally. The ordinary prelude rules apply
+unchanged: a nearer `Range: custom` creation shadows the prelude binding, while
+a bare `Range = custom` whose only destination is the frozen prelude binding
+signals an assignment error.
+
+The importable Standard Library module `std:collections/Range` remains a
+source-backed compatibility module. Its module instance contains exactly two
+public slots, `Range` and `InvertedRange`, from the creation of its
+`moduleContext`, before its body executes (as for the canonical families of
+`std:network/IpAddresses`, `../io/NETWORK.md`). Their initial values are the
+same canonical objects published by the prelude, not copies or wrappers:
+
+```protos
+Ranges: import("std:collections/Range")
+
+Range === Ranges.Range                  // true
+InvertedRange === Ranges.InvertedRange  // true
+```
+
+Module instances remain Actor-local under the ordinary module rules: distinct
+Actors obtain distinct `std:collections/Range` instances whose initial members
+are identical. The module's own slots are ordinary mutable module slots;
+rebinding `Ranges.Range` changes only that Actor-local slot and never the
+canonical prototype or the prelude binding. The module itself is not invocable
+as a range factory, and a member-call form such as `Ranges.Range(0, 10)` keeps
+its ordinary message-send meaning; this section does not define it as
+equivalent to invoking an extracted prototype. Module clients extract a
+prototype before invoking it, as before.
+
+### Construction
 
 Neither prototype defines its own `call`. Construction is the inherited
 `Object.call`: it creates a fresh object whose parent is the invoked prototype
@@ -1319,7 +1351,8 @@ local slots, `start` and `stop`, holding the supplied Integers unchanged (no
 normalization or swapping). They are observable through ordinary slot access
 and reflection (`hasSlot`, `slotValue`, `slotNames`). After the slots are
 created the instance is frozen, so slot reassignment, creation, and removal
-fail normally. The prototypes themselves are not frozen by this contract.
+fail normally. The canonical prototypes are frozen by the ownership rule above;
+a failed `init` neither creates slots on them nor changes them otherwise.
 
 ### Traversal
 

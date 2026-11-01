@@ -28,6 +28,9 @@ import static com.guillermomolina.protos.documentation.ProtosDocumentationModel.
 import static com.guillermomolina.protos.documentation.ProtosDocumentationModel.Symbol;
 import static com.guillermomolina.protos.documentation.ProtosDocumentationModel.SymbolIdentity;
 
+import com.guillermomolina.protos.lexer.ProtosLexer;
+import com.guillermomolina.protos.lexer.TokenOccurrence;
+import com.guillermomolina.protos.lexer.TokenType;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
@@ -48,6 +51,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -73,6 +77,7 @@ public final class ProtosStandardLibraryDocumentationExtractor {
     private static final String GENERATOR_NAME = "protos-stdlib-doc-extractor";
     private static final String GENERATOR_VERSION = "1";
     private static final String SOURCE_SUFFIX = ".protos";
+    private static final String STANDARD_MEMBER_MARKER = "% @standard-member";
     private static final Set<String> WINDOWS_RESERVED_SEGMENTS =
             Set.of(
                     "CON", "PRN", "AUX", "NUL",
@@ -285,7 +290,117 @@ public final class ProtosStandardLibraryDocumentationExtractor {
                     new SourceProvenance(sourcePath, sourceRange(source, slot.expressionSpan()));
             symbols.add(new Symbol(identity, documentation, provenance, callable));
         }
+        symbols.addAll(standardMemberSymbols(source, moduleIdentity, sourcePath, topLevelSlots));
+        symbols.sort(Comparator.comparingInt(symbol -> symbol.source().range().startLine()));
         return new ParsedModule(module, List.copyOf(symbols));
+    }
+
+    /**
+     * Documentation-only declarations of runtime-installed standard module members.
+     *
+     * <p>A line comment {@code //% @standard-member NAME | DOCUMENTATION} that begins its line
+     * (after optional indentation) documents a member that the runtime installs into the module
+     * before its body executes. It creates no slot and executes nothing; runtime membership
+     * remains owned by the standard-member registry. Each declaration yields one ordinary symbol
+     * with no callable, whose provenance is the comment itself.</p>
+     */
+    private static List<Symbol> standardMemberSymbols(
+            String source,
+            StandardModuleIdentity moduleIdentity,
+            String sourcePath,
+            List<TopLevelSlot> topLevelSlots) {
+        List<ProtosLexer.LineCommentOccurrence> comments = new ArrayList<>();
+        new ProtosLexer(source).tokenizeOccurrences(comments::add);
+
+        Set<String> slotNames = new HashSet<>();
+        for (TopLevelSlot slot : topLevelSlots) {
+            slotNames.add(((SurfaceName) slot.creation().target()).name());
+        }
+
+        Set<String> declared = new HashSet<>();
+        List<Symbol> symbols = new ArrayList<>();
+        for (ProtosLexer.LineCommentOccurrence comment : comments) {
+            String text = comment.text();
+            if (!text.startsWith("%")) {
+                continue;
+            }
+            if (!text.startsWith(STANDARD_MEMBER_MARKER + " ")) {
+                throw new IllegalArgumentException(
+                        "malformed `//% @standard-member` declaration in " + sourcePath);
+            }
+            if (!beginsLine(source, comment.span().startOffset())) {
+                throw new IllegalArgumentException(
+                        "`//% @standard-member` must begin its line in " + sourcePath);
+            }
+            String body = text.substring(STANDARD_MEMBER_MARKER.length() + 1);
+            int separator = body.indexOf('|');
+            if (separator < 0) {
+                throw new IllegalArgumentException(
+                        "`//% @standard-member` requires `NAME | DOCUMENTATION` in "
+                                + sourcePath);
+            }
+            String name = body.substring(0, separator).strip();
+            String documentation = body.substring(separator + 1).strip();
+            if (!isSlotIdentifier(name)) {
+                throw new IllegalArgumentException(
+                        "`//% @standard-member` name is not a slot identifier in "
+                                + sourcePath + ": " + name);
+            }
+            if (documentation.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "`//% @standard-member` documentation is empty in "
+                                + sourcePath + ": " + name);
+            }
+            if (!declared.add(name)) {
+                throw new IllegalArgumentException(
+                        "duplicate `//% @standard-member` declaration in "
+                                + sourcePath + ": " + name);
+            }
+            if (slotNames.contains(name)) {
+                throw new IllegalArgumentException(
+                        "`//% @standard-member` collides with a module slot in "
+                                + sourcePath + ": " + name);
+            }
+            symbols.add(new Symbol(
+                    new SymbolIdentity(moduleIdentity, name),
+                    documentation,
+                    new SourceProvenance(sourcePath, sourceRange(source, comment.span())),
+                    null));
+        }
+        return symbols;
+    }
+
+    private static boolean beginsLine(String source, int offset) {
+        for (int index = offset - 1; index >= 0; index--) {
+            char current = source.charAt(index);
+            if (current == '\n' || current == '\r') {
+                return true;
+            }
+            if (current != ' ' && current != '\t') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** True when {@code name} lexes as exactly one ordinary identifier spelled identically. */
+    private static boolean isSlotIdentifier(String name) {
+        if (name.isEmpty()) {
+            return false;
+        }
+        List<TokenOccurrence> tokens;
+        try {
+            tokens = new ProtosLexer(name).tokenizeOccurrences();
+        } catch (RuntimeException invalid) {
+            return false;
+        }
+        List<TokenOccurrence> significant = tokens.stream()
+                .filter(token -> token.token().type() != TokenType.EOF
+                        && token.token().type() != TokenType.NEWLINE)
+                .toList();
+        return significant.size() == 1
+                && significant.get(0).token().type() == TokenType.IDENTIFIER
+                && significant.get(0).token().lexeme().equals(name);
     }
 
     private static List<Path> discoverSources(Path libraryRoot) throws IOException {

@@ -16,8 +16,6 @@
  */
 
 Arrays: import("std:collections/Array")
-Ranges: import("std:collections/Range")
-Range: Ranges.Range
 
 doorsAfterPasses: (passes) => {
     doors: []

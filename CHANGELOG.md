@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.433-SNAPSHOT
+
+- `I139` (D235-B1-F): promote `Range` and `InvertedRange` to frozen Core
+  Prelude prototypes with `std:collections/Range` module compatibility.
+  - Move the unchanged D232 source-backed prototypes to
+    `protos/lib/core/Range.protos`, loaded once before the Prelude and frozen
+    with the shared standard graph; publish both as ordinary Prelude bindings.
+  - Register the same identities as the standard members of
+    `std:collections/Range`, which is now a comment-only compatibility module;
+    no Java range class, intrinsic or specialized node.
+  - Extend the Standard Library documentation extractor with generic
+    `//% @standard-member NAME | DOCUMENTATION` declarations so D064/D067 keep
+    documenting runtime-installed members.
+  - Add Prelude/module identity, freezing, shadowing, rebinding, cancellation,
+    P and cross-Actor coverage; examples and guide use unqualified `Range`.
+
 ## 0.3.432-SNAPSHOT
 
 - `I138` (D234-B2-S1): implement the contextual `return expression` spelling
