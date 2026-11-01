@@ -8,6 +8,36 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.32-SNAPSHOT
+
+- **I115 — experimental convergence of the unary Closure PIC and local `run` root**
+  with GraalPy-style fixed-arity dispatch. This entry records the original
+  implementation state; replaying its bytes is not semantic acceptance.
+  - Rework the `CallUnaryMethod` direct-call PIC around weakly held concrete
+    Closure identity (limit three), with guarded canonical `Object.call`
+    selection and root-call, code, and Context-projection assumptions.
+    On saturation the generic tier handles the megamorphic transition.
+  - Specialize `MaterializeCurrentClosure` for noncapturing Closures whose
+    `ReturnHome` is unobservable, without binding or publishing a creator
+    activation. Select the experimental local `Call1`/`run` result transport
+    from compilation facts rather than an invocation name or a separate PIC.
+  - Add `ProtosI115UnaryPICConvergenceTest` for fresh Closure identity,
+    override/restore behavior, cache saturation, capture/ReturnHome cases,
+    and local unary call-root structure. Historical tests are preserved,
+    not executed by this versioned replay; no Tier 1/Tier 2 graph or timing
+    measurements are claimed here.
+  - **Historical semantic limitations:** the lightweight noncapturing
+    Closure may omit creator metadata, and the admitted compact path can
+    bypass caller/Task/ReturnHome lifecycle and Context admission. Dynamic
+    `Object.call` overrides, suspension and non-local control transfer
+    require ordinary fallback and have not been proven equivalent on all
+    paths. The prior experimental H7 numeric-protocol and Boolean-control
+    divergences and D179 C0 remain open. The signed-64 `long` contract is
+    retained in the source replay, but full semantic and performance gates
+    are not established by this commit.
+  - Original implementation: `4c69f201c560abed905b0a38065b6df6dda1c754`.
+    All four original source/test blobs are preserved byte-for-byte.
+
 ## 0.4.31-SNAPSHOT
 
 - **I115 — experimental convergence of H7 signed-64 numeric fast paths and
