@@ -157,6 +157,41 @@ Boolean so that sends could be chained; those messages no longer exist. Use the
 contextual form, or `ifTrue` / `ifFalse` / `ifTrueIfFalse` directly; `or` / `||`
 are strict Boolean operations and are not a substitute for that old chaining.
 
+## Returning from the enclosing invocation through a callback
+
+```protos
+findFirstAbove: (items, threshold) => {
+    items.each((item) => {
+        if(item > threshold) {
+            return item
+        }
+    })
+
+    null
+}
+```
+
+`each` invokes an ordinary callback Closure. Inside it, contextual `if` uses the
+Boolean protocol described above and invokes its selected branch Closure. Both
+nested Closures capture the return home of the enclosing `findFirstAbove`
+invocation, so `return item` leaves `findFirstAbove`, not merely the `if` body or
+the `each` callback. Replacing `return item` with `^item` produces the same
+behavior; when no element matches, normal completion returns `null`.
+
+Cleanup registered through `ensure` still runs during that unwinding according
+to the existing language contract. It is not bypassed merely because the source
+spells the return `return` instead of `^`.
+
+This differs from JavaScript (including GraalJS): there, `return` inside a
+`forEach` callback terminates only that callback, not the function that created
+it, and `forEach` keeps iterating.
+
+See [Errors and non-local returns cross the loop normally](#errors-and-non-local-returns-cross-the-loop-normally)
+for the same rule applied to loops. Executable sources:
+
+- [`../../protos/tutorials/03-closures/03-return-home.protos`](../../protos/tutorials/03-closures/03-return-home.protos)
+- [`../../protos/examples/closures/non-local-return.protos`](../../protos/examples/closures/non-local-return.protos)
+
 ## Boolean negation and two-way selection
 
 Canonical Booleans also provide ordinary zero-argument `not()`:

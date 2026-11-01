@@ -8,6 +8,14 @@ Print-dependent tutorial programs are maintained as executable standalone-CLI so
 
 Start with the numbered directories in order. Each source file focuses on one language mechanism and is intentionally small.
 
+The `03-closures/` lessons build on each other: `01-closure.protos` introduces
+ordinary Closure values, `02-captured-state.protos` introduces lexical capture,
+and [`03-closures/03-return-home.protos`](03-closures/03-return-home.protos)
+introduces normal final-expression results and the equivalence of `^value` and
+contextual `return value`. The third lesson demonstrates an early exit through
+nested callbacks and records the visited elements in an explicit counter, so the
+skipped remainder of the enclosing function is observable.
+
 [`01-values-and-slots/04-bitwise-operators.protos`](01-values-and-slots/04-bitwise-operators.protos)
 teaches the six bitwise and shift operators (`&`, `|`, binary `~`, prefix `~`,
 `<<`, `>>`). It distinguishes binary XOR from unary NOT by position, shows that

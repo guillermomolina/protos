@@ -8,6 +8,13 @@ All Protos source files use the canonical `.protos` extension. Examples are non-
 
 Print-dependent cookbook programs are maintained as executable standalone-CLI sources. The CLI regression suite discovers every `.protos` file in this tree containing `print(` and executes it unchanged, including concurrent examples whose `Future.value()` suspension must run inside the Process RootActor task.
 
+`closures/non-local-return.protos` compares contextual `return value` with
+`^value` when returning early from an enclosing function inside an Array
+callback, records the number of visited elements, and shows `(return)(x)` for
+an ordinary function binding named `return`. It teaches that control-flow
+requirement; ordinary index searches may use `std:collections/Array.findIndex`
+instead.
+
 | Task | Example |
 | --- | --- |
 | Print a value | `hello-world.protos` |
@@ -22,6 +29,7 @@ Print-dependent cookbook programs are maintained as executable standalone-CLI so
 | Pass behavior as a value | `closures/higher-order.protos` |
 | Work with closure call arguments | `closures/rest-arguments.protos` |
 | Share captured mutable state across closures | `closures/shared-captured-state.protos` |
+| Return early from an enclosing function inside an Array callback | `closures/non-local-return.protos` |
 | Inherit callable behavior through delegation | `objects/inherited-callability.protos` |
 | Express conditional control flow | `control-flow/conditional.protos` |
 | Compute Fibonacci with recursive and iterative variants | `algorithms/fibonacci-recursive.protos` |

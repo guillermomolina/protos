@@ -631,6 +631,33 @@ inside the callback passed to `forEach` only ends that callback. In Protos,
 `return item` targets the captured return home exactly like `^item`, so it
 returns from `find`. Choose either spelling; they compile to the same operation.
 
+Normal completion and an early return can produce the same value for different
+reasons:
+
+```protos
+lastValue: () => {
+    40 + 2
+}
+
+earlyValue: () => {
+    return 42
+    0
+}
+```
+
+Both produce `42`. `lastValue` completes normally with its final expression.
+`earlyValue` explicitly abandons its return home before `0` is evaluated. This
+is not JavaScript's block-body rule: a Protos Closure needs no `return` to
+produce its final expression.
+
+Both spellings retain the same captured activation, even when a nested Closure
+is returned or otherwise escapes. If that home is no longer active, `return 42`
+signals the same `InvalidReturn` that `^42` would signal. A home belonging to
+another Task is likewise unreachable; neither spelling transfers control between
+Tasks. The next section,
+[Escaped non-local return is an error](#escaped-non-local-return-is-an-error),
+shows the escaped case.
+
 `return` is still an ordinary identifier. Only a bare `return` at the start of
 an expression, followed on the same line by an operand, is a return. A newline
 ends it:
@@ -647,6 +674,17 @@ return (
 If you have a binding named `return`, group it to call, index or combine it:
 `(return)(x)`, `(return)[0]`, `(return) - x`. Complete assignment targets such
 as `return[0] = x` keep their ordinary meaning.
+
+The boundaries are worth stating explicitly:
+
+- `return(x)` with exactly one argument is a contextual non-local return;
+- `(return)(x)` calls a binding named `return`;
+- `return()` and `return(x, y)` remain ordinary calls;
+- `return` on its own is an ordinary lookup; it does not implicitly return
+  `null`;
+- a newline between bare `return` and its intended operand prevents contextual
+  recognition; and
+- a Map operand is written `return (%{"a": 1})`, not `return %{...}`.
 
 ## Escaped non-local return is an error
 
@@ -704,6 +742,8 @@ The corresponding introductory executable tutorial material is:
 
 - [`../../protos/tutorials/03-closures/01-closure.protos`](../../protos/tutorials/03-closures/01-closure.protos)
 - [`../../protos/tutorials/03-closures/02-captured-state.protos`](../../protos/tutorials/03-closures/02-captured-state.protos)
+- [`../../protos/tutorials/03-closures/03-return-home.protos`](../../protos/tutorials/03-closures/03-return-home.protos)
+- [`../../protos/examples/closures/non-local-return.protos`](../../protos/examples/closures/non-local-return.protos)
 - [`../../protos/tutorials/07-call-arguments/01-defaults-args-and-rest.protos`](../../protos/tutorials/07-call-arguments/01-defaults-args-and-rest.protos)
 - [`../../protos/examples/closures/rest-arguments.protos`](../../protos/examples/closures/rest-arguments.protos)
 

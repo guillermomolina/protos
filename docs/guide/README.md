@@ -44,6 +44,15 @@ is paired with the executable
 and the
 [bit flags and masks example](../../protos/examples/numbers/bit-flags-and-masks.protos).
 
+Similarly, the
+[contextual `return` section of chapter 03](03-closures-methods-and-receivers.md#return-value-is-the-same-non-local-return)
+is paired with the
+[Closure return-home tutorial](../../protos/tutorials/03-closures/03-return-home.protos)
+and the
+[non-local return example](../../protos/examples/closures/non-local-return.protos).
+Together they teach early return through callbacks without changing Closure
+invocation semantics.
+
 ## Source style reference
 
 [`SOURCE_STYLE.md`](SOURCE_STYLE.md) records the non-normative project convention
