@@ -391,6 +391,13 @@ sends, ordinary message lookup, receiver binding, argument evaluation, and
 ordinary Closure invocation apply. Other fixed operators retain their existing
 dedicated semantics.
 
+D233-B1 adds five fixed operator spellings (`&`, `|`, `~`, `<<`, `>>`) whose six
+syntactic forms (`a & b`, `a | b`, `a ~ b`, `~a`, `a << n`, `a >> n`) lower to
+the ordinary sends `bitAnd`, `bitOr`, `bitXor`, `bitNot`, `shiftLeft`, and
+`shiftRight`. They introduce no distinct callable kind: receiver binding,
+lookup, extraction, argument evaluation, and Closure invocation are the ordinary
+rules above, and the call protocol is unchanged.
+
 Ordinary named messages/calls, including one-argument sends, remain unchanged.
 `Object.alias` also remains unchanged and does not introduce new source-level
 symbolic operator syntax.

@@ -97,6 +97,40 @@ containsNewline: (text) => {
     result
 }
 
+// D233-B1: a symbolic prefix immediately followed by another symbolic
+// character would lex as one maximal-munch run (for example "~-a" or "^~a"),
+// so a lexical space separates them. Identifiers, literals and groups stay
+// compact.
+startsWithOperatorCharacter: (text) => {
+    result: false
+
+    if(text.size() > 0) {
+        first: text[0]
+        candidates: "!$%&*+-/<=>?@^|~"
+        index: 0
+
+        while(index < candidates.size()) {
+            if(candidates[index] == first) {
+                result = true
+            }
+
+            index = index + 1
+        }
+    }
+
+    result
+}
+
+joinSymbolicPrefix: (prefix, text) => {
+    result: prefix + text
+
+    if(startsWithOperatorCharacter(text)) {
+        result = prefix + " " + text
+    }
+
+    result
+}
+
 fitsAtIndent: (text, level) => {
     result:
         !containsNewline(text)
@@ -1709,11 +1743,13 @@ formatExpression = (node, level, layout) => {
 
     if(kind == "UNARY") {
         formatted =
-            node.operator +
-            formatExpression(
-                node.operand,
-                level,
-                layout
+            joinSymbolicPrefix(
+                node.operator,
+                formatExpression(
+                    node.operand,
+                    level,
+                    layout
+                )
             )
     }
 
@@ -1728,11 +1764,13 @@ formatExpression = (node, level, layout) => {
 
     if(kind == "NON_LOCAL_RETURN") {
         formatted =
-            "^" +
-            formatExpression(
-                node.expression,
-                level,
-                layout
+            joinSymbolicPrefix(
+                "^",
+                formatExpression(
+                    node.expression,
+                    level,
+                    layout
+                )
             )
     }
 

@@ -30,7 +30,10 @@ import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
+import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
+import com.guillermomolina.protos.source.SourceSpan;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class CanonicalizerFoundationTest {
@@ -105,6 +108,71 @@ class CanonicalizerFoundationTest {
                         () -> canonicalizer.canonicalize(unsupported));
 
         assertEquals("Unsupported binary operator: |>", error.getMessage());
+    }
+
+    @Test
+    void lowersBinaryBitwiseOperatorsToOrdinarySends() {
+        assertBinaryBitwiseSend("a & b", "bitAnd", "a", "b", 4);
+        assertBinaryBitwiseSend("a | b", "bitOr", "a", "b", 4);
+        assertBinaryBitwiseSend("a ~ b", "bitXor", "a", "b", 4);
+        assertBinaryBitwiseSend("a << n", "shiftLeft", "a", "n", 5);
+        assertBinaryBitwiseSend("a >> n", "shiftRight", "a", "n", 5);
+    }
+
+    @Test
+    void lowersUnaryTildeToBitNotSend() {
+        CanonicalSend send = assertInstanceOf(CanonicalSend.class, canonicalizeOnly("~a"));
+
+        assertEquals("bitNot", send.message());
+        assertEquals(List.of(), send.arguments());
+        CanonicalLookup receiver = assertInstanceOf(CanonicalLookup.class, send.receiver());
+        assertEquals("a", receiver.name());
+        assertEquals(new SourceSpan(1, 2), receiver.span());
+        assertEquals(new SourceSpan(0, 2), send.span());
+    }
+
+    @Test
+    void bitwiseOperatorsMatchExplicitMessageSends() {
+        assertSameSendShape("a & b", "a.bitAnd(b)");
+        assertSameSendShape("a | b", "a.bitOr(b)");
+        assertSameSendShape("a ~ b", "a.bitXor(b)");
+        assertSameSendShape("~a", "a.bitNot()");
+        assertSameSendShape("a << n", "a.shiftLeft(n)");
+        assertSameSendShape("a >> n", "a.shiftRight(n)");
+    }
+
+    private void assertBinaryBitwiseSend(
+            String source, String message, String left, String right, int rightStart) {
+        CanonicalSend send = assertInstanceOf(CanonicalSend.class, canonicalizeOnly(source));
+
+        assertEquals(message, send.message());
+        assertEquals(1, send.arguments().size());
+        CanonicalLookup receiver = assertInstanceOf(CanonicalLookup.class, send.receiver());
+        assertEquals(left, receiver.name());
+        assertEquals(new SourceSpan(0, 1), receiver.span());
+        CanonicalLookup argument =
+                assertInstanceOf(CanonicalLookup.class, send.arguments().get(0));
+        assertEquals(right, argument.name());
+        assertEquals(new SourceSpan(rightStart, rightStart + 1), argument.span());
+        assertEquals(new SourceSpan(0, source.length()), send.span());
+    }
+
+    private void assertSameSendShape(String operatorSource, String messageSource) {
+        CanonicalSend operator =
+                assertInstanceOf(CanonicalSend.class, canonicalizeOnly(operatorSource));
+        CanonicalSend message =
+                assertInstanceOf(CanonicalSend.class, canonicalizeOnly(messageSource));
+
+        assertEquals(message.message(), operator.message());
+        assertEquals(
+                assertInstanceOf(CanonicalLookup.class, message.receiver()).name(),
+                assertInstanceOf(CanonicalLookup.class, operator.receiver()).name());
+        assertEquals(message.arguments().size(), operator.arguments().size());
+        for (int i = 0; i < message.arguments().size(); i++) {
+            assertEquals(
+                    assertInstanceOf(CanonicalLookup.class, message.arguments().get(i)).name(),
+                    assertInstanceOf(CanonicalLookup.class, operator.arguments().get(i)).name());
+        }
     }
 
     private CanonicalExpression canonicalizeOnly(String source) {

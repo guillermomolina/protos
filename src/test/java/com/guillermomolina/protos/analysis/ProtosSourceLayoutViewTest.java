@@ -24,7 +24,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParserSourceFacts;
 import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SequenceSeparatorKind;
+import com.guillermomolina.protos.lexer.TokenType;
 import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
+import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
@@ -34,6 +36,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
+import com.guillermomolina.protos.parser.ast.SurfaceUnary;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -64,6 +67,60 @@ class ProtosSourceLayoutViewTest {
                         view.program().expressions().get(1));
 
         assertTrue(closure.expressionBody());
+    }
+
+    @Test
+    void projectsBitwiseOperatorTokensAndNodesWithExactSpans() {
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:i137-bitwise",
+                                3L,
+                                "a ~ ~b\na << n\na | b & c"));
+
+        assertEquals(
+                List.of(
+                        TokenType.IDENTIFIER, TokenType.TILDE, TokenType.TILDE,
+                        TokenType.IDENTIFIER, TokenType.NEWLINE,
+                        TokenType.IDENTIFIER, TokenType.SHIFT_LEFT,
+                        TokenType.IDENTIFIER, TokenType.NEWLINE,
+                        TokenType.IDENTIFIER, TokenType.PIPE, TokenType.IDENTIFIER,
+                        TokenType.AMPERSAND, TokenType.IDENTIFIER, TokenType.EOF),
+                view.tokenOccurrences().stream()
+                        .map(occurrence -> occurrence.token().type())
+                        .toList());
+        assertEquals(new SourceSpan(2, 3), view.tokenOccurrences().get(1).span());
+        assertEquals(new SourceSpan(4, 5), view.tokenOccurrences().get(2).span());
+        assertEquals(new SourceSpan(9, 11), view.tokenOccurrences().get(6).span());
+
+        SurfaceBinary xor =
+                assertInstanceOf(
+                        SurfaceBinary.class,
+                        view.program().expressions().get(0));
+        assertEquals("~", xor.operator());
+        assertEquals(new SourceSpan(0, 6), xor.span());
+        SurfaceUnary not = assertInstanceOf(SurfaceUnary.class, xor.right());
+        assertEquals("~", not.operator());
+        assertEquals(new SourceSpan(4, 6), not.span());
+        assertTrue(view.pathOf(not).isPresent());
+
+        SurfaceBinary shift =
+                assertInstanceOf(
+                        SurfaceBinary.class,
+                        view.program().expressions().get(1));
+        assertEquals("<<", shift.operator());
+        assertEquals(new SourceSpan(7, 13), shift.span());
+
+        SurfaceBinary or =
+                assertInstanceOf(
+                        SurfaceBinary.class,
+                        view.program().expressions().get(2));
+        assertEquals("|", or.operator());
+        assertEquals(new SourceSpan(14, 23), or.span());
+        SurfaceBinary and = assertInstanceOf(SurfaceBinary.class, or.right());
+        assertEquals("&", and.operator());
+        assertEquals(new SourceSpan(18, 23), and.span());
+        assertTrue(view.pathOf(and).isPresent());
     }
 
     @Test

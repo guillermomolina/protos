@@ -228,6 +228,29 @@ class ProtosLanguageServerFormattingTest {
         assertEquals(List.of(), format(server, URI, options(8, false)));
     }
 
+    @Test
+    void i137RealFormatterFormatsUnaryAndBinaryTildeStably() {
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {});
+
+        server.textDocuments().didOpen(
+                open(URI, 1, "x:a~ ~b& -c"));
+
+        List<? extends TextEdit> edits =
+                format(server, URI, options(8, false));
+
+        assertEquals(1, edits.size());
+        String formatted = edits.get(0).getNewText();
+        assertEquals("x: a ~ ~b & -c\n", formatted);
+        assertTrue(
+                new com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore()
+                        .parse(new ProtosDocumentSnapshot(URI, 2, formatted))
+                        instanceof com.guillermomolina.protos.analysis.ProtosStaticParseResult.Parsed);
+
+        server.textDocuments().didChange(change(URI, 2, formatted));
+        assertEquals(List.of(), format(server, URI, options(8, false)));
+    }
+
     private static ProtosLanguageServer server(ProtosLspDocumentFormatter formatter) {
         return new ProtosLanguageServer(
                 code -> {}, new ProtosProjectFileBindingProvider(), formatter);

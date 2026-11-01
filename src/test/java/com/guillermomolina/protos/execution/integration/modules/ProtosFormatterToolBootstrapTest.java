@@ -1569,6 +1569,55 @@ final class ProtosFormatterToolBootstrapTest {
         assertEquals(first, formatOnce(first, 32L));
     }
 
+    @Test
+    void formatsBitwiseOperatorsWithLexicallySafePrefixes()
+            throws Exception {
+        String[][] samples = {
+            {"~ -a", "~ -a"},
+            {"- ~a", "- ~a"},
+            {"~ ~a", "~ ~a"},
+            {"! ~a", "! ~a"},
+            {"~(-a)", "~(-a)"},
+            {"~a", "~a"},
+            {"^ ~a", "^ ~a"},
+            {"^ -a", "^ -a"},
+            {"^ !a", "^ !a"},
+            {"a~ ~b", "a ~ ~b"},
+            {"a&b|c<<d>>e", "a & b | c << d >> e"},
+            {"(a&b)~c", "(a & b) ~ c"},
+            {"a&(b~c)", "a & (b ~ c)"},
+            {"a<<(b+c)", "a << (b + c)"},
+        };
+
+        long version = 40L;
+        for (String[] sample : samples) {
+            String first = formatOnce(sample[0], version++);
+            assertEquals(sample[1] + "\n", first, sample[0]);
+            ProtosStaticParseResult reparsed =
+                    new ProtosStaticAnalysisCore()
+                            .parse(new ProtosDocumentSnapshot(
+                                    "memory:i137-bitwise-reparse",
+                                    version++,
+                                    first));
+            assertInstanceOf(
+                    ProtosStaticParseResult.Parsed.class, reparsed, sample[0]);
+            assertEquals(first, formatOnce(first, version++), sample[0]);
+        }
+
+        String continued = formatOnce("a ~\n    b", version++);
+        ProtosSourceLayoutView continuedView =
+                new ProtosStaticAnalysisCore()
+                        .sourceLayout(new ProtosDocumentSnapshot(
+                                "memory:i137-bitwise-continuation",
+                                version++,
+                                continued));
+        assertEquals(1, continuedView.program().expressions().size());
+        assertInstanceOf(
+                com.guillermomolina.protos.parser.ast.SurfaceBinary.class,
+                continuedView.program().expressions().get(0));
+        assertEquals(continued, formatOnce(continued, version++));
+    }
+
     private static String formatOnce(String source, long version)
             throws Exception {
         ProtosSourceLayoutView view =

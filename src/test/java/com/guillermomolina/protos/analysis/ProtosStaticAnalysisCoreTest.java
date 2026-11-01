@@ -64,6 +64,28 @@ class ProtosStaticAnalysisCoreTest {
     }
 
     @Test
+    void acceptsBitwiseOperatorsAndStillRejectsUnsupportedMaximalRuns() {
+        ProtosStaticParseResult.Parsed parsed =
+                assertInstanceOf(
+                        ProtosStaticParseResult.Parsed.class,
+                        core.parse(new ProtosDocumentSnapshot(
+                                "memory:i137-valid",
+                                1,
+                                "x: a & b | c ~ ~d << 1 >> 2")));
+        assertEquals(1, parsed.program().expressions().size());
+
+        ProtosStaticParseResult.Failed failed =
+                assertInstanceOf(
+                        ProtosStaticParseResult.Failed.class,
+                        core.parse(new ProtosDocumentSnapshot(
+                                "memory:i137-invalid",
+                                2,
+                                "x: a~~b")));
+        assertEquals(new SourceSpan(4, 4), failed.span());
+        assertTrue(failed.message().contains("~~"));
+    }
+
+    @Test
     void preservesUnexpectedEndOfSourceClassification() {
         ProtosDocumentSnapshot snapshot =
                 new ProtosDocumentSnapshot("memory:incomplete", 11, "name:");

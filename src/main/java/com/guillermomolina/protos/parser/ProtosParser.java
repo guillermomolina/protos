@@ -242,8 +242,24 @@ public final class ProtosParser {
     }
 
     private SurfaceExpression parseComparisonFoundation() {
-        return parseLeftAssociative(this::parseAdditiveFoundation,
+        return parseLeftAssociative(this::parseBitwiseOrFoundation,
                 TokenType.LESS, TokenType.LESS_EQUAL, TokenType.GREATER, TokenType.GREATER_EQUAL);
+    }
+
+    private SurfaceExpression parseBitwiseOrFoundation() {
+        return parseLeftAssociative(this::parseBitwiseXorFoundation, TokenType.PIPE);
+    }
+
+    private SurfaceExpression parseBitwiseXorFoundation() {
+        return parseLeftAssociative(this::parseBitwiseAndFoundation, TokenType.TILDE);
+    }
+
+    private SurfaceExpression parseBitwiseAndFoundation() {
+        return parseLeftAssociative(this::parseShiftFoundation, TokenType.AMPERSAND);
+    }
+
+    private SurfaceExpression parseShiftFoundation() {
+        return parseLeftAssociative(this::parseAdditiveFoundation, TokenType.SHIFT_LEFT, TokenType.SHIFT_RIGHT);
     }
 
     private SurfaceExpression parseAdditiveFoundation() {
@@ -255,7 +271,7 @@ public final class ProtosParser {
     }
 
     private SurfaceExpression parseUnaryFoundation() {
-        if (cursor.at(TokenType.BANG) || cursor.at(TokenType.MINUS)) {
+        if (cursor.at(TokenType.BANG) || cursor.at(TokenType.MINUS) || cursor.at(TokenType.TILDE)) {
             TokenOccurrence operator = cursor.advance();
             consumeContinuationNewlines();
             SurfaceExpression operand = parseUnaryFoundation();

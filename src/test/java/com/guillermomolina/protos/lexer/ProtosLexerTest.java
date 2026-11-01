@@ -326,7 +326,7 @@ class ProtosLexerTest {
     @Test
     void lexesEveryStandardSymbolicTokenWhenItIsTheCompleteSpelling() {
         assertTypes(
-            "=> = == === != !== <= >= && || + - * / % < > ! ^",
+            "=> = == === != !== <= >= && || + - * / % < > ! ^ & | ~ << >>",
             TokenType.FAT_ARROW,
             TokenType.EQUALS,
             TokenType.DOUBLE_EQUALS,
@@ -346,6 +346,39 @@ class ProtosLexerTest {
             TokenType.GREATER,
             TokenType.BANG,
             TokenType.CARET,
+            TokenType.AMPERSAND,
+            TokenType.PIPE,
+            TokenType.TILDE,
+            TokenType.SHIFT_LEFT,
+            TokenType.SHIFT_RIGHT,
+            TokenType.EOF
+        );
+    }
+
+    @Test
+    void distinguishesBitwiseTokensFromLogicalAndComparisonTokens() {
+        assertTypes(
+            "a&b a&&b a|b a||b",
+            TokenType.IDENTIFIER, TokenType.AMPERSAND, TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER, TokenType.AND, TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER, TokenType.PIPE, TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER, TokenType.OR, TokenType.IDENTIFIER,
+            TokenType.EOF
+        );
+        assertTypes(
+            "~a b ~ ~c",
+            TokenType.TILDE, TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER, TokenType.TILDE, TokenType.TILDE, TokenType.IDENTIFIER,
+            TokenType.EOF
+        );
+        assertTypes(
+            "a<<b a>>b a<b a<=b a>b a>=b",
+            TokenType.IDENTIFIER, TokenType.SHIFT_LEFT, TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER, TokenType.SHIFT_RIGHT, TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER, TokenType.LESS, TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER, TokenType.LESS_EQUAL, TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER, TokenType.GREATER, TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER, TokenType.GREATER_EQUAL, TokenType.IDENTIFIER,
             TokenType.EOF
         );
     }
@@ -368,7 +401,14 @@ class ProtosLexerTest {
                 "<=?",
                 "--",
                 "-!",
-                "!-")) {
+                "!-",
+                "~~",
+                "&-",
+                "<<-",
+                ">>=",
+                ">>>",
+                "~=",
+                "|>")) {
             assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
         }
     }

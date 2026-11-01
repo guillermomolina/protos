@@ -61,7 +61,12 @@ public final class ProtosLexer {
             Map.entry("<", TokenType.LESS),
             Map.entry(">", TokenType.GREATER),
             Map.entry("!", TokenType.BANG),
-            Map.entry("^", TokenType.CARET));
+            Map.entry("^", TokenType.CARET),
+            Map.entry("&", TokenType.AMPERSAND),
+            Map.entry("|", TokenType.PIPE),
+            Map.entry("~", TokenType.TILDE),
+            Map.entry("<<", TokenType.SHIFT_LEFT),
+            Map.entry(">>", TokenType.SHIFT_RIGHT));
 
     private final String source;
     private int pos;

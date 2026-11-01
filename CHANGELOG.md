@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.431-SNAPSHOT
+
+- `I137` (D233-B1): add fixed bitwise and shift operator syntax over the
+  existing ordinary Integer messages.
+  - Lex the five fixed tokens `&`, `|`, `~`, `<<` and `>>`; maximal munch is
+    unchanged, so runs such as `~~`, `&-`, `>>=` and `>>>` remain lexical
+    errors.
+  - Parse four new left-associative levels between comparison and additive
+    (`|`, binary `~`, `&`, `<<`/`>>`) and unary `~`.
+  - Canonicalize `a & b`, `a | b`, `a ~ b`, `~a`, `a << n` and `a >> n` to
+    ordinary `bitAnd`, `bitOr`, `bitXor`, `bitNot`, `shiftLeft` and
+    `shiftRight` sends with strict operand evaluation; `&&`, `||` and `^` are
+    unchanged and no new execution nodes or Integer kernels are added.
+  - Keep the Protos structural formatter lexically safe by separating a
+    symbolic prefix (`!`, `-`, `~`, `^`) from an operand that starts with a
+    symbol.
+  - Use the operators in the private SHA-256 bit helpers, keeping explicit
+    32-bit masking, and add the `surface-sugar/bitwise-operators` conformance
+    source.
+
 ## 0.3.430-SNAPSHOT
 
 - `I136` (D232): replace the LIB017 `std:collections/Range` helpers with

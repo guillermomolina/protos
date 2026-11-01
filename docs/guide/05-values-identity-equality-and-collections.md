@@ -234,6 +234,40 @@ use ordinary exact arithmetic such as `1 / 2`. An exact zero divisor signals
 an `Error`. For integer-only quotient and remainder, use `div`, `mod`, or `%`
 (with truncation toward zero for `div`).
 
+### Bitwise operators on Integer
+
+Integers support fixed bitwise and shift operators. Each one is ordinary syntax
+for an ordinary Integer message, so the operator and the message are
+interchangeable:
+
+| Operator | Message |
+|---|---|
+| `a & b` | `a.bitAnd(b)` |
+| `a \| b` | `a.bitOr(b)` |
+| `a ~ b` | `a.bitXor(b)` |
+| `~a` | `a.bitNot()` |
+| `a << n` | `a.shiftLeft(n)` |
+| `a >> n` | `a.shiftRight(n)` |
+
+```protos
+12 & 10      // 8
+12 | 10      // 14
+12 ~ 10      // 6
+~0           // -1
+1 << 64      // 18446744073709551616 (a BigInteger, no overflow)
+(-3) >> 1    // -2
+```
+
+Integers have no implicit width: they behave as infinite two's-complement
+values, so `~0` is `-1` and `1 << 64` simply grows. `>>` is an arithmetic
+shift (it rounds toward negative infinity). If you need a fixed width, mask
+explicitly, for example `value & 4294967295` for 32 bits. Shift counts must be
+non-negative Integers; a negative count signals an `Error`.
+
+`&` and `|` are not the Boolean operators `&&` and `||`: they always evaluate
+both operands and send an ordinary message, while `&&` and `||` short-circuit.
+Binary `~` is XOR; `^` keeps its meaning as non-local return.
+
 Mixing `Integer` or `Fraction` with a `Float` produces a `Float`: the exact
 operand is converted to binary64 **before** the arithmetic operation, so
 precision may be lost. `Float(value)` explicitly rounds an exact Integer or

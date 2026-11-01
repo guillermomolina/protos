@@ -26,6 +26,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceNonLocalReturn;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
+import com.guillermomolina.protos.parser.ast.SurfaceUnary;
 import org.junit.jupiter.api.Test;
 
 class ProtosParserNonLocalReturnTest {
@@ -62,6 +63,40 @@ class ProtosParserNonLocalReturnTest {
     @Test
     void caretAfterAnOrdinaryExpressionIsRejected() {
         assertThrows(ParseError.class, () -> only("value ^ other"));
+    }
+
+    @Test
+    void parsesNonLocalReturnWithBinaryTilde() {
+        SurfaceNonLocalReturn result =
+                assertInstanceOf(SurfaceNonLocalReturn.class, only("^a ~ b"));
+
+        SurfaceBinary expression =
+                assertInstanceOf(SurfaceBinary.class, result.expression());
+        assertEquals("~", expression.operator());
+        assertName("a", expression.left());
+        assertName("b", expression.right());
+    }
+
+    @Test
+    void parsesNonLocalReturnWithUnaryTilde() {
+        SurfaceNonLocalReturn result =
+                assertInstanceOf(SurfaceNonLocalReturn.class, only("^ ~a"));
+
+        SurfaceUnary expression =
+                assertInstanceOf(SurfaceUnary.class, result.expression());
+        assertEquals("~", expression.operator());
+        assertName("a", expression.operand());
+    }
+
+    @Test
+    void parsesNonLocalReturnWithUnaryMinus() {
+        SurfaceNonLocalReturn result =
+                assertInstanceOf(SurfaceNonLocalReturn.class, only("^ -a"));
+
+        SurfaceUnary expression =
+                assertInstanceOf(SurfaceUnary.class, result.expression());
+        assertEquals("-", expression.operator());
+        assertName("a", expression.operand());
     }
 
     private SurfaceExpression only(String source) {

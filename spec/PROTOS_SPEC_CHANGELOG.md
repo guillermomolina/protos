@@ -23,6 +23,30 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.486] - 2026-11-01
+
+### D233-B1 — Fixed bitwise and shift operator syntax
+- `PROTOS_GRAMMAR.md` section 21 **Operators** and 39 **Compact EBNF**: four
+  new left-associative precedence levels between comparison and additive
+  (`|`, binary `~`, `&`, `<<`/`>>`, lowest to highest) and `~` added to
+  `unary-operator`. Section 21 defines the six mandatory desugarings `a & b` ->
+  `a.bitAnd(b)`, `a | b` -> `a.bitOr(b)`, `a ~ b` -> `a.bitXor(b)`, `~a` ->
+  `a.bitNot()`, `a << n` -> `a.shiftLeft(n)`, `a >> n` -> `a.shiftRight(n)`
+  as ordinary sends with ordinary lookup and strict, once-only, left-to-right
+  operand evaluation. The single token `~` is unary or binary by grammatical
+  position only.
+- Section 21.1 and **Symbolic Operator Lexing**: five fixed spellings `&`, `|`,
+  `~`, `<<`, `>>` join the fixed token set; `operator-character` and maximal
+  munch are unchanged (`a~~b`, `a&-b`, `a<<-1`, `a>>=b`, `a>>>b`, `a~=b` remain
+  lexical errors). Newline continuation after a binary operator and the absence
+  of leading-operator continuation are restated for the new operators.
+- `semantics/VALUES_AND_COLLECTIONS.md` **Standard Integer bitwise messages**,
+  `semantics/CALLABLES.md` 21.1 and the `PROTOS_LANGUAGE_SPEC.md` 21.1 anchor
+  reference the desugaring. No change to D230-C1 numeric semantics, no custom
+  operators (D149 unchanged), no reinterpretation of `^` (still non-local
+  return), no change to `&&`/`||` laziness, and no `>>>`, `^^`, or compound
+  assignment forms.
+
 ## [0.1.485] - 2026-11-01
 
 ### D232 — Standard Library directed Integer Range and InvertedRange

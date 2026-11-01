@@ -57,6 +57,16 @@ more correct source for the task, especially when:
 The existence of syntactic sugar is therefore not a command to use it
 mechanically everywhere.
 
+### Bitwise operators (D233-B1)
+
+Idiomatic Protos source should normally use the fixed bitwise and shift
+operators `&`, `|`, `~` (binary and unary), `<<`, and `>>`. Keep the explicit
+`bitAnd`, `bitOr`, `bitXor`, `bitNot`, `shiftLeft`, and `shiftRight` messages
+when explaining, implementing, or testing that canonical protocol, or when the
+explicit form is materially clearer. Existing source that spells these messages
+is not converted mechanically; convert it only when a scoped change touches it
+for another reason.
+
 ## Boundaries
 
 This policy does **not**:

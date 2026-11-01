@@ -32,30 +32,30 @@ digest: (bytes) => {
     mask32: 4294967295
 
     word32: (value) => {
-        value.bitAnd(mask32)
+        value & mask32
     }
 
     logicalShiftRight: (value, count) => {
-        word32(value).shiftRight(count)
+        word32(value) >> count
     }
 
     rotateRight: (value, count) => {
         source: word32(value)
 
-        source.shiftRight(count).bitOr(word32(source.shiftLeft(32 - count)))
+        (source >> count) | word32(source << (32 - count))
     }
 
     xor3: (left, middle, right) => {
-        word32(left).bitXor(word32(middle)).bitXor(word32(right))
+        (word32(left) ~ word32(middle)) ~ word32(right)
     }
 
-    // (x & y) ^ (~x & z); bitNot is unbounded, so the final AND restores 32 bits.
+    // (x & y) ~ (~x & z); bitNot is unbounded, so the final AND restores 32 bits.
     choose: (x, y, z) => {
-        word32(x.bitAnd(y).bitXor(x.bitNot().bitAnd(z)))
+        word32((x & y) ~ ((~x) & z))
     }
 
     majority: (x, y, z) => {
-        word32(x.bitAnd(y).bitXor(x.bitAnd(z)).bitXor(y.bitAnd(z)))
+        word32((x & y) ~ (x & z) ~ (y & z))
     }
 
     upperSigma0: (value) => {

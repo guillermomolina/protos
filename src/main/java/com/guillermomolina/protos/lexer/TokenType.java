@@ -62,6 +62,11 @@ public enum TokenType {
     NOT_EQUALS_2,   // !==
     AND,            // &&
     OR,             // ||
+    AMPERSAND,      // & (bitAnd)
+    PIPE,           // | (bitOr)
+    TILDE,          // ~ (unary bitNot, binary bitXor)
+    SHIFT_LEFT,     // << (shiftLeft)
+    SHIFT_RIGHT,    // >> (shiftRight)
     ELLIPSIS,       // ...
     CARET,          // ^ (non-local return)
 

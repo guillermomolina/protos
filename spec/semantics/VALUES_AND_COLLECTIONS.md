@@ -1977,7 +1977,13 @@ that leaves the signed-64 range is a `BigInteger` and a result that returns
 into it is a `SmallInteger`. These messages are ordinary slots of the common
 `Integer` prototype: lookup, dispatch, extraction, and user overriding follow
 the ordinary rules, and the numeric rules of **Errors, effects, transfer, and
-optimization boundary** below apply. No grammar operator denotes them.
+optimization boundary** below apply. D233-B1 adds fixed operator syntax that
+desugars to these same ordinary sends: `a & b` to `a.bitAnd(b)`, `a | b` to
+`a.bitOr(b)`, `a ~ b` to `a.bitXor(b)`, `~a` to `a.bitNot()`, `a << n` to
+`a.shiftLeft(n)`, and `a >> n` to `a.shiftRight(n)`. The syntax, precedence,
+and lowering are owned by `../PROTOS_GRAMMAR.md`; the operator forms reach the
+same standard methods with the same original receiver, and this section remains
+the only definition of the operations.
 
 ### Float format, precision, and arithmetic
 

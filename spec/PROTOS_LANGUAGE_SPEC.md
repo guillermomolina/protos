@@ -153,7 +153,10 @@ The primary normative contract formerly contained here has moved to `semantics/V
 
 The accepted symbolic source spellings, precedence, associativity, and lexical
 rejection rules are owned by `PROTOS_GRAMMAR.md`. Arbitrary custom symbolic
-binary operators are not part of Core v0.1. This heading is a
+binary operators are not part of Core v0.1. The fixed surface includes the
+D233-B1 bitwise and shift operators (`&`, `|`, `~` binary and unary, `<<`,
+`>>`), which lower to ordinary `bitAnd`/`bitOr`/`bitXor`/`bitNot`/`shiftLeft`/
+`shiftRight` message sends. This heading is a
 compatibility/navigation anchor and is not an independent normative owner.
 ## 22. Open Objects
 

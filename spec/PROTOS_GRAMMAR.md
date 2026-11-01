@@ -1837,14 +1837,30 @@ equality-operator =
     | "!==" ;
 
 comparison-expression =
-    additive-expression,
-    { comparison-operator, additive-expression } ;
+    bitwise-or-expression,
+    { comparison-operator, bitwise-or-expression } ;
 
 comparison-operator =
       "<"
     | "<="
     | ">"
     | ">=" ;
+
+bitwise-or-expression =
+    bitwise-xor-expression,
+    { "|", bitwise-xor-expression } ;
+
+bitwise-xor-expression =
+    bitwise-and-expression,
+    { "~", bitwise-and-expression } ;
+
+bitwise-and-expression =
+    shift-expression,
+    { "&", shift-expression } ;
+
+shift-expression =
+    additive-expression,
+    { ("<<" | ">>"), additive-expression } ;
 
 additive-expression =
     multiplicative-expression,
@@ -1869,7 +1885,8 @@ unary-expression =
 
 unary-operator =
       "!"
-    | "-" ;
+    | "-"
+    | "~" ;
 ```
 
 Core precedence, highest to lowest:
@@ -1882,6 +1899,7 @@ postfix:
 unary:
     !
     -
+    ~
 
 multiplicative:
     *
@@ -1891,6 +1909,19 @@ multiplicative:
 additive:
     +
     -
+
+shift:
+    <<
+    >>
+
+bitwise and:
+    &
+
+bitwise xor (binary):
+    ~
+
+bitwise or:
+    |
 
 comparison:
     <
@@ -1916,9 +1947,47 @@ slot creation / modification:
     =
 ```
 
-Binary operators associate left-to-right unless otherwise specified.
+Binary operators associate left-to-right unless otherwise specified. The
+bitwise and shift operators (D233-B1) are left-associative: `a << b << c` is
+`(a << b) << c`, `a & b & c` is `(a & b) & c`, `a ~ b ~ c` is `(a ~ b) ~ c`, and
+`a | b | c` is `(a | b) | c`.
 
 `:` and `=` are right-associative.
+
+### Bitwise and shift operator lowering (D233-B1)
+
+The six bitwise/shift operator forms are mandatory desugarings to ordinary
+one-argument or zero-argument message sends:
+
+| Surface form | Canonical message send |
+|---|---|
+| `a & b` | `a.bitAnd(b)` |
+| `a \| b` | `a.bitOr(b)` |
+| `a ~ b` | `a.bitXor(b)` |
+| `~a` | `a.bitNot()` |
+| `a << n` | `a.shiftLeft(n)` |
+| `a >> n` | `a.shiftRight(n)` |
+
+The send uses the original receiver and ordinary lookup, including overrides,
+delegation, `methodHome`, and `this`. The parser and canonicalizer impose no
+Integer semantics: any object that defines `bitAnd`, `bitOr`, `bitXor`,
+`bitNot`, `shiftLeft`, or `shiftRight` receives the corresponding operator
+send. The standard Integer behavior of those messages is owned by
+`spec/semantics/VALUES_AND_COLLECTIONS.md` (D230-C1) and is not redefined here.
+
+The single token `~` has two grammatical interpretations decided only by its
+position in the grammar, never by the lexer: in `unary-operator` position it is
+the prefix `~a` (`bitNot`); in `bitwise-xor-expression` infix position it is
+binary `a ~ b` (`bitXor`). Thus `a ~ ~b` is `a.bitXor(b.bitNot())`.
+
+The bitwise and shift operators evaluate strictly: the left operand is
+evaluated exactly once, then the right operand exactly once, left to right,
+before the send. The right operand is not wrapped in a Closure. Only `&&` and
+`||` keep their lazy right-operand lowering (section 23); `&` and `|` are not
+Boolean short-circuit operators.
+
+`^` remains non-local return and is never an XOR operator. No `^^`, `>>>`, or
+compound assignment forms (`&=`, `|=`, `~=`, `<<=`, `>>=`) exist.
 
 Both slot creation and assignment evaluate to the value written.
 
@@ -1927,8 +1996,22 @@ Both slot creation and assignment evaluate to the value written.
 Core v0.1 has no arbitrary custom symbolic binary operator syntax.
 
 The accepted symbolic source surface is the fixed set owned by this grammar.
-The existing standard binary precedence ladder and associativity are unchanged,
-and parser precedence cannot be changed at runtime or by modules/imports.
+D233-B1 adds five fixed spellings to that set: `&`, `|`, `~`, `<<`, and `>>`,
+with the precedence levels and lowering defined in section 21. The relative
+precedence and associativity of the pre-existing operators are unchanged, and
+parser precedence cannot be changed at runtime or by modules/imports. There is
+no `CUSTOM_OPERATOR` token and no declarable fixity. The bitwise forms are
+ordinary message sends with ordinary dispatch:
+
+```js
+a & b      // a.bitAnd(b)
+a | b      // a.bitOr(b)
+a ~ b      // a.bitXor(b)
+~a         // a.bitNot()
+a << n     // a.shiftLeft(n)
+a >> n     // a.shiftRight(n)
+a ~ ~b     // a.bitXor(b.bitNot())
+```
 
 Unsupported symbolic spellings such as:
 
@@ -2652,14 +2735,30 @@ equality-operator =
     | "!==" ;
 
 comparison-expression =
-    additive-expression,
-    { comparison-operator, additive-expression } ;
+    bitwise-or-expression,
+    { comparison-operator, bitwise-or-expression } ;
 
 comparison-operator =
       "<"
     | "<="
     | ">"
     | ">=" ;
+
+bitwise-or-expression =
+    bitwise-xor-expression,
+    { "|", bitwise-xor-expression } ;
+
+bitwise-xor-expression =
+    bitwise-and-expression,
+    { "~", bitwise-and-expression } ;
+
+bitwise-and-expression =
+    shift-expression,
+    { "&", shift-expression } ;
+
+shift-expression =
+    additive-expression,
+    { ("<<" | ">>"), additive-expression } ;
 
 additive-expression =
     multiplicative-expression,
@@ -2684,7 +2783,8 @@ unary-expression =
 
 unary-operator =
       "!"
-    | "-" ;
+    | "-"
+    | "~" ;
 
 postfix-expression =
     primary-expression,
@@ -3794,7 +3894,12 @@ The fixed reserved/standard symbolic tokens are:
 ```text
 =>  =  ==  ===  !=  !==  <=  >=  &&  ||
 +   -  *   /   %   <   >   !   ^
+&   |  ~   <<  >>
 ```
+
+The D233-B1 spellings `&`, `|`, `~`, `<<`, and `>>` were already members of the
+candidate character set; adding them to the fixed token set does not change
+`operator-character` or the maximal-munch rule.
 
 When a symbolic candidate run begins, the lexer consumes the longest consecutive
 run of candidate characters. The complete spelling is accepted only when it
@@ -3817,6 +3922,54 @@ shorter valid tokens. In particular:
 a @ b   -> lexical error
 a |> b  -> lexical error
 ```
+
+D233-B1 bitwise spellings follow the same rule. Valid examples:
+
+```text
+a&b       -> IDENTIFIER("a") & IDENTIFIER("b")
+a&&b      -> IDENTIFIER("a") && IDENTIFIER("b")
+a|b       -> IDENTIFIER("a") | IDENTIFIER("b")
+a||b      -> IDENTIFIER("a") || IDENTIFIER("b")
+a~b       -> IDENTIFIER("a") ~ IDENTIFIER("b")
+~a        -> ~ IDENTIFIER("a")
+a ~ ~b    -> IDENTIFIER("a") ~ ~ IDENTIFIER("b")
+~(~a)     -> ~ ( ~ IDENTIFIER("a") )
+a & -b    -> IDENTIFIER("a") & - IDENTIFIER("b")
+a << -1   -> IDENTIFIER("a") << - INTEGER(1)
+```
+
+`a << -1` is syntactically valid; evaluating it signals the ordinary
+`shiftLeft` negative-count Error.
+
+Lexically invalid examples (each maximal run is not a fixed token and is never
+split):
+
+```text
+a~~b   ~~a   a&-b   a<<-1   a>>=b   a>>>b
+a~=b   a|>b  ^^a    !!a     --a
+```
+
+The lexer classifies `~` as the single token `TILDE` regardless of position;
+whether it is the unary or binary form is decided by the parser.
+
+A binary operator is a necessarily incomplete construct, so a logical newline
+after it is continuation:
+
+```js
+a ~
+    b      // one expression: a.bitXor(b)
+```
+
+A complete expression followed by a newline is not continued by a leading
+operator on the next line; there is no leading-operator continuation exception:
+
+```js
+a
+~b         // two expressions: a, then b.bitNot()
+```
+
+Comment recognition (`//`, `/*`), structural punctuation, and non-local return
+`^` are unchanged.
 
 The exact one-character spellings `!` and `^` keep their existing grammar roles
 (prefix `!` and non-local return `^`). Explicit nesting of prefix operations

@@ -374,10 +374,23 @@ public final class Canonicalizer {
                             binary.operator(),
                             List.of(canonicalize(binary.right())),
                             binary.span());
+            case "&" -> lowerBitwise(binary, "bitAnd");
+            case "|" -> lowerBitwise(binary, "bitOr");
+            case "~" -> lowerBitwise(binary, "bitXor");
+            case "<<" -> lowerBitwise(binary, "shiftLeft");
+            case ">>" -> lowerBitwise(binary, "shiftRight");
             default ->
                     throw new IllegalArgumentException(
                             "Unsupported binary operator: " + binary.operator());
         };
+    }
+
+    private CanonicalExpression lowerBitwise(SurfaceBinary binary, String message) {
+        return new CanonicalSend(
+                canonicalize(binary.left()),
+                message,
+                List.of(canonicalize(binary.right())),
+                binary.span());
     }
 
     private CanonicalExpression lowerLazyBoolean(
@@ -415,6 +428,7 @@ public final class Canonicalizer {
         String message = switch (unary.operator()) {
             case "-" -> "negated";
             case "!" -> "not";
+            case "~" -> "bitNot";
             default -> throw new IllegalArgumentException(
                     "Unsupported unary operator: " + unary.operator());
         };

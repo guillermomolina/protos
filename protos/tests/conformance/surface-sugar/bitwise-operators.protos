@@ -1,0 +1,159 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+// D233-B1 (I137): fixed bitwise and shift operators desugar to the ordinary
+// bitAnd/bitOr/bitXor/bitNot/shiftLeft/shiftRight sends.
+tests: [
+    Test("bitwise operators compute the Integer operations", () => {
+        Assertions.require(12 & 10 == 8)
+        Assertions.require(12 | 10 == 14)
+        Assertions.require(12 ~ 10 == 6)
+        Assertions.require(~0 == -1)
+        Assertions.require(~(-1) == 0)
+        Assertions.require((-3) >> 1 == -2)
+        Assertions.require(1 << 64 == 18446744073709551616)
+    }),
+    Test("operators normalize SmallInteger and BigInteger results", () => {
+        big: 18446744073709551616
+        Assertions.require((1 << 63).parent() === BigInteger)
+        Assertions.require(((1 << 64) >> 64).parent() === SmallInteger)
+        Assertions.require((big | 1).parent() === BigInteger)
+        Assertions.require((big & 1) === 0)
+        Assertions.require((big & 1).parent() === SmallInteger)
+        Assertions.require((big ~ big) === 0)
+        Assertions.require((~9223372036854775807) === -9223372036854775808)
+        Assertions.require((~9223372036854775808).parent() === BigInteger)
+    }),
+    Test("shift operators accept huge Integer counts", () => {
+        huge: 100000000000000000000
+        Assertions.require(huge.parent() === BigInteger)
+        Assertions.require((1 >> huge) === 0)
+        Assertions.require(((-1) >> huge) === -1)
+        Assertions.require((18446744073709551616 >> huge) === 0)
+        Assertions.require(((-18446744073709551616) >> huge) === -1)
+        Assertions.require((0 << huge) === 0)
+    }),
+    Test("operators signal the ordinary message Errors", () => {
+        Assertions.signals(Error, () => 1 << -1)
+        Assertions.signals(Error, () => 1 >> -1)
+        Assertions.signals(Error, () => 1 & 1.0)
+        Assertions.signals(Error, () => 1 | "1")
+        Assertions.signals(Error, () => 1 ~ null)
+        Assertions.signals(Error, () => 1 << true)
+    }),
+    Test("operators equal their ordinary message sends", () => {
+        values: Array(0, 1, -1, 12, -12, 9223372036854775807, -18446744073709551617)
+        values.each((x) => {
+            Assertions.require(~x == x.bitNot())
+            values.each((y) => {
+                Assertions.require((x & y) == x.bitAnd(y))
+                Assertions.require((x | y) == x.bitOr(y))
+                Assertions.require((x ~ y) == x.bitXor(y))
+            })
+            Assertions.require((x << 3) == x.shiftLeft(3))
+            Assertions.require((x >> 3) == x.shiftRight(3))
+        })
+        null
+    }),
+    Test("operators dispatch ordinarily on non-Integer objects", () => {
+        received: null
+        custom: {
+            bitAnd: (other) => {
+                received = other
+                42
+            }
+            bitXor: (other) => { other * 2 }
+            bitNot: () => { "complement" }
+            bitOr: (other) => { "or" }
+            shiftLeft: (count) => { count + 100 }
+            shiftRight: (count) => { count - 100 }
+        }
+        Assertions.require(custom & 7 == 42)
+        Assertions.require(received == 7)
+        Assertions.require(custom ~ 21 == 42)
+        Assertions.require(~custom == "complement")
+        Assertions.require(custom | 0 == "or")
+        Assertions.require(custom << 1 == 101)
+        Assertions.require(custom >> 1 == -99)
+    }),
+    Test("bitwise operands evaluate strictly once and left to right", () => {
+        count: 0
+        Assertions.require(0 & (count = count + 1) == 0)
+        Assertions.require(count == 1)
+        Assertions.require((12 & 0) & (count = count + 1) == 0)
+        Assertions.require(count == 2)
+        Assertions.require(-1 | (count = count + 1) == -1)
+        Assertions.require(count == 3)
+        order: ""
+        left: () => {
+            order = order + "L"
+            12
+        }
+        right: () => {
+            order = order + "R"
+            10
+        }
+        Assertions.require(left() ~ right() == 6)
+        Assertions.require(order == "LR")
+    }),
+    Test("lazy Boolean operators keep short circuit", () => {
+        count: 0
+        Assertions.require((false && (count = count + 1)) === false)
+        Assertions.require((true || (count = count + 1)) === true)
+        Assertions.require(count == 0)
+    }),
+    Test("precedence and left associativity", () => {
+        Assertions.require(1 + 1 << 2 == 8)
+        Assertions.require(1 << 2 + 1 == 8)
+        Assertions.require(1 | 6 & 3 == 3)
+        Assertions.require(1 ~ 7 & 3 == 2)
+        Assertions.require(5 ~ 3 | 8 == 14)
+        Assertions.require(~1 & 7 == 6)
+        Assertions.require(12 ~ ~10 == -7)
+        Assertions.require(2 * 3 << 1 == 12)
+        Assertions.require(256 >> 2 >> 1 == 32)
+        Assertions.require(1 << 2 << 3 == 32)
+        Assertions.require(12 ~ 10 ~ 6 == 0)
+        Assertions.require((1 | 2 < 4) === true)
+        Assertions.require((6 & 3 == 2) === true)
+    }),
+    Test("non-local return and Error propagation through operators", () => {
+        returnScenario: () => {
+            xor: () => {
+                (() => {
+                    ^12 ~ 10
+                }).ensure(() => {
+                    null
+                })
+                0
+            }
+            complement: () => {
+                (() => {
+                    ^ ~5
+                }).ensure(() => {
+                    null
+                })
+                0
+            }
+            xor() * 100 + complement()
+        }
+        Assertions.require(returnScenario() == 594)
+        Assertions.signals(Error, () => (1 << -1) | 0)
+    })
+]
+tests.freeze()
