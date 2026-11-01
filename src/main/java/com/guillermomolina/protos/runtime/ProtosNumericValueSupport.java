@@ -377,9 +377,9 @@ public final class ProtosNumericValueSupport {
     /** The guest value denoted by {@code value}; identity for every non-carrier. */
     public static Object guestValue(Object value) {
         /*
-         * I115-H7 EXPERIMENTAL: an int carrier of the GraalPy-shaped compact
-         * operations (NumberAdd and the int-specialized locals) becomes the
-         * guest Integer only when it crosses an observable boundary.
+         * A Java Integer is never an I115 carrier (the compact lane carries
+         * signed-64 longs); one supplied by an external host API is
+         * normalized to the guest Integer, like any other Java integer.
          */
         if (value instanceof Integer small) {
             return new ProtosIntegerValue(small.intValue());

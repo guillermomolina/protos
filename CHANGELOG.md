@@ -8,6 +8,39 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.31-SNAPSHOT
+
+- **I115 — experimental convergence of H7 signed-64 numeric fast paths and
+  direct Closure calls with GraalPy.** This is a historical implementation
+  checkpoint; the following code and tests are preserved as originally
+  committed, not rerun or independently accepted by this replay.
+  - Replace 32-bit `int`/`Integer` compact numeric paths with primitive
+    signed-64 `long`/`Long` literals, arithmetic and comparisons. The H7
+    `NumberAdd` fast path uses checked `long` addition; signed-64 overflow
+    promotes to the exact large guest Integer using the effective Prelude.
+    A host-supplied Java `Integer` is normalized at guest boundaries and
+    is no longer an admitted 32-bit internal numeric carrier.
+  - Extend the H11 reduced unary call ABI to transport the effective Prelude
+    when a callee registers `NEEDS_CALLER_PRELUDE`, including cold recovery
+    on initial numeric overflow. Keep deferred caller transport where it
+    is needed, and allow raw `Long` results to cross the admitted compact
+    root and Polyglot boundary without premature guest materialization.
+  - Update method-call, static/recursive Closure, compact-lowering and
+    factorial test expectations. Original tests cover signed-64 literals,
+    recursive arithmetic, exact overflow, lazy Prelude propagation and
+    host return representation; none are executed as part of this replay.
+  - **Historical semantic limitations:** some direct H7 method-call paths
+    no longer require a global proof of non-suspension, so exceptional
+    continuations and non-terminal suspension may diverge. Experimental
+    arithmetic does not always perform the ordinary Prelude numeric-protocol
+    admission or dynamic `+`/comparison selection. `Object.call`, Boolean
+    control, caller authority, `ReturnHome`, Task lifecycle and D179 C0
+    retain historical open divergences. This local `long` migration does
+    not establish full language-wide semantic or performance acceptance,
+    and no Tier 1/Tier 2 graph evidence is claimed by the replay.
+  - Original implementation: `4ac5d115f7c00294be1a8a0133b988eab80708b9`.
+    All fourteen original source/test blobs are preserved byte-for-byte.
+
 ## 0.4.30-SNAPSHOT
 
 - **I115-C6 — reconcile Bytecode DSL call and Boolean-control oracles with

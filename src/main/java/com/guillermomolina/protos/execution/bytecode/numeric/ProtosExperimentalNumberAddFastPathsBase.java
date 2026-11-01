@@ -33,18 +33,16 @@ import com.oracle.truffle.api.nodes.Node;
  * NumberInPlaceAdd}. Each subclass declares its own generic fallback.
  *
  * <ul>
- *   <li>{@code doII}: {@code int + int} with {@link Math#addExact}, an
- *       {@code int} result; the first overflow rewrites it into {@code
- *       doIIOvf}, whose {@code long} result cannot overflow.</li>
  *   <li>{@code doLL}: {@code long + long} with {@link Math#addExact};
  *       rewritten on overflow into {@code doLLOvf} (declared by each
  *       subclass), which promotes to the exact large Integer.</li>
  *   <li>{@code double} specializations.</li>
  * </ul>
  *
- * <p>DIFFERENCE FROM GRAALPY: Protos has no implicit {@code int -> long}
- * cast in this interpreter's type system, so {@code doLL} does not replace
- * {@code doII} and mixed int/long pairs reach the generic fallback.
+ * <p>DIFFERENCE FROM GRAALPY: the signed-64 Integer representation is a
+ * Java {@code long} and the Float representation a Java {@code double};
+ * there is no 32-bit primitive integer level, hence no {@code doII}/{@code
+ * doIIOvf} and no implicit {@code int -> long} type-system cast.
  *
  * <p>RECORDED DIVERGENCE: no Prelude numeric-protocol admission certificate
  * is consulted; the standard Integer/Float {@code +} is assumed.
@@ -53,16 +51,6 @@ import com.oracle.truffle.api.nodes.Node;
 abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
 
     abstract Object execute(VirtualFrame frame, Object left, Object right);
-
-    @Specialization(rewriteOn = ArithmeticException.class)
-    static int doII(int left, int right) {
-        return Math.addExact(left, right);
-    }
-
-    @Specialization(replaces = "doII")
-    static long doIIOvf(int left, int right) {
-        return (long) left + (long) right;
-    }
 
     @Specialization(rewriteOn = ArithmeticException.class)
     static long doLL(long left, long right) {
@@ -85,13 +73,14 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
     }
 
     /*
-     * The caller prelude of the running root, read as every send selection
-     * of a compact root reads it (registering NEEDS_CALLER_PRELUDE once when
-     * an inherited prelude was not transported).
+     * The effective Prelude of the running root, read only on the overflow
+     * and generic Integer routes: the Prelude its reduced H11 entry carries
+     * or its B5 header's admitted Prelude. When it was not transported, the
+     * root registers NEEDS_CALLER_PRELUDE once and the value is recovered
+     * cold (ProtosBytecodeRootNode#experimentalEffectivePrelude).
      */
     static ProtosPrelude callerPrelude(ProtosBytecodeRootNode root, VirtualFrame frame) {
-        return ProtosBytecodeRootNode.InvokeClosureOneTail.admittedCallerPrelude(
-                root, ProtosExperimentalCallBinaryMethodNode.callerReference(frame));
+        return ProtosBytecodeRootNode.experimentalEffectivePrelude(root, frame.getArguments());
     }
 
     /*
@@ -117,7 +106,7 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
 
     /**
      * The single generic route of both operations: two semantic Integers
-     * (any representation, int/long carriers included) are added exactly
+     * (any representation, long carriers included) are added exactly
      * without promotion loss; any other pair receives the ordinary send of
      * {@code +} (so a non-numeric receiver keeps its own {@code +}).
      */

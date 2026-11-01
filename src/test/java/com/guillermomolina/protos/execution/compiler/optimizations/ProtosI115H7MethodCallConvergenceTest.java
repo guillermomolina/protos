@@ -28,8 +28,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.bytecode.Instruction;
@@ -364,12 +366,12 @@ final class ProtosI115H7MethodCallConvergenceTest {
     // ---- I115-H7-R5 return representation ---------------------------------------------
 
     /**
-     * An admitted H7 root and its host entry must BOTH return the raw Integer.
-     * Checking Value.asLong alone would miss an accidental ProtosIntegerValue
-     * allocation at either boundary.
+     * An admitted H7 root and its host entry must BOTH return the raw
+     * signed-64 Long. Checking Value.asLong alone would miss an accidental
+     * ProtosIntegerValue allocation at either boundary.
      */
     @Test
-    void h7IntegerRemainsRawAcrossRootAndHostBoundary() throws Exception {
+    void h7LongRemainsRawAcrossRootAndHostBoundary() throws Exception {
         try (ProtosStandaloneHostedSession session =
                 open("r5-raw-integer", METHOD_CALL)) {
             ProtosStandaloneHostedSession.PreparedTopLevel prepared =
@@ -379,7 +381,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
                     ProtosBytecodeRootNode.class, host.target.getRootNode());
 
             assertTrue(run.isExperimentalH7RawIntegerReturn(),
-                    "the compact H7 root must admit raw Integer transport");
+                    "the compact H7 root must admit raw Long transport");
 
             for (int call = 0; call < WARM; call++) {
                 assertEquals(499500L, prepared.executable().execute().asLong());
@@ -390,8 +392,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
                         ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
                                 host.closure, host.caller));
 
-                assertEquals(499500,
-                        assertInstanceOf(Integer.class, rootResult).intValue(),
+                assertEquals(499500L,
+                        assertInstanceOf(Long.class, rootResult).longValue(),
                         "EpilogForReturn must not allocate ProtosIntegerValue");
 
                 Object hostResult;
@@ -401,9 +403,9 @@ final class ProtosI115H7MethodCallConvergenceTest {
                     throw new AssertionError(unexpected);
                 }
 
-                assertEquals(499500,
-                        assertInstanceOf(Integer.class, hostResult).intValue(),
-                        "the Polyglot host boundary must preserve the raw Integer");
+                assertEquals(499500L,
+                        assertInstanceOf(Long.class, hostResult).longValue(),
+                        "the Polyglot host boundary must preserve the raw Long");
                 return null;
             });
         }
@@ -411,7 +413,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
 
     /**
      * The R5 admission is narrow: ordinary guest-number returns still use
-     * the guest representation, and a result exceeding int is not truncated.
+     * the guest representation, and a result exceeding 32 bits is the same
+     * raw signed-64 Long, never truncated.
      */
     @Test
     void r5RawIntegerAdmissionDoesNotChangeOtherNumericResults() throws Exception {
@@ -432,7 +435,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
             assertFalse(root(session, "plain").isExperimentalH7RawIntegerReturn(),
                     "an ordinary literal root is not an H7 return root");
             assertTrue(root(session, "wide").isExperimentalH7RawIntegerReturn(),
-                    "the H7 addition is admitted even when the result overflows int");
+                    "the H7 addition is admitted even when the result exceeds 32 bits");
 
             session.processContextForTesting().callForRuntime(() -> {
                 InteropLibrary interop = InteropLibrary.getUncached();
@@ -447,9 +450,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
                                     ProtosIntegerValue.class, plainResult).longValue(),
                             "ordinary results retain their guest representation");
                     assertEquals(2147483648L,
-                            assertInstanceOf(
-                                    ProtosIntegerValue.class, wideResult).longValue(),
-                            "a wide result must not be narrowed to Java Integer");
+                            assertInstanceOf(Long.class, wideResult).longValue(),
+                            "a result beyond 32 bits remains the raw signed-64 Long");
                 } catch (InteropException unexpected) {
                     throw new AssertionError(unexpected);
                 }
@@ -458,6 +460,200 @@ final class ProtosI115H7MethodCallConvergenceTest {
 
             assertEquals(7L, plain.executable().execute().asLong());
             assertEquals(2147483648L, wide.executable().execute().asLong());
+        }
+    }
+
+    // ---- I115 long/double numeric representation -------------------------------------
+
+    /** The compact long, double and mixed operations of the regressions below. */
+    private static final String LONG_DOUBLE = """
+            sumLong: () => {
+                a: 40
+                b: 2
+                a + b
+            }
+
+            sumBeyond32: () => {
+                a: 2147483647
+                b: 2147483647
+                a + b
+            }
+
+            storedSum: () => {
+                a: 40
+                b: 1
+                c: a + b
+                c + 1
+            }
+
+            inPlace: () => {
+                t: 2147483647
+                t = t + 5
+                t
+            }
+
+            sumDouble: () => {
+                a: 0.1
+                b: 0.2
+                a + b
+            }
+
+            sumLongDouble: () => {
+                a: 16777216
+                b: 1.0
+                a + b
+            }
+
+            sumDoubleLong: () => {
+                a: 1.0
+                b: 16777216
+                a + b
+            }
+
+            lessLongDouble: () => {
+                k: 0
+                (() => k < 2.5).whileTrue() {
+                    k = k + 1
+                }
+                k
+            }
+            """;
+
+    /*
+     * 1, 4, 7, 8, 10: long results of NumberAdd and NumberInPlaceAdd stay raw
+     * Longs through locals, EpilogForReturn and the host boundary, both
+     * before and after the operations specialize.
+     */
+    @Test
+    void longResultsStayRawLongs() throws Exception {
+        try (ProtosStandaloneHostedSession session =
+                open("long-results", LONG_DOUBLE)) {
+            List<String> stored = unquickened(names(root(session, "storedSum")));
+            assertEquals(2, count(stored, "c.NumberAdd"),
+                    "NumberAdd -> StoreLocal -> LoadLocal -> NumberAdd: " + stored);
+            assertEquals(3, count(stored, "store.local"),
+                    "a, b and the intermediate sum are stored locals: " + stored);
+            assertReplacedAbsent("storedSum", stored);
+            List<String> inPlace = unquickened(names(root(session, "inPlace")));
+            assertEquals(1, count(inPlace, "c.NumberInPlaceAdd"), inPlace.toString());
+
+            for (int call = 0; call < WARM; call++) {
+                assertRawLong(session, "sumLong", 42L);
+                assertRawLong(session, "sumBeyond32", 4294967294L);
+                assertRawLong(session, "storedSum", 42L);
+                assertRawLong(session, "inPlace", 2147483652L);
+            }
+            assertNumber(session, "sumBeyond32", 4294967294L);
+            assertNumber(session, "inPlace", 2147483652L);
+        }
+    }
+
+    /*
+     * 6: double and mixed long/double operations keep double precision.
+     * Float literals are not admitted to the compact lane, so the double
+     * fast paths of NumberAdd/NumberInPlaceAdd and Lt are checked directly;
+     * the source cases check the observable values.
+     */
+    @Test
+    void doubleOperationsKeepDoublePrecision() throws Exception {
+        // 16777217 has no Java float representation.
+        assertEquals(16777217.0, ProtosExperimentalNumberAddFastPathsBase.doLD(16777216L, 1.0));
+        assertEquals(16777217.0, ProtosExperimentalNumberAddFastPathsBase.doDL(1.0, 16777216L));
+        assertEquals(0.1 + 0.2, ProtosExperimentalNumberAddFastPathsBase.doDD(0.1, 0.2));
+        assertTrue(ProtosExperimentalLessNode.doLD(2L, 2.5));
+        assertFalse(ProtosExperimentalLessNode.doDL(2.5, 2L));
+        assertTrue(ProtosExperimentalLessNode.doDD(16777216.0, 16777217.0));
+        try (ProtosStandaloneHostedSession session =
+                open("double-results", LONG_DOUBLE)) {
+            for (int call = 0; call < WARM; call++) {
+                assertDouble(session, "sumDouble", 0.1 + 0.2);
+                // 16777217 has no Java float representation.
+                assertDouble(session, "sumLongDouble", 16777217.0);
+                assertDouble(session, "sumDoubleLong", 16777217.0);
+                assertNumber(session, "lessLongDouble", 3L);
+            }
+        }
+    }
+
+    /*
+     * 2, 3: the compact subtraction and multiplication return a Java long
+     * on their primitive paths, also after the overflow specialization
+     * replaced them; an int never appears as a carrier.
+     */
+    @Test
+    void compactIntegerOperationsReturnLongs() {
+        assertEquals(42L, ProtosBytecodeRootNode.ExperimentalIntegerAdd.doLong(40L, 2L));
+        assertEquals(38L, ProtosBytecodeRootNode.ExperimentalIntegerSubtract.doLong(40L, 2L));
+        assertEquals(80L, ProtosBytecodeRootNode.ExperimentalIntegerMultiply.doLong(40L, 2L));
+        assertEquals(4294967294L, assertInstanceOf(Long.class,
+                ProtosBytecodeRootNode.ExperimentalIntegerAdd.doLongWithOverflow(
+                        2147483647L, 2147483647L, null, null)));
+        assertEquals(-4294967296L, assertInstanceOf(Long.class,
+                ProtosBytecodeRootNode.ExperimentalIntegerSubtract.doLongWithOverflow(
+                        -2147483648L, 2147483648L, null, null)));
+        assertEquals(4611686014132420609L, assertInstanceOf(Long.class,
+                ProtosBytecodeRootNode.ExperimentalIntegerMultiply.doLongWithOverflow(
+                        2147483647L, 2147483647L, null, null)));
+        assertEquals(Long.MIN_VALUE, assertInstanceOf(Long.class,
+                ProtosBytecodeRootNode.ExperimentalIntegerMultiply.doLongWithOverflow(
+                        Long.MIN_VALUE, 1L, null, null)));
+        assertThrows(ArithmeticException.class,
+                () -> ProtosBytecodeRootNode.ExperimentalIntegerMultiply.doLong(
+                        Long.MIN_VALUE, -1L));
+    }
+
+    /* 5: a real signed-64 overflow of +, - and * is the exact large Integer. */
+    @Test
+    void signed64OverflowPromotesExactly() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("signed-64-overflow", """
+                sumDown: (n) => {
+                    result: 9223372036854775807
+
+                    (n > 0).ifTrue() {
+                        result = sumDown(n - 1) + n
+                    }
+
+                    result
+                }
+
+                differenceDown: (n) => {
+                    result: 9223372036854775807
+
+                    (n > 0).ifTrue() {
+                        result = n - differenceDown(n - 1)
+                    }
+
+                    result
+                }
+
+                factorial: (n) => {
+                    result: 1
+
+                    (n > 1).ifTrue() {
+                        result = n * factorial(n - 1)
+                    }
+
+                    result
+                }
+
+                inPlaceOverflow: () => {
+                    j: 9223372036854775807
+                    j = j + 1
+                    j
+                }
+
+                runSum: () => { sumDown(2) }
+                runDifference: () => { differenceDown(2) }
+                runProduct: () => { factorial(21) }
+                runFits: () => { factorial(20) }
+                """)) {
+            for (int call = 0; call < WARM; call++) {
+                assertLarge(session, "runSum", "9223372036854775810");
+                assertLarge(session, "runDifference", "9223372036854775808");
+                assertLarge(session, "runProduct", "51090942171709440000");
+                assertLarge(session, "inPlaceOverflow", "9223372036854775808");
+                assertNumber(session, "runFits", 2432902008176640000L);
+            }
         }
     }
 
@@ -931,6 +1127,311 @@ final class ProtosI115H7MethodCallConvergenceTest {
         }
     }
 
+    private static final String H7_OVERFLOW = """
+            limit: 9223372036854775807
+
+            holder: {
+                grow: (n) => { n + 9223372036854775807 }
+                growCaptured: (n) => { n + limit }
+                same: (n) => { n }
+                plusOne: (n) => { n + 1 }
+                escape: (n) => { ^n }
+            }
+
+            runGrow: () => { holder.grow(1) }
+            runGrowCaptured: () => { holder.growCaptured(1) }
+            runKeep: () => { holder.same(41) + 1 }
+            runPlusOne: () => { holder.plusOne(41) }
+            runEscape: () => { holder.escape(5) }
+            """;
+
+    /**
+     * I115: a signed-64 overflow in a CallBinaryMethod callee, without
+     * ReadGlobal (grow) and with it (growCaptured). ABI selection: with no
+     * need, grow's entry would be exactly {@code {supplied0}} even though
+     * its Closure has its own Prelude; growCaptured's {@code {closure,
+     * supplied0}}. Both arithmetic callees are admitted to the direct H7
+     * tier (no global non-suspension proof is required): the overflow is
+     * exact, grow's minimal entry registers NEEDS_CALLER_PRELUDE once and
+     * then transports the Prelude, and the need stays stable.
+     *
+     * <p>RECORDED I115 DIVERGENCE: the minimal entry omits the Closure, so
+     * the first recovery may use the caller's effective Prelude instead of
+     * the Closure's own; its prototype identity is reported, not required.
+     */
+    @Test
+    void h7MethodOverflowUsesTheInvocationPrelude() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("h7-method-overflow", H7_OVERFLOW)) {
+            for (String[] fixture : List.of(
+                    new String[] {"runGrow", "grow"},
+                    new String[] {"runGrowCaptured", "growCaptured"})) {
+                String run = fixture[0];
+                String selector = fixture[1];
+                boolean captured = "growCaptured".equals(selector);
+                ProtosClosureValue closure = methodClosure(session, run, "holder", selector);
+                // Before the first call the Context target does not exist yet; the
+                // template root has the same lowering and ABI facts.
+                ProtosBytecodeRootNode template = methodRoot(session, run, "holder", selector);
+                ProtosBytecodeRootNode caller = root(session, run);
+                Object ownPrelude = session.processContextForTesting().callForRuntime(
+                        closure::preludeOrNullForRuntime);
+
+                List<String> calleeNames = unquickened(names(template));
+                List<String> runNames = unquickened(names(caller));
+                assertTrue(calleeNames.contains("c.CopyArguments"), calleeNames.toString());
+                assertEquals(1, count(calleeNames, "c.NumberAdd"), calleeNames.toString());
+                assertEquals(1, count(runNames, "c.GetMethod"), runNames.toString());
+                assertEquals(1, count(runNames, "c.CallBinaryMethod"), runNames.toString());
+                for (List<String> names : List.of(calleeNames, runNames)) {
+                    assertTrue(names.stream().noneMatch(
+                                    name -> name.contains("MaterializeCurrentClosure")),
+                            names.toString());
+                    assertReplacedAbsent(selector, names);
+                }
+                assertEquals(captured, template.experimentalUnaryNeedsCapturedOwner(), selector);
+                assertFalse(template.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+
+                // Before any need: the entry this callee receives (no frame is read).
+                Object argument = Long.valueOf(1L);
+                Object[] entry = ProtosExperimentalCallBinaryMethodNode.unaryArguments(
+                        caller, null, template, closure, argument);
+                if (captured) {
+                    assertEquals(2, entry.length, selector);
+                    assertSame(closure, entry[0]);
+                    assertSame(argument, entry[1]);
+                } else {
+                    assertEquals(1, entry.length, "minimal even with an own Prelude");
+                    assertSame(argument, entry[0]);
+                }
+                for (Object element : entry) {
+                    assertFalse(element instanceof ProtosPrelude, selector + ": no Prelude");
+                    assertFalse(element instanceof ProtosCallerFrameReference,
+                            selector + ": no caller reference");
+                }
+
+                // First overflow: exact, through the admitted direct H7 entry.
+                Object first = rawResult(session, run);
+                ProtosLargeIntegerValue large =
+                        assertInstanceOf(ProtosLargeIntegerValue.class, first);
+                assertLarge(session, run, "9223372036854775808");
+                ProtosBytecodeRootNode callee = admittedCallee(session, closure);
+                assertEquals(captured, callee.experimentalUnaryNeedsCapturedOwner(), selector);
+                assertEquals(calleeNames, unquickened(names(callee)), "same lowering");
+                if (captured && ownPrelude != null) {
+                    // {closure, supplied0} retains the Closure: its own Prelude, no need.
+                    assertSame(((ProtosPrelude) ownPrelude).bigIntegerPrototype(),
+                            large.parent().orElseThrow());
+                    assertFalse(callee.hasCallerNeed(
+                            ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+                } else {
+                    /*
+                     * {supplied0} carried no Prelude: the admitted callee registered
+                     * its need (an ordinary B5 send would have found the Closure's
+                     * own Prelude and registered nothing).
+                     */
+                    assertTrue(callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE),
+                            selector + " registered its caller Prelude need");
+                    if (ownPrelude != null
+                            && ((ProtosPrelude) ownPrelude).bigIntegerPrototype()
+                                    != large.parent().orElseThrow()) {
+                        System.out.println("I115_H7_RECORDED_DIVERGENCE[" + selector
+                                + "]=first recovery used the caller Prelude");
+                    }
+                    if (ownPrelude != null) {
+                        // From now on the extended entry transports the Closure's own Prelude.
+                        Object[] extended = ProtosExperimentalCallBinaryMethodNode.unaryArguments(
+                                caller, null, callee, closure, argument);
+                        assertEquals(3, extended.length, selector);
+                        assertSame(ownPrelude,
+                                ProtosFrameArguments.experimentalTransportedPreludeOrNull(extended));
+                        assertSame(argument,
+                                ProtosFrameArguments.experimentalSuppliedArgument0(extended));
+                    }
+                }
+
+                Assumption stable = callee.callerNeedsStability();
+                for (int call = 0; call < WARM; call++) {
+                    assertLarge(session, run, "9223372036854775808");
+                }
+                assertSame(stable, callee.callerNeedsStability(), "no repeated registration");
+                assertTrue(stable.isValid());
+                assertSame(callee, admittedCallee(session, closure), "the same direct target");
+                assertEquals(calleeNames, unquickened(names(callee)));
+                assertEquals(calleeNames, unquickened(names(template)));
+                assertEquals(runNames, unquickened(names(caller)));
+            }
+        }
+    }
+
+    /**
+     * The direct H7 tier without needs: an admitted method (no arithmetic)
+     * is entered through {@code {supplied0}} and never requests the caller
+     * Prelude; a non-overflowing NumberAdd in the H7 caller returns a raw
+     * Long and requests nothing either.
+     */
+    @Test
+    void h7MethodWithoutOverflowRequestsNoPrelude() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("h7-method-keep", H7_OVERFLOW)) {
+            ProtosClosureValue closure = methodClosure(session, "runKeep", "holder", "same");
+            assertEquals(42L, assertInstanceOf(Long.class, rawResult(session, "runKeep")));
+            ProtosBytecodeRootNode callee = admittedCallee(session, closure);
+            assertFalse(callee.experimentalUnaryNeedsCapturedOwner());
+            ProtosBytecodeRootNode caller = root(session, "runKeep");
+            Object argument = Long.valueOf(41L);
+            Object[] entry = ProtosExperimentalCallBinaryMethodNode.unaryArguments(
+                    caller, null, callee, closure, argument);
+            assertEquals(1, entry.length, "minimal even with an own Prelude");
+            assertSame(argument, entry[0]);
+
+            Assumption calleeStable = callee.callerNeedsStability();
+            Assumption callerStable = caller.callerNeedsStability();
+            for (int call = 0; call < WARM; call++) {
+                assertEquals(42L, assertInstanceOf(Long.class, rawResult(session, "runKeep")));
+            }
+            for (ProtosBytecodeRootNode root : List.of(callee, caller)) {
+                assertFalse(root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            }
+            assertSame(calleeStable, callee.callerNeedsStability());
+            assertSame(callerStable, caller.callerNeedsStability());
+            assertTrue(calleeStable.isValid() && callerStable.isValid());
+        }
+    }
+
+    /**
+     * I115: an arithmetic H7 method (NumberAdd, whose generic route keeps an
+     * ordinary send) is admitted to the direct CallBinaryMethod tier and
+     * entered with {@code {supplied0}}; its long result comes back raw.
+     * The raw Long proves the direct entry: the ordinary send would have
+     * projected it to a guest Integer.
+     */
+    @Test
+    void h7ArithmeticMethodUsesTheDirectTier() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("h7-method-plus-one", H7_OVERFLOW)) {
+            ProtosClosureValue closure =
+                    methodClosure(session, "runPlusOne", "holder", "plusOne");
+            ProtosBytecodeRootNode template =
+                    methodRoot(session, "runPlusOne", "holder", "plusOne");
+            ProtosBytecodeRootNode caller = root(session, "runPlusOne");
+            List<String> calleeNames = unquickened(names(template));
+            List<String> runNames = unquickened(names(caller));
+            assertTrue(calleeNames.contains("c.CopyArguments"), calleeNames.toString());
+            assertEquals(1, count(calleeNames, "c.NumberAdd"), calleeNames.toString());
+            assertEquals(1, count(runNames, "c.GetMethod"), runNames.toString());
+            assertEquals(1, count(runNames, "c.CallBinaryMethod"), runNames.toString());
+            for (List<String> names : List.of(calleeNames, runNames)) {
+                assertTrue(names.stream().noneMatch(
+                                name -> name.contains("MaterializeCurrentClosure")),
+                        names.toString());
+                assertReplacedAbsent("plusOne", names);
+            }
+
+            assertEquals(42L, assertInstanceOf(Long.class, rawResult(session, "runPlusOne")));
+            ProtosBytecodeRootNode callee = admittedCallee(session, closure);
+            assertTrue(callee.isExperimentalPrimitiveArgumentRoot());
+            assertFalse(callee.experimentalUnaryNeedsCapturedOwner());
+            assertEquals(calleeNames, unquickened(names(callee)), "the expected H7 root");
+            Object argument = Long.valueOf(41L);
+            Object[] entry = ProtosExperimentalCallBinaryMethodNode.unaryArguments(
+                    caller, null, callee, closure, argument);
+            assertEquals(1, entry.length, "minimal entry");
+            assertSame(argument, entry[0]);
+
+            Assumption stable = callee.callerNeedsStability();
+            for (int call = 0; call < WARM; call++) {
+                assertEquals(42L,
+                        assertInstanceOf(Long.class, rawResult(session, "runPlusOne")));
+            }
+            assertFalse(callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertSame(stable, callee.callerNeedsStability());
+            assertTrue(stable.isValid());
+            assertSame(callee, admittedCallee(session, closure));
+            assertEquals(calleeNames, unquickened(names(callee)), "after quickening");
+            assertEquals(runNames, unquickened(names(caller)), "after quickening");
+            // The call site quickened to the doDirect specialization (DirectCallNode PIC).
+            List<String> quickened = names(caller);
+            assertTrue(quickened.stream().anyMatch(name ->
+                            name.startsWith("c.CallBinaryMethod$") && name.contains("Direct")),
+                    "CallBinaryMethod uses its direct specialization: " + quickened);
+            // As GraalPy callPFunction: no suspension test follows the direct call.
+            assertTrue(java.util.Arrays.stream(
+                                    ProtosExperimentalCallBinaryMethodNode.class.getDeclaredMethods())
+                            .noneMatch(method -> method.getName().equals("directOutcome")),
+                    "no post-call outcome check");
+        }
+    }
+
+    /**
+     * Admission stays limited to H7 roots: a method outside the subset (a
+     * non-local return, observable ReturnHome) is not admitted and keeps the
+     * ordinary send, with its correct result; plusOne in the same holder is
+     * admitted.
+     */
+    @Test
+    void nonH7MethodKeepsTheOrdinarySend() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("h7-method-fallback", H7_OVERFLOW)) {
+            assertNumber(session, "runEscape", 5L);
+            assertNumber(session, "runPlusOne", 42L);
+            ProtosClosureValue escape = methodClosure(session, "runEscape", "holder", "escape");
+            ProtosClosureValue plusOne = methodClosure(session, "runPlusOne", "holder", "plusOne");
+            assertNull(session.processContextForTesting().callForRuntime(() ->
+                            ProtosExperimentalCallBinaryMethodNode.admittedTargetOrNull(
+                                    escape, ProtosLanguageContext.current())),
+                    "a non-H7 method is not admitted");
+            assertTrue(admittedCallee(session, plusOne).isExperimentalPrimitiveArgumentRoot());
+            for (int call = 0; call < WARM; call++) {
+                assertNumber(session, "runEscape", 5L);
+            }
+        }
+    }
+
+    /**
+     * Every H11 entry recognizes its layout explicitly, also when the guest
+     * argument is itself a Closure, and keeps that argument by identity; the
+     * Prelude is never read as the argument.
+     */
+    @Test
+    void h11EntriesAreUnambiguousForClosureArguments() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("h11-closure-argument", H7_OVERFLOW)) {
+            ProtosClosureValue owner = methodClosure(session, "runGrow", "holder", "growCaptured");
+            ProtosClosureValue argument = methodClosure(session, "runGrow", "holder", "grow");
+            ProtosPrelude prelude = (ProtosPrelude) session.processContextForTesting()
+                    .callForRuntime(session.prepareTopLevel("runGrow").closureForTesting()
+                            ::preludeOrNullForRuntime);
+            assertTrue(prelude != null);
+
+            Object[] minimal = ProtosFrameArguments.experimentalMinimalUnaryCall(argument);
+            Object[] minimalExtended =
+                    ProtosFrameArguments.experimentalMinimalUnaryCall(argument, prelude);
+            Object[] captured = ProtosFrameArguments.experimentalCapturedUnaryCall(owner, argument);
+            Object[] capturedExtended =
+                    ProtosFrameArguments.experimentalCapturedUnaryCall(owner, argument, prelude);
+
+            for (Object[] entry : List.of(minimal, minimalExtended, captured, capturedExtended)) {
+                assertTrue(ProtosFrameArguments.isExperimentalReducedCall(entry));
+                assertSame(argument, ProtosFrameArguments.experimentalSuppliedArgument0(entry));
+            }
+            assertEquals(1, minimal.length);
+            assertTrue(ProtosFrameArguments.isExperimentalMinimalUnaryWithPrelude(minimalExtended));
+            assertFalse(ProtosFrameArguments.isExperimentalMinimalUnaryWithPrelude(capturedExtended));
+
+            assertNull(ProtosFrameArguments.experimentalCapturedOwnerOrNull(minimal));
+            assertNull(ProtosFrameArguments.experimentalCapturedOwnerOrNull(minimalExtended));
+            assertSame(owner, ProtosFrameArguments.experimentalCapturedOwnerOrNull(captured));
+            assertSame(owner, ProtosFrameArguments.experimentalCapturedOwnerOrNull(capturedExtended));
+            assertNull(ProtosExperimentalReadGlobalNode.compactClosureOrNull(minimalExtended));
+            assertSame(owner, ProtosExperimentalReadGlobalNode.compactClosureOrNull(capturedExtended));
+
+            assertNull(ProtosFrameArguments.experimentalTransportedPreludeOrNull(minimal));
+            assertSame(prelude,
+                    ProtosFrameArguments.experimentalTransportedPreludeOrNull(minimalExtended));
+            assertSame(prelude,
+                    ProtosFrameArguments.experimentalTransportedPreludeOrNull(capturedExtended));
+            assertSame(session.processContextForTesting().callForRuntime(
+                            owner::preludeOrNullForRuntime),
+                    ProtosFrameArguments.experimentalTransportedPreludeOrNull(captured));
+        }
+    }
+
     @Test
     void h11MinimalUnaryAbiSharesTheArgumentWithLegacyEntries() {
         Object value = Long.valueOf(42L);
@@ -942,7 +1443,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 ProtosFrameArguments.experimentalSuppliedArgument0(minimal));
 
         Object[] previous =
-                ProtosFrameArguments.experimentalStaticUnaryCall(value);
+                ProtosFrameArguments.experimentalStaticUnaryCall(value, null);
         assertSame(
                 value,
                 ProtosFrameArguments.experimentalSuppliedArgument0(previous));
@@ -1344,9 +1845,9 @@ final class ProtosI115H7MethodCallConvergenceTest {
                      * Test-only physical representation transition.
                      * This is the actual retained module frame, not a mock.
                      */
-                    frame.setInt(physicalIndex, 41);
+                    frame.setLong(physicalIndex, 41L);
 
-                    assertTrue(frame.isInt(physicalIndex));
+                    assertTrue(frame.isLong(physicalIndex));
                     assertFalse(frame.isObject(physicalIndex));
 
                     assertNull(
@@ -1360,7 +1861,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
                                     published, ordinal, name, 1));
 
                     assertEquals(41L, generic.longValue(),
-                            "the generic route converts the int carrier");
+                            "the generic route converts the long carrier");
 
                     ProtosIntegerValue recovered = assertInstanceOf(
                             ProtosIntegerValue.class,
@@ -1490,6 +1991,44 @@ final class ProtosI115H7MethodCallConvergenceTest {
         });
     }
 
+    /*
+     * The Context-owned target CallBinaryMethod enters for closure (admitted);
+     * it exists once the method has been called in this Context.
+     */
+    private static ProtosBytecodeRootNode admittedCallee(
+            ProtosStandaloneHostedSession session, ProtosClosureValue closure) {
+        return session.processContextForTesting().callForRuntime(() ->
+                assertInstanceOf(ProtosBytecodeRootNode.class,
+                        ProtosExperimentalCallBinaryMethodNode.admittedTargetOrNull(
+                                        closure, ProtosLanguageContext.current())
+                                .getRootNode()));
+    }
+
+    /* The raw result of a zero-argument top-level root, inside its Context. */
+    private static Object rawResult(ProtosStandaloneHostedSession session, String name)
+            throws Exception {
+        ProtosHostExecutableClosure host = session.prepareTopLevel(name).hostExecutableForTesting();
+        return session.processContextForTesting().callForRuntime(() ->
+                host.target.call(ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
+                        host.closure, host.caller)));
+    }
+
+    private static ProtosClosureValue methodClosure(
+            ProtosStandaloneHostedSession session,
+            String topLevel,
+            String holder,
+            String selector) throws Exception {
+        ProtosClosureValue anchor =
+                session.prepareTopLevel(topLevel).closureForTesting();
+        return session.processContextForTesting().callForRuntime(() -> {
+            ProtosLexicalEnvironment module = anchor.capturedLexicalEnvironmentForRuntime();
+            ProtosObjectValue object = assertInstanceOf(ProtosObjectValue.class,
+                    module.readLocalSlotForRuntime(holder).orElseThrow());
+            return assertInstanceOf(ProtosClosureValue.class,
+                    object.readLocalSlot(selector).orElseThrow());
+        });
+    }
+
     /* The While: one conditional exit and one backward edge, no callback call. */
     private static void assertDirectLoop(ProtosBytecodeRootNode root) {
         List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
@@ -1522,6 +2061,45 @@ final class ProtosI115H7MethodCallConvergenceTest {
         assertTrue(result.isNumber(), name + " is a guest number: " + result);
         assertTrue(result.fitsInLong(), name + ": " + result);
         assertEquals(expected, result.asLong(), name);
+    }
+
+    /* The host-boundary result of an admitted H7 root: the raw Long. */
+    private static void assertRawLong(
+            ProtosStandaloneHostedSession session, String name, long expected)
+            throws Exception {
+        ProtosHostExecutableClosure host =
+                session.prepareTopLevel(name).hostExecutableForTesting();
+        ProtosBytecodeRootNode target = assertInstanceOf(
+                ProtosBytecodeRootNode.class, host.target.getRootNode());
+        assertTrue(target.isExperimentalH7RawIntegerReturn(), name);
+        Object result = session.processContextForTesting().callForRuntime(() -> {
+            try {
+                return InteropLibrary.getUncached().execute(host);
+            } catch (InteropException unexpected) {
+                throw new AssertionError(unexpected);
+            }
+        });
+        assertEquals(expected, assertInstanceOf(Long.class, result,
+                name + " must not carry Integer or ProtosIntegerValue").longValue(), name);
+    }
+
+    private static void assertDouble(
+            ProtosStandaloneHostedSession session, String name, double expected)
+            throws Exception {
+        Value result = session.prepareTopLevel(name).executable().execute();
+        assertTrue(result.isNumber(), name + " is a guest number: " + result);
+        assertTrue(result.fitsInDouble(), name + ": " + result);
+        assertEquals(expected, result.asDouble(), 0.0, name);
+    }
+
+    private static void assertLarge(
+            ProtosStandaloneHostedSession session, String name, String expected)
+            throws Exception {
+        Value result = session.prepareTopLevel(name).executable().execute();
+        assertTrue(result.isNumber(), name + " is a guest number: " + result);
+        assertFalse(result.fitsInLong(), name + " promotes beyond signed-64: " + result);
+        assertTrue(result.toString().contains(expected),
+                name + " exact large Integer: " + result);
     }
 
     private static int count(List<String> names, String name) {

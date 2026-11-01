@@ -393,12 +393,7 @@ final class CanonicalToBytecodeLowerer {
      * of every numeric MISS path; null when the root has no numeric send.
      */
     private ComposedSequenceScratch currentExperimentalCompactScratch;
-    /*
-     * I115-H7 EXPERIMENTAL: whether the compact root being emitted loads
-     * signed-32 Integer literals as int carriers (a non-recursive root
-     * without any pre-H7 dispatching site), and the root's physical scope.
-     */
-    private boolean currentExperimentalIntLiterals;
+    /* I115-H7 EXPERIMENTAL: the physical scope of the compact root being emitted. */
     private CanonicalLexicalScope currentExperimentalCompactScope;
     /*
      * I115-H7-R1: the root's terminal expression while a compact root is
@@ -1707,7 +1702,7 @@ final class CanonicalToBytecodeLowerer {
         /*
          * I115-H7-R5: the compact admission and the presence of an H7
          * invocation are compile-time facts. The root and its host entry
-         * must agree on whether a returned int remains unwrapped.
+         * must agree on whether a returned signed-64 long remains unwrapped.
          */
         if (experimentalCompact != null && experimentalCompact.invokes()) {
             result.markExperimentalH7RawIntegerReturn();
@@ -11151,11 +11146,7 @@ final class CanonicalToBytecodeLowerer {
                 currentExperimentalRecursiveIntegerEmission;
         java.util.Set<CanonicalSend> savedDispatchingControls =
                 currentExperimentalDispatchingControls;
-        boolean savedIntLiterals = currentExperimentalIntLiterals;
         CanonicalLexicalScope savedCompactScope = currentExperimentalCompactScope;
-        // I115-H7: int carriers never reach a pre-H7 dispatching site.
-        currentExperimentalIntLiterals =
-                !compact.experimentalRecursiveInteger() && !compact.dispatches();
         currentExperimentalCompactScope = compact.scope();
         CanonicalExpression savedCompactTerminal = currentExperimentalCompactTerminal;
         currentExperimentalCompactTerminal =
@@ -11196,7 +11187,6 @@ final class CanonicalToBytecodeLowerer {
                     savedRecursiveEmission;
             currentExperimentalCompactScratch = savedScratch;
             currentExperimentalDispatchingControls = savedDispatchingControls;
-            currentExperimentalIntLiterals = savedIntLiterals;
             currentExperimentalCompactScope = savedCompactScope;
             currentExperimentalCompactTerminal = savedCompactTerminal;
         }
@@ -11365,8 +11355,7 @@ final class CanonicalToBytecodeLowerer {
             if (assign.value() instanceof CanonicalLiteral literal
                     && literal.kind() == CanonicalLiteral.Kind.NUMBER
                     && primitiveNumberLiteralOrNull(literal) instanceof Long integer) {
-                // The attribute lane is signed-64, even when other
-                // experimental roots still admit int carriers.
+                // The attribute lane is signed-64, like every compact literal.
                 builder.emitLoadConstant(integer);
             } else {
                 emitExperimentalCompactValue(builder, assign.value());
@@ -11442,17 +11431,11 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I115-H7: a signed-32 Integer literal is an int carrier in a root that
-     * admits them; otherwise the existing long carrier.
+     * I115-H7: every signed-64 Integer literal is a long carrier, even when
+     * it fits in 32 bits; there is no 32-bit guest integer level.
      */
     private Object experimentalCompactNumber(CanonicalLiteral literal) {
-        Object number = primitiveNumberLiteralOrNull(literal);
-        if (currentExperimentalIntLiterals
-                && number instanceof Long small
-                && small.longValue() == (int) small.longValue()) {
-            return Integer.valueOf((int) small.longValue());
-        }
-        return number;
+        return primitiveNumberLiteralOrNull(literal);
     }
 
     /**

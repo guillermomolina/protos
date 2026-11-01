@@ -28,7 +28,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Value;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -464,8 +463,8 @@ final class ProtosI115RFactorialCaptureTest {
             }
 
             // I115-H5: compute is not an admitted recursive Integer callee.
-            assertOrdinaryUnaryCall(session, "runZero");
-            assertOrdinaryUnaryCall(session, "runThree");
+            assertUnaryMethodCall(session, "runZero");
+            assertUnaryMethodCall(session, "runThree");
 
             assertEquals(
                     1,
@@ -599,7 +598,6 @@ final class ProtosI115RFactorialCaptureTest {
      * ordinary invocation. Independent of compilation and graph capture.
      */
     @Test
-    @Disabled("I115-H3: the experimental lane wraps on long overflow (owner-accepted divergence)")
     void recursiveFactorialOverflowsToLargeInteger() throws Exception {
         Path file = Path.of(
                 "target", "i115-r-factorial", "h1-overflow.protos");
@@ -625,12 +623,15 @@ final class ProtosI115RFactorialCaptureTest {
     /** I115-R5 historical run() FULL DSL count, before the R6 module-global read. */
     private static final int I115_R5_RUN_DSL_FULL_HISTORICAL = 17;
 
-    /** I115-R6 run() FULL DSL sequence (GraalPy run() has 6). */
+    /**
+     * I115-R6 run() FULL DSL sequence (GraalPy run() has 6). I115-H11: the
+     * unary call is the GraalPy-style CallUnaryMethod.
+     */
     private static final List<String> I115_R6_RUN_DSL_FULL = List.of(
             "c.EnterRoot",
             "c.ReadGlobal",
             "load.constant",
-            "c.InvokeExperimentalClosureOneTail",
+            "c.CallUnaryMethod",
             "c.EpilogForReturn",
             "return");
 
@@ -761,43 +762,37 @@ final class ProtosI115RFactorialCaptureTest {
     }
 
     /*
-     * I115-H5: the experimental Call1 (static unary ABI) is emitted and the
-     * ordinary terminal Call1 is not.
+     * I115-H11: a unary Closure call site of a caller root is one
+     * GraalPy-style CallUnaryMethod; the retired Call1 operations (ordinary,
+     * experimental) are absent, and the static recursive call is not used
+     * outside its own recursive root.
      */
-    private static void assertExperimentalUnaryCall(
+    private static void assertUnaryMethodCall(
             ProtosStandaloneHostedSession session, String name)
             throws Exception {
         List<String> names = instructionNames(session, name);
-        assertTrue(
-                names.contains("c.InvokeExperimentalClosureOneTail"),
-                name + " must use the experimental Call1: " + names);
-        assertTrue(
-                names.stream().noneMatch(
-                        instruction -> instruction.endsWith(
-                                ".InvokeClosureOneTail")),
-                name + " must not also use InvokeClosureOneTail: " + names);
+        assertEquals(
+                1,
+                names.stream().filter(
+                        instruction -> instruction.startsWith("c.CallUnaryMethod")).count(),
+                name + " must use one CallUnaryMethod: " + names);
+        for (String retired : List.of(
+                "InvokeClosureOneTail",
+                "InvokeExperimentalClosureOneTail",
+                "InvokeStaticClosureOneTail",
+                "MaterializeCurrentClosure")) {
+            assertTrue(
+                    names.stream().noneMatch(
+                            instruction -> instruction.contains(retired)),
+                    name + " must not use " + retired + ": " + names);
+        }
     }
 
     /*
-     * I115-H5: the ordinary terminal Call1 is emitted and the experimental
-     * Call1 is not.
-     */
-    private static void assertOrdinaryUnaryCall(
-            ProtosStandaloneHostedSession session, String name)
-            throws Exception {
-        List<String> names = instructionNames(session, name);
-        assertTrue(
-                names.contains("c.InvokeClosureOneTail"),
-                name + " must use the ordinary Call1: " + names);
-        assertTrue(
-                !names.contains("c.InvokeExperimentalClosureOneTail"),
-                name + " must not use the experimental Call1: " + names);
-    }
-
-    /*
-     * I115-H5: compute is not an experimentalRecursiveInteger callee, so
-     * runZero and runThree keep the ordinary Call1 and its B5 ABI, while
-     * run keeps the experimental Call1 to the recursive factorial.
+     * I115-H5/H11: compute is not an experimentalRecursiveInteger callee.
+     * run, runZero and runThree all call through CallUnaryMethod with the
+     * B5 compact header; only factorial's own recursion uses the static
+     * unary ABI.
      */
     @Test
     void ordinaryUnaryCallEntersNonRecursiveRootWithB5()
@@ -832,8 +827,8 @@ final class ProtosI115RFactorialCaptureTest {
                     I115_R6_RUN_DSL_FULL,
                     instructionNames(session, "run"),
                     "I115-R6 run() FULL DSL sequence");
-            assertOrdinaryUnaryCall(session, "runZero");
-            assertOrdinaryUnaryCall(session, "runThree");
+            assertUnaryMethodCall(session, "runZero");
+            assertUnaryMethodCall(session, "runThree");
 
             // Module, factorial, run, compute, compute's dispatching ifTrue
             // callback (MaterializeCurrentClosure), runZero and runThree.
@@ -882,8 +877,8 @@ final class ProtosI115RFactorialCaptureTest {
     /*
      * I115-H4-B: run refers to factorial, declared after it. The forward
      * reference is not a static captured resolution but a dynamic Lookup,
-     * so the structural admission of the experimental Call1 does not apply
-     * and run keeps the ordinary terminal Call1 (both use B5). This test
+     * so the module-global admission does not apply and run reads it with
+     * Lookup before its I115-H11 CallUnaryMethod (B5). This test
      * covers the forward-reference rule only, not root emission order, on
      * which the admission does not depend.
      */
@@ -927,8 +922,8 @@ final class ProtosI115RFactorialCaptureTest {
                                     || name.contains("InvokeExperimentalClosureOneTail")),
                     "A forward reference must not be statically admitted: " + names);
             assertTrue(
-                    names.contains("c.InvokeClosureOneTail"),
-                    "run must keep the ordinary terminal Call1: " + names);
+                    names.stream().anyMatch(name -> name.startsWith("c.CallUnaryMethod")),
+                    "run must call through CallUnaryMethod: " + names);
 
             assertEquals(
                     EXPECTED,
@@ -940,39 +935,78 @@ final class ProtosI115RFactorialCaptureTest {
     }
 
     /*
-     * I115-H5: run()'s experimental Call1 and factorial's recursive call
-     * both build their arguments with experimentalStaticUnaryCall: the
-     * marker, header slots 1..4 null (no receiver, caller, Prelude, Task or
-     * ReturnHome; slot 4 is the B5 ReturnHome position), and supplied0 at the
-     * B5 supplied position.
+     * I115-H5/I115: factorial's recursive call (InvokeStaticClosureOneTail,
+     * both tiers) builds its arguments with experimentalStaticUnaryCall: the
+     * marker, slot 1 the Prelude (null until the callee root registers
+     * NEEDS_CALLER_PRELUDE, then the caller's Prelude by identity), header
+     * slots 2..4 null (no receiver, caller, Task or ReturnHome; slot 4 is the
+     * B5 ReturnHome position), and supplied0 at the B5 supplied position.
      */
     @Test
-    void experimentalStaticUnaryCallIsTheSharedRunAndRecursionAbi() {
-        Object supplied0 = 20L;
+    void recursiveStaticUnaryCallTransportsPreludeOnlyWhenRequested() throws Exception {
+        Path file = Path.of("target", "i115-r-factorial", "static-abi.protos");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, I115_R2_SOURCE, StandardCharsets.UTF_8);
 
-        Object[] fromRun = ProtosFrameArguments.experimentalStaticUnaryCall(supplied0);
-        Object[] fromRecursion = ProtosFrameArguments.experimentalStaticUnaryCall(supplied0);
+        try (ProtosStandaloneHostedSession session =
+                ProtosStandaloneHostedSession.open(CORE, file)) {
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    session.initialOutcome().state());
+            com.guillermomolina.protos.runtime.ProtosClosureValue factorial =
+                    session.prepareTopLevel("factorial").closureForTesting();
+            com.guillermomolina.protos.runtime.ProtosPrelude prelude =
+                    session.processContextForTesting().callForRuntime(
+                            factorial::preludeOrNullForRuntime);
+            assertTrue(prelude != null, "the hosted factorial has a real Prelude");
 
-        assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, fromRun.length);
-        assertTrue(ProtosFrameArguments.isExperimentalStaticUnaryCall(fromRun));
-        for (int slot = 1; slot < ProtosFrameArguments.HEADER_LENGTH; slot++) {
-            assertNull(fromRun[slot], "header slot " + slot + " must carry nothing");
-        }
-        assertNull(fromRun[4], "slot 4 (ReturnHome) must be null");
-        assertSame(supplied0, fromRun[ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET]);
-        assertSame(supplied0, ProtosFrameArguments.experimentalSuppliedArgument0(fromRun));
+            Object supplied0 = 20L;
+            Object[] unrequested =
+                    ProtosFrameArguments.experimentalStaticUnaryCall(supplied0, null);
+            Object[] requested =
+                    ProtosFrameArguments.experimentalStaticUnaryCall(supplied0, prelude);
 
-        // Same layout, element by element, including the identical marker.
-        assertEquals(fromRecursion.length, fromRun.length);
-        for (int slot = 0; slot < fromRun.length; slot++) {
-            assertSame(fromRecursion[slot], fromRun[slot], "slot " + slot);
+            for (Object[] arguments : List.of(unrequested, requested)) {
+                assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, arguments.length);
+                assertTrue(ProtosFrameArguments.isExperimentalStaticUnaryCall(arguments));
+                for (int slot = 2; slot < ProtosFrameArguments.HEADER_LENGTH; slot++) {
+                    assertNull(arguments[slot], "header slot " + slot + " must carry nothing");
+                }
+                assertSame(supplied0,
+                        arguments[ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET]);
+                // The Prelude is transport, never a guest argument.
+                assertSame(supplied0,
+                        ProtosFrameArguments.experimentalSuppliedArgument0(arguments));
+                assertSame(supplied0,
+                        ProtosFrameArguments.compactSuppliedArgumentOrNull(arguments, 0));
+            }
+            assertNull(unrequested[1], "slot 1 is null until the callee requests it");
+            assertNull(ProtosFrameArguments.experimentalTransportedPreludeOrNull(unrequested));
+            assertSame(prelude, requested[1], "slot 1 keeps the Prelude by identity");
+            assertSame(prelude,
+                    ProtosFrameArguments.experimentalTransportedPreludeOrNull(requested));
+
+            // factorial(20) fits signed-64: its recursion never requests the Prelude,
+            // so InvokeStaticClosureOneTail keeps preparing nothing per call.
+            ProtosBytecodeRootNode root = assertInstanceOf(ProtosBytecodeRootNode.class,
+                    session.prepareTopLevel("factorial").hostExecutableForTesting()
+                            .target.getRootNode());
+            com.oracle.truffle.api.Assumption stability = root.callerNeedsStability();
+            for (int i = 0; i < 12; i++) {
+                assertEquals(EXPECTED,
+                        session.prepareTopLevel("run").executable().execute().asLong());
+            }
+            assertTrue(!root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE),
+                    "no Prelude transport without a request");
+            assertSame(stability, root.callerNeedsStability());
+            assertTrue(stability.isValid());
         }
     }
 
     /*
-     * I115-H5: the doubler object is not an admitted recursive Integer
-     * Closure. Its Call1 is emitted with the ordinary operator, never through
-     * the experimental one.
+     * I115-H5/H11: the doubler object is not an admitted recursive Integer
+     * Closure. Its call is the ordinary CallUnaryMethod, never the static
+     * recursive call.
      */
     @Test
     void nonClosureCallableUsesOrdinaryTerminalCall() throws Exception {
@@ -993,7 +1027,7 @@ final class ProtosI115RFactorialCaptureTest {
                     ProtosExecutionOutcome.State.COMPLETED,
                     session.initialOutcome().state());
 
-            assertOrdinaryUnaryCall(session, "runDoubler");
+            assertUnaryMethodCall(session, "runDoubler");
             for (int i = 0; i < 3; i++) {
                 assertEquals(
                         42,

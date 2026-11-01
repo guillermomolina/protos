@@ -251,6 +251,103 @@ final class ProtosI115MCompactLoweringTest {
         }
     }
 
+    /*
+     * I115: every compact Integer literal is a Java Long, also when it fits
+     * in 32 bits; no Java Integer constant is a guest number of the lane.
+     */
+    @Test
+    void compactIntegerLiteralsAreLongs() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "long-literals", """
+                run: () => {
+                    small: 1
+                    wide: 2147483648
+                    (() => small < 3).whileTrue() {
+                        small = small + 1
+                    }
+                    small + wide
+                }
+                """)) {
+            ProtosStandaloneHostedSession.PreparedTopLevel prepared =
+                    session.prepareTopLevel("run");
+            ProtosBytecodeRootNode run = selectedRoot(prepared);
+            census("long-literals", run, new Sites(1, 1, 1, 0));
+            assertLongConstants("long-literals", run, 4);
+            assertEquals(2147483651L, prepared.executable().execute().asLong());
+            System.out.println("I115_M_CASE[long-literals]_CORRECTNESS=PASS");
+        }
+    }
+
+    /*
+     * I115: the recursive lane emits ExperimentalIntegerAdd, Subtract and
+     * Multiply directly, with no wrapper, MISS branch or extra root, and its
+     * stored local results keep their values.
+     */
+    @Test
+    void recursiveLaneUsesPhysicalIntegerOperations() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "recursive-operations", """
+                mix: (n) => {
+                    result: 1
+
+                    (n > 1).ifTrue() {
+                        result = n * 2 + mix(n - 1) - 1
+                    }
+
+                    result
+                }
+
+                run: () => { mix(4) }
+                """)) {
+            ProtosBytecodeRootNode mix =
+                    selectedRoot(session.prepareTopLevel("mix"));
+            mix.getRootNodes().ensureSourceInformation();
+            assertEquals(3, mix.getRootNodes().getNodes().size(),
+                    "module, mix and run are the only physical roots");
+            List<String> names = mix.getBytecodeNode().getInstructionsAsList()
+                    .stream().map(ProtosInstructionNames::of).toList();
+            System.out.println("I115_M_CASE[recursive-operations]_DSL=" + names);
+            // n * 2 + mix(n - 1) - 1: one product, one sum, two differences.
+            for (java.util.Map.Entry<String, Integer> required : java.util.Map.of(
+                    "ExperimentalIntegerAdd", 1,
+                    "ExperimentalIntegerSubtract", 2,
+                    "ExperimentalIntegerMultiply", 1).entrySet()) {
+                assertEquals((long) required.getValue(), names.stream()
+                                .filter(name -> name.contains(required.getKey())).count(),
+                        required.getKey() + ": " + names);
+            }
+            for (String forbidden : MISS_PATH) {
+                assertTrue(names.stream().noneMatch(name -> name.contains(forbidden)),
+                        "recursive-operations expands " + forbidden + ": " + names);
+            }
+            assertLongConstants("recursive-operations", mix, 1);
+            // mix(1) = 1, mix(n) = 2n + mix(n - 1) - 1.
+            assertEquals(16L,
+                    session.prepareTopLevel("run").executable().execute().asLong());
+            System.out.println("I115_M_CASE[recursive-operations]_CORRECTNESS=PASS");
+        }
+    }
+
+    /* Every numeric constant of root is a Long; at least minimum of them. */
+    private static void assertLongConstants(
+            String name, ProtosBytecodeRootNode root, int minimum) {
+        int longs = 0;
+        for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {
+            for (Instruction.Argument argument : instruction.getArguments()) {
+                if (argument.getKind() != Instruction.Argument.Kind.CONSTANT) {
+                    continue;
+                }
+                Object constant = argument.asConstant();
+                assertFalse(constant instanceof Integer,
+                        name + " emits a Java Integer literal: " + instruction);
+                if (constant instanceof Long) {
+                    longs++;
+                }
+            }
+        }
+        assertTrue(longs >= minimum, name + " Long literals: " + longs);
+    }
+
     private static Census runCase(String name, String source, int expected, Sites sites)
             throws Exception {
         try (ProtosStandaloneHostedSession session = openSession(name, source)) {
