@@ -1,0 +1,78 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+// Six fixed bitwise forms are ordinary Integer message sends.
+// Expected output: 8, 14, 6, -1, -2, true.
+
+left: 12
+andValue: left & 10
+namedAnd: left.bitAnd(10)
+orValue: 12 | 10
+xorValue: 12 ~ 10
+complement: ~0
+large: 1 << 64
+negativeShift: (-3) >> 1
+
+// Integer bits have unlimited sign extension.
+// An explicit mask selects the low 32 bits.
+word32: (~0) & 4294967295
+
+// AND binds tighter than OR.
+// Tilde is prefix NOT or binary XOR by position.
+mixed: 1 | 6 & 3
+doubleTilde: 12 ~ ~10
+
+// Both bitwise AND and OR evaluate their right argument.
+// Boolean AND does not evaluate its RHS when false.
+calls: 0
+andResult: 0 & (calls = calls + 1)
+orResult: -1 | (calls = calls + 1)
+lazy: false && (calls = calls + 1)
+
+// Ordinary message dispatch works with custom objects.
+custom: {
+    bitAnd: (argument) => { 40 + argument }
+}
+customResult: custom & 2
+
+verified:
+    (andValue == 8) &&
+    (andValue == namedAnd) &&
+    (orValue == 14) &&
+    (xorValue == 6) &&
+    (complement == -1) &&
+    (large == 18446744073709551616) &&
+    (negativeShift == -2) &&
+    (word32 == 4294967295) &&
+    (mixed == 3) &&
+    (doubleTilde == -7) &&
+    (andResult == 0) &&
+    (orResult == -1) &&
+    (calls == 2) &&
+    (lazy === false) &&
+    (customResult == 42)
+
+if(!verified) {
+    Error().signal()
+}
+
+print(andValue)
+print(orValue)
+print(xorValue)
+print(complement)
+print(negativeShift)
+print(verified)

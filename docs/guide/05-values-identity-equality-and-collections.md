@@ -268,6 +268,39 @@ non-negative Integers; a negative count signals an `Error`.
 both operands and send an ordinary message, while `&&` and `||` short-circuit.
 Binary `~` is XOR; `^` keeps its meaning as non-local return.
 
+Precedence, from tightest to loosest, is: unary `~` (with `!` and unary `-`),
+arithmetic (`*` `/` `%`, then `+` `-`), shifts (`<<` `>>`), `&`, binary `~`,
+`|`, comparisons, equality, `&&`, and finally `||`. All binary bitwise and
+shift operators associate to the left. The table makes `1 | 6 & 3` mean
+`1 | (6 & 3)`, but parentheses are cheap and usually clearer when operators
+are mixed.
+
+The lexer uses maximal munch, so separate adjacent operator characters with
+spaces: `a ~ ~b` is XOR with the complement of `b`, while `a~~b` is invalid;
+`a & -b` is valid, while `a&-b` is invalid. Likewise write `a << -1` rather
+than `a<<-1`, although that expression still signals an `Error` when it runs:
+a negative shift count is a runtime error, never a shift in the opposite
+direction.
+
+Because Integer is unlimited, fixed-width fields are always expressed with
+explicit masks rather than an implicit word size:
+
+```protos
+1 | 6 & 3             // 3: 1 | (6 & 3)
+12 ~ ~10              // -7: XOR with the complement of 10
+(1 << 8) | 17         // 273: pack two fields
+(~0) & 4294967295     // 4294967295: explicit low 32-bit mask
+```
+
+Every operator is equivalent to its ordinary message send, so dispatch is
+unchanged: a non-Integer object that implements `bitAnd` (or any other of the
+six selectors) answers the corresponding operator too.
+
+See the progressive
+[`04-bitwise-operators.protos` tutorial](../../protos/tutorials/01-values-and-slots/04-bitwise-operators.protos)
+and the practical
+[`bit-flags-and-masks.protos` permissions-and-masks example](../../protos/examples/numbers/bit-flags-and-masks.protos).
+
 Mixing `Integer` or `Fraction` with a `Float` produces a `Float`: the exact
 operand is converted to binary64 **before** the arithmetic operation, so
 precision may be lost. `Float(value)` explicitly rounds an exact Integer or

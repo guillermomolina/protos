@@ -35,6 +35,7 @@ Print-dependent cookbook programs are maintained as executable standalone-CLI so
 | Capture independent values in a collection of Closures | `closures/value-capture.protos` |
 | Delegate optional behavior to a helper object | `objects/rosetta-delegates.protos` |
 | Work with exact Fractions, Float mixing, Complex numbers and square roots | `numbers/exact-and-complex.protos` |
+| Set, clear, test and toggle Integer flags with an explicit 32-bit mask | `numbers/bit-flags-and-masks.protos` |
 | Apply and verify a linear transformation with Vectors and Matrices (`std:math/LinearAlgebra`) | `numbers/vector-matrix.protos` |
 | Show portable runtime metadata (`std:runtime`) | `runtime-introspection/info.protos` |
 | Inspect the runtime (`std:inspect`, requires `--inspect`) | `runtime-introspection/inspect.protos` |
@@ -65,6 +66,10 @@ inspection example requires explicit authority:
 `bin/protos --inspect protos/examples/runtime-introspection/inspect.protos`.
 The inspection command produces implementation-specific diagnostic text;
 do not treat its contents as a stable output format.
+
+`numbers/bit-flags-and-masks.protos` runs with the standalone CLI
+(`bin/protos protos/examples/numbers/bit-flags-and-masks.protos`); it needs no
+imports and no host authority, and prints six true Boolean checks.
 
 The standalone CLI grants no `network`. The two `io/` examples marked "requires
 `network`" therefore contain no `print(...)` call and are not run by the CLI

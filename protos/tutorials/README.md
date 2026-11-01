@@ -8,6 +8,14 @@ Print-dependent tutorial programs are maintained as executable standalone-CLI so
 
 Start with the numbered directories in order. Each source file focuses on one language mechanism and is intentionally small.
 
+[`01-values-and-slots/04-bitwise-operators.protos`](01-values-and-slots/04-bitwise-operators.protos)
+teaches the six bitwise and shift operators (`&`, `|`, binary `~`, prefix `~`,
+`<<`, `>>`). It distinguishes binary XOR from unary NOT by position, shows that
+Integer is unlimited and that fixed-width fields need explicit masks, contrasts
+the strict evaluation of `&` and `|` with the lazy Boolean `&&`, and
+demonstrates that each operator sends an ordinary message (such as `bitAnd`)
+to its receiver, including a custom object. It runs with the standalone CLI.
+
 Current progression:
 
 1. `01-values-and-slots/`

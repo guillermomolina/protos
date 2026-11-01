@@ -37,6 +37,13 @@ Four complementary resources are maintained:
 Where practical, guide chapters point to executable tutorial programs rather
 than duplicating large source examples that can drift independently.
 
+For example, the
+[bitwise operators section of chapter 05](05-values-identity-equality-and-collections.md#bitwise-operators-on-integer)
+is paired with the executable
+[bitwise operators tutorial](../../protos/tutorials/01-values-and-slots/04-bitwise-operators.protos)
+and the
+[bit flags and masks example](../../protos/examples/numbers/bit-flags-and-masks.protos).
+
 ## Source style reference
 
 [`SOURCE_STYLE.md`](SOURCE_STYLE.md) records the non-normative project convention

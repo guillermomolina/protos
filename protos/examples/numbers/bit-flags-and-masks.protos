@@ -1,0 +1,65 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Portable permission flags using ordinary Integer operations.
+// Expected output: six true lines.
+
+readFlag: 1 << 0
+writeFlag: 1 << 1
+executeFlag: 1 << 2
+
+permissions: readFlag | writeFlag
+canWrite: (permissions & writeFlag) != 0
+
+// Set, clear and toggle permissions.
+granted: permissions | executeFlag
+withoutWrite: granted & (~writeFlag)
+toggledRead: permissions ~ readFlag
+restored: toggledRead ~ readFlag
+
+// Integer has no implicit width.
+// An explicit mask keeps the low 32 bits.
+mask32: 4294967295
+all32: (~0) & mask32
+
+// Pack and extract two octets.
+packed: (255 << 8) | 17
+highByte: (packed >> 8) & 255
+lowByte: packed & 255
+
+verified:
+    canWrite &&
+    (permissions == 3) &&
+    (granted == 7) &&
+    (withoutWrite == 5) &&
+    ((withoutWrite & writeFlag) == 0) &&
+    (toggledRead == writeFlag) &&
+    (restored == permissions) &&
+    (all32 == mask32) &&
+    (highByte == 255) &&
+    (lowByte == 17) &&
+    ((-3) >> 1 == -2) &&
+    (1 << 64 == 18446744073709551616)
+
+if(!verified) {
+    Error().signal()
+}
+
+print(canWrite)
+print(withoutWrite == 5)
+print(toggledRead == writeFlag)
+print(restored == permissions)
+print((highByte == 255) && (lowByte == 17))
+print(verified)
