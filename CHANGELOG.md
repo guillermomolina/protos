@@ -8,6 +8,38 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.35-SNAPSHOT
+
+- **I115 — GraalPy-shaped unary call lowering and single-Context direct dispatch (historical).**
+  - `CanonicalToBytecodeLowerer.emitCall` emits a terminal one-argument
+    `CallUnaryMethod` directly from its evaluated callable and argument,
+    removing intermediate BytecodeLocal staging for this admitted case.
+  - `ProtosCallUnaryMethodNode.callPFunction` adds a three-entry, weak
+    Closure-identity PIC with `@ForceQuickening` and a `DirectCallNode`.
+    Its fast admission requires one Context, a prepared source execution
+    plan in the caller root's language, stable code and Context-projection
+    assumptions. Deferred, multi-context and projection-required cases
+    retain the Context-aware `FunctionCachedCallNode` fallback.
+  - `ProtosLanguage` records the single-Context language-instance fact and
+    invalidates this condition when `initializeMultipleContexts` runs.
+    In `ProtosFunctionCallDispatchers`, a proven non-suspending callee
+    returns its direct result without terminal continuation wrapping;
+    unproven callees still use the existing completion path.
+  - Source and test delta: 4 modified files, 0 added, 0 deleted; exact
+    original source/test blobs are preserved without further edits.
+  - **Historical semantic limitations:** the previous source-function
+    selection behavior still bypasses instance-local `Object.call`
+    overrides for direct source function calls, a known D013 dynamic-send
+    divergence. The direct path also depends on sound single-Context,
+    code/projection-stability and non-suspension proofs; continuation,
+    Task/C-prime, ReturnHome, cancellation, structured cleanup and non-local
+    transfers require independent conformance. D179 C0 lexical behavior
+    remains unproven; `long`-only integer and internal-specialized message
+    execution remain requirements, not certified project-wide here.
+    No runtime tests, compilation graphs or performance measurements are
+    asserted for this reconstructed historical version.
+  - Original implementation: `88c175a941c58f17cf3096626d5fdb79bdd7aea5`.
+
 ## 0.4.34-SNAPSHOT
 
 - **I115 — experimental GraalPy-shaped source-function root and Context lookup.**

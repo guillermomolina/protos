@@ -4207,6 +4207,20 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginSourceSection(span.startOffset(), span.length());
         builder.beginTag(StandardTags.CallTag.class);
+
+        // GraalPy RootNodeCompiler.emitCall: emit unary operands directly.
+        // No intermediate BytecodeLocal stores or reloads are required.
+        if (expression instanceof CanonicalCall call
+                && call.arguments().size() == 1) {
+            builder.beginCallUnaryMethod(true);
+            emitTerminalCallOperand(builder, call.receiver());
+            emitTerminalCallOneArgument(builder, call.arguments().get(0));
+            builder.endCallUnaryMethod();
+            builder.endTag(StandardTags.CallTag.class);
+            builder.endSourceSection();
+            return;
+        }
+
         builder.beginBlock();
 
         BytecodeLocal callable = builder.createLocal("terminalCallable", null);
