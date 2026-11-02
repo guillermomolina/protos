@@ -1,0 +1,383 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Arrays: import("std:collections/Array")
+
+sameElements: (array, ...expected) => {
+    ok: array.size() == expected.size()
+    if(ok) {
+        index: 0
+        while(index < expected.size()) {
+            (array[index] == expected[index]).ifFalse(() => {
+                ok = false
+            })
+            index = index + 1
+        }
+    }
+    ok
+}
+
+huge: 100000000000000000000000000000000000000000
+
+tests: Array(
+    Test("array find first match and absence", () => {
+        source: Array(1, 2, 3, 2)
+        found: Arrays.find(source, (value) => { value == 2 })
+        missing: Arrays.find(source, (value) => { value == 99 })
+        Assertions.require(found == 2)
+        Assertions.require(missing === null)
+        Assertions.require(sameElements(source, 1, 2, 3, 2))
+    }),
+
+    Test("array find snapshots before callback effects", () => {
+        source: Array(1, 2, 3)
+        calls: 0
+        found: Arrays.find(source, (value) => {
+            calls = calls + 1
+            if(calls == 1) {
+                source[1] = 99
+            }
+            value == 2
+        })
+        Assertions.require(found == 2)
+        Assertions.require(calls == 2)
+        Assertions.require(source[1] == 99)
+    }),
+
+    Test("array find keeps matched reference and null ambiguity", () => {
+        marker: Array(7)
+        source: Array(null, marker, marker)
+        calls: 0
+        found: Arrays.find(source, (value) => {
+            calls = calls + 1
+            value === marker
+        })
+        nullMatch: Arrays.find(source, (value) => {
+            value === null
+        })
+        Assertions.require(found === marker)
+        Assertions.require(calls == 2)
+        Assertions.require(nullMatch === null)
+        Assertions.require(Arrays.findIndex(source, (value) => {
+            value === null
+        }) == 0)
+    }),
+
+    Test("array contains ordinary ordered equality", () => {
+        source: Array(1, 2, 3)
+        Assertions.require(Arrays.contains(source, 2))
+        Assertions.require(Arrays.contains(source, 99) === false)
+        Assertions.require(Arrays.contains(Array(), 1) === false)
+        Assertions.require(Arrays.contains(Array(null), null))
+    }),
+
+    Test("array contains dispatches equality on scanned element", () => {
+        calls: 0
+        marker: {}
+        prototype: {
+            equals: (other) => {
+                calls = calls + 1
+                other === marker
+            }
+        }
+        view: prototype.alias("equals", "==")
+        value: view {}
+        Assertions.require(value == marker)
+        Assertions.require(calls == 1)
+        calls = 0
+        Assertions.require(Arrays.contains(Array(value), marker))
+        Assertions.require(calls == 1)
+    }),
+
+    Test("array contains snapshots before equality effects", () => {
+        marker: {}
+        source: Array(null, marker)
+        calls: 0
+        prototype: {
+            equals: (other) => {
+                calls = calls + 1
+                source[1] = 99
+                false
+            }
+        }
+        view: prototype.alias("equals", "==")
+        source[0] = view {}
+
+        Assertions.require(Arrays.contains(source, marker))
+        Assertions.require(calls == 1)
+        Assertions.require(source[1] == 99)
+    }),
+
+    Test("array contains stops after first equality match", () => {
+        calls: 0
+        prototype: {
+            equals: (other) => {
+                calls = calls + 1
+                true
+            }
+        }
+        view: prototype.alias("equals", "==")
+        first: view {}
+        second: view {}
+
+        Assertions.require(Arrays.contains(Array(first, second), {}))
+        Assertions.require(calls == 1)
+    }),
+
+    Test("array any and all snapshot before predicate effects", () => {
+        anySource: Array(1, 2)
+        anyCalls: 0
+        some: Arrays.any(anySource, (element) => {
+            anyCalls = anyCalls + 1
+            if(element == 1) {
+                anySource[1] = 99
+            }
+            element == 2
+        })
+        Assertions.require(some === true)
+        Assertions.require(anyCalls == 2)
+
+        allSource: Array(1, 2)
+        allCalls: 0
+        every: Arrays.all(allSource, (element) => {
+            allCalls = allCalls + 1
+            if(element == 1) {
+                allSource[1] = 99
+            }
+            element < 3
+        })
+        Assertions.require(every === true)
+        Assertions.require(allCalls == 2)
+    }),
+
+    Test("array any and all empty and nonempty", () => {
+        Assertions.require(Arrays.any(Array(), 42) === false)
+        Assertions.require(Arrays.all(Array(), 42) === true)
+        source: Array(2, 4, 5)
+        Assertions.require(Arrays.any(source, (x) => { x == 5 }))
+        Assertions.require(Arrays.all(source, (x) => { x > 0 }))
+        Assertions.require(Arrays.any(source, (x) => { x == 99 }) === false)
+        Assertions.require(Arrays.all(source, (x) => { x < 5 }) === false)
+    }),
+
+    Test("array any and all short circuit", () => {
+        source: Array(1, 2, 3)
+        anyCalls: 0
+        allCalls: 0
+        anyResult: Arrays.any(source, (x) => {
+            anyCalls = anyCalls + 1
+            x == 2
+        })
+        allResult: Arrays.all(source, (x) => {
+            allCalls = allCalls + 1
+            x < 2
+        })
+        Assertions.require(anyResult === true)
+        Assertions.require(allResult === false)
+        Assertions.require(anyCalls == 2)
+        Assertions.require(allCalls == 2)
+    }),
+
+    Test("array strict predicate results", () => {
+        Assertions.signals(InvalidPredicateResult, () => {
+            Arrays.find(Array(1), (x) => { 1 })
+        })
+        Assertions.signals(InvalidPredicateResult, () => {
+            Arrays.any(Array(1), (x) => { null })
+        })
+        Assertions.signals(InvalidPredicateResult, () => {
+            Arrays.all(Array(1), (x) => { Array() })
+        })
+        Assertions.signals(Error, () => {
+            Arrays.find(Array(1), 42)
+        })
+        Assertions.signals(Error, () => {
+            Arrays.any(Array(1), 42)
+        })
+        Assertions.signals(Error, () => {
+            Arrays.all(Array(1), 42)
+        })
+        Assertions.require(Arrays.find(Array(), 42) === null)
+        Assertions.require(Arrays.any(Array(), 42) === false)
+        Assertions.require(Arrays.all(Array(), 42) === true)
+    }),
+
+    Test("array take and drop boundaries", () => {
+        source: Array(1, 2, 3, 4)
+        Assertions.require(sameElements(Arrays.take(source, 0)))
+        Assertions.require(sameElements(Arrays.take(source, 2), 1, 2))
+        Assertions.require(sameElements(Arrays.take(source, 4), 1, 2, 3, 4))
+        Assertions.require(sameElements(Arrays.drop(source, 0), 1, 2, 3, 4))
+        Assertions.require(sameElements(Arrays.drop(source, 2), 3, 4))
+        Assertions.require(sameElements(Arrays.drop(source, 4)))
+        Assertions.require(sameElements(source, 1, 2, 3, 4))
+    }),
+
+    Test("array take and drop saturate without conversion", () => {
+        source: Array(1, 2, 3)
+        Assertions.require(sameElements(Arrays.take(source, 100), 1, 2, 3))
+        Assertions.require(sameElements(Arrays.drop(source, 100)))
+        Assertions.require(sameElements(Arrays.take(source, huge), 1, 2, 3))
+        Assertions.require(sameElements(Arrays.drop(source, huge)))
+        Assertions.require(sameElements(Arrays.take(Array(), huge)))
+        Assertions.require(sameElements(Arrays.drop(Array(), huge)))
+    }),
+
+    Test("array take and drop reject invalid counts", () => {
+        source: Array(1, 2)
+        Assertions.signals(Error, () => { Arrays.take(source, -1) })
+        Assertions.signals(Error, () => { Arrays.drop(source, -1) })
+        Assertions.signals(Error, () => { Arrays.take(source, 1.0) })
+        Assertions.signals(Error, () => { Arrays.drop(source, 1.0) })
+        Assertions.signals(Error, () => { Arrays.take(source, null) })
+        Assertions.signals(Error, () => { Arrays.drop(source, null) })
+        Assertions.signals(Error, () => { Arrays.take(source, 0 - huge) })
+        Assertions.signals(Error, () => { Arrays.drop(source, 0 - huge) })
+        Assertions.require(sameElements(source, 1, 2))
+    }),
+
+    Test("array take and drop return fresh open arrays", () => {
+        source: Array(1, 2, 3)
+        results: Array(
+            Arrays.take(source, 0),
+            Arrays.take(source, 3),
+            Arrays.take(source, huge),
+            Arrays.drop(source, 0),
+            Arrays.drop(source, 3),
+            Arrays.drop(source, huge)
+        )
+        results.each((result) => {
+            Assertions.require(Array.recognizes(result))
+            Assertions.require(result !== source)
+            result.lib023Probe: 1
+            Assertions.require(result.lib023Probe == 1)
+        })
+        Assertions.require(sameElements(source, 1, 2, 3))
+    }),
+
+    Test("array queries and copies accept closed frozen sources", () => {
+        closed: Array(1, 2, 3)
+        closed.close()
+        frozen: Array(1, 2, 3)
+        frozen.freeze()
+        Array(closed, frozen).each((source) => {
+            Assertions.require(Arrays.find(source, (x) => { x == 2 }) == 2)
+            Assertions.require(Arrays.contains(source, 3))
+            Assertions.require(Arrays.any(source, (x) => { x == 1 }))
+            Assertions.require(Arrays.all(source, (x) => { x > 0 }))
+            taken: Arrays.take(source, 2)
+            dropped: Arrays.drop(source, 1)
+            Assertions.require(sameElements(taken, 1, 2))
+            Assertions.require(sameElements(dropped, 2, 3))
+            taken[0] = 99
+            dropped[0] = 88
+            Assertions.require(sameElements(source, 1, 2, 3))
+        })
+        null
+    }),
+
+    Test("array take and drop preserve shallow references", () => {
+        marker: Array(9)
+        source: Array(marker, 2, marker)
+        taken: Arrays.take(source, 2)
+        dropped: Arrays.drop(source, 2)
+        Assertions.require(taken[0] === marker)
+        Assertions.require(dropped[0] === marker)
+        taken[0] = null
+        Assertions.require(source[0] === marker)
+    }),
+
+    Test("array take and drop preserve source self references", () => {
+        source: Array(1, null, 3)
+        source[1] = source
+        taken: Arrays.take(source, 2)
+        dropped: Arrays.drop(source, 1)
+        Assertions.require(taken[1] === source)
+        Assertions.require(dropped[0] === source)
+        Assertions.require(taken[1] !== taken)
+        Assertions.require(dropped[0] !== dropped)
+    }),
+
+    Test("array queries ignore overridden indexed protocol slots", () => {
+        source: Array(1, 2, 3)
+        source.size: () => 99
+        source.at: (index) => 99
+        source.each: (callback) => { null }
+        Assertions.require(Arrays.find(source, (x) => { x == 2 }) == 2)
+        Assertions.require(Arrays.contains(source, 3))
+        Assertions.require(Arrays.any(source, (x) => { x == 2 }))
+        Assertions.require(Arrays.all(source, (x) => { x < 4 }))
+        Assertions.require(sameElements(Arrays.take(source, 2), 1, 2))
+        Assertions.require(sameElements(Arrays.drop(source, 2), 3))
+    }),
+
+    Test("array queries and copies accept descendant arrays", () => {
+        MyArray: Array { label: 9 }
+        source: MyArray(1, 2, 3)
+        Assertions.require(Arrays.find(source, (x) => { x == 2 }) == 2)
+        Assertions.require(Arrays.contains(source, 2))
+        Assertions.require(Arrays.any(source, (x) => { x == 3 }))
+        Assertions.require(Arrays.all(source, (x) => { x > 0 }))
+        Assertions.require(sameElements(Arrays.take(source, 2), 1, 2))
+        Assertions.require(sameElements(Arrays.drop(source, 1), 2, 3))
+    }),
+
+    Test("array queries and copies reject non-Array sources", () => {
+        lookalike: Array {}
+        imitation: {
+            size: () => 1
+            at: (index) => 1
+            each: (callback) => { callback(1) }
+        }
+        Array(lookalike, imitation, Array, null, 1).each((candidate) => {
+            Assertions.signals(Error, () => {
+                Arrays.find(candidate, (x) => { true })
+            })
+            Assertions.signals(Error, () => {
+                Arrays.contains(candidate, 1)
+            })
+            Assertions.signals(Error, () => {
+                Arrays.any(candidate, (x) => { true })
+            })
+            Assertions.signals(Error, () => {
+                Arrays.all(candidate, (x) => { true })
+            })
+            Assertions.signals(Error, () => { Arrays.take(candidate, 0) })
+            Assertions.signals(Error, () => { Arrays.drop(candidate, 0) })
+        })
+        null
+    }),
+
+    Test("array new operations follow flexible argument binding", () => {
+        source: Array(1, 2, 3)
+        Assertions.require(Arrays.find(source, (x, extra) => {
+            extra === null
+        }) == 1)
+        Assertions.require(Arrays.any(source, (x, extra) => {
+            extra === null
+        }))
+        Assertions.require(Arrays.all(source, (x, extra) => {
+            extra === null
+        }))
+        Assertions.require(Arrays.contains(source, 2, 99))
+        Assertions.require(sameElements(Arrays.take(source, 1, 99), 1))
+        Assertions.require(sameElements(Arrays.drop(source, 2, 99), 3))
+    })
+)
+tests.freeze()

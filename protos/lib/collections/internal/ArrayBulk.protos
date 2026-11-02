@@ -1,0 +1,182 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal Protos-first bulk algorithms for std:collections/Array.
+//! Not a separate supported Standard Library API.
+
+// Allocate a fresh base Array with count indexed null placeholders.
+sized: null
+sized = (count) => {
+    result: Array()
+    if(count > 0) {
+        half: sized(count.div(2))
+        result = Array(...half, ...half)
+        if((count % 2) == 1) {
+            result = Array(...result, null)
+        }
+    }
+    result
+}
+
+/// Maps each element once, snapshots each returned Array immediately,
+/// then flattens exactly one level into a fresh open Array.
+flatMap: (array, transform) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+
+    snapshot: Array(...array)
+    chunks: Array(...snapshot)
+    total: 0
+    index: 0
+
+    for(element in snapshot) {
+        chunk: transform(element)
+        Array.recognizes(chunk).ifFalse(() => {
+            Error().signal()
+        })
+
+        captured: Array(...chunk)
+        chunks[index] = captured
+        total = total + captured.size()
+        index = index + 1
+    }
+
+    result: sized(total)
+    target: 0
+
+    for(chunk in chunks) {
+        for(element in chunk) {
+            result[target] = element
+            target = target + 1
+        }
+    }
+
+    result
+}
+
+/// Combines corresponding snapshot elements up to the shorter size.
+/// Both the result and every pair are fresh open base Arrays.
+zip: (left, right) => {
+    Array.recognizes(left).ifFalse(() => {
+        Error().signal()
+    })
+    Array.recognizes(right).ifFalse(() => {
+        Error().signal()
+    })
+
+    a: Array(...left)
+    b: Array(...right)
+    count: a.size()
+    if(b.size() < count) {
+        count = b.size()
+    }
+
+    result: sized(count)
+    index: 0
+    while(index < count) {
+        result[index] = Array(a[index], b[index])
+        index = index + 1
+    }
+    result
+}
+
+/// Evaluates each strict Boolean predicate once, remembering decisions
+/// before allocating independent stable-order match/reject Arrays.
+partition: (array, predicate) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+
+    snapshot: Array(...array)
+    decisions: Array(...snapshot)
+    matchedCount: 0
+    index: 0
+
+    for(element in snapshot) {
+        decision: predicate(element)
+
+        (decision === true).ifFalse(() => {
+            (decision === false).ifFalse(() => {
+                InvalidPredicateResult().signal()
+            })
+        })
+
+        decisions[index] = decision
+        if(decision === true) {
+            matchedCount = matchedCount + 1
+        }
+        index = index + 1
+    }
+
+    matched: sized(matchedCount)
+    rejected: sized(snapshot.size() - matchedCount)
+    matchIndex: 0
+    rejectIndex: 0
+    index = 0
+
+    for(element in snapshot) {
+        if(decisions[index] === true) {
+            matched[matchIndex] = element
+            matchIndex = matchIndex + 1
+        } else {
+            rejected[rejectIndex] = element
+            rejectIndex = rejectIndex + 1
+        }
+        index = index + 1
+    }
+
+    Array(matched, rejected)
+}
+
+/// Retains the first representative of each ordinary Set-equivalence
+/// class in source order, using the existing hash and == protocols.
+distinct: (array) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+
+    snapshot: Array(...array)
+    Sets: import("std:collections/Set")
+    seen: Sets()
+    retained: Array(...snapshot)
+    count: 0
+    index: 0
+
+    for(element in snapshot) {
+        present: Sets.contains(seen, element)
+        retained[index] = !present
+
+        if(!present) {
+            Sets.add(seen, element)
+            count = count + 1
+        }
+        index = index + 1
+    }
+
+    result: sized(count)
+    target: 0
+    index = 0
+
+    for(element in snapshot) {
+        if(retained[index] === true) {
+            result[target] = element
+            target = target + 1
+        }
+        index = index + 1
+    }
+
+    result
+}

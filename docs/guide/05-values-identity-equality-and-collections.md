@@ -1066,6 +1066,81 @@ and `values` remains `[10, 20, 30]`. A few rules to keep in mind:
   so it suits numbers but is not a total order over arbitrary values. An
   explicit `null` comparator is not replaced by the default.
 
+The module also has ordered queries and fresh prefix/suffix copies:
+
+```protos
+Arrays: import("std:collections/Array")
+values: Array(10, 20, 30)
+
+found: Arrays.find(values, (item) => item > 15)
+present: Arrays.contains(values, 20)
+someLarge: Arrays.any(values, (item) => item > 25)
+allPositive: Arrays.all(values, (item) => item > 0)
+firstTwo: Arrays.take(values, 2)
+tail: Arrays.drop(values, 2)
+```
+
+```text
+found       = 20
+present     = true
+someLarge   = true
+allPositive = true
+firstTwo    = [10, 20]
+tail        = [30]
+```
+
+`find` answers the first matching **original element**, or `null` when none
+matches. A matching `null` is indistinguishable from a failed search: use
+`Arrays.findIndex` when that distinction matters. `contains` scans left to
+right using the element's ordinary `==` behavior (no hash table or identity
+shortcut). `find`, `any` and `all` require exact Boolean predicate results;
+anything other than `true` or `false` signals `InvalidPredicateResult`.
+They stop as soon as their answers are known: an empty Array gives `false`
+for `any` and `true` for `all`, without invoking callbacks.
+
+Callbacks and equality operations work on a shallow snapshot made before the
+first callback, so an effect that edits the source cannot change the values
+still to be visited. `take` and `drop` accept only nonnegative Integers and
+saturate at the Array size; even an empty/full/no-op result is a new open,
+independent shallow Array. Neither operation mutates the input.
+
+For one-to-many mapping, pairing, grouping, and deduplication, use the same Array module:
+
+```protos
+Arrays: import("std:collections/Array")
+values: Array(1, 2, 2, 3)
+
+expanded: Arrays.flatMap(values, (x) => { Array(x, x * 10) })
+paired: Arrays.zip(values, Array("a", "b", "c"))
+groups: Arrays.partition(values, (x) => { x.mod(2) == 0 })
+unique: Arrays.distinct(values)
+```
+
+```text
+expanded  = [1, 10, 2, 20, 2, 20, 3, 30]
+paired    = [[1, "a"], [2, "b"], [2, "c"]]
+groups[0] = [2, 2]                 (matches)
+groups[1] = [1, 3]                 (rejects)
+unique    = [1, 2, 3]
+```
+
+`flatMap` requires each mapper result to be a real Array and flattens only
+one level. It snapshots each returned Array immediately, so reusing the
+same mutable chunk as scratch space does not corrupt earlier results.
+`zip` stops at the shorter length, returning new pairs without padding.
+`partition` invokes a predicate once per element, requires actual `true`
+or `false`, and returns two stable-order buckets, even when either is empty.
+`distinct` preserves the first occurrence using the ordinary hashed Set
+semantics (`hash` plus `==`), **not** the identity comparison `===`.
+
+All four operations preserve the original elements by reference while
+creating fresh open Arrays with independent indexed storage. They work
+with closed, frozen and descendant-factory input Arrays, and take a
+shallow snapshot before any callback or equality/hash effects. They do
+not modify the source Array. `flatMap` and `partition` do not inspect an
+unused callback when the input is empty; any invalid nonempty callback
+result or equality/hash failure propagates normally.
+
 ## Set and IdentitySet are Standard Library abstractions
 
 Current Standard Library modules include:

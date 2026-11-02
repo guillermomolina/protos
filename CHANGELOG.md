@@ -7,6 +7,14 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.438-SNAPSHOT
+
+- `LIB023-B/C` (D213): complete the approved `std:collections/Array` Standard Library enhancements, following the previously published LIB023-A slice.
+  - Add snapshot-based `find`, ordered ordinary-equality `contains`, strict short-circuiting `any`/`all`, and saturating nonnegative-Integer `take`/`drop`.
+  - Add `flatMap` with immediate one-level Array-chunk snapshots, shortest-length fresh-pair `zip`, single-pass strict-predicate `partition`, and stable first-occurrence `distinct` using ordinary Set hashing and equality.
+  - Implement bulk algorithms in Protos-first `std:collections/internal/ArrayBulk`, preserving the sole public `std:collections/Array` module surface; no Core collection, Java/Truffle kernel, or new public builder is introduced.
+  - Extend the normative Array Standard Library contract, developer guide, source API documentation, and registered suite-native conformance/regression cases for both slices.
+
 ## 0.3.437-SNAPSHOT
 
 - `AUD022`: audit the post-0.3.428 syntax across static tooling, source formatting and debugging without changing language semantics.

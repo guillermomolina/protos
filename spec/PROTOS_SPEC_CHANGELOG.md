@@ -23,6 +23,16 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.491] - 2026-11-02
+
+### D213 / LIB023-B/C — Standard Library Array queries and bulk transformations
+- `semantics/VALUES_AND_COLLECTIONS.md`: document ten additional ordinary functions of `std:collections/Array` approved in D213. They do not become Core Array selectors and do not alter Array's fixed-size, dense indexed state or the previously published LIB023-A operations.
+- `find(array, predicate)` answers the first matching snapshotted element or `null`; `contains(array, sought)` scans left-to-right using `element == sought`, without Set hashing. `any` and `all` short-circuit, answering `false` and `true` respectively on empty Arrays. Predicate results must be canonical Booleans; invalid results signal `InvalidPredicateResult`.
+- `take(array, count)` and `drop(array, count)` require a nonnegative semantic Integer, saturate counts at source size, and return fresh shallow base Arrays even for empty and no-op results; no numeric coercion or negative indexing is introduced.
+- `flatMap(array, transform)` processes a snapshot in order, requires every mapper result to be a standard Array, captures each returned chunk immediately, and flattens exactly one level. `zip(left, right)` truncates at the shorter input and creates independent fresh two-element pair Arrays.
+- `partition(array, predicate)` invokes its strict-Boolean predicate once per snapshotted element and returns a fresh outer Array of stable-order fresh matching/rejected buckets. `distinct(array)` preserves first representatives in source order under the existing ordinary Set/Map `hash` and `==` membership rules; it remembers membership decisions instead of repeating user effects during output assembly.
+- All operations retain standard Array receiver-domain checks, shallow snapshot/callback and error propagation, identity-preserving elements, fresh open result storage, and existing Actor/P isolation. They introduce no native builder, new callback or equality protocol, or implicit parallel operation.
+
 ## [0.1.490] - 2026-11-01
 
 ### D231-F2-PURE — contextual generic and numeric for as ordinary each/eachStep sugar

@@ -960,6 +960,134 @@ flexible Closure invocation and are ignored. These functions do not make Core
 Arrays resizable (Core Arrays keep fixed length and dense elements), and they
 introduce no syntax, no Core selector, and no new public module.
 
+## Standard Library Array queries and prefix/suffix operations (D213 / LIB023-B)
+
+The existing `std:collections/Array` module additionally publishes the
+following ordinary functions. They do not add Core Array selectors, change the
+fixed-size/dense Core Array model, or modify existing parallel algorithms.
+
+```text
+find(array, predicate)
+contains(array, value)
+any(array, predicate)
+all(array, predicate)
+take(array, count)
+drop(array, count)
+```
+
+Argument and snapshot domains. `array` must satisfy `Array.recognizes`,
+including genuine descendant-factory Arrays in open, closed, or frozen state;
+delegate-only lookalikes are rejected with an ordinary `Error`. All four
+query operations read a shallow snapshot of the Array's indexed elements,
+captured before invoking any user callback or custom equality behavior.
+Source mutations during a callback do not change that operation's pending
+input elements. Ordinary callback effects, failures and non-local returns
+propagate; the query functions do not add Tasks, Actors or parallelism.
+
+- `find(array, predicate)` visits the snapshot in ascending index order,
+  invokes `predicate(element)` once per visited element, and answers the first
+  original snapshotted element for which the result is canonical `true`. It
+  answers `null` if none matches. A matched `null` is indistinguishable from
+  absence in the result; use the existing `findIndex` to distinguish them.
+- `contains(array, value)` answers whether any snapshotted element matches
+  `value` using ordinary `element == value`, with the **element as the left
+  receiver**. It scans in order and stops at the first match; it does not use
+  hashing, Set membership, identity or reversed comparison. The ordinary
+  equality contract, effects and errors apply.
+- `any(array, predicate)` answers `true` on the first canonical `true`
+  predicate result and otherwise `false`; an empty Array answers `false`.
+- `all(array, predicate)` answers `false` on the first canonical `false`
+  predicate result and otherwise `true`; an empty Array answers `true`.
+
+For `find`, `any`, and `all`, every invoked predicate must answer canonical
+`true` or canonical `false`; any other result signals
+`InvalidPredicateResult` immediately. Predicate callbacks receive exactly
+one element argument and are not invoked again after the result is settled.
+On an empty source, the query functions do not inspect callback callability.
+
+`take(array, count)` and `drop(array, count)` produce fresh, open, shallow,
+standard base-factory Arrays with independent identity and indexed storage:
+
+- `take` retains the first `min(count, size)` source elements.
+- `drop` discards the first `min(count, size)` source elements and retains the
+  rest in their original order.
+
+`count` must be an exact semantic nonnegative Integer (`Integer.recognizes`
+and `count >= 0`), with no Float conversion, negative-from-end behavior,
+truncation or host-width coercion. Oversized counts, including arbitrarily
+large positive Integers, saturate at the source length rather than signal.
+A wrong count type or a negative count signals an ordinary `Error`. Empty,
+full and no-op results are still fresh Arrays, never views or shared indexed
+storage; nested elements preserve their original references. Source Arrays
+remain unchanged. Extra supplied arguments follow ordinary flexible Closure
+binding and are ignored.
+
+## Standard Library Array bulk transformations (D213 / LIB023-C)
+
+The Standard Library module `std:collections/Array` also publishes four
+ordinary functions, not Core Array selectors:
+
+```text
+flatMap(array, transform)
+zip(left, right)
+partition(array, predicate)
+distinct(array)
+```
+
+Input and result contracts. All Array inputs must satisfy `Array.recognizes`:
+real semantic Arrays, including descendant-factory instances and closed or
+frozen Arrays, are accepted; lookalikes that merely delegate to `Array` or
+imitate indexed methods are not. Any invalid Array input signals an ordinary
+`Error`. Each operation reads shallow, indexed-state snapshots, unaffected by
+source slots that override `size`, `at`, or `each`. All resulting Arrays,
+including inner pairs and buckets, are fresh, open standard base Arrays with
+independent indexed storage. Every retained element preserves its exact
+original identity; nested objects are not cloned. Input Arrays are not
+mutated by the library operations themselves.
+
+- `flatMap(array, transform)` invokes `transform(element)` once for each
+  source-snapshot element, in ascending order, and requires each answer to be
+  an Array recognized by `Array.recognizes`. Each mapper-returned chunk is
+  shallow-snapshotted **immediately when returned**, before the next mapper
+  call. The final result is the chunks' captured elements concatenated in
+  source order, flattened exactly one level. A non-Array chunk signals an
+  ordinary `Error`; arbitrary scalar results are not coerced to Arrays.
+  A reused chunk Array mutated by a later mapper call cannot change an
+  earlier captured chunk.
+- `zip(left, right)` snapshots both operands, pairs corresponding elements
+  by index, and stops at `min(left.size(), right.size())`. It answers a fresh
+  Array of fresh open two-element Arrays `[leftElement, rightElement]`; it
+  does not pad the shorter input, demand equal sizes or call a callback.
+- `partition(array, predicate)` evaluates `predicate(element)` exactly once
+  per source-snapshot element in ascending order. Every answer must be
+  canonical `true` or `false`; otherwise `InvalidPredicateResult` signals.
+  It answers a fresh two-element outer Array `[matches, rejects]`, whose
+  separate fresh open bucket Arrays retain source order, with all `true`
+  elements in `matches` and all `false` elements in `rejects`. Selection
+  decisions are retained, not recomputed while filling the buckets.
+- `distinct(array)` retains the first occurrence of each equivalence class
+  in encounter order, preserving the selected original element references.
+  Membership uses the existing ordinary `std:collections/Set` semantics
+  (normal `Map` hashing and customizable `==`), not semantic identity `===`,
+  adjacent-only deduplication or a new equality strategy. Existing Set/Map
+  hash-coherence requirements, user-defined hash/equality effects and errors,
+  and mutable-key risks apply. Membership decisions are not repeated during
+  result construction.
+
+`flatMap` and `partition` callbacks receive one element argument under
+ordinary flexible Closure invocation. For empty Arrays no callback is called
+or subjected to a separate callability check; `flatMap` answers an empty
+Array and `partition` answers two distinct empty bucket Arrays. `zip` with
+an empty operand and `distinct` on an empty source also answer fresh empty
+Arrays. A source containing itself is copied shallowly: result elements
+refer to that source rather than becoming self-references of the result.
+
+Ordinary callback effects, `==`/`hash` behavior, Error propagation and
+non-local control transfer remain in force. These functions introduce no
+new Core Array features, Tasks, Actors, native builders, implicit parallelism
+or additional public Standard Library module. Additional supplied arguments
+follow ordinary flexible Closure binding.
+
 # Actor-suspension integration for Map comparison scopes
 
 ### Map comparison scopes and Actor-local suspension

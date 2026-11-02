@@ -428,6 +428,139 @@ reverse: (array) => {
     result
 }
 
+/// Answers the first element of a shallow snapshot whose predicate answers
+/// canonical true, or null when none matches. A matched null is ambiguous;
+/// use findIndex when the distinction matters.
+find: (array, predicate) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+    snapshot: Array(...array)
+
+    for(element in snapshot) {
+        decision: predicate(element)
+        if(decision === true) {
+            ^element
+        }
+        (decision === false).ifFalse(() => {
+            InvalidPredicateResult().signal()
+        })
+    }
+    null
+}
+
+/// Answers whether a snapshot contains value, using element == value in
+/// ascending order. Equality is ordinary dispatch, not hashing or identity.
+contains: (array, value) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+    snapshot: Array(...array)
+
+    for(element in snapshot) {
+        if(element == value) {
+            ^true
+        }
+    }
+    false
+}
+
+/// Answers true at the first canonical true predicate result, otherwise false.
+/// Invalid predicate results signal InvalidPredicateResult.
+any: (array, predicate) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+    snapshot: Array(...array)
+
+    for(element in snapshot) {
+        decision: predicate(element)
+        if(decision === true) {
+            ^true
+        }
+        (decision === false).ifFalse(() => {
+            InvalidPredicateResult().signal()
+        })
+    }
+    false
+}
+
+/// Answers false at the first canonical false predicate result, otherwise true.
+/// Invalid predicate results signal InvalidPredicateResult.
+all: (array, predicate) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+    snapshot: Array(...array)
+
+    for(element in snapshot) {
+        decision: predicate(element)
+        if(decision === false) {
+            ^false
+        }
+        (decision === true).ifFalse(() => {
+            InvalidPredicateResult().signal()
+        })
+    }
+    true
+}
+
+/// Answers a fresh open Array with the first min(count, size) elements.
+/// Count must be a nonnegative Integer; an oversized count saturates.
+take: (array, count) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+    Integer.recognizes(count).ifFalse(() => {
+        Error().signal()
+    })
+    (count >= 0).ifFalse(() => {
+        Error().signal()
+    })
+
+    snapshot: Array(...array)
+    n: snapshot.size()
+    if(count >= n) {
+        ^snapshot
+    }
+    slice(snapshot, 0, count)
+}
+
+/// Answers a fresh open Array after skipping min(count, size) elements.
+/// Count must be a nonnegative Integer; an oversized count saturates.
+drop: (array, count) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+    Integer.recognizes(count).ifFalse(() => {
+        Error().signal()
+    })
+    (count >= 0).ifFalse(() => {
+        Error().signal()
+    })
+
+    snapshot: Array(...array)
+    n: snapshot.size()
+    if(count == 0) {
+        ^snapshot
+    }
+    if(count >= n) {
+        ^Array()
+    }
+    slice(snapshot, count, n)
+}
+
+// LIB023-C: defer loading the internal bulk algorithms until first use.
+// No implementation-helper binding is added to this public module.
+/// Maps each source element once; snapshots each Array chunk immediately and flattens one level.
+flatMap: (array, transform) => import("std:collections/internal/ArrayBulk").flatMap(array, transform)
+/// Answers fresh element pairs up to the shorter Array length, without padding.
+zip: (left, right) => import("std:collections/internal/ArrayBulk").zip(left, right)
+/// Splits a snapshot by a strict Boolean predicate into two fresh stable-order Arrays.
+partition: (array, predicate) => import("std:collections/internal/ArrayBulk").partition(array, predicate)
+/// Retains first occurrences in source order using ordinary Set hash and equality semantics.
+distinct: (array) => import("std:collections/internal/ArrayBulk").distinct(array)
+
 // Parallel algorithms (D160): Standard Library policy composed only from the
 // public isolated-parallel substrate (`Closure.parallel`, `Future`,
 // `Future.all`, `ensure`). Every callback runs in isolated P, so it cannot

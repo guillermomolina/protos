@@ -1,0 +1,451 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Arrays: import("std:collections/Array")
+
+sameElements: (array, ...expected) => {
+    ok: array.size() == expected.size()
+    if(ok) {
+        index: 0
+        while(index < expected.size()) {
+            (array[index] == expected[index]).ifFalse(() => {
+                ok = false
+            })
+            index = index + 1
+        }
+    }
+    ok
+}
+
+tests: Array(
+    Test("array flatMap maps and flattens one level", () => {
+        source: Array(1, 2, 3)
+        result: Arrays.flatMap(source, (x) => {
+            Array(x, x * 10)
+        })
+        Assertions.require(sameElements(result, 1, 10, 2, 20, 3, 30))
+        Assertions.require(sameElements(source, 1, 2, 3))
+        Assertions.require(result !== source)
+    }),
+
+    Test("array flatMap accepts empty chunks", () => {
+        result: Arrays.flatMap(Array(1, 2, 3), (x) => {
+            if(x == 2) {
+                Array()
+            } else {
+                Array(x)
+            }
+        })
+        Assertions.require(sameElements(result, 1, 3))
+        Assertions.require(sameElements(Arrays.flatMap(Array(), 42)))
+    }),
+
+    Test("array flatMap captures reused chunks immediately", () => {
+        scratch: Array(0)
+        calls: 0
+        result: Arrays.flatMap(Array(1, 2, 3), (x) => {
+            calls = calls + 1
+            scratch[0] = x
+            scratch
+        })
+        Assertions.require(sameElements(result, 1, 2, 3))
+        Assertions.require(calls == 3)
+        Assertions.require(scratch[0] == 3)
+    }),
+
+    Test("array flatMap keeps nested objects as elements", () => {
+        nested: Array(7)
+        result: Arrays.flatMap(Array(1), (x) => {
+            Array(nested, x)
+        })
+        Assertions.require(result.size() == 2)
+        Assertions.require(result[0] === nested)
+        Assertions.require(result[1] == 1)
+    }),
+
+    Test("array flatMap rejects non Array chunks", () => {
+        Assertions.signals(Error, () => {
+            Arrays.flatMap(Array(1), (x) => { x })
+        })
+        Assertions.signals(Error, () => {
+            Arrays.flatMap(Array(1), (x) => { null })
+        })
+        Assertions.signals(Error, () => {
+            Arrays.flatMap(Array(1), 42)
+        })
+    }),
+
+    Test("array flatMap snapshots source before callbacks", () => {
+        source: Array(1, 2)
+        result: Arrays.flatMap(source, (x) => {
+            if(x == 1) {
+                source[1] = 99
+            }
+            Array(x)
+        })
+        Assertions.require(sameElements(result, 1, 2))
+        Assertions.require(source[1] == 99)
+    }),
+
+    Test("array zip truncates to shorter side", () => {
+        left: Array(1, 2, 3)
+        right: Array(10, 20)
+        result: Arrays.zip(left, right)
+        Assertions.require(result.size() == 2)
+        Assertions.require(sameElements(result[0], 1, 10))
+        Assertions.require(sameElements(result[1], 2, 20))
+        Assertions.require(sameElements(left, 1, 2, 3))
+    }),
+
+    Test("array zip handles empty sides", () => {
+        Assertions.require(Arrays.zip(Array(), Array(1)).size() == 0)
+        Assertions.require(Arrays.zip(Array(1), Array()).size() == 0)
+        Assertions.require(Arrays.zip(Array(), Array()).size() == 0)
+    }),
+
+    Test("array zip results and pairs have independent storage", () => {
+        source: Array(1, 2)
+        result: Arrays.zip(source, source)
+        Assertions.require(result !== source)
+        Assertions.require(result[0] !== result[1])
+        result[0][0] = 99
+        Assertions.require(result[1][0] == 2)
+        Assertions.require(source[0] == 1)
+        result[0].lib023Probe: 1
+        Assertions.require(result[0].lib023Probe == 1)
+    }),
+
+    Test("array zip preserves original object references", () => {
+        a: Array(1)
+        b: Array(2)
+        result: Arrays.zip(Array(a), Array(b))
+        Assertions.require(result[0][0] === a)
+        Assertions.require(result[0][1] === b)
+    }),
+
+    Test("array partition preserves both stable orders", () => {
+        source: Array(1, 2, 3, 4, 5)
+        result: Arrays.partition(source, (x) => { x.mod(2) == 0 })
+        Assertions.require(result.size() == 2)
+        Assertions.require(sameElements(result[0], 2, 4))
+        Assertions.require(sameElements(result[1], 1, 3, 5))
+        Assertions.require(sameElements(source, 1, 2, 3, 4, 5))
+    }),
+
+    Test("array partition invokes predicate once per element", () => {
+        source: Array(1, 2, 3)
+        calls: 0
+        result: Arrays.partition(source, (x) => {
+            calls = calls + 1
+            if(calls == 1) {
+                source[1] = 99
+            }
+            x > 1
+        })
+        Assertions.require(calls == 3)
+        Assertions.require(sameElements(result[0], 2, 3))
+        Assertions.require(sameElements(result[1], 1))
+    }),
+
+    Test("array partition empty source ignores callback", () => {
+        result: Arrays.partition(Array(), 42)
+        Assertions.require(result.size() == 2)
+        Assertions.require(result[0].size() == 0)
+        Assertions.require(result[1].size() == 0)
+        Assertions.require(result[0] !== result[1])
+    }),
+
+    Test("array partition enforces canonical Booleans", () => {
+        Assertions.signals(InvalidPredicateResult, () => {
+            Arrays.partition(Array(1), (x) => { null })
+        })
+        Assertions.signals(InvalidPredicateResult, () => {
+            Arrays.partition(Array(1), (x) => { 1 })
+        })
+        Assertions.signals(Error, () => {
+            Arrays.partition(Array(1), 42)
+        })
+    }),
+
+    Test("array partition preserves shallow references", () => {
+        marker: Array(9)
+        result: Arrays.partition(Array(marker, 2), (x) => {
+            x === marker
+        })
+        Assertions.require(result[0][0] === marker)
+        Assertions.require(result[1][0] == 2)
+        result[0][0] = null
+        Assertions.require(marker[0] == 9)
+    }),
+
+    Test("array distinct preserves first occurrences", () => {
+        source: Array(3, 1, 2, 1, 3, 2)
+        result: Arrays.distinct(source)
+        Assertions.require(sameElements(result, 3, 1, 2))
+        Assertions.require(sameElements(source, 3, 1, 2, 1, 3, 2))
+        Assertions.require(result !== source)
+    }),
+
+    Test("array distinct uses ordinary numeric equality", () => {
+        result: Arrays.distinct(Array(1, 1.0, 2.0, 2, 3))
+        Assertions.require(sameElements(result, 1, 2, 3))
+        Assertions.require(result[0] === 1)
+        Assertions.require(result[1] === 2.0)
+    }),
+
+    Test("array distinct uses custom hash and equality", () => {
+        prototype: {
+            key: 0
+            hash: () => { 7 }
+            equals: (other) => { this.key == other.key }
+        }
+        view: prototype.alias("equals", "==")
+        a: view { key: 1 }
+        b: view { key: 1 }
+        c: view { key: 2 }
+        result: Arrays.distinct(Array(a, b, c, a))
+        Assertions.require(result.size() == 2)
+        Assertions.require(result[0] === a)
+        Assertions.require(result[1] === c)
+    }),
+
+    Test("array distinct rejects invalid hash values", () => {
+        source: Array({
+            hash: () => { "not-an-integer" }
+        })
+        Assertions.signals(Error, () => {
+            Arrays.distinct(source)
+        })
+    }),
+
+    Test("array distinct handles empty and singleton sources", () => {
+        empty: Array()
+        singleton: Array(7)
+        distinctEmpty: Arrays.distinct(empty)
+        distinctOne: Arrays.distinct(singleton)
+        Assertions.require(sameElements(distinctEmpty))
+        Assertions.require(sameElements(distinctOne, 7))
+        Assertions.require(distinctEmpty !== empty)
+        Assertions.require(distinctOne !== singleton)
+    }),
+
+    Test("array bulk operations accept closed and frozen sources", () => {
+        closed: Array(1, 2, 3)
+        closed.close()
+        frozen: Array(1, 2, 3)
+        frozen.freeze()
+
+        Array(closed, frozen).each((source) => {
+            Assertions.require(sameElements(
+                Arrays.flatMap(source, (x) => { Array(x) }),
+                1, 2, 3
+            ))
+            Assertions.require(Arrays.zip(source, Array(9)).size() == 1)
+            parts: Arrays.partition(source, (x) => { x > 1 })
+            Assertions.require(sameElements(parts[0], 2, 3))
+            Assertions.require(sameElements(parts[1], 1))
+            Assertions.require(sameElements(Arrays.distinct(source), 1, 2, 3))
+            Assertions.require(sameElements(source, 1, 2, 3))
+        })
+        null
+    }),
+
+    Test("array bulk operations accept descendant arrays", () => {
+        MyArray: Array { label: 1 }
+        source: MyArray(1, 2, 2)
+        Assertions.require(sameElements(
+            Arrays.flatMap(source, (x) => { Array(x) }),
+            1, 2, 2
+        ))
+        Assertions.require(Arrays.zip(source, source).size() == 3)
+        Assertions.require(Arrays.partition(source, (x) => {
+            x == 2
+        })[0].size() == 2)
+        Assertions.require(sameElements(Arrays.distinct(source), 1, 2))
+    }),
+
+    Test("array bulk operations reject non Array sources", () => {
+        lookalike: Array {}
+        Array(lookalike, null, 42, Array).each((candidate) => {
+            Assertions.signals(Error, () => {
+                Arrays.flatMap(candidate, (x) => { Array(x) })
+            })
+            Assertions.signals(Error, () => {
+                Arrays.zip(candidate, Array())
+            })
+            Assertions.signals(Error, () => {
+                Arrays.zip(Array(), candidate)
+            })
+            Assertions.signals(Error, () => {
+                Arrays.partition(candidate, (x) => { true })
+            })
+            Assertions.signals(Error, () => {
+                Arrays.distinct(candidate)
+            })
+        })
+        null
+    }),
+
+    Test("array bulk operations compose with queries and copies", () => {
+        source: Array(1, 2, 2, 3)
+        expanded: Arrays.flatMap(source, (x) => { Array(x, x) })
+        unique: Arrays.distinct(expanded)
+        first: Arrays.take(unique, 2)
+        tail: Arrays.drop(unique, 1)
+        pairs: Arrays.zip(first, tail)
+        groups: Arrays.partition(unique, (x) => { x > 1 })
+
+        Assertions.require(sameElements(unique, 1, 2, 3))
+        Assertions.require(sameElements(first, 1, 2))
+        Assertions.require(sameElements(tail, 2, 3))
+        Assertions.require(pairs.size() == 2)
+        Assertions.require(sameElements(pairs[0], 1, 2))
+        Assertions.require(sameElements(pairs[1], 2, 3))
+        Assertions.require(sameElements(groups[0], 2, 3))
+        Assertions.require(sameElements(groups[1], 1))
+        Assertions.require(Arrays.find(unique, (x) => { x == 3 }) == 3)
+        Assertions.require(Arrays.contains(unique, 2))
+        Assertions.require(sameElements(source, 1, 2, 2, 3))
+    }),
+
+    Test("array bulk operations ignore overridden indexed slots", () => {
+        source: Array(1, 2, 3)
+        source.size: () => 99
+        source.at: (index) => 99
+        source.each: (callback) => { null }
+
+        mapped: Arrays.flatMap(source, (x) => { Array(x) })
+        zipped: Arrays.zip(source, Array(4, 5))
+        grouped: Arrays.partition(source, (x) => { x > 1 })
+        unique: Arrays.distinct(source)
+
+        Assertions.require(sameElements(mapped, 1, 2, 3))
+        Assertions.require(zipped.size() == 2)
+        Assertions.require(sameElements(zipped[0], 1, 4))
+        Assertions.require(sameElements(zipped[1], 2, 5))
+        Assertions.require(sameElements(grouped[0], 2, 3))
+        Assertions.require(sameElements(grouped[1], 1))
+        Assertions.require(sameElements(unique, 1, 2, 3))
+    }),
+
+    Test("array bulk empty results are fresh and open", () => {
+        empty: Array()
+        mapped: Arrays.flatMap(empty, 42)
+        zipped: Arrays.zip(empty, Array(1))
+        grouped: Arrays.partition(empty, 42)
+        unique: Arrays.distinct(empty)
+
+        Assertions.require(mapped.size() == 0)
+        Assertions.require(zipped.size() == 0)
+        Assertions.require(grouped.size() == 2)
+        Assertions.require(grouped[0].size() == 0)
+        Assertions.require(grouped[1].size() == 0)
+        Assertions.require(unique.size() == 0)
+        Assertions.require(grouped[0] !== grouped[1])
+
+        results: Array(
+            mapped, zipped, grouped,
+            grouped[0], grouped[1], unique
+        )
+        results.each((result) => {
+            Assertions.require(Array.recognizes(result))
+            Assertions.require(result !== empty)
+            result.lib023Probe: 1
+            Assertions.require(result.lib023Probe == 1)
+        })
+        null
+    }),
+
+    Test("array distinct snapshots before hash effects", () => {
+        source: Array(null, null, null)
+        first: {
+            hash: () => {
+                source[2] = 99
+                41
+            }
+        }
+        second: {}
+        third: {}
+        source[0] = first
+        source[1] = second
+        source[2] = third
+
+        result: Arrays.distinct(source)
+        Assertions.require(result.size() == 3)
+        Assertions.require(result[0] === first)
+        Assertions.require(result[1] === second)
+        Assertions.require(result[2] === third)
+        Assertions.require(source[2] == 99)
+    }),
+
+    Test("array bulk operations preserve cyclic source references", () => {
+        source: Array(null)
+        source[0] = source
+
+        mapped: Arrays.flatMap(source, (x) => { Array(x) })
+        zipped: Arrays.zip(source, source)
+        grouped: Arrays.partition(source, (x) => { true })
+        unique: Arrays.distinct(source)
+
+        Assertions.require(mapped[0] === source)
+        Assertions.require(mapped[0] !== mapped)
+        Assertions.require(zipped[0][0] === source)
+        Assertions.require(zipped[0][1] === source)
+        Assertions.require(grouped[0][0] === source)
+        Assertions.require(grouped[1].size() == 0)
+        Assertions.require(unique[0] === source)
+        Assertions.require(unique !== source)
+    }),
+
+    Test("array bulk callbacks and calls use flexible arity", () => {
+        source: Array(1, 2)
+        calls: 0
+
+        mapped: Arrays.flatMap(source, (x, extra) => {
+            Assertions.require(extra === null)
+            calls = calls + 1
+            Array(x)
+        }, 99)
+
+        grouped: Arrays.partition(source, (x, extra) => {
+            Assertions.require(extra === null)
+            x == 2
+        }, 99)
+
+        zipped: Arrays.zip(source, source, 99)
+        unique: Arrays.distinct(Array(1, 1, 2), 99)
+
+        Assertions.require(calls == 2)
+        Assertions.require(sameElements(mapped, 1, 2))
+        Assertions.require(sameElements(grouped[0], 2))
+        Assertions.require(sameElements(grouped[1], 1))
+        Assertions.require(zipped.size() == 2)
+        Assertions.require(sameElements(unique, 1, 2))
+    }),
+
+    Test("array bulk algorithms do not export helper slots", () => {
+        Assertions.require(Arrays.hasSlot("flatMap"))
+        Assertions.require(Arrays.hasSlot("zip"))
+        Assertions.require(Arrays.hasSlot("partition"))
+        Assertions.require(Arrays.hasSlot("distinct"))
+        Assertions.require(Arrays.hasSlot("ArrayBulk") === false)
+        Assertions.require(Arrays.hasSlot("sized") === false)
+    })
+)
+tests.freeze()
