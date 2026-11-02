@@ -272,6 +272,44 @@ class ProtosLanguageServerFormattingTest {
         assertEquals(List.of(), format(server, URI, options(8, false)));
     }
 
+    @Test
+    void bug032RealFormatterPreservesCaretOperandCommentInLsp() {
+        String source =
+                "f:()=>{\n"
+                        + "^\n"
+                        + "// keep return comment\n"
+                        + "42\n"
+                        + "}";
+
+        String expected =
+                "f: () => { ^\n"
+                        + "    // keep return comment\n"
+                        + "    42 }\n";
+
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {});
+
+        server.textDocuments().didOpen(open(URI, 1, source));
+
+        List<? extends TextEdit> edits =
+                format(server, URI, options(8, false));
+
+        assertEquals(1, edits.size());
+        assertEquals(expected, edits.get(0).getNewText());
+
+        assertTrue(
+                new com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore()
+                        .parse(new ProtosDocumentSnapshot(URI, 2, expected))
+                        instanceof com.guillermomolina.protos.analysis
+                                .ProtosStaticParseResult.Parsed);
+
+        server.textDocuments().didChange(change(URI, 2, expected));
+
+        assertEquals(
+                List.of(),
+                format(server, URI, options(4, true)));
+    }
+
     private static ProtosLanguageServer server(ProtosLspDocumentFormatter formatter) {
         return new ProtosLanguageServer(
                 code -> {}, new ProtosProjectFileBindingProvider(), formatter);

@@ -1757,6 +1757,63 @@ final class ProtosFormatterToolBootstrapTest {
         }
     }
 
+    @Test
+    void bug032PreservesCombinedCaretCommentsAndReturnNewlineRule()
+            throws Exception {
+        String[] samples = {
+            "^ // after caret\n// on own line\n42",
+            "^\n// first\n\n// second\n42",
+            "^ /* embedded */ // end of line\n42",
+            "^\n\n/* first\n second */\n\n42",
+            "^ /* first */\n// second\n42"
+        };
+
+        long version = 3300L;
+
+        for (String source : samples) {
+            String formatted = formatOnce(source, version++);
+
+            assertEquals(source + "\n", formatted, source);
+            assertEquals(
+                    canonicalOf(source, version++),
+                    canonicalOf(formatted, version++),
+                    source);
+            assertEquals(
+                    formatted,
+                    formatOnce(formatted, version++),
+                    source);
+        }
+
+        for (String source : List.of(
+                "return\n42",
+                "return // separate expression\n42")) {
+            ProtosSourceLayoutView view =
+                    new ProtosStaticAnalysisCore()
+                            .sourceLayout(
+                                    new ProtosDocumentSnapshot(
+                                            "memory:bug032-return-newline",
+                                            version++,
+                                            source));
+
+            assertEquals(2, view.program().expressions().size(), source);
+            assertInstanceOf(
+                    com.guillermomolina.protos.parser.ast.SurfaceName.class,
+                    view.program().expressions().get(0),
+                    source);
+
+            String formatted = formatOnce(source, version++);
+
+            assertEquals(
+                    canonicalOf(source, version++),
+                    canonicalOf(formatted, version++),
+                    source);
+            assertEquals(
+                    formatted,
+                    formatOnce(formatted, version++),
+                    source);
+        }
+    }
+
     private static String canonicalOf(String source, long version)
             throws ReflectiveOperationException {
         ProtosSourceLayoutView view =
@@ -1788,6 +1845,46 @@ final class ProtosFormatterToolBootstrapTest {
                 view,
                 ignored -> {},
                 runtimeHost);
+    }
+
+    @Test
+    void bug032FormatsCaretOperandCommentsWithoutChangingSemantics()
+            throws Exception {
+        String[][] samples = {
+            {"^\n// own-line comment\n42", "// own-line comment"},
+            {"^ // end-of-line comment\n42", "// end-of-line comment"},
+            {"^\n/* own-line block */\n42", "/* own-line block */"},
+            {"^\n/* first line\n second line */\n42",
+                "/* first line\n second line */"},
+            {"^\n\n// separated comment\n\n42",
+                "// separated comment"},
+            {"^ /* embedded */ 42", "/* embedded */"},
+            {"return /* embedded */ 42", "/* embedded */"},
+            {"f:()=>{\n^\n// keep return comment\n42\n}",
+                "// keep return comment"}
+        };
+
+        long version = 3200L;
+
+        for (String[] sample : samples) {
+            String source = sample[0];
+
+            String formatted = formatOnce(source, version++);
+
+            assertTrue(
+                    formatted.contains(sample[1]),
+                    () -> "Comment was lost: " + source);
+
+            assertEquals(
+                    canonicalOf(source, version++),
+                    canonicalOf(formatted, version++),
+                    source);
+
+            assertEquals(
+                    formatted,
+                    formatOnce(formatted, version++),
+                    source);
+        }
     }
 
     @Test

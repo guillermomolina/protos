@@ -1332,6 +1332,96 @@ contextualHeaderComments: (
     result
 }
 
+// BUG032: unlike contextual return, ^ remains incomplete across logical
+// newlines. Keep every comment between the caret and its operand, including
+// physical own-line comments and line comments that terminate their line.
+formatCaretOperandComments: (node, level, layout) => {
+    result: ""
+    atLineStart: false
+    pendingBlankAfter: false
+
+    for(comment in layout.comments) {
+        sameBoundary:
+            (comment.boundaryKind == "NON_LOCAL_RETURN_OPERAND") &&
+            (comment.preceding === node.path) &&
+            (comment.following === node.expression.path)
+
+        if(sameBoundary) {
+            if(comment.placement == "EMBEDDED_BETWEEN_TOKENS") {
+                if(atLineStart) {
+                    if(pendingBlankAfter) {
+                        result = result + "\n" + indent(level)
+                    }
+
+                    result = result + comment.rawText
+                }
+
+                atLineStart.ifFalse(() => {
+                    result = result + " " + comment.rawText
+                })
+
+                atLineStart = false
+                pendingBlankAfter = false
+            }
+
+            if(comment.placement == "END_OF_LINE") {
+                if(atLineStart) {
+                    Error().signal()
+                }
+
+                result =
+                    result +
+                    " " +
+                    comment.rawText +
+                    "\n" +
+                    indent(level)
+
+                atLineStart = true
+                pendingBlankAfter = comment.blankLineAfter
+            }
+
+            if(comment.placement == "OWN_LINE") {
+                atLineStart.ifFalse(() => {
+                    result = result + "\n" + indent(level)
+                })
+
+                if(pendingBlankAfter || comment.blankLineBefore) {
+                    result = result + "\n" + indent(level)
+                }
+
+                result =
+                    result +
+                    comment.rawText +
+                    "\n" +
+                    indent(level)
+
+                atLineStart = true
+                pendingBlankAfter = comment.blankLineAfter
+            }
+
+            ((comment.placement == "EMBEDDED_BETWEEN_TOKENS") ||
+                (comment.placement == "END_OF_LINE") ||
+                (comment.placement == "OWN_LINE")).ifFalse(() => {
+                Error().signal()
+            })
+        }
+    }
+
+    if(result.size() > 0) {
+        if(atLineStart) {
+            if(pendingBlankAfter) {
+                result = result + "\n" + indent(level)
+            }
+        }
+
+        atLineStart.ifFalse(() => {
+            result = result + " "
+        })
+    }
+
+    result
+}
+
 // D231-F2-PURE: comments written before a header comma stay before it, each
 // preceded by one space and with no space before the comma itself.
 contextualCommentsBeforeSeparator: (
@@ -1913,10 +2003,9 @@ formatExpression = (node, level, layout) => {
             )
     }
 
-    // I138: the contextual `return expression` alias keeps its spelling; a
-    // single space keeps the identifier apart from the operand. Comments
-    // between the prefix and the operand stay there, separated by spaces
-    // only: a logical newline after `return` would end the contextual form.
+    // Contextual return keeps its exact spelling and accepts only comments
+    // without a logical newline before the operand. The ^ spelling also
+    // supports continuation across whole-line comments (BUG032).
     if(kind == "NON_LOCAL_RETURN") {
         operandText:
             formatExpression(
@@ -1925,13 +2014,26 @@ formatExpression = (node, level, layout) => {
                 layout
             )
 
-        operandComments:
-            contextualHeaderComments(
-                node,
-                "NON_LOCAL_RETURN_OPERAND",
-                node.spelling != "return",
-                layout
-            )
+        operandComments: ""
+
+        if(node.spelling == "return") {
+            operandComments =
+                contextualHeaderComments(
+                    node,
+                    "NON_LOCAL_RETURN_OPERAND",
+                    false,
+                    layout
+                )
+        }
+
+        if(node.spelling == "^") {
+            operandComments =
+                formatCaretOperandComments(
+                    node,
+                    level,
+                    layout
+                )
+        }
 
         formatted =
             joinSymbolicPrefix(
@@ -2142,7 +2244,9 @@ formatBody: (layout) => {
         nonLocalReturnComment:
             (comment.boundaryKind ==
                 "NON_LOCAL_RETURN_OPERAND") &&
-            (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
+            ((comment.placement == "EMBEDDED_BETWEEN_TOKENS") ||
+                (comment.placement == "END_OF_LINE") ||
+                (comment.placement == "OWN_LINE"))
 
         embeddedComment:
             (comment.boundaryKind == "NONE") &&

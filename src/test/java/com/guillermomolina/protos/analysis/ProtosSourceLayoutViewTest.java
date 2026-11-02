@@ -1278,6 +1278,61 @@ class ProtosSourceLayoutViewTest {
     }
 
     @Test
+    void bug032ClassifiesCaretOperandCommentsAcrossNewlines() {
+        String[][] samples = {
+            {"^\n// own-line comment\n42", "OWN_LINE"},
+            {"^ // end-of-line comment\n42", "END_OF_LINE"},
+            {"^\n/* own-line block */\n42", "OWN_LINE"},
+            {"^\n/* first line\n second line */\n42", "OWN_LINE"},
+            {"^\n\n// separated comment\n\n42", "OWN_LINE"}
+        };
+
+        for (String[] sample : samples) {
+            String source = sample[0];
+            ProtosSourceLayoutView view =
+                    core.sourceLayout(
+                            new ProtosDocumentSnapshot(
+                                    "memory:bug032-layout",
+                                    1L,
+                                    source));
+
+            assertEquals(1, view.program().expressions().size(), source);
+
+            SurfaceNonLocalReturn nonLocalReturn =
+                    assertInstanceOf(
+                            SurfaceNonLocalReturn.class,
+                            view.program().expressions().get(0),
+                            source);
+
+            assertEquals(1, view.commentAttachments().size(), source);
+
+            ProtosSourceLayoutView.CommentAttachment attachment =
+                    view.commentAttachments().get(0);
+
+            assertEquals(
+                    ProtosSourceLayoutView.CommentBoundaryKind
+                            .NON_LOCAL_RETURN_OPERAND,
+                    attachment.boundaryKind(),
+                    source);
+
+            assertEquals(
+                    ProtosSourceLayoutView.CommentPlacement.valueOf(sample[1]),
+                    attachment.placement(),
+                    source);
+
+            assertEquals(
+                    view.pathOf(nonLocalReturn).orElseThrow(),
+                    attachment.preceding().orElseThrow(),
+                    source);
+
+            assertEquals(
+                    view.pathOf(nonLocalReturn.expression()).orElseThrow(),
+                    attachment.following().orElseThrow(),
+                    source);
+        }
+    }
+
+    @Test
     void multilineBlockCommentBeforeUntilKeepsTheSuffixBoundary() {
         String source = "{ y } /* one\n two */ until(x)";
         ProtosSourceLayoutView view =

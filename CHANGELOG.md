@@ -7,6 +7,13 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.439-SNAPSHOT
+
+- `BUG032` (#1024): fix TOOL010 rejecting whole-line and end-of-line comments between the `^` non-local return prefix and its operand.
+  - Preserve `NON_LOCAL_RETURN_OPERAND` attachments across logical newlines, including original comment text and blank-line placement, while retaining canonical formatting and idempotence.
+  - Keep the contextual `return` spelling and its same-logical-line operand requirement unchanged; no parser, AST, or runtime semantic changes.
+  - Add source-layout, structural-formatter, CLI stdin/file, and real LSP regression tests for comment retention, canonical equivalence, idempotence, and read-only file formatting.
+
 ## 0.3.438-SNAPSHOT
 
 - `LIB023-B/C` (D213): complete the approved `std:collections/Array` Standard Library enhancements, following the previously published LIB023-A slice.
