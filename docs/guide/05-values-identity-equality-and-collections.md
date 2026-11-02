@@ -1306,6 +1306,19 @@ The current tutorial material includes direct examples for keyed collections:
 - [`../../protos/tutorials/05-collections/02-identity-maps.protos`](../../protos/tutorials/05-collections/02-identity-maps.protos)
   demonstrates distinct identity-bearing objects as separate IdentityMap keys.
 
+The new Array lessons are standalone-CLI programs:
+
+- [`../../protos/tutorials/05-collections/03-array-copies-and-queries.protos`](../../protos/tutorials/05-collections/03-array-copies-and-queries.protos)
+  shows fresh copy/edit operations, default sort, searches, strict Booleans, and
+  saturating `take`/`drop`;
+- [`../../protos/tutorials/05-collections/04-array-bulk-transformations.protos`](../../protos/tutorials/05-collections/04-array-bulk-transformations.protos)
+  composes `flatMap`, `zip`, `partition`, and `distinct`, including an input
+  mutation that cannot change an already captured callback snapshot.
+
+For task-oriented uses, see
+[`array-incident-summary.protos`](../../protos/examples/collections/array-incident-summary.protos)
+and [`array-pairing-and-deduplication.protos`](../../protos/examples/collections/array-pairing-and-deduplication.protos).
+
 The current Standard Library collection sources are also ordinary Protos and are
 useful as larger examples:
 

@@ -33,6 +33,14 @@ standalone CLI without imports or additional host authority. See the
 [control-flow guide](../../docs/guide/04-control-flow-through-protocols.md#the-contextual-for-forms-are-each-and-eachstep)
 for the accompanying explanation.
 
+The collection progression continues after Map and IdentityMap with
+[`05-collections/03-array-copies-and-queries.protos`](05-collections/03-array-copies-and-queries.protos)
+(fresh Array copy/edit operations, default sort, ordered queries and saturating
+prefix/suffix copies), then
+[`05-collections/04-array-bulk-transformations.protos`](05-collections/04-array-bulk-transformations.protos)
+(`flatMap`, `zip`, `partition`, `distinct` and callback snapshot behavior).
+Both run unchanged with the standalone CLI and require no extra host authority.
+
 Current progression:
 
 1. `01-values-and-slots/`

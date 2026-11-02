@@ -1,0 +1,52 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+// Standard Library Array operations return fresh shallow Arrays without
+// changing the fixed length or indexed contents of the original.
+Arrays: import("std:collections/Array")
+
+values: Array(10, 20, 30)
+appended: Arrays.append(values, 40)
+combined: Arrays.concat(values, Array(40, 50))
+middle: Arrays.slice(values, 1, 3)
+inserted: Arrays.insertAt(values, 1, 15)
+removed: Arrays.removeAt(values, 1)
+reversed: Arrays.reverse(values)
+sorted: Arrays.sort(Array(30, 10, 20))
+
+print(values.size() == 3 && values[2] == 30)
+print(appended.size() == 4 && appended[3] == 40 && appended !== values)
+print(combined.size() == 5 && combined[4] == 50)
+print(middle.size() == 2 && middle[0] == 20 && middle[1] == 30)
+print(inserted.size() == 4 && inserted[1] == 15 && inserted[2] == 20)
+print(removed.size() == 2 && removed[1] == 30)
+print(reversed[0] == 30 && reversed[2] == 10)
+print(sorted[0] == 10 && sorted[1] == 20 && sorted[2] == 30)
+
+// Ordered queries use a shallow input snapshot. find's null return can mean
+// absent or a matched null element; findIndex distinguishes those cases.
+print(Arrays.find(values, (x) => x > 15) == 20)
+print(Arrays.contains(values, 20))
+print(Arrays.any(values, (x) => x > 25))
+print(Arrays.all(values, (x) => x > 0))
+nullable: Array(null, 5)
+print(Arrays.find(nullable, (x) => x === null) === null)
+print(Arrays.findIndex(nullable, (x) => x === null) == 0)
+
+// take/drop saturate on a count larger than the input length.
+first: Arrays.take(values, 2)
+tail: Arrays.drop(values, 2)
+all: Arrays.take(values, 100)
+none: Arrays.drop(values, 100)
+print(first.size() == 2 && first[1] == 20)
+print(tail.size() == 1 && tail[0] == 30)
+print(all.size() == 3 && all !== values)
+print(none.size() == 0 && none !== values)

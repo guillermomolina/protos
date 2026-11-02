@@ -1,0 +1,31 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+// Pair ordered item names with available stock counts; unpaired tails are
+// intentionally ignored, and the source Arrays are unchanged.
+Arrays: import("std:collections/Array")
+
+items: Array("red", "blue", "red", "gold")
+counts: Array(5, 2, 9)
+pairs: Arrays.zip(items, counts)
+stockGroups: Arrays.partition(pairs, (pair) => { pair[1] >= 5 })
+labelsAndCounts: Arrays.flatMap(pairs, (pair) => { Array(pair[0], pair[1]) })
+uniqueItems: Arrays.distinct(items)
+
+print(pairs.size() == 3 && items.size() == 4 && counts.size() == 3)
+print(pairs[0][0] == "red" && pairs[0][1] == 5)
+print(pairs[2][0] == "red" && pairs[2][1] == 9)
+print(pairs[0] !== pairs[2])
+print(stockGroups[0].size() == 2 && stockGroups[1].size() == 1)
+print(stockGroups[1][0][0] == "blue")
+print(labelsAndCounts.size() == 6 && labelsAndCounts[5] == 9)
+print(uniqueItems.size() == 3 && uniqueItems[2] == "gold")
+print(Arrays.contains(uniqueItems, "blue"))

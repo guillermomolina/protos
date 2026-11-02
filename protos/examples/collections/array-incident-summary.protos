@@ -1,0 +1,57 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+// Summarize a batch of incident events without changing the input records.
+Arrays: import("std:collections/Array")
+
+events: Array(
+    {
+        name: "api"
+        severity: 1
+        team: "app"
+    },
+    {
+        name: "login"
+        severity: 4
+        team: "ops"
+    },
+    {
+        name: "queue"
+        severity: 5
+        team: "ops"
+    },
+    {
+        name: "report"
+        severity: 2
+        team: "data"
+    },
+    {
+        name: "cache"
+        severity: 3
+        team: "app"
+    }
+)
+
+buckets: Arrays.partition(events, (event) => { event.severity >= 4 })
+urgent: buckets[0]
+routine: buckets[1]
+teams: Arrays.distinct(Arrays.map(events, (event) => { event.team }))
+firstUrgent: Arrays.take(urgent, 1)
+found: Arrays.find(events, (event) => { event.name == "queue" })
+
+print(events.size() == 5 && events[1].name == "login")
+print(urgent.size() == 2 && urgent[0].name == "login" && urgent[1].name == "queue")
+print(routine.size() == 3 && routine[0].name == "api")
+print(teams.size() == 3 && teams[0] == "app" && teams[1] == "ops" && teams[2] == "data")
+print(firstUrgent.size() == 1 && firstUrgent[0] === urgent[0])
+print(found === urgent[1])
+print(Arrays.any(events, (event) => { event.severity >= 5 }))
+print(Arrays.all(urgent, (event) => { event.severity >= 4 }))

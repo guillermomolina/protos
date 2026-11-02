@@ -48,6 +48,8 @@ instead.
 | Apply and verify a linear transformation with Vectors and Matrices (`std:math/LinearAlgebra`) | `numbers/vector-matrix.protos` |
 | Show portable runtime metadata (`std:runtime`) | `runtime-introspection/info.protos` |
 | Inspect the runtime (`std:inspect`, requires `--inspect`) | `runtime-introspection/inspect.protos` |
+| Summarize incident severities and distinct responsible teams with Array operations | `collections/array-incident-summary.protos` |
+| Pair ordered stock counts, split by threshold and deduplicate item names | `collections/array-pairing-and-deduplication.protos` |
 | Use value-keyed maps | `collections/maps.protos` |
 | Use identity-keyed maps | `collections/identity-map.protos` |
 | Use structurally equal values as Map vs IdentityMap keys | `collections/path-keys.protos` |
