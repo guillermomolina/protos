@@ -16,6 +16,24 @@
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
+// Helpers invoked from module level own independent return homes.
+test011MakeEscaped: () => {
+    () => {
+        ^42
+    }
+}
+
+test011DefaultHome: (trace) => {
+    f: (x: ^42) => {
+        trace.bodyReached = true
+        0
+    }
+
+    f()
+    trace.afterCall = true
+    0
+}
+
 tests: [
     Test("non-local return escaping to a different Task signals InvalidReturn", () => {
         Assertions.signals(InvalidReturn, () => {
@@ -40,28 +58,23 @@ tests: [
         })
     }),
     Test("escaped closure fresh invalid return", () => {
-        make: () => {
-            () => {
-                ^42
-            }
-        }
+        closure: test011MakeEscaped()
 
-        closure: make()
-
-        first: Assertions.signals(InvalidReturn, () => { closure() })
-        second: Assertions.signals(InvalidReturn, () => { closure() })
+        first: Assertions.signals(InvalidReturn, () => {
+            closure()
+        })
+        second: Assertions.signals(InvalidReturn, () => {
+            closure()
+        })
 
         Assertions.require(first !== second)
     }),
     Test("non local return from default", () => {
-        tool009LegacyCase: () => {
-            f: (x: ^42) => {
-                0
-            }
+        trace: { bodyReached: false; afterCall: false }
 
-            f()
-        }
-        Assertions.require(tool009LegacyCase() == 42)
+        Assertions.require(test011DefaultHome(trace) == 42)
+        Assertions.require(trace.bodyReached == false)
+        Assertions.require(trace.afterCall == false)
     })
 ]
 tests.freeze()

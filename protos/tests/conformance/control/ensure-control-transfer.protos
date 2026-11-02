@@ -16,22 +16,52 @@
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
+// The protected body and cleanup share this invoked helper's home.
+test011EnsureBodyReturn: (trace) => {
+    (() => {
+        trace.order = trace.order * 10 + 1
+        ^42
+    }).ensure(() => {
+        trace.order = trace.order * 10 + 2
+    })
+
+    trace.afterEnsure = true
+    0
+}
+
+test011EnsureCleanupNormal: (trace) => {
+    (() => {
+        trace.order = trace.order * 10 + 1
+        41
+    }).ensure(() => {
+        trace.order = trace.order * 10 + 2
+        ^43
+    })
+
+    trace.afterEnsure = true
+    0
+}
+
+test011EnsureCleanupPending: (trace) => {
+    (() => {
+        trace.order = trace.order * 10 + 1
+        ^42
+    }).ensure(() => {
+        trace.order = trace.order * 10 + 2
+        ^43
+    })
+
+    trace.afterEnsure = true
+    0
+}
+
 tests: [
     Test("ensure body nonlocal return runs cleanup", () => {
-        tool009LegacyCase: () => {
-            cleaned: 0
-            outer: () => {
-                (() => {
-                    ^42
-                }).ensure(() => {
-                    cleaned = 7
-                })
-                0
-            }
-            result: outer()
-            cleaned * 10 + result
-        }
-        Assertions.require(tool009LegacyCase() == 112)
+        trace: { order: 0; afterEnsure: false }
+
+        Assertions.require(test011EnsureBodyReturn(trace) == 42)
+        Assertions.require(trace.order == 12)
+        Assertions.require(trace.afterEnsure == false)
     }),
     Test("ensure cleanup error supersedes normal", () => {
         tool009LegacyCase: () => {
@@ -43,30 +73,18 @@ tests: [
         Assertions.require(tool009LegacyCase() === true)
     }),
     Test("ensure cleanup nonlocal return supersedes normal", () => {
-        tool009LegacyCase: () => {
-            outer: () => {
-                (() => 1).ensure(() => {
-                    ^43
-                })
-                0
-            }
-            outer()
-        }
-        Assertions.require(tool009LegacyCase() == 43)
+        trace: { order: 0; afterEnsure: false }
+
+        Assertions.require(test011EnsureCleanupNormal(trace) == 43)
+        Assertions.require(trace.order == 12)
+        Assertions.require(trace.afterEnsure == false)
     }),
     Test("ensure cleanup nonlocal return supersedes pending return", () => {
-        tool009LegacyCase: () => {
-            outer: () => {
-                (() => {
-                    ^42
-                }).ensure(() => {
-                    ^43
-                })
-                0
-            }
-            outer()
-        }
-        Assertions.require(tool009LegacyCase() == 43)
+        trace: { order: 0; afterEnsure: false }
+
+        Assertions.require(test011EnsureCleanupPending(trace) == 43)
+        Assertions.require(trace.order == 12)
+        Assertions.require(trace.afterEnsure == false)
     }),
     Test("ensure error cleanup preserves original", () => {
         tool009LegacyCase: () => {

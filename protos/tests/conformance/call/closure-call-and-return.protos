@@ -16,6 +16,24 @@
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
+// The invoked helper owns the home captured by the nested closures.
+test011NestedCallReturn: (trace) => {
+    outer: () => {
+        inner: () => {
+            trace.innerCalls = trace.innerCalls + 1
+            ^42
+        }
+
+        inner()
+        trace.afterInner = true
+        0
+    }
+
+    outer()
+    trace.afterOuter = true
+    0
+}
+
 tests: [
     Test("plain closure call", () => {
         tool009LegacyCase: () => {
@@ -33,19 +51,16 @@ tests: [
         Assertions.require(tool009LegacyCase() == 7)
     }),
     Test("non local return crosses nested call", () => {
-        tool009LegacyCase: () => {
-            outer: () => {
-                inner: () => {
-                    ^42
-                }
-
-                inner()
-                0
-            }
-
-            outer()
+        trace: {
+            innerCalls: 0
+            afterInner: false
+            afterOuter: false
         }
-        Assertions.require(tool009LegacyCase() == 42)
+
+        Assertions.require(test011NestedCallReturn(trace) == 42)
+        Assertions.require(trace.innerCalls == 1)
+        Assertions.require(trace.afterInner == false)
+        Assertions.require(trace.afterOuter == false)
     })
 ]
 tests.freeze()
