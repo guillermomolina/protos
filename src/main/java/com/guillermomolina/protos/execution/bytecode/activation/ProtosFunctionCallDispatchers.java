@@ -334,6 +334,27 @@ final class ProtosFunctionCallDispatchers {
         static RootNode functionRootOrNull(
                 ProtosClosureValue closure,
                 ProtosLanguageContext enteredContext) {
+            /*
+             * I115: like GraalPy PFunction.getCode().getRootNode(), read
+             * the prepared root directly when it already belongs to the
+             * entered Context. Preserve the general resolution path for
+             * deferred plans and Context-local projections.
+             */
+            if (closure != null
+                    && enteredContext != null
+                    && closure.nativeBody().isEmpty()
+                    && closure.definition() != null) {
+                ProtosClosureExecutionPlan prepared =
+                        closure.preparedExecutionPlanOrNullForRuntime();
+                if (prepared != null
+                        && !closure.requiresContextLocalExecutionProjectionForRuntime()
+                        && prepared.language().orElse(null)
+                                == enteredContext.languageForRuntime()) {
+                    return prepared.bytecodeActivationTargetForComposition()
+                            .getRootNode();
+                }
+            }
+
             RootCallTarget target = ProtosClosureCallPreparation.functionCallTarget(
                     closure, enteredContext);
             return target == null ? null : target.getRootNode();
@@ -807,7 +828,7 @@ final class ProtosFunctionCallDispatchers {
 
     @NonIdempotent
     static ProtosLanguageContext currentContext(Node node) {
-        ProtosLanguageContext context = ProtosLanguageContext.currentIfEnteredForRuntime();
+        ProtosLanguageContext context = ProtosLanguageContext.current(node);
         if (context == null) {
             throw CompilerDirectives.shouldNotReachHere("call dispatch requires an entered Context");
         }

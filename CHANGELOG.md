@@ -8,6 +8,35 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.34-SNAPSHOT
+
+- **I115 — experimental GraalPy-shaped source-function root and Context lookup.**
+  - Resolve an already prepared source Closure's bytecode activation root directly
+    when its execution plan belongs to the entered Context and needs no
+    Context-local projection. Preserve the general target lookup for deferred
+    plans and Context-local projections, rather than assuming all Closures
+    share a physical target or lifetime.
+  - The shared `ProtosFunctionCallDispatchers` resolves its entered
+    `ProtosLanguageContext` using `current(node)` instead of the host-side
+    `currentIfEnteredForRuntime()` lookup.
+  - Update source-call admission tests and deferred-caller tests to pin the
+    historical selection of a source function despite an instance-local
+    `call` override (including overrides created during argument evaluation).
+    A separate explicit `late.call(7)` still selects that local method.
+  - Original source delta: 3 modified files, 0 added, 0 deleted. All source
+    and test blobs are reproduced verbatim from the historical commit.
+  - **Historical semantic limitations:** the source-function direct-dispatch
+    rule bypasses an instance-local `Object.call` override on `callOne(late, 7)`.
+    This is a known D013/dynamic-message-selection semantic divergence, not
+    evidence that Protos' ordinary message semantics were recovered. Deferred
+    caller, ReturnHome, Task/C-prime, suspension/resumption, cancellation,
+    structured cleanup, non-local transfer and D179 C0 require independent
+    conformance. `long`-only integer representation and internal specialized
+    message execution remain project-wide requirements, not certified here.
+    No runtime tests, Truffle graphs, timing or performance acceptance were
+    run for this reconstructed versioned historical commit.
+  - Original implementation: `b3730cd8abbfdcb1674c650019a3ab4c572472a0`.
+
 ## 0.4.33-SNAPSHOT
 
 - **I116 — experimental unification of Bytecode DSL semantic execution and on-demand Truffle tooling**
