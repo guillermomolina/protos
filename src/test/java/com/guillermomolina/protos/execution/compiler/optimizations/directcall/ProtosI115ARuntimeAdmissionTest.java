@@ -413,7 +413,7 @@ final class ProtosI115ARuntimeAdmissionTest {
     }
 
     @Test
-    void selectionWithoutPreludeAdmitsOnlyCanonicalSourceClosures() throws Exception {
+    void sourceFunctionSelectionIgnoresLocalCallOverrides() throws Exception {
         withCore(module -> {
             evaluate("make: () => { (value) => { value } }\n", "i115a-select-define.protos", module);
             ProtosClosureValue source = closure("make()\n", module);
@@ -431,13 +431,20 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertRejected(module.context(), context);
 
             source.createLocalSlot("call", ProtosNullValue.INSTANCE);
-            assertRejected(source, context);
+            assertTrue(source.hasLocalCallSlotForRuntime());
+            assertSame(source, functionSelection(source));
+            assertNotNull(dispatchFacts(source, context));
             source.assignLocalSlot("call", closure("make()\n", module));
-            assertRejected(source, context);
-            // Even an alias of the canonical behavior is a local selection.
+            assertTrue(source.hasLocalCallSlotForRuntime());
+            assertSame(source, functionSelection(source));
+            assertNotNull(dispatchFacts(source, context));
+            // Even a local canonical alias does not redirect source-function calls.
             source.assignLocalSlot("call", standardCall);
-            assertRejected(source, context);
+            assertTrue(source.hasLocalCallSlotForRuntime());
+            assertSame(source, functionSelection(source));
+            assertNotNull(dispatchFacts(source, context));
             source.removeLocalSlot("call");
+            assertFalse(source.hasLocalCallSlotForRuntime());
             assertSame(source, functionSelection(source));
             assertNotNull(dispatchFacts(source, context));
             assertNull(dispatchFacts(source, null));
@@ -445,7 +452,7 @@ final class ProtosI115ARuntimeAdmissionTest {
     }
 
     @Test
-    void warmCallSiteObservesCallOverridesCreatedAfterWarmUp() throws Exception {
+    void warmCallSiteKeepsDirectSourceDispatchAcrossCallOverrides() throws Exception {
         withCore(module -> {
             evaluate("""
                     make: () => { (value) => { value } }
@@ -457,11 +464,13 @@ final class ProtosI115ARuntimeAdmissionTest {
             }
             for (int round = 0; round < 2; round++) {
                 evaluate("late.call: (value) => { 100 + value }\n", "i115a-warm-override.protos", module);
-                assertInteger(107, evaluate("callOne(late, 7)\n", "i115a-warm-overridden.protos", module));
+                assertInteger(7, evaluate("callOne(late, 7)\n", "i115a-warm-overridden.protos", module));
+                assertInteger(107, evaluate("late.call(7)\n", "i115a-explicit-overridden.protos", module));
                 evaluate("late.removeSlot(\"call\")\n", "i115a-warm-remove.protos", module);
                 assertInteger(7, evaluate("callOne(late, 7)\n", "i115a-warm-restored.protos", module));
                 evaluate("late.call: (value) => { 200 + value }\n", "i115a-warm-recreate.protos", module);
-                assertInteger(207, evaluate("callOne(late, 7)\n", "i115a-warm-recreated.protos", module));
+                assertInteger(7, evaluate("callOne(late, 7)\n", "i115a-warm-recreated.protos", module));
+                assertInteger(207, evaluate("late.call(7)\n", "i115a-explicit-recreated.protos", module));
                 evaluate("late.removeSlot(\"call\")\n", "i115a-warm-remove-again.protos", module);
                 assertInteger(7, evaluate("callOne(make(), 7)\n", "i115a-warm-fresh.protos", module));
             }
@@ -469,7 +478,7 @@ final class ProtosI115ARuntimeAdmissionTest {
     }
 
     @Test
-    void callCreatedWhileEvaluatingTheArgumentIsSelected() throws Exception {
+    void callCreatedWhileEvaluatingArgumentKeepsDirectFunctionSelection() throws Exception {
         withCore(module -> {
             evaluate("""
                     make: () => { (value) => { value } }
@@ -485,7 +494,8 @@ final class ProtosI115ARuntimeAdmissionTest {
                 assertInteger(7, evaluate("callWith(make(), plain)\n", "i115a-argument-warm.protos", module));
             }
             for (int round = 0; round < 2; round++) {
-                assertInteger(107, evaluate("callWith(late, arm)\n", "i115a-argument-arm.protos", module));
+                assertInteger(7, evaluate("callWith(late, arm)\n", "i115a-argument-arm.protos", module));
+                assertInteger(107, evaluate("late.call(7)\n", "i115a-argument-explicit.protos", module));
                 evaluate("late.removeSlot(\"call\")\n", "i115a-argument-remove.protos", module);
                 assertInteger(7, evaluate("callWith(late, plain)\n", "i115a-argument-plain.protos", module));
             }
@@ -636,7 +646,9 @@ final class ProtosI115ARuntimeAdmissionTest {
                         throw new IllegalStateException("I115-A: admission must not prepare a plan");
                     });
             overridden.createLocalSlot("call", prepared);
-            assertNull(functionSelection(overridden));
+            // I115: source functions bypass local call selection.
+            // The deferred plan must still remain unmaterialized.
+            assertSame(overridden, functionSelection(overridden));
             assertNull(dispatchFacts(overridden, context));
             assertEquals(0, rematerializations[0]);
 
@@ -710,14 +722,16 @@ final class ProtosI115ARuntimeAdmissionTest {
             Object standardCall = field.get(null);
             ProtosClosureValue sourceShaped =
                     new ProtosClosureValue(null, List.of(), ProtosNullValue.INSTANCE);
+            // This fixture has no source definition: it is never a
+            // source function, regardless of the root call certificate.
+            assertNull(functionSelection(sourceShaped));
 
             root.createLocalSlot("call", standardCall);
             Assumption a = certificate();
             assertNotNull(a);
             assertTrue(a.isValid());
             assertSame(a, certificate());
-            assertSame(sourceShaped,
-                    functionSelection(sourceShaped));
+            assertNull(functionSelection(sourceShaped));
 
             root.assignLocalSlot("call", ProtosNullValue.INSTANCE);
             assertFalse(a.isValid());
@@ -752,8 +766,7 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertNotNull(d);
             assertTrue(d.isValid());
             assertNotSame(c, d);
-            assertSame(sourceShaped,
-                    functionSelection(sourceShaped));
+            assertNull(functionSelection(sourceShaped));
         }
 
         private static Assumption certificate() {
@@ -876,9 +889,21 @@ final class ProtosI115ARuntimeAdmissionTest {
     }
 
     private static void assertInteger(long expected, Object actual) {
+        // Compact Truffle roots may return an unboxed JVM integer.
+        if (actual instanceof Long number) {
+            assertEquals(expected, number.longValue());
+            return;
+        }
+        if (actual instanceof Integer number) {
+            assertEquals(expected, number.longValue());
+            return;
+        }
+
+        // Preserve exact semantic Integer checking for guest values.
         assertEquals(
                 Long.toString(expected),
-                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(actual));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                        .integerDecimalText(actual));
     }
 
     /*
@@ -896,14 +921,22 @@ final class ProtosI115ARuntimeAdmissionTest {
 
     private static DispatchFacts dispatchFacts(
             ProtosClosureValue closure, ProtosLanguageContext context) {
-        if (!ProtosFunctionCallDispatchers.CallNode.isSourceFunction(closure)) {
+        if (context == null
+                || !ProtosFunctionCallDispatchers.CallNode.isSourceFunction(closure)) {
             return null;
         }
+
+        // Admission inspection must not materialize a deferred execution plan.
+        ProtosClosureExecutionPlan template =
+                closure.preparedExecutionPlanOrNullForRuntime();
+        if (template == null) {
+            return null;
+        }
+
         RootCallTarget target = ProtosClosureCallPreparation.functionCallTarget(closure, context);
         if (target == null) {
             return null;
         }
-        ProtosClosureExecutionPlan template = closure.preparedExecutionPlanOrNullForRuntime();
         boolean projectionRequired =
                 closure.requiresContextLocalExecutionProjectionForRuntime()
                         || template.language().orElseThrow() != context.languageForRuntime();

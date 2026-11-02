@@ -707,10 +707,10 @@ final class ProtosI115BDeferredCallerTest {
         });
     }
 
-    // ---- G. D013 selection after operand evaluation, and recovery -------------------
+    // ---- G. Direct source-function selection after operand evaluation --------------
 
     @Test
-    void callCreatedWhileEvaluatingTheArgumentBypassesTheCachedTarget() throws Exception {
+    void callCreatedWhileEvaluatingArgumentKeepsDirectFunctionTarget() throws Exception {
         withCore(module -> {
             evaluate("""
                     make: () => { (value) => { value } }
@@ -728,7 +728,7 @@ final class ProtosI115BDeferredCallerTest {
                 assertInteger(7, evaluate("callWith(late, plain)\n", "i115b-g-late.protos", module));
             }
             for (int round = 0; round < 3; round++) {
-                assertInteger(107, evaluate("callWith(late, arm)\n", "i115b-g-arm.protos", module));
+                assertInteger(7, evaluate("callWith(late, arm)\n", "i115b-g-arm.protos", module));
                 assertTrue(late(module).hasLocalCallSlotForRuntime());
                 evaluate("late.removeSlot(\"call\")\n", "i115b-g-remove.protos", module);
                 assertFalse(late(module).hasLocalCallSlotForRuntime());
@@ -736,9 +736,9 @@ final class ProtosI115BDeferredCallerTest {
                 assertInteger(7, evaluate("callWith(make(), plain)\n", "i115b-g-fresh.protos", module));
             }
             /*
-             * A call-valued argument lowers this site to the non-terminal Call1;
-             * the same scenario at an InvokeClosureOneTail site is covered by
-             * ProtosI112TailContinuationTest#callSelectionObservesAnOverrideInstalledByArgumentEvaluation.
+             * Argument evaluation installs a local call slot, but the
+             * source-function dispatcher continues to invoke the source body.
+             * The slot remains present and is removed explicitly above.
              */
         });
     }
@@ -1481,13 +1481,12 @@ final class ProtosI115BDeferredCallerTest {
     }
 
     /**
-     * A terminal site that first runs only its admitted entry and later needs
-     * its exact caller (the fallback for a local {@code call}) registers the
-     * need once; its results are unchanged and later executions do not
-     * invalidate the root's needs again.
+     * An instance-local call override does not redirect a source-function
+     * invocation. Direct dispatch must not request an exact caller merely
+     * because that override exists. Repeated calls keep the needs stable.
      */
     @Test
-    void terminalFallbackRegistersTheExactActivationNeedOnce() throws Exception {
+    void terminalSourceFunctionDoesNotFallbackForLocalCall() throws Exception {
         withCore(module -> {
             evaluate("""
                     make: () => { (value) => { value } }
@@ -1501,11 +1500,18 @@ final class ProtosI115BDeferredCallerTest {
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 assertInteger(3, evaluate("callOne(make(), 3)\n", "i115-needs-warm.protos", module));
             }
-            assertInteger(104, evaluate("callOne(late, 4)\n", "i115-needs-late.protos", module));
+            com.oracle.truffle.api.Assumption beforeOverride =
+                    root.callerNeedsStability();
+            boolean beforeExactNeed = root.hasCallerNeed(need);
+            assertInteger(4, evaluate("callOne(late, 4)\n", "i115-needs-late.protos", module));
+            assertTrue(late(module).hasLocalCallSlotForRuntime());
+            assertSame(beforeOverride, root.callerNeedsStability(),
+                    "local call override must not trigger a fallback");
+            assertEquals(beforeExactNeed, root.hasCallerNeed(need));
             com.oracle.truffle.api.Assumption settled = root.callerNeedsStability();
             boolean registered = root.hasCallerNeed(need);
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
-                assertInteger(105, evaluate("callOne(late, 5)\n", "i115-needs-late2.protos", module));
+                assertInteger(5, evaluate("callOne(late, 5)\n", "i115-needs-late2.protos", module));
                 assertInteger(6, evaluate("callOne(make(), 6)\n", "i115-needs-admitted.protos", module));
             }
             assertSame(settled, root.callerNeedsStability(), "no repeated invalidation");
@@ -1663,9 +1669,9 @@ final class ProtosI115BDeferredCallerTest {
      * guarded source send (which, unlike a native send such as indexing,
      * does not publish the sender) and ends in an admitted terminal Call1. The callee root each terminal site caches is the root of the
      * target its DirectCallNode invokes, and the needs land on exactly
-     * those roots that read an inherited prelude through a caller
-     * reference that has not transported it: B and C. I115-H7-R3: D's
-     * cached H7 method selection no longer reads the prelude.
+     * roots that genuinely request an inherited prelude. With the
+     * cached H7 method selections, D does not request one, so C has
+     * nothing to transport to D and B has nothing to transport to C.
      * I115-H7-R2 preserves the deferred B5 caller across admitted Send0
      * instead of publishing A merely for method selection.
      * A does not request an inherited caller prelude. Once the needs
@@ -1673,7 +1679,7 @@ final class ProtosI115BDeferredCallerTest {
      * repeated invalidation or unnecessary caller publication.
      */
     @Test
-    void realChainRegistersNeedsOnTheInvokedRootsAndConverges() throws Exception {
+    void realChainAvoidsUnneededCallerPreludeAndConverges() throws Exception {
         withCore(module -> {
             evaluate("""
                     makeB: () => { (k) => {
@@ -1738,9 +1744,10 @@ final class ProtosI115BDeferredCallerTest {
              */
             assertFalse(rootD.hasCallerNeed(need),
                     "D's cached H7 selection reads no inherited prelude");
-            assertTrue(rootC.hasCallerNeed(need), "C computes the prelude D requested");
-            assertTrue(rootB.hasCallerNeed(need),
-                    "B also reads an initially untransported inherited prelude");
+            assertFalse(rootC.hasCallerNeed(need),
+                    "C must not transport a prelude D did not request");
+            assertFalse(rootB.hasCallerNeed(need),
+                    "B must not transport a prelude C did not request");
             assertFalse(rootA.hasCallerNeed(need), "A owns its prelude");
 
             List<com.oracle.truffle.api.Assumption> settled = new ArrayList<>();
@@ -2437,9 +2444,19 @@ final class ProtosI115BDeferredCallerTest {
     }
 
     private static void assertInteger(long expected, Object actual) {
+        // Compact Truffle roots may return JVM primitive integers.
+        if (actual instanceof Long number) {
+            assertEquals(expected, number.longValue());
+            return;
+        }
+        if (actual instanceof Integer number) {
+            assertEquals(expected, number.longValue());
+            return;
+        }
         assertEquals(
                 Long.toString(expected),
-                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(actual));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                        .integerDecimalText(actual));
     }
 
     /** I115: the effective CallTarget the shared dispatcher enters for a source Closure. */
