@@ -18,8 +18,10 @@
 package com.guillermomolina.protos.execution;
 
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.Option;
 import com.oracle.truffle.api.TruffleLanguage;
+import com.oracle.truffle.api.dsl.Idempotent;
 import com.oracle.truffle.api.debug.DebuggerTags;
 import com.oracle.truffle.api.instrumentation.ProvidedTags;
 import com.oracle.truffle.api.instrumentation.StandardTags;
@@ -80,6 +82,24 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
     static final OptionKey<Boolean> INSPECT = new OptionKey<>(false);
 
     private final ProtosSourceCompiler sourceCompiler = new ProtosSourceCompiler();
+
+    /*
+     * GraalPy PythonLanguage.isSingleContext: Truffle invalidates compiled
+     * single-context paths when another Context is initialized for this
+     * language instance. Multi-context calls retain Context-local projection.
+     */
+    @CompilationFinal private boolean singleContext = true;
+
+    @Idempotent
+    boolean isSingleContextForRuntime() {
+        return singleContext;
+    }
+
+    @Override
+    protected void initializeMultipleContexts() {
+        super.initializeMultipleContexts();
+        singleContext = false;
+    }
 
     @Override
     protected ProtosLanguageContext createContext(Env env) {

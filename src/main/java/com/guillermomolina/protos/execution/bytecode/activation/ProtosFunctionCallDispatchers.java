@@ -538,6 +538,16 @@ final class ProtosFunctionCallDispatchers {
                 // Bytecode DSL bridge: the owning root captures its own return.
                 throw bridged.transfer();
             }
+            /*
+             * GraalPy FunctionDirectInvokeNode returns the direct-call
+             * outcome. Protos needs terminal suspension transport only
+             * when the effective callee body may suspend. The existing
+             * whole-root proof includes defaults and effective-body
+             * transformations; an unproven callee keeps the general path.
+             */
+            if (callee != null && callee.provablyNonSuspendingBody()) {
+                return outcome;
+            }
             return completed(frame, inliningTarget, terminal, outcome);
         }
     }
