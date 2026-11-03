@@ -28,6 +28,7 @@ instead.
 | Capture local state | `closures/captured-state.protos` |
 | Pass behavior as a value | `closures/higher-order.protos` |
 | Work with closure call arguments | `closures/rest-arguments.protos` |
+| Triage incident records with named arguments and constructor defaults | `closures/named-arguments.protos` |
 | Share captured mutable state across closures | `closures/shared-captured-state.protos` |
 | Return early from an enclosing function inside an Array callback | `closures/non-local-return.protos` |
 | Inherit callable behavior through delegation | `objects/inherited-callability.protos` |

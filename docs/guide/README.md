@@ -63,6 +63,16 @@ Together they demonstrate ordinary `each` dispatch, ascending and descending
 half-open ranges, signed steps, and a practical collection-processing task
 without introducing a separate iteration protocol.
 
+The
+[named-arguments section of chapter 03](03-closures-methods-and-receivers.md#named-arguments-and-name-aware-calls-d237)
+is paired with the
+[progressive named-arguments tutorial](../../protos/tutorials/07-call-arguments/02-named-arguments.protos)
+and the
+[incident triage example](../../protos/examples/closures/named-arguments.protos).
+Together they show name-aware invocation, stable positional ordinals, and
+ordinary constructor `init` forwarding without inventing a keyword-argument
+object or changing the `call` protocol.
+
 ## Source style reference
 
 [`SOURCE_STYLE.md`](SOURCE_STYLE.md) records the non-normative project convention

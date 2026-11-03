@@ -1,0 +1,54 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE: https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
+ */
+
+// D237: a name before ':' in a call is a label, not a new slot.
+// Read 01-defaults-args-and-rest.protos first.
+triple: (first, second, third: 30) => [first, second, third]
+
+// Named arguments can appear in any order.
+reordered: triple(third: 3, first: 1, second: 2)
+print(reordered[0] == 1 && reordered[1] == 2 && reordered[2] == 3)
+
+// Positional arguments retain their ordinal positions, ignoring named items.
+mixed: triple(third: 3, 1, 2)
+spread: triple(third: 3, ...[1, 2])
+print(mixed[0] == 1 && mixed[1] == 2 && mixed[2] == 3)
+print(spread[0] == 1 && spread[1] == 2 && spread[2] == 3)
+
+// The receiver and values are evaluated once, in source order.
+trace: { digits: 0 }
+track: (digit) => {
+    trace.digits = trace.digits * 10 + digit
+    digit
+}
+observed: triple(third: track(3), track(1), second: track(2))
+print(trace.digits == 312)
+print(observed[0] == 1 && observed[1] == 2 && observed[2] == 3)
+
+// In a signature ':' gives a default. In a call ':' supplies a name.
+// An omitted argument uses its default; explicit null does not.
+defaults: (first: 10, second: 20) => [first, second]
+omitted: defaults(second: 7)
+suppliedNull: defaults(first: null)
+print(omitted[0] == 10 && omitted[1] == 7)
+print(suppliedNull[0] === null && suppliedNull[1] == 20)
+
+// Rest collects only excess positional values, not named values.
+captureRest: (first, second: 0, ...rest) => [first, second, rest.size()]
+namedOnly: captureRest(second: 4, first: 1)
+extra: captureRest(1, 4, 8, 9)
+print(namedOnly[0] == 1 && namedOnly[1] == 4 && namedOnly[2] == 0)
+print(extra[0] == 1 && extra[1] == 4 && extra[2] == 2)
+
+// Grouping changes syntax: the inner ':' creates a slot and is positional.
+identity: (value) => value
+fromCall: identity((createdByCall: 41))
+print(fromCall == 41 && createdByCall == 41)
+
+// An Array literal uses the same argument grammar as Array(...).
+// [createdByArray: 42] would pass a name to standard Array and signal Error.
+fromArray: [(createdByArray: 42)]
+print(fromArray[0] == 42 && createdByArray == 42)

@@ -112,6 +112,80 @@ For executable examples, see the
 [`07-call-arguments` tutorial](../../protos/tutorials/07-call-arguments/01-defaults-args-and-rest.protos)
 and the [`rest-arguments` cookbook example](../../protos/examples/closures/rest-arguments.protos).
 
+## Named arguments and name-aware calls (D237)
+
+A call may supply arguments by the *declared parameter names* of the selected
+Closure, not just by position. The label in `name: expression` is literal syntax:
+it is not evaluated as a variable, and it does not create a slot. This differs
+from `name: default` inside a Closure **parameter list**, where `:` declares a
+default expression.
+
+```protos
+triple: (first, second, third: 30) => [first, second, third]
+
+triple(third: 3, first: 1, second: 2)  // [1, 2, 3]
+triple(third: 3, 1, 2)                // [1, 2, 3]
+triple(third: 3, ...[1, 2])          // [1, 2, 3]
+```
+
+**MIX-C preserves positional indices:** the first positional value still binds
+the first non-rest formal, even when a named argument appears before it. Named
+items can appear anywhere in source order, but they never move a positional
+value into an unfilled parameter. The target and argument expressions are
+evaluated once, left to right; a call's actual `call` method is selected after
+those evaluations. Spreads and a trailing braced Closure contribute only
+*positional* values; `...rest` collects only excess positional values. An
+omitted parameter takes its default (if any), while an explicitly supplied
+`null` suppresses that default.
+
+```protos
+defaults: (first: 10, second: 20) => [first, second]
+
+defaults(second: 7)       // [10, 7]
+defaults(first: null)     // [null, 20]
+```
+
+The call syntax intentionally changes the old meaning of bare `:` in an
+argument. To evaluate an ordinary **slot-creation expression** and pass its
+result positionally, group that expression:
+
+```protos
+identity: value => value
+identity((created: 41))  // 41; also creates the slot created
+```
+
+The Array literal uses the same argument-item grammar as an ordinary call:
+`[item: 5]` is `Array(item: 5)`, **not** an Array containing a slot-creation
+result. The standard Array factory has no matching `item` formal, so that call
+signals an Error; `[(item: 5)]` keeps the original positional slot-creation
+meaning. A shadowing source-defined `Array` Closure can accept an `item` label
+if its signature declares that parameter.
+
+Name association belongs to the *actually selected* Closure. An unknown label,
+a label matching a rest parameter, or supplying a formal both positionally and
+by name signals a fresh generic `Error` after argument evaluation and method
+selection, before the selected Closure's defaults or body. Repeating an explicit
+label in a single argument list is instead a **syntax error**. A missing
+method or non-Closure selected `call` retains its ordinary lookup/invocation
+failure rather than becoming a named-argument error.
+
+Standard `Object.call` transparently forwards named and positional arguments
+to the Closure receiver or to the ordinary selected constructor `init` (also
+when the standard behavior was inherited, copied or extracted). A custom
+`call` Closure only accepts names from **its own** declared signature; it does
+not implicitly forward them to another callable. Native or projected
+behaviors accept named calls only when they explicitly publish a compatible
+Protos-semantic signature. No automatic foreign keyword arguments or ambient
+`args` binding are introduced. The already-defined contextual `if`, `while`,
+`for`, `until` and `return` forms retain their own structural precedence.
+
+Because named calls depend on declared parameter names, renaming a public
+formal can break callers even when positional invocation remains unchanged.
+See the [progressive named-arguments tutorial](../../protos/tutorials/07-call-arguments/02-named-arguments.protos)
+and the [incident triage cookbook example](../../protos/examples/closures/named-arguments.protos)
+for runnable uses of these rules. The detailed authority is the D237 material
+in `spec/PROTOS_GRAMMAR.md` and `spec/semantics/CALLABLES.md`.
+
 ## Closures capture lexical contexts by reference
 
 The binding model from chapter 1 applies directly to Closures:

@@ -41,6 +41,15 @@ prefix/suffix copies), then
 (`flatMap`, `zip`, `partition`, `distinct` and callback snapshot behavior).
 Both run unchanged with the standalone CLI and require no extra host authority.
 
+The `07-call-arguments/` progression now has two lessons:
+[`01-defaults-args-and-rest.protos`](07-call-arguments/01-defaults-args-and-rest.protos)
+introduces positional arguments, defaults, and rest; then
+[`02-named-arguments.protos`](07-call-arguments/02-named-arguments.protos)
+teaches D237 names in any order, MIX-C positional indices, spread, explicit
+`null`, and grouped slot creation. Both run with the standalone CLI and need
+no extra host authority. The [Closure guide](../../docs/guide/03-closures-methods-and-receivers.md#named-arguments-and-name-aware-calls-d237)
+explains the corresponding dynamic binding and error boundaries.
+
 Current progression:
 
 1. `01-values-and-slots/`
