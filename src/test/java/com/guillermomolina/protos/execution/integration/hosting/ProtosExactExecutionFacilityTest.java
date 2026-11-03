@@ -22,7 +22,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -191,9 +190,9 @@ final class ProtosExactExecutionFacilityTest {
                         "(subject) => { subject.value() }");
 
         assertCompletedObservation(observation);
-        ProtosIntegerValue value =
+        Long value =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         observation.readLocalSlot("value").orElseThrow());
         assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
     }
@@ -223,9 +222,9 @@ final class ProtosExactExecutionFacilityTest {
                         "(subject) => { subject.value() }");
 
         assertCompletedObservation(observation);
-        ProtosIntegerValue value =
+        Long value =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         observation.readLocalSlot("value").orElseThrow());
         assertTrue(
                 com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value).equals("1")

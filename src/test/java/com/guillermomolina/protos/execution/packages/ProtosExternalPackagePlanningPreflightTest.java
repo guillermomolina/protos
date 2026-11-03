@@ -13,7 +13,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -141,9 +140,9 @@ final class ProtosExternalPackagePlanningPreflightTest {
             assertTrue(process.rootFilesystemForRuntime().isEmpty());
 
             ProtosObjectValue plan = assertInstanceOf(ProtosObjectValue.class, rawPlan);
-            ProtosIntegerValue generation =
+            Long generation =
                     assertInstanceOf(
-                            ProtosIntegerValue.class,
+                            Long.class,
                             plan.readLocalSlot("generation").orElseThrow());
             assertEquals(String.valueOf(2), String.valueOf(Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(generation))));
 

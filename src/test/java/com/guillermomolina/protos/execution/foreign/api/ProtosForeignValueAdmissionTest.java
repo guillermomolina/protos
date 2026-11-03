@@ -221,8 +221,7 @@ class ProtosForeignValueAdmissionTest {
 
         // Only normalized scalars are valid INTEGER descriptors.
         for (Object invalid : new Object[] {
-                BigInteger.ONE, Integer.valueOf(1), 1.0d, "1", null,
-                new com.guillermomolina.protos.runtime.ProtosIntegerValue(1L)}) {
+                BigInteger.ONE, Integer.valueOf(1), 1.0d, "1", null}) {
             assertThrows(IllegalArgumentException.class,
                     () -> new ProtosForeignAdmissionDescriptor(
                             ProtosForeignAdmissionDescriptor.Kind.INTEGER, invalid, null,
@@ -251,10 +250,10 @@ class ProtosForeignValueAdmissionTest {
                         .member("huge", new Integral(huge));
         try (ProtosForeignValueFixture fixture = fixture(root)) {
             assertEquals(-7L, assertInstanceOf(
-                    com.guillermomolina.protos.runtime.ProtosIntegerValue.class,
+                    java.lang.Long.class,
                     fixture.eval(M + "m.smallBig")).longValue());
             assertEquals(Long.MIN_VALUE, assertInstanceOf(
-                    com.guillermomolina.protos.runtime.ProtosIntegerValue.class,
+                    java.lang.Long.class,
                     fixture.eval(M + "m.edge")).longValue());
             Object large = fixture.eval(M + "m.huge");
             assertInstanceOf(com.guillermomolina.protos.runtime.ProtosLargeIntegerValue.class, large);

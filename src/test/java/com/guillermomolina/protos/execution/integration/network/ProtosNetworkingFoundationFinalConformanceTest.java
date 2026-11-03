@@ -11,7 +11,6 @@ import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -187,7 +186,7 @@ final class ProtosNetworkingFoundationFinalConformanceTest {
                 (ProtosObjectValue)
                         ProtosInvocation.invoke(
                                 addressFactory,
-                                List.of(integer(4), new ProtosIntegerValue(0x7f000001L)),
+                                List.of(integer(4), Long.valueOf(0x7f000001L)),
                                 activation);
         Object endpointFactory = prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
@@ -210,8 +209,8 @@ final class ProtosNetworkingFoundationFinalConformanceTest {
         }
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static void closeAndAwait(ProtosTcpConnectionValue connection, ProtosActivation activation)

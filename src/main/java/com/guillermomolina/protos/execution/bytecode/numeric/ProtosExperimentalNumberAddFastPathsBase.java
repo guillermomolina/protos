@@ -17,10 +17,13 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
-import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+
+// PRUIBA DE I115, en algún momento esto volverá a funcionar
+// Signed-64 semantic Integers use Long directly, not ProtosIntegerValue.
+
+// PRUIBA DE I115, en algún momento esto volverá a funcionar
+// import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.dsl.GenerateCached;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -79,30 +82,28 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
      * root registers NEEDS_CALLER_PRELUDE once and the value is recovered
      * cold (ProtosBytecodeRootNode#experimentalEffectivePrelude).
      */
-    static ProtosPrelude callerPrelude(ProtosBytecodeRootNode root, VirtualFrame frame) {
-        return ProtosBytecodeRootNode.experimentalEffectivePrelude(root, frame.getArguments());
-    }
+    /*
+     * PRUIBA DE I115, en algún momento esto volverá a funcionar
+     * Retired caller-frame arithmetic provenance; not executed:
+     * static ProtosPrelude callerPrelude(ProtosBytecodeRootNode root, VirtualFrame frame) {
+     *     return ProtosBytecodeRootNode.experimentalEffectivePrelude(root, frame.getArguments());
+     * }
+     */
 
     /*
      * doLLOvf (declared by each proxied subclass, which can bind its root):
      * the long sum, or on signed-64 overflow the exact large Integer of the
      * caller's Prelude.
      */
-    static Object addOrPromote(
-            ProtosBytecodeRootNode root, VirtualFrame frame, long left, long right) {
+    static Object addOrPromote(Node node, long left, long right) {
         long sum = left + right;
         if (((left ^ sum) & (right ^ sum)) >= 0L) {
             return sum;
         }
-        return promote(callerPrelude(root, frame), left, right);
+        return ProtosNumberFactory.add(node, left, right);
     }
 
     /* Signed-64 overflow: the exact large Integer of the caller's Prelude. */
-    @TruffleBoundary
-    static Object promote(ProtosPrelude prelude, long left, long right) {
-        return ProtosNumericValueSupport.addIntegers(
-                new ProtosIntegerValue(left), new ProtosIntegerValue(right), prelude);
-    }
 
     /**
      * The single generic route of both operations: two semantic Integers
@@ -110,13 +111,13 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
      * without promotion loss; any other pair receives the ordinary send of
      * {@code +} (so a non-numeric receiver keeps its own {@code +}).
      */
-    static Object genericAdd(
-            ProtosBytecodeRootNode root, VirtualFrame frame, Object left, Object right) {
+    static Object genericAdd(ProtosBytecodeRootNode root, VirtualFrame frame,
+            Node node, Object left, Object right) {
         Object receiver = ProtosNumericValueSupport.guestValue(left);
         Object argument = ProtosNumericValueSupport.guestValue(right);
         if (ProtosNumericValueSupport.isCurrentInteger(receiver)
                 && ProtosNumericValueSupport.isCurrentInteger(argument)) {
-            return addIntegers(receiver, argument, callerPrelude(root, frame));
+            return ProtosNumberFactory.add(node, receiver, argument);
         }
         return ProtosFunctionCallDispatchers.sendOne(
                 root,
@@ -127,10 +128,6 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
                 argument);
     }
 
-    @TruffleBoundary
-    private static Object addIntegers(Object left, Object right, ProtosPrelude prelude) {
-        return ProtosNumericValueSupport.addIntegers(left, right, prelude);
-    }
 
     /*
      * I115-H7-R1: the Protos root executing this operation. In a proxied

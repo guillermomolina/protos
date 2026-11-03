@@ -22,7 +22,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
@@ -149,7 +148,7 @@ final class ProtosParallelPolyglotContextRoutingTest {
                         ProtosClosureValue.nativeClosure(
                                 (activation, arguments) -> {
                                     nestedContext.set(ProtosLanguageContext.current());
-                                    return new ProtosIntegerValue(73);
+                                    return Long.valueOf(73);
                                 }));
 
         ProtosFutureValue result =

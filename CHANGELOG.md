@@ -8,6 +8,51 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.36-SNAPSHOT
+
+- **I115 — GraalPy-style arithmetic and Context-owned BigInteger promotion (historical).**
+  - Replace the guest signed-64 `ProtosIntegerValue` wrapper with Java `Long`
+    as the canonical semantic Integer in-range, retaining
+    `ProtosLargeIntegerValue` for values outside signed 64 bits. Remove
+    `ProtosIntegerValue.java`; normalize integer reads, interop,
+    numeric relations, slot storage and tests to the new representation.
+  - Introduce direct `NumberSubtract` and `NumberMultiply` fast paths,
+    beside `NumberAdd` and the general `ProtosNumericAddNode`,
+    `ProtosNumericSubtractNode` and `ProtosNumericMultiplyNode`.
+    Signed-64 arithmetic uses primitive `long` / `Math.*Exact`; overflow
+    promotes exactly to a BigInteger-backed guest value, without int
+    narrowing or a generic message send on the numeric hit.
+  - Introduce `ProtosNumberFactory`: a GraalPy PFactory-style numeric
+    constructor owned by `ProtosLanguageContext`. Its prototype Prelude
+    is bound on initial root entry, rather than recovered from caller
+    frames at every overflowing arithmetic site. Non-numeric fallback
+    retains dynamic selector dispatch.
+  - Add LONG-4/LONG-5 arithmetic witnesses and rename
+    `ProtosIntegerValueRepresentationTest.java` to
+    `ProtosLongRepresentationTest.java`; update the wider test corpus
+    for the new `Long` representation. No historical runtime tests or
+    performance measurements are claimed for this replay.
+  - **Historical source delta:** GitHub reports 221 file entries:
+    212 modified, 7 added, 1 deleted and 1 renamed. With Git
+    `--no-renames` the rename is one addition and one deletion:
+    222 changes = 212 modified, 8 added and 2 deleted.
+    All historical source/test blobs, including the removed class and
+    renamed test, are retained without alteration.
+  - **Historical semantic limitations:** the Context-owned numeric
+    factory pins an initial Prelude; a different caller Prelude or
+    an overridden numeric prototype may therefore not redirect
+    large-Integer construction, so D197-C / dynamic number protocol
+    semantics remain open. The prior source-function `Object.call`
+    override discrepancy (D013) also remains. Signed-64 `long` is the
+    intended numeric carrier, but project-wide conformance of
+    `ReturnHome`, Task/C-prime, suspension, cancellation, non-local
+    control transfers, D179 C0 lexical selection and optimized
+    internal message execution has not been established. Replacing
+    the guest wrapper with `Long` also needs independent interop,
+    identity and delegation acceptance. No benchmarks, graph evidence
+    or compilation/tests were executed for this historical replay.
+  - Original implementation: `bdca637a534ca9a1e071e9670461fddf61ae6690`.
+
 ## 0.4.35-SNAPSHOT
 
 - **I115 — GraalPy-shaped unary call lowering and single-Context direct dispatch (historical).**

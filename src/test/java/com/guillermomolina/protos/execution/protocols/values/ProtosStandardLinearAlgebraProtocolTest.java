@@ -34,7 +34,6 @@ import com.guillermomolina.protos.runtime.ProtosComplexArithmetic;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMatrixValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -157,7 +156,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         ProtosPrelude prelude = prelude();
         ProtosActivation a = prelude.newModuleActivation();
         Object half = fraction(1, 2, prelude);
-        Object complex = complex(new ProtosIntegerValue(1), new ProtosIntegerValue(2), prelude);
+        Object complex = complex(Long.valueOf(1), Long.valueOf(2), prelude);
         Object big = big(BigInteger.ONE.shiftLeft(90), prelude);
 
         ProtosVectorValue empty = vector(a, prelude);
@@ -288,7 +287,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
             integer(-1),
             integer(3),
             integer(Integer.MAX_VALUE),
-            new ProtosIntegerValue((1L << 32) + 1),
+            Long.valueOf((1L << 32) + 1),
             big(BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE), prelude),
             new ProtosFloatValue(1.0d),
             fraction(1, 2, prelude),
@@ -479,7 +478,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         ProtosPrelude prelude = prelude();
         ProtosActivation a = prelude.newModuleActivation();
         Object dot = invoke(vector(a, prelude), "dot", a, vector(a, prelude));
-        assertInstanceOf(ProtosIntegerValue.class, dot);
+        assertInstanceOf(Long.class, dot);
         assertTrue(ProtosIdentity.identical(integer(0), dot));
     }
 
@@ -549,7 +548,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         }
         for (Object result :
                 reductions(a, prelude, new Object[] {half, half}, new Object[] {integer(2), integer(2)})) {
-            assertInstanceOf(ProtosIntegerValue.class, result);
+            assertInstanceOf(Long.class, result);
             assertTrue(ProtosIdentity.identical(integer(2), result));
         }
     }
@@ -1023,7 +1022,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         ProtosMatrixValue zeros = assertInstanceOf(ProtosMatrixValue.class, invoke(wide, "matmul", a, tall));
         assertNull(packed(zeros));
         for (Object zero : zeros.indexedSnapshot()) {
-            assertInstanceOf(ProtosIntegerValue.class, zero);
+            assertInstanceOf(Long.class, zero);
             assertTrue(ProtosIdentity.identical(integer(0), zero));
         }
         ProtosMatrixValue row = matrix(a, prelude, 1, 2, floats(1.0d, 2.0d));
@@ -1201,7 +1200,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
     }
 
     private static Object integer(long value) {
-        return new ProtosIntegerValue(value);
+        return Long.valueOf(value);
     }
 
     private static Object big(BigInteger value, ProtosPrelude prelude) {

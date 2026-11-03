@@ -13,7 +13,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
@@ -227,7 +226,7 @@ final class ProtosPackageContentVerificationTest {
                             ProtosInvocation.invokeMessage(
                                     file,
                                     "read",
-                                    List.of(new ProtosIntegerValue(4096)),
+                                    List.of(Long.valueOf(4096)),
                                     activation));
             assertEquals(ProtosFutureValue.State.RESOLVED, read.state());
             Object readValue = read.resolvedValue().orElseThrow();

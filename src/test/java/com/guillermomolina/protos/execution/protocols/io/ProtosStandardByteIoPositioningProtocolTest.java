@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 class ProtosStandardByteIoPositioningProtocolTest {
     private static ProtosPrelude core() throws Exception{return new ProtosCoreBootstrap().bootstrap(Path.of("protos","lib","core"));}
-    private static ProtosIntegerValue i(long n){return new ProtosIntegerValue(n);}
+    private static Long i(long n){return Long.valueOf(n);}
     private static ProtosBytesValue bytes(ProtosObjectValue p,int...v){var b=new ProtosBytesValue(p);for(int x:v)b.indexedAdd(i(x));return b;}
 
     @Test void extendedSurfaceReturnsFuturesAndValidatesArguments()throws Exception{
@@ -215,13 +215,13 @@ class ProtosStandardByteIoPositioningProtocolTest {
             System.arraycopy(b,0,data,position,b.length);position=end;
         }
         public ProtosByteIoFlow.Cancellation flush(ProtosByteIoFlow.ReceiverCompletion c){flushCalls++;c.succeeded();return()->{};}
-        public ProtosByteIoFlow.Cancellation position(ProtosByteIoFlow.IntegerCompletion c){c.succeeded(new ProtosIntegerValue(position));return()->{};}
+        public ProtosByteIoFlow.Cancellation position(ProtosByteIoFlow.IntegerCompletion c){c.succeeded(Long.valueOf(position));return()->{};}
         public ProtosByteIoFlow.Cancellation seek(Object p,ProtosByteIoFlow.IntegerCompletion c){position=ProtosNumericValueSupport.exactInt(p);c.succeeded(p);return()->{};}
         public ProtosByteIoFlow.Cancellation seekBy(Object o,ProtosByteIoFlow.IntegerCompletion c){
-            ProtosIntegerValue p=new ProtosIntegerValue(Math.addExact(position,((ProtosIntegerValue)o).longValue()));if(p.longValue()<0){c.failed();return()->{};}position=ProtosNumericValueSupport.exactInt(p);c.succeeded(p);return()->{};
+            Long p=Long.valueOf(Math.addExact(position,((Long)o).longValue()));if(p.longValue()<0){c.failed();return()->{};}position=ProtosNumericValueSupport.exactInt(p);c.succeeded(p);return()->{};
         }
-        public ProtosByteIoFlow.Cancellation seekToEnd(ProtosByteIoFlow.IntegerCompletion c){position=data.length;c.succeeded(new ProtosIntegerValue(position));return()->{};}
-        public ProtosByteIoFlow.Cancellation size(ProtosByteIoFlow.IntegerCompletion c){sizeCalls++;c.succeeded(new ProtosIntegerValue(data.length));return()->{};}
+        public ProtosByteIoFlow.Cancellation seekToEnd(ProtosByteIoFlow.IntegerCompletion c){position=data.length;c.succeeded(Long.valueOf(position));return()->{};}
+        public ProtosByteIoFlow.Cancellation size(ProtosByteIoFlow.IntegerCompletion c){sizeCalls++;c.succeeded(Long.valueOf(data.length));return()->{};}
         public ProtosByteIoFlow.Cancellation truncate(Object n,ProtosByteIoFlow.ReceiverCompletion c){
             int x=ProtosNumericValueSupport.exactInt(n);if(x<data.length)data=Arrays.copyOf(data,x);c.succeeded();return()->{};
         }

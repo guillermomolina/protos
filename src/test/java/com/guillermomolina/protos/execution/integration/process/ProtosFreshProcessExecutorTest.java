@@ -22,7 +22,6 @@ import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
@@ -72,8 +71,8 @@ final class ProtosFreshProcessExecutorTest {
                                 source("(() => { 42 }).future().value()")));
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        ProtosIntegerValue value =
-                assertInstanceOf(ProtosIntegerValue.class, outcome.value());
+        Long value =
+                assertInstanceOf(Long.class, outcome.value());
         assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         assertNull(outcome.error());
     }
@@ -109,9 +108,9 @@ final class ProtosFreshProcessExecutorTest {
                 assertInstanceOf(ProtosArrayValue.class, outcome.value());
         assertEquals(1, captures.indexedSize());
 
-        ProtosIntegerValue captured =
+        Long captured =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         captures.indexedAt(0));
         assertEquals(42L, captured.longValue());
     }
@@ -141,9 +140,9 @@ final class ProtosFreshProcessExecutorTest {
                 assertInstanceOf(ProtosArrayValue.class, outcome.value());
         assertEquals(1, captures.indexedSize());
 
-        ProtosIntegerValue captured =
+        Long captured =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         captures.indexedAt(0));
         assertEquals(42L, captured.longValue());
     }
@@ -165,8 +164,8 @@ final class ProtosFreshProcessExecutorTest {
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
 
-        ProtosIntegerValue result =
-                assertInstanceOf(ProtosIntegerValue.class, outcome.value());
+        Long result =
+                assertInstanceOf(Long.class, outcome.value());
         assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(result));
     }
 
@@ -363,8 +362,8 @@ final class ProtosFreshProcessExecutorTest {
             ProtosExecutionOutcome outcome,
             long expected) {
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        ProtosIntegerValue integer =
-                assertInstanceOf(ProtosIntegerValue.class, outcome.value());
+        Long integer =
+                assertInstanceOf(Long.class, outcome.value());
         assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
         assertNull(outcome.error());
     }

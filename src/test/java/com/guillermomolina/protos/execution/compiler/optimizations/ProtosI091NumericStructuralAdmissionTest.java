@@ -19,18 +19,18 @@ final class ProtosI091NumericStructuralAdmissionTest {
 
         ProtosActivation activation = prelude.newModuleActivation();
 
-        Object small = new ProtosIntegerValue(7L);
+        Object small = Long.valueOf(7L);
         Object large = ProtosNumericValueSupport.integerFromHost(
                 BigInteger.ONE.shiftLeft(90), prelude);
         Object floating = new ProtosFloatValue(-0.0d);
 
         Object fraction = ProtosNumericValueSupport.normalizeExactRational(
-                new ProtosIntegerValue(1L),
-                new ProtosIntegerValue(2L),
+                Long.valueOf(1L),
+                Long.valueOf(2L),
                 prelude);
 
         Object complex = ProtosComplexNumericSupport.normalize(
-                new ProtosIntegerValue(3L),
+                Long.valueOf(3L),
                 new ProtosFloatValue(-0.0d),
                 prelude);
 
@@ -65,14 +65,14 @@ final class ProtosI091NumericStructuralAdmissionTest {
         ProtosActivation activation = prelude.newModuleActivation();
 
         Object fraction = ProtosNumericValueSupport.normalizeExactRational(
-                new ProtosIntegerValue(1L),
-                new ProtosIntegerValue(2L),
+                Long.valueOf(1L),
+                Long.valueOf(2L),
                 prelude);
 
         ProtosObjectValue ordinary =
                 new ProtosObjectValue((ProtosObjectValue) fraction);
 
-        Object marker = new ProtosIntegerValue(17L);
+        Object marker = Long.valueOf(17L);
         ordinary.createLocalSlot("marker", marker);
 
         assertFalse(ProtosNumericValueSupport.isCurrentNumber(ordinary));

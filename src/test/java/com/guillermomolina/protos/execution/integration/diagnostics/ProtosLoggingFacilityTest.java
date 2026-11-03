@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -124,7 +123,7 @@ final class ProtosLoggingFacilityTest {
                         new ProtosFloatValue(Double.NaN),
                         new ProtosFloatValue(Double.POSITIVE_INFINITY),
                         new ProtosFloatValue(Double.NEGATIVE_INFINITY),
-                        new ProtosIntegerValue(1),
+                        Long.valueOf(1),
                         new ProtosStringValue("1.0"))) {
             assertThrows(
                     ProtosSignalException.class,
@@ -188,7 +187,7 @@ final class ProtosLoggingFacilityTest {
         assertEquals(
                 exponent,
                 ProtosNumericValueSupport.exactInt(
-                        assertInstanceOf(ProtosIntegerValue.class, result.indexedAt(1))));
+                        assertInstanceOf(Long.class, result.indexedAt(1))));
     }
 
     private static ProtosObjectValue eventFacility(ProtosPrelude prelude) {

@@ -54,16 +54,14 @@ abstract class ProtosNumericAddNode extends ProtosPrimitiveNumericSendFastPathsB
         return ProtosNumericAddNodeGen.create();
     }
 
+    // PRUIBA DE I115, en algún momento esto volverá a funcionar
     /*
-     * PERF040-E1, GraalPy doLL: two lowerer-authorized Long carriers, primitive
-     * in and out. The first ArithmeticException rewrites this specialization
-     * into doLLOvf, which accepts exactly the same inputs.
+     * I115 LONG-3: signed-64 Long is the semantic Integer, independent of
+     * carrier flags. ArithmeticException rewrites doLL to doLLOvf,
+     * preserving exact promotion outside the signed-64 range.
      */
     @Specialization(
-            guards = {
-                "receiverCarrier",
-                "argumentCarrier",
-                "admits(prelude, INTEGER_LANE)"},
+            guards = "admits(prelude, INTEGER_LANE)",
             rewriteOn = ArithmeticException.class)
     static long doLL(
             long receiver, Object caller, long argument,
@@ -79,10 +77,7 @@ abstract class ProtosNumericAddNode extends ProtosPrimitiveNumericSendFastPathsB
 
     /* GraalPy doLLOvf: same domain; a result that fits is still a Java long. */
     @Specialization(
-            guards = {
-                "receiverCarrier",
-                "argumentCarrier",
-                "admits(prelude, INTEGER_LANE)"},
+            guards = "admits(prelude, INTEGER_LANE)",
             replaces = "doLL")
     static Object doLLOvf(
             long receiver, Object caller, long argument,
@@ -96,50 +91,51 @@ abstract class ProtosNumericAddNode extends ProtosPrimitiveNumericSendFastPathsB
         return addOrPromote(receiver, argument, prelude);
     }
 
-    /*
-     * Every other signed-64 Integer pair: at least one authentic
-     * ProtosIntegerValue, any Long being an authorized carrier. Same exact
-     * primitive arithmetic and long result; the pair of Long carriers stays
-     * with doLL / doLLOvf.
-     */
-    @Specialization(
-            guards = {
-                "representedIntegerPair(receiver, receiverCarrier, argument, argumentCarrier)",
-                "admits(prelude, INTEGER_LANE)"},
-            rewriteOn = ArithmeticException.class)
-    static long doIntegers(
-            Object receiver, Object caller, Object argument,
-            boolean receiverCarrier, boolean argumentCarrier,
-            Object foldedArithmetic, Object staticFoldResult,
-            @Bind("callerPrelude(caller)") ProtosPrelude prelude) {
-        long left = smallValue(receiver);
-        long right = smallValue(argument);
-        if (foldApplies(ProtosStandardIntegerProtocol.CanonicalIntegerOperation.ADD,
-                left, right, foldedArithmetic, staticFoldResult)) {
-            return foldedValue(staticFoldResult);
-        }
-        return Math.addExact(left, right);
-    }
+    // PRUIBA DE I115, en algún momento esto volverá a funcionar
+    // /*
+    //  * Every other signed-64 Integer pair: at least one authentic
+    //  * Long, any Long being an authorized carrier. Same exact
+    //  * primitive arithmetic and long result; the pair of Long carriers stays
+    //  * with doLL / doLLOvf.
+    //  */
+    // @Specialization(
+    //         guards = {
+    //             "representedIntegerPair(receiver, receiverCarrier, argument, argumentCarrier)",
+    //             "admits(prelude, INTEGER_LANE)"},
+    //         rewriteOn = ArithmeticException.class)
+    // static long doIntegers(
+    //         Object receiver, Object caller, Object argument,
+    //         boolean receiverCarrier, boolean argumentCarrier,
+    //         Object foldedArithmetic, Object staticFoldResult,
+    //         @Bind("callerPrelude(caller)") ProtosPrelude prelude) {
+    //     long left = smallValue(receiver);
+    //     long right = smallValue(argument);
+    //     if (foldApplies(ProtosStandardIntegerProtocol.CanonicalIntegerOperation.ADD,
+    //             left, right, foldedArithmetic, staticFoldResult)) {
+    //         return foldedValue(staticFoldResult);
+    //     }
+    //     return Math.addExact(left, right);
+    // }
 
-    /* The exact generalization of doIntegers, over the same domain. */
-    @Specialization(
-            guards = {
-                "representedIntegerPair(receiver, receiverCarrier, argument, argumentCarrier)",
-                "admits(prelude, INTEGER_LANE)"},
-            replaces = "doIntegers")
-    static Object doIntegersOvf(
-            Object receiver, Object caller, Object argument,
-            boolean receiverCarrier, boolean argumentCarrier,
-            Object foldedArithmetic, Object staticFoldResult,
-            @Bind("callerPrelude(caller)") ProtosPrelude prelude) {
-        long left = smallValue(receiver);
-        long right = smallValue(argument);
-        if (foldApplies(ProtosStandardIntegerProtocol.CanonicalIntegerOperation.ADD,
-                left, right, foldedArithmetic, staticFoldResult)) {
-            return foldedValue(staticFoldResult);
-        }
-        return addOrPromote(left, right, prelude);
-    }
+    // /* The exact generalization of doIntegers, over the same domain. */
+    // @Specialization(
+    //         guards = {
+    //             "representedIntegerPair(receiver, receiverCarrier, argument, argumentCarrier)",
+    //             "admits(prelude, INTEGER_LANE)"},
+    //         replaces = "doIntegers")
+    // static Object doIntegersOvf(
+    //         Object receiver, Object caller, Object argument,
+    //         boolean receiverCarrier, boolean argumentCarrier,
+    //         Object foldedArithmetic, Object staticFoldResult,
+    //         @Bind("callerPrelude(caller)") ProtosPrelude prelude) {
+    //     long left = smallValue(receiver);
+    //     long right = smallValue(argument);
+    //     if (foldApplies(ProtosStandardIntegerProtocol.CanonicalIntegerOperation.ADD,
+    //             left, right, foldedArithmetic, staticFoldResult)) {
+    //         return foldedValue(staticFoldResult);
+    //     }
+    //     return addOrPromote(left, right, prelude);
+    // }
 
     @Specialization(
             guards = {

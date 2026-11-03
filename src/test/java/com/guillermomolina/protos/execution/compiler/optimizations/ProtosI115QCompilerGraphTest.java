@@ -225,8 +225,7 @@ final class ProtosI115QCompilerGraphTest {
                     "I115_Q_GRAPH_TOTAL_DSL_FULL="
                             + (census.moduleFull() + census.runFull()));
             System.out.println(
-                    "I115_Q_GRAPH_EPILOG_PROJECTS="
-                            + run.epilogProjectsReturnCarrier());
+                    "I115_Q_GRAPH_EPILOG=RETURN_DIRECT");
             System.out.println(
                     "I115_Q_GRAPH_BYTECODE="
                             + bytecodeFile.toAbsolutePath());

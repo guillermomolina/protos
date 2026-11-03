@@ -81,8 +81,8 @@ final class ProtosI091ParallelTransferAcceptanceTest {
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosBytesValue bytes =
                 new ProtosBytesValue(ProtosObjectValue.rootObject());
-        bytes.indexedAdd(new ProtosIntegerValue(200L));
-        bytes.indexedAdd(new ProtosIntegerValue(255L));
+        bytes.indexedAdd(Long.valueOf(200L));
+        bytes.indexedAdd(Long.valueOf(255L));
         bytes.createLocalSlot("owner", holder);
         holder.createLocalSlot("bytes", bytes);
         holder.createLocalSlot(

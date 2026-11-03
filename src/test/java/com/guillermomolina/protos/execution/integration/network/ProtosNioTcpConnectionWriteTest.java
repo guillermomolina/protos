@@ -10,7 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -65,7 +64,7 @@ final class ProtosNioTcpConnectionWriteTest {
     void readAndWriteProgressRemainIndependent() throws Exception {
         try (Fixture x=connected("protos-test-nio-write-duplex")) {
             ProtosFutureValue read=(ProtosFutureValue)ProtosInvocation.invokeMessage(
-                    x.connection,"read",List.of(new ProtosIntegerValue(4)),x.activation);
+                    x.connection,"read",List.of(Long.valueOf(4)),x.activation);
             assertEquals(ProtosFutureValue.State.PENDING,read.state());
             byte[] outgoing=payload(1024*1024);
             ProtosFutureValue write=write(x,outgoing);
@@ -111,16 +110,16 @@ final class ProtosNioTcpConnectionWriteTest {
     private static ProtosObjectValue endpoint(ProtosPrelude p,ProtosActivation a,int port) {
         Object af=p.ipAddressPrototypeForRuntime();
         ProtosObjectValue address=(ProtosObjectValue)ProtosInvocation.invoke(af,List.of(
-                new ProtosIntegerValue(4),
-                new ProtosIntegerValue(0x7f000001L)),a);
+                Long.valueOf(4),
+                Long.valueOf(0x7f000001L)),a);
         Object ef=p.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)ProtosInvocation.invoke(
-                ef,List.of(address,new ProtosIntegerValue(port)),a);
+                ef,List.of(address,Long.valueOf(port)),a);
     }
 
     private static ProtosFutureValue write(Fixture x,byte[] bytes) {
         ProtosBytesValue value=new ProtosBytesValue(x.prelude.bytesPrototypeForRuntime());
-        for(byte b:bytes)value.indexedAdd(new ProtosIntegerValue(b&0xff));
+        for(byte b:bytes)value.indexedAdd(Long.valueOf(b&0xff));
         return (ProtosFutureValue)ProtosInvocation.invokeMessage(
                 x.connection,"write",List.of(value),x.activation);
     }

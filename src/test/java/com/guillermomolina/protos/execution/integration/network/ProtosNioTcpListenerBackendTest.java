@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -268,8 +267,8 @@ final class ProtosNioTcpListenerBackendTest {
         }
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static void awaitTerminal(ProtosFutureValue future) throws Exception {

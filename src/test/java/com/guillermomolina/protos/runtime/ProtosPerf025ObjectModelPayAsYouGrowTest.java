@@ -170,7 +170,7 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         assertEquals(
                 1L,
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         object.readLocalSlot("value").orElseThrow())
                         .longValue());
 
@@ -184,7 +184,7 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         assertEquals(
                 wide,
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         object.localSlotsSnapshot().get("value"))
                         .longValue());
 
@@ -224,7 +224,7 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         assertEquals(
                 Long.MAX_VALUE,
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         object.readLocalSlot("value").orElseThrow())
                         .longValue());
 

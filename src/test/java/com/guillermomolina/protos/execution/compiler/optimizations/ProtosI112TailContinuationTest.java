@@ -36,7 +36,6 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -121,7 +120,7 @@ final class ProtosI112TailContinuationTest {
                             "i112-transitions-direct.protos",
                             ProtosReturnHome.unobservable());
             ProtosClosureValue generic =
-                    nativeClosure((activation, supplied) -> new ProtosIntegerValue(100));
+                    nativeClosure((activation, supplied) -> Long.valueOf(100));
 
             List<ProtosClosureValue> sequence = List.of(generic, direct, generic, direct, direct);
             List<Long> expected = List.of(100L, 2L, 100L, 2L, 2L);
@@ -158,7 +157,7 @@ final class ProtosI112TailContinuationTest {
             }
 
             target.createLocalSlot(
-                    "call", nativeClosure((activation, supplied) -> new ProtosIntegerValue(77)));
+                    "call", nativeClosure((activation, supplied) -> Long.valueOf(77)));
             ProtosActivation module = activation(prelude, domain);
             module.context().createLocalSlot("target", target);
             assertInteger(77, root.getCallTarget().call(module));
@@ -190,8 +189,8 @@ final class ProtosI112TailContinuationTest {
                                 target.createLocalSlot(
                                         "call",
                                         nativeClosure(
-                                                (inner, values) -> new ProtosIntegerValue(55)));
-                                return new ProtosIntegerValue(1);
+                                                (inner, values) -> Long.valueOf(55)));
+                                return Long.valueOf(1);
                             }));
 
             // A composed argument is not a terminal operand: the established
@@ -212,13 +211,13 @@ final class ProtosI112TailContinuationTest {
                             "i112-selection-fresh.protos",
                             ProtosReturnHome.unobservable());
             second.context().createLocalSlot("target", fresh);
-            second.context().createLocalSlot("argument", new ProtosIntegerValue(3));
+            second.context().createLocalSlot("argument", Long.valueOf(3));
             ProtosBytecodeRootNode terminal =
                     lowerRoot(scope.language(), "target(argument)", "i112-selection-terminal.protos");
             assertTerminal(terminal, "c.CallUnaryMethod");
             assertInteger(3, terminal.getCallTarget().call(second));
             fresh.createLocalSlot(
-                    "call", nativeClosure((activation, supplied) -> new ProtosIntegerValue(56)));
+                    "call", nativeClosure((activation, supplied) -> Long.valueOf(56)));
             assertInteger(56, terminal.getCallTarget().call(second));
         }
     }
@@ -252,7 +251,7 @@ final class ProtosI112TailContinuationTest {
                 }
             }
             targets.get(0).createLocalSlot(
-                    "call", nativeClosure((activation, supplied) -> new ProtosIntegerValue(-1)));
+                    "call", nativeClosure((activation, supplied) -> Long.valueOf(-1)));
             ProtosActivation module = activation(prelude, domain);
             module.context().createLocalSlot("target", targets.get(0));
             assertInteger(-1, root.getCallTarget().call(module));
@@ -978,7 +977,7 @@ final class ProtosI112TailContinuationTest {
                                             (ProtosClosureValue) supplied.get(0),
                                             List.of(),
                                             module);
-                                    return new ProtosIntegerValue(5);
+                                    return Long.valueOf(5);
                                 }));
                 assertInteger(5, root.getCallTarget().call(module));
                 assertInstanceOf(ProtosClosureValue.class, observed[0]);
@@ -1019,7 +1018,7 @@ final class ProtosI112TailContinuationTest {
                                     recreated.context().createLocalSlot(
                                             "identity",
                                             nativeClosure(
-                                                    (inner, values) -> new ProtosIntegerValue(99)));
+                                                    (inner, values) -> Long.valueOf(99)));
                                     return ProtosNullValue.INSTANCE;
                                 }));
                 assertInteger(99, root.getCallTarget().call(recreated));
@@ -1132,7 +1131,7 @@ final class ProtosI112TailContinuationTest {
                     sourceClosureWithHome(scope.language(), creator, "(value) => { value + 1 }",
                             "i112-uncached-source.protos", ProtosReturnHome.unobservable());
             ProtosClosureValue nativeTarget =
-                    nativeClosure((activation, supplied) -> new ProtosIntegerValue(9));
+                    nativeClosure((activation, supplied) -> Long.valueOf(9));
             for (int run = 0; run < 12; run++) {
                 boolean useSource = run % 3 != 2;
                 ProtosActivation module = activation(prelude, domain);
@@ -1192,7 +1191,7 @@ final class ProtosI112TailContinuationTest {
             for (int round = 0; round < 3; round++) {
                 // A local call introduced after warm-up is selected.
                 target.createLocalSlot(
-                        "call", nativeClosure((activation, supplied) -> new ProtosIntegerValue(77)));
+                        "call", nativeClosure((activation, supplied) -> Long.valueOf(77)));
                 assertInteger(77, callWithTarget(root, prelude, domain, target));
                 assertInteger(2, callWithTarget(root, prelude, domain,
                         sibling(template, creator.receiver(), null)));
@@ -1232,7 +1231,7 @@ final class ProtosI112TailContinuationTest {
 
             // D179: the captured binding is shared by reference, so a later
             // assignment in the creator is observed by the same instance.
-            creator.context().createLocalSlot("seed", new ProtosIntegerValue(10));
+            creator.context().createLocalSlot("seed", Long.valueOf(10));
             ProtosBytecodeRootNode captureRoot =
                     lowerRoot(scope.language(), "target(1)", "i114-capture.protos");
             captureRoot.getBytecodeNode().setUncachedThreshold(0);
@@ -1240,7 +1239,7 @@ final class ProtosI112TailContinuationTest {
                     sourceClosureWithHome(scope.language(), creator, "(value) => { seed + value }",
                             "i114-capture-target.protos", ProtosReturnHome.unobservable());
             for (int run = 0; run < 4; run++) {
-                creator.context().assignLocalSlot("seed", new ProtosIntegerValue(10 * run));
+                creator.context().assignLocalSlot("seed", Long.valueOf(10 * run));
                 assertInteger(10 * run + 1, callWithTarget(captureRoot, prelude, domain, adder));
             }
         }

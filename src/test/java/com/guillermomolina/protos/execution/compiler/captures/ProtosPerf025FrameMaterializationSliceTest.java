@@ -28,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
@@ -614,7 +613,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
         if (value instanceof Long longValue) {
             return longValue;
         }
-        if (value instanceof ProtosIntegerValue integerValue) {
+        if (value instanceof Long integerValue) {
             return integerValue.longValue();
         }
         throw new AssertionError("expected a Protos integer result, got: " + value);

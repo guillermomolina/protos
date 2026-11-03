@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.io.ProtosFileValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -368,8 +367,8 @@ final class ProtosDiagnosticInspectorTest {
         return ProtosComplexNumericSupport.normalize(real, imaginary, prelude);
     }
 
-    private static ProtosIntegerValue octet(int value) {
-        return new ProtosIntegerValue(value);
+    private static Long octet(int value) {
+        return Long.valueOf(value);
     }
 
 }

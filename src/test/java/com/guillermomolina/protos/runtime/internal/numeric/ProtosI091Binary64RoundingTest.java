@@ -256,8 +256,8 @@ final class ProtosI091Binary64RoundingTest {
         for (long[] fraction : fractions) {
             long numerator = fraction[0];
             long denominator = fraction[1];
-            Object n = new ProtosIntegerValue(numerator);
-            Object d = new ProtosIntegerValue(denominator);
+            Object n = Long.valueOf(numerator);
+            Object d = Long.valueOf(denominator);
             BigDecimal exactNumerator = BigDecimal.valueOf(numerator);
             BigDecimal exactDenominator = BigDecimal.valueOf(denominator);
 
@@ -387,7 +387,7 @@ final class ProtosI091Binary64RoundingTest {
 
     private static double divide(long numerator, long denominator) {
         return ProtosBinary64Rounding.divideExactIntegers(
-                new ProtosIntegerValue(numerator), new ProtosIntegerValue(denominator));
+                Long.valueOf(numerator), Long.valueOf(denominator));
     }
 
     private static double divide(BigInteger numerator, BigInteger denominator) {

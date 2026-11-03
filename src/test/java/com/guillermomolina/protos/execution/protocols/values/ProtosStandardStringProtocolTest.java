@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -95,10 +94,10 @@ class ProtosStandardStringProtocolTest {
         ProtosActivation a = prelude.newModuleActivation();
         ProtosStringValue mixed = new ProtosStringValue("a\uD83D\uDE00b");
         Object[] invalid = {
-            new ProtosIntegerValue(-1),
-            new ProtosIntegerValue(3),
-            new ProtosIntegerValue(4),
-            new ProtosIntegerValue((1L << 32) + 1),
+            Long.valueOf(-1),
+            Long.valueOf(3),
+            Long.valueOf(4),
+            Long.valueOf((1L << 32) + 1),
             com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), prelude),
             com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE), prelude),
             new ProtosFloatValue(1.0d),
@@ -115,7 +114,7 @@ class ProtosStandardStringProtocolTest {
     private static String at(ProtosStringValue string, long index, ProtosActivation a) {
         return ((ProtosStringValue)
                         ProtosInvocation.invokeMessage(
-                                string, "at", List.of(new ProtosIntegerValue(index)), a))
+                                string, "at", List.of(Long.valueOf(index)), a))
                 .value();
     }
 

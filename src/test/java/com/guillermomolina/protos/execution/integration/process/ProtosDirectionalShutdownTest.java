@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 class ProtosDirectionalShutdownTest {
     private static ProtosPrelude core() throws Exception{return new ProtosCoreBootstrap().bootstrap(Path.of("protos","lib","core"));}
-    private static ProtosIntegerValue i(long n){return new ProtosIntegerValue(n);}
+    private static Long i(long n){return Long.valueOf(n);}
     private static ProtosBytesValue bytes(ProtosObjectValue p,int...v){var b=new ProtosBytesValue(p);for(int x:v)b.indexedAdd(i(x));return b;}
     private record F(ProtosPrelude p,ProtosActivation a,ProtosObjectValue bp,ProtosObjectValue r){}
     private static F fixture() throws Exception{var p=core();var a=p.newModuleActivation();var bp=new ProtosObjectValue(ProtosObjectValue.rootObject());ProtosStandardBytesProtocol.install(bp);return new F(p,a,bp,new ProtosObjectValue(ProtosObjectValue.rootObject()));}

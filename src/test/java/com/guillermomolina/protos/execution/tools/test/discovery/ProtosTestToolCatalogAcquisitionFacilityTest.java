@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -182,7 +181,7 @@ final class ProtosTestToolCatalogAcquisitionFacilityTest {
                 () ->
                         invoke(
                                 wrongType,
-                                new ProtosIntegerValue(1L)));
+                                Long.valueOf(1L)));
     }
 
     private static Fixture fixture(Path cwd) throws Exception {
@@ -218,9 +217,9 @@ final class ProtosTestToolCatalogAcquisitionFacilityTest {
     private static byte[] octets(ProtosBytesValue bytes) {
         byte[] result = new byte[bytes.indexedSize()];
         for (int index = 0; index < result.length; index++) {
-            ProtosIntegerValue octet =
+            Long octet =
                     assertInstanceOf(
-                            ProtosIntegerValue.class,
+                            Long.class,
                             bytes.indexedAt(index));
             result[index] = (byte) Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(octet));
         }

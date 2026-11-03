@@ -28,7 +28,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -362,7 +361,7 @@ final class ProtosNioNetworkBackendConnectTest {
             // A large guest Integer is never a port.
             Object address = ProtosInvocation.invoke(
                     x.prelude.ipAddressPrototypeForRuntime(),
-                    List.of(new ProtosIntegerValue(4), new ProtosIntegerValue(1)),
+                    List.of(Long.valueOf(4), Long.valueOf(1)),
                     x.activation);
             assertThrows(ProtosSignalException.class,
                     () -> ProtosInvocation.invoke(
@@ -444,7 +443,7 @@ final class ProtosNioNetworkBackendConnectTest {
                         ProtosInvocation.invoke(
                                 addressFactory,
                                 List.of(
-                                        new ProtosIntegerValue(version),
+                                        Long.valueOf(version),
                                         com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(bits, prelude)),
                                 activation);
         Object endpointFactory =
@@ -454,7 +453,7 @@ final class ProtosNioNetworkBackendConnectTest {
                         endpointFactory,
                         List.of(
                                 address,
-                                new ProtosIntegerValue(port)),
+                                Long.valueOf(port)),
                         activation);
     }
 

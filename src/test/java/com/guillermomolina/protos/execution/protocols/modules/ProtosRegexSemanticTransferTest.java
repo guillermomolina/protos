@@ -484,7 +484,7 @@ final class ProtosRegexSemanticTransferTest {
         if (value instanceof ProtosStringValue string) {
             return string.value();
         }
-        if (value instanceof ProtosIntegerValue integer) {
+        if (value instanceof Long integer) {
             return Long.parseLong(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
         }
         if (value == ProtosBooleanValue.TRUE || value == ProtosBooleanValue.FALSE) {

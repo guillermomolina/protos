@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
@@ -79,6 +80,33 @@ final class ProtosLanguageContext {
     private final Object embeddedProcessLock = new Object();
     private volatile boolean standardEmbedding;
     private volatile ProtosEmbeddedProcess embeddedProcess;
+    /*
+     * I115 LONG-6: PFactory-style numeric constructor associated with the
+     * entered language Context, not with a call frame. It is established
+     * once by the first root entry. Alternative caller Core prototypes do
+     * not redirect arithmetic promotion at individual call sites.
+     */
+    private volatile ProtosPrelude numericFactoryPrelude;
+
+    void bindNumericFactoryPreludeForRuntime(ProtosPrelude prelude) {
+        Objects.requireNonNull(prelude, "prelude");
+        if (numericFactoryPrelude == null) {
+            synchronized (this) {
+                if (numericFactoryPrelude == null) {
+                    numericFactoryPrelude = prelude;
+                }
+            }
+        }
+    }
+
+    ProtosPrelude numericFactoryPreludeForRuntime() {
+        ProtosPrelude selected = numericFactoryPrelude;
+        if (selected == null) {
+            throw new IllegalStateException(
+                    "I115 LONG-6: numeric factory was not initialized by a root entry");
+        }
+        return selected;
+    }
     /*
      * PLAT055 application module catalog: immutable, installed at most once, and only before the
      * Process bootstrap begins. Guarded by embeddedProcessLock, which the bootstrap also holds, so

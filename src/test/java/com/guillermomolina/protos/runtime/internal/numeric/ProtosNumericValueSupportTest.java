@@ -31,21 +31,19 @@ final class ProtosNumericValueSupportTest {
     @Test
     void onlyCurrentGuestNumericCarriersAreAdmitted() {
         assertTrue(ProtosNumericValueSupport.isCurrentInteger(
-                new ProtosIntegerValue(42L)));
+                Long.valueOf(42L)));
         assertTrue(ProtosNumericValueSupport.isCurrentFloat(
                 new ProtosFloatValue(42.0)));
         assertTrue(ProtosNumericValueSupport.isCurrentNumber(
-                new ProtosIntegerValue(42L)));
+                Long.valueOf(42L)));
 
-        assertFalse(ProtosNumericValueSupport.isCurrentNumber(42L));
+        assertTrue(ProtosNumericValueSupport.isCurrentNumber(42L));
         assertFalse(ProtosNumericValueSupport.isCurrentNumber(42.0));
         assertFalse(ProtosNumericValueSupport.isCurrentNumber(BigInteger.TEN));
         assertFalse(ProtosNumericValueSupport.isCurrentNumber(
                 new ProtosObjectValue(ProtosObjectValue.rootObject())));
 
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> ProtosNumericValueSupport.requireCurrentInteger(42L));
+        assertEquals(Long.valueOf(42L), ProtosNumericValueSupport.requireCurrentInteger(42L));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> ProtosNumericValueSupport.currentFloatValue(42.0));
@@ -53,10 +51,10 @@ final class ProtosNumericValueSupportTest {
 
     @Test
     void currentNumericValueIdentityAndHashAreUnchanged() {
-        ProtosIntegerValue first = new ProtosIntegerValue(42L);
-        ProtosIntegerValue twin =
-                new ProtosIntegerValue(42L);
-        ProtosIntegerValue other = new ProtosIntegerValue(43L);
+        Long first = Long.valueOf(42L);
+        Long twin =
+                Long.valueOf(42L);
+        Long other = Long.valueOf(43L);
 
         assertTrue(ProtosNumericValueSupport.sameCurrentFamilyIdentity(first, twin));
         assertFalse(ProtosNumericValueSupport.sameCurrentFamilyIdentity(first, other));
@@ -94,12 +92,12 @@ final class ProtosNumericValueSupportTest {
     @Test
     void detachedNumberCopiesPreserveExactValuesAndIeeeBits() throws IOException {
         ProtosPrelude destination = new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
-        ProtosIntegerValue small = new ProtosIntegerValue(Long.MIN_VALUE);
+        Long small = Long.valueOf(Long.MIN_VALUE);
         Object large = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(130), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         ProtosFloatValue negativeZero = new ProtosFloatValue(-0.0d);
 
-        ProtosIntegerValue smallCopy = assertInstanceOf(
-                ProtosIntegerValue.class,
+        Long smallCopy = assertInstanceOf(
+                Long.class,
                 ProtosNumericValueSupport.copyCurrentNumberOrNull(small, destination));
         ProtosLargeIntegerValue largeCopy = assertInstanceOf(
                 ProtosLargeIntegerValue.class,
@@ -108,7 +106,7 @@ final class ProtosNumericValueSupportTest {
                 ProtosFloatValue.class,
                 ProtosNumericValueSupport.copyCurrentNumberOrNull(negativeZero, destination));
 
-        assertNotSame(small, smallCopy);
+        assertSame(small, smallCopy);
         assertNotSame(large, largeCopy);
         assertNotSame(negativeZero, floatCopy);
 
@@ -123,7 +121,7 @@ final class ProtosNumericValueSupportTest {
                 Double.doubleToRawLongBits(negativeZero.value()),
                 Double.doubleToRawLongBits(floatCopy.value()));
 
-        assertNull(ProtosNumericValueSupport.copyCurrentNumberOrNull(12L, destination));
+        assertEquals(Long.valueOf(12L), ProtosNumericValueSupport.copyCurrentNumberOrNull(12L, destination));
         assertNull(ProtosNumericValueSupport.copyCurrentNumberOrNull(
                 ProtosBooleanValue.TRUE, destination));
     }

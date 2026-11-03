@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import java.nio.file.Path;
@@ -108,7 +107,7 @@ final class ProtosHostEntryFutureSuspensionTest {
         }
 
         void resolve(long value) {
-            assertTrue(gate.resolve(new ProtosIntegerValue(value), null));
+            assertTrue(gate.resolve(Long.valueOf(value), null));
         }
 
         ProtosObjectValue failureError() {
@@ -343,7 +342,7 @@ final class ProtosHostEntryFutureSuspensionTest {
 
                 assertTrue(adapter.fastNonSuspendingHostEntry);
 
-                ProtosIntegerValue supplied = new ProtosIntegerValue(7);
+                Long supplied = Long.valueOf(7);
 
                 // I115: the host entry calls through the shared dispatcher with
                 // exactly this B5 function header.
@@ -479,7 +478,7 @@ final class ProtosHostEntryFutureSuspensionTest {
                 assertEquals("37", decimal(forwarded));
 
                 Object guest = InteropLibrary.getUncached().execute(
-                        identity, new ProtosIntegerValue(-4));
+                        identity, Long.valueOf(-4));
                 assertEquals("-4", decimal(guest));
 
                 assertCompactState(f);

@@ -34,10 +34,10 @@ final class ProtosIntegralInteropTest {
 
     @Test
     void arbitraryIntegerExportsExactIntegralWidthsAndBigInteger() throws Exception {
-        ProtosIntegerValue byteMax =
-                new ProtosIntegerValue(Byte.MAX_VALUE);
-        ProtosIntegerValue byteOverflow =
-                new ProtosIntegerValue(Byte.MAX_VALUE + 1L);
+        Long byteMax =
+                Long.valueOf(Byte.MAX_VALUE);
+        Long byteOverflow =
+                Long.valueOf(Byte.MAX_VALUE + 1L);
 
         assertTrue(interop.isNumber(byteMax));
         assertTrue(interop.fitsInByte(byteMax));
@@ -298,7 +298,7 @@ final class ProtosIntegralInteropTest {
 
         String display = String.valueOf(interop.toDisplayString(value, false));
         assertEquals(integer.toString(), display);
-        assertFalse(display.contains("ProtosIntegerValue"));
+        assertFalse(display.contains("Long"));
         assertFalse(display.contains("@"));
 
         assertFalse(interop.isString(value));
@@ -327,16 +327,16 @@ final class ProtosIntegralInteropTest {
 
     @Test
     void negativePowersOfTwoAndExactNeighboursAreDecidedOnTheMagnitude() throws Exception {
-        ProtosIntegerValue minimum = new ProtosIntegerValue(Long.MIN_VALUE);
+        Long minimum = Long.valueOf(Long.MIN_VALUE);
         assertTrue(interop.fitsInFloat(minimum));
         assertTrue(interop.fitsInDouble(minimum));
         assertEquals(-0x1p63, interop.asDouble(minimum));
         assertEquals(-0x1p63f, interop.asFloat(minimum));
-        assertFalse(interop.fitsInDouble(new ProtosIntegerValue(Long.MIN_VALUE + 1L)));
-        assertFalse(interop.fitsInDouble(new ProtosIntegerValue(Long.MAX_VALUE)));
+        assertFalse(interop.fitsInDouble(Long.valueOf(Long.MIN_VALUE + 1L)));
+        assertFalse(interop.fitsInDouble(Long.valueOf(Long.MAX_VALUE)));
 
         for (int exponent = 0; exponent < 63; exponent++) {
-            ProtosIntegerValue negative = new ProtosIntegerValue(-(1L << exponent));
+            Long negative = Long.valueOf(-(1L << exponent));
             assertTrue(interop.fitsInFloat(negative));
             assertEquals(-Math.scalb(1.0d, exponent), interop.asDouble(negative));
         }

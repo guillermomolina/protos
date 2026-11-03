@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.CallTarget;
@@ -336,12 +335,12 @@ final class ProtosI115NCompactBooleanTest {
 
             // HIT: canonical true, then canonical false, both inline.
             DirectEntry taken =
-                    fastDirect(run, module, new ProtosIntegerValue(1));
+                    fastDirect(run, module, Long.valueOf(1));
             assertEquals("1", integerValue(enter(taken)));
             assertSame(run, taken.targetArguments()[0],
                     "the inline path creates no Closure and publishes nothing");
             DirectEntry skipped =
-                    fastDirect(run, module, new ProtosIntegerValue(5));
+                    fastDirect(run, module, Long.valueOf(5));
             assertEquals("0", integerValue(enter(skipped)));
             assertSame(run, skipped.targetArguments()[0]);
 
@@ -357,7 +356,7 @@ final class ProtosI115NCompactBooleanTest {
                                 ProtosClosureValue.class, supplied.get(0));
                         ProtosClosureInvoker.invoke(callback, List.of(), activation);
                         ProtosClosureInvoker.invoke(callback, List.of(), activation);
-                        return new ProtosIntegerValue(42);
+                        return Long.valueOf(42);
                     }));
             ProtosObjectValue gate =
                     new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -375,7 +374,7 @@ final class ProtosI115NCompactBooleanTest {
 
             // The site still takes the inline path for a canonical result.
             assertEquals("1", integerValue(
-                    enter(fastDirect(run, module, new ProtosIntegerValue(0)))));
+                    enter(fastDirect(run, module, Long.valueOf(0)))));
         });
         System.out.println("I115_N_REDEFINED_COMPARISON_DISPATCH=PASS");
     }

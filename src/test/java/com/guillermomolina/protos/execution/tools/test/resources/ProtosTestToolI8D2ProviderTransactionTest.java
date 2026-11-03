@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -486,7 +485,7 @@ final class ProtosTestToolI8D2ProviderTransactionTest {
         return new ProtosTestResourceProviderRequest.Binding(
                 key,
                 mode,
-                units == null ? null : new ProtosIntegerValue(units),
+                units == null ? null : Long.valueOf(units),
                 scope,
                 provider,
                 profile);

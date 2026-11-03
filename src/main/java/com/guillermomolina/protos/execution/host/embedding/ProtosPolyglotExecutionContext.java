@@ -195,7 +195,9 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         Objects.requireNonNull(activation, "activation");
         return callEntered(
                 () -> {
-                    CallTarget target = ProtosLanguageContext.current().parsePublic(source);
+                    ProtosLanguageContext languageContext = ProtosLanguageContext.current();
+                    activation.prelude().ifPresent(languageContext::bindNumericFactoryPreludeForRuntime);
+                    CallTarget target = languageContext.parsePublic(source);
                     try {
                         return target.call(activation);
                     } catch (ProtosSignalException escaped) {

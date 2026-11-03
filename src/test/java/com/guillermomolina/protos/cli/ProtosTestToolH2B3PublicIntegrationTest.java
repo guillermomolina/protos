@@ -39,7 +39,6 @@ import com.guillermomolina.protos.execution.ProtosTestToolFileSelectionFacility;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -422,9 +421,9 @@ activation);
                         observation.readLocalSlot("state").orElseThrow());
         assertEquals("completed", state.value());
         assertSame(ProtosNullValue.INSTANCE, observation.readLocalSlot("error").orElseThrow());
-        ProtosIntegerValue value =
+        Long value =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         observation.readLocalSlot("value").orElseThrow());
         assertEquals(Long.toString(expectedValue), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
     }

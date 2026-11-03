@@ -165,7 +165,7 @@ com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActiv
     private static int integerLikeAt(ProtosArrayValue array, int index) {
         return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.exactInt(
                 assertInstanceOf(
-                        com.guillermomolina.protos.runtime.ProtosIntegerValue.class,
+                        java.lang.Long.class,
                         array.indexedAt(index)));
     }
 

@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -47,7 +46,7 @@ final class ProtosTestToolI8D3RootActorResourceBundleTest {
     @Test
     void bundleUsesCanonicalCoreMapProtocolAndIsFrozen() throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        Object gpu = new ProtosIntegerValue(41);
+        Object gpu = Long.valueOf(41);
         Object db = new ProtosStringValue("db-capability");
 
         LinkedHashMap<String, Object> capabilities = new LinkedHashMap<>();
@@ -72,7 +71,7 @@ final class ProtosTestToolI8D3RootActorResourceBundleTest {
                                 "atPut",
                                 List.of(
                                         new ProtosStringValue("other"),
-                                        new ProtosIntegerValue(1L)),
+                                        Long.valueOf(1L)),
                                 prelude.newModuleActivation()));
     }
 
@@ -80,7 +79,7 @@ final class ProtosTestToolI8D3RootActorResourceBundleTest {
     void resourcefulStandaloneRootActorReceivesExactFrozenResourcesLocal()
             throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosIntegerValue gpu = new ProtosIntegerValue(42);
+        Long gpu = Long.valueOf(42);
         ProtosMapValue resources =
                 ProtosTestResourceCapabilityBundle.createResourceful(
                         prelude, Map.of("gpu", gpu));
@@ -114,8 +113,8 @@ final class ProtosTestToolI8D3RootActorResourceBundleTest {
 bootstrap.activation());
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        ProtosIntegerValue observed =
-                assertInstanceOf(ProtosIntegerValue.class, outcome.value());
+        Long observed =
+                assertInstanceOf(Long.class, outcome.value());
         assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(observed));
     }
 
@@ -169,7 +168,7 @@ bootstrap.activation());
                         second,
                         Map.of(
                                 "gpu",
-                                new ProtosIntegerValue(1L)));
+                                Long.valueOf(1L)));
         assertThrows(
                 IllegalStateException.class,
                 () -> standaloneWithResources(first, foreign));

@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 
@@ -143,9 +142,9 @@ class ProtosArrayMatchProtocolTest {
 
         assertEquals(2, captures.indexedSize());
 
-        ProtosIntegerValue first =
+        Long first =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         captures.indexedAt(0));
         assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(first));
 
@@ -225,9 +224,9 @@ class ProtosArrayMatchProtocolTest {
 
         assertEquals(1, captures.indexedSize());
 
-        ProtosIntegerValue captured =
+        Long captured =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         captures.indexedAt(0));
         assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(captured));
     }

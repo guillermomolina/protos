@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -59,8 +58,8 @@ class ProtosPolyglotExecutionContextTest {
             ProtosExecutionOutcome outcome = polyglot.execute(source, activation);
 
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-            ProtosIntegerValue result =
-                    assertInstanceOf(ProtosIntegerValue.class, outcome.value());
+            Long result =
+                    assertInstanceOf(Long.class, outcome.value());
             assertEquals(42L, result.longValue());
         }
     }

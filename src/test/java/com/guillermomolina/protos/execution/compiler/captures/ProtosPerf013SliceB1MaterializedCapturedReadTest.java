@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -80,7 +79,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
 
                 Object result = root.getCallTarget().call(module);
-                ProtosIntegerValue integer = assertInstanceOf(ProtosIntegerValue.class, result);
+                Long integer = assertInstanceOf(Long.class, result);
                 assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
             } finally {
                 context.leave();
@@ -157,7 +156,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                  * authority before returning.
                  */
                 Object result = root.getCallTarget().call(module);
-                ProtosIntegerValue integer = assertInstanceOf(ProtosIntegerValue.class, result);
+                Long integer = assertInstanceOf(Long.class, result);
                 assertEquals(String.valueOf("7"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
             } finally {
                 context.leave();
@@ -186,7 +185,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
 
                 Object result = root.getCallTarget().call(module);
-                ProtosIntegerValue integer = assertInstanceOf(ProtosIntegerValue.class, result);
+                Long integer = assertInstanceOf(Long.class, result);
                 assertEquals(String.valueOf("9"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
             } finally {
                 context.leave();
@@ -390,7 +389,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
 
                 Object result = root.getCallTarget().call(module);
-                ProtosIntegerValue integer = assertInstanceOf(ProtosIntegerValue.class, result);
+                Long integer = assertInstanceOf(Long.class, result);
                 assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
             } finally {
                 context.leave();

@@ -25,7 +25,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -85,7 +84,7 @@ class ProtosCollectionsSetMutationModuleTest {
                 values,
                 "atPut",
                 List.of(
-                        new ProtosIntegerValue(1L),
+                        Long.valueOf(1L),
                         ProtosBooleanValue.TRUE),
                 activation);
         if (frozen) {

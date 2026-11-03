@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
@@ -89,9 +88,9 @@ final class ProtosA4B3NestedToolProcessHostingTest {
                         assertInstanceOf(
                                 ProtosStringValue.class,
                                 observation.readLocalSlot("state").orElseThrow());
-                ProtosIntegerValue value =
+                Long value =
                         assertInstanceOf(
-                                ProtosIntegerValue.class,
+                                Long.class,
                                 observation.readLocalSlot("value").orElseThrow());
 
                 assertEquals("completed", state.value());

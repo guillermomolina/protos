@@ -779,8 +779,8 @@ final class ProtosGuardedLookupTest {
         return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     /** PERF016: admission is by representation family, never by value or identity. */

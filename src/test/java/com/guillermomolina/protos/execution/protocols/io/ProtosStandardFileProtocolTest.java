@@ -17,8 +17,8 @@ class ProtosStandardFileProtocolTest {
         return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static ProtosBytesValue bytes(ProtosObjectValue prototype, int... octets) {

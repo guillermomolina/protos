@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.runtime.values;
 
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidArrayIndexException;
@@ -37,16 +36,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class ProtosAdditionalIndexedInteropTest {
     private final InteropLibrary interop = InteropLibrary.getUncached();
 
-    private static ProtosIntegerValue octet(int value) {
-        return new ProtosIntegerValue(value);
+    private static Long octet(int value) {
+        return Long.valueOf(value);
     }
 
     @Test
     void bytesProjectsCurrentIndexedStateReadOnly() throws Exception {
         ProtosBytesValue bytes =
                 new ProtosBytesValue(ProtosObjectValue.rootObject());
-        ProtosIntegerValue first = octet(1);
-        ProtosIntegerValue replacement = octet(2);
+        Long first = octet(1);
+        Long replacement = octet(2);
         bytes.indexedAdd(first);
 
         assertTrue(interop.hasArrayElements(bytes));

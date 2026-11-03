@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.semantic.Canonicalizer;
@@ -84,8 +83,8 @@ final class ProtosPerf013SliceA2DefaultClosureSharedLexicalRootGroupingTest {
                                 .lowerRoot(sequence);
 
                 Object finalResult = root.getCallTarget().call(module);
-                ProtosIntegerValue integer =
-                        assertInstanceOf(ProtosIntegerValue.class, finalResult);
+                Long integer =
+                        assertInstanceOf(Long.class, finalResult);
                 assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
 
                 ProtosClosureValue closureF =
@@ -164,8 +163,8 @@ final class ProtosPerf013SliceA2DefaultClosureSharedLexicalRootGroupingTest {
                                 .lowerRoot(sequence);
 
                 Object finalResult = root.getCallTarget().call(module);
-                ProtosIntegerValue integer =
-                        assertInstanceOf(ProtosIntegerValue.class, finalResult);
+                Long integer =
+                        assertInstanceOf(Long.class, finalResult);
                 assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer), "x must remain visible by reference two Closure levels below "
                                 + "the default expression that first captured it");
 

@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
@@ -43,8 +42,8 @@ import com.oracle.truffle.api.nodes.Node;
  * (its receiver is not counted among the arguments) or any other object.
  *
  * <p>The B5 frame-argument array is built once here and becomes the callee
- * frame's arguments. Source functions first use the unary direct-call
- * cache, with the shared function PIC as their polymorphic fallback.
+ * frame's arguments. In the I115 experiment, source functions use only
+ * the unary direct-call cache; the shared PIC fallback is disabled.
  * A bound source method preserves its receiver and methodHome and uses
  * the shared PIC; other callables use {@link
  * ProtosFunctionCallDispatchers.CallNode}. No call is prepared.
@@ -62,20 +61,21 @@ abstract class ProtosCallUnaryMethodNode extends Node {
      * exclusive to a language instance with one Context. The target is
      * obtained from the already-prepared, same-language executable plan.
      * It neither resolves an entered Context nor projects an execution
-     * plan on a cache hit. Multi-context and deferred cases use the
-     * existing FunctionCachedCallNode fallback.
+     * plan on a cache hit. Multi-context and deferred cases deliberately
+     * have no fallback during this I115 experiment.
      */
+    // PRUIBA DE I115, en algún momento esto volverá a funcionar
+    // Direct PIC keyed by prepared execution-plan identity.
+    // No generic root resolution or indirect-call fallback.
     @ForceQuickening
     @Specialization(
             guards = {
                     "isSourceFunction(callable)",
                     "isSingleContext()",
-                    "callable == cachedCallable",
+                    "cachedPlan != null",
+                    "callable.preparedExecutionPlanOrNullForRuntime() == cachedPlan",
+                    "!callable.requiresContextLocalExecutionProjectionForRuntime()",
                     "cachedTarget != null"
-            },
-            assumptions = {
-                    "cachedCodeStable",
-                    "cachedProjectionStable"
             },
             excludeForUncached = true,
             limit = "3")
@@ -86,13 +86,9 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             Object a0,
             @Bind("$node") Node inliningTarget,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Cached(value = "callable", weak = true)
-                    ProtosClosureValue cachedCallable,
-            @Cached("cachedCallable.codeStableAssumptionForRuntime()")
-                    Assumption cachedCodeStable,
-            @Cached("cachedCallable.contextProjectionStabilityForRuntime()")
-                    Assumption cachedProjectionStable,
-            @Cached("singleContextTargetOrNull(cachedCallable, root)")
+            @Cached("callable.preparedExecutionPlanOrNullForRuntime()")
+                    ProtosClosureExecutionPlan cachedPlan,
+            @Cached("singleContextTargetOrNull(callable, root)")
                     RootCallTarget cachedTarget,
             @Cached("createDirectCallNodeOrNull(cachedTarget)")
                     DirectCallNode callNode,
@@ -108,25 +104,26 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                 ProtosFunctionCallDispatchers.callerReference(frame), root);
     }
 
-    @Specialization(
-            guards = "isSourceFunction(callable)",
-            replaces = "callPFunction")
-    static Object callFunction(
-            VirtualFrame frame,
-            boolean terminal,
-            ProtosClosureValue callable,
-            Object a0,
-            @Bind("$node") Node inliningTarget,
-            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
-        return call.execute(
-                frame, inliningTarget, terminal, callable,
-                ProtosFrameArguments.dispatchedCall1(
-                        null, ProtosFrameArguments.functionCallMarker(),
-                        null, null, null, a0),
-                ProtosFunctionCallDispatchers.callerReference(frame), root,
-                ProtosFunctionCallDispatchers.currentContext(inliningTarget));
-    }
+    // PRUIBA DE I115, en algún momento esto volverá a funcionar
+    // @Specialization(
+    //         guards = "isSourceFunction(callable)",
+    //         replaces = "callPFunction")
+    // static Object callFunction(
+    //         VirtualFrame frame,
+    //         boolean terminal,
+    //         ProtosClosureValue callable,
+    //         Object a0,
+    //         @Bind("$node") Node inliningTarget,
+    //         @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+    //         @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
+    //     return call.execute(
+    //             frame, inliningTarget, terminal, callable,
+    //             ProtosFrameArguments.dispatchedCall1(
+    //                     null, ProtosFrameArguments.functionCallMarker(),
+    //                     null, null, null, a0),
+    //             ProtosFunctionCallDispatchers.callerReference(frame), root,
+    //             ProtosFunctionCallDispatchers.currentContext(inliningTarget));
+    // }
 
     @Specialization(guards = "isSourceFunction(method.callable())")
     static Object callBoundMethod(

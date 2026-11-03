@@ -59,13 +59,13 @@ class ProtosRepresentedValueLookupTest {
 
         ProtosSlotLookupResult integerSelected =
                 ProtosValueLookup.lookup(
-                                new ProtosIntegerValue(42),
+                                Long.valueOf(42),
                                 "construct",
                                 prelude)
                         .orElseThrow();
         assertSame(
                 prelude.smallIntegerPrototype(),
-                new ProtosIntegerValue(42).representedDelegationParent(prelude));
+                ProtosValueLookup.delegationParent(Long.valueOf(42), prelude).orElseThrow());
         assertSame(integerCall, integerSelected.value());
         // The concrete family inherits the factory; its canonical owner stays Integer.
         assertSame(prelude.integerPrototype(), integerSelected.home());

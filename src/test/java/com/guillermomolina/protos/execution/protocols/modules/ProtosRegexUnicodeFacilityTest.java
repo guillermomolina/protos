@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -144,18 +143,18 @@ final class ProtosRegexUnicodeFacilityTest {
         assertThrows(
                 ProtosSignalException.class,
                 () -> invoke(facility, "caseClosure", activation,
-                        prelude.newFrozenArray(List.of(new ProtosIntegerValue(2)))));
+                        prelude.newFrozenArray(List.of(Long.valueOf(2)))));
         assertThrows(
                 ProtosSignalException.class,
                 () -> invoke(facility, "caseClosure", activation,
                         prelude.newFrozenArray(
-                                List.of(new ProtosIntegerValue(9), new ProtosIntegerValue(1)))));
+                                List.of(Long.valueOf(9), Long.valueOf(1)))));
         assertThrows(
                 ProtosSignalException.class,
                 () -> invoke(facility, "caseClosure", activation,
                         prelude.newFrozenArray(
-                                List.of(new ProtosIntegerValue(0),
-                                        new ProtosIntegerValue(0x110000)))));
+                                List.of(Long.valueOf(0),
+                                        Long.valueOf(0x110000)))));
     }
 
     private static String propertyName(
@@ -185,7 +184,7 @@ final class ProtosRegexUnicodeFacilityTest {
         return pairs(
                 invoke(facility, "caseClosure", activation,
                         prelude.newFrozenArray(
-                                List.of(new ProtosIntegerValue(low), new ProtosIntegerValue(high)))));
+                                List.of(Long.valueOf(low), Long.valueOf(high)))));
     }
 
     private static List<int[]> pairs(Object result) {
@@ -209,7 +208,7 @@ final class ProtosRegexUnicodeFacilityTest {
 
     private static int bound(Object value) {
         return ProtosNumericValueSupport.exactInt(
-                assertInstanceOf(ProtosIntegerValue.class, value));
+                assertInstanceOf(Long.class, value));
     }
 
     private static boolean contains(List<int[]> ranges, int scalar) {

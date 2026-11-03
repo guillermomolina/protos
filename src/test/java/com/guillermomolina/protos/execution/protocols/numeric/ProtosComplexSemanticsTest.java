@@ -33,7 +33,6 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -64,13 +63,13 @@ final class ProtosComplexSemanticsTest {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation caller = prelude.newModuleActivation();
 
-        Object small = new ProtosIntegerValue(7L);
+        Object small = Long.valueOf(7L);
         Object large = ProtosNumericValueSupport.integerFromHost(
                 BigInteger.ONE.shiftLeft(90), prelude);
         Object floating = new ProtosFloatValue(-0.0d);
         Object fraction = divide(1L, 2L, prelude);
         Object complex = complex(
-                new ProtosIntegerValue(3L),
+                Long.valueOf(3L),
                 new ProtosFloatValue(-0.0d),
                 prelude);
 
@@ -120,8 +119,8 @@ final class ProtosComplexSemanticsTest {
 
         Object fraction = divide(2L, 3L, prelude);
         Object complex = complex(
-                new ProtosIntegerValue(2L),
-                new ProtosIntegerValue(3L),
+                Long.valueOf(2L),
+                Long.valueOf(3L),
                 prelude);
 
         assertTrue(ProtosNumericValueSupport.isFraction(fraction));
@@ -163,7 +162,7 @@ final class ProtosComplexSemanticsTest {
             assertThrows(
                     IllegalStateException.class,
                     () -> object.createLocalSlot(
-                            "familyState", new ProtosIntegerValue(42L)));
+                            "familyState", Long.valueOf(42L)));
         }
 
         // Ordinary delegation must not be mistaken for numeric membership
@@ -192,7 +191,7 @@ final class ProtosComplexSemanticsTest {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation caller = prelude.newModuleActivation();
         ProtosObjectValue prototype = prelude.complexPrototype();
-        Object genuine = complex(new ProtosIntegerValue(1L), new ProtosIntegerValue(2L), prelude);
+        Object genuine = complex(Long.valueOf(1L), Long.valueOf(2L), prelude);
 
         ProtosObjectValue delegating = new ProtosObjectValue(prototype);
         ProtosObjectValue frozenForgery = new ProtosObjectValue(prototype);
@@ -204,7 +203,7 @@ final class ProtosComplexSemanticsTest {
                 prototype,
                 delegating,
                 frozenForgery,
-                new ProtosIntegerValue(1L),
+                Long.valueOf(1L),
                 divide(1, 2, prelude),
                 new ProtosFloatValue(1.0),
                 com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_100, prelude),
@@ -231,13 +230,13 @@ final class ProtosComplexSemanticsTest {
     @Test
     void onlyAnExactIntegerZeroImaginaryPartCollapsesToTheRealPart() throws IOException {
         ProtosPrelude prelude = corePrelude();
-        Object four = new ProtosIntegerValue(4L);
+        Object four = Long.valueOf(4L);
         Object third = divide(1, 3, prelude);
         ProtosFloatValue negativeZero = new ProtosFloatValue(-0.0);
 
-        assertSame(four, complex(four, new ProtosIntegerValue(0L), prelude));
-        assertSame(third, complex(third, new ProtosIntegerValue(0L), prelude));
-        assertSame(negativeZero, complex(negativeZero, new ProtosIntegerValue(0L), prelude));
+        assertSame(four, complex(four, Long.valueOf(0L), prelude));
+        assertSame(third, complex(third, Long.valueOf(0L), prelude));
+        assertSame(negativeZero, complex(negativeZero, Long.valueOf(0L), prelude));
 
         Object positiveZeroImaginary =
                 complex(new ProtosFloatValue(-4.0), new ProtosFloatValue(0.0), prelude);
@@ -263,15 +262,15 @@ final class ProtosComplexSemanticsTest {
         assertInstanceOf(ProtosLargeIntegerValue.class, ProtosComplexNumericSupport.real(exact));
         assertTrue(ProtosNumericValueSupport.isFraction(ProtosComplexNumericSupport.imaginary(exact)));
 
-        Object mixed = complex(new ProtosIntegerValue(7L), new ProtosFloatValue(2.5), prelude);
-        assertInstanceOf(ProtosIntegerValue.class, ProtosComplexNumericSupport.real(mixed));
+        Object mixed = complex(Long.valueOf(7L), new ProtosFloatValue(2.5), prelude);
+        assertInstanceOf(Long.class, ProtosComplexNumericSupport.real(mixed));
         assertInstanceOf(ProtosFloatValue.class, ProtosComplexNumericSupport.imaginary(mixed));
     }
 
     @Test
     void canonicalizationRejectsNonRealComponents() throws IOException {
         ProtosPrelude prelude = corePrelude();
-        Object one = new ProtosIntegerValue(1L);
+        Object one = Long.valueOf(1L);
         Object genuine = complex(one, one, prelude);
         ProtosObjectValue delegatingToNumber = new ProtosObjectValue(prelude.numberPrototype());
         delegatingToNumber.freeze();
@@ -303,7 +302,7 @@ final class ProtosComplexSemanticsTest {
         ProtosActivation caller = prelude.newModuleActivation();
         Object half = divide(1, 2, prelude);
         Object tenth = divide(1, 10, prelude);
-        Object one = new ProtosIntegerValue(1L);
+        Object one = Long.valueOf(1L);
 
         Object exactHalf = complex(one, half, prelude);
         Object floatHalf = complex(new ProtosFloatValue(1.0), new ProtosFloatValue(0.5), prelude);
@@ -319,7 +318,7 @@ final class ProtosComplexSemanticsTest {
         assertEquality(true, positiveZero, one, caller);
         assertEquality(true, negativeZero, new ProtosFloatValue(1.0), caller);
         assertEquality(true, positiveZero, negativeZero, caller);
-        assertEquality(false, positiveZero, new ProtosIntegerValue(2L), caller);
+        assertEquality(false, positiveZero, Long.valueOf(2L), caller);
 
         // A nonzero imaginary part never equals a real value.
         assertEquality(false, exactHalf, one, caller);
@@ -341,11 +340,11 @@ final class ProtosComplexSemanticsTest {
     @Test
     void identityIsSemanticAndDistinguishesFamiliesAndSignedZero() throws IOException {
         ProtosPrelude prelude = corePrelude();
-        Object one = new ProtosIntegerValue(1L);
+        Object one = Long.valueOf(1L);
         Object half = divide(1, 2, prelude);
 
         Object a = complex(one, half, prelude);
-        Object b = complex(new ProtosIntegerValue(1L), divide(2, 4, prelude), prelude);
+        Object b = complex(Long.valueOf(1L), divide(2, 4, prelude), prelude);
         assertNotSame(a, b);
         assertTrue(ProtosIdentity.identical(a, b));
         assertEquals(ProtosIdentity.identityHash(a), ProtosIdentity.identityHash(b));
@@ -378,7 +377,7 @@ final class ProtosComplexSemanticsTest {
     void normalHashFollowsMathematicalEquality() throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation caller = prelude.newModuleActivation();
-        Object one = new ProtosIntegerValue(1L);
+        Object one = Long.valueOf(1L);
         Object half = divide(1, 2, prelude);
 
         assertSameNormalHash(
@@ -408,7 +407,7 @@ final class ProtosComplexSemanticsTest {
     void realOrderingRejectsComplexWithAStandardError() throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation caller = prelude.newModuleActivation();
-        Object one = new ProtosIntegerValue(1L);
+        Object one = Long.valueOf(1L);
         Object value = complex(one, new ProtosFloatValue(0.0), prelude);
 
         for (String selector : List.of("<", "<=", ">", ">=")) {
@@ -426,15 +425,15 @@ final class ProtosComplexSemanticsTest {
         assertEquals(ProtosBooleanValue.TRUE, ProtosInvocation.invokeMessage(
                 divide(1, 3, prelude), "<", List.of(new ProtosFloatValue(0.5)), caller));
         assertEquals(ProtosBooleanValue.TRUE, ProtosInvocation.invokeMessage(
-                one, "<", List.of(new ProtosIntegerValue(2L)), caller));
+                one, "<", List.of(Long.valueOf(2L)), caller));
     }
 
     @Test
     void realConversionsDoNotAdmitComplexButArithmeticDoes() throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation caller = prelude.newModuleActivation();
-        Object one = new ProtosIntegerValue(1L);
-        Object value = complex(one, new ProtosIntegerValue(2L), prelude);
+        Object one = Long.valueOf(1L);
+        Object value = complex(one, Long.valueOf(2L), prelude);
 
         for (ProtosStandardNumericConversionProtocol.FactoryKind kind :
                 ProtosStandardNumericConversionProtocol.FactoryKind.values()) {
@@ -443,12 +442,12 @@ final class ProtosComplexSemanticsTest {
         // D198: real + Complex is standard Complex arithmetic in both native receiver families.
         Object exactSum = ProtosInvocation.invokeMessage(one, "+", List.of(value), caller);
         assertTrue(ProtosIdentity.identical(
-                complex(new ProtosIntegerValue(2L), new ProtosIntegerValue(2L), prelude),
+                complex(Long.valueOf(2L), Long.valueOf(2L), prelude),
                 exactSum));
         Object floatSum = ProtosInvocation.invokeMessage(
                 new ProtosFloatValue(1.0), "+", List.of(value), caller);
         assertTrue(ProtosIdentity.identical(
-                complex(new ProtosFloatValue(2.0), new ProtosIntegerValue(2L), prelude),
+                complex(new ProtosFloatValue(2.0), Long.valueOf(2L), prelude),
                 floatSum));
         // div and mod stay Integer-only.
         assertThrows(ProtosSignalException.class,
@@ -584,8 +583,8 @@ final class ProtosComplexSemanticsTest {
     void realArithmeticKeepsItsExistingPaths() throws IOException {
         ProtosPrelude prelude = corePrelude();
         Object sum = ProtosNumericValueSupport.addIntegers(
-                new ProtosIntegerValue(1L), new ProtosIntegerValue(2L), prelude);
-        assertInstanceOf(ProtosIntegerValue.class, sum);
+                Long.valueOf(1L), Long.valueOf(2L), prelude);
+        assertInstanceOf(Long.class, sum);
         assertTrue(ProtosNumericValueSupport.isFraction(divide(1, 2, prelude)));
         for (Object real : List.of(sum, divide(1, 2, prelude), new ProtosFloatValue(3.0))) {
             assertFalse(ProtosComplexNumericSupport.isComplex(real));
@@ -593,7 +592,7 @@ final class ProtosComplexSemanticsTest {
         }
         // Without a Prelude the primitive path never mints, so it cannot mint a Complex either.
         assertThrows(NullPointerException.class, () -> complex(
-                new ProtosIntegerValue(1L), new ProtosIntegerValue(1L), null));
+                Long.valueOf(1L), Long.valueOf(1L), null));
     }
 
 
@@ -603,16 +602,16 @@ final class ProtosComplexSemanticsTest {
         ProtosActivation caller = prelude.newModuleActivation();
 
         Object exact = complex(
-                new ProtosIntegerValue(1L), divide(1, 2, prelude), prelude);
+                Long.valueOf(1L), divide(1, 2, prelude), prelude);
         Object mathematicallyEqual = complex(
                 new ProtosFloatValue(1.0), new ProtosFloatValue(0.5), prelude);
         Object identityTwin = complex(
-                new ProtosIntegerValue(1L), divide(2, 4, prelude), prelude);
+                Long.valueOf(1L), divide(2, 4, prelude), prelude);
 
         Object positiveZero = complex(
-                new ProtosIntegerValue(1L), new ProtosFloatValue(+0.0), prelude);
+                Long.valueOf(1L), new ProtosFloatValue(+0.0), prelude);
         Object negativeZero = complex(
-                new ProtosIntegerValue(1L), new ProtosFloatValue(-0.0), prelude);
+                Long.valueOf(1L), new ProtosFloatValue(-0.0), prelude);
         Object realOne = new ProtosFloatValue(1.0);
 
         var map = new com.guillermomolina.protos.runtime.ProtosMapValue(
@@ -632,7 +631,7 @@ final class ProtosComplexSemanticsTest {
                 map, "atPut", List.of(mathematicallyEqual, updated), caller);
         assertSame(updated, ProtosInvocation.invokeMessage(
                 map, "at", List.of(identityTwin), caller));
-        assertEquals(1L, ((ProtosIntegerValue) ProtosInvocation.invokeMessage(
+        assertEquals(1L, ((Long) ProtosInvocation.invokeMessage(
                 map, "size", List.of(), caller)).longValue());
 
         ProtosInvocation.invokeMessage(
@@ -641,7 +640,7 @@ final class ProtosComplexSemanticsTest {
                 map, "at", List.of(negativeZero), caller));
         assertSame(realValue, ProtosInvocation.invokeMessage(
                 map, "at", List.of(realOne), caller));
-        assertEquals(2L, ((ProtosIntegerValue) ProtosInvocation.invokeMessage(
+        assertEquals(2L, ((Long) ProtosInvocation.invokeMessage(
                 map, "size", List.of(), caller)).longValue());
 
         var identityMap =
@@ -670,7 +669,7 @@ final class ProtosComplexSemanticsTest {
         ProtosInvocation.invokeMessage(
                 identityMap, "atPut", List.of(realOne, realValue), caller);
 
-        assertEquals(5L, ((ProtosIntegerValue) ProtosInvocation.invokeMessage(
+        assertEquals(5L, ((Long) ProtosInvocation.invokeMessage(
                 identityMap, "size", List.of(), caller)).longValue());
     }
 
@@ -693,9 +692,9 @@ final class ProtosComplexSemanticsTest {
                         sourcePrelude.identityMapPrototype());
 
         ProtosInvocation.invokeMessage(
-                map, "atPut", List.of(key, new ProtosIntegerValue(10L)), source);
+                map, "atPut", List.of(key, Long.valueOf(10L)), source);
         ProtosInvocation.invokeMessage(
-                identityMap, "atPut", List.of(key, new ProtosIntegerValue(20L)), source);
+                identityMap, "atPut", List.of(key, Long.valueOf(20L)), source);
 
         List<Object> snapshot = ProtosActorValueTransfer.snapshotArguments(
                 List.of(map, identityMap), source);
@@ -734,11 +733,11 @@ final class ProtosComplexSemanticsTest {
                 destinationPrelude);
 
         assertEquals(10L,
-                ((ProtosIntegerValue) ProtosInvocation.invokeMessage(
+                ((Long) ProtosInvocation.invokeMessage(
                         deliveredMap, "at", List.of(mathematicalTwin), destination))
                         .longValue());
         assertEquals(20L,
-                ((ProtosIntegerValue) ProtosInvocation.invokeMessage(
+                ((Long) ProtosInvocation.invokeMessage(
                         deliveredIdentityMap, "at", List.of(identityTwin), destination))
                         .longValue());
         assertSame(ProtosBooleanValue.FALSE, ProtosInvocation.invokeMessage(
@@ -754,7 +753,7 @@ final class ProtosComplexSemanticsTest {
 
     private static Object divide(long numerator, long denominator, ProtosPrelude prelude) {
         return ProtosNumericValueSupport.divideIntegersExactly(
-                new ProtosIntegerValue(numerator), new ProtosIntegerValue(denominator), prelude);
+                Long.valueOf(numerator), Long.valueOf(denominator), prelude);
     }
 
     private static long imaginaryBits(Object complex) {

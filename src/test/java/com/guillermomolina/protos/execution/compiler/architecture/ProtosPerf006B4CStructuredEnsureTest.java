@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -73,7 +72,7 @@ final class ProtosPerf006B4CStructuredEnsureTest {
                     nativeClosure(
                             (activation, supplied) -> {
                                 cleanups.incrementAndGet();
-                                return new ProtosIntegerValue(999);
+                                return Long.valueOf(999);
                             }));
 
             Object result =

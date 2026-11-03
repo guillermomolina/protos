@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -97,19 +96,19 @@ abstract class ProtosPrimitiveNumericSendFastPathsBase extends Node {
     @TruffleBoundary
     static Object addLarge(long left, long right, ProtosPrelude prelude) {
         return ProtosNumericValueSupport.addIntegers(
-                new ProtosIntegerValue(left), new ProtosIntegerValue(right), prelude);
+                Long.valueOf(left), Long.valueOf(right), prelude);
     }
 
     @TruffleBoundary
     static Object subtractLarge(long left, long right, ProtosPrelude prelude) {
         return ProtosNumericValueSupport.subtractIntegers(
-                new ProtosIntegerValue(left), new ProtosIntegerValue(right), prelude);
+                Long.valueOf(left), Long.valueOf(right), prelude);
     }
 
     @TruffleBoundary
     static Object multiplyLarge(long left, long right, ProtosPrelude prelude) {
         return ProtosNumericValueSupport.multiplyIntegers(
-                new ProtosIntegerValue(left), new ProtosIntegerValue(right), prelude);
+                Long.valueOf(left), Long.valueOf(right), prelude);
     }
 
     /*
@@ -119,8 +118,7 @@ abstract class ProtosPrimitiveNumericSendFastPathsBase extends Node {
      * Integer, Float or Number, is ever a member.
      */
     static boolean smallInteger(Object value, boolean carrierPermitted) {
-        return (carrierPermitted && value instanceof Long)
-                || value instanceof ProtosIntegerValue;
+        return value instanceof Long;
     }
 
     static boolean smallFloat(Object value, boolean carrierPermitted) {
@@ -134,10 +132,7 @@ abstract class ProtosPrimitiveNumericSendFastPathsBase extends Node {
     }
 
     static long smallValue(Object value) {
-        if (value instanceof Long carrier) {
-            return carrier.longValue();
-        }
-        return ((ProtosIntegerValue) value).longValue();
+        return ((Long) value).longValue();
     }
 
     static double floatValue(Object value) {
@@ -175,7 +170,7 @@ abstract class ProtosPrimitiveNumericSendFastPathsBase extends Node {
     /**
      * PERF040-E2: an Integer x Integer pair with at least one owned large
      * Integer. Disjoint from the carrier pair of doLL and from
-     * {@link #representedIntegerPair}, which are both signed-64 only.
+     * the signed-64 primitive pair, which are both signed-64 only.
      */
     static boolean largeIntegerPair(
             Object receiver, boolean receiverCarrier,
@@ -256,27 +251,28 @@ abstract class ProtosPrimitiveNumericSendFastPathsBase extends Node {
                 ProtosNumericValueSupport.guestValue(argument))));
     }
 
-    /**
-     * The two disjoint Integer x Integer domains of '+', '-' and '*'. The
-     * carrier pair (two lowerer-authorized Java longs) is matched by the
-     * primitive {@code long} parameters of doLL; this predicate covers every
-     * other signed-64 pair, which involves at least one authentic
-     * {@link ProtosIntegerValue}. A Java Long is a member only where the
-     * lowerer authorized its carrier position; an unauthorized Long is no
-     * Integer here and the site returns MISS. Together they are exactly the
-     * signed-64 Integer x Integer part of {@link #admittedCanonicalNumericLane};
-     * pairs with a large Integer belong to {@link #largeIntegerPair}.
-     */
-    static boolean representedIntegerPair(
-            Object receiver, boolean receiverCarrier,
-            Object argument, boolean argumentCarrier) {
-        return smallInteger(receiver, receiverCarrier)
-                && smallInteger(argument, argumentCarrier)
-                && !(receiverCarrier
-                        && argumentCarrier
-                        && receiver instanceof Long
-                        && argument instanceof Long);
-    }
+    // PRUIBA DE I115, en algún momento esto volverá a funcionar
+    // /**
+    //  * The two disjoint Integer x Integer domains of '+', '-' and '*'. The
+    //  * carrier pair (two lowerer-authorized Java longs) is matched by the
+    //  * primitive {@code long} parameters of doLL; this predicate covers every
+    //  * other signed-64 pair, which involves at least one authentic
+    //  * {@link Long}. A Java Long is a member only where the
+    //  * lowerer authorized its carrier position; an unauthorized Long is no
+    //  * Integer here and the site returns MISS. Together they are exactly the
+    //  * signed-64 Integer x Integer part of {@link #admittedCanonicalNumericLane};
+    //  * pairs with a large Integer belong to {@link #largeIntegerPair}.
+    //  */
+    // static boolean representedIntegerPair(
+    //         Object receiver, boolean receiverCarrier,
+    //         Object argument, boolean argumentCarrier) {
+    //     return smallInteger(receiver, receiverCarrier)
+    //             && smallInteger(argument, argumentCarrier)
+    //             && !(receiverCarrier
+    //                     && argumentCarrier
+    //                     && receiver instanceof Long
+    //                     && argument instanceof Long);
+    // }
 
     /**
      * D197-C: Integer / Integer is the canonical exact quotient. Only an

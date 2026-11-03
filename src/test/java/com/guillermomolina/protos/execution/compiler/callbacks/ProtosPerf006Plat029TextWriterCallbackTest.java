@@ -72,8 +72,8 @@ final class ProtosPerf006Plat029TextWriterCallbackTest {
             assertEquals(ProtosFutureValue.State.PENDING, outer.state());
             assertEquals(0, f.domain.liveTaskCount());
 
-            ProtosIntegerValue gateValue =
-                    new ProtosIntegerValue(7);
+            Long gateValue =
+                    Long.valueOf(7);
             assertTrue(gate.resolve(gateValue, f.module));
             assertEquals(
                     1,

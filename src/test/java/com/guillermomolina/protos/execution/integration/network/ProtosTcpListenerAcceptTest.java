@@ -158,7 +158,7 @@ final class ProtosTcpListenerAcceptTest {
     @Test void acceptRequiresActualAcceptEnabledFamilyAndZeroArguments() throws Exception {
         Fixture x=fixture(); ProtosObjectValue child=new ProtosObjectValue(x.listener);
         assertThrows(ProtosSignalException.class,()->ProtosInvocation.invokeMessage(child,"accept",List.of(),x.activation));
-        assertThrows(ProtosSignalException.class,()->ProtosInvocation.invokeMessage(x.listener,"accept",List.of(new ProtosIntegerValue(1L)),x.activation));
+        assertThrows(ProtosSignalException.class,()->ProtosInvocation.invokeMessage(x.listener,"accept",List.of(Long.valueOf(1L)),x.activation));
         ProtosTcpListenerValue lifecycleOnly=new ProtosTcpListenerValue(x.prelude,new Object(),x.activation,x.backend,51000);
         assertThrows(ProtosSignalException.class,()->ProtosInvocation.invokeMessage(lifecycleOnly,"accept",List.of(),x.activation));
         assertTrue(x.backend.accepts.isEmpty());
@@ -245,7 +245,7 @@ final class ProtosTcpListenerAcceptTest {
     private static ProtosFutureValue future(Object receiver,String selector,List<?> args,ProtosActivation a){ return assertInstanceOf(ProtosFutureValue.class,ProtosInvocation.invokeMessage(receiver,selector,args,a)); }
     private static ProtosObjectValue endpoint(Fixture x,long bits,long port){
         Object af=x.prelude.ipAddressPrototypeForRuntime(); Object ef=x.prelude.ipEndpointPrototypeForRuntime();
-        ProtosObjectValue addr=(ProtosObjectValue)ProtosInvocation.invoke(af,List.of(integer(4),new ProtosIntegerValue(bits)),x.activation);
+        ProtosObjectValue addr=(ProtosObjectValue)ProtosInvocation.invoke(af,List.of(integer(4),Long.valueOf(bits)),x.activation);
         return (ProtosObjectValue)ProtosInvocation.invoke(ef,List.of(addr,integer(port)),x.activation);
     }
     private static ProtosHostIpEndpoint host(ProtosObjectValue endpoint) {
@@ -261,7 +261,7 @@ final class ProtosTcpListenerAcceptTest {
         return new ProtosHostIpEndpoint(version, bytes, port);
     }
 
-    private static ProtosIntegerValue integer(long v){ return new ProtosIntegerValue(v); }
+    private static Long integer(long v){ return Long.valueOf(v); }
     private static void assertEndpointEquals(Fixture x,Object actual,Object expected){ assertSame(ProtosBooleanValue.TRUE,ProtosInvocation.invokeMessage(actual,"==",List.of(expected),x.activation)); }
     private static void assertFailedAs(ProtosFutureValue f,ProtosPrelude p,String name){ assertEquals(ProtosFutureValue.State.FAILED,f.state()); assertSame(p.bindings().readLocalSlot(name).orElseThrow(),f.failedError().orElseThrow().parent().orElseThrow()); }
 

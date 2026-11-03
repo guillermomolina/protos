@@ -15,7 +15,6 @@ import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTask;
@@ -44,8 +43,8 @@ final class ProtosPerf006Plat028ArrayEachCallbackTest {
             ProtosArrayValue array =
                     prelude.newArray(
                             List.of(
-                                    new ProtosIntegerValue(1L),
-                                    new ProtosIntegerValue(2L)));
+                                    Long.valueOf(1L),
+                                    Long.valueOf(2L)));
             AtomicInteger callbacks = new AtomicInteger();
 
             module.context().createLocalSlot("gate", gate);
@@ -92,8 +91,8 @@ final class ProtosPerf006Plat028ArrayEachCallbackTest {
             ProtosArrayValue array =
                     prelude.newArray(
                             List.of(
-                                    new ProtosIntegerValue(1L),
-                                    new ProtosIntegerValue(2L)));
+                                    Long.valueOf(1L),
+                                    Long.valueOf(2L)));
             AtomicInteger callbacks = new AtomicInteger();
 
             module.context().createLocalSlot("array", array);
@@ -104,7 +103,7 @@ final class ProtosPerf006Plat028ArrayEachCallbackTest {
                                 callbacks.incrementAndGet();
                                 array.indexedPut(
                                         1,
-                                        new ProtosIntegerValue(99));
+                                        Long.valueOf(99));
                                 return ProtosNullValue.INSTANCE;
                             }));
 

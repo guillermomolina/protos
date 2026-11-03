@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 
@@ -64,13 +63,13 @@ class ProtosStandardNumericConversionTest {
         var toInteger = ProtosStandardNumericConversionProtocol.FactoryKind.INTEGER;
         var toFloat = ProtosStandardNumericConversionProtocol.FactoryKind.FLOAT;
 
-        assertEquals(Long.MIN_VALUE, assertInstanceOf(ProtosIntegerValue.class,
+        assertEquals(Long.MIN_VALUE, assertInstanceOf(Long.class,
                 ProtosStandardNumericConversionProtocol.convert(
                         toInteger, new ProtosFloatValue(-0x1p63), prelude)).longValue());
-        assertEquals(1L << 62, assertInstanceOf(ProtosIntegerValue.class,
+        assertEquals(1L << 62, assertInstanceOf(Long.class,
                 ProtosStandardNumericConversionProtocol.convert(
                         toInteger, new ProtosFloatValue(0x1p62), null)).longValue());
-        assertEquals(0L, assertInstanceOf(ProtosIntegerValue.class,
+        assertEquals(0L, assertInstanceOf(Long.class,
                 ProtosStandardNumericConversionProtocol.convert(
                         toInteger, new ProtosFloatValue(-0.0d), null)).longValue());
         for (double value : new double[] {0x1p63, -0x1.0000000000001p63, 0x1p1023}) {
@@ -89,7 +88,7 @@ class ProtosStandardNumericConversionTest {
             assertNull(ProtosStandardNumericConversionProtocol.convert(
                     toInteger, new ProtosFloatValue(value), prelude));
         }
-        Object integer = new ProtosIntegerValue(7L);
+        Object integer = Long.valueOf(7L);
         assertSame(integer,
                 ProtosStandardNumericConversionProtocol.convert(toInteger, integer, prelude));
         assertNull(ProtosStandardNumericConversionProtocol.convert(toInteger, "7", prelude));

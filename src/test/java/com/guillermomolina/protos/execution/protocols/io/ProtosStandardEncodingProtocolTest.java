@@ -29,7 +29,6 @@ import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -76,18 +75,18 @@ final class ProtosStandardEncodingProtocolTest {
 
         assertEquals(
                 "\u0000\u00ff",
-                decode(latin1, bytes(bytesPrototype, new ProtosIntegerValue(0), new ProtosIntegerValue(255)), a));
+                decode(latin1, bytes(bytesPrototype, Long.valueOf(0), Long.valueOf(255)), a));
 
         Object[] invalid = {
-            new ProtosIntegerValue(-1),
-            new ProtosIntegerValue(256),
-            new ProtosIntegerValue((1L << 32) + 65),
+            Long.valueOf(-1),
+            Long.valueOf(256),
+            Long.valueOf((1L << 32) + 65),
             com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), prelude),
             com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(65)), prelude),
             new ProtosFloatValue(65.0d),
         };
         for (Object bad : invalid) {
-            ProtosBytesValue bytes = bytes(bytesPrototype, new ProtosIntegerValue(65), bad);
+            ProtosBytesValue bytes = bytes(bytesPrototype, Long.valueOf(65), bad);
             ProtosSignalException signal =
                     assertThrows(
                             ProtosSignalException.class,
@@ -111,7 +110,7 @@ final class ProtosStandardEncodingProtocolTest {
                             ProtosInvocation.invokeMessage(
                                     encoding, "encode", List.of(new ProtosStringValue(text)), a));
             for (Object octet : encoded.indexedSnapshot()) {
-                assertTrue((octet instanceof com.guillermomolina.protos.runtime.ProtosIntegerValue compact && compact.longValue() >= 0 && compact.longValue() <= 255), name);
+                assertTrue((octet instanceof java.lang.Long compact && compact.longValue() >= 0 && compact.longValue() <= 255), name);
             }
             assertEquals(text, decode(encoding, encoded, a), name);
         }
@@ -124,7 +123,7 @@ final class ProtosStandardEncodingProtocolTest {
                 utf8.indexedSnapshot().stream().map(com.guillermomolina.protos.runtime.ProtosNumericValueSupport::integerDecimalText).toList());
 
         ProtosBytesValue malformed =
-                bytes(bytesPrototype(prelude, a), new ProtosIntegerValue(0xc3), new ProtosIntegerValue(0x28));
+                bytes(bytesPrototype(prelude, a), Long.valueOf(0xc3), Long.valueOf(0x28));
         assertEncodingError(
                 a, () -> ProtosInvocation.invokeMessage(descriptor(prelude, "UTF8"), "decode", List.of(malformed), a));
         assertEncodingError(

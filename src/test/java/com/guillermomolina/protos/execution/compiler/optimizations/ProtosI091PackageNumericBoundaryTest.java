@@ -17,18 +17,18 @@ final class ProtosI091PackageNumericBoundaryTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap()
                 .bootstrap(Path.of("protos", "lib", "core"));
 
-        Object small = new ProtosIntegerValue(7L);
+        Object small = Long.valueOf(7L);
         Object large = ProtosNumericValueSupport.integerFromHost(
                 BigInteger.ONE.shiftLeft(80), prelude);
         Object floating = new ProtosFloatValue(1.5d);
 
         Object fraction = ProtosNumericValueSupport.normalizeExactRational(
-                new ProtosIntegerValue(1L),
-                new ProtosIntegerValue(3L),
+                Long.valueOf(1L),
+                Long.valueOf(3L),
                 prelude);
 
         Object complex = ProtosComplexNumericSupport.normalize(
-                new ProtosIntegerValue(2L),
+                Long.valueOf(2L),
                 new ProtosFloatValue(-0.0d),
                 prelude);
 
@@ -50,13 +50,13 @@ final class ProtosI091PackageNumericBoundaryTest {
                 .bootstrap(Path.of("protos", "lib", "core"));
 
         Object fraction = ProtosNumericValueSupport.normalizeExactRational(
-                new ProtosIntegerValue(1L),
-                new ProtosIntegerValue(2L),
+                Long.valueOf(1L),
+                Long.valueOf(2L),
                 prelude);
 
         ProtosObjectValue ordinary = new ProtosObjectValue(fraction);
         ordinary.createLocalSlot(
-                "generation", new ProtosIntegerValue(1L));
+                "generation", Long.valueOf(1L));
 
         assertFalse(ProtosNumericValueSupport.isCurrentNumber(ordinary));
         assertSame(fraction, ordinary.parent().orElseThrow());

@@ -25,7 +25,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -50,8 +49,8 @@ class ProtosArrayConformanceCompletionTest {
         ProtosArrayValue xs =
                 prelude.newArray(
                         List.of(
-                                new ProtosIntegerValue(1L),
-                                new ProtosIntegerValue(2L)));
+                                Long.valueOf(1L),
+                                Long.valueOf(2L)));
         activation.context().createLocalSlot("xs", xs);
 
         assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(execute(activation, "xs.size()")));
@@ -79,8 +78,8 @@ class ProtosArrayConformanceCompletionTest {
         ProtosArrayValue xs =
                 prelude.newArray(
                         List.of(
-                                new ProtosIntegerValue(1L),
-                                new ProtosIntegerValue(2L)));
+                                Long.valueOf(1L),
+                                Long.valueOf(2L)));
         List<Object> seen = new ArrayList<>();
         ProtosObjectValue error = ProtosCoreErrors.newError(activation);
         ProtosClosureValue callback =

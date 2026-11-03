@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 
@@ -57,7 +56,7 @@ final class ProtosTestToolI8D4BResourcefulAttemptBridgeTest {
                             new ProtosTestResourceProviderLease(
                                     Map.of(
                                             "gpu",
-                                            new ProtosIntegerValue(42)),
+                                            Long.valueOf(42)),
                                     () -> {
                                         cleanupCalls.incrementAndGet();
                                         return CompletableFuture.completedFuture(null);
@@ -93,9 +92,9 @@ final class ProtosTestToolI8D4BResourcefulAttemptBridgeTest {
             assertEquals(
                     ProtosExecutionOutcome.State.COMPLETED,
                     guest.outcome().state());
-            ProtosIntegerValue value =
+            Long value =
                     assertInstanceOf(
-                            ProtosIntegerValue.class,
+                            Long.class,
                             guest.outcome().value());
             assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
             assertEquals(0, guest.stdout().length);
@@ -208,7 +207,7 @@ final class ProtosTestToolI8D4BResourcefulAttemptBridgeTest {
                                 new ProtosTestResourceProviderLease(
                                         Map.of(
                                                 "gpu",
-                                                new ProtosIntegerValue(1L)),
+                                                Long.valueOf(1L)),
                                         () -> {
                                             cleanupCalls.incrementAndGet();
                                             return CompletableFuture.completedFuture(null);

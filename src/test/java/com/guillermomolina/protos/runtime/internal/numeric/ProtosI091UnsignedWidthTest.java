@@ -30,14 +30,10 @@ import org.junit.jupiter.api.Test;
 final class ProtosI091UnsignedWidthTest {
     @Test
     void ipv4Boundary() {
-        assertTrue(new ProtosIntegerValue(0L)
-                .fitsUnsignedBitsForRuntime(32));
-        assertTrue(new ProtosIntegerValue(4294967295L)
-                .fitsUnsignedBitsForRuntime(32));
-        assertFalse(new ProtosIntegerValue(4294967296L)
-                .fitsUnsignedBitsForRuntime(32));
-        assertFalse(new ProtosIntegerValue(-1L)
-                .fitsUnsignedBitsForRuntime(32));
+        assertTrue(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(0L), 32));
+        assertTrue(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(4294967295L), 32));
+        assertFalse(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(4294967296L), 32));
+        assertFalse(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(-1L), 32));
     }
 
     @Test
@@ -53,36 +49,31 @@ final class ProtosI091UnsignedWidthTest {
 
     @Test
     void signed64AndZeroWidthBoundaries() {
-        assertTrue(new ProtosIntegerValue(Long.MAX_VALUE)
-                .fitsUnsignedBitsForRuntime(63));
-        assertFalse(new ProtosIntegerValue(Long.MIN_VALUE)
-                .fitsUnsignedBitsForRuntime(128));
-        assertTrue(new ProtosIntegerValue(0L)
-                .fitsUnsignedBitsForRuntime(0));
-        assertFalse(new ProtosIntegerValue(1L)
-                .fitsUnsignedBitsForRuntime(0));
+        assertTrue(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(Long.MAX_VALUE), 63));
+        assertFalse(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(Long.MIN_VALUE), 128));
+        assertTrue(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(0L), 0));
+        assertFalse(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(1L), 0));
         assertThrows(IllegalArgumentException.class,
-                () -> new ProtosIntegerValue(1L)
-                        .fitsUnsignedBitsForRuntime(-1));
+                () -> ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(1L), -1));
     }
 
     @Test
     void bitWidthsAroundTheSigned64Boundary() {
         int[] widths = {0, 1, 7, 8, 31, 32, 63, 64, 65, 128};
         for (int bits : widths) {
-            assertTrue(new ProtosIntegerValue(0L).fitsUnsignedBitsForRuntime(bits));
-            assertFalse(new ProtosIntegerValue(-1L).fitsUnsignedBitsForRuntime(bits));
-            assertFalse(new ProtosIntegerValue(Long.MIN_VALUE).fitsUnsignedBitsForRuntime(bits));
+            assertTrue(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(0L), bits));
+            assertFalse(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(-1L), bits));
+            assertFalse(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(Long.MIN_VALUE), bits));
             boolean maxFits = bits >= 63;
             assertEquals(maxFits,
-                    new ProtosIntegerValue(Long.MAX_VALUE).fitsUnsignedBitsForRuntime(bits));
+                    ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(Long.MAX_VALUE), bits));
             if (bits > 0 && bits < 63) {
                 long max = (1L << bits) - 1L;
-                assertTrue(new ProtosIntegerValue(max).fitsUnsignedBitsForRuntime(bits));
-                assertFalse(new ProtosIntegerValue(max + 1L).fitsUnsignedBitsForRuntime(bits));
+                assertTrue(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(max), bits));
+                assertFalse(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(max + 1L), bits));
             }
         }
-        assertFalse(new ProtosIntegerValue(1L).fitsUnsignedBitsForRuntime(0));
+        assertFalse(ProtosNumericValueSupport.isUnsignedIntegerWithin(Long.valueOf(1L), 0));
     }
 
     @Test
@@ -98,18 +89,15 @@ final class ProtosI091UnsignedWidthTest {
                 () -> ProtosNumericValueSupport.unsignedBitsOfOctets(-1));
 
         assertArrayEquals(new byte[] {0, 0, 0, (byte) 0xff},
-                new ProtosIntegerValue(255L).toUnsignedBigEndianForRuntime(4));
-        assertArrayEquals(new byte[0], new ProtosIntegerValue(0L).toUnsignedBigEndianForRuntime(0));
-        assertThrows(ArithmeticException.class,
-                () -> new ProtosIntegerValue(1L).toUnsignedBigEndianForRuntime(0));
-        assertThrows(ArithmeticException.class,
-                () -> new ProtosIntegerValue(-1L).toUnsignedBigEndianForRuntime(1 << 29));
-        assertThrows(ArithmeticException.class,
-                () -> new ProtosIntegerValue(1L).toUnsignedBigEndianForRuntime(-1));
+                ProtosNumericValueSupport.unsignedBigEndianOrNull(Long.valueOf(255L), 4));
+        assertArrayEquals(new byte[0], ProtosNumericValueSupport.unsignedBigEndianOrNull(Long.valueOf(0L), 0));
+        assertNull(ProtosNumericValueSupport.unsignedBigEndianOrNull(Long.valueOf(1L), 0));
+        assertNull(ProtosNumericValueSupport.unsignedBigEndianOrNull(Long.valueOf(-1L), 1 << 29));
+        assertNull(ProtosNumericValueSupport.unsignedBigEndianOrNull(Long.valueOf(1L), -1));
         assertNull(ProtosNumericValueSupport.unsignedBigEndianOrNull(
-                new ProtosIntegerValue(-1L), 1 << 29));
+                Long.valueOf(-1L), 1 << 29));
         assertNull(ProtosNumericValueSupport.unsignedBigEndianOrNull(
-                new ProtosIntegerValue(1L), -1));
+                Long.valueOf(1L), -1));
     }
 
     @Test

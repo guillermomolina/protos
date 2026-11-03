@@ -111,7 +111,7 @@ class ProtosFilesystemOpenFlowTest {
         invalid.add(unknownLocalSlot);
 
         ProtosObjectValue nonBoolean = options();
-        nonBoolean.createLocalSlot("write", new ProtosIntegerValue(1L));
+        nonBoolean.createLocalSlot("write", Long.valueOf(1L));
         invalid.add(nonBoolean);
 
         for (ProtosObjectValue candidate : invalid) {

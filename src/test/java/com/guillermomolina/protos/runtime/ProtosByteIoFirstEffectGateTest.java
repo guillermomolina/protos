@@ -86,7 +86,7 @@ class ProtosByteIoFirstEffectGateTest {
     private static ProtosBytesValue bytes(ProtosObjectValue prototype, int... values) {
         ProtosBytesValue bytes = new ProtosBytesValue(prototype);
         for (int value : values) {
-            bytes.indexedAdd(new ProtosIntegerValue(value));
+            bytes.indexedAdd(Long.valueOf(value));
         }
         return bytes;
     }

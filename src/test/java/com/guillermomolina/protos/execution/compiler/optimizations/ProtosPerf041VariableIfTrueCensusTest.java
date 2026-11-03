@@ -17,7 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.RootCallTarget;
@@ -184,7 +183,7 @@ final class ProtosPerf041VariableIfTrueCensusTest {
                         Object constant = argument.asConstant();
                         if (constant instanceof Long) {
                             primitiveIntegers++;
-                        } else if (constant instanceof ProtosIntegerValue) {
+                        } else if (constant instanceof Long) {
                             guestIntegers++;
                         } else {
                             otherConstants++;

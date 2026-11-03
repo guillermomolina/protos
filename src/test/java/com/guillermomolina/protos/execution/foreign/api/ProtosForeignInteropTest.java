@@ -29,7 +29,6 @@ import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Fake;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Integral;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.TestForeignFailure;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosRawForeignValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -156,7 +155,7 @@ class ProtosForeignInteropTest {
                 assertMissing(fixture, fixture.failure(h + "h." + name));
             }
             assertSame(ProtosBooleanValue.TRUE, fixture.eval(h + "h == h"));
-            assertInstanceOf(ProtosIntegerValue.class, fixture.eval(h + "h.hash()"));
+            assertInstanceOf(Long.class, fixture.eval(h + "h.hash()"));
             for (String name : institutions) {
                 assertEquals(1, provider.count("read:" + name), name);
             }

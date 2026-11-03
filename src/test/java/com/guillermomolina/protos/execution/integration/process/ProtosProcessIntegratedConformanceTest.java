@@ -109,7 +109,7 @@ final class ProtosProcessIntegratedConformanceTest {
                                 ProtosInvocation.invokeMessage(
                                         copiedArgs,
                                         "at",
-                                        List.of(new ProtosIntegerValue(1L)),
+                                        List.of(Long.valueOf(1L)),
                                         fixture.activation))
                         .value());
 
@@ -437,7 +437,7 @@ activation);
 
     private static void appendCapturedBytes(ProtosBytesValue capture, byte[] bytes) {
         for (byte value : bytes) {
-            capture.indexedAdd(new ProtosIntegerValue(value & 0xff));
+            capture.indexedAdd(Long.valueOf(value & 0xff));
         }
     }
 

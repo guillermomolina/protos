@@ -29,7 +29,6 @@ import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -116,8 +115,8 @@ final class ProtosDetachedExecutionValueCrossPreludeTest {
         inner.createLocalSlot("twin", twin);
         inner.freeze();
         ProtosObjectValue graph = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        graph.createLocalSlot("max", new ProtosIntegerValue(Long.MAX_VALUE));
-        graph.createLocalSlot("min", new ProtosIntegerValue(Long.MIN_VALUE));
+        graph.createLocalSlot("max", Long.valueOf(Long.MAX_VALUE));
+        graph.createLocalSlot("min", Long.valueOf(Long.MIN_VALUE));
         graph.createLocalSlot("positive", positive);
         graph.createLocalSlot("negative", negative);
         graph.createLocalSlot("shared", shared);
@@ -167,12 +166,12 @@ final class ProtosDetachedExecutionValueCrossPreludeTest {
         Object fraction =
                 ProtosNumericValueSupport.normalizeExactRational(
                         com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(magnitude, pair.sourcePrelude),
-                        new ProtosIntegerValue(2L),
+                        Long.valueOf(2L),
                         pair.sourcePrelude);
         Object twin =
                 ProtosNumericValueSupport.normalizeExactRational(
                         com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(magnitude, pair.sourcePrelude),
-                        new ProtosIntegerValue(2L),
+                        Long.valueOf(2L),
                         pair.sourcePrelude);
         Object complex =
                 ProtosComplexNumericSupport.normalize(

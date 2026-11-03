@@ -32,7 +32,6 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -126,7 +125,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                             module,
                             ProtosReturnHome
                                     .unobservableAcceptingPrimitiveResultForRuntime(),
-                            new ProtosIntegerValue(7L));
+                            Long.valueOf(7L));
 
             assertTrue(ProtosFrameArguments.acceptsPrimitiveResult(arguments));
 

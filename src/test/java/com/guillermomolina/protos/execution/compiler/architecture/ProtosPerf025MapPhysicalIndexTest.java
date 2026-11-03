@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -126,10 +125,10 @@ final class ProtosPerf025MapPhysicalIndexTest {
         ProtosObjectValue parent = ProtosObjectValue.rootObject();
         ProtosIdentityMapValue map = new ProtosIdentityMapValue(parent);
 
-        ProtosIntegerValue first =
-                new ProtosIntegerValue(42);
-        ProtosIntegerValue semanticallyIdentical =
-                new ProtosIntegerValue(42);
+        Long first =
+                Long.valueOf(42);
+        Long semanticallyIdentical =
+                Long.valueOf(42);
 
         assertNotSame(first, semanticallyIdentical);
         assertTrue(ProtosIdentity.identical(first, semanticallyIdentical));

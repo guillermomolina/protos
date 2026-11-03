@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -159,8 +158,8 @@ final class ProtosWorkspacePackageModuleResolverTest {
 
     private static void assertIntegerSlot(
             ProtosObjectValue module, String slotName, long expected) {
-        ProtosIntegerValue value =
-                (ProtosIntegerValue) module.readLocalSlot(slotName).orElseThrow();
+        Long value =
+                (Long) module.readLocalSlot(slotName).orElseThrow();
         assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
     }
 

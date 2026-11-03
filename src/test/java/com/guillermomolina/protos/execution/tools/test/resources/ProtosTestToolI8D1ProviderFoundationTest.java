@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -111,7 +110,7 @@ final class ProtosTestToolI8D1ProviderFoundationTest {
                 new ProtosTestResourceProviderRequest.Binding(
                         "gpu",
                         "shared",
-                        new ProtosIntegerValue(2),
+                        Long.valueOf(2),
                         "placement",
                         "device/gpu",
                         "a100");

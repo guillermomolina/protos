@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -153,8 +152,8 @@ final class ProtosPerf025C1ObjectBodyInlineControlTest {
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
                 () -> "outcome=" + outcome.state() + ", error=" + outcome.error());
-        ProtosIntegerValue integer =
-                assertInstanceOf(ProtosIntegerValue.class, outcome.value());
+        Long integer =
+                assertInstanceOf(Long.class, outcome.value());
         assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
     }
 }

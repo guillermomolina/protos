@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.runtime.values;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.oracle.truffle.api.interop.InteropLibrary;
@@ -44,7 +43,7 @@ final class ProtosObjectInteropTest {
         parent.createLocalSlot("delegated", new ProtosStringValue("must-not-be-visible"));
 
         ProtosObjectValue value = new ProtosObjectValue(parent);
-        ProtosIntegerValue first = new ProtosIntegerValue(1L);
+        Long first = Long.valueOf(1L);
         value.createLocalSlot("first", first);
         value.createLocalSlot("self", value);
 
@@ -69,7 +68,7 @@ final class ProtosObjectInteropTest {
                 UnknownIdentifierException.class,
                 () -> interop.readMember(value, "delegated"));
 
-        value.createLocalSlot("later", new ProtosIntegerValue(2L));
+        value.createLocalSlot("later", Long.valueOf(2L));
         assertEquals(2L, memberInterop.getArraySize(members));
 
         Object freshMembers = interop.getMembers(value, false);
@@ -82,10 +81,10 @@ final class ProtosObjectInteropTest {
         ProtosArrayValue array =
                 new ProtosArrayValue(
                         ProtosObjectValue.rootObject(),
-                        List.of(new ProtosIntegerValue(1L)));
+                        List.of(Long.valueOf(1L)));
         array.createLocalSlot(
                 "host-visible-by-accident",
-                new ProtosIntegerValue(2L));
+                Long.valueOf(2L));
 
         assertFalse(interop.hasMembers(array));
         assertThrows(
@@ -96,7 +95,7 @@ final class ProtosObjectInteropTest {
     @Test
     void objectInteropIsReadOnlyAndRejectsHostOnlySlotValues() throws Exception {
         ProtosObjectValue value = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosIntegerValue answer = new ProtosIntegerValue(42);
+        Long answer = Long.valueOf(42);
         value.createLocalSlot("answer", answer);
         value.createLocalSlot("hostOnly", BigInteger.valueOf(99));
 
@@ -106,7 +105,7 @@ final class ProtosObjectInteropTest {
                 UnknownIdentifierException.class,
                 () -> interop.readMember(value, "hostOnly"));
 
-        ProtosIntegerValue replacement = new ProtosIntegerValue(0L);
+        Long replacement = Long.valueOf(0L);
         assertFalse(interop.isMemberModifiable(value, "answer"));
         assertFalse(interop.isMemberInsertable(value, "newSlot"));
         assertFalse(interop.isMemberRemovable(value, "answer"));

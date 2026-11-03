@@ -39,7 +39,7 @@ public final class ProtosBinary64Rounding {
     /** The binary64 value nearest to an exact Integer, ties to even. */
     public static double roundExactInteger(Object integer) {
         Objects.requireNonNull(integer, "integer");
-        if (integer instanceof ProtosIntegerValue small) {
+        if (integer instanceof Long small) {
             return (double) small.longValue();
         }
         return roundLarge(ProtosNumericValueSupport.exactBigInteger(integer));
@@ -61,8 +61,8 @@ public final class ProtosBinary64Rounding {
     public static double divideExactIntegers(Object numerator, Object denominator) {
         Objects.requireNonNull(numerator, "numerator");
         Objects.requireNonNull(denominator, "denominator");
-        if (numerator instanceof ProtosIntegerValue smallNumerator
-                && denominator instanceof ProtosIntegerValue smallDenominator) {
+        if (numerator instanceof Long smallNumerator
+                && denominator instanceof Long smallDenominator) {
             long exactDenominator = smallDenominator.longValue();
             if (exactDenominator == 0L) {
                 throw new ArithmeticException("division by zero");
@@ -344,8 +344,8 @@ public final class ProtosBinary64Rounding {
             return ProtosNumericValueSupport.integerSignum(numerator);
         }
 
-        if (numerator instanceof ProtosIntegerValue compactNumerator
-                && denominator instanceof ProtosIntegerValue compactDenominator) {
+        if (numerator instanceof Long compactNumerator
+                && denominator instanceof Long compactDenominator) {
             long rawBits = Double.doubleToRawLongBits(value);
             int exponentField = (int) ((rawBits >>> 52) & 0x7ffL);
             long significand = exponentField == 0

@@ -33,7 +33,6 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -77,8 +76,8 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                                 "(a, b) => { b - a.negated() }", "perf025-add.protos", module);
                 ProtosDynamicControlState callerControl = module.dynamicControlState();
 
-                ProtosIntegerValue two = integer(2);
-                ProtosIntegerValue three = integer(3);
+                Long two = integer(2);
+                Long three = integer(3);
                 DirectEntry prepared =
                         fastDirect(add, module, two, three);
 
@@ -444,8 +443,8 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 ProtosClosureValue.class, evaluate(characters, name, activation));
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static String integerValue(Object value) {

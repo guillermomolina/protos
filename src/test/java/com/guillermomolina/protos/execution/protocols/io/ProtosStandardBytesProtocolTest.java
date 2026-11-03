@@ -27,7 +27,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -76,8 +75,8 @@ class ProtosStandardBytesProtocolTest {
     void invalidOpenMutationFailuresLeaveSameBytesUntouched() throws IOException {
         Fixture fixture = fixture();
         ProtosBytesValue bytes = fixture.create();
-        ProtosIntegerValue ten = integer(10);
-        ProtosIntegerValue twenty = integer(20);
+        Long ten = integer(10);
+        Long twenty = integer(20);
         fixture.add(bytes, ten);
         fixture.add(bytes, twenty);
 
@@ -112,7 +111,7 @@ class ProtosStandardBytesProtocolTest {
         ProtosBytesValue closed = fixture.create();
         fixture.add(closed, integer(1));
         closed.close();
-        ProtosIntegerValue two = integer(2);
+        Long two = integer(2);
         assertSame(two, fixture.send(closed, "atPut", integer(0), two));
         assertDirectError(fixture, () -> fixture.send(closed, "add", integer(3)));
         assertDirectError(fixture, () -> fixture.send(closed, "removeAt", integer(0)));
@@ -120,7 +119,7 @@ class ProtosStandardBytesProtocolTest {
         assertSame(two, fixture.send(closed, "at", integer(0)));
 
         ProtosBytesValue frozen = fixture.create();
-        ProtosIntegerValue four = integer(4);
+        Long four = integer(4);
         fixture.add(frozen, four);
         frozen.freeze();
         assertDirectError(fixture, () -> fixture.send(frozen, "atPut", integer(0), integer(5)));
@@ -164,8 +163,8 @@ class ProtosStandardBytesProtocolTest {
     void indicesAndOctetsAreRangeCheckedBeforeAnyNarrowing() throws IOException {
         Fixture fixture = fixture();
         ProtosBytesValue bytes = fixture.create();
-        ProtosIntegerValue zero = integer(0);
-        ProtosIntegerValue max = integer(255);
+        Long zero = integer(0);
+        Long max = integer(255);
         assertSame(zero, fixture.add(bytes, zero));
         assertSame(max, fixture.add(bytes, max));
         Object twoPow63 = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(63), fixture.prelude);
@@ -194,7 +193,7 @@ class ProtosStandardBytesProtocolTest {
         assertEquals(List.of((byte) 0, (byte) 0xff),
                 List.of(bytes.octetSnapshot()[0], bytes.octetSnapshot()[1]));
 
-        ProtosIntegerValue one = integer(1);
+        Long one = integer(1);
         assertSame(one, fixture.send(bytes, "atPut", integer(1), one));
         assertSame(one, fixture.send(bytes, "at", integer(1)));
     }
@@ -220,8 +219,8 @@ class ProtosStandardBytesProtocolTest {
         }
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static String intValue(Object value) {

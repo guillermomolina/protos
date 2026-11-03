@@ -35,7 +35,6 @@ import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.io.ProtosPathComponents;import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -245,7 +244,7 @@ activation);
     private static void appendCapturedBytes(ProtosBytesValue capture, byte[] bytes) {
         for (byte value : bytes) {
             capture.indexedAdd(
-                    new ProtosIntegerValue(value & 0xff));
+                    Long.valueOf(value & 0xff));
         }
     }
 

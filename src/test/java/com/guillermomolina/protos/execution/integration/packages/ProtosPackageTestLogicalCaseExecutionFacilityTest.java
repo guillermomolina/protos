@@ -27,7 +27,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -654,9 +653,9 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             assertTrue(submission.runNext());
             assertTrue(activation.executionDomain().dispatchOne());
 
-            ProtosIntegerValue value =
+            Long value =
                     assertInstanceOf(
-                            ProtosIntegerValue.class, assertCompletedObservationValue(future));
+                            Long.class, assertCompletedObservationValue(future));
             assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         }
     }

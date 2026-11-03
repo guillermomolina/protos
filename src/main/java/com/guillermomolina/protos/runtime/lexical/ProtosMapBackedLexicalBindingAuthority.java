@@ -17,6 +17,9 @@
 
 package com.guillermomolina.protos.runtime;
 
+// PRUIBA DE I115, en algún momento esto volverá a funcionar
+// Signed-64 semantic Integers use Long directly, not ProtosIntegerValue.
+
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.object.DynamicObject;
@@ -72,7 +75,7 @@ final class ProtosMapBackedLexicalBindingAuthority
      * truncated. Other guest values keep their object storage.
      */
     private static Object toStorageValue(Object value) {
-        if (value instanceof ProtosIntegerValue integer) {
+        if (value instanceof Long integer) {
             return Long.valueOf(integer.longValue());
         }
         if (value instanceof Integer integer) {

@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.execution.ProtosStandardNumberOrderingProtocol.Comparison;
@@ -40,8 +39,8 @@ final class ProtosCurrentNumericRelations {
     private ProtosCurrentNumericRelations() {}
 
     static boolean numericEquals(Object left, Object right) {
-        if (left instanceof ProtosIntegerValue leftInteger
-                && right instanceof ProtosIntegerValue rightInteger) {
+        if (left instanceof Long leftInteger
+                && right instanceof Long rightInteger) {
             return leftInteger.longValue() == rightInteger.longValue();
         }
 
@@ -118,8 +117,8 @@ final class ProtosCurrentNumericRelations {
             throw new IllegalArgumentException("numeric comparison requires real Number values");
         }
 
-        if (left instanceof ProtosIntegerValue leftInteger
-                && right instanceof ProtosIntegerValue rightInteger) {
+        if (left instanceof Long leftInteger
+                && right instanceof Long rightInteger) {
             return fromSign(Long.compare(leftInteger.longValue(), rightInteger.longValue()));
         }
 
@@ -174,7 +173,7 @@ final class ProtosCurrentNumericRelations {
         if (Double.isNaN(floating)) {
             return Comparison.UNORDERED;
         }
-        if (integer instanceof ProtosIntegerValue small) {
+        if (integer instanceof Long small) {
             return compareFloatToLong(floating, small.longValue());
         }
         return reverse(fromSign(
