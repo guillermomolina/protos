@@ -23,6 +23,30 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.492] - 2026-11-03
+
+### D237 / I143 — Contextual named arguments and MIX-C R3 association
+- `PROTOS_GRAMMAR.md`: contextual `identifier: expression` named-call items,
+  precedence of contextual control forms, positional slot-creation grouping,
+  bracket Array call sugar and syntax-time duplicate-label rejection.
+- `semantics/CALLABLES.md`: exact once-only receiver/argument evaluation,
+  independent positional `P` and named `K` packet, dynamic selected-call
+  association, MIX-C positional-first formal binding, collisions, default
+  presence, rest exclusion, and forwarding by the actual standard `Object.call`
+  implementation to a Closure or a fresh child's selected `init`.
+- `semantics/VALUES_AND_COLLECTIONS.md`: Array's positional-only standard
+  factory, bracket named-item equivalence and lexical shadowing, spread's
+  positional-only contribution, frozen positional-only rest Arrays, and
+  positional-only foreign projected/interop entry without name inference.
+- `semantics/ERRORS.md`: syntax-time duplicate labels versus fresh generic
+  runtime binding failures, lookup-error precedence, and pre-foreign-entry
+  failures distinct from `ForeignError`; no new Error taxonomy.
+- `semantics/EXECUTION_AND_CONTROL.md`: `super` sends preserve receiver,
+  ordinary left-to-right argument evaluation, both packet components, lookup
+  before formal-name association, and selected-implementation semantics.
+- D237 adds no reserved words, host/foreign name reflection, new Core value
+  family, implicit callable signature, or Actor/P boundary behavior.
+
 ## [0.1.491] - 2026-11-02
 
 ### D213 / LIB023-B/C — Standard Library Array queries and bulk transformations

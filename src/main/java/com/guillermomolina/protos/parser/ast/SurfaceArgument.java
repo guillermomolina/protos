@@ -20,9 +20,22 @@ package com.guillermomolina.protos.parser.ast;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.Objects;
 
-public record SurfaceArgument(boolean spread, SurfaceExpression expression, SourceSpan span) {
+public record SurfaceArgument(
+        boolean spread,
+        java.util.Optional<String> name,
+        SurfaceExpression expression,
+        SourceSpan span) {
     public SurfaceArgument {
+        Objects.requireNonNull(name, "name");
         Objects.requireNonNull(expression, "expression");
         Objects.requireNonNull(span, "span");
+        if (spread && name.isPresent()) {
+            throw new IllegalArgumentException("a named argument cannot be spread");
+        }
+    }
+
+    public SurfaceArgument(
+            boolean spread, SurfaceExpression expression, SourceSpan span) {
+        this(spread, java.util.Optional.empty(), expression, span);
     }
 }

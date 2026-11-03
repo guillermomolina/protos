@@ -325,14 +325,15 @@ defines one executable value kind, Closure, and method behavior as an invocation
 role. A syntactically valid super message send is therefore not rejected merely
 because the Closure was created in a source position that had no method role.
 
-For `super.message(arguments...)`, first form the complete caller-supplied
-positional argument vector under the ordinary call argument, spread, and
-trailing-Closure rules in `CALLABLES.md`. Argument items are evaluated exactly
-once from left to right. If that phase signals an Error or performs another
-control transfer, super dispatch does not begin and the super send produces no
-additional failure.
+For `super.message(arguments...)`, first form the complete ordinary
+argument packet under `CALLABLES.md`: positional vector `P`, including all
+spread elements and any trailing Closure, and explicitly labelled named
+items `K`. Argument items are evaluated exactly once from left to right;
+labels are literal names and do not perform lexical lookup. If that phase
+signals an Error or performs another control transfer, super dispatch does
+not begin and the super send produces no additional failure.
 
-After the argument vector completes normally, super dispatch proceeds exactly as
+After the argument packet completes normally, super dispatch proceeds exactly as
 follows:
 
 1. If the current execution has no `methodHome`, signal one fresh standard
@@ -347,6 +348,11 @@ follows:
    message name while preserving the original receiver. If no matching slot is
    found, signal one fresh standard `SlotNotFound` failure. If a slot is selected,
    its invocation follows the ordinary Closure/method rules in `CALLABLES.md`.
+   Only after that selected implementation is known are the named items `K`
+   associated with its published formal signature. Invalid labels or
+   positional/named collisions signal a fresh generic `Error` before its
+   defaults or body; selecting a different implementation can therefore
+   change which labels are admissible.
 
 `InvalidSuper` therefore identifies absence of the invocation metadata required
 to define a super lookup origin; it is not a failed selector lookup. Conversely,
@@ -367,6 +373,18 @@ getObject().x = makeValue()
 ```
 
 evaluates `getObject()` first, then `makeValue()`, then performs the assignment. Lazy operations such as `&&` and `||` are exceptions because their right-hand expression is evaluated only when required by their lazy semantics.
+
+For ordinary invocation, message sends, and `super` sends, D237 preserves
+the same receiver-first, left-to-right, once-only evaluation. Each positional
+or named argument value and each spread operand is evaluated at its source
+position; spread snapshots contribute positional values, while explicit
+labels contribute only to a separate named sequence. Neither a label nor the
+presence of a later named argument changes the positional index of an earlier
+or later positional value. If argument evaluation transfers control, no
+subsequent dispatch or binding occurs. After the argument packet has been
+formed, the actual selected callable determines name association, defaults,
+and body execution under `CALLABLES.md`; no speculative selection or
+re-evaluation of arguments is permitted.
 
 ### Normal result of slot creation and assignment expressions
 

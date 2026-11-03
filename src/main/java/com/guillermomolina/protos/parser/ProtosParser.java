@@ -403,7 +403,7 @@ public final class ProtosParser {
 
         TokenOccurrence close = cursor.consume(TokenType.RBRACKET, "']'");
         return new SurfaceArrayConstruction(
-                arguments,
+                ordinaryCallArguments(arguments),
                 new SourceSpan(
                         open.span().startOffset(),
                         close.span().endOffset()));
@@ -736,7 +736,7 @@ public final class ProtosParser {
         TokenOccurrence close = cursor.consume(TokenType.RPAREN, "')'");
         return new SurfaceSuperSend(
                 message.token().lexeme(),
-                arguments,
+                ordinaryCallArguments(arguments),
                 new SourceSpan(superToken.span().startOffset(), close.span().endOffset()));
     }
 
@@ -829,7 +829,7 @@ public final class ProtosParser {
 
         SurfaceCall call = new SurfaceCall(
                 receiver,
-                arguments,
+                ordinaryCallArguments(arguments),
                 new SourceSpan(receiver.span().startOffset(), endOffset));
         if (trailingClosure != null) {
             recordTrailingClosureOrigin(call, trailingClosure);
@@ -1030,6 +1030,43 @@ public final class ProtosParser {
                 new SourceSpan(start, close.span().endOffset()));
         recordContextualUntilOrigin(loop);
         return loop;
+    }
+
+    /**
+     * I143 / D237: an ungrouped bare slot-creation expression in an
+     * ordinary argument position is a named argument.
+     *
+     * Contextual control forms are recognized before this normalization.
+     * Their header expressions therefore retain ordinary slot creation.
+     */
+    private List<SurfaceArgument> ordinaryCallArguments(
+            List<SurfaceArgument> arguments) {
+        List<SurfaceArgument> normalized = new ArrayList<>(arguments.size());
+        Set<String> names = new HashSet<>();
+
+        for (SurfaceArgument argument : arguments) {
+            if (!argument.spread()
+                    && argument.expression() instanceof SurfaceSlotCreation creation
+                    && creation.target() instanceof SurfaceName name
+                    && creation.span().startOffset()
+                            == argument.span().startOffset()) {
+                if (!names.add(name.name())) {
+                    throw new ParseError(
+                            "Duplicate named argument: " + name.name(),
+                            name.span());
+                }
+                normalized.add(
+                        new SurfaceArgument(
+                                false,
+                                Optional.of(name.name()),
+                                creation.value(),
+                                argument.span()));
+            } else {
+                normalized.add(argument);
+            }
+        }
+
+        return List.copyOf(normalized);
     }
 
     private SurfaceArgument parseArgument() {

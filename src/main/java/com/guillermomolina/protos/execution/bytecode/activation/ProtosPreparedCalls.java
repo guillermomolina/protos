@@ -703,6 +703,12 @@ final class ProtosPreparedCalls {
         private final ProtosActivation activation;
         private final StructuredCallCapabilities structured;
 
+        /*
+         * I143: optional only for the actual standard Object.call body.
+         * Absent for every positional or unrelated native invocation.
+         */
+        private PreparedArgumentVector namedObjectCallArguments;
+
         NativeCall(
                 ProtosNativeClosureBody nativeBody,
                 List<?> supplied,
@@ -720,6 +726,31 @@ final class ProtosPreparedCalls {
             this.supplied = List.copyOf(supplied);
             this.activation = activation;
             this.structured = structured;
+        }
+
+        /**
+         * Freeze the evaluated P,K packet at preparation time. No source
+         * expression is re-evaluated and later caller-vector mutations
+         * cannot change this invocation.
+         */
+        void installNamedObjectCallArguments(
+                PreparedArgumentVector original) {
+            if (!isStructuredObjectCall()
+                    || !original.hasNamedArguments()
+                    || namedObjectCallArguments != null) {
+                throw new IllegalStateException(
+                        "invalid named standard Object.call packet");
+            }
+
+            PreparedArgumentVector copy = new PreparedArgumentVector();
+            for (Object value : original.positionalSnapshot()) {
+                copy.append(value);
+            }
+            for (ProtosNamedArgumentAssociation.NamedValue named
+                    : original.namedSnapshot()) {
+                copy.appendNamed(named.name(), named.value());
+            }
+            namedObjectCallArguments = copy;
         }
 
         @Override
@@ -982,20 +1013,26 @@ final class ProtosPreparedCalls {
             Object receiver = activation.receiver();
             if (receiver instanceof ProtosClosureValue targetClosure) {
                 return PreparedStandardObjectCall.closure(
-                        ProtosSendPreparation.prepareDirectClosureCall(
-                                targetClosure,
-                                supplied,
-                                activation));
+                        namedObjectCallArguments == null
+                                ? ProtosSendPreparation.prepareDirectClosureCall(
+                                        targetClosure, supplied, activation)
+                                : ProtosNamedCallPreparation.prepareSelectedDirectSource(
+                                        targetClosure,
+                                        activation,
+                                        namedObjectCallArguments));
             }
             if (receiver instanceof ProtosObjectValue prototype
                     && !ProtosNumericValueSupport.isCurrentNumber(receiver)) {
                 ProtosObjectValue instance = new ProtosObjectValue(prototype);
                 return PreparedStandardObjectCall.construction(
-                        ProtosSendPreparation.prepareSend(
-                                instance,
-                                "init",
-                                activation,
-                                supplied),
+                        namedObjectCallArguments == null
+                                ? ProtosSendPreparation.prepareSend(
+                                        instance, "init", activation, supplied)
+                                : ProtosSendPreparation.prepareNamedSend(
+                                        instance,
+                                        "init",
+                                        activation,
+                                        namedObjectCallArguments),
                         instance);
             }
             throw ProtosCoreErrors.signal(
@@ -1398,6 +1435,37 @@ final class ProtosPreparedCalls {
     static final class PreparedArgumentVector {
         private final ArrayList<Object> values = new ArrayList<>();
 
+        // I143: positional calls allocate no named-argument metadata.
+        private ArrayList<ProtosNamedArgumentAssociation.NamedValue> namedValues;
+
+        void appendNamed(String name, Object value) {
+            ProtosNamedArgumentAssociation.NamedValue item =
+                    new ProtosNamedArgumentAssociation.NamedValue(name, value);
+            if (namedValues == null) {
+                namedValues = new ArrayList<>();
+            }
+            namedValues.add(item);
+        }
+
+        boolean hasNamedArguments() {
+            return namedValues != null && !namedValues.isEmpty();
+        }
+
+        List<ProtosNamedArgumentAssociation.NamedValue> namedSnapshot() {
+            return namedValues == null ? List.of() : List.copyOf(namedValues);
+        }
+
+        List<Object> positionalSnapshot() {
+            return List.copyOf(values);
+        }
+
+        private void requirePositionalOnly() {
+            if (hasNamedArguments()) {
+                throw new IllegalStateException(
+                        "I143 named arguments require name-aware call preparation");
+            }
+        }
+
         void append(Object value) {
             values.add(
                     java.util.Objects.requireNonNull(
@@ -1429,11 +1497,13 @@ final class ProtosPreparedCalls {
         }
 
         Object soleValueOrNull() {
+            requirePositionalOnly();
             return values.size() == 1 ? values.get(0) : null;
         }
 
         List<Object> snapshot() {
-            return List.copyOf(values);
+            requirePositionalOnly();
+            return positionalSnapshot();
         }
     }
 }

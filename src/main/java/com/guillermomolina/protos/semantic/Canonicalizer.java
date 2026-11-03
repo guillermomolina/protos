@@ -53,6 +53,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalMultipleCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalDerivedInequality;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalNamedArgument;
 import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
@@ -291,6 +292,12 @@ public final class Canonicalizer {
 
     private CanonicalExpression canonicalizeArgument(SurfaceArgument argument) {
         CanonicalExpression expression = canonicalize(argument.expression());
+        if (argument.name().isPresent()) {
+            return new CanonicalNamedArgument(
+                    argument.name().orElseThrow(),
+                    expression,
+                    argument.span());
+        }
         if (!argument.spread()) {
             return expression;
         }

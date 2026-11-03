@@ -7,6 +7,19 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.440-SNAPSHOT
+
+- `I143` (D237-MIX-C/R3): implement contextual named call arguments with dynamic name association.
+  - Recognize `identifier: expression` as a named argument in ordinary call position, preserving positional slot creation through explicit grouping and precedence for existing contextual control forms.
+  - Add separate positional and named argument components, preserving receiver-first, left-to-right, exactly-once evaluation and positional spread expansion.
+  - Bind named arguments against the actual selected Closure signature; reject unknown labels, positional/named collisions and rest-parameter labels before defaults or body execution.
+  - Preserve positional ordinals, supplied-null presence, declaration-order defaults, excess-positional behavior and fresh frozen rest Arrays.
+  - Forward named arguments through the actual standard `Object.call` implementation to Closure activation or the selected constructor `init`, including inherited, copied and extracted behavior.
+  - Require explicit Protos-semantic signatures for native and projected callables; do not infer names from Java or foreign interfaces.
+  - Extend parser, lowering, bytecode, static tooling, formatter, LSP, JUnit and suite-native conformance coverage.
+  - Publish the D237 normative grammar and semantic contracts in specification revision 0.1.492.
+  - Update the generated-bytecode BCI topology baseline after verifying the constant advancement of the split cached dispatch; preserve both TEST009-D guards and the directory-file limit.
+
 ## 0.3.439-SNAPSHOT
 
 - `BUG032` (#1024): fix TOOL010 rejecting whole-line and end-of-line comments between the `^` non-local return prefix and its operand.

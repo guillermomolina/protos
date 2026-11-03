@@ -897,9 +897,14 @@ affects `Array(a, b)`, including ordinary invocation failure when the selected
 value is not invokable.
 
 The production reuses `argument-items` and `argument` from Calls and Arguments.
-It therefore inherits their comma separation, layout, spread, left-to-right
-evaluation, exact-once evaluation, Error propagation, and control-flow behavior.
-There is no trailing comma.
+It therefore inherits their comma separation, layout, spread, contextual named
+arguments, left-to-right evaluation, exact-once evaluation, Error propagation,
+and control-flow behavior. There is no trailing comma. In particular,
+`[a: 10]` means `Array(a: 10)`, including ordinary dynamic `Array` shadowing;
+it is not an Array containing the result of creating slot `a`. Use
+`[(a: 10)]` for that positional slot-creation expression. A standard native
+`Array` factory without a declared matching named parameter rejects the label;
+a shadowing source-defined factory with a compatible parameter may accept it.
 
 Because an Array construction is a `primary-expression`, ordinary postfix
 operations apply without another rule:
@@ -1244,8 +1249,11 @@ while these are syntax errors:
 (...rest, a) => { ... }
 ```
 
-Core v0.1 has no named-argument syntax and no omitted-position marker; binding
-remains strictly positional.
+Core v0.1 supports contextual named call arguments (see §17) but has no
+omitted-position marker. Under MIX-C, positional arguments bind non-rest
+parameters by positional index independently of named-argument source order;
+named arguments associate by declared parameter name under the rules in
+`semantics/CALLABLES.md`.
 
 Parameters are comma-separated: exactly one comma is required between each two consecutive parameters. A comma is strictly a separator between two list elements; it is not a terminator and does not represent an empty or omitted element. A comma must have a parameter on both sides within the same list, so a trailing comma before the closing `)` is a syntax error: `(a,)` and `(a, b,)` are invalid. Default parameters and rest parameters use the same separator rule.
 
@@ -1503,8 +1511,12 @@ argument-items =
     argument, { ",", [ layout ], argument } ;
 
 argument =
-      expression
+      named-argument
+    | [ lookahead != named-argument ], expression
     | "...", expression ;
+
+named-argument =
+    identifier, ":", expression ;
 ```
 
 Call arguments are comma-separated: exactly one comma is required between each two consecutive arguments. A comma is strictly a separator between two list elements; it is not a terminator and does not represent an empty or omitted element. A comma must have an argument on both sides within the same list, so a trailing comma before the closing `)` is a syntax error: `foo(a,)` and `foo(a, b,)` are invalid. Spread arguments use the same separator rule.
@@ -1574,7 +1586,38 @@ foo(
 
 The newlines between the final argument and the closing delimiter — a single newline or a run of blank lines — are layout inside the open construct: they are not an element separator, not a trailing list separator, and not an empty element, and they do not make a trailing comma legal.
 
-Argument expressions, including spread operands, are evaluated left-to-right.
+Argument expressions, including named values and spread operands, are evaluated
+left-to-right, exactly once, after evaluation of the call target. Names are
+literal parameter labels, not expressions, lookups or slot creations.
+
+**D237 contextual named arguments.** In an ordinary `argument` position, a bare
+leading `identifier: expression` is a `named-argument`, not a slot-creation
+expression. This structural recognition takes precedence over the general
+`expression` alternative without consulting the eventual callee or its
+signature. The negative lookahead on the positional alternative expresses this
+priority. The identifier has the ordinary Unicode 17 NFC identifier rules.
+The label's value expression is evaluated exactly once at its original source
+position, even if binding later fails. Named and positional arguments may appear
+in any order; spread is always positional. Two explicitly written occurrences
+of the same label in one argument list are a source/parse error before any
+argument expression executes.
+
+Grouping preserves the old slot-creation meaning: `f((a: 10))` has one
+positional argument whose parenthesized expression creates the ordinary slot
+`a`; outside an ordinary argument position, `a: 10` retains its existing
+slot-creation meaning. `f(object.a: 10)` is not a bare-name label; it retains
+ordinary member-slot creation. In particular, existing source `f(a: 10)` now
+means a named argument, intentionally replacing its former slot-creation
+meaning; use `f((a: 10))` when the latter is intended.
+
+Recognition of the already-defined exact contextual `if`, `while`, numeric and
+generic `for`, postfix `until`, and contextual `return` forms precedes this
+ordinary-argument reinterpretation. Their matched condition, header or operand
+expressions retain ordinary `:` semantics. When that contextual syntax is not
+matched (including when a callee is grouped), any ordinary parenthesized call
+uses the named-argument rule. A trailing braced Closure, when attached by the
+existing grammar, remains one final positional argument and can collide with a
+named assignment to the same formal.
 
 The spelling `args` has no call-syntax or invocation-intrinsic meaning. It is an ordinary identifier; a use such as `...args` therefore refers to an ordinary binding named `args`, commonly a rest parameter.
 
@@ -3461,13 +3504,21 @@ The normative productions are defined in Sections 16-17 and in the Compact EBNF.
 
 Elements of parameter and argument lists are separated by commas only. A comma is strictly a separator between two list elements, not a terminator: trailing commas are syntax errors, and one or more logical newlines inside the delimiters are continuation/layout under the newline-continuation rules in Whitespace and Newlines, never a substitute for a missing comma.
 
-Call argument lists may contain ordinary arguments and spread arguments:
+Call argument lists may contain positional, named and spread arguments:
 
 ```ebnf
 argument =
-    expression
+    named-argument
+  | [ lookahead != named-argument ], expression
   | "...", expression ;
+
+named-argument =
+    identifier, ":", expression ;
 ```
+
+The structural label recognition, grouped positional escape, duplicate-label
+source error and precedence of exact contextual forms are defined in §17.
+`[...]` uses these same argument items and their same label rules.
 
 For:
 

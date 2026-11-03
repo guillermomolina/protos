@@ -32,6 +32,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMapConstruction;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalMultipleCreate;
+import com.guillermomolina.protos.semantic.ast.CanonicalNamedArgument;
 import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalObject;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
@@ -185,6 +186,8 @@ final class CanonicalBindingAnalyzer {
             case CanonicalMember member -> collectDeclaredNames(member.receiver(), scope);
             case CanonicalReturn returnExpression -> collectDeclaredNames(returnExpression.value(), scope);
             case CanonicalSpread spread -> collectDeclaredNames(spread.expression(), scope);
+            case CanonicalNamedArgument named ->
+                    collectDeclaredNames(named.expression(), scope);
             case CanonicalCompose compose -> collectDeclaredNames(compose.object(), scope);
             case CanonicalIdentity identity -> {
                 collectDeclaredNames(identity.left(), scope);
@@ -231,6 +234,7 @@ final class CanonicalBindingAnalyzer {
             case CanonicalMember member -> walk(member.receiver(), scope);
             case CanonicalReturn returnExpression -> walk(returnExpression.value(), scope);
             case CanonicalSpread spread -> walk(spread.expression(), scope);
+            case CanonicalNamedArgument named -> walk(named.expression(), scope);
             case CanonicalCompose compose -> walk(compose.object(), scope);
             case CanonicalIdentity identity -> {
                 walk(identity.left(), scope);

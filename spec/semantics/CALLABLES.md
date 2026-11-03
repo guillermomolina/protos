@@ -427,16 +427,16 @@ binding algorithm. The completed caller-supplied positional vector may remain
 available to the implementation as activation/binding state, but Core exposes
 no ambient guest identifier for that complete vector.
 
-### Caller-supplied positional vector
+### Caller-supplied positional and named arguments
 
 A call first evaluates its call receiver/target as required by the ordinary call
 form, then evaluates its explicit argument items strictly from left to right.
 Argument evaluation completes before Closure activation creation or parameter
 binding begins.
 
-For each ordinary argument item, its expression is evaluated exactly once and
-its resulting value contributes one element to the caller-supplied positional
-vector.
+For each ordinary positional argument item, its expression is evaluated
+exactly once and its resulting value contributes one element to the
+caller-supplied positional vector.
 
 For each spread argument `...expression`, the spread expression is evaluated
 exactly once at its left-to-right position. Standard call-spread extraction then
@@ -444,6 +444,14 @@ uses the standard Array rules in `VALUES_AND_COLLECTIONS.md`: the source must
 have standard Array indexed state and contributes a shallow ascending-index
 snapshot of its elements at that point. Those contributed elements are appended
 to the same positional vector. Empty spread contributes zero elements.
+
+For a named item `name: expression`, evaluate only the value expression exactly
+once at that item's original position and retain its literal label paired with
+the resulting value. Neither the label nor its presence performs slot creation
+or lexical lookup. A named item does not add a positional element and a spread
+never introduces named items. Positional and named items may be interleaved in
+any textual order. Source-level duplicate explicit labels have already been
+rejected by the grammar before execution.
 
 A trailing closure that the grammar attaches and desugars is an ordinary final
 argument. Its creation occurs at the position established by that desugaring,
@@ -456,16 +464,68 @@ control transfer, evaluation stops immediately. No Closure activation for that
 call is created, no parameter/default binding begins, and effects already
 performed by earlier evaluation are not rolled back.
 
-Once this phase completes, let `supplied` denote the resulting positional vector
-and let `N` be its length. Spread therefore composes with invocation by producing
-ordinary positional elements before binding; it does not invoke a second
-parameter-binding algorithm.
+Once this phase completes, let `supplied` (or `P`) denote the resulting
+positional vector, `N` its length, and `K` the ordered sequence of already
+evaluated named `(label, value)` pairs. For positional-only calls `K` is empty;
+ordinary D203 binding remains unchanged. Spread contributes only to `P` and
+does not invoke a second binding algorithm. The `(P,K)` packet is internal to
+invocation, not a new Core value or an ambient guest argument Map.
+
+### Name association, dynamic selection and forwarding (D237-MIX-C/R3)
+
+After evaluating the target, all supplied expressions and all spread snapshots,
+perform the ordinary D013 lookup of the actual `call` behavior (or the selected
+member/`super` method). No argument name is statically bound to a speculative
+callee. If lookup is missing or selects a non-Closure value, its existing Error
+wins before named association. `call` may have been rebound by the argument
+expressions themselves; lookup must see that updated behavior. Source-defined
+custom `call` methods bind their own declared formals normally.
+
+For a name-bearing invocation of a selected source Closure, associate `P` and
+`K` against that Closure's declared non-rest formal parameters. The nth value
+of `P`, including spread elements, targets the nth non-rest formal regardless
+of where named items appear in the source. Each named item targets the one
+non-rest formal with the same declared name. A named item never moves a
+positional argument to an unoccupied position. A label with no matching
+non-rest formal (including a rest parameter's name), or a label whose formal
+is already supplied positionally or by a named item, signals a fresh generic
+Protos `Error` **after successful dynamic selection but before any default or
+body of that selected Closure executes**. Earlier caller effects are not
+rolled back. All such association failures are non-resumable under the ordinary
+Error handler rules. Parameter names in a public source Closure therefore form
+part of its name-aware invocation API; renaming one may break named callers
+without changing positional behavior.
+
+The **actual executable standard `Object.call` implementation** is the sole
+standard transparent forwarding behavior: it forwards the complete `(P,K)`
+packet without binding labels against its native wrapper. When invoked on a
+Closure receiver, it activates that exact Closure with `(P,K)` and the existing
+captured/bound `this`, `methodHome`, lexical and return-home relationships. For
+ordinary constructible object receivers, it creates the usual fresh child and
+sends the selected ordinary `init` behavior the same `(P,K)`; the `init`
+lookup, failures, return-value handling and control transfers are unchanged.
+This is true when that actual standard behavior was copied, inherited,
+composed, aliased or extracted; `methodHome` need not be `Object`. A different
+custom `call`, even one with positional rest, does not acquire this forwarding
+power. A successful `init` result is still ignored in favor of the new child.
+
+Native/standard/projected Closure behaviors accept names only when they
+explicitly publish a compatible Protos-semantic parameter signature. Java or
+foreign parameter names, selectors and documentation are not inferred as
+signatures, and the standard `Object.call` bridge does not extend this rule to
+other native methods. Absent such a signature, named invocation signals a
+fresh generic Protos `Error` **before entering** the native/foreign behavior.
+Foreign projected `call`, `std:interop.invoke` and `instantiate`, Polyglot/host
+positional execution and synchronous callback ingress remain positional; no
+automatic conversion to foreign keyword arguments occurs. Errors that originate
+after entering an admitted foreign operation retain their existing ForeignError
+and control-flow rules. Actor/P isolation and transfer rules are unchanged.
 
 ### Activation establishment
 
-After the complete caller-supplied vector exists and ordinary dispatch has
-selected the Closure to invoke, the Closure invocation establishes its activation
-before evaluating any default expression.
+After the complete caller-supplied `(P,K)` packet exists, ordinary dispatch
+has selected the Closure and any named association has succeeded, the invocation
+establishes its activation before evaluating any default expression.
 
 The activation has a fresh execution-context object with the ordinary lexical
 parent, receiver (`this`), `methodHome`, and captured lexical relationships
@@ -491,8 +551,11 @@ lookup exactly like any other identifier.
 Process the declared parameters strictly from left to right. Parameter names
 are already unique by the grammar/signature rules. Let `k` be the position of a
 non-rest parameter among the non-rest parameters, starting at `0`; positional
-binding pairs that parameter with `supplied[k]`. Parameters with and without a
-default may appear in any order.
+binding pairs that parameter with `supplied[k]`. In a name-bearing invocation,
+the successfully validated association additionally marks a formal as supplied
+when it received its matching named value, without changing the positional
+ordinals. For positional-only calls, supply/presence is still determined only
+by `k < N`. Parameters with and without a default may appear in any order.
 
 For each parameter:
 
@@ -500,9 +563,11 @@ For each parameter:
    parameters. Create its local parameter slot with a fresh frozen standard Array
    containing exactly `supplied[m]` through `supplied[N - 1]` in order, or an
    empty Array when `m >= N`. No default applies to a rest parameter.
-2. Otherwise, if `k < N`, the argument is **supplied**: take `supplied[k]` as the
-   parameter value. A default expression on that parameter is not evaluated at
-   all, even when `supplied[k]` is canonical `null`.
+2. Otherwise, if the formal was supplied by positional ordinal `k < N`
+   or by its successfully associated named item, take that exact supplied value.
+   A default expression on that parameter is not evaluated at all, even when
+   the supplied value is canonical `null`. The presence decision is independent
+   of whether the value itself is `null`.
 3. Otherwise, the argument is **absent**. If the parameter has a default
    expression, evaluate that expression exactly once in the current invocation
    activation; if evaluation completes normally, its exact resulting value
@@ -549,9 +614,10 @@ special overwrite or parameter reservation occurs.
 
 ### Rest and default interaction
 
-A rest parameter contains only the still-unconsumed suffix of the completed
-caller-supplied vector. Values produced by defaults are never inserted into
-rest. Each rest binding is a fresh frozen standard Array and is shallow: the
+A rest parameter contains only the suffix of positional vector `P` after
+the declared non-rest formal positions. Named values are never captured by
+rest, even when the label equals the rest parameter name (which is an Error).
+Values produced by defaults are never inserted into rest. Each rest binding is a fresh frozen standard Array and is shallow: the
 argument objects themselves retain their ordinary identities and aliasing.
 
 For example, for `(a: 1, ...rest)`:
@@ -569,6 +635,9 @@ arity preflight:
 
 - receiver/target evaluation and argument/spread evaluation happen before
   invocation and therefore before every parameter-binding or default failure;
+- the selected `call` or member/`super` lookup and callable check precede
+  named-label validation; an association Error prevents every default and body
+  effect, but leaves earlier caller effects in place;
 - a default-expression Error or other control transfer stops binding immediately
   and takes precedence over every later parameter/default/body outcome;
 - a parameter-slot creation failure likewise stops binding before later
@@ -642,8 +711,8 @@ Parenthesized invocation is defined entirely in terms of the ordinary slot named
 `call`. There is no hidden callable bit, internal invocation property, separate
 callable hierarchy, wrapper object, or runtime registry.
 
-For a completed caller-supplied positional vector `supplied`, invoking target
-`receiver` performs these steps:
+For a completed caller-supplied packet `(P,K)` (`K` empty for a positional-only
+call), invoking target `receiver` performs these steps:
 
 1. Perform ordinary member lookup for the name `call`, starting at `receiver`
    itself and continuing through its ordinary immutable delegation chain exactly
@@ -656,8 +725,10 @@ For a completed caller-supplied positional vector `supplied`, invoking target
    but the selected value is not a `Closure`, invocation signals an `Error`
    before any activation or parameter/default binding for that selected value.
 4. Directly activate that selected Closure in method role with `this === receiver`,
-   the preserved `methodHome`, and `supplied` as its caller-supplied argument
-   vector. Activation, arity/default/rest binding, returns, Errors, and explicit
+   the preserved `methodHome`, and `(P,K)` as its supplied arguments. Validate
+   names against its actual declared signature before defaults/body, except for
+   the exact standard `Object.call` forwarding implementation defined below.
+   Activation, arity/default/rest binding, returns, Errors, and explicit
    suspension then follow the ordinary Closure rules in this document.
 
 Steps 1–4 occur only after target evaluation and all ordinary/spread/trailing
@@ -750,17 +821,25 @@ Conceptually, after `Object.call` has been selected and directly activated with
 invocation receiver `this`:
 
 ```text
-Object.call(...args):
+Object.call(P,K):
     if this is a Closure value:
-        directly activate this Closure value with args
+        directly activate this Closure value with P,K
         using its captured/bound receiver, methodHome, lexical context,
         and return-home semantics
         return that activation's result
 
     instance = createObject(parent = this)
-    send(instance, "init", args)
+    send(instance, "init", P,K)
     return instance
 ```
+
+The packet `(P,K)` is forwarded, not validated against the standard native
+`Object.call` wrapper's formal names. This transparency belongs to the actual
+selected executable standard implementation even when copied, aliased,
+composed, inherited or extracted; a matching `methodHome` is not required and
+a different source-defined `call` method is not a transparent forwarding bridge.
+For a constructed instance, selected `init` lookup precedes validation of its
+own parameter names. A failure of that lookup wins over an invalid name.
 
 The Closure branch is the terminal executable operation already defined above;
 it does not perform another `this(args...)` lookup. A Closure that inherits
@@ -819,6 +898,10 @@ numeric conversion prototypes. Delegation inherits those factory behaviors
 normally, with the actual invocation receiver remaining `this`; a nearer user or
 standard `call` shadows them normally. Standard receiver-domain and result rules
 for each factory remain owned by the corresponding domain specification.
+
+A standard/native factory with no explicitly declared Protos-semantic named
+signature does not acquire keyword parameters from its selector or Java body.
+Only the standard executable `Object.call` forwards names automatically.
 
 Arity, defaults, rest, spread, Errors, non-local return, and explicit suspension
 for user-defined or standard `call` Closures are not a second invocation system:

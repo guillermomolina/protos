@@ -698,6 +698,16 @@ that ordinary factory behavior. Shadowing `Array` affects bracket construction
 exactly as it affects an explicit `Array(...)` call; a non-invokable selected
 value fails by the ordinary invocation rules.
 
+D237 does not create a named-argument overload of the standard Array
+factory. Bracket construction preserves *all* ordinary argument syntax and
+call binding: `[item: value]` denotes `Array(item: value)`, with `item` a
+literal argument label rather than a slot creation. The canonical standard
+Array factory has no published named-formal signature and rejects a supplied
+named argument with a fresh generic `Error` before allocating its result.
+Shadowing `Array` still selects the shadow's ordinary `call` behavior, which
+may accept named arguments when it publishes a Protos semantic signature.
+There is no independent bracket-specific named-argument binding rule.
+
 A standard `Array` is an identity-bearing object with receiver-owned indexed
 element state. Its indexed contents are distinct from its ordinary local slots,
 in the same sense that standard Map entries are distinct from ordinary slots.
@@ -1324,6 +1334,16 @@ accepts only an original receiver that owns standard `Array` indexed state.
 Delegation, copying, composition, or user-defined `at` / `size` / `each`
 behavior does not make an otherwise incompatible object spreadable.
 
+With D237 named arguments, every spread contributes only positional
+elements to the caller's positional vector `P`; it never manufactures labels.
+Explicit named items form the separate named sequence `K` and do not alter
+the positional indices supplied before or after a spread. Both sorts of
+argument item still evaluate once in their original left-to-right source
+order. A spread-contributed positional value that fills a formal also
+supplied by a named label causes the ordinary fresh generic binding `Error`
+after selection, not a reinterpretation of the spread as named values
+(`CALLABLES.md`).
+
 The spread operand expression is evaluated exactly once at its ordinary
 left-to-right argument position. After successful standard Array receiver
 validation, the spread operation captures a shallow logical snapshot of the
@@ -1378,6 +1398,11 @@ A rest parameter is bound to a **fresh frozen standard `Array`** containing
 exactly the remaining caller-supplied positional argument objects, in order.
 Distinct rest bindings created by different invocations are distinct objects,
 including empty rest Arrays.
+
+D237 named arguments never become elements of the rest Array: only
+surplus positional values enter it. A named label matching the rest formal
+is invalid and signals the ordinary fresh generic binding `Error` before
+any default expression or body is executed (`CALLABLES.md`).
 
 Because rest bindings are standard Arrays, their read behavior follows the
 standard Array contracts for `at`, `size`, and `each`. Because they are frozen,
@@ -4813,6 +4838,16 @@ semantics is construction. When a foreign target is both executable and
 instantiable, the generic layer does not choose between them; a provider facade
 or explicit interoperability disambiguates.
 
+D237 named-argument syntax does not infer parameter names from host,
+foreign, or interop signatures. The standard projected foreign executable
+`call` adapter and the ordinary foreign execution/instantiation boundary
+accept positional supplied arguments only. Named arguments are admitted
+only by an explicitly published Protos semantic callable signature; a
+provider facade may define such a Protos Closure independently, without
+turning the underlying foreign entry point into a named-call protocol.
+Selection, argument validation, and any failure before foreign entry remain
+ordinary Protos operations (`CALLABLES.md`).
+
 ### Indexed access, foreign hash containers, and iteration
 
 Bracket syntax keeps exactly its lowering to `at` / `atPut` ("Indexed Access
@@ -4854,6 +4889,12 @@ that occurs before any foreign operation is entered is the existing ordinary
 Protos failure; for example, a foreign target that lacks a required
 Protos-facing `call` produces the ordinary lookup/invocation failure, not a
 `ForeignError` merely because the receiver is foreign.
+
+In particular, rejecting an unsupported D237 named label at a projected
+foreign `call` adapter or other positional-only foreign entrance happens
+*before* the foreign operation is entered. It produces one fresh generic
+Protos `Error`, not a `ForeignError`. A failure occurring after the foreign
+operation has actually been entered retains the `ForeignError` rules above.
 
 A `ForeignError` occurrence exposes exactly these visible payload slots, each
 holding only safe Protos values:

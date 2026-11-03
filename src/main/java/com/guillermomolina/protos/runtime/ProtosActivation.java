@@ -46,6 +46,13 @@ public final class ProtosActivation {
     private ProtosIoReleaseExecution deferredCPrimeRelease;
     private ProtosDynamicControlState directDynamicControlState;
 
+    /*
+     * I143: allocated only for a name-bearing invocation. It describes
+     * declared non-rest formal positions, not the source argument order.
+     * Null means the established D203 positional count semantics.
+     */
+    private boolean[] namedParameterPresence;
+
     private static final class DeferredSuppliedArguments {
         private final List<?> values;
         private ProtosArrayValue guestArray;
@@ -992,6 +999,51 @@ public final class ProtosActivation {
         }
         throw new IllegalStateException(
                 "parameter binding requires an invocation activation");
+    }
+
+    /**
+     * I143: install the exact parameter-presence result of the already
+     * selected source Closure's successful name association.
+     *
+     * <p>May be installed once, before entering the Closure body.
+     * Positional-only invocations never install this optional sidecar.
+     */
+    public void installNamedParameterPresenceForRuntime(
+            boolean[] presence) {
+        Objects.requireNonNull(presence, "presence");
+
+        if (namedParameterPresence != null) {
+            throw new IllegalStateException(
+                    "named parameter presence already installed");
+        }
+
+        if (presence.length > suppliedArgumentCountForRuntime()) {
+            throw new IllegalArgumentException(
+                    "presence exceeds supplied binding positions");
+        }
+
+        namedParameterPresence = presence.clone();
+    }
+
+    /**
+     * Whether formal position index was actually supplied.
+     *
+     * <p>In ordinary calls the established D203 positional count wins.
+     * A named invocation reads its exact association mask instead,
+     * independently of the value at that position.
+     */
+    public boolean hasSuppliedParameterForRuntime(int index) {
+        if (index < 0) {
+            throw new IllegalArgumentException(
+                    "negative formal parameter index");
+        }
+
+        boolean[] presence = namedParameterPresence;
+        if (presence != null) {
+            return index < presence.length && presence[index];
+        }
+
+        return index < suppliedArgumentCountForRuntime();
     }
 
     public Optional<ProtosReturnHome> returnHome() {

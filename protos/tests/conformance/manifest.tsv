@@ -233,6 +233,7 @@ surface-sugar/expression-closure.protos	suite-native	-
 surface-sugar/trailing-closure.protos	suite-native	-
 surface-sugar/bitwise-operators.protos	suite-native	-
 surface-sugar/contextual-return.protos	suite-native	-
+surface-sugar/named-arguments.protos	suite-native	-
 network/network-prototype.protos	suite-native	-
 matching/primitives.protos	suite-native	-
 matching/structural-matches.protos	suite-native	-

@@ -1,0 +1,154 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// I143 / D237-MIX-C: contextual named argument conformance.
+// All observable behavior lives inside named suite-native Test bodies.
+// Positional ordinals remain stable; the actual selected implementation
+// owns name association; standard Object.call forwards to its selected child.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("names associate by selected formal rather than source order", () => {
+        f: (a, b, c) => a * 100 + b * 10 + c
+        Assertions.require(f(c: 3, a: 1, b: 2) == 123)
+    }),
+    Test("mixed positional, spread and named positions are stable", () => {
+        f: (a, b, c) => a * 100 + b * 10 + c
+        Assertions.require(f(c: 3, ...[1, 2]) == 123)
+        Assertions.require(f(1, c: 3, 2) == 123)
+    }),
+    Test("explicit null suppresses a default and absent names run defaults", () => {
+        f: (a: 10, b: 20, c: 30) => [a, b, c]
+        actual: f(c: null)
+        Assertions.require(actual[0] == 10)
+        Assertions.require(actual[1] == 20)
+        Assertions.require(actual[2] === null)
+    }),
+    Test("named binding leaves rest empty when no positional overflow", () => {
+        f: (a, b, c, ...rest) => rest
+        actual: f(1, c: 3)
+        Assertions.require(actual.size() == 0)
+    }),
+    Test("supplied values precede defaults in declaration order", () => {
+        trace: { value: 0 }
+        mark: (n) => {
+            trace.value = trace.value * 10 + n
+            n
+        }
+        f: (a: mark(1), b: mark(2), c: mark(3)) => trace.value
+        Assertions.require(f(c: mark(9)) == 912)
+    }),
+    Test("custom call binds its own formal rather than forwarding", () => {
+        receiver: { call: (own) => own }
+        Assertions.require(receiver(own: 7) == 7)
+        Assertions.signals(Error, () => { receiver(other: 7) })
+    }),
+    Test("super named send uses inherited implementation and dynamic this", () => {
+        base: {
+            read: (unused) => this.value
+        }
+        middle: base {
+            read: () => super.read(unused: 0)
+        }
+        leaf: middle { value: 17 }
+        Assertions.require(leaf.read() == 17)
+    }),
+    Test("standard Object.call forwards named arguments to init", () => {
+        prototype: { init: (value: 0) => value }
+        instance: prototype(value: 7)
+        Assertions.require(instance.parent() === prototype)
+    }),
+    Test("fresh errors distinguish missing selector from bad association", () => {
+        f: (value) => value
+        first: Assertions.signals(Error, () => { f(bad: 1) })
+        second: Assertions.signals(Error, () => { f(bad: 2) })
+        Assertions.require(first !== second)
+        receiver: {}
+        Assertions.signals(SlotNotFound, () => {
+            receiver.missing(bad: 1)
+        })
+    }),
+    Test("selected call is rebound during named argument evaluation", () => {
+        receiver: { call: (old) => old }
+        replace: () => {
+            receiver.call = (selected) => selected
+            17
+        }
+        Assertions.require(receiver(selected: replace()) == 17)
+        Assertions.signals(Error, () => { receiver(old: 19) })
+    }),
+    Test("a spread positional collides with the same named formal", () => {
+        f: (first, second) => second
+        Assertions.signals(Error, () => { f(first: 9, ...[1]) })
+        Assertions.signals(Error, () => { f(...[1, 2], second: 9) })
+    }),
+    Test("copied standard Object.call forwards labels to selected init", () => {
+        prototype: {
+            init: (value) => {
+                this.stored: value
+            }
+        }
+        prototype.call: Object.call
+        instance: prototype(value: 13)
+        Assertions.require(instance.parent() === prototype)
+        Assertions.require(instance.stored == 13)
+    }),
+    Test("standard Object.call copied under another selector forwards", () => {
+        prototype: {
+            init: (value) => {
+                this.result: value
+            }
+        }
+        prototype.make: Object.call
+        instance: prototype.make(value: 19)
+        Assertions.require(instance.parent() === prototype)
+        Assertions.require(instance.result == 19)
+    }),
+    Test("bracket syntax rejects names at standard Array and honors a shadow", () => {
+        Assertions.signals(Error, () => { [item: 5] })
+        Array: (item) => item
+        Assertions.require([item: 8] == 8)
+        Assertions.require(Array(item: 9) == 9)
+    }),
+    Test("grouped slot creation remains one positional argument", () => {
+        f: (value) => value
+        Assertions.require(f((created: 27)) == 27)
+        Assertions.require(created == 27)
+    }),
+    Test("the rest formal name never accepts named association", () => {
+        f: (value: 1, ...rest) => value
+        Assertions.signals(Error, () => { f(rest: [2]) })
+        Assertions.require(f(value: 7) == 7)
+    }),
+    Test("contextual if condition retains slot creation semantics", () => {
+        trace: { count: 0 }
+        if(flag: true) {
+            trace.count = trace.count + 1
+        }
+        Assertions.require(flag === true)
+        Assertions.require(trace.count == 1)
+    }),
+    Test("a named callback preserves the captured non-local return home", () => {
+        outer: () => {
+            apply: (action) => action()
+            apply(action: () => { ^42 })
+            0
+        }
+        Assertions.require(outer() == 42)
+    })
+]
+tests.freeze()

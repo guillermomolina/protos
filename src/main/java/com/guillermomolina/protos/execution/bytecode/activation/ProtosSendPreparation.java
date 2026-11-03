@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedArgumentVector;
 import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -83,6 +84,43 @@ final class ProtosSendPreparation {
     }
 
     /**
+     * I143: name-bearing ordinary send. Argument evaluation and spread
+     * expansion are already complete. D013 lookup precedes association.
+     *
+     * <p>Only source methods are admitted in this slice. The selected
+     * standard Object.call forwarding bridge remains separate.
+     */
+    static PreparedClosureCall prepareNamedSend(
+            Object receiver,
+            String selector,
+            ProtosActivation caller,
+            PreparedArgumentVector supplied) {
+        if (!supplied.hasNamedArguments()) {
+            throw new IllegalArgumentException(
+                    "named send requires a name-bearing vector");
+        }
+
+        ProtosSlotLookupResult selected =
+                performOrdinarySendLookup(receiver, selector, caller);
+
+        if (ProtosForeignProjectedOperations
+                .isForeignMemberSelection(selected)) {
+            receiver = selected.value();
+            selected = ProtosForeignProjectedOperations
+                    .invocationSelection(receiver, caller);
+        }
+
+        if (!(selected.value() instanceof ProtosClosureValue closure)) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(caller));
+        }
+
+        return ProtosClosureCallPreparation
+                .prepareSelectedNamedCallImplementation(
+                        receiver, selected, caller, supplied);
+    }
+
+    /**
      * Performs the authoritative D013 ordinary-send lookup shared by the
      * generic {@link #prepareSend} path and the {@code PrepareSendArguments}
      * fast-hit specialization, preserving the exact existing lookup-failure
@@ -115,6 +153,55 @@ final class ProtosSendPreparation {
             String selector,
             ProtosActivation caller,
             List<?> supplied) {
+        ProtosSlotLookupResult selected =
+                performSuperSendLookup(selector, caller);
+
+        if (!(selected.value() instanceof ProtosClosureValue closure)) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(caller));
+        }
+
+        return prepareImmediateMethodCall(
+                closure,
+                caller.receiver(),
+                selected.home(),
+                supplied,
+                caller);
+    }
+
+    /**
+     * I143: selected inherited method, never the current home method.
+     * Name association happens only after this exact lookup succeeds.
+     */
+    static PreparedClosureCall prepareNamedSuperSend(
+            String selector,
+            ProtosActivation caller,
+            PreparedArgumentVector supplied) {
+        if (!supplied.hasNamedArguments()) {
+            throw new IllegalArgumentException(
+                    "named super send requires a name-bearing vector");
+        }
+
+        ProtosSlotLookupResult selected =
+                performSuperSendLookup(selector, caller);
+
+        if (!(selected.value() instanceof ProtosClosureValue closure)) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(caller));
+        }
+
+        return ProtosClosureCallPreparation
+                .prepareSelectedNamedCallImplementation(
+                        caller.receiver(), selected, caller, supplied);
+    }
+
+    /**
+     * Shared D013 super lookup, preserving InvalidSuper and SlotNotFound
+     * precedence for positional and named invocation alike.
+     */
+    private static ProtosSlotLookupResult performSuperSendLookup(
+            String selector,
+            ProtosActivation caller) {
         ProtosObjectValue methodHome =
                 caller.methodHome()
                         .orElseThrow(
@@ -129,27 +216,17 @@ final class ProtosSendPreparation {
                                                 ProtosCoreErrors.newSlotNotFound(caller)));
 
         ProtosPrelude prelude = caller.prelude().orElse(null);
-        ProtosSlotLookupResult selected;
-        try {
-            selected =
-                    ProtosValueLookup.lookup(lookupOrigin, selector, prelude)
-                            .orElseThrow(
-                                    () ->
-                                            new ProtosSignalException(
-                                                    ProtosCoreErrors.newSlotNotFound(caller)));
-        } catch (UnsupportedOperationException unsupportedRepresentation) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
-        }
-        if (!(selected.value() instanceof ProtosClosureValue closure)) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
-        }
 
-        return prepareImmediateMethodCall(
-                closure,
-                caller.receiver(),
-                selected.home(),
-                supplied,
-                caller);
+        try {
+            return ProtosValueLookup.lookup(
+                            lookupOrigin, selector, prelude)
+                    .orElseThrow(
+                            () -> new ProtosSignalException(
+                                    ProtosCoreErrors.newSlotNotFound(caller)));
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(caller));
+        }
     }
 
     static PreparedClosureCall prepareImmediateMethodCall(

@@ -535,9 +535,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class HasClosureArgument {
         @Specialization
         public static boolean perform(ProtosActivation activation, int positionalIndex) {
-            List<?> arguments =
-                    ProtosFrameLocalBindings.closureArguments(activation);
-            return arguments.size() > positionalIndex;
+            return activation.hasSuppliedParameterForRuntime(
+                    positionalIndex);
         }
     }
 
@@ -2947,6 +2946,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * I143: append an already evaluated named argument.
+     * The label is a source-fixed constant, not a guest expression.
+     * Parameter association occurs after callee selection.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "name")
+    public static final class AppendNamedSuppliedArgument {
+        @Specialization
+        public static void perform(
+                String name,
+                PreparedArgumentVector vector,
+                Object value) {
+            vector.appendNamed(name, value);
+        }
+    }
+
     @Operation
     public static final class AppendSpreadSuppliedArgument {
         @Specialization
@@ -5340,8 +5356,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation caller,
                 PreparedArgumentVector supplied) {
             if (superSend) {
+                if (supplied.hasNamedArguments()) {
+                    return ProtosSendPreparation.prepareNamedSuperSend(
+                            (String) receiverOrSelector, caller, supplied);
+                }
                 return ProtosSendPreparation.prepareSuperSend(
                         (String) receiverOrSelector, caller, supplied.snapshot());
+            }
+            if (supplied.hasNamedArguments()) {
+                return ProtosClosureCallPreparation.prepareNamedClosureCall(
+                        receiverOrSelector, caller, supplied);
             }
             return ProtosClosureCallPreparation.prepareClosureCall(
                     receiverOrSelector, supplied.snapshot(), caller);
@@ -6654,6 +6678,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosActivation caller,
                 PreparedArgumentVector supplied) {
+            if (supplied.hasNamedArguments()) {
+                return ProtosSendPreparation.prepareNamedSend(
+                        receiver, selector, caller, supplied);
+            }
             return ProtosSendPreparation.prepareSend(
                     receiver,
                     selector,

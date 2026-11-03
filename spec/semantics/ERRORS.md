@@ -116,6 +116,31 @@ is observably reachable. `identityHashOf(error)` therefore has the same stabilit
 and collision rules as for other objects; fresh Error identity does not imply a
 unique numeric hash value.
 
+### Named-argument and invocation association failures (D237)
+
+An explicit duplicate named label within one argument list is rejected by
+the grammar as a syntax error before argument-expression evaluation; it is
+not a runtime Error occurrence. A label is a literal identifier, not a
+lexical lookup or a `name: value` slot creation.
+
+After ordinary receiver and argument evaluation, `CALLABLES.md` defines
+selection of the actual executable `call` or method and binding of positional
+vector `P` with named items `K`. An unknown label, a named collision with a
+formal already filled positionally (including through spread), a label
+naming a rest formal, or a named argument presented to a callable without
+an explicit published Protos semantic name signature signals one fresh
+generic `Error`. Validation precedes default evaluation and invocation of
+the selected body. Supplied `null` is present rather than absent and does
+not by itself trigger a binding error.
+
+An earlier failed lookup, including a missing selected `call` or a missing
+`init` on standard `Object.call` construction, retains the normal fresh
+`SlotNotFound` category; named association does not replace an earlier
+lookup failure. A rejected label before foreign or host entry likewise
+signals an ordinary generic `Error`, not `ForeignError`; the foreign
+operation has not yet begun (`VALUES_AND_COLLECTIONS.md`). These rules add
+no new standard Error prototype or singleton occurrence.
+
 ### Standard generic `fail()` callable
 
 The standard prelude provides `fail` as an ordinary callable that accepts exactly

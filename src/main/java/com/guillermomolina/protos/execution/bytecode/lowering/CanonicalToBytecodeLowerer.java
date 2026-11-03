@@ -38,6 +38,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMapConstruction;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
+import com.guillermomolina.protos.semantic.ast.CanonicalNamedArgument;
 import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalObject;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
@@ -2916,6 +2917,10 @@ final class CanonicalToBytecodeLowerer {
             validateSupportedDefaultExpression(indexedAssign.value());
             return;
         }
+        if (expression instanceof CanonicalNamedArgument named) {
+            validateSupportedDefaultExpression(named.expression());
+            return;
+        }
         if (expression instanceof CanonicalCall call) {
             validateSupportedDefaultExpression(call.receiver());
             for (CanonicalExpression argument : call.arguments()) {
@@ -3949,7 +3954,7 @@ final class CanonicalToBytecodeLowerer {
                 || currentActivationLocal != null
                 || expressions.size() < 2
                 || !(expressions.get(expressions.size() - 1) instanceof CanonicalCall call)
-                || hasSpreadArgument(call.arguments())
+                || hasVectorArgument(call.arguments())
                 || !isTerminalCallOperand(call.receiver())
                 || call.arguments().stream()
                         .anyMatch(argument -> !isTerminalCallOperand(argument))) {
@@ -3963,7 +3968,7 @@ final class CanonicalToBytecodeLowerer {
                             && create.value() instanceof CanonicalClosure;
             boolean directCall =
                     expression instanceof CanonicalCall prefixCall
-                            && !hasSpreadArgument(prefixCall.arguments())
+                            && !hasVectorArgument(prefixCall.arguments())
                             && isTerminalCallOperand(prefixCall.receiver())
                             && prefixCall.arguments().stream()
                                     .allMatch(CanonicalToBytecodeLowerer::isTerminalCallOperand);
@@ -3994,7 +3999,7 @@ final class CanonicalToBytecodeLowerer {
                 || currentInlineCallbackFrameNative
                 || currentInlineClosureCallBody
                 || !currentNormalCallbackScalarLocals.isEmpty()
-                || hasSpreadArgument(call.arguments())
+                || hasVectorArgument(call.arguments())
                 || !isTerminalCallOperand(call.receiver())
                 || inlineClosureLiteralCallCandidate(call) != null
                 // Decided before the prefix materializes its literals: an
@@ -4114,10 +4119,27 @@ final class CanonicalToBytecodeLowerer {
                 .anyMatch(CanonicalSpread.class::isInstance);
     }
 
+    /** I143: labels explicitly supplied at a source call site. */
+    private static boolean hasNamedArgument(
+            java.util.List<CanonicalExpression> arguments) {
+        return arguments.stream()
+                .anyMatch(CanonicalNamedArgument.class::isInstance);
+    }
+
+    /** Either form requires the source-ordered argument vector. */
+    private static boolean hasVectorArgument(
+            java.util.List<CanonicalExpression> arguments) {
+        return hasSpreadArgument(arguments)
+                || hasNamedArgument(arguments);
+    }
+
     private static CanonicalExpression suppliedArgumentExpression(
             CanonicalExpression argument) {
         if (argument instanceof CanonicalSpread spread) {
             return spread.expression();
+        }
+        if (argument instanceof CanonicalNamedArgument named) {
+            return named.expression();
         }
         return argument;
     }
@@ -4150,7 +4172,12 @@ final class CanonicalToBytecodeLowerer {
                     childResult,
                     resumeValue);
 
-            if (argument instanceof CanonicalSpread) {
+            if (argument instanceof CanonicalNamedArgument named) {
+                builder.beginAppendNamedSuppliedArgument(named.name());
+                builder.emitLoadLocal(suppliedVector);
+                builder.emitLoadLocal(value);
+                builder.endAppendNamedSuppliedArgument();
+            } else if (argument instanceof CanonicalSpread) {
                 if (currentInlineCallbackFrameNative) {
                     builder.beginAppendInlineSpreadSuppliedArgument(
                             currentRootFrameNativeLocals,
@@ -4203,7 +4230,12 @@ final class CanonicalToBytecodeLowerer {
                     childResult,
                     resumeValue);
 
-            if (argument instanceof CanonicalSpread) {
+            if (argument instanceof CanonicalNamedArgument named) {
+                builder.beginAppendNamedSuppliedArgument(named.name());
+                builder.emitLoadLocal(suppliedVector);
+                builder.emitLoadLocal(value);
+                builder.endAppendNamedSuppliedArgument();
+            } else if (argument instanceof CanonicalSpread) {
                 if (currentInlineCallbackFrameNative) {
                     builder.beginAppendInlineSpreadSuppliedArgument(
                             currentRootFrameNativeLocals,
@@ -5826,7 +5858,9 @@ final class CanonicalToBytecodeLowerer {
         requireDefaultScratch(result, preparedCall, childResult, resumeValue);
         boolean stageArguments = hasComposedArgument(send.arguments());
         boolean spreadArguments = hasSpreadArgument(send.arguments());
-        boolean stageInputs = stageArguments || spreadArguments;
+        boolean namedArguments = hasNamedArgument(send.arguments());
+        boolean vectorArguments = spreadArguments || namedArguments;
+        boolean stageInputs = stageArguments || vectorArguments;
         BytecodeLocal suppliedVector = null;
         java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
 
@@ -5834,7 +5868,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
 
         if (stageInputs) {
-            if (spreadArguments) {
+            if (vectorArguments) {
                 suppliedVector = builder.createLocal("superSuppliedArgumentVector", null);
                 emitBodySpreadArgumentVector(
                         builder,
@@ -5860,7 +5894,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         builder.beginStoreLocal(preparedCall);
-        if (spreadArguments) {
+        if (vectorArguments) {
             builder.beginPrepareClosureCallVector(true);
             builder.emitLoadConstant(send.message());
             emitCurrentActivation(builder);
@@ -5903,7 +5937,9 @@ final class CanonicalToBytecodeLowerer {
         requireDefaultScratch(result, preparedCall, childResult, resumeValue);
         boolean stageArguments = hasComposedArgument(send.arguments());
         boolean spreadArguments = hasSpreadArgument(send.arguments());
-        boolean stageInputs = stageArguments || spreadArguments;
+        boolean namedArguments = hasNamedArgument(send.arguments());
+        boolean vectorArguments = spreadArguments || namedArguments;
+        boolean stageInputs = stageArguments || vectorArguments;
         BytecodeLocal suppliedVector = null;
         java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
 
@@ -5914,7 +5950,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
 
         if (stageInputs) {
-            if (spreadArguments) {
+            if (vectorArguments) {
                 suppliedVector = builder.createLocal("defaultSuperSuppliedArgumentVector", null);
                 emitDefaultSpreadArgumentVector(
                         builder,
@@ -5940,7 +5976,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         builder.beginStoreLocal(preparedCall);
-        if (spreadArguments) {
+        if (vectorArguments) {
             builder.beginPrepareClosureCallVector(true);
             builder.emitLoadConstant(send.message());
             emitCurrentActivation(builder);
@@ -5990,12 +6026,13 @@ final class CanonicalToBytecodeLowerer {
         boolean stageReceiver = requiresComposedInvocation(receiver);
         boolean stageArguments =
                 hasComposedArgument(call.arguments());
-        boolean spreadArguments =
-                hasSpreadArgument(call.arguments());
+        boolean spreadArguments = hasSpreadArgument(call.arguments());
+        boolean namedArguments = hasNamedArgument(call.arguments());
+        boolean vectorArguments = spreadArguments || namedArguments;
         boolean stageInputs =
                 stageReceiver
                         || stageArguments
-                        || spreadArguments;
+                        || vectorArguments;
         BytecodeLocal receiverValue = null;
         BytecodeLocal suppliedVector = null;
         java.util.List<BytecodeLocal> argumentValues =
@@ -6026,7 +6063,7 @@ final class CanonicalToBytecodeLowerer {
                 builder.endStoreLocal();
             }
 
-            if (spreadArguments) {
+            if (vectorArguments) {
                 suppliedVector =
                         builder.createLocal(
                                 "defaultSuppliedArgumentVector",
@@ -6061,7 +6098,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         builder.beginStoreLocal(preparedCall);
-        if (spreadArguments) {
+        if (vectorArguments) {
             builder.beginPrepareClosureCallVector(false);
             builder.emitLoadLocal(receiverValue);
             emitCurrentActivation(builder);
@@ -6116,11 +6153,14 @@ final class CanonicalToBytecodeLowerer {
         boolean stageReceiver = requiresComposedInvocation(receiver);
         boolean stageArguments =
                 hasComposedArgument(send.arguments());
-        boolean spreadArguments =
-                hasSpreadArgument(send.arguments());
-        boolean tryNativeIfTrue = admitsNativeIfTrue(send, spreadArguments);
+        boolean spreadArguments = hasSpreadArgument(send.arguments());
+        boolean namedArguments = hasNamedArgument(send.arguments());
+        boolean vectorArguments = spreadArguments || namedArguments;
+        boolean tryNativeIfTrue =
+                !namedArguments
+                        && admitsNativeIfTrue(send, spreadArguments);
         boolean stageInputs =
-                stageReceiver || stageArguments || spreadArguments
+                stageReceiver || stageArguments || vectorArguments
                         || tryNativeIfTrue;
         BytecodeLocal receiverValue = null;
         BytecodeLocal suppliedVector = null;
@@ -6152,7 +6192,7 @@ final class CanonicalToBytecodeLowerer {
                 builder.endStoreLocal();
             }
 
-            if (spreadArguments) {
+            if (vectorArguments) {
                 suppliedVector =
                         builder.createLocal(
                                 "defaultSuppliedArgumentVector",
@@ -6217,7 +6257,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         builder.beginStoreLocal(preparedCall);
-        if (spreadArguments) {
+        if (vectorArguments) {
             builder.beginPrepareSendVector();
             builder.emitLoadLocal(receiverValue);
             builder.emitLoadConstant(send.message());
@@ -7407,6 +7447,10 @@ final class CanonicalToBytecodeLowerer {
             validateSupportedExpression(indexedAssign.value());
             return;
         }
+        if (expression instanceof CanonicalNamedArgument named) {
+            validateSupportedExpression(named.expression());
+            return;
+        }
         if (expression instanceof CanonicalCall call) {
             validateSupportedExpression(call.receiver());
             for (CanonicalExpression argument : call.arguments()) {
@@ -7974,7 +8018,7 @@ final class CanonicalToBytecodeLowerer {
     private static boolean primitiveNumericSendCandidate(CanonicalSend send) {
         return send.arguments().size() == 1
                 && primitiveNumericSelector(send.message())
-                && !hasSpreadArgument(send.arguments());
+                && !hasVectorArgument(send.arguments());
     }
 
     /*
@@ -7982,6 +8026,9 @@ final class CanonicalToBytecodeLowerer {
      * primitive result to a carrier-permitting consumer.
      */
     private static boolean primitiveResultSend(CanonicalSend send) {
+        if (hasNamedArgument(send.arguments())) {
+            return false;
+        }
         // I091-F2: zero-argument sends may return primitive carriers
         // through the admitted direct Send0 frame. Generic dispatch
         // remains materialized, and Send1 retains its existing rules.
@@ -7998,7 +8045,7 @@ final class CanonicalToBytecodeLowerer {
      */
     private static boolean primitiveResultCall(CanonicalCall call) {
         return call.arguments().size() == 1
-                && !hasSpreadArgument(call.arguments());
+                && !hasVectorArgument(call.arguments());
     }
 
     private static boolean primitiveNumericSelector(String selector) {
@@ -8813,7 +8860,7 @@ final class CanonicalToBytecodeLowerer {
                 || context.inlineCallbackFrameNative()
                 || context.activationLocalPresent()
                 || send.arguments().size() != control.arity
-                || hasSpreadArgument(send.arguments())) {
+                || hasVectorArgument(send.arguments())) {
             return null;
         }
         return control;
@@ -9025,6 +9072,7 @@ final class CanonicalToBytecodeLowerer {
                     containsMutationInMixedInlineOperand(result.value());
             case CanonicalSpread spread ->
                     containsMutationInMixedInlineOperand(spread.expression());
+            case CanonicalNamedArgument ignored -> true;
             case CanonicalIntrinsic ignored -> false;
             case CanonicalLiteral ignored -> false;
             case CanonicalLookup ignored -> false;
@@ -9452,23 +9500,27 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
         CanonicalExpression receiver = send.receiver();
-        boolean tryPrimitiveNumericSend = primitiveNumericSendCandidate(send);
+        boolean tryPrimitiveNumericSend =
+                !hasNamedArgument(send.arguments())
+                        && primitiveNumericSendCandidate(send);
         boolean stageReceiver = requiresComposedInvocation(receiver);
         boolean stageArguments =
                 hasComposedArgument(send.arguments());
-        boolean spreadArguments =
-                hasSpreadArgument(send.arguments());
+        boolean spreadArguments = hasSpreadArgument(send.arguments());
+        boolean namedArguments = hasNamedArgument(send.arguments());
+        boolean vectorArguments = spreadArguments || namedArguments;
         java.util.List<Integer> inlineCallbackPositions =
-                spreadArguments
+                vectorArguments
                         ? java.util.List.of()
                         : inlineLiteralCallbackCandidates(send.arguments());
         boolean tryCompactCanonicalIfTrue =
-                admitsNativeIfTrue(send, spreadArguments);
+                !namedArguments
+                        && admitsNativeIfTrue(send, spreadArguments);
         boolean inlineIndexedEachCandidate =
-                !spreadArguments
+                !vectorArguments
                         && isInlineLiteralIndexedEachCandidate(send.arguments());
         boolean inlineTwoParameterEachCandidate =
-                !spreadArguments
+                !vectorArguments
                         && isInlineLiteralTwoParameterEachCandidate(send.arguments());
         /*
          * PLAT044 B′: candidate literals are staged in ordinary argument
@@ -9481,7 +9533,7 @@ final class CanonicalToBytecodeLowerer {
          * Admission of the actual selected method is runtime-guarded.
          */
         boolean tryDirectSendZero =
-                !spreadArguments
+                !vectorArguments
                         && send.arguments().isEmpty()
                         && !currentInlineCallbackFrameNative
                         && inlineCallbackPositions.isEmpty()
@@ -9489,7 +9541,7 @@ final class CanonicalToBytecodeLowerer {
                         && !inlineTwoParameterEachCandidate;
 
         boolean tryDirectSendOne =
-                !spreadArguments
+                !vectorArguments
                         && send.arguments().size() == 1
                         && !currentInlineCallbackFrameNative
                         && inlineCallbackPositions.isEmpty()
@@ -9499,7 +9551,7 @@ final class CanonicalToBytecodeLowerer {
         boolean stageInputs =
                 stageReceiver
                         || stageArguments
-                        || spreadArguments
+                        || vectorArguments
                         || !inlineCallbackPositions.isEmpty()
                         || inlineIndexedEachCandidate
                         || inlineTwoParameterEachCandidate
@@ -9538,7 +9590,7 @@ final class CanonicalToBytecodeLowerer {
                 builder.endStoreLocal();
             }
 
-            if (spreadArguments) {
+            if (vectorArguments) {
                 suppliedVector =
                         builder.createLocal(
                                 "suppliedArgumentVector",
@@ -9722,7 +9774,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         builder.beginStoreLocal(preparedCall);
-        if (spreadArguments) {
+        if (vectorArguments) {
             builder.beginPrepareSendVector();
             builder.emitLoadLocal(receiverValue);
             builder.emitLoadConstant(send.message());
@@ -10026,6 +10078,8 @@ final class CanonicalToBytecodeLowerer {
                             || containsClosure(object.body());
             case CanonicalReturn returnExpression -> containsClosure(returnExpression.value());
             case CanonicalSpread spread -> containsClosure(spread.expression());
+            case CanonicalNamedArgument named ->
+                    containsClosure(named.expression());
             case CanonicalIntrinsic intrinsic -> false;
             case CanonicalLiteral literal -> false;
             case CanonicalLookup lookup -> false;
@@ -10069,8 +10123,10 @@ final class CanonicalToBytecodeLowerer {
         boolean stageReceiver = requiresComposedInvocation(receiver);
         boolean stageArguments = hasComposedArgument(call.arguments());
         boolean spreadArguments = hasSpreadArgument(call.arguments());
+        boolean namedArguments = hasNamedArgument(call.arguments());
+        boolean vectorArguments = spreadArguments || namedArguments;
         boolean positionalCall =
-                !spreadArguments && !currentInlineCallbackFrameNative;
+                !vectorArguments && !currentInlineCallbackFrameNative;
         boolean semanticCall =
                 positionalCall && call.arguments().size() <= 1;
         CanonicalClosure inlineLiteral =
@@ -10103,6 +10159,7 @@ final class CanonicalToBytecodeLowerer {
          */
         boolean semanticCallN =
                 !currentInlineCallbackFrameNative
+                        && !namedArguments
                         && (spreadArguments || call.arguments().size() >= 2);
         boolean semanticInlineZero =
                 currentInlineCallbackFrameNative
@@ -10110,17 +10167,18 @@ final class CanonicalToBytecodeLowerer {
                         && call.arguments().isEmpty();
         boolean semanticInlineOne =
                 currentInlineCallbackFrameNative
-                        && !spreadArguments
+                        && !vectorArguments
                         && call.arguments().size() == 1;
         boolean semanticInlineArguments =
                 currentInlineCallbackFrameNative
+                        && !namedArguments
                         && (spreadArguments
                                 || call.arguments().size() >= 2);
 
         boolean stageInputs =
                 stageReceiver
                         || stageArguments
-                        || spreadArguments
+                        || vectorArguments
                         || semanticCall
                         || semanticCallN
                         || semanticInlineZero
@@ -10154,7 +10212,7 @@ final class CanonicalToBytecodeLowerer {
                 builder.endStoreLocal();
             }
 
-            if (spreadArguments) {
+            if (vectorArguments) {
                 suppliedVector =
                         builder.createLocal(
                                 "suppliedArgumentVector",
@@ -10337,7 +10395,7 @@ final class CanonicalToBytecodeLowerer {
                 && !semanticInlineOne
                 && !semanticInlineArguments) {
             builder.beginStoreLocal(preparedCall);
-            if (spreadArguments) {
+            if (vectorArguments) {
                 builder.beginPrepareClosureCallVector(false);
                 builder.emitLoadLocal(receiverValue);
                 emitCurrentActivation(builder);
@@ -10499,6 +10557,7 @@ final class CanonicalToBytecodeLowerer {
             return null;
         }
         if (candidate != null
+                && !hasVectorArgument(call.arguments())
                 && candidate.parameters().size() == call.arguments().size()
                 && call.arguments().size() <= MAX_INLINE_CLOSURE_CALL_ARGUMENTS
                 && candidate.parameters().stream()

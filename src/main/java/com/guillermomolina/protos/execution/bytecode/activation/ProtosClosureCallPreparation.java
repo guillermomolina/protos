@@ -18,6 +18,8 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall;
+import com.guillermomolina.protos.execution.ProtosPreparedCalls.NativeCall;
+import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedArgumentVector;
 import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -706,6 +708,77 @@ final class ProtosClosureCallPreparation {
             Object[] supplied) {
         return prepareInlineLiteralCall(
                 receiver, java.util.Arrays.asList(supplied), caller);
+    }
+
+    /**
+     * I143: name-bearing ordinary call. Ordinary D013 selection is
+     * authoritative and happens after the entire evaluated P,K packet.
+     */
+    static PreparedClosureCall prepareNamedClosureCall(
+            Object receiver,
+            ProtosActivation caller,
+            PreparedArgumentVector supplied) {
+        if (!supplied.hasNamedArguments()) {
+            throw new IllegalArgumentException(
+                    "named call requires a name-bearing vector");
+        }
+
+        ProtosSlotLookupResult selected =
+                selectClosureCall(receiver, caller);
+
+        return prepareSelectedNamedCallImplementation(
+                receiver, selected, caller, supplied);
+    }
+
+    /**
+     * Shared with ordinary named sends and super sends: the actual
+     * selected implementation decides whether names bind to source
+     * formals or pass transparently through standard Object.call.
+     *
+     * <p>Method-home identity is not an admission condition for
+     * standard forwarding: its executable native-body identity is.
+     */
+    static PreparedClosureCall prepareSelectedNamedCallImplementation(
+            Object receiver,
+            ProtosSlotLookupResult selected,
+            ProtosActivation caller,
+            PreparedArgumentVector supplied) {
+        if (!supplied.hasNamedArguments()) {
+            throw new IllegalArgumentException(
+                    "named selection requires a name-bearing vector");
+        }
+
+        if (!(selected.value() instanceof ProtosClosureValue behavior)) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(caller));
+        }
+
+        if (ProtosStandardObjectProtocol
+                .isStandardCallImplementation(behavior)) {
+            PreparedClosureCall prepared =
+                    ProtosSendPreparation.prepareImmediateMethodCall(
+                            behavior,
+                            receiver,
+                            selected.home(),
+                            supplied.positionalSnapshot(),
+                            caller);
+
+            if (!(prepared instanceof NativeCall nativeCall)
+                    || !nativeCall.isStructuredObjectCall()) {
+                throw new IllegalStateException(
+                        "standard Object.call lost structured preparation");
+            }
+
+            nativeCall.installNamedObjectCallArguments(supplied);
+            return nativeCall;
+        }
+
+        return ProtosNamedCallPreparation.prepareSelectedSourceMethod(
+                behavior,
+                receiver,
+                selected.home(),
+                caller,
+                supplied);
     }
 
     private static ProtosSlotLookupResult selectClosureCall(
