@@ -26,6 +26,19 @@ Please use the available issue forms when they fit. A design idea does not need
 to become an issue until there is a sufficiently concrete problem or outcome to
 track.
 
+## Accessibility
+
+Accessibility feedback is welcome for Protos documentation, command-line
+tools, language tooling, the public website, and editor integrations.
+
+See [ACCESSIBILITY.md](ACCESSIBILITY.md) for project accessibility priorities,
+current limitations, and the appropriate reporting channels.
+
+A complete reproduction, screenshot, or disclosure of personal disability
+information is not required to raise an accessibility concern. If the
+available issue form does not fit the report, GitHub Discussions is another
+way to start the conversation.
+
 ## Contributions
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before preparing a substantial change.

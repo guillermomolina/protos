@@ -597,6 +597,8 @@ expectations, and the project's AI-assisted development policy.
 -   [Roadmap](ROADMAP.md) — a short, human-facing `Now / Next / Later` view of
     project direction.
 -   [Support](SUPPORT.md) — where to ask for help and what information is useful.
+-   [Accessibility](ACCESSIBILITY.md) — accessibility priorities, known
+    limitations, and how to report barriers in Protos documentation and tools.
 -   [Code of Conduct](CODE_OF_CONDUCT.md) — expectations for project spaces.
 -   [Security policy](SECURITY.md) — how to report security-sensitive problems.
 
