@@ -30,6 +30,7 @@ import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Idempotent;
+import com.oracle.truffle.api.dsl.ReportPolymorphism.Megamorphic;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.DirectCallNode;
@@ -42,8 +43,8 @@ import com.oracle.truffle.api.nodes.Node;
  * (its receiver is not counted among the arguments) or any other object.
  *
  * <p>The B5 frame-argument array is built once here and becomes the callee
- * frame's arguments. In the I115 experiment, source functions use only
- * the unary direct-call cache; the shared PIC fallback is disabled.
+ * frame's arguments. Source functions use a GraalPy-style identity-keyed
+ * unary direct-call cache before entering the existing call dispatcher.
  * A bound source method preserves its receiver and methodHome and uses
  * the shared PIC; other callables use {@link
  * ProtosFunctionCallDispatchers.CallNode}. No call is prepared.
@@ -57,28 +58,27 @@ abstract class ProtosCallUnaryMethodNode extends Node {
     abstract Object execute(VirtualFrame frame, boolean terminal, Object callable, Object a0);
 
     /*
-     * GraalPy CallUnaryMethodNode.callPFunction: this specialization is
-     * exclusive to a language instance with one Context. The target is
-     * obtained from the already-prepared, same-language executable plan.
-     * It neither resolves an entered Context nor projects an execution
-     * plan on a cache hit. Multi-context and deferred cases deliberately
-     * have no fallback during this I115 experiment.
+     * GraalPy CallUnaryMethodNode.callPFunction: cache the callable
+     * instance rather than its shared source execution plan. Cache hits
+     * use the already-prepared, same-language target without resolving
+     * an entered Context. Other source calls use the existing dispatcher.
      */
     // PRUIBA DE I115, en algún momento esto volverá a funcionar
-    // Direct PIC keyed by prepared execution-plan identity.
-    // No generic root resolution or indirect-call fallback.
+    // Direct PIC keyed by Closure identity, matching GraalPy's outer call PIC.
+    // The cached execution plan remains the source of the direct target.
     @ForceQuickening
     @Specialization(
             guards = {
                     "isSourceFunction(callable)",
                     "isSingleContext()",
+                    "callable == cachedCallable",
                     "cachedPlan != null",
                     "callable.preparedExecutionPlanOrNullForRuntime() == cachedPlan",
                     "!callable.requiresContextLocalExecutionProjectionForRuntime()",
                     "cachedTarget != null"
             },
             excludeForUncached = true,
-            limit = "3")
+            limit = "4")
     static Object callPFunction(
             VirtualFrame frame,
             boolean terminal,
@@ -86,9 +86,11 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             Object a0,
             @Bind("$node") Node inliningTarget,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Cached("callable.preparedExecutionPlanOrNullForRuntime()")
+            @Cached(value = "callable", weak = true)
+                    ProtosClosureValue cachedCallable,
+            @Cached("cachedCallable.preparedExecutionPlanOrNullForRuntime()")
                     ProtosClosureExecutionPlan cachedPlan,
-            @Cached("singleContextTargetOrNull(callable, root)")
+            @Cached("singleContextTargetOrNull(cachedCallable, root)")
                     RootCallTarget cachedTarget,
             @Cached("createDirectCallNodeOrNull(cachedTarget)")
                     DirectCallNode callNode,
@@ -124,6 +126,30 @@ abstract class ProtosCallUnaryMethodNode extends Node {
     //             ProtosFunctionCallDispatchers.callerReference(frame), root,
     //             ProtosFunctionCallDispatchers.currentContext(inliningTarget));
     // }
+
+    /*
+     * GraalPy-style megamorphic transition for source functions.
+     * Reuse the existing CallNode and its current dispatch implementation.
+     */
+    @Specialization(
+            guards = "isSourceFunction(callable)",
+            replaces = "callPFunction")
+    @Megamorphic
+    @InliningCutoff
+    static Object callSourceMegamorphic(
+            VirtualFrame frame,
+            boolean terminal,
+            ProtosClosureValue callable,
+            Object a0,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached ProtosFunctionCallDispatchers.CallNode call) {
+        return call.execute(
+                frame, terminal, callable,
+                ProtosFrameArguments.dispatchedCall1(
+                        null, ProtosFrameArguments.functionCallMarker(),
+                        null, null, null, a0),
+                ProtosFunctionCallDispatchers.callerReference(frame), root);
+    }
 
     @Specialization(guards = "isSourceFunction(method.callable())")
     static Object callBoundMethod(

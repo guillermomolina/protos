@@ -298,6 +298,58 @@ final class ProtosI115UnaryPICConvergenceTest {
     }
 
     @Test
+    void unaryCallQuickensByClosureIdentityThenBecomesMegamorphic()
+            throws Exception {
+        withCore(module -> {
+            evaluate(FOCAL, "i115-identity-quickening-define.protos", module);
+            ProtosBytecodeRootNode root = runRoot(module);
+
+            int specializedSnapshots = 0;
+            int genericSnapshots = 0;
+
+            for (int i = 1; i <= 101; i++) {
+                assertInteger(
+                        1,
+                        evaluate(
+                                "run()\n",
+                                "i115-identity-quickening-call.protos",
+                                module));
+
+                {
+                    List<String> unaryNames =
+                            root.getBytecodeNode()
+                                    .getInstructionsAsList()
+                                    .stream()
+                                    .map(Instruction::getName)
+                                    .filter(name -> isInstruction(
+                                            name, "c.CallUnaryMethod"))
+                                    .toList();
+
+                    assertEquals(1, unaryNames.size(), unaryNames.toString());
+
+                    String expected = i <= 4
+                            ? "c.CallUnaryMethod$CallPFunction"
+                            : "c.CallUnaryMethod";
+
+                    assertEquals(
+                            expected,
+                            unaryNames.get(0),
+                            "Unexpected unary quickening state after call " + i);
+
+                    if (i <= 4) {
+                        specializedSnapshots++;
+                    } else {
+                        genericSnapshots++;
+                    }
+                }
+            }
+
+            assertEquals(4, specializedSnapshots);
+            assertEquals(97, genericSnapshots);
+        });
+    }
+
+    @Test
     void unaryCallBytecodeShapeRemainsDirect() throws Exception {
         withCore(module -> {
             evaluate(FOCAL, "i115-pic-shape-define.protos", module);

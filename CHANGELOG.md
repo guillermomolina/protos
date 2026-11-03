@@ -8,6 +8,39 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.37-SNAPSHOT
+
+- **I115 — GraalPy-style unary Closure PIC quickening (historical).**
+  - Restore an identity-keyed, weakly cached source-Closure `CallUnaryMethod`
+    direct PIC: an installed `callPFunction` entry matches the concrete
+    Closure, not just its shared execution plan, and uses the prepared
+    `cachedPlan` and stable `RootCallTarget` for the direct call.
+  - Raise the experimental unary PIC limit to four entries. Once four
+    distinct Closure identities have been seen, the `@Megamorphic`
+    specialization `callSourceMegamorphic` takes over through the common
+    `ProtosFunctionCallDispatchers.CallNode` and the B5 call layout.
+    Retain single-Context and prepared-plan restrictions on the direct hit;
+    source-function fallback is restored rather than disabled.
+  - Reconcile the deferred-caller test with identity-cache saturation:
+    the underlying target is checked independently, not inferred from a
+    remaining direct cache entry. Add a 101-call structural witness for
+    quickening (`c.CallUnaryMethod$CallPFunction` on the first four calls)
+    and the generic operation after saturation. The witness was added
+    historically, but has not been executed during this versioned replay.
+  - **Historical semantic limitations:** the preceding D013 / `Object.call`
+    behavior still lets direct source-function calls bypass a local `call`
+    override, even though an explicit `object.call(...)` send selects it.
+    Identity-PIC quickening alone does not establish `ReturnHome`,
+    suspension or cancellation correctness, Task/C-prime ownership,
+    non-local control transfer, D179 C0 lexical semantics, or dynamic
+    numeric-prototype delegation. The Context-owned BigInteger Prelude of
+    V55 remains a separate D197-C concern. `long`/`Long` is the intended
+    64-bit numeric lane; no new arithmetic or delegation acceptance is
+    claimed here. No runtime tests, graph evidence, benchmarks, or
+    compilation were executed for this historical replay.
+  - Original implementation: `b5263d39cf277c1fb2ebfd1458aed6d62461b784`.
+    The three source/test blobs are reproduced without modification.
+
 ## 0.4.36-SNAPSHOT
 
 - **I115 — GraalPy-style arithmetic and Context-owned BigInteger promotion (historical).**
