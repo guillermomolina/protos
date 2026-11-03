@@ -252,44 +252,51 @@ final class ProtosFunctionCallDispatchers {
                     closure, arguments, callerReference, root);
         }
 
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // /*
-        //  * Keyed by the effective code root, not by Closure identity: the
-        //  * current Closure, with its current captures, travels in the arguments.
-        //  */
-        // @Specialization(
-        //         guards = {
-        //             "currentRoot != null",
-        //             "currentRoot == cachedRoot"
-        //         },
-        //         limit = "3",
-        //         replaces = "callFunctionCached")
-        // static Object callFunctionCachedCt(
-        //         VirtualFrame frame,
-        //         Node inliningTarget,
-        //         boolean terminal,
-        //         ProtosClosureValue closure,
-        //         Object[] arguments,
-        //         Object callerReference,
-        //         ProtosBytecodeRootNode root,
-        //         ProtosLanguageContext enteredContext,
-        //         @Bind("functionRootOrNull(closure, enteredContext)") RootNode currentRoot,
-        //         @Cached(value = "currentRoot", adopt = false) RootNode cachedRoot,
-        //         @Cached("create(cachedRoot.getCallTarget())") DirectCallNode callNode,
-        //         @Cached(value = "calleeRootOrNull(cachedRoot)", adopt = false)
-        //                 ProtosBytecodeRootNode cachedCallee,
-        //         @Cached FunctionDirectInvokeNode invoke) {
-        //     return invoke.execute(
-        //             frame, inliningTarget, terminal, callNode, cachedCallee,
-        //             closure, arguments, callerReference, root);
-        // }
+        /*
+         * Once the closure-identity PIC saturates, different Closure values
+         * may still share a prepared executable target. Cache that target,
+         * never the Closure (and therefore never its lexical captures).
+         *
+         * A deferred plan or Context-local projection must go through the
+         * general resolver; a plan from another language/Context must not be
+         * entered by this direct node. No rematerialization runs in a guard.
+         */
+        @Specialization(
+                guards = {
+                    "currentPlan != null",
+                    "enteredContext == cachedContext",
+                    "!closure.requiresContextLocalExecutionProjectionForRuntime()",
+                    "samePreparedPlanLanguage(currentPlan, enteredContext)",
+                    "cachedTarget != null",
+                    "currentPlan.bytecodeActivationTargetForComposition() == cachedTarget"
+                },
+                limit = "3",
+                replaces = "callFunctionCached")
+        static Object callFunctionCachedCt(
+                VirtualFrame frame,
+                Node inliningTarget,
+                boolean terminal,
+                ProtosClosureValue closure,
+                Object[] arguments,
+                Object callerReference,
+                ProtosBytecodeRootNode root,
+                ProtosLanguageContext enteredContext,
+                @Bind("closure.preparedExecutionPlanOrNullForRuntime()")
+                        ProtosClosureExecutionPlan currentPlan,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("currentPlan.bytecodeActivationTargetForComposition()")
+                        RootCallTarget cachedTarget,
+                @Cached("createDirectCallNodeOrNull(cachedTarget)") DirectCallNode callNode,
+                @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
+                        ProtosBytecodeRootNode cachedCallee,
+                @Cached FunctionDirectInvokeNode invoke) {
+            return invoke.execute(
+                    frame, inliningTarget, terminal, callNode, cachedCallee,
+                    closure, arguments, callerReference, root);
+        }
 
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // @Specialization(replaces = {
-        //     "callFunctionCached",
-        //     "callFunctionCachedCt"
-        // })
-        @Specialization(replaces = "callFunctionCached")
+        /* Last resort: different effective targets beyond the secondary PIC. */
+        @Specialization(replaces = {"callFunctionCached", "callFunctionCachedCt"})
         @Megamorphic
         @InliningCutoff
         static Object callFunctionMegamorphic(
@@ -312,6 +319,15 @@ final class ProtosFunctionCallDispatchers {
                     frame, inliningTarget, terminal, target,
                     calleeRootOrNull(target.getRootNode()),
                     closure, arguments, callerReference, root);
+        }
+
+        static boolean samePreparedPlanLanguage(
+                ProtosClosureExecutionPlan plan,
+                ProtosLanguageContext context) {
+            return plan != null
+                    && context != null
+                    && plan.language().orElse(null)
+                            == context.languageForRuntime();
         }
 
         static RootCallTarget functionCallTarget(
