@@ -369,6 +369,79 @@ final class ProtosCliTest {
     }
 
     @Test
+    void bug033FormatCliPreservesNamedArgumentsThroughStdinAndFile()
+            throws Exception {
+        String source = "value:f(third:3,first:1,second:2)";
+        String expected =
+                "value: f(third: 3, first: 1, second: 2)\n";
+
+        byte[] original = source.getBytes(StandardCharsets.UTF_8);
+
+        R formatted = runWithInput(original, "format");
+        assertEquals(0, formatted.c, formatted.e);
+        assertEquals(expected, formatted.o);
+        assertEquals("", formatted.e);
+
+        R repeated =
+                runWithInput(
+                        expected.getBytes(StandardCharsets.UTF_8),
+                        "format");
+        assertEquals(0, repeated.c, repeated.e);
+        assertEquals(expected, repeated.o);
+
+        Path file = Files.createTempFile(
+                "protos-bug033-named-", ".protos");
+
+        try {
+            Files.write(file, original);
+
+            R fromFile = run("format", file.toString());
+            assertEquals(0, fromFile.c, fromFile.e);
+            assertEquals(expected, fromFile.o);
+            assertArrayEquals(original, Files.readAllBytes(file));
+        } finally {
+            Files.deleteIfExists(file);
+        }
+
+        String invalid = "f(a:1,a:2)";
+        R failed =
+                runWithInput(
+                        invalid.getBytes(StandardCharsets.UTF_8),
+                        "format");
+
+        assertEquals(1, failed.c);
+        assertEquals(invalid, failed.o);
+    }
+
+    @Test
+    void bug033NamedArgumentFormattingPreservesRuntimeResult() {
+        String source =
+                "f: (first, second, third) => "
+                        + "first * 100 + second * 10 + third\n"
+                        + "print(f(third:3,first:1,second:2))";
+
+        R before = run("-e", source);
+
+        assertEquals(0, before.c, before.e);
+        assertEquals("123\n", before.o);
+
+        R formatted =
+                runWithInput(
+                        source.getBytes(StandardCharsets.UTF_8),
+                        "format");
+
+        assertEquals(0, formatted.c, formatted.e);
+        assertTrue(formatted.o.contains("third: 3"));
+        assertTrue(formatted.o.contains("first: 1"));
+        assertTrue(formatted.o.contains("second: 2"));
+
+        R after = run("-e", formatted.o);
+
+        assertEquals(0, after.c, after.e);
+        assertEquals(before.o, after.o);
+    }
+
+    @Test
     void formatSymlinkToRegularFileIsReadOnly() throws Exception {
         Path dir = Files.createTempDirectory("protos-cli-format-link-");
         Path target = dir.resolve("target.protos");

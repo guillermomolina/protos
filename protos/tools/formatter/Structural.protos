@@ -232,6 +232,39 @@ formatArgument: (argument, level, layout) => {
         prefix = "..."
     }
 
+    if(argument.name !== null) {
+        beforeColon:
+            formatTokenBoundaryComments(
+                argument.path,
+                argument.expression.path,
+                "NAMED_ARGUMENT_BEFORE_COLON",
+                level,
+                layout
+            )
+
+        afterColon:
+            formatTokenBoundaryComments(
+                argument.path,
+                argument.expression.path,
+                "NAMED_ARGUMENT_AFTER_COLON",
+                level,
+                layout
+            )
+
+        prefix =
+            argument.name +
+            beforeColon +
+            ":"
+
+        if(afterColon.size() > 0) {
+            prefix = prefix + afterColon
+        }
+
+        if(afterColon.size() == 0) {
+            prefix = prefix + " "
+        }
+    }
+
     prefix +
         formatExpression(
             argument.expression,
@@ -1332,19 +1365,23 @@ contextualHeaderComments: (
     result
 }
 
-// BUG032: unlike contextual return, ^ remains incomplete across logical
-// newlines. Keep every comment between the caret and its operand, including
-// physical own-line comments and line comments that terminate their line.
-formatCaretOperandComments: (node, level, layout) => {
+// Reconstruct source-preserved comments at an exact structural boundary.
+formatTokenBoundaryComments: (
+    preceding,
+    following,
+    boundaryKind,
+    level,
+    layout
+) => {
     result: ""
     atLineStart: false
     pendingBlankAfter: false
 
     for(comment in layout.comments) {
         sameBoundary:
-            (comment.boundaryKind == "NON_LOCAL_RETURN_OPERAND") &&
-            (comment.preceding === node.path) &&
-            (comment.following === node.expression.path)
+            (comment.boundaryKind == boundaryKind) &&
+            (comment.preceding === preceding) &&
+            (comment.following === following)
 
         if(sameBoundary) {
             if(comment.placement == "EMBEDDED_BETWEEN_TOKENS") {
@@ -1420,6 +1457,19 @@ formatCaretOperandComments: (node, level, layout) => {
     }
 
     result
+}
+
+// BUG032: unlike contextual return, ^ remains incomplete across logical
+// newlines. Keep every comment between the caret and its operand, including
+// physical own-line comments and line comments that terminate their line.
+formatCaretOperandComments: (node, level, layout) => {
+    formatTokenBoundaryComments(
+        node.path,
+        node.expression.path,
+        "NON_LOCAL_RETURN_OPERAND",
+        level,
+        layout
+    )
 }
 
 // D231-F2-PURE: comments written before a header comma stay before it, each
@@ -2248,6 +2298,15 @@ formatBody: (layout) => {
                 (comment.placement == "END_OF_LINE") ||
                 (comment.placement == "OWN_LINE"))
 
+        namedArgumentComment:
+            ((comment.boundaryKind ==
+                "NAMED_ARGUMENT_BEFORE_COLON") ||
+                (comment.boundaryKind ==
+                    "NAMED_ARGUMENT_AFTER_COLON")) &&
+            ((comment.placement == "EMBEDDED_BETWEEN_TOKENS") ||
+                (comment.placement == "END_OF_LINE") ||
+                (comment.placement == "OWN_LINE"))
+
         embeddedComment:
             (comment.boundaryKind == "NONE") &&
             (comment.placement == "EMBEDDED_BETWEEN_TOKENS") &&
@@ -2262,6 +2321,7 @@ formatBody: (layout) => {
             contextualUntilComment ||
             contextualForComment ||
             nonLocalReturnComment ||
+            namedArgumentComment ||
             embeddedComment).ifFalse(() => {
             Error().signal()
         })

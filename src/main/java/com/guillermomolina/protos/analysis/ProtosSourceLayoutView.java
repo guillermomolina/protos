@@ -102,6 +102,8 @@ public final class ProtosSourceLayoutView {
         CONTEXTUAL_FOR_AFTER_STOP,
         CONTEXTUAL_FOR_BEFORE_STEP,
         NON_LOCAL_RETURN_OPERAND,
+        NAMED_ARGUMENT_BEFORE_COLON,
+        NAMED_ARGUMENT_AFTER_COLON,
         DOCUMENT_PREFIX,
         DOCUMENT_SUFFIX
     }
@@ -914,6 +916,14 @@ public final class ProtosSourceLayoutView {
 
             if (boundary.isEmpty()) {
                 boundary =
+                        namedArgumentBoundary(
+                                occurrence.span(),
+                                tokenOccurrences,
+                                structuralIndex);
+            }
+
+            if (boundary.isEmpty()) {
+                boundary =
                         contextualElseBoundary(
                                 occurrence.span(),
                                 sourceFacts,
@@ -1267,6 +1277,67 @@ public final class ProtosSourceLayoutView {
                                 ownerPath.orElseThrow(),
                                 operandPath.orElseThrow(),
                                 CommentBoundaryKind.NON_LOCAL_RETURN_OPERAND,
+                                Optional.empty()));
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    /**
+     * D237: comments within a named argument's literal label/colon/value
+     * header attach to that argument and its value expression. The canonical
+     * SurfaceArgument owns the name; no label text is reconstructed here.
+     */
+    private static Optional<ResolvedBoundary>
+            namedArgumentBoundary(
+                    SourceSpan comment,
+                    List<TokenOccurrence> tokenOccurrences,
+                    StructuralIndex structuralIndex) {
+        for (StructuralNode structuralNode : structuralIndex.nodes) {
+            if (!(structuralNode.node() instanceof SurfaceArgument argument)
+                    || argument.name().isEmpty()) {
+                continue;
+            }
+
+            SourceSpan value = argument.expression().span();
+            if (comment.startOffset() < argument.span().startOffset()
+                    || comment.endOffset() > value.startOffset()) {
+                continue;
+            }
+
+            TokenOccurrence colon =
+                    firstTokenOfTypeBetween(
+                            tokenOccurrences,
+                            TokenType.COLON,
+                            argument.span().startOffset(),
+                            value.startOffset());
+
+            if (colon == null) {
+                continue;
+            }
+
+            CommentBoundaryKind kind;
+            if (comment.endOffset() <= colon.span().startOffset()) {
+                kind = CommentBoundaryKind.NAMED_ARGUMENT_BEFORE_COLON;
+            } else if (comment.startOffset()
+                    >= colon.span().endOffset()) {
+                kind = CommentBoundaryKind.NAMED_ARGUMENT_AFTER_COLON;
+            } else {
+                continue;
+            }
+
+            Optional<StructuralPath> argumentPath =
+                    structuralIndex.pathOf(argument);
+            Optional<StructuralPath> valuePath =
+                    structuralIndex.pathOf(argument.expression());
+
+            if (argumentPath.isPresent() && valuePath.isPresent()) {
+                return Optional.of(
+                        new ResolvedBoundary(
+                                argumentPath.orElseThrow(),
+                                valuePath.orElseThrow(),
+                                kind,
                                 Optional.empty()));
             }
         }

@@ -7,6 +7,13 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.441-SNAPSHOT
+
+- `BUG033` (#1041): fix TOOL010 silently discarding D237 named-argument labels when formatting source.
+  - Carry each canonical argument's optional name and structural path through the existing source-layout bridge; format `label: expression` without reinterpreting the label, changing argument order, or converting named arguments to positional arguments.
+  - Attach and retain comments on both sides of a named argument's colon through the existing D183 token/trivia model, including valid embedded, end-of-line and own-line comments, without changing parser or runtime semantics.
+  - Add source-layout, bridge, bundled-formatter, CLI stdin/file and LSP edit/reformat regressions covering nested, mixed/spread, Unicode NFC, `super`, grouped slot creation, Array/shadowed Array and trailing-Closure forms; verify canonical equivalence, actual execution results, idempotence and fail-closed invalid input.
+
 ## 0.3.440-SNAPSHOT
 
 - `I143` (D237-MIX-C/R3): implement contextual named call arguments with dynamic name association.

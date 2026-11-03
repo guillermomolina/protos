@@ -48,6 +48,72 @@ class ProtosSourceLayoutViewTest {
             new ProtosStaticAnalysisCore();
 
     @Test
+    void bug033AttachesNamedArgumentCommentsToTheirExactBoundaries() {
+        String source =
+                "f(first /* before */: /* after */ "
+                        + "g(inner /* nested-before */: "
+                        + "/* nested-after */ 2))";
+
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:bug033-named-comment-boundaries",
+                                1L,
+                                source));
+
+        SurfaceCall outer =
+                assertInstanceOf(
+                        SurfaceCall.class,
+                        view.program().expressions().get(0));
+
+        SurfaceCall inner =
+                assertInstanceOf(
+                        SurfaceCall.class,
+                        outer.arguments().get(0).expression());
+
+        var outerArgument = outer.arguments().get(0);
+        var innerArgument = inner.arguments().get(0);
+
+        var attachments = view.commentAttachments();
+
+        assertEquals(4, attachments.size());
+
+        assertEquals(
+                List.of(
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .NAMED_ARGUMENT_BEFORE_COLON,
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .NAMED_ARGUMENT_AFTER_COLON,
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .NAMED_ARGUMENT_BEFORE_COLON,
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .NAMED_ARGUMENT_AFTER_COLON),
+                attachments.stream()
+                        .map(ProtosSourceLayoutView.CommentAttachment::boundaryKind)
+                        .toList());
+
+        for (int index = 0; index < attachments.size(); index++) {
+            var argument = index < 2 ? outerArgument : innerArgument;
+            var attachment = attachments.get(index);
+
+            assertEquals(
+                    view.pathOfNode(argument).orElseThrow(),
+                    attachment.preceding().orElseThrow());
+            assertEquals(
+                    view.pathOf(argument.expression()).orElseThrow(),
+                    attachment.following().orElseThrow());
+        }
+
+        assertEquals(
+                attachments.stream()
+                        .map(ProtosSourceLayoutView.CommentAttachment::boundaryKind)
+                        .toList(),
+                view.preservationProjection().comments().stream()
+                        .map(ProtosSourceLayoutView.CommentProjection::boundaryKind)
+                        .toList());
+    }
+
+    @Test
     void buildsOnDemandFromExactSnapshotAndCanonicalSurfaceAst() {
         ProtosDocumentSnapshot snapshot =
                 new ProtosDocumentSnapshot(

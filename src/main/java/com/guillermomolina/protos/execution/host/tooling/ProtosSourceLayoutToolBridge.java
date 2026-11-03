@@ -592,8 +592,20 @@ public final class ProtosSourceLayoutToolBridge {
         for (SurfaceArgument argument : source) {
             ProtosObjectValue value = object();
             value.createLocalSlot(
+                    "path",
+                    path(
+                            view.pathOfNode(argument)
+                                    .orElseThrow(),
+                            paths,
+                            prelude));
+            value.createLocalSlot(
                     "spread",
                     ProtosBooleanValue.of(argument.spread()));
+            value.createLocalSlot(
+                    "name",
+                    argument.name().isPresent()
+                            ? string(argument.name().orElseThrow())
+                            : ProtosNullValue.INSTANCE);
             value.createLocalSlot(
                     "expression",
                     expression(

@@ -421,6 +421,209 @@ final class ProtosFormatterToolBootstrapTest {
     }
 
     @Test
+    void bug033BridgePreservesNamedAndPositionalArgumentIdentity()
+            throws Exception {
+        String source =
+                "f(third: 3, (local: 4), ...rest, first: 1)";
+
+        ProtosSourceLayoutView view =
+                new ProtosStaticAnalysisCore()
+                        .sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:bug033-bridge",
+                                        1L,
+                                        source));
+
+        ProtosStandardLibraryModuleResolver standardLibraryResolver =
+                new ProtosStandardLibraryModuleResolver(
+                        STANDARD_LIBRARY);
+
+        ProtosBundledToolModuleResolver resolver =
+                new ProtosBundledToolModuleResolver(
+                        "formatter",
+                        TOOL_ROOT,
+                        TOOL_ROOT.resolveSibling("shared"),
+                        standardLibraryResolver);
+
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(
+                        CORE,
+                        resolver);
+
+        ProtosObjectValue projected =
+                ProtosSourceLayoutToolBridge.project(
+                        view,
+                        prelude);
+
+        ProtosObjectValue program =
+                object(slot(projected, "program"));
+
+        ProtosObjectValue call =
+                object(
+                        array(slot(program, "expressions"))
+                                .indexedSnapshot()
+                                .get(0));
+
+        assertEquals("CALL", string(slot(call, "kind")));
+
+        List<Object> arguments =
+                array(slot(call, "arguments"))
+                        .indexedSnapshot();
+
+        assertEquals(4, arguments.size());
+
+        assertEquals(
+                "third",
+                string(slot(object(arguments.get(0)), "name")));
+
+        assertEquals(
+                com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                slot(object(arguments.get(1)), "name"));
+
+        assertEquals(
+                "GROUP",
+                string(
+                        slot(
+                                object(
+                                        slot(
+                                                object(arguments.get(1)),
+                                                "expression")),
+                                "kind")));
+
+        assertEquals(
+                com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                slot(object(arguments.get(2)), "name"));
+
+        assertEquals(
+                "first",
+                string(slot(object(arguments.get(3)), "name")));
+    }
+
+    @Test
+    void bug033FormattingPreservesNamedArgumentCanonicalSemantics()
+            throws Exception {
+        String[] samples = {
+            "f: (first, second, third) => [first, second, third]\n"
+                    + "value: f(third:3,first:1,second:2)",
+            "object.method(second:2,first:1)",
+            "super.move(second:2,first:1)",
+            "f(last:3,1,...rest,first:2)",
+            "f(café:1)",
+            "f((name:1))",
+            "f(first:[inner:1],second:g(item:2))",
+            "Array: (entry) => entry\nresult:[entry:1]",
+            "[entry:1]",
+            "[(entry:1)]",
+            "f(value:1) { block() }"
+        };
+
+        long version = 3300L;
+
+        for (String source : samples) {
+            String formatted = formatOnce(source, version++);
+
+            assertEquals(
+                    canonicalOf(source, version++),
+                    canonicalOf(formatted, version++),
+                    "formatter must preserve canonical semantics: " + source);
+
+            assertEquals(
+                    formatted,
+                    formatOnce(formatted, version++),
+                    "formatter must be idempotent: " + source);
+        }
+
+        assertEquals(
+                "value: f(third: 3, first: 1, second: 2)\n",
+                formatOnce(
+                        "value:f(third:3,first:1,second:2)",
+                        version++));
+
+        assertFalse(
+                canonicalOf("f(a: 1)", version++)
+                        .equals(
+                                canonicalOf(
+                                        "f((a: 1))",
+                                        version++)),
+                "named arguments and grouped slot creation are distinct");
+    }
+
+    @Test
+    void bug033PreservesNamedArgumentCommentsAndCanonicalSemantics()
+            throws Exception {
+        String[] samples = {
+            "f(a /* before */: 1)",
+            "f(a: /* after */ 1)",
+            "f(a /* before */: /* after */ 1)",
+            "f(a: // after\n 1)",
+            "f(a:\n// own line\n1)",
+            "f(a:\n\n// separated\n\n1)",
+            "f(a /* outer */: g(b /* inner */: 2))",
+            "super.move(a /* before */: /* after */ 1)",
+            "[a /* before */: /* after */ 1]",
+            "f(a: /* before nested */ [b: 2])"
+        };
+
+        long version = 3400L;
+
+        for (String source : samples) {
+            String formatted = formatOnce(source, version++);
+
+            assertEquals(
+                    canonicalOf(source, version++),
+                    canonicalOf(formatted, version++),
+                    "named argument semantics changed: " + source);
+
+            assertEquals(
+                    commentCount(source),
+                    commentCount(formatted),
+                    "named argument comments changed: " + source);
+
+            assertEquals(
+                    formatted,
+                    formatOnce(formatted, version++),
+                    "named argument formatting is not idempotent: "
+                            + source);
+        }
+    }
+
+    @Test
+    void bug033NamedArgumentSurfaceMatrixPreservesCanonicalSemantics()
+            throws Exception {
+        String[] samples = {
+            "f(café:1, π:2, 日本語:3)",
+            "receiver.send(name:1)",
+            "super.move(café:2)",
+            "f(1, named:2, ...rest, other:3)",
+            "f((name:1))",
+            "f(object.name:1)",
+            "f(name:1, (other:2))",
+            "[name:1]",
+            "[(name:1)]",
+            "Array: (name) => name\nvalue: [name:1]",
+            "Array: (name) => name\nvalue: Array(name:1)",
+            "f(outer:g(inner:1), last:2)",
+            "f(name:1) { body() }"
+        };
+
+        long version = 3500L;
+
+        for (String source : samples) {
+            String formatted = formatOnce(source, version++);
+
+            assertEquals(
+                    canonicalOf(source, version++),
+                    canonicalOf(formatted, version++),
+                    "Canonical semantics changed: " + source);
+
+            assertEquals(
+                    formatted,
+                    formatOnce(formatted, version++),
+                    "Formatting is not idempotent: " + source);
+        }
+    }
+
+    @Test
     void formatsBasicStructuralPolicyInBundledProtos()
             throws Exception {
         String source =

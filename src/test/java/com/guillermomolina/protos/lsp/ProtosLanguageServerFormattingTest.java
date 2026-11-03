@@ -273,6 +273,60 @@ class ProtosLanguageServerFormattingTest {
     }
 
     @Test
+    void bug033RealFormatterRetainsNamedArgumentsAcrossEdits()
+            throws Exception {
+        String source = "value:f(third:3,first:1,second:2)";
+        String expected =
+                "value: f(third: 3, first: 1, second: 2)\n";
+
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {});
+
+        server.textDocuments().didOpen(open(URI, 1, source));
+
+        List<? extends TextEdit> first =
+                format(server, URI, options(4, true));
+
+        assertEquals(1, first.size());
+        assertEquals(expected, first.get(0).getNewText());
+
+        server.textDocuments().didChange(
+                change(URI, 2, first.get(0).getNewText()));
+
+        assertEquals(
+                List.of(),
+                format(server, URI, options(8, false)));
+
+        server.textDocuments().didChange(
+                change(
+                        URI,
+                        3,
+                        "value:f(first:1,second:2,third:3)"));
+
+        List<? extends TextEdit> second =
+                format(server, URI, options(8, false));
+
+        assertEquals(1, second.size());
+        assertEquals(
+                "value: f(first: 1, second: 2, third: 3)\n",
+                second.get(0).getNewText());
+
+        server.textDocuments().didChange(
+                change(URI, 4, second.get(0).getNewText()));
+
+        assertEquals(
+                List.of(),
+                format(server, URI, options(4, true)));
+
+        server.textDocuments().didChange(
+                change(URI, 5, "f(a:1,a:2)"));
+
+        assertEquals(
+                List.of(),
+                format(server, URI, options(4, true)));
+    }
+
+    @Test
     void bug032RealFormatterPreservesCaretOperandCommentInLsp() {
         String source =
                 "f:()=>{\n"
