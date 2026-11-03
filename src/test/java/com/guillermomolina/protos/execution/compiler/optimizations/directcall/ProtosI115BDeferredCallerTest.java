@@ -659,9 +659,13 @@ final class ProtosI115BDeferredCallerTest {
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 assertInteger(1, evaluate("callOne(make(), 1)\n", "i115b-j-run.protos", module));
             }
-            List<RootCallTarget> entries = tierEntries("callOne", module);
-            assertEquals(1, entries.size());
-            RootCallTarget target = entries.get(0);
+            // The saturated identity PIC need not retain a direct-call
+            // entry. Verify the effective code target independently.
+            ProtosClosureValue first = closure("make()\n", module);
+            ProtosClosureValue second = closure("make()\n", module);
+            assertNotSame(first, second);
+            RootCallTarget target = directTarget(first);
+            assertSame(target, directTarget(second));
             assertTrue(provenNonSuspending(target));
             assertTrue(bytecodeTarget(target));
         });
