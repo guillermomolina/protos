@@ -210,6 +210,34 @@ class ProtosLanguageServerIntegratedEditorTest {
         assertEquals(1, connection.signatureHelp(uri, 1, 2, null).getActiveParameter());
         assertNull(connection.signatureHelp(uri, 0, 16, null));
         assertNull(connection.signatureHelp(uri, 99, 0, null));
+
+        // D237: named arguments associate by label; positionals ignore named items.
+        String reordered = "((first, second, third) => first)(third: 3, 1, 2)";
+        connection.change(uri, 7, reordered);
+        assertEquals(2, connection.signatureHelp(uri, 0, reordered.indexOf("3,"), null)
+                .getActiveParameter());
+        assertEquals(0, connection.signatureHelp(uri, 0, reordered.indexOf("1,"), ",")
+                .getActiveParameter());
+        assertEquals(1, connection.signatureHelp(uri, 0, reordered.indexOf("2)"), ",")
+                .getActiveParameter());
+
+        String collision = "((first, second) => first)(1, first: 2)";
+        connection.change(uri, 8, collision);
+        assertNull(connection.signatureHelp(uri, 0, collision.indexOf("2)"), null));
+
+        String updated = "((first, second) => first)(second: 2, 1)";
+        connection.change(uri, 9, updated);
+        assertEquals(1, connection.signatureHelp(uri, 0, updated.indexOf("2,"), null)
+                .getActiveParameter());
+        assertEquals(0, connection.signatureHelp(uri, 0, updated.indexOf("1)"), ",")
+                .getActiveParameter());
+
+        // U+1F600 occupies two UTF-16 code units at characters 35 and 36.
+        connection.change(uri, 10,
+                "((first, second, third) => first)(\"😀\",\r\n  third: 3,\r\n  2\r\n)");
+        assertEquals(2, connection.signatureHelp(uri, 1, 9, null).getActiveParameter());
+        assertEquals(1, connection.signatureHelp(uri, 2, 2, null).getActiveParameter());
+        assertNull(connection.signatureHelp(uri, 0, 36, null));
     }
 
     @Test

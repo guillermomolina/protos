@@ -236,6 +236,138 @@ class ProtosStaticSignatureHelpTest {
         assertFalse(session.isCurrent("workspace", result));
     }
 
+    @Test
+    void namedArgumentsAssociateByLabelAndPositionalsIgnoreNamedItems() {
+        String call = "((first, second, third) => first)";
+        assertActive(call + "(third: |3, 1, 2)", 0, OptionalInt.of(2));
+        assertActive(call + "(third: 3, |1, 2)", 1, OptionalInt.of(0));
+        assertActive(call + "(third: 3, 1, 2|)", 2, OptionalInt.of(1));
+
+        assertActive(call + "(1, |third: 3, 2)", 1, OptionalInt.of(2));
+        assertActive(call + "(1, third: 3, |2)", 2, OptionalInt.of(1));
+        assertActive(call + "(1, 2, third: |3)", 2, OptionalInt.of(2));
+
+        assertActive(call + "(third: 3, second: |2, first: 1)", 1, OptionalInt.of(1));
+        assertActive(call + "(third: 3, second: 2, first: |1)", 2, OptionalInt.of(0));
+        assertActive(call + "(|third: 3, second: 2, first: 1)", 0, OptionalInt.of(2));
+    }
+
+    @Test
+    void namedArgumentsHonorDefaultsNullAndRest() {
+        assertActive("((a, b: 2, c: 3) => a)(1, c: |5)", 1, OptionalInt.of(2));
+        assertActive("((a, b: 2, c: 3) => a)(c: 5, |1)", 1, OptionalInt.of(0));
+        assertActive("((a, b: 2, c: 3) => a)(c: 5, 1, |2)", 2, OptionalInt.of(1));
+        assertActive("((a, b) => a)(null, |2)", 1, OptionalInt.of(1));
+        assertActive("((a, b) => a)(b: null, |1)", 1, OptionalInt.of(0));
+        assertActive("((a, ...rest) => a)(1, 2, |3)", 2, OptionalInt.of(1));
+        // Positional ordinal 0 is a, which is also named: a collision, not rest.
+        assertActive("((a, ...rest) => a)(a: 1, |2)", 1, OptionalInt.empty());
+        assertActive("((a, b, ...rest) => a)(b: 1, 2, |3)", 2, OptionalInt.empty());
+        assertActive("((first, ...rest) => first)(1, ...values, 2|)", 2, OptionalInt.of(1));
+        assertActive("((first, ...rest) => first)(1, ...values, |)", 2, OptionalInt.of(1));
+    }
+
+    @Test
+    void invalidOrUncertainAssociationsHaveNoActiveParameter() {
+        // Unknown label and a label naming the rest formal.
+        assertActive("((a, b) => a)(c: |1)", 0, OptionalInt.empty());
+        assertActive("((a, ...rest) => a)(1, rest: |2)", 1, OptionalInt.empty());
+        // Named/positional collisions, either order, including a trailing Closure.
+        assertActive("((a, b) => a)(a: 1, |2)", 1, OptionalInt.empty());
+        assertActive("((a, b) => a)(a: |1, 2)", 0, OptionalInt.empty());
+        assertActive("((a, b) => a)(|1, a: 2)", 0, OptionalInt.empty());
+        assertActive("((a, b) => a)(1, a: |2)", 1, OptionalInt.empty());
+        assertActive("((a, b) => a)(1, b: |2) { 3 }", 1, OptionalInt.empty());
+        assertActive("((a, b) => a)(b: |2) { 1 }", 0, OptionalInt.of(1));
+        // Spreads that could fill the named formal or shift a positional.
+        assertActive("((a, b) => a)(...values, b: |2)", 1, OptionalInt.empty());
+        assertActive("((a, b) => a)(b: |2, ...values)", 0, OptionalInt.empty());
+        assertActive("((a, b, c) => a)(b: |1, ...[2])", 0, OptionalInt.empty());
+        assertActive("((a, b) => a)(...[1], |2)", 1, OptionalInt.empty());
+        assertActive("((a, b, c) => a)(c: 3, ...values, |2)", 2, OptionalInt.empty());
+        assertActive("((a, b) => a)(c: 3, ...val|ues)", 1, OptionalInt.empty());
+        // Positional excess without rest.
+        assertActive("((a, b) => a)(b: 2, 1, |3)", 2, OptionalInt.empty());
+        // A fixed positional before a later spread stays proven.
+        assertActive("((a, b, c) => a)(|1, ...values)", 0, OptionalInt.of(0));
+        assertActive("((a, b, c) => a)(1, |2, ...[3])", 1, OptionalInt.of(1));
+        // Duplicate explicit labels remain a parse failure.
+        assertTrue(help("((a, b) => a)(a: 1, a: |2)").isEmpty());
+    }
+
+    @Test
+    void groupedSlotCreationAndNestedNamedValuesStayDistinct() {
+        assertActive("((created, b) => created)((created: 1), |2)", 1, OptionalInt.of(1));
+        assertActive("((created, b) => created)((created: 1)|, 2)", 0, OptionalInt.of(0));
+        assertActive("((a, b) => a)(b: (a: 1), |2)", 1, OptionalInt.of(0));
+
+        String nested = "((a, b) => a)(b: ((x, y) => x)(y: |1))";
+        ProtosStaticSignatureHelpResult inner = help(nested).orElseThrow();
+        assertEquals("(x, y)", inner.label());
+        assertEquals(0, inner.activeArgument());
+        assertEquals(OptionalInt.of(1), inner.activeParameter());
+
+        assertTrue(help("((a, b) => a)(b: g(x: |1))").isEmpty());
+        assertTrue(help("f: (a, b) => a\nf(b: |1)").isEmpty());
+        assertTrue(help("object.run(b: |1)").isEmpty());
+        assertTrue(help("(factory())(b: |1)").isEmpty());
+        assertTrue(help("super.run(b: |1)").isEmpty());
+    }
+
+    @Test
+    void incompleteNamedValuesAreRecoveredOnlyLocally() {
+        assertActive("((a, b) => a)(b: |)", 0, OptionalInt.of(1));
+        assertActive("((a, b) => a)(b: |", 0, OptionalInt.of(1));
+        assertActive("((a, b) => a)(b: |, a: 1)", 0, OptionalInt.of(1));
+        assertActive("((a, b) => a)(1, b: |", 1, OptionalInt.of(1));
+        assertActive("((a, b) => a)(b: |\n)", 0, OptionalInt.of(1));
+        assertActive("((a, b) => a)(b: |\n\n// note\n", 0, OptionalInt.of(1));
+        assertActive("((a, b) => a)(\n  b: |, a: 1\n)", 0, OptionalInt.of(1));
+        assertActive("((a, b) => a)(c: |)", 0, OptionalInt.empty());
+
+        assertTrue(help("((a, b) => a)(b: |)\nbroken: (").isEmpty());
+        assertTrue(help("((a, b) => a)(1 + b: |)").isEmpty());
+        assertTrue(help("((a, b) => a)(x.b: |)").isEmpty());
+        assertTrue(help("((a, b) => a)(: |)").isEmpty());
+        assertTrue(help("((a, b) => a)(b: |\nnext: 2").isEmpty());
+    }
+
+    @Test
+    void namedArgumentsKeepUtf16CrlfAndSnapshotSemantics() {
+        String call = "((first, second, third) => first)";
+        assertActive(call + "(\r\n  third: 3,\r\n  |1,\r\n  2\r\n)", 1, OptionalInt.of(0));
+        assertActive(call + "(\"\uD83D\uDE00\", third: |3, 2)", 1, OptionalInt.of(2));
+        assertActive(call + "(third: \"\uD83D\uDE00\", 1, |2)", 2, OptionalInt.of(1));
+
+        String source = call + "(third: \"\uD83D\uDE00\", 1)";
+        ProtosDocumentSnapshot snapshot = snapshot(source);
+        assertTrue(core.signatureHelp(snapshot, source.indexOf('\uD83D') + 1).isEmpty());
+        ProtosStaticSignatureHelpResult afterEmoji =
+                core.signatureHelp(snapshot, source.indexOf(", 1") + 2).orElseThrow();
+        assertEquals(OptionalInt.of(0), afterEmoji.activeParameter());
+
+        ProtosStaticAnalysisSession session = new ProtosStaticAnalysisSession();
+        session.openWorkspace("workspace");
+        String first = call + "(third: 3, ";
+        session.putDocument("workspace", new ProtosDocumentSnapshot("doc", 1, first));
+        ProtosStaticSignatureHelpResult before =
+                session.signatureHelpCurrent("workspace", "doc", first.length()).orElseThrow();
+        assertEquals(1, before.activeArgument());
+        assertEquals(OptionalInt.of(0), before.activeParameter());
+
+        String second = call + "(1, third: 3, ";
+        session.putDocument("workspace", new ProtosDocumentSnapshot("doc", 2, second));
+        assertFalse(session.isCurrent("workspace", before));
+        ProtosStaticSignatureHelpResult after =
+                session.signatureHelpCurrent("workspace", "doc", second.length()).orElseThrow();
+        assertEquals(2, after.activeArgument());
+        assertEquals(OptionalInt.of(1), after.activeParameter());
+
+        session.closeDocument("workspace", "doc");
+        assertTrue(session.signatureHelpCurrent("workspace", "doc", second.length()).isEmpty());
+        assertFalse(session.isCurrent("workspace", after));
+    }
+
     private void assertActive(String marked, int activeArgument, OptionalInt activeParameter) {
         ProtosStaticSignatureHelpResult result = help(marked).orElseThrow(
                 () -> new AssertionError("expected a signature for: " + marked));

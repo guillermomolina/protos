@@ -145,6 +145,30 @@ class ProtosLanguageServerDefinitionTest {
         assertTrue(definitions(server, uri, 0, 0).isEmpty());
     }
 
+    @Test
+    void namedArgumentLabelIsNotALexicalRead() throws Exception {
+        ProjectFixture project = project("named-label");
+        ProtosLanguageServer server = initialized(
+                project,
+                candidate -> candidate.equals(project.root())
+                        ? Optional.of(project.binding())
+                        : Optional.empty());
+
+        // The label "value" at characters 21-25 of line 1 spells the
+        // parameter "value"; the argument's value expression at 28 reads it.
+        String source = "f: (value) => {\n  ((other) => other)(value: value)\n}\n";
+        String uri = project.source().toUri().toString();
+        server.textDocuments().didOpen(open(uri, 1, source));
+
+        assertTrue(definitions(server, uri, 1, 21).isEmpty());
+        assertTrue(definitions(server, uri, 1, 23).isEmpty());
+
+        List<Location> locations = definitions(server, uri, 1, 29);
+        assertEquals(1, locations.size());
+        assertEquals(new Position(0, 4), locations.get(0).getRange().getStart());
+        assertEquals(new Position(0, 9), locations.get(0).getRange().getEnd());
+    }
+
     private ProjectFixture project(String name) throws Exception {
         Path projectRoot = Files.createDirectory(temporary.resolve(name)).toRealPath();
         Path source = projectRoot.resolve("Main.protos");

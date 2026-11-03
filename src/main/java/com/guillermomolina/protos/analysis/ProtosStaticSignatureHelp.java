@@ -61,9 +61,9 @@ import java.util.OptionalInt;
  * one local transient repair is attempted, never retained or published:</p>
  *
  * <ul>
- *   <li>an empty argument slot (after {@code (} or {@code ,}, before
- *       {@code ,} or {@code )}) receives one synthetic identifier absent from
- *       the snapshot; or</li>
+ *   <li>an empty argument slot (after {@code (} or {@code ,}, or after the
+ *       {@code label:} of a named argument, before {@code ,} or {@code )})
+ *       receives one synthetic identifier absent from the snapshot; or</li>
  *   <li>when only logical newlines and trivia follow the cursor, the slot is
  *       filled if empty and every still-open delimiter is closed at the
  *       cursor.</li>
@@ -72,7 +72,8 @@ import java.util.OptionalInt;
  * <p>The repaired text must lex to exactly the original tokens plus the
  * inserted ones, must parse with the real parser, and must produce the same
  * call, with argument-list commas lying exactly between its parsed
- * arguments and the synthetic identifier as the active argument. Any other
+ * arguments and the synthetic identifier as the active argument, carrying
+ * exactly the expected named label or none. Any other
  * failure, including an unrelated error elsewhere, yields nothing.</p>
  */
 final class ProtosStaticSignatureHelp {
@@ -138,12 +139,13 @@ final class ProtosStaticSignatureHelp {
 
         List<TokenOccurrence> parsedTokens = tokens;
         String synthetic = null;
+        Repair repair = null;
         SurfaceSequence program = parse(source);
         if (program == null) {
             if (straddled) {
                 return Optional.empty();
             }
-            Repair repair = repair(source, tokens, before, open);
+            repair = repair(source, tokens, before, open);
             if (repair == null) {
                 return Optional.empty();
             }
@@ -189,6 +191,7 @@ final class ProtosStaticSignatureHelp {
         if (synthetic != null) {
             SurfaceArgument filled = listArguments.get(activeArgument);
             if (filled.spread()
+                    || !filled.name().equals(Optional.ofNullable(repair.label()))
                     || !(filled.expression() instanceof SurfaceName name)
                     || !name.name().equals(synthetic)
                     || !name.span().equals(new SourceSpan(
@@ -214,40 +217,120 @@ final class ProtosStaticSignatureHelp {
                 tokens.get(argumentListOpen).span().startOffset(),
                 parameters,
                 activeArgument,
-                activeParameter(closure.parameters(), listArguments, activeArgument)));
+                activeParameter(
+                        closure.parameters(),
+                        call.arguments(),
+                        listArguments.size(),
+                        activeArgument)));
     }
 
     /**
-     * Positional binding per CALLABLES.md without runtime information: a
-     * spread at or before the active argument contributes an unknown number
-     * of values, and an excess argument without a rest parameter binds to no
-     * parameter. A trailing Closure is appended after every list argument, so
-     * it never shifts the binding of a list argument.
+     * D237 MIX-C association per CALLABLES.md from source structure alone.
+     *
+     * <p>{@code arguments} is the complete parsed argument sequence: the
+     * parenthesized arguments followed by an attached trailing Closure, which
+     * is one final ordinary positional argument and never shifts the source
+     * index of a list argument.</p>
+     *
+     * <ul>
+     *   <li>A named argument selects the non-rest formal with its literal
+     *       label, only when no positional value can fill that formal: an
+     *       ordinary positional item at or before its ordinal is a proven
+     *       collision, and a spread anywhere in the packet is a possible one.
+     *       An unknown label or a rest-formal label selects nothing.</li>
+     *   <li>An ordinary positional argument's ordinal counts only the
+     *       positional values before it; named items contribute none and a
+     *       spread contributes an unknown nonnegative number. Defaults never
+     *       count. After a spread, a formal is selected only when every spread
+     *       length selects it: the minimum ordinal already reaches a trailing
+     *       rest parameter. A formal also named by a named argument is a
+     *       collision and selects nothing.</li>
+     *   <li>A spread argument itself has no unique formal.</li>
+     * </ul>
      */
     private static OptionalInt activeParameter(
             List<SurfaceParameter> parameters,
-            List<SurfaceArgument> listArguments,
+            List<SurfaceArgument> arguments,
+            int listArgumentCount,
             int activeArgument) {
-        for (int index = 0; index <= activeArgument && index < listArguments.size(); index++) {
-            if (listArguments.get(index).spread()) {
+        if (listArgumentCount == 0) {
+            // An empty argument list: the cursor sits at the first position.
+            return parameters.isEmpty() ? OptionalInt.empty() : OptionalInt.of(0);
+        }
+        int fixed = parameters.size();
+        boolean hasRest = fixed > 0 && parameters.get(fixed - 1).rest();
+        if (hasRest) {
+            fixed--;
+        }
+        SurfaceArgument active = arguments.get(activeArgument);
+        if (active.spread()) {
+            return OptionalInt.empty();
+        }
+
+        if (active.name().isPresent()) {
+            int formal = fixedFormal(parameters, fixed, active.name().get());
+            if (formal < 0) {
+                return OptionalInt.empty();
+            }
+            int positional = 0;
+            for (SurfaceArgument argument : arguments) {
+                if (argument.spread()) {
+                    return OptionalInt.empty();
+                }
+                if (argument.name().isEmpty()) {
+                    positional++;
+                }
+            }
+            return positional > formal ? OptionalInt.empty() : OptionalInt.of(formal);
+        }
+
+        int ordinal = 0;
+        boolean afterSpread = false;
+        for (int index = 0; index < activeArgument; index++) {
+            SurfaceArgument argument = arguments.get(index);
+            if (argument.spread()) {
+                afterSpread = true;
+            } else if (argument.name().isEmpty()) {
+                ordinal++;
+            }
+        }
+        if (ordinal >= fixed) {
+            return hasRest ? OptionalInt.of(fixed) : OptionalInt.empty();
+        }
+        if (afterSpread) {
+            return OptionalInt.empty();
+        }
+        String formalName = parameters.get(ordinal).name();
+        for (SurfaceArgument argument : arguments) {
+            if (argument.name().isPresent() && argument.name().get().equals(formalName)) {
                 return OptionalInt.empty();
             }
         }
-        if (activeArgument < parameters.size()) {
-            return OptionalInt.of(activeArgument);
+        return OptionalInt.of(ordinal);
+    }
+
+    /** The index of the non-rest formal declared with {@code label}, or -1. */
+    private static int fixedFormal(List<SurfaceParameter> parameters, int fixed, String label) {
+        for (int index = 0; index < fixed; index++) {
+            if (parameters.get(index).name().equals(label)) {
+                return index;
+            }
         }
-        if (!parameters.isEmpty() && parameters.get(parameters.size() - 1).rest()) {
-            return OptionalInt.of(parameters.size() - 1);
-        }
-        return OptionalInt.empty();
+        return -1;
     }
 
     /**
      * One transient insertion at the cursor; {@code synthetic} is the
      * identifier filling the active argument slot, or {@code null} when the
-     * slot already holds an argument.
+     * slot already holds an argument. {@code label} is the named-argument
+     * label whose empty value the synthetic identifier fills, or
+     * {@code null} for an ordinary positional slot.
      */
-    private record Repair(String text, String synthetic, List<TokenType> insertedTypes) {
+    private record Repair(
+            String text,
+            String synthetic,
+            String label,
+            List<TokenType> insertedTypes) {
     }
 
     private static Repair repair(
@@ -257,12 +340,16 @@ final class ProtosStaticSignatureHelp {
             Deque<Integer> open) {
         TokenType previous = significantType(tokens, before - 1, -1);
         TokenType next = significantType(tokens, before, 1);
-        boolean afterSeparator = previous == TokenType.COMMA;
+        String label = previous == TokenType.COLON ? namedValueLabel(tokens, before) : null;
+        if (previous == TokenType.COLON && label == null) {
+            return null;
+        }
+        boolean afterSeparator = previous == TokenType.COMMA || label != null;
         String synthetic = syntheticName(source);
 
         if (next == TokenType.RPAREN || next == TokenType.COMMA) {
             if (afterSeparator || (previous == TokenType.LPAREN && next == TokenType.COMMA)) {
-                return new Repair(synthetic, synthetic, List.of(TokenType.IDENTIFIER));
+                return new Repair(synthetic, synthetic, label, List.of(TokenType.IDENTIFIER));
             }
             return null;
         }
@@ -287,7 +374,33 @@ final class ProtosStaticSignatureHelp {
             });
             inserted.add(closer);
         }
-        return new Repair(text.toString(), filled, inserted);
+        return new Repair(text.toString(), filled, label, inserted);
+    }
+
+    /**
+     * The label of a named argument whose value is missing at the cursor:
+     * the significant tokens before the cursor are an argument-slot start
+     * ({@code (} or {@code ,}), one identifier, and {@code :}. The real
+     * parser must still confirm the repaired argument as that named
+     * argument; otherwise nothing is published.
+     */
+    private static String namedValueLabel(List<TokenOccurrence> tokens, int before) {
+        int colon = significantIndex(tokens, before - 1, -1);
+        if (colon < 1 || tokens.get(colon).token().type() != TokenType.COLON) {
+            return null;
+        }
+        TokenOccurrence label = tokens.get(colon - 1);
+        if (label.token().type() != TokenType.IDENTIFIER) {
+            return null;
+        }
+        int separator = significantIndex(tokens, colon - 2, -1);
+        if (separator < 0) {
+            return null;
+        }
+        TokenType type = tokens.get(separator).token().type();
+        return type == TokenType.LPAREN || type == TokenType.COMMA
+                ? label.token().lexeme()
+                : null;
     }
 
     /**
@@ -432,13 +545,17 @@ final class ProtosStaticSignatureHelp {
     }
 
     private static TokenType significantType(List<TokenOccurrence> tokens, int start, int step) {
+        int index = significantIndex(tokens, start, step);
+        return index < 0 ? null : tokens.get(index).token().type();
+    }
+
+    private static int significantIndex(List<TokenOccurrence> tokens, int start, int step) {
         for (int index = start; index >= 0 && index < tokens.size(); index += step) {
-            TokenType type = tokens.get(index).token().type();
-            if (type != TokenType.NEWLINE) {
-                return type;
+            if (tokens.get(index).token().type() != TokenType.NEWLINE) {
+                return index;
             }
         }
-        return null;
+        return -1;
     }
 
     private static boolean isOpener(TokenType type) {

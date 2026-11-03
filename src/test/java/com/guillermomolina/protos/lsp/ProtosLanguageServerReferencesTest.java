@@ -176,6 +176,42 @@ class ProtosLanguageServerReferencesTest {
         assertTrue(references(server, uri, 2, 2, false).isEmpty());
     }
 
+    @Test
+    void namedArgumentLabelContributesNoLexicalReference() throws Exception {
+        ProjectFixture project = project("named-label");
+        ProtosLanguageServer server = initialized(
+                project,
+                candidate -> candidate.equals(project.root())
+                        ? Optional.of(project.binding())
+                        : Optional.empty());
+
+        // Line 1: the label "value" at 21, its value-expression read at 28.
+        // Line 4: a grouped positional slot creation reads "value" at 31.
+        String source =
+                "f: (value) => {\n"
+                        + "  ((other) => other)(value: value)\n"
+                        + "}\n"
+                        + "g: (value) => {\n"
+                        + "  ((other) => other)((created: value))\n"
+                        + "}\n";
+        String uri = project.source().toUri().toString();
+        server.textDocuments().didOpen(open(uri, 1, source));
+
+        assertTrue(references(server, uri, 1, 21, true).isEmpty());
+        assertTrue(references(server, uri, 1, 23, false).isEmpty());
+
+        List<Location> fromRead = references(server, uri, 1, 29, true);
+        assertEquals(2, fromRead.size());
+        assertEquals(new Position(0, 4), fromRead.get(0).getRange().getStart());
+        assertEquals(new Position(1, 28), fromRead.get(1).getRange().getStart());
+        assertEquals(new Position(1, 33), fromRead.get(1).getRange().getEnd());
+
+        List<Location> grouped = references(server, uri, 4, 32, true);
+        assertEquals(2, grouped.size());
+        assertEquals(new Position(3, 4), grouped.get(0).getRange().getStart());
+        assertEquals(new Position(4, 31), grouped.get(1).getRange().getStart());
+    }
+
     private ProjectFixture project(String name) throws Exception {
         Path projectRoot = Files.createDirectory(temporary.resolve(name)).toRealPath();
         Path source = projectRoot.resolve("Main.protos");

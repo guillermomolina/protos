@@ -280,6 +280,42 @@ class ProtosLanguageServerDiagnosticsTest {
                 new Range(new Position(2, 4), new Position(2, 5)));
     }
 
+    @Test
+    void namedArgumentsProduceOnlyParserOwnedDiagnostics() {
+        List<PublishDiagnosticsParams> published = new ArrayList<>();
+        ProtosTextDocumentService documents = connectedDocuments(published);
+        String uri = "file:///workspace/named.protos";
+
+        documents.didOpen(open(uri, 1, "((first, second, third) => first)(third: 3, 1, 2)"));
+        documents.didChange(change(uri, 2, "((first, second) => first)(first: 1, first: 2)"));
+        // Runtime-only association failures are not static diagnostics.
+        documents.didChange(change(uri, 3, "((first, second) => first)(1, first: 2)"));
+        documents.didChange(change(uri, 4, "((first, second) => first)(other: 1)"));
+        documents.didChange(change(uri, 5, "((first, second) => first)(first: 1, first: 2)"));
+        documents.didChange(change(uri, 6, "((first, second) => first)(second: 2, 1)"));
+
+        assertEquals(6, published.size());
+        assertEquals(Integer.valueOf(1), published.get(0).getVersion());
+        assertTrue(published.get(0).getDiagnostics().isEmpty());
+
+        assertEquals(Integer.valueOf(2), published.get(1).getVersion());
+        assertEquals(1, published.get(1).getDiagnostics().size());
+        Diagnostic duplicate = published.get(1).getDiagnostics().get(0);
+        assertEquals(DiagnosticSeverity.Error, duplicate.getSeverity());
+        assertTrue(duplicate.getMessage().getLeft().contains("Duplicate named argument"));
+        assertEquals(new Position(0, 37), duplicate.getRange().getStart());
+
+        assertEquals(Integer.valueOf(3), published.get(2).getVersion());
+        assertTrue(published.get(2).getDiagnostics().isEmpty());
+        assertEquals(Integer.valueOf(4), published.get(3).getVersion());
+        assertTrue(published.get(3).getDiagnostics().isEmpty());
+
+        assertEquals(Integer.valueOf(5), published.get(4).getVersion());
+        assertEquals(1, published.get(4).getDiagnostics().size());
+        assertEquals(Integer.valueOf(6), published.get(5).getVersion());
+        assertTrue(published.get(5).getDiagnostics().isEmpty());
+    }
+
     private static ProtosTextDocumentService connectedDocuments(
             List<PublishDiagnosticsParams> published) {
         ProtosLanguageServer server = new ProtosLanguageServer(code -> {});

@@ -280,6 +280,98 @@ class ProtosLanguageServerSignatureHelpTest {
         assertEquals("first", items.get(0).getLabel());
     }
 
+    @Test
+    void namedArgumentsPublishTheDeclaredFormalIndex() throws Exception {
+        ProjectFixture project = project("named");
+        ProtosLanguageServer server = initialized(project, canonical(project));
+        String uri = project.source().toUri().toString();
+
+        String reordered = "((first, second, third) => first)(third: 3, 1, 2)";
+        server.textDocuments().didOpen(open(uri, 1, reordered));
+        SignatureHelp named = signatureHelp(server, uri, 0, reordered.indexOf("3,"));
+        assertEquals(2, named.getActiveParameter());
+        assertEquals("(first, second, third)", named.getSignatures().get(0).getLabel());
+        assertEquals(0, signatureHelp(server, uri, 0, reordered.indexOf("1,")).getActiveParameter());
+        assertEquals(1, signatureHelp(server, uri, 0, reordered.indexOf("2)")).getActiveParameter());
+
+        String shaped = "((first, second: 2, third, ...rest) => first)(third: 3, 1, 4, 5, 6)";
+        server.textDocuments().didChange(change(uri, 2, shaped));
+        SignatureHelp mixed = signatureHelp(server, uri, 0, shaped.indexOf("1,"));
+        assertEquals(0, mixed.getActiveParameter());
+        assertEquals(
+                "(first, second: 2, third, ...rest)",
+                mixed.getSignatures().get(0).getLabel());
+        assertEquals(
+                List.of("first", "second: 2", "third", "...rest"),
+                mixed.getSignatures().get(0).getParameters().stream()
+                        .map(ParameterInformation::getLabel)
+                        .map(label -> label.getLeft())
+                        .toList());
+        // Four positional values also fill third: the named third collides.
+        assertNull(signatureHelp(server, uri, 0, shaped.indexOf("3,")));
+        assertEquals(1, signatureHelp(server, uri, 0, shaped.indexOf("4,")).getActiveParameter());
+        // Positional ordinal 2 is third, which is also named: a collision.
+        assertNull(signatureHelp(server, uri, 0, shaped.indexOf("5,")));
+        // Positional ordinal 3 is excess and belongs to the rest parameter.
+        assertEquals(3, signatureHelp(server, uri, 0, shaped.indexOf("6)")).getActiveParameter());
+
+        String defaulted = "((first, second: 2, third: 3) => first)(1, third: 4)";
+        server.textDocuments().didChange(change(uri, 3, defaulted));
+        assertEquals(2, signatureHelp(server, uri, 0, defaulted.indexOf("4)")).getActiveParameter());
+
+        String rest = "((first, ...rest) => first)(1, ...values, 2)";
+        server.textDocuments().didChange(change(uri, 4, rest));
+        assertEquals(1, signatureHelp(server, uri, 0, rest.indexOf("2)")).getActiveParameter());
+
+        String incomplete = "((first, second) => first)(second: ";
+        server.textDocuments().didChange(change(uri, 5, incomplete));
+        assertEquals(1, signatureHelp(server, uri, 0, incomplete.length()).getActiveParameter());
+
+        // A changed unsaved document replaces the previous association.
+        String changed = "((first, second) => first)(first: ";
+        server.textDocuments().didChange(change(uri, 6, changed));
+        assertEquals(0, signatureHelp(server, uri, 0, changed.length()).getActiveParameter());
+    }
+
+    @Test
+    void unprovableNamedAssociationsPublishNothing() throws Exception {
+        ProjectFixture project = project("named-unprovable");
+        ProtosLanguageServer server = initialized(project, canonical(project));
+        String uri = project.source().toUri().toString();
+
+        String unknown = "((first, second) => first)(other: 1)";
+        server.textDocuments().didOpen(open(uri, 1, unknown));
+        assertNull(signatureHelp(server, uri, 0, unknown.indexOf("1)")));
+
+        String collision = "((first, second) => first)(1, first: 2)";
+        server.textDocuments().didChange(change(uri, 2, collision));
+        assertNull(signatureHelp(server, uri, 0, collision.indexOf("2)")));
+        assertNull(signatureHelp(server, uri, 0, collision.indexOf("1,")));
+
+        String restLabel = "((first, ...rest) => first)(1, rest: 2)";
+        server.textDocuments().didChange(change(uri, 3, restLabel));
+        assertNull(signatureHelp(server, uri, 0, restLabel.indexOf("2)")));
+
+        String spread = "((first, second) => first)(...values, second: 2)";
+        server.textDocuments().didChange(change(uri, 4, spread));
+        assertNull(signatureHelp(server, uri, 0, spread.indexOf("2)")));
+    }
+
+    @Test
+    void namedArgumentsMapUtf16NonBmpAndCrlfPositions() throws Exception {
+        ProjectFixture project = project("named-utf16");
+        ProtosLanguageServer server = initialized(project, canonical(project));
+        String uri = project.source().toUri().toString();
+
+        // U+1F600 occupies two UTF-16 code units at characters 35 and 36 of line 0.
+        String source = "((first, second, third) => first)(\"\uD83D\uDE00\",\r\n  third: 3,\r\n  2\r\n)";
+        server.textDocuments().didOpen(open(uri, 1, source));
+
+        assertEquals(2, signatureHelp(server, uri, 1, 9).getActiveParameter());
+        assertEquals(1, signatureHelp(server, uri, 2, 2).getActiveParameter());
+        assertNull(signatureHelp(server, uri, 0, 36));
+    }
+
     private ProjectFixture project(String name) throws Exception {
         Path projectRoot = Files.createDirectory(temporary.resolve(name)).toRealPath();
         Path source = projectRoot.resolve("Main.protos");

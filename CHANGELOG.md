@@ -7,6 +7,14 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.442-SNAPSHOT
+
+- `BUG034` (#1042): fix LM010-C Signature Help associating D237 named and mixed arguments with formals by source ordinal.
+  - Associate a named argument with the declared non-rest formal of the same label; compute positional ordinals ignoring named items, with the attached trailing Closure as one final positional argument.
+  - Publish no active parameter for unknown or rest-formal labels, proven or spread-possible named/positional collisions, spread-dependent formals and positional excess without rest; select a trailing rest parameter when every spread length guarantees it.
+  - Extend the transient editor repair to an empty named value after `label:`, confirmed by the real parser.
+  - Add analyzer, LSP service, JSON-RPC transport, definition, references and diagnostics regressions covering reordered, defaulted, rest, collision, spread, incomplete, snapshot, CRLF and non-BMP cases.
+
 ## 0.3.441-SNAPSHOT
 
 - `BUG033` (#1041): fix TOOL010 silently discarding D237 named-argument labels when formatting source.

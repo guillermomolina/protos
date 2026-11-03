@@ -31,13 +31,22 @@ import java.util.OptionalInt;
  * before the cursor and are therefore exact coordinates of the snapshot
  * itself, even when the call was validated through a transient repair.</p>
  *
- * <p>{@code activeArgument} is the syntactic index of the argument containing
- * the cursor: the number of argument-list-level commas before it.
- * {@code activeParameter} is the parameter index that argument binds to, and
- * is present only when the positional binding is decidable without runtime
- * information: never at or after a spread, and never for an excess argument
- * of a Closure without a rest parameter. Parameters carry only shape facts
- * from the surface syntax; a default is source text, never a value.</p>
+ * <p>{@code activeArgument} is the zero-based syntactic position of the
+ * argument containing the cursor in the parenthesized argument list: the
+ * number of argument-list-level commas before it. {@code activeParameter} is
+ * the independently proved zero-based index of the declared formal parameter
+ * that argument associates with under D237; named arguments may make the two
+ * indices differ. A named argument selects the non-rest formal with its
+ * literal label. A positional argument ignores named items when computing its
+ * positional ordinal, and an attached trailing Closure counts as one final
+ * positional argument. {@code activeParameter} is absent whenever the
+ * correspondence is not demonstrable from source structure: for a spread
+ * argument, a formal that depends on an unknown spread length, a proven or
+ * possible named/positional collision, an unknown label or a label naming the
+ * rest formal, and positional excess without a rest parameter. A trailing
+ * rest parameter may be selected when every possible association selects it.
+ * Parameters carry only shape facts from the surface syntax; labels and
+ * defaults are source-text projections, never evaluated values.</p>
  */
 public record ProtosStaticSignatureHelpResult(
         ProtosDocumentSnapshot snapshot,
