@@ -1597,6 +1597,10 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
         ProtosBytecodeRootNode result = builder.endRoot();
         result.markSemanticActivationRoot();
+        if (activationDefinition != null) {
+            result.recordReturnHomeProvenUnobservable(
+                    !compilationFacts.mayObserveReturnHome(activationDefinition));
+        }
         /*
          * I115-H4-B EXPERIMENTAL: the focal run root and the H3 recursive
          * Integer roots run the GraalPy-style callee context.

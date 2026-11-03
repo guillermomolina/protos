@@ -8,6 +8,39 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.39-SNAPSHOT
+
+- **I115 — proof-driven null ReturnHome for direct Closure invocation (historical).**
+  - Introduce the compilation-final `returnHomeProvenUnobservable` fact on
+    `ProtosBytecodeRootNode`. The lowerer records the result of
+    `!compilationFacts.mayObserveReturnHome(activationDefinition)` for each
+    source-Closure activation root at construction, rather than inspecting
+    the Closure execution plan on each cached direct call.
+  - `ProtosFunctionCallDispatchers` passes a `null` ReturnHome in the B5
+    header only when it has a resolved callee root with the recorded
+    unobservability proof. Other calls continue to obtain the invocation's
+    normal semantic ReturnHome from the Closure. A fast no-home entry can
+    therefore avoid allocating the unobservable marker on initial entry.
+  - Teach `ProtosFrameArguments` to recognize a null ReturnHome in compact
+    and deferred B5 headers, and to materialize `ProtosReturnHome.unobservable()`
+    only if the slow semantic path actually requires a home object.
+  - **Historical semantic limitations:** `null` is an internal B5 carrier,
+    not a guest-facing value. The proof relies on the lowerer's analysis
+    of the Closure's lexical subtree, including defaults and nested Closures;
+    this historical replay does not demonstrate its completeness under
+    dynamic mutation, non-local return, or unusual control transfers.
+    D013 / `Object.call` still lets implicit source-function invocation
+    bypass instance-local `call` overrides. suspension, cancellation,
+    Task/C-prime ownership, D179 C0 lexical behavior, and ReturnHome
+    propagation after resumption require independent acceptance. Context-
+    owned BigInteger creation, D197-C numeric-prototype delegation, and
+    the long/Long-only Integer lane are separate concerns; no correctness,
+    performance or allocation benefit has been measured in this replay.
+    No build, tests, compiler graphs or benchmarks were run after bumping
+    the version.
+  - Original implementation: `339fd0102d12b419e3d5e97ab4e5ece881d91751`.
+    All four original production blobs are reproduced without modification.
+
 ## 0.4.38-SNAPSHOT
 
 - **I115 — secondary RootCallTarget PIC after unary Closure-identity saturation (historical).**

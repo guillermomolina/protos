@@ -630,18 +630,13 @@ final class ProtosFunctionCallDispatchers {
                 callee == null
                         ? callerReference
                         : callerArgument(root, callee, closure, callerReference);
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // ProtosReturnHome returnHome =
-        //         closure.hasUnobservableInvocationReturnHomeForRuntime()
-        //                 ? ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime()
-        //                 : closure.invocationReturnHomeForRuntime();
-
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // Do not claim primitive-result acceptance for every generic call.
-        // Preserve the previous experimental marker for restoration:
-        // ProtosReturnHome returnHome =
-        //         ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime();
-        ProtosReturnHome returnHome = ProtosReturnHome.unobservable();
+        // The callee's return-home proof is fixed by the lowering. For a
+        // direct call it is a PE constant; unresolved call targets retain
+        // the general return-home semantics.
+        ProtosReturnHome returnHome =
+                callee != null && callee.returnHomeProvenUnobservable()
+                        ? null
+                        : closure.invocationReturnHomeForRuntime();
         ProtosFrameArguments.completeDispatchedHeader(arguments, closure, caller, returnHome);
     }
 
