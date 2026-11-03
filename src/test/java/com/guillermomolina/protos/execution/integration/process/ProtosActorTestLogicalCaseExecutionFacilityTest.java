@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -126,7 +125,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
 
             assertTrue(activation.executionDomain().dispatchOne());
 
-            ProtosIntegerValue value =
+            Long value =
                     assertCompletedIntegerObservation(future);
 
             // A value of exactly 1 is only reachable if Actor.spawn("workers", ...) resolved
@@ -171,7 +170,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
             assertTrue(submission.runNext());
             assertTrue(activation.executionDomain().dispatchOne());
 
-            ProtosIntegerValue value = assertCompletedIntegerObservation(future);
+            Long value = assertCompletedIntegerObservation(future);
 
             // 0 -> 1 -> 2, combined as first * 10 + second: only reachable if both requests
             // were served by the same Actor incarnation within this one Case.
@@ -344,7 +343,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
         Files.writeString(root.resolve("suite.protos"), source, StandardCharsets.UTF_8);
     }
 
-    private static ProtosIntegerValue assertCompletedIntegerObservation(
+    private static Long assertCompletedIntegerObservation(
             ProtosFutureValue future) {
         ProtosObjectValue completion =
                 assertInstanceOf(ProtosObjectValue.class, future.resolvedValue().orElseThrow());
@@ -363,7 +362,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
         assertEquals("completed", state.value());
 
         return assertInstanceOf(
-                ProtosIntegerValue.class, observation.readLocalSlot("value").orElseThrow());
+                Long.class, observation.readLocalSlot("value").orElseThrow());
     }
 
     private static ProtosFutureValue invoke(

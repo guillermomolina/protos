@@ -22,7 +22,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -382,9 +381,9 @@ final class ProtosAsyncExactExecutionFacilityTest {
                         observation.readLocalSlot("state").orElseThrow());
         assertEquals("completed", state.value());
 
-        ProtosIntegerValue value =
+        Long value =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         observation.readLocalSlot("value").orElseThrow());
         assertEquals(Long.toString(expectedValue), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         assertEquals(
@@ -404,9 +403,9 @@ final class ProtosAsyncExactExecutionFacilityTest {
     private static String bytesText(ProtosBytesValue bytes) {
         byte[] raw = new byte[bytes.indexedSize()];
         for (int index = 0; index < raw.length; index++) {
-            ProtosIntegerValue octet =
+            Long octet =
                     assertInstanceOf(
-                            ProtosIntegerValue.class,
+                            Long.class,
                             bytes.indexedAt(index));
             raw[index] = (byte) Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(octet));
         }

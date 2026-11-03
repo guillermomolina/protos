@@ -25,6 +25,7 @@ import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.Node;
 
 /**
  * I115-H7 EXPERIMENTAL, proxied as the {@code NumberInPlaceAdd} operation
@@ -44,12 +45,8 @@ abstract class ProtosExperimentalNumberInPlaceAddNode
         extends ProtosExperimentalNumberAddFastPathsBase {
 
     @Specialization(replaces = "doLL")
-    static Object doLLOvf(
-            VirtualFrame frame,
-            long left,
-            long right,
-            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
-        return addOrPromote(root, frame, left, right);
+    static Object doLLOvf(long left, long right, @Bind Node node) {
+        return addOrPromote(node, left, right);
     }
 
     @Fallback
@@ -58,7 +55,8 @@ abstract class ProtosExperimentalNumberInPlaceAddNode
             VirtualFrame frame,
             Object left,
             Object right,
-            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
-        return genericAdd(root, frame, left, right);
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Bind Node node) {
+        return genericAdd(root, frame, node, left, right);
     }
 }

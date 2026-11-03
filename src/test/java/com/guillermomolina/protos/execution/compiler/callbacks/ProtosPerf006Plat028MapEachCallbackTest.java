@@ -17,7 +17,6 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -48,8 +47,8 @@ final class ProtosPerf006Plat028MapEachCallbackTest {
                     new ProtosFutureValue(prelude.futurePrototype(), domain);
             AtomicInteger callbacks = new AtomicInteger();
 
-            append(map, key(), new ProtosIntegerValue(1L));
-            append(map, key(), new ProtosIntegerValue(2L));
+            append(map, key(), Long.valueOf(1L));
+            append(map, key(), Long.valueOf(2L));
             module.context().createLocalSlot("map", map);
             module.context().createLocalSlot("gate", gate);
             module.context().createLocalSlot(
@@ -95,11 +94,11 @@ final class ProtosPerf006Plat028MapEachCallbackTest {
             ProtosMapValue map = map(prelude);
             ProtosObjectValue firstKey = key();
             ProtosObjectValue secondKey = key();
-            ProtosIntegerValue firstValue = new ProtosIntegerValue(1L);
-            ProtosIntegerValue secondValue = new ProtosIntegerValue(2L);
+            Long firstValue = Long.valueOf(1L);
+            Long secondValue = Long.valueOf(2L);
             ProtosObjectValue appendedKey = key();
-            ProtosIntegerValue appendedValue = new ProtosIntegerValue(3);
-            ProtosIntegerValue replacementValue = new ProtosIntegerValue(99);
+            Long appendedValue = Long.valueOf(3);
+            Long replacementValue = Long.valueOf(99);
             AtomicInteger callbacks = new AtomicInteger();
             List<List<Object>> seen = new ArrayList<>();
 

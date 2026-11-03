@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.oracle.truffle.api.source.Source;
@@ -86,7 +85,7 @@ class ProtosPolyglotNestedCallTargetSharingTest {
             ProtosExecutionOutcome outcome = context.execute(source, activation);
 
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-            ProtosIntegerValue result = assertInstanceOf(ProtosIntegerValue.class, outcome.value());
+            Long result = assertInstanceOf(Long.class, outcome.value());
             assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(result));
 
             process.requestTerminationForRuntime();

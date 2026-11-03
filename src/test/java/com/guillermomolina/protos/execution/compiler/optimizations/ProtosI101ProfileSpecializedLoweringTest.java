@@ -115,7 +115,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
                 assertEquals(expected, directSignature, "direct literal root");
                 assertTrue(
-                        expected.stream().anyMatch(entry -> entry.contains("=Metadata(com.guillermomolina.protos.runtime.ProtosIntegerValue)")),
+                        expected.stream().anyMatch(entry -> entry.contains("=Metadata(com.guillermomolina.protos.runtime.Long)")),
                         expected::toString);
                 assertExperimentalBooleanControlTopology(
                         folded, foldedSignature, "witness " + label(debugger));

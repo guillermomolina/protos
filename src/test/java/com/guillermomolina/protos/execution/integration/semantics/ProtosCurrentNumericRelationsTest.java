@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 
 import java.io.IOException;
@@ -32,14 +31,14 @@ final class ProtosCurrentNumericRelationsTest {
 
     @Test
     void equalityUsesExactMathematicalValue() {
-        ProtosIntegerValue beyond = new ProtosIntegerValue((1L << 53) + 1L);
+        Long beyond = Long.valueOf((1L << 53) + 1L);
         ProtosFloatValue rounded =
                 new ProtosFloatValue((double) (1L << 53));
 
         assertFalse(ProtosStandardNumberEqualityProtocol.numericEquals(
                 beyond, rounded));
 
-        ProtosIntegerValue integer = new ProtosIntegerValue(42L);
+        Long integer = Long.valueOf(42L);
         ProtosFloatValue floating = new ProtosFloatValue(42.0);
 
         assertTrue(ProtosStandardNumberEqualityProtocol.numericEquals(
@@ -73,8 +72,8 @@ final class ProtosCurrentNumericRelationsTest {
     @Test
     void orderingIsExactAcrossBinary64Boundaries() throws IOException {
         ProtosPrelude prelude = corePrelude();
-        ProtosIntegerValue max =
-                new ProtosIntegerValue(Long.MAX_VALUE);
+        Long max =
+                Long.valueOf(Long.MAX_VALUE);
         ProtosFloatValue rounded =
                 new ProtosFloatValue((double) Long.MAX_VALUE);
 
@@ -136,8 +135,8 @@ final class ProtosCurrentNumericRelationsTest {
         var greater = ProtosStandardNumberOrderingProtocol.Comparison.GREATER;
         var equal = ProtosStandardNumberOrderingProtocol.Comparison.EQUAL;
         Object twoPow63 = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(63), prelude);
-        ProtosIntegerValue max = new ProtosIntegerValue(Long.MAX_VALUE);
-        ProtosIntegerValue min = new ProtosIntegerValue(Long.MIN_VALUE);
+        Long max = Long.valueOf(Long.MAX_VALUE);
+        Long min = Long.valueOf(Long.MIN_VALUE);
         assertEquals(less, ProtosCurrentNumericRelations.compare(max, twoPow63));
         assertEquals(greater, ProtosCurrentNumericRelations.compare(twoPow63, max));
         assertFalse(ProtosCurrentNumericRelations.numericEquals(max, twoPow63));
@@ -170,9 +169,9 @@ final class ProtosCurrentNumericRelationsTest {
         assertTrue(ProtosCurrentNumericRelations.numericEquals(
                 exactNegative, new ProtosFloatValue(-0x1p129)));
         assertTrue(ProtosCurrentNumericRelations.numericEquals(
-                new ProtosIntegerValue(1L << 53), new ProtosFloatValue(0x1p53)));
+                Long.valueOf(1L << 53), new ProtosFloatValue(0x1p53)));
         assertFalse(ProtosCurrentNumericRelations.numericEquals(
-                new ProtosIntegerValue((1L << 53) + 1L), new ProtosFloatValue(0x1p53)));
+                Long.valueOf((1L << 53) + 1L), new ProtosFloatValue(0x1p53)));
     }
 
     private static void assertComparison(
@@ -187,7 +186,7 @@ final class ProtosCurrentNumericRelationsTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> ProtosCurrentNumericRelations.compare(
-                        Long.valueOf(1), new ProtosIntegerValue(1L)));
+                        Long.valueOf(1), Long.valueOf(1L)));
 
         assertThrows(
                 IllegalArgumentException.class,

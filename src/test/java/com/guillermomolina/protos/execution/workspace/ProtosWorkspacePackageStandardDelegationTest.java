@@ -23,7 +23,7 @@ final class ProtosWorkspacePackageStandardDelegationTest {
         ProtosModuleKey entry = r.entryModule("Main");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, r);
         ProtosObjectValue module = new ProtosModuleRuntime(r).loadCanonicalModule(entry, prelude.newModuleActivation());
-        ProtosIntegerValue v=(ProtosIntegerValue)module.readLocalSlot("result").orElseThrow();
+        Long v=(Long)module.readLocalSlot("result").orElseThrow();
         assertEquals(Long.toString(88), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(v));
         assertEquals("std:probe/Thing",std.specifier);
         assertEquals(Optional.of(entry),std.importer);

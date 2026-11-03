@@ -28,7 +28,6 @@ import java.util.List;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
@@ -149,7 +148,7 @@ final class ProtosPrimitiveSlotWriteRegressionTest {
                 assertEquals(
                         2L,
                         assertInstanceOf(
-                                ProtosIntegerValue.class, stored).longValue(),
+                                Long.class, stored).longValue(),
                         "Attribute reads must preserve guest Integer semantics");
 
                 return null;

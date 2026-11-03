@@ -252,41 +252,44 @@ final class ProtosFunctionCallDispatchers {
                     closure, arguments, callerReference, root);
         }
 
-        /*
-         * Keyed by the effective code root, not by Closure identity: the
-         * current Closure, with its current captures, travels in the arguments.
-         */
-        @Specialization(
-                guards = {
-                    "currentRoot != null",
-                    "currentRoot == cachedRoot"
-                },
-                limit = "3",
-                replaces = "callFunctionCached")
-        static Object callFunctionCachedCt(
-                VirtualFrame frame,
-                Node inliningTarget,
-                boolean terminal,
-                ProtosClosureValue closure,
-                Object[] arguments,
-                Object callerReference,
-                ProtosBytecodeRootNode root,
-                ProtosLanguageContext enteredContext,
-                @Bind("functionRootOrNull(closure, enteredContext)") RootNode currentRoot,
-                @Cached(value = "currentRoot", adopt = false) RootNode cachedRoot,
-                @Cached("create(cachedRoot.getCallTarget())") DirectCallNode callNode,
-                @Cached(value = "calleeRootOrNull(cachedRoot)", adopt = false)
-                        ProtosBytecodeRootNode cachedCallee,
-                @Cached FunctionDirectInvokeNode invoke) {
-            return invoke.execute(
-                    frame, inliningTarget, terminal, callNode, cachedCallee,
-                    closure, arguments, callerReference, root);
-        }
+        // PRUIBA DE I115, en algún momento esto volverá a funcionar
+        // /*
+        //  * Keyed by the effective code root, not by Closure identity: the
+        //  * current Closure, with its current captures, travels in the arguments.
+        //  */
+        // @Specialization(
+        //         guards = {
+        //             "currentRoot != null",
+        //             "currentRoot == cachedRoot"
+        //         },
+        //         limit = "3",
+        //         replaces = "callFunctionCached")
+        // static Object callFunctionCachedCt(
+        //         VirtualFrame frame,
+        //         Node inliningTarget,
+        //         boolean terminal,
+        //         ProtosClosureValue closure,
+        //         Object[] arguments,
+        //         Object callerReference,
+        //         ProtosBytecodeRootNode root,
+        //         ProtosLanguageContext enteredContext,
+        //         @Bind("functionRootOrNull(closure, enteredContext)") RootNode currentRoot,
+        //         @Cached(value = "currentRoot", adopt = false) RootNode cachedRoot,
+        //         @Cached("create(cachedRoot.getCallTarget())") DirectCallNode callNode,
+        //         @Cached(value = "calleeRootOrNull(cachedRoot)", adopt = false)
+        //                 ProtosBytecodeRootNode cachedCallee,
+        //         @Cached FunctionDirectInvokeNode invoke) {
+        //     return invoke.execute(
+        //             frame, inliningTarget, terminal, callNode, cachedCallee,
+        //             closure, arguments, callerReference, root);
+        // }
 
-        @Specialization(replaces = {
-            "callFunctionCached",
-            "callFunctionCachedCt"
-        })
+        // PRUIBA DE I115, en algún momento esto volverá a funcionar
+        // @Specialization(replaces = {
+        //     "callFunctionCached",
+        //     "callFunctionCachedCt"
+        // })
+        @Specialization(replaces = "callFunctionCached")
         @Megamorphic
         @InliningCutoff
         static Object callFunctionMegamorphic(
@@ -330,35 +333,36 @@ final class ProtosFunctionCallDispatchers {
             return ProtosFunctionCallDispatchers.calleeRootOrNull(rootNode);
         }
 
-        @NonIdempotent
-        static RootNode functionRootOrNull(
-                ProtosClosureValue closure,
-                ProtosLanguageContext enteredContext) {
-            /*
-             * I115: like GraalPy PFunction.getCode().getRootNode(), read
-             * the prepared root directly when it already belongs to the
-             * entered Context. Preserve the general resolution path for
-             * deferred plans and Context-local projections.
-             */
-            if (closure != null
-                    && enteredContext != null
-                    && closure.nativeBody().isEmpty()
-                    && closure.definition() != null) {
-                ProtosClosureExecutionPlan prepared =
-                        closure.preparedExecutionPlanOrNullForRuntime();
-                if (prepared != null
-                        && !closure.requiresContextLocalExecutionProjectionForRuntime()
-                        && prepared.language().orElse(null)
-                                == enteredContext.languageForRuntime()) {
-                    return prepared.bytecodeActivationTargetForComposition()
-                            .getRootNode();
-                }
-            }
+        // PRUIBA DE I115, en algún momento esto volverá a funcionar
+        // @NonIdempotent
+        // static RootNode functionRootOrNull(
+        //         ProtosClosureValue closure,
+        //         ProtosLanguageContext enteredContext) {
+        //     /*
+        //      * I115: like GraalPy PFunction.getCode().getRootNode(), read
+        //      * the prepared root directly when it already belongs to the
+        //      * entered Context. Preserve the general resolution path for
+        //      * deferred plans and Context-local projections.
+        //      */
+        //     if (closure != null
+        //             && enteredContext != null
+        //             && closure.nativeBody().isEmpty()
+        //             && closure.definition() != null) {
+        //         ProtosClosureExecutionPlan prepared =
+        //                 closure.preparedExecutionPlanOrNullForRuntime();
+        //         if (prepared != null
+        //                 && !closure.requiresContextLocalExecutionProjectionForRuntime()
+        //                 && prepared.language().orElse(null)
+        //                         == enteredContext.languageForRuntime()) {
+        //             return prepared.bytecodeActivationTargetForComposition()
+        //                     .getRootNode();
+        //         }
+        //     }
 
-            RootCallTarget target = ProtosClosureCallPreparation.functionCallTarget(
-                    closure, enteredContext);
-            return target == null ? null : target.getRootNode();
-        }
+        //     RootCallTarget target = ProtosClosureCallPreparation.functionCallTarget(
+        //             closure, enteredContext);
+        //     return target == null ? null : target.getRootNode();
+        // }
     }
 
     /**
@@ -610,10 +614,18 @@ final class ProtosFunctionCallDispatchers {
                 callee == null
                         ? callerReference
                         : callerArgument(root, callee, closure, callerReference);
-        ProtosReturnHome returnHome =
-                closure.hasUnobservableInvocationReturnHomeForRuntime()
-                        ? ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime()
-                        : closure.invocationReturnHomeForRuntime();
+        // PRUIBA DE I115, en algún momento esto volverá a funcionar
+        // ProtosReturnHome returnHome =
+        //         closure.hasUnobservableInvocationReturnHomeForRuntime()
+        //                 ? ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime()
+        //                 : closure.invocationReturnHomeForRuntime();
+
+        // PRUIBA DE I115, en algún momento esto volverá a funcionar
+        // Do not claim primitive-result acceptance for every generic call.
+        // Preserve the previous experimental marker for restoration:
+        // ProtosReturnHome returnHome =
+        //         ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime();
+        ProtosReturnHome returnHome = ProtosReturnHome.unobservable();
         ProtosFrameArguments.completeDispatchedHeader(arguments, closure, caller, returnHome);
     }
 

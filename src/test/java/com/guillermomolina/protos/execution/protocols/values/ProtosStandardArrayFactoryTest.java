@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -90,7 +89,7 @@ class ProtosStandardArrayFactoryTest {
             index(-1),
             index(3),
             index(Integer.MAX_VALUE),
-            new ProtosIntegerValue((1L << 32) + 1),
+            Long.valueOf((1L << 32) + 1),
             twoTo64,
             com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE), prelude),
             new ProtosFloatValue(1.0d),
@@ -120,7 +119,7 @@ class ProtosStandardArrayFactoryTest {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation a = prelude.newModuleActivation();
         BigInteger negative = BigInteger.ONE.shiftLeft(64).negate();
-        ProtosArrayValue array = prelude.newArray(List.of(new ProtosIntegerValue(0)));
+        ProtosArrayValue array = prelude.newArray(List.of(Long.valueOf(0)));
 
         ProtosInvocation.invokeMessage(
                 array, "atPut", List.of(index(0), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(negative, prelude)), a);
@@ -147,7 +146,7 @@ class ProtosStandardArrayFactoryTest {
     }
 
     private static Object index(long value) {
-        return new ProtosIntegerValue(value);
+        return Long.valueOf(value);
     }
 
     private static String string(Object value) {

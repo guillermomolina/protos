@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -101,7 +100,7 @@ final class ProtosTcpConnectionEndpointObservationTest {
                 (ProtosObjectValue)
                         ProtosInvocation.invoke(
                                 addressFactory,
-                                List.of(integer(4), new ProtosIntegerValue(bits)),
+                                List.of(integer(4), Long.valueOf(bits)),
                                 activation);
         Object endpointFactory = prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
@@ -118,8 +117,8 @@ final class ProtosTcpConnectionEndpointObservationTest {
         assertEquals(java.util.Set.of("address", "port"), endpoint.localSlotsSnapshot().keySet());
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static final class RecordingBackend implements ProtosTcpConnectionFlow.Backend {

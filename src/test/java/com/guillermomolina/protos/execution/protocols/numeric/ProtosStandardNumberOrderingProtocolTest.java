@@ -25,7 +25,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -59,15 +58,15 @@ class ProtosStandardNumberOrderingProtocolTest {
         Object twoTo1000Plus1 = integer(BigInteger.ONE.shiftLeft(1000).add(BigInteger.ONE), prelude);
 
         // small/small
-        assertOrder(-1, new ProtosIntegerValue(1), new ProtosIntegerValue(2), a);
-        assertOrder(0, new ProtosIntegerValue(Long.MAX_VALUE), new ProtosIntegerValue(Long.MAX_VALUE), a);
+        assertOrder(-1, Long.valueOf(1), Long.valueOf(2), a);
+        assertOrder(0, Long.valueOf(Long.MAX_VALUE), Long.valueOf(Long.MAX_VALUE), a);
         // small/large across the signed-64 boundary
-        assertOrder(-1, new ProtosIntegerValue(Long.MAX_VALUE), twoTo64, a);
-        assertOrder(1, new ProtosIntegerValue(Long.MIN_VALUE), minusTwoTo64, a);
+        assertOrder(-1, Long.valueOf(Long.MAX_VALUE), twoTo64, a);
+        assertOrder(1, Long.valueOf(Long.MIN_VALUE), minusTwoTo64, a);
         assertOrder(-1, minusTwoTo64, twoTo64, a);
         // Integer/Float, never through a rounded double of the Integer
         assertOrder(1, twoTo53Plus1, new ProtosFloatValue(0x1p53), a);
-        assertOrder(-1, new ProtosIntegerValue(Long.MAX_VALUE), new ProtosFloatValue(0x1p63), a);
+        assertOrder(-1, Long.valueOf(Long.MAX_VALUE), new ProtosFloatValue(0x1p63), a);
         assertOrder(0, integer(BigInteger.ONE.shiftLeft(63), prelude), new ProtosFloatValue(0x1p63), a);
         assertOrder(1, twoTo1000Plus1, new ProtosFloatValue(0x1p1000), a);
         assertOrder(-1, twoTo1000Plus1, new ProtosFloatValue(Double.POSITIVE_INFINITY), a);
@@ -80,7 +79,7 @@ class ProtosStandardNumberOrderingProtocolTest {
         ProtosActivation a = prelude.newModuleActivation();
         ProtosFloatValue nan = new ProtosFloatValue(Double.NaN);
         for (Object other :
-                List.of(nan, new ProtosIntegerValue(0), integer(BigInteger.ONE.shiftLeft(64), prelude))) {
+                List.of(nan, Long.valueOf(0), integer(BigInteger.ONE.shiftLeft(64), prelude))) {
             for (String selector : List.of("<", "<=", ">", ">=")) {
                 assertSame(ProtosBooleanValue.FALSE, ProtosInvocation.invokeMessage(nan, selector, List.of(other), a));
                 assertSame(ProtosBooleanValue.FALSE, ProtosInvocation.invokeMessage(other, selector, List.of(nan), a));
@@ -95,10 +94,10 @@ class ProtosStandardNumberOrderingProtocolTest {
         ProtosObjectValue impostor = new ProtosObjectValue(prelude.numberPrototype());
         assertThrows(
                 ProtosSignalException.class,
-                () -> ProtosInvocation.invokeMessage(new ProtosIntegerValue(1), "<", List.of(BigInteger.TEN), a));
+                () -> ProtosInvocation.invokeMessage(Long.valueOf(1), "<", List.of(BigInteger.TEN), a));
         assertThrows(
                 ProtosSignalException.class,
-                () -> ProtosInvocation.invokeMessage(impostor, "<", List.of(new ProtosIntegerValue(1)), a));
+                () -> ProtosInvocation.invokeMessage(impostor, "<", List.of(Long.valueOf(1)), a));
     }
 
     @Test

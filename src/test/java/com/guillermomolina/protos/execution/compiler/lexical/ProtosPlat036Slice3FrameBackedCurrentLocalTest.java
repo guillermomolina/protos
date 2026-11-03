@@ -210,9 +210,10 @@ final class ProtosPlat036Slice3FrameBackedCurrentLocalTest {
         if (value instanceof Long longValue) {
             return longValue;
         }
-        if (value instanceof com.guillermomolina.protos.runtime.ProtosIntegerValue integerValue) {
-            return integerValue.longValue();
-        }
+        // PRUIBA DE I115, en algún momento esto volverá a funcionar
+        // if (value instanceof com.guillermomolina.protos.runtime.Long integerValue) {
+            // return integerValue.longValue();
+        // }
         throw new AssertionError("expected a Protos integer literal result, got: " + value);
     }
 

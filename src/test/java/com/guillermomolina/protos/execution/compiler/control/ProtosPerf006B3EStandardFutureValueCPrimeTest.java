@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.callables.ProtosSuspensionCapableNativeClosureBody;
@@ -105,8 +104,8 @@ final class ProtosPerf006B3EStandardFutureValueCPrimeTest {
             ProtosLanguage language = scope.language();
             Harness harness = harness();
             ProtosFutureValue future = harness.future();
-            ProtosIntegerValue resolved =
-                    new ProtosIntegerValue(73);
+            Long resolved =
+                    Long.valueOf(73);
             harness.activation().context().createLocalSlot("f", future);
 
             ProtosTask task =
@@ -332,8 +331,8 @@ final class ProtosPerf006B3EStandardFutureValueCPrimeTest {
             ProtosLanguage language = scope.language();
             Harness harness = harness();
             ProtosFutureValue future = harness.future();
-            ProtosIntegerValue resolved =
-                    new ProtosIntegerValue(91);
+            Long resolved =
+                    Long.valueOf(91);
 
             ProtosClosureValue extracted =
                     (ProtosClosureValue)
@@ -379,8 +378,8 @@ final class ProtosPerf006B3EStandardFutureValueCPrimeTest {
             Harness harness = harness();
             ProtosFutureValue first = harness.future();
             ProtosFutureValue second = harness.future();
-            ProtosIntegerValue resolved =
-                    new ProtosIntegerValue(107);
+            Long resolved =
+                    Long.valueOf(107);
 
             ProtosClosureValue raw =
                     (ProtosClosureValue)

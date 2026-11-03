@@ -15,7 +15,6 @@ import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTask;
@@ -95,15 +94,15 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
                     "mutate",
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
-                                ProtosIntegerValue octet =
-                                        (ProtosIntegerValue) supplied.get(0);
+                                Long octet =
+                                        (Long) supplied.get(0);
                                 observed.add(octet.longValue());
                                 if (observed.size() == 1) {
                                     bytes.indexedPut(
                                             1,
-                                            new ProtosIntegerValue(99));
+                                            Long.valueOf(99));
                                 }
-                                return new ProtosIntegerValue(77);
+                                return Long.valueOf(77);
                             }));
 
             ProtosTask task =
@@ -136,7 +135,7 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
                 new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (long value : values) {
             bytes.indexedAdd(
-                    new ProtosIntegerValue(value));
+                    Long.valueOf(value));
         }
         return bytes;
     }

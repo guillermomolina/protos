@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 
@@ -81,7 +80,7 @@ final class ProtosWorkspacePackageAuthorityIsolationIntegrationTest {
                         applicationProcess::set);
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        ProtosIntegerValue value = (ProtosIntegerValue) outcome.value();
+        Long value = (Long) outcome.value();
         assertEquals(String.valueOf("73"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
 
         ProtosProcessRuntime tool = toolProcess.get();

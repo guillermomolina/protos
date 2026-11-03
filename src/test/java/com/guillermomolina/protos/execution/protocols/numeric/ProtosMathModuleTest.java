@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -267,7 +266,7 @@ final class ProtosMathModuleTest {
     @Test
     void exactRationalRootsStayExactAndCanonical() {
         assertExactReal(integer(2), call(integer(4)));
-        assertInstanceOf(ProtosIntegerValue.class, call(integer(4)));
+        assertInstanceOf(Long.class, call(integer(4)));
         assertExactReal(integer(0), call(integer(0)));
         assertExactReal(integer(1), call(integer(1)));
         assertExactReal(fraction(1, 2), call(fraction(1, 4)));
@@ -444,7 +443,7 @@ final class ProtosMathModuleTest {
     }
 
     private static Object integer(long value) {
-        return new ProtosIntegerValue(value);
+        return Long.valueOf(value);
     }
 
     private static Object large(BigInteger value) {

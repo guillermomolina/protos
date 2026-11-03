@@ -121,7 +121,7 @@ class ProtosFilesystemIntegratedConformanceTest {
                         ProtosInvocation.invokeMessage(
                                 file,
                                 "read",
-                                List.of(new ProtosIntegerValue(1L)),
+                                List.of(Long.valueOf(1L)),
                                 activation);
         ProtosBytesValue bytes =
                 (ProtosBytesValue) read.resolvedValue().orElseThrow();

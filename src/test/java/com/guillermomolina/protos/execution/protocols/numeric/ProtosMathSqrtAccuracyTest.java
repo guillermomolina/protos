@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.fail;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -280,7 +279,7 @@ final class ProtosMathSqrtAccuracyTest {
     }
 
     private static Object integer(long value) {
-        return new ProtosIntegerValue(value);
+        return Long.valueOf(value);
     }
 
     private static Object large(BigInteger value) {

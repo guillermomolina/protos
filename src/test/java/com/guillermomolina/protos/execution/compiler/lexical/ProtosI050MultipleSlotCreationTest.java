@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -81,7 +80,7 @@ final class ProtosI050MultipleSlotCreationTest {
 
         activation.context().createLocalSlot(
                 "existing",
-                new ProtosIntegerValue(99));
+                Long.valueOf(99));
 
         ProtosExecutionOutcome outcome =
                 ProtosTestExecutionSupport.execute(
@@ -106,9 +105,9 @@ final class ProtosI050MultipleSlotCreationTest {
             ProtosActivation activation,
             String name,
             long expected) {
-        ProtosIntegerValue value =
+        Long value =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         activation.context()
                                 .readLocalSlot(name)
                                 .orElseThrow());

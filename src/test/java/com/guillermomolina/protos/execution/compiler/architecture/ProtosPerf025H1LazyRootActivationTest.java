@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -82,7 +81,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
         withCore(module -> {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "h1-identity.protos", module);
-            ProtosIntegerValue supplied = integer(42);
+            Long supplied = integer(42);
             DirectEntry prepared =
                     fastDirect(identity, module, supplied);
 
@@ -103,7 +102,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             assertEquals("7", integerValue(enter(omitted)));
             assertSame(defaulted, omitted.targetArguments()[0]);
 
-            ProtosIntegerValue supplied = integer(3);
+            Long supplied = integer(3);
             DirectEntry given =
                     fastDirect(defaulted, module, supplied);
             assertSame(supplied, enter(given));
@@ -141,7 +140,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
         withCore(module -> {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "h1-on-demand.protos", module);
-            ProtosIntegerValue supplied = integer(5);
+            Long supplied = integer(5);
             DirectEntry prepared =
                     fastDirect(identity, module, supplied);
             Object[] arguments = prepared.targetArguments();
@@ -227,7 +226,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
                     parsedClosure("(value) => { value }", "h1-arity.protos", module);
 
             // D203/I105: excess is ignored and an absent argument binds null, compactly.
-            ProtosIntegerValue first = integer(1);
+            Long first = integer(1);
             DirectEntry tooMany =
                     fastDirect(identity, module, first, integer(2));
             assertSame(first, enter(tooMany));
@@ -301,7 +300,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
         withCore(module -> {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "h1-generic.protos", module);
-            ProtosIntegerValue supplied = integer(11);
+            Long supplied = integer(11);
             ProtosActivation activation =
                     ProtosActivation.forClosureInvocation(
                             identity,
@@ -363,7 +362,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
 
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "i102b-one.protos", module);
-            ProtosIntegerValue supplied = integer(42);
+            Long supplied = integer(42);
             RootCallTarget identityTarget =
                     ProtosDispatchTestSupport.target(identity);
 
@@ -425,7 +424,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
                     parsedClosure("(value) => { this }", "i102b-method.protos", module);
             ProtosObjectValue receiver = new ProtosObjectValue(method);
             ProtosObjectValue methodHome = new ProtosObjectValue(method);
-            ProtosIntegerValue supplied = integer(17);
+            Long supplied = integer(17);
 
             ProtosActivation activation =
                     ProtosActivation.forImmediateMethodInvocation(
@@ -517,8 +516,8 @@ final class ProtosPerf025H1LazyRootActivationTest {
         return assertInstanceOf(ProtosArrayValue.class, array).indexedSnapshot();
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static String integerValue(Object value) {

@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -661,7 +660,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
         if (value instanceof Long longValue) {
             return longValue;
         }
-        if (value instanceof ProtosIntegerValue integerValue) {
+        if (value instanceof Long integerValue) {
             return integerValue.longValue();
         }
         throw new AssertionError("expected a Protos integer result, got: " + value);

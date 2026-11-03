@@ -29,7 +29,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMatrixValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -95,8 +94,8 @@ final class ProtosI123CpuKernelEligibilityTest {
             ProtosMatrixValue result =
                     matmul(matrix(prelude, a, rows, inner, in[0]),
                             matrix(prelude, a, inner, columns, in[1]), a);
-            assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(rows), result.rowsValue()));
-            assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(columns), result.columnsValue()));
+            assertTrue(ProtosIdentity.identical(Long.valueOf(rows), result.rowsValue()));
+            assertTrue(ProtosIdentity.identical(Long.valueOf(columns), result.columnsValue()));
             double[] scalar = strictScalarMatmul(in[0], in[1], rows, inner, columns);
             assertBits(scalar, ProtosI123CpuKernelCandidateSupport.columnLaneMatmul(in[0], in[1], rows, inner, columns));
             assertBits(scalar, floats(result.indexedSnapshot()));
@@ -137,20 +136,20 @@ final class ProtosI123CpuKernelEligibilityTest {
         ProtosActivation a = prelude.newModuleActivation();
         ProtosMatrixValue result =
                 matmul(matrix(prelude, a, 2, 0, new double[0]), matrix(prelude, a, 0, 3, new double[0]), a);
-        assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(2), result.rowsValue()));
-        assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(3), result.columnsValue()));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(2), result.rowsValue()));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(3), result.columnsValue()));
         List<Object> cells = result.indexedSnapshot();
         assertEquals(6, cells.size());
         for (Object cell : cells) {
-            assertInstanceOf(ProtosIntegerValue.class, cell);
-            assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(0), cell));
+            assertInstanceOf(Long.class, cell);
+            assertTrue(ProtosIdentity.identical(Long.valueOf(0), cell));
         }
         Object dot =
                 ProtosInvocation.invokeMessage(
                         vector(prelude, a, new double[0]), "dot",
                         List.of(vector(prelude, a, new double[0])), a);
-        assertInstanceOf(ProtosIntegerValue.class, dot);
-        assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(0), dot));
+        assertInstanceOf(Long.class, dot);
+        assertTrue(ProtosIdentity.identical(Long.valueOf(0), dot));
     }
 
     @Test
@@ -164,12 +163,12 @@ final class ProtosI123CpuKernelEligibilityTest {
                         BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE), prelude);
         Object complex =
                 ProtosComplexNumericSupport.normalize(
-                        new ProtosIntegerValue(0), new ProtosIntegerValue(1), prelude);
+                        Long.valueOf(0), Long.valueOf(1), prelude);
 
         ProtosMatrixValue fractions = generic(prelude, a, 1, 2, half, third);
-        ProtosMatrixValue mixed = generic(prelude, a, 2, 1, new ProtosIntegerValue(1), new ProtosFloatValue(1.0d));
-        ProtosMatrixValue exact = generic(prelude, a, 1, 2, big, new ProtosIntegerValue(1));
-        ProtosMatrixValue ones = generic(prelude, a, 2, 1, new ProtosIntegerValue(1), new ProtosIntegerValue(1));
+        ProtosMatrixValue mixed = generic(prelude, a, 2, 1, Long.valueOf(1), new ProtosFloatValue(1.0d));
+        ProtosMatrixValue exact = generic(prelude, a, 1, 2, big, Long.valueOf(1));
+        ProtosMatrixValue ones = generic(prelude, a, 2, 1, Long.valueOf(1), Long.valueOf(1));
         ProtosMatrixValue imaginary = generic(prelude, a, 1, 1, complex);
         for (ProtosMatrixValue operand : List.of(fractions, mixed, exact, ones, imaginary)) {
             assertNull(packFloatOnly(operand.indexedSnapshot()));
@@ -182,7 +181,7 @@ final class ProtosI123CpuKernelEligibilityTest {
                         ProtosNumericValueSupport.integerFromHost(
                                 BigInteger.ONE.shiftLeft(63).add(BigInteger.ONE), prelude),
                         matmul(exact, ones, a).indexedSnapshot().get(0)));
-        assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(-1), matmul(imaginary, imaginary, a).indexedSnapshot().get(0)));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(-1), matmul(imaginary, imaginary, a).indexedSnapshot().get(0)));
     }
 
     @Test
@@ -318,8 +317,8 @@ final class ProtosI123CpuKernelEligibilityTest {
                 assertCandidateMatches(expected, candidate, left, right);
                 assertEquals(shape[0] * shape[2], candidate.indexedSnapshot().size());
                 for (Object cell : candidate.indexedSnapshot()) {
-                    assertInstanceOf(ProtosIntegerValue.class, cell);
-                    assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(0), cell));
+                    assertInstanceOf(Long.class, cell);
+                    assertTrue(ProtosIdentity.identical(Long.valueOf(0), cell));
                 }
             }
         }
@@ -348,14 +347,14 @@ final class ProtosI123CpuKernelEligibilityTest {
         for (int index = 0; index < heterogeneousValues.length; index++) {
             heterogeneousValues[index] = new ProtosFloatValue(in[0][index]);
         }
-        heterogeneousValues[heterogeneousValues.length - 1] = new ProtosIntegerValue(1);
+        heterogeneousValues[heterogeneousValues.length - 1] = Long.valueOf(1);
         ProtosMatrixValue heterogeneousLast = generic(prelude, a, 4, 7, heterogeneousValues);
         ProtosMatrixValue floats = matrix(prelude, a, 7, 8, in[1]);
         ProtosMatrixValue floatsLeft = matrix(prelude, a, 8, 4, inputs(8, 4, 1)[0]);
         ProtosMatrixValue fractions = generic(prelude, a, 1, 2, half, third);
-        ProtosMatrixValue ones = generic(prelude, a, 2, 1, new ProtosIntegerValue(1), new ProtosIntegerValue(1));
-        ProtosMatrixValue exact = generic(prelude, a, 1, 2, big, new ProtosIntegerValue(1));
-        ProtosMatrixValue mixed = generic(prelude, a, 1, 2, new ProtosIntegerValue(1), new ProtosFloatValue(1.0d));
+        ProtosMatrixValue ones = generic(prelude, a, 2, 1, Long.valueOf(1), Long.valueOf(1));
+        ProtosMatrixValue exact = generic(prelude, a, 1, 2, big, Long.valueOf(1));
+        ProtosMatrixValue mixed = generic(prelude, a, 1, 2, Long.valueOf(1), new ProtosFloatValue(1.0d));
         ProtosMatrixValue floatColumn = matrix(prelude, a, 2, 1, new double[] {1.0d, 1.0d});
         ProtosMatrixValue complexLeft = generic(prelude, a, 1, 1, leftComplex);
         ProtosMatrixValue complexRight = generic(prelude, a, 1, 1, rightComplex);
@@ -377,9 +376,9 @@ final class ProtosI123CpuKernelEligibilityTest {
 
         // Canonical public protocol still answers every eligible-shape fallback.
         ProtosMatrixValue heterogeneousResult = matmul(heterogeneousLast, floats, a);
-        assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(4), heterogeneousResult.rowsValue()));
-        assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(8), heterogeneousResult.columnsValue()));
-        assertInstanceOf(ProtosIntegerValue.class, heterogeneousLast.indexedSnapshot().get(27));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(4), heterogeneousResult.rowsValue()));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(8), heterogeneousResult.columnsValue()));
+        assertInstanceOf(Long.class, heterogeneousLast.indexedSnapshot().get(27));
         assertTrue(ProtosIdentity.identical(fraction(5, 6, prelude), matmul(fractions, ones, a).indexedSnapshot().get(0)));
         assertTrue(
                 ProtosIdentity.identical(
@@ -729,8 +728,8 @@ final class ProtosI123CpuKernelEligibilityTest {
         ProtosObjectValue matrixPrototype =
                 ProtosStandardModuleMemberTestSupport.member(prelude, MODULE, "Matrix");
         List<Object> arguments = new ArrayList<>();
-        arguments.add(new ProtosIntegerValue(rows));
-        arguments.add(new ProtosIntegerValue(columns));
+        arguments.add(Long.valueOf(rows));
+        arguments.add(Long.valueOf(columns));
         arguments.addAll(Arrays.asList(values));
         return assertInstanceOf(
                 ProtosMatrixValue.class,
@@ -794,6 +793,6 @@ final class ProtosI123CpuKernelEligibilityTest {
 
     private static Object fraction(long numerator, long denominator, ProtosPrelude prelude) {
         return ProtosNumericValueSupport.divideIntegersExactly(
-                new ProtosIntegerValue(numerator), new ProtosIntegerValue(denominator), prelude);
+                Long.valueOf(numerator), Long.valueOf(denominator), prelude);
     }
 }

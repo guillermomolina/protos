@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -137,14 +136,14 @@ class ProtosStandardIntegerArithmeticTest {
         ProtosPrelude prelude = corePrelude();
         BigInteger huge = BigInteger.TWO.pow(200).add(BigInteger.ONE);
 
-        ProtosIntegerValue smallAdd =
+        Long smallAdd =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         direct(
                                 prelude,
                                 "+",
-                                new ProtosIntegerValue(40L),
-                                new ProtosIntegerValue(2L)));
+                                Long.valueOf(40L),
+                                Long.valueOf(2L)));
         assertEquals(42L, smallAdd.longValue());
 
         // I091: an exact result outside the signed-64 range is a large Integer object.
@@ -154,8 +153,8 @@ class ProtosStandardIntegerArithmeticTest {
                         direct(
                                 prelude,
                                 "+",
-                                new ProtosIntegerValue(Long.MAX_VALUE),
-                                new ProtosIntegerValue(1L)));
+                                Long.valueOf(Long.MAX_VALUE),
+                                Long.valueOf(1L)));
         assertSame(prelude.bigIntegerPrototype(), promotedAdd.parent().orElseThrow());
 
         // D197-C: the canonical home stays Integer; a concrete-family home is never canonical.
@@ -174,8 +173,8 @@ class ProtosStandardIntegerArithmeticTest {
         assertEquals(
                 Long.MAX_VALUE,
                 assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                direct(prelude, "-", promotedAdd, new ProtosIntegerValue(1L)))
+                                Long.class,
+                                direct(prelude, "-", promotedAdd, Long.valueOf(1L)))
                         .longValue());
         assertEquals((BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE)).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(promotedAdd));
 
@@ -185,14 +184,14 @@ class ProtosStandardIntegerArithmeticTest {
                         direct(
                                 prelude,
                                 "div",
-                                new ProtosIntegerValue(Long.MIN_VALUE),
-                                new ProtosIntegerValue(-1L)));
+                                Long.valueOf(Long.MIN_VALUE),
+                                Long.valueOf(-1L)));
         assertEquals((BigInteger.valueOf(Long.MIN_VALUE).negate()).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(promotedDivision));
 
         Object add =
                 direct(prelude, "+",
                         com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude),
-                        new ProtosIntegerValue(1L));
+                        Long.valueOf(1L));
         assertEquals((huge.add(BigInteger.ONE)).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(add));
 
         Object multiply =
@@ -204,27 +203,27 @@ class ProtosStandardIntegerArithmeticTest {
         Object quotient =
                 direct(prelude, "div",
                         com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude),
-                        new ProtosIntegerValue(7));
+                        Long.valueOf(7));
         assertEquals((huge.divide(BigInteger.valueOf(7))).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(quotient));
 
         Object remainder =
                 direct(prelude, "mod",
                         com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude),
-                        new ProtosIntegerValue(7));
+                        Long.valueOf(7));
         assertEquals((huge.remainder(BigInteger.valueOf(7))).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(remainder));
 
         assertNull(
                 direct(prelude, "+",
-                        new ProtosIntegerValue(1L),
+                        Long.valueOf(1L),
                         ProtosBooleanValue.TRUE));
         assertNull(
                 direct(prelude, "div",
-                        new ProtosIntegerValue(1L),
-                        new ProtosIntegerValue(0L)));
+                        Long.valueOf(1L),
+                        Long.valueOf(0L)));
         assertNull(
                 direct(prelude, "mod",
-                        new ProtosIntegerValue(1L),
-                        new ProtosIntegerValue(0L)));
+                        Long.valueOf(1L),
+                        Long.valueOf(0L)));
     }
 
     @Test
@@ -235,21 +234,21 @@ class ProtosStandardIntegerArithmeticTest {
         ProtosFloatValue rounded = assertInstanceOf(
                 ProtosFloatValue.class,
                 direct(prelude, "+",
-                        new ProtosIntegerValue(9007199254740993L),
+                        Long.valueOf(9007199254740993L),
                         new ProtosFloatValue(-9007199254740992.0)));
         assertEquals(0.0d, rounded.value());
 
         ProtosFloatValue subtraction = assertInstanceOf(
                 ProtosFloatValue.class,
                 direct(prelude, "-",
-                        new ProtosIntegerValue(7L),
+                        Long.valueOf(7L),
                         new ProtosFloatValue(2.5)));
         assertEquals(4.5d, subtraction.value());
 
         ProtosFloatValue divideByFloatZero = assertInstanceOf(
                 ProtosFloatValue.class,
                 direct(prelude, "/",
-                        new ProtosIntegerValue(1L),
+                        Long.valueOf(1L),
                         new ProtosFloatValue(0.0)));
         assertEquals(Double.POSITIVE_INFINITY, divideByFloatZero.value());
 
@@ -262,14 +261,14 @@ class ProtosStandardIntegerArithmeticTest {
         assertTrue(Double.isNaN(invalidProduct.value()));
 
         assertNull(direct(prelude, "div",
-                new ProtosIntegerValue(7L),
+                Long.valueOf(7L),
                 new ProtosFloatValue(2.0)));
         assertNull(direct(prelude, "mod",
-                new ProtosIntegerValue(7L),
+                Long.valueOf(7L),
                 new ProtosFloatValue(2.0)));
         assertNull(direct(prelude, "/",
-                new ProtosIntegerValue(7L),
-                new ProtosIntegerValue(0L)));
+                Long.valueOf(7L),
+                Long.valueOf(0L)));
     }
 
     @Test
@@ -277,17 +276,17 @@ class ProtosStandardIntegerArithmeticTest {
         ProtosPrelude prelude = corePrelude();
 
         // D197-C: an integral quotient stays a signed-64 Integer, never a Float or Fraction.
-        ProtosIntegerValue integral = assertInstanceOf(
-                ProtosIntegerValue.class,
-                direct(prelude, "/", new ProtosIntegerValue(-6L), new ProtosIntegerValue(3L)));
+        Long integral = assertInstanceOf(
+                Long.class,
+                direct(prelude, "/", Long.valueOf(-6L), Long.valueOf(3L)));
         assertEquals(-2L, integral.longValue());
 
         Object half = direct(prelude, "/",
-                new ProtosIntegerValue(2L), new ProtosIntegerValue(-4L));
+                Long.valueOf(2L), Long.valueOf(-4L));
         assertTrue(ProtosNumericValueSupport.isFraction(half));
-        assertEquals(-1L, ((ProtosIntegerValue)
+        assertEquals(-1L, ((Long)
                 ProtosNumericValueSupport.fractionNumerator(half)).longValue());
-        assertEquals(2L, ((ProtosIntegerValue)
+        assertEquals(2L, ((Long)
                 ProtosNumericValueSupport.fractionDenominator(half)).longValue());
         assertSame(prelude.fractionPrototype(), ((ProtosObjectValue) half).parent().orElseThrow());
 
@@ -295,7 +294,7 @@ class ProtosStandardIntegerArithmeticTest {
         assertInstanceOf(
                 ProtosLargeIntegerValue.class,
                 direct(prelude, "/",
-                        new ProtosIntegerValue(Long.MIN_VALUE), new ProtosIntegerValue(-1L)));
+                        Long.valueOf(Long.MIN_VALUE), Long.valueOf(-1L)));
 
         // Without a Prelude a Fraction result stays on the ordinary path.
         ProtosClosureValue selected = assertInstanceOf(
@@ -304,8 +303,8 @@ class ProtosStandardIntegerArithmeticTest {
         assertNull(ProtosStandardIntegerProtocol.tryExecuteCanonicalOperationOne(
                 ProtosStandardIntegerProtocol.canonicalOperationForSelection(
                         selected, prelude.integerPrototype(), "/", prelude),
-                new ProtosIntegerValue(1L),
-                new ProtosIntegerValue(3L),
+                Long.valueOf(1L),
+                Long.valueOf(3L),
                 null));
     }
 

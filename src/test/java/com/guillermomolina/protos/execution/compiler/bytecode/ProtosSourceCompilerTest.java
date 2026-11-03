@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.guillermomolina.protos.parser.ParseError;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.oracle.truffle.api.source.Source;
 
@@ -37,8 +36,8 @@ class ProtosSourceCompilerTest {
     void compilesCompleteSourceThroughParserCanonicalizerAndBytecodeLowerer() {
         Object result = compileAndCall("1\n2");
 
-        ProtosIntegerValue integer =
-                assertInstanceOf(ProtosIntegerValue.class, result);
+        Long integer =
+                assertInstanceOf(Long.class, result);
         assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
     }
 
@@ -48,9 +47,9 @@ class ProtosSourceCompilerTest {
 
         ProtosObjectValue object =
                 assertInstanceOf(ProtosObjectValue.class, result);
-        ProtosIntegerValue value =
+        Long value =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         object.readLocalSlot("value").orElseThrow());
         assertEquals(String.valueOf("7"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         assertSame(

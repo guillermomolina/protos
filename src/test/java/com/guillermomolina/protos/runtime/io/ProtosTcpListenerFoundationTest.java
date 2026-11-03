@@ -20,7 +20,6 @@ package com.guillermomolina.protos.runtime.io;
 import com.guillermomolina.protos.execution.ProtosParallelRuntime;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -66,11 +65,11 @@ final class ProtosTcpListenerFoundationTest {
         assertTrue(listener.localSlotsSnapshot().isEmpty());
         assertSame(resourceState, listener.resourceStateForRuntime());
 
-        listener.createLocalSlot("label", new ProtosIntegerValue(13));
+        listener.createLocalSlot("label", Long.valueOf(13));
         assertEquals(
                 13L,
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         listener.readLocalSlot("label").orElseThrow())
                         .longValue());
         assertNotSame(listener, new ProtosTcpListenerValue(prelude, resourceState));
@@ -101,7 +100,7 @@ final class ProtosTcpListenerFoundationTest {
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue prototype = prelude.tcpListenerPrototypeForRuntime();
         ProtosObjectValue ordinary = new ProtosObjectValue(prototype);
-        ordinary.createLocalSlot("payload", new ProtosIntegerValue(17));
+        ordinary.createLocalSlot("payload", Long.valueOf(17));
         ordinary.freeze();
 
         ProtosObjectValue actorCopy =

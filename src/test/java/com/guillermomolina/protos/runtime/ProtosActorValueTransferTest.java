@@ -36,7 +36,7 @@ final class ProtosActorValueTransferTest {
     void scalarValuesCopyWhileCanonicalSingletonsRemainCanonical() throws Exception {
         ProtosPrelude prelude = core();
         ProtosActivation source = prelude.newModuleActivation();
-        ProtosIntegerValue integer = new ProtosIntegerValue(42);
+        Long integer = Long.valueOf(42);
         ProtosStringValue string = new ProtosStringValue("snapshot");
 
         List<Object> result =
@@ -270,8 +270,8 @@ final class ProtosActorValueTransferTest {
     void bytesSnapshotOwnsIndependentIndexedAndLocalState() throws Exception {
         ProtosActivation source = core().newModuleActivation();
         ProtosBytesValue bytes = new ProtosBytesValue(ProtosObjectValue.rootObject());
-        bytes.indexedAdd(new ProtosIntegerValue(1L));
-        bytes.indexedAdd(new ProtosIntegerValue(2L));
+        bytes.indexedAdd(Long.valueOf(1L));
+        bytes.indexedAdd(Long.valueOf(2L));
         ProtosObjectValue metadata = new ProtosObjectValue(ProtosObjectValue.rootObject());
         bytes.createLocalSlot("metadata", metadata);
 
@@ -279,7 +279,7 @@ final class ProtosActorValueTransferTest {
                 assertInstanceOf(
                         ProtosBytesValue.class,
                         ProtosActorValueTransfer.snapshotValue(bytes, source));
-        bytes.indexedPut(0, new ProtosIntegerValue(9));
+        bytes.indexedPut(0, Long.valueOf(9));
 
         assertNotSame(bytes, copied);
         assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(copied.indexedAt(0)));
@@ -767,13 +767,13 @@ final class ProtosActorValueTransferTest {
         ProtosVectorValue vector =
                 new ProtosVectorValue(
                         vectorPrototype,
-                        List.of(new ProtosIntegerValue(1), big, new ProtosFloatValue(-0.0d)));
+                        List.of(Long.valueOf(1), big, new ProtosFloatValue(-0.0d)));
         ProtosMatrixValue matrix =
                 new ProtosMatrixValue(
                         matrixPrototype,
-                        new ProtosIntegerValue(1),
-                        new ProtosIntegerValue(2),
-                        List.of(new ProtosIntegerValue(3), new ProtosFloatValue(2.5d)));
+                        Long.valueOf(1),
+                        Long.valueOf(2),
+                        List.of(Long.valueOf(3), new ProtosFloatValue(2.5d)));
         vector.createLocalSlot("self", vector);
         vector.createLocalSlot("other", matrix);
         matrix.createLocalSlot("self", matrix);
@@ -806,20 +806,20 @@ final class ProtosActorValueTransferTest {
                             vector.indexedSnapshot().get(index),
                             copiedVector.indexedSnapshot().get(index)));
         }
-        assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(1), copiedMatrix.rowsValue()));
-        assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(2), copiedMatrix.columnsValue()));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(1), copiedMatrix.rowsValue()));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(2), copiedMatrix.columnsValue()));
         assertTrue(
                 ProtosIdentity.identical(
                         new ProtosFloatValue(2.5d),
-                        copiedMatrix.indexedAt(new ProtosIntegerValue(0), new ProtosIntegerValue(1))));
+                        copiedMatrix.indexedAt(Long.valueOf(0), Long.valueOf(1))));
 
         // A closed Vector keeps atPut; neither side can reach the other's payload.
-        vector.indexedPut(new ProtosIntegerValue(0), new ProtosIntegerValue(99));
+        vector.indexedPut(Long.valueOf(0), Long.valueOf(99));
         assertTrue(
                 ProtosIdentity.identical(
-                        new ProtosIntegerValue(1), copiedVector.indexedAt(new ProtosIntegerValue(0))));
-        copiedVector.indexedPut(new ProtosIntegerValue(1), new ProtosIntegerValue(7));
-        assertTrue(ProtosIdentity.identical(big, vector.indexedAt(new ProtosIntegerValue(1))));
+                        Long.valueOf(1), copiedVector.indexedAt(Long.valueOf(0))));
+        copiedVector.indexedPut(Long.valueOf(1), Long.valueOf(7));
+        assertTrue(ProtosIdentity.identical(big, vector.indexedAt(Long.valueOf(1))));
         ArrayList<String> names = new ArrayList<>();
         copiedVector.appendLocalBindingsTo(names, new ArrayList<>());
         assertEquals(java.util.Set.of("self", "other"), java.util.Set.copyOf(names));
@@ -835,17 +835,17 @@ final class ProtosActorValueTransferTest {
         ProtosObjectValue matrixPrototype = linearAlgebraMember(sourcePrelude, "Matrix");
         Object half =
                 ProtosNumericValueSupport.divideIntegersExactly(
-                        new ProtosIntegerValue(1), new ProtosIntegerValue(2), sourcePrelude);
+                        Long.valueOf(1), Long.valueOf(2), sourcePrelude);
         Object complex =
                 ProtosComplexNumericSupport.normalize(
-                        new ProtosIntegerValue(3), new ProtosFloatValue(-0.0d), sourcePrelude);
+                        Long.valueOf(3), new ProtosFloatValue(-0.0d), sourcePrelude);
         ProtosVectorValue vector =
                 new ProtosVectorValue(vectorPrototype, List.of(half, complex, half));
         ProtosMatrixValue matrix =
                 new ProtosMatrixValue(
                         matrixPrototype,
-                        new ProtosIntegerValue(2),
-                        new ProtosIntegerValue(1),
+                        Long.valueOf(2),
+                        Long.valueOf(1),
                         List.of(complex, half));
         ProtosObjectValue holder = new ProtosObjectValue(ProtosObjectValue.rootObject());
         holder.createLocalSlot("left", vector);
@@ -878,23 +878,23 @@ final class ProtosActorValueTransferTest {
         assertSame(elements.get(0), elements.get(2));
         assertSame(
                 elements.get(1),
-                copiedMatrix.indexedAt(new ProtosIntegerValue(0), new ProtosIntegerValue(0)));
+                copiedMatrix.indexedAt(Long.valueOf(0), Long.valueOf(0)));
         for (Object element : copiedMatrix.indexedSnapshot()) {
             assertTrue(ProtosNumericValueSupport.isCurrentNumber(element));
         }
         // Elements read through the public accessors are Numbers, never inert descriptors.
         for (int index = 0; index < copiedVector.indexedSize(); index++) {
-            Object element = copiedVector.indexedAt(new ProtosIntegerValue(index));
+            Object element = copiedVector.indexedAt(Long.valueOf(index));
             assertTrue(ProtosNumericValueSupport.isCurrentNumber(element));
             assertFalse(ProtosNumericValueSupport.isFractionTransferDescriptor(element));
             assertFalse(ProtosComplexNumericSupport.isTransferDescriptor(element));
         }
         assertTrue(
                 ProtosComplexNumericSupport.isComplex(
-                        copiedMatrix.indexedAt(new ProtosIntegerValue(0), new ProtosIntegerValue(0))));
+                        copiedMatrix.indexedAt(Long.valueOf(0), Long.valueOf(0))));
         assertTrue(
                 ProtosNumericValueSupport.isFraction(
-                        copiedMatrix.indexedAt(new ProtosIntegerValue(1), new ProtosIntegerValue(0))));
+                        copiedMatrix.indexedAt(Long.valueOf(1), Long.valueOf(0))));
     }
 
     @Test
@@ -905,13 +905,13 @@ final class ProtosActorValueTransferTest {
         ProtosObjectValue matrixPrototype = linearAlgebraMember(sourcePrelude, "Matrix");
         Object half =
                 ProtosNumericValueSupport.divideIntegersExactly(
-                        new ProtosIntegerValue(1), new ProtosIntegerValue(2), sourcePrelude);
+                        Long.valueOf(1), Long.valueOf(2), sourcePrelude);
         ProtosVectorValue vector = new ProtosVectorValue(vectorPrototype, List.of(half));
         ProtosMatrixValue matrix =
                 new ProtosMatrixValue(
                         matrixPrototype,
-                        new ProtosIntegerValue(1),
-                        new ProtosIntegerValue(1),
+                        Long.valueOf(1),
+                        Long.valueOf(1),
                         List.of(half));
         vector.createLocalSlot("self", vector);
         vector.createLocalSlot("matrix", matrix);
@@ -932,14 +932,14 @@ final class ProtosActorValueTransferTest {
         assertSame(copiedVector, copiedMatrix.readLocalSlot("vector").orElseThrow());
         assertTrue(copiedVector.isFrozen());
         assertTrue(copiedMatrix.isClosed());
-        Object element = copiedVector.indexedAt(new ProtosIntegerValue(0));
+        Object element = copiedVector.indexedAt(Long.valueOf(0));
         assertTrue(ProtosNumericValueSupport.isFraction(element));
         assertSame(
                 element,
-                copiedMatrix.indexedAt(new ProtosIntegerValue(0), new ProtosIntegerValue(0)));
+                copiedMatrix.indexedAt(Long.valueOf(0), Long.valueOf(0)));
         assertThrows(
                 IllegalStateException.class,
-                () -> copiedVector.indexedPut(new ProtosIntegerValue(0), new ProtosIntegerValue(1)));
+                () -> copiedVector.indexedPut(Long.valueOf(0), Long.valueOf(1)));
 
         // A non-transferable slot rejects the whole snapshot; no partial container is published.
         ProtosVectorValue failing = new ProtosVectorValue(vectorPrototype, List.of(half));
@@ -951,7 +951,7 @@ final class ProtosActorValueTransferTest {
                 source, () -> ProtosActorValueTransfer.snapshotArguments(List.of(holder), source));
         assertNonTransferable(
                 source, () -> ProtosActorValueTransfer.snapshotValue(failing, source));
-        assertSame(half, failing.indexedAt(new ProtosIntegerValue(0)));
+        assertSame(half, failing.indexedAt(Long.valueOf(0)));
         assertTrue(failing.isOpen());
     }
 

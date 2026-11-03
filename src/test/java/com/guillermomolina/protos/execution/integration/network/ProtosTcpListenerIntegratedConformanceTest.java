@@ -31,7 +31,6 @@ import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.io.ProtosNetworkListenFlow;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -87,7 +86,7 @@ final class ProtosTcpListenerIntegratedConformanceTest {
         assertEquals(String.valueOf("51000"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosInvocation.invokeMessage(
                                         listener, "localPort", List.of(), x.activation)));
 
-        ProtosIntegerValue marker = integer(7);
+        Long marker = integer(7);
         listener.createLocalSlot("label", marker);
         assertSame(marker, listener.readLocalSlot("label").orElseThrow());
 
@@ -235,7 +234,7 @@ final class ProtosTcpListenerIntegratedConformanceTest {
                 (ProtosObjectValue)
                         ProtosInvocation.invoke(
                                 addressFactory,
-                                List.of(integer(4), new ProtosIntegerValue(bits)),
+                                List.of(integer(4), Long.valueOf(bits)),
                                 x.activation);
         Object endpointFactory = x.prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
@@ -256,8 +255,8 @@ final class ProtosTcpListenerIntegratedConformanceTest {
         return new ProtosHostIpEndpoint(version, bytes, port);
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static void assertEndpointEquals(Fixture x, Object actual, Object expected) {

@@ -45,7 +45,7 @@ final class ProtosTcpListenerLifecycleTest {
     }
 
     @Test void localPortAndCloseRequireZeroArguments() throws Exception {
-        Fixture x=fixture(54000); Object extra=new ProtosIntegerValue(1L);
+        Fixture x=fixture(54000); Object extra=Long.valueOf(1L);
         assertThrows(ProtosSignalException.class,()->ProtosInvocation.invokeMessage(x.listener,"localPort",List.of(extra),x.activation));
         assertThrows(ProtosSignalException.class,()->ProtosInvocation.invokeMessage(x.listener,"close",List.of(extra),x.activation));
         assertEquals(0,x.backend.closeStarts);

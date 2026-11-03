@@ -85,7 +85,7 @@ class ProtosParallelExecutionTest{
    var f=h.callEntered(()->ProtosParallelRuntime.ownedFutureForTesting(h.activation(),(current,resolve)->{
     observedPending[0]++;
     assertEquals(ProtosTask.State.RUNNING,current.state());
-    resolve.accept(new ProtosIntegerValue(42));
+    resolve.accept(Long.valueOf(42));
     assertEquals(ProtosTask.State.RUNNING,current.state());
    }));
    var producer=f.producerTask().orElseThrow();
@@ -110,7 +110,7 @@ class ProtosParallelExecutionTest{
    var f=h.callEntered(()->ProtosParallelRuntime.ownedFutureForTesting(h.activation(),(current,resolve)->{
     observedPending[0]++;
     assertTrue(current.requestCancellation());
-    resolve.accept(new ProtosIntegerValue(42));
+    resolve.accept(Long.valueOf(42));
    }));
    var producer=f.producerTask().orElseThrow();
    dispatchHosted(h,d);
@@ -274,14 +274,14 @@ class ProtosParallelExecutionTest{
   var vectorPrototype=linearAlgebraMember(p,"Vector");
   var matrixPrototype=linearAlgebraMember(p,"Matrix");
   Object half=ProtosNumericValueSupport.divideIntegersExactly(
-      new ProtosIntegerValue(1),new ProtosIntegerValue(2),p);
+      Long.valueOf(1),Long.valueOf(2),p);
   Object complex=ProtosComplexNumericSupport.normalize(
-      new ProtosIntegerValue(1),new ProtosFloatValue(-0.0d),p);
+      Long.valueOf(1),new ProtosFloatValue(-0.0d),p);
   Object hugeRows=ProtosNumericValueSupport.integerFromHost(java.math.BigInteger.ONE.shiftLeft(70),p);
-  var vector=new ProtosVectorValue(vectorPrototype,List.of(new ProtosIntegerValue(1),half,complex));
-  var matrix=new ProtosMatrixValue(matrixPrototype,new ProtosIntegerValue(1),new ProtosIntegerValue(2),
+  var vector=new ProtosVectorValue(vectorPrototype,List.of(Long.valueOf(1),half,complex));
+  var matrix=new ProtosMatrixValue(matrixPrototype,Long.valueOf(1),Long.valueOf(2),
       List.of(complex,new ProtosFloatValue(0.5d)));
-  var empty=new ProtosMatrixValue(matrixPrototype,hugeRows,new ProtosIntegerValue(0),List.of());
+  var empty=new ProtosMatrixValue(matrixPrototype,hugeRows,Long.valueOf(0),List.of());
   vector.createLocalSlot("self",vector);
   vector.createLocalSlot("matrix",matrix);
   matrix.createLocalSlot("vector",vector);
@@ -309,7 +309,7 @@ class ProtosParallelExecutionTest{
   assertTrue(copiedMatrix.isClosed());
   assertTrue(copiedEmpty.isFrozen());
   assertTrue(ProtosIdentity.identical(hugeRows,copiedEmpty.rowsValue()));
-  assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(0),copiedEmpty.columnsValue()));
+  assertTrue(ProtosIdentity.identical(Long.valueOf(0),copiedEmpty.columnsValue()));
 
   var elements=copiedVector.indexedSnapshot();
   assertTrue(ProtosNumericValueSupport.isFraction(elements.get(1)));
@@ -318,10 +318,10 @@ class ProtosParallelExecutionTest{
   assertNotSame(complex,elements.get(2));
   assertTrue(ProtosIdentity.identical(half,elements.get(1)));
   assertTrue(ProtosIdentity.identical(complex,elements.get(2)));
-  assertSame(elements.get(2),copiedMatrix.indexedAt(new ProtosIntegerValue(0),new ProtosIntegerValue(0)));
+  assertSame(elements.get(2),copiedMatrix.indexedAt(Long.valueOf(0),Long.valueOf(0)));
   // Public reads after materialization yield Numbers, never inert transfer descriptors.
   for(int index=0;index<copiedVector.indexedSize();index++){
-   Object element=copiedVector.indexedAt(new ProtosIntegerValue(index));
+   Object element=copiedVector.indexedAt(Long.valueOf(index));
    assertTrue(ProtosNumericValueSupport.isCurrentNumber(element));
    assertFalse(ProtosNumericValueSupport.isFractionTransferDescriptor(element));
    assertFalse(ProtosComplexNumericSupport.isTransferDescriptor(element));
@@ -329,11 +329,11 @@ class ProtosParallelExecutionTest{
   for(Object element:copiedMatrix.indexedSnapshot())assertTrue(ProtosNumericValueSupport.isCurrentNumber(element));
 
   // No mutable aliasing with the origin in either direction.
-  vector.indexedPut(new ProtosIntegerValue(0),new ProtosIntegerValue(9));
-  copiedMatrix.indexedPut(new ProtosIntegerValue(0),new ProtosIntegerValue(1),new ProtosIntegerValue(8));
-  assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(1),copiedVector.indexedAt(new ProtosIntegerValue(0))));
+  vector.indexedPut(Long.valueOf(0),Long.valueOf(9));
+  copiedMatrix.indexedPut(Long.valueOf(0),Long.valueOf(1),Long.valueOf(8));
+  assertTrue(ProtosIdentity.identical(Long.valueOf(1),copiedVector.indexedAt(Long.valueOf(0))));
   assertTrue(ProtosIdentity.identical(new ProtosFloatValue(0.5d),
-      matrix.indexedAt(new ProtosIntegerValue(0),new ProtosIntegerValue(1))));
+      matrix.indexedAt(Long.valueOf(0),Long.valueOf(1))));
  }
 
  @Test void linearAlgebraResultsThroughPMatchOrdinaryExecution()throws Exception{

@@ -20,7 +20,6 @@ package com.guillermomolina.protos.runtime.values;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -43,7 +42,7 @@ final class ProtosArrayInteropTest {
     @Test
     void arrayExportsExactDenseIndexedState() throws Exception {
         ProtosStringValue first = new ProtosStringValue("first");
-        ProtosIntegerValue second = new ProtosIntegerValue(2);
+        Long second = Long.valueOf(2);
         ProtosFloatValue third = new ProtosFloatValue(-0.0d);
         ProtosArrayValue array =
                 new ProtosArrayValue(

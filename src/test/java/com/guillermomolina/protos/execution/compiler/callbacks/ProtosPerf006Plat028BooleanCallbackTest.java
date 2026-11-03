@@ -15,7 +15,6 @@ import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTask;
@@ -71,7 +70,7 @@ final class ProtosPerf006Plat028BooleanCallbackTest {
             assertEquals(ProtosTask.State.SUSPENDED, task.state());
             assertEquals(1, prefixCalls.get());
 
-            ProtosIntegerValue result = new ProtosIntegerValue(42);
+            Long result = Long.valueOf(42);
             assertTrue(future.resolve(result, module));
             assertEquals(ProtosTask.State.RUNNABLE, task.state());
             assertTrue(domain.dispatchOne());

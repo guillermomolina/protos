@@ -31,7 +31,6 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -60,7 +59,7 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
     void successfulCanonicalArithmeticExecutesWithoutGeneralNativeInvocationState()
             throws Exception {
         inEnteredContext(prelude -> {
-            ProtosIntegerValue receiver = new ProtosIntegerValue(Long.MAX_VALUE);
+            Long receiver = Long.valueOf(Long.MAX_VALUE);
             ProtosCallRequest prepared = send(prelude, receiver, "+", integer(1));
 
             ProtosClosureValue selected =
@@ -134,7 +133,7 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
         inEnteredContext(prelude -> {
             // D197-C: an integral quotient is an Integer, never a Float.
             assertEquals(4L, assertInstanceOf(
-                    ProtosIntegerValue.class,
+                    Long.class,
                     run(prelude, integer(8), "/", integer(2))).longValue());
 
             Object half = run(prelude, integer(7), "/", integer(2));
@@ -262,8 +261,8 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
                 "guarded Integer success must not materialize the guest argument Array");
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static String integerValue(Object value) {

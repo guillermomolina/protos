@@ -40,7 +40,7 @@ final class ProtosTextReaderLineProtocolTest {
                 readLine(
                         f.reader,
                         f.activation,
-                        new ProtosIntegerValue(1L));
+                        Long.valueOf(1L));
         assertEquals(ProtosFutureValue.State.FAILED, first.state());
         ProtosObjectValue lineError = first.failedError().orElseThrow();
         assertErrorParent(f.prelude, lineError, "LineTooLong");
@@ -56,7 +56,7 @@ final class ProtosTextReaderLineProtocolTest {
                 readLine(
                         malformed.reader,
                         malformed.activation,
-                        new ProtosIntegerValue(2));
+                        Long.valueOf(2));
         assertEquals(ProtosFutureValue.State.FAILED, decoding.state());
         assertErrorParent(
                 malformed.prelude,
@@ -116,7 +116,7 @@ final class ProtosTextReaderLineProtocolTest {
             lines.add(observedDepth(readLine(f.reader, f.activation), lineDepths, index));
         }
         ProtosFutureValue tooLong =
-                readLine(f.reader, f.activation, new ProtosIntegerValue(1L));
+                readLine(f.reader, f.activation, Long.valueOf(1L));
         List<ProtosFutureValue> followers = new ArrayList<>();
         long[] followerDepths = new long[count];
         for (int index = 0; index < count; index++) {
@@ -160,18 +160,18 @@ final class ProtosTextReaderLineProtocolTest {
                 com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(java.math.BigInteger.ONE.shiftLeft(64), f.prelude);
         // "é" is two UTF-8 octets; "a" one; the terminator never counts.
         f.source.bytes('a', '\n', 0xc3, 0xa9, '\n', 'x', 'y', '\n', 'z', '\n', 'w', '\n');
-        assertEquals("a", stringResult(readLine(f.reader, f.activation, new ProtosIntegerValue(1L))));
+        assertEquals("a", stringResult(readLine(f.reader, f.activation, Long.valueOf(1L))));
         assertEquals("\u00e9",
-                stringResult(readLine(f.reader, f.activation, new ProtosIntegerValue(2L))));
+                stringResult(readLine(f.reader, f.activation, Long.valueOf(2L))));
         assertEquals("xy",
-                stringResult(readLine(f.reader, f.activation, new ProtosIntegerValue(Long.MAX_VALUE))));
+                stringResult(readLine(f.reader, f.activation, Long.valueOf(Long.MAX_VALUE))));
         assertEquals("z", stringResult(readLine(f.reader, f.activation, beyondLong)));
         assertEquals("w", stringResult(readLine(f.reader, f.activation)));
 
         Fixture multibyte = fixture("UTF8");
         multibyte.source.bytes(0xc3, 0xa9, '\n');
         ProtosFutureValue tooLong =
-                readLine(multibyte.reader, multibyte.activation, new ProtosIntegerValue(1L));
+                readLine(multibyte.reader, multibyte.activation, Long.valueOf(1L));
         assertEquals(ProtosFutureValue.State.FAILED, tooLong.state());
         assertErrorParent(multibyte.prelude, tooLong.failedError().orElseThrow(), "LineTooLong");
     }
@@ -183,12 +183,12 @@ final class ProtosTextReaderLineProtocolTest {
         Object largeNegative =
                 com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(java.math.BigInteger.ONE.shiftLeft(64).negate(), f.prelude);
         for (Object limit : List.of(
-                new ProtosIntegerValue(0L), new ProtosIntegerValue(-1L),
-                new ProtosIntegerValue(Long.MIN_VALUE), largeNegative, new ProtosFloatValue(1.0))) {
+                Long.valueOf(0L), Long.valueOf(-1L),
+                Long.valueOf(Long.MIN_VALUE), largeNegative, new ProtosFloatValue(1.0))) {
             assertInvalid(f, readLine(f.reader, f.activation, limit));
         }
         assertEquals(0, f.source.reads);
-        assertEquals("a", stringResult(readLine(f.reader, f.activation, new ProtosIntegerValue(1L))));
+        assertEquals("a", stringResult(readLine(f.reader, f.activation, Long.valueOf(1L))));
     }
 
     @Test
@@ -202,7 +202,7 @@ final class ProtosTextReaderLineProtocolTest {
         assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
         pending.resolve(bytes(f.prelude, 0xc3, 0xa9, '\n'), f.activation);
         assertEquals("\u00e9",
-                stringResult(readLine(f.reader, f.activation, new ProtosIntegerValue(2L))));
+                stringResult(readLine(f.reader, f.activation, Long.valueOf(2L))));
     }
 
     private static ProtosFutureValue observedDepth(
@@ -292,7 +292,7 @@ final class ProtosTextReaderLineProtocolTest {
                 new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (int value : values) {
             bytes.indexedAdd(
-                    new ProtosIntegerValue(value & 0xff));
+                    Long.valueOf(value & 0xff));
         }
         return bytes;
     }

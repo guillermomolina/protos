@@ -16,7 +16,6 @@ import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -163,7 +162,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                     "hash",
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) ->
-                                    new ProtosIntegerValue(7)));
+                                    Long.valueOf(7)));
             query.createLocalSlot(
                     "==",
                     sourceClosure(
@@ -223,7 +222,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
                                 closedHashCalls.incrementAndGet();
-                                return new ProtosIntegerValue(1L);
+                                return Long.valueOf(1L);
                             }));
             ProtosTask closedTask =
                     execute(
@@ -252,7 +251,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
                                 frozenHashCalls.incrementAndGet();
-                                return new ProtosIntegerValue(1L);
+                                return Long.valueOf(1L);
                             }));
             ProtosTask frozenTask =
                     execute(
@@ -291,7 +290,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
                                 map.close();
-                                return new ProtosIntegerValue(7);
+                                return Long.valueOf(7);
                             }));
             query.createLocalSlot(
                     "==",
@@ -341,7 +340,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                     "hash",
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) ->
-                                    new ProtosIntegerValue(7)));
+                                    Long.valueOf(7)));
             query.createLocalSlot(
                     "==",
                     sourceClosure(

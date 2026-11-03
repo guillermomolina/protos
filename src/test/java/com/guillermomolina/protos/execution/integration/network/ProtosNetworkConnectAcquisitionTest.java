@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.io.ProtosNetworkConnectFlow;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -350,7 +349,7 @@ final class ProtosNetworkConnectAcquisitionTest {
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         addressFactory,
-                        List.of(integer(4), new ProtosIntegerValue(bits)),
+                        List.of(integer(4), Long.valueOf(bits)),
                         activation);
     }
 
@@ -367,8 +366,8 @@ final class ProtosNetworkConnectAcquisitionTest {
         return new ProtosHostIpEndpoint(version, bytes, port);
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static void assertFailedAs(

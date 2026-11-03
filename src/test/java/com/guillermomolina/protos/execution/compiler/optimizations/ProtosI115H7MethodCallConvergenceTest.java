@@ -28,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -369,7 +368,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
     /**
      * An admitted H7 root and its host entry must BOTH return the raw
      * signed-64 Long. Checking Value.asLong alone would miss an accidental
-     * ProtosIntegerValue allocation at either boundary.
+     * Long allocation at either boundary.
      */
     @Test
     void h7LongRemainsRawAcrossRootAndHostBoundary() throws Exception {
@@ -395,7 +394,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
 
                 assertEquals(499500L,
                         assertInstanceOf(Long.class, rootResult).longValue(),
-                        "EpilogForReturn must not allocate ProtosIntegerValue");
+                        "EpilogForReturn must not allocate Long");
 
                 Object hostResult;
                 try {
@@ -448,7 +447,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
 
                     assertEquals(7L,
                             assertInstanceOf(
-                                    ProtosIntegerValue.class, plainResult).longValue(),
+                                    Long.class, plainResult).longValue(),
                             "ordinary results retain their guest representation");
                     assertEquals(2147483648L,
                             assertInstanceOf(Long.class, wideResult).longValue(),
@@ -1817,16 +1816,16 @@ final class ProtosI115H7MethodCallConvergenceTest {
                                     "target", ordinal),
                             "primitive storage must not install an Object location");
 
-                    ProtosIntegerValue generic = assertInstanceOf(
-                            ProtosIntegerValue.class,
+                    Long generic = assertInstanceOf(
+                            Long.class,
                             ProtosExperimentalReadGlobalNode.resolveInitial(
                                     published, ordinal, name, 1));
 
                     assertEquals(41L, generic.longValue(),
                             "the generic route converts the long carrier");
 
-                    ProtosIntegerValue recovered = assertInstanceOf(
-                            ProtosIntegerValue.class,
+                    Long recovered = assertInstanceOf(
+                            Long.class,
                             location.read());
 
                     assertEquals(41L, recovered.longValue(),
@@ -2040,7 +2039,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
             }
         });
         assertEquals(expected, assertInstanceOf(Long.class, result,
-                name + " must not carry Integer or ProtosIntegerValue").longValue(), name);
+                name + " must not carry Integer or Long").longValue(), name);
     }
 
     private static void assertDouble(

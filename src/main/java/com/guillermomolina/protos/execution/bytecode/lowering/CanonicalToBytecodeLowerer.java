@@ -1336,16 +1336,12 @@ final class CanonicalToBytecodeLowerer {
         CanonicalLiteral foldedTerminal = rootPlan.foldedTerminal();
 
         boolean loweringRefinementAccepted = true;
-        // I112: the terminal paths that used to emit MaterializeReturnCarrier.
-        boolean epilogProjectsReturnCarrier = false;
+        // PRUIBA DE I115, en algún momento esto volverá a funcionar
+        // Terminal return values propagate unchanged.
         // I115-H4-B EXPERIMENTAL: whether the focal terminal Call1 was emitted.
         boolean experimentalCallRoot = false;
         if (experimentalCompact != null) {
             emitExperimentalCompactRoot(builder, sequence, experimentalCompact);
-            // I115-O/I115-Q: a certified guest-constant return delivers no carrier.
-            epilogProjectsReturnCarrier =
-                    experimentalCompact.guestIntegerReturn() == null
-                            && !experimentalCompact.guestIntegerLiteralReturn();
             /*
              * I115-M: literals, root locals, inline whileTrue and structured
              * Boolean control emit no send, callback, prepared invocation or
@@ -1475,20 +1471,12 @@ final class CanonicalToBytecodeLowerer {
                         builder.endReturn();
                     } else if (last instanceof CanonicalLiteral literal
                             && primitiveNumberLiteralOrNull(literal) != null) {
-                        // I091: retain Long and Double literal carriers until the
-                        // caller requires an observable guest numeric value.
-                        // I112: the EpilogForReturn epilogue owns that
-                        // projection for every returned value.
-                        epilogProjectsReturnCarrier = true;
+                        // I115: numeric literals return directly.
                         builder.beginReturn();
                         builder.emitLoadConstant(primitiveNumberLiteralOrNull(literal));
                         builder.endReturn();
                     } else if (last instanceof CanonicalLookup terminalRead) {
-                        // I091: a retained carrier may return to an accepting caller.
-                        // I112: a root binding (an admitted unary parameter
-                        // included) is one ReadRootFrameLocal with constant
-                        // operands; EpilogForReturn projects the result.
-                        epilogProjectsReturnCarrier = true;
+                        // I115: a terminal binding read returns directly.
                         emitLookup(builder, terminalRead, true);
                     } else {
                         builder.beginReturn();
@@ -1500,11 +1488,7 @@ final class CanonicalToBytecodeLowerer {
                         builder.endReturn();
                     }
                 } else if (admitsTerminalClosureCall(last)) {
-                    // I115-D2: terminal Call1 may retain a numeric
-                    // carrier until the existing root return epilogue.
-                    // The epilogue projects it for non-accepting callers.
-                    epilogProjectsReturnCarrier =
-                            ((CanonicalCall) last).arguments().size() == 1;
+                    // I115: Call0 and Call1 return directly.
                     /*
                      * I112 / PLAT062-T: the final Closure call is the root's
                      * terminal invocation. No result or scratch local, no
@@ -1534,7 +1518,6 @@ final class CanonicalToBytecodeLowerer {
                      * its fallback and the terminal execution. A retained
                      * numeric carrier is projected by the return epilogue.
                      */
-                    epilogProjectsReturnCarrier = true;
                     if (expressions.size() > 1) {
                         emitDiscardedPrefix(
                                 builder,
@@ -1603,8 +1586,6 @@ final class CanonicalToBytecodeLowerer {
 
                     endStatement(builder);
 
-                    // I112: EpilogForReturn projects a retained carrier result.
-                    epilogProjectsReturnCarrier = carrierTerminal;
                     builder.beginReturn();
                     builder.emitLoadLocal(result);
                     builder.endReturn();
@@ -1692,13 +1673,6 @@ final class CanonicalToBytecodeLowerer {
                         && (loweringRefinementAccepted
                                 || rootPlan.plannedEffectiveRoot().proven()));
         result.recordDirectScalarLocalCarrierBody(directScalarLocalBody);
-        // I115-H5 EXPERIMENTAL: the focal run root and the recursive Integer roots never project.
-        if (experimentalCallRoot
-                || (experimentalCompact != null
-                        && experimentalCompact.experimentalRecursiveInteger())) {
-            epilogProjectsReturnCarrier = false;
-        }
-        result.recordEpilogProjectsReturnCarrier(epilogProjectsReturnCarrier);
         if (ProtosDiagnosticRootIdentity.ENABLED) {
             ProtosDiagnosticRootIdentity.record(
                     result,
@@ -8073,7 +8047,7 @@ final class CanonicalToBytecodeLowerer {
         String selector = send.message();
         if (!"whileTrue".equals(selector)
                 && experimentalCompactBooleanControl(selector) == null) {
-            boolean h7 = "+".equals(selector)
+            boolean h7 = experimentalCompactArithmetic(selector)
                     || (whileCondition && "<".equals(selector))
                     || experimentalCompactMethodSend(send);
             return !h7
@@ -9032,14 +9006,24 @@ final class CanonicalToBytecodeLowerer {
                     && experimentalCompactMethodSend(send)) {
                 emitExperimentalCompactMethodSend(builder, send);
             } else if (!currentExperimentalRecursiveIntegerEmission
-                    && "+".equals(send.message())) {
-                // I115-H7: GraalPy PyNumberAdd; the generic route is inside the node.
+                    && experimentalCompactArithmetic(send.message())) {
+                // I115-LONG-4: GraalPy-shaped arithmetic; fallback stays inside the node.
                 SourceSpan span = send.span();
                 builder.beginSourceSection(span.startOffset(), span.length());
-                builder.beginNumberAdd();
+                switch (send.message()) {
+                    case "+" -> builder.beginNumberAdd();
+                    case "-" -> builder.beginNumberSubtract();
+                    case "*" -> builder.beginNumberMultiply();
+                    default -> throw new AssertionError("unknown direct arithmetic operation");
+                }
                 emitExperimentalCompactValue(builder, send.receiver());
                 emitExperimentalCompactValue(builder, send.arguments().get(0));
-                builder.endNumberAdd();
+                switch (send.message()) {
+                    case "+" -> builder.endNumberAdd();
+                    case "-" -> builder.endNumberSubtract();
+                    case "*" -> builder.endNumberMultiply();
+                    default -> throw new AssertionError("unknown direct arithmetic operation");
+                }
                 builder.endSourceSection();
             } else {
                 if (currentExperimentalRecursiveIntegerEmission) {
@@ -9589,6 +9573,48 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
+     * I115-LONG-5 EXPERIMENTAL: the general source lowering uses the same
+     * GraalPy-shaped arithmetic operations as the H7 compact lowering.
+     * No numeric carrier certificates and no MISS branch for +, - or *.
+     * Each operand is evaluated exactly once, from left to right. The
+     * operation owns its generic fallback, as in PyNumber{Add,Subtract,Multiply}.
+     */
+    private void emitGraalPyGeneralArithmeticSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+        BytecodeLocal receiverValue = builder.createLocal("numericReceiver", null);
+        BytecodeLocal argumentValue = builder.createLocal("numericArgument", null);
+        emitPrimitiveNumericOperandToLocal(
+                builder, send.receiver(), receiverValue, scratch, childResult, resumeValue);
+        emitPrimitiveNumericOperandToLocal(
+                builder, send.arguments().get(0), argumentValue, scratch, childResult, resumeValue);
+        builder.beginStoreLocal(result);
+        switch (send.message()) {
+            case "+" -> builder.beginNumberAdd();
+            case "-" -> builder.beginNumberSubtract();
+            case "*" -> builder.beginNumberMultiply();
+            default -> throw new AssertionError("not a direct arithmetic selector");
+        }
+        builder.emitLoadLocal(receiverValue);
+        builder.emitLoadLocal(argumentValue);
+        switch (send.message()) {
+            case "+" -> builder.endNumberAdd();
+            case "-" -> builder.endNumberSubtract();
+            case "*" -> builder.endNumberMultiply();
+            default -> throw new AssertionError("not a direct arithmetic selector");
+        }
+        builder.endStoreLocal();
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /**
      * PERF040-E1 numeric operator sends keep their primitive attempt over the
      * staged operands; its MISS branch (and every other send) is the
      * dispatched GraalPy send: GetMethod on the staged receiver, then the
@@ -9602,6 +9628,15 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
+        if (send.arguments().size() == 1
+                && !hasSpreadArgument(send.arguments())
+                && ("+".equals(send.message())
+                        || "-".equals(send.message())
+                        || "*".equals(send.message()))) {
+            emitGraalPyGeneralArithmeticSend(
+                    builder, send, result, scratch, childResult, resumeValue);
+            return;
+        }
         if (!primitiveNumericSendCandidate(send)) {
             emitDispatchedInvocation(
                     builder, InvocationShape.SEND, send.receiver(), send.message(), send.arguments(),

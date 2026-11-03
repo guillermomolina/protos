@@ -34,7 +34,7 @@ final class ProtosNumericHashKeyTest {
         }) {
             assertEquals(
                     ProtosNumericHashKey.ofLong(value),
-                    ProtosNumericHashKey.fromSemanticInteger(new ProtosIntegerValue(value)));
+                    ProtosNumericHashKey.fromSemanticInteger(Long.valueOf(value)));
             assertEquals(
                     ProtosNumericHashKey.ofLong(value),
                     ProtosNumericHashKey.fromSemanticInteger(

@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -140,8 +139,8 @@ final class ProtosActorBootstrapTest {
                 new ProtosCoreBootstrap().bootstrap(CORE, resolver);
 
         Object complex = ProtosComplexNumericSupport.normalize(
-                new ProtosIntegerValue(2L),
-                new ProtosIntegerValue(3L),
+                Long.valueOf(2L),
+                Long.valueOf(3L),
                 prelude);
 
         assertTrue(ProtosComplexNumericSupport.isComplex(complex));

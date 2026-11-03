@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -408,7 +407,7 @@ final class ProtosTestToolFileSelectionFacilityTest {
                                 .execute(
                                         fixture.activation(),
                                         List.of(
-                                                new ProtosIntegerValue(1L))));
+                                                Long.valueOf(1L))));
     }
 
     @Test

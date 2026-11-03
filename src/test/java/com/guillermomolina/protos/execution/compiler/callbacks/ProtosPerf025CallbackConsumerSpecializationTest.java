@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -496,10 +495,10 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
                 "bump",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) ->
-                                new ProtosIntegerValue(
+                                Long.valueOf(
                                         Math.multiplyExact(
                                                 assertInstanceOf(
-                                                                ProtosIntegerValue.class,
+                                                                Long.class,
                                                                 supplied.get(0))
                                                         .longValue(),
                                                 10L))));

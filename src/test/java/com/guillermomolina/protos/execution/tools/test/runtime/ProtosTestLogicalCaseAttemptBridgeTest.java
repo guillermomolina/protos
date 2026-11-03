@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 
 import java.nio.charset.StandardCharsets;
@@ -107,8 +106,8 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
                     ProtosExecutionOutcome.State.COMPLETED,
                     result.outcome().state());
 
-            ProtosIntegerValue value =
-                    (ProtosIntegerValue) result.outcome().value();
+            Long value =
+                    (Long) result.outcome().value();
 
             assertEquals(String.valueOf("22"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
 

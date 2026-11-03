@@ -54,7 +54,7 @@ final class ProtosI091IdentityRepresentationTest {
 
         assertFalse(ProtosIdentity.identical(a, b));
         assertFalse(ProtosIdentity.identical(a, negated));
-        assertFalse(ProtosIdentity.identical(a, new ProtosIntegerValue(5)));
+        assertFalse(ProtosIdentity.identical(a, Long.valueOf(5)));
     }
 
     @Test
@@ -75,7 +75,7 @@ final class ProtosI091IdentityRepresentationTest {
 
     @Test
     void integerAndFloatKeepDistinctIdentityFamilies() {
-        Object one = new ProtosIntegerValue(1);
+        Object one = Long.valueOf(1);
         Object oneFloat = new ProtosFloatValue(1.0d);
 
         assertFalse(ProtosIdentity.identical(one, oneFloat));
@@ -100,22 +100,16 @@ final class ProtosI091IdentityRepresentationTest {
     }
 
     @Test
-    void hostNumericObjectsDoNotAcquireGuestValueIdentity() {
-        Object[][] pairs = {
-            {Long.valueOf(1_000_000L), Long.valueOf(1_000_000L)},
-            {Double.valueOf(1.5d), Double.valueOf(1.5d)},
-            {BigInteger.ONE.shiftLeft(64), BigInteger.ONE.shiftLeft(64)},
-        };
-        for (Object[] pair : pairs) {
-            assertNotSame(pair[0], pair[1]);
-            assertFalse(ProtosIdentity.identical(pair[0], pair[1]));
-            assertFalse(ProtosNumericValueSupport.isCurrentNumber(pair[0]));
-        }
-        assertFalse(ProtosIdentity.identical(Long.valueOf(1L), new ProtosIntegerValue(1)));
-        assertFalse(
-                ProtosIdentity.identical(
-                        BigInteger.ONE.shiftLeft(64),
-                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(64), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
+    void longIsSemanticIntegerAndOtherHostNumbersAreNot() {
+        Long first = Long.valueOf(1_000_000L);
+        Long second = Long.valueOf(1_000_000L);
+        assertTrue(ProtosNumericValueSupport.isCurrentInteger(first));
+        assertTrue(ProtosNumericValueSupport.isCurrentNumber(first));
+        assertTrue(ProtosIdentity.identical(first, second));
+        assertEquals(ProtosIdentity.identityHash(first), ProtosIdentity.identityHash(second));
+        assertFalse(ProtosNumericValueSupport.isCurrentInteger(Integer.valueOf(1)));
+        assertFalse(ProtosNumericValueSupport.isCurrentNumber(Double.valueOf(1.5)));
+        assertFalse(ProtosNumericValueSupport.isCurrentNumber(BigInteger.ONE.shiftLeft(64)));
     }
 
     @Test

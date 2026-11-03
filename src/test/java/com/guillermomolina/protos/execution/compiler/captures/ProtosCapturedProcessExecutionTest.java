@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.source.Source;
 import java.nio.charset.StandardCharsets;
@@ -164,9 +163,9 @@ final class ProtosCapturedProcessExecutionTest {
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 result.outcome().state());
-        ProtosIntegerValue integer =
+        Long integer =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        Long.class,
                         result.outcome().value());
         assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
         assertNull(result.outcome().error());

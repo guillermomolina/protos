@@ -30,7 +30,6 @@ import com.guillermomolina.protos.execution.ProtosStandardNumberOrderingProtocol
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -69,16 +68,16 @@ final class ProtosFractionSemanticsTest {
         assertEquals(3L, small(ProtosNumericValueSupport.divideIntegersExactly(
                 big, bigDivisor, prelude)));
         Object wide = ProtosNumericValueSupport.divideIntegersExactly(
-                bigDivisor, new ProtosIntegerValue(3L), prelude);
+                bigDivisor, Long.valueOf(3L), prelude);
         assertTrue(ProtosNumericValueSupport.isFraction(wide));
         assertInstanceOf(
                 ProtosLargeIntegerValue.class, ProtosNumericValueSupport.fractionNumerator(wide));
 
         // The primitive path without a Prelude never mints and never allocates large state.
         assertNull(ProtosNumericValueSupport.divideIntegersExactly(
-                new ProtosIntegerValue(1L), new ProtosIntegerValue(3L), null));
+                Long.valueOf(1L), Long.valueOf(3L), null));
         assertEquals(2L, small(ProtosNumericValueSupport.divideIntegersExactly(
-                new ProtosIntegerValue(6L), new ProtosIntegerValue(3L), null)));
+                Long.valueOf(6L), Long.valueOf(3L), null)));
     }
 
     @Test
@@ -147,7 +146,7 @@ final class ProtosFractionSemanticsTest {
         assertTrue(ProtosCurrentNumericRelations.numericEquals(half, new ProtosFloatValue(0.5)));
         assertTrue(ProtosCurrentNumericRelations.numericEquals(new ProtosFloatValue(0.5), half));
         assertFalse(ProtosCurrentNumericRelations.numericEquals(tenth, new ProtosFloatValue(0.1)));
-        assertFalse(ProtosCurrentNumericRelations.numericEquals(half, new ProtosIntegerValue(0L)));
+        assertFalse(ProtosCurrentNumericRelations.numericEquals(half, Long.valueOf(0L)));
         assertTrue(ProtosCurrentNumericRelations.numericEquals(half, divide(2, 4, prelude)));
 
         // binary64 1/3 is below the exact rational 1/3.
@@ -157,9 +156,9 @@ final class ProtosFractionSemanticsTest {
                 ProtosCurrentNumericRelations.compare(new ProtosFloatValue(1.0 / 3.0), third));
         assertSame(Comparison.LESS, ProtosCurrentNumericRelations.compare(third, half));
         assertSame(Comparison.GREATER,
-                ProtosCurrentNumericRelations.compare(half, new ProtosIntegerValue(0L)));
+                ProtosCurrentNumericRelations.compare(half, Long.valueOf(0L)));
         assertSame(Comparison.LESS,
-                ProtosCurrentNumericRelations.compare(new ProtosIntegerValue(0L), half));
+                ProtosCurrentNumericRelations.compare(Long.valueOf(0L), half));
         assertSame(Comparison.UNORDERED,
                 ProtosCurrentNumericRelations.compare(half, new ProtosFloatValue(Double.NaN)));
         assertSame(Comparison.LESS, ProtosCurrentNumericRelations.compare(
@@ -171,7 +170,7 @@ final class ProtosFractionSemanticsTest {
 
         // 2^53 + 1/2 lies strictly between two adjacent binary64 values.
         Object above = ProtosNumericValueSupport.divideIntegersExactly(
-                new ProtosIntegerValue((1L << 54) + 1L), new ProtosIntegerValue(2L), prelude);
+                Long.valueOf((1L << 54) + 1L), Long.valueOf(2L), prelude);
         assertSame(Comparison.GREATER,
                 ProtosCurrentNumericRelations.compare(above, new ProtosFloatValue(0x1p53)));
         assertSame(Comparison.LESS, ProtosCurrentNumericRelations.compare(
@@ -179,7 +178,7 @@ final class ProtosFractionSemanticsTest {
 
         // A subnormal binary64 equals its exact dyadic rational.
         Object tiny = ProtosNumericValueSupport.divideIntegersExactly(
-                new ProtosIntegerValue(1L),
+                Long.valueOf(1L),
                 com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(1074), prelude),
                 prelude);
         assertTrue(ProtosCurrentNumericRelations.numericEquals(
@@ -249,10 +248,10 @@ final class ProtosFractionSemanticsTest {
 
         assertSame(Comparison.GREATER,
                 ProtosCurrentNumericRelations.compare(
-                        maximumHalf, new ProtosIntegerValue(Long.MAX_VALUE / 2L)));
+                        maximumHalf, Long.valueOf(Long.MAX_VALUE / 2L)));
         assertSame(Comparison.LESS,
                 ProtosCurrentNumericRelations.compare(
-                        maximumHalf, new ProtosIntegerValue(Long.MAX_VALUE)));
+                        maximumHalf, Long.valueOf(Long.MAX_VALUE)));
 
         assertSame(Comparison.EQUAL,
                 ProtosCurrentNumericRelations.compare(
@@ -323,7 +322,7 @@ final class ProtosFractionSemanticsTest {
         ProtosPrelude destinationPrelude = corePrelude();
         Object fraction = ProtosNumericValueSupport.divideIntegersExactly(
                 com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_64, sourcePrelude),
-                new ProtosIntegerValue(3L),
+                Long.valueOf(3L),
                 sourcePrelude);
 
         List<Object> snapshot = ProtosActorValueTransfer.snapshotArguments(
@@ -366,11 +365,11 @@ final class ProtosFractionSemanticsTest {
 
     private static Object divide(long numerator, long denominator, ProtosPrelude prelude) {
         return ProtosNumericValueSupport.divideIntegersExactly(
-                new ProtosIntegerValue(numerator), new ProtosIntegerValue(denominator), prelude);
+                Long.valueOf(numerator), Long.valueOf(denominator), prelude);
     }
 
     private static long small(Object integer) {
-        return assertInstanceOf(ProtosIntegerValue.class, integer).longValue();
+        return assertInstanceOf(Long.class, integer).longValue();
     }
 
     private static void assertFraction(

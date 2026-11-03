@@ -22,7 +22,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -68,9 +67,9 @@ final class ProtosA4B3ModuleProcessHostingTest {
                 assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
                 ProtosObjectValue module =
                         assertInstanceOf(ProtosObjectValue.class, outcome.value());
-                ProtosIntegerValue value =
+                Long value =
                         assertInstanceOf(
-                                ProtosIntegerValue.class,
+                                Long.class,
                                 module.readLocalSlot("value").orElseThrow());
                 assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
                 assertEquals(1, resolver.loads("m"));

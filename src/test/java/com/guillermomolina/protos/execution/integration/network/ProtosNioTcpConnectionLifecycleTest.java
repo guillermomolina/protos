@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -128,7 +127,7 @@ final class ProtosNioTcpConnectionLifecycleTest {
     private static ProtosObjectValue endpoint(ProtosPrelude p,ProtosActivation a,int port) {
         Object af=p.ipAddressPrototypeForRuntime();
         ProtosObjectValue address=(ProtosObjectValue)ProtosInvocation.invoke(af,List.of(
-                integer(4),new ProtosIntegerValue(0x7f000001L)),a);
+                integer(4),Long.valueOf(0x7f000001L)),a);
         Object ef=p.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)ProtosInvocation.invoke(
                 ef,List.of(address,integer(port)),a);
@@ -144,8 +143,8 @@ final class ProtosNioTcpConnectionLifecycleTest {
         return future(x,"write",List.of(value));
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static byte[] payload(int n) {

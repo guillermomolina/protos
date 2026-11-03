@@ -29,7 +29,6 @@ import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Fake;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Integral;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.TestForeignFailure;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosRawForeignValue;
@@ -89,7 +88,7 @@ class ProtosForeignValueProjectionTest {
                     fixture.eval(h + "h.ifNull"));
             assertInstanceOf(ProtosRawForeignValue.class, fixture.eval(h + "h.child"));
             assertSame(ProtosBooleanValue.TRUE, fixture.eval(h + "h == h"));
-            assertInstanceOf(ProtosIntegerValue.class, fixture.eval(h + "h.hash()"));
+            assertInstanceOf(Long.class, fixture.eval(h + "h.hash()"));
             for (String reserved : List.of("call", "at", "atPut", "each")) {
                 assertMissing(fixture, fixture.failure(h + "h." + reserved));
             }
@@ -264,7 +263,7 @@ class ProtosForeignValueProjectionTest {
                 if (values[index].bitLength() < Long.SIZE) {
                     assertEquals(values[index].longValueExact(),
                             assertInstanceOf(Long.class, outbound), spellings[index]);
-                    assertInstanceOf(ProtosIntegerValue.class, admitted, spellings[index]);
+                    assertInstanceOf(Long.class, admitted, spellings[index]);
                 } else {
                     assertEquals(values[index],
                             assertInstanceOf(BigInteger.class, outbound), spellings[index]);
@@ -290,7 +289,7 @@ class ProtosForeignValueProjectionTest {
         assertEquals(5L, ProtosForeignAdmissionDescriptor.integral(5).scalar());
         // A forged guest Integer or an unnormalized host scalar is never an Integer descriptor.
         for (Object forged : new Object[] {
-                new ProtosIntegerValue(1L), BigInteger.ONE, 1, 1.0d, "1"}) {
+                Long.valueOf(1L), BigInteger.ONE, 1, 1.0d, "1"}) {
             assertThrows(IllegalArgumentException.class,
                     () -> new ProtosForeignAdmissionDescriptor(
                             ProtosForeignAdmissionDescriptor.Kind.INTEGER,

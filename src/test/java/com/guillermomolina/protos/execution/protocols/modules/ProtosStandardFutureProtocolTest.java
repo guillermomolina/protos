@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -220,7 +219,7 @@ class ProtosStandardFutureProtocolTest {
                 aggregate.state(),
                 "later failure must not overtake unresolved lower index");
 
-        first.resolve(new ProtosIntegerValue(10L), activation);
+        first.resolve(Long.valueOf(10L), activation);
 
         assertEquals(ProtosFutureValue.State.FAILED, aggregate.state());
         assertSame(laterError, aggregate.failedError().orElseThrow());

@@ -14,7 +14,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -92,7 +91,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             assertTrue(pending != null, "resolver must inject the pending Future before module execution");
             assertTrue(
                     pending.resolve(
-                            new ProtosIntegerValue(7),
+                            Long.valueOf(7),
                             activation(prelude, domain, state)));
             assertTrue(domain.dispatchOne(), "suspended import task must resume");
             assertEquals(ProtosTask.State.COMPLETED, task.state());
@@ -297,7 +296,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             assertNotSame(firstFuture, retryFuture);
             assertTrue(
                     retryFuture.resolve(
-                            new ProtosIntegerValue(11),
+                            Long.valueOf(11),
                             activation(prelude, domain, state)));
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.COMPLETED, retried.state());

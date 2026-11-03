@@ -31,7 +31,6 @@ import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.io.ProtosNetworkConnectFlow;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -85,7 +84,7 @@ final class ProtosTcpConnectionIntegratedConformanceTest {
                 ProtosInvocation.invokeMessage(observedRemote, "==", List.of(remote), x.activation));
         // Endpoint object identity remains deliberately unspecified by D052/C5.
 
-        ProtosIntegerValue marker = integer(7);
+        Long marker = integer(7);
         connection.createLocalSlot("label", marker);
         assertSame(marker, connection.readLocalSlot("label").orElseThrow());
         Object inheritedRead =
@@ -180,8 +179,8 @@ final class ProtosTcpConnectionIntegratedConformanceTest {
         return new ProtosHostIpEndpoint(version, bytes, port);
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static void assertNonTransferable(ProtosPrelude prelude, ThrowingAction action) {

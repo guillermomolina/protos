@@ -17,7 +17,6 @@ import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemTreeObservationFlow;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
@@ -198,14 +197,14 @@ final class ProtosCapturedFilesystemCustodyTest {
                         ProtosInvocation.invokeMessage(
                                 file,
                                 "read",
-                                List.of(new ProtosIntegerValue(4096)),
+                                List.of(Long.valueOf(4096)),
                                 activation));
         ProtosBytesValue bytes =
                 assertInstanceOf(ProtosBytesValue.class, read.resolvedValue().orElseThrow());
         byte[] raw = new byte[bytes.indexedSize()];
         for (int index = 0; index < raw.length; index++) {
             long octet = org.junit.jupiter.api.Assertions.assertInstanceOf(
-                    ProtosIntegerValue.class, bytes.indexedAt(index)).longValue();
+                    Long.class, bytes.indexedAt(index)).longValue();
             raw[index] = (byte) octet;
         }
 

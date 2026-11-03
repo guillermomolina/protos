@@ -30,7 +30,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
@@ -301,7 +300,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
         withCore(module -> {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "g7-full.protos", module);
-            ProtosIntegerValue seven = integer(7);
+            Long seven = integer(7);
             DirectEntry prepared =
                     fastDirect(identity, module, seven);
             Object[] direct = prepared.targetArguments();
@@ -365,7 +364,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                     ProtosFrameArguments.compactReturnHome(
                             zero.targetArguments()));
 
-            ProtosIntegerValue value = integer(9);
+            Long value = integer(9);
             DirectEntry one =
                     ProtosDispatchTestSupport.direct(literal, module, value);
 
@@ -438,7 +437,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
         withCore(module -> {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "i102-rich.protos", module);
-            ProtosIntegerValue seven = integer(7);
+            Long seven = integer(7);
             DirectEntry compact =
                     fastDirect(identity, module, seven);
             ProtosActivation activation =
@@ -873,8 +872,8 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                 ProtosClosureValue.class, evaluate(characters, name, activation));
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static String integerValue(Object value) {

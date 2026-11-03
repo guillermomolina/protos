@@ -48,7 +48,8 @@ import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.Prepare
 import com.guillermomolina.protos.execution.ProtosFrameLocalBindings.ResolvedLexicalWriteTarget;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+// PRUIBA DE I115, en algún momento esto volverá a funcionar
+// import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -179,13 +180,18 @@ import com.oracle.truffle.api.source.Source;
 @OperationProxy(value = ProtosExperimentalReadGlobalNode.class, name = "ReadGlobal")
 // I115-H7 EXPERIMENTAL: GraalPy-shaped method call, numeric and comparison operations.
 @OperationProxy(value = ProtosCallNilaryMethodNode.class, name = "CallNilaryMethod")
-@OperationProxy(value = ProtosCallUnaryMethodNode.class, name = "CallUnaryMethod")
+// PRUIBA DE I115, en algún momento esto volverá a funcionar
+// Original operation proxy:
+// @OperationProxy(value = ProtosCallUnaryMethodNode.class, name = "CallUnaryMethod")
+@OperationProxy(value = ProtosCallUnaryMethodNode.class, name = "CallUnaryMethod", forceCached = true)
 @OperationProxy(value = ProtosExperimentalGetMethodNode.class, name = "GetMethod")
 @OperationProxy(value = ProtosExperimentalCallBinaryMethodNode.class, name = "CallBinaryMethod")
 @OperationProxy(value = ProtosCallTernaryMethodNode.class, name = "CallTernaryMethod")
 @OperationProxy(value = ProtosCallQuaternaryMethodNode.class, name = "CallQuaternaryMethod")
 @OperationProxy(value = ProtosCallVarargsMethodNode.class, name = "CallVarargsMethod")
 @OperationProxy(value = ProtosExperimentalNumberAddNode.class, name = "NumberAdd")
+@OperationProxy(value = ProtosExperimentalNumberSubtractNode.class, name = "NumberSubtract")
+@OperationProxy(value = ProtosExperimentalNumberMultiplyNode.class, name = "NumberMultiply")
 @OperationProxy(value = ProtosExperimentalNumberInPlaceAddNode.class, name = "NumberInPlaceAdd")
 @OperationProxy(value = ProtosExperimentalLessNode.class, name = "Lt")
 abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNode {
@@ -585,22 +591,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return directScalarLocalCarrierBody;
     }
 
-    /*
-     * I112: whether EpilogForReturn applies the MaterializeReturnCarrier
-     * projection, exactly at the roots whose terminal value the lowerer used
-     * to wrap in that operation. Every other root (an I101-B scalar-lane
-     * body, a builder-level root) returns its value unchanged and leaves the
-     * projection to its caller. Recorded once per parse.
-     */
-    @CompilationFinal private transient boolean epilogProjectsReturnCarrier;
-
-    final void recordEpilogProjectsReturnCarrier(boolean projects) {
-        this.epilogProjectsReturnCarrier = projects;
-    }
-
-    final boolean epilogProjectsReturnCarrier() {
-        return epilogProjectsReturnCarrier;
-    }
+    // PRUIBA DE I115, en algún momento esto volverá a funcionar
+    // Removed per-root numeric return-projection state.
 
     final void recordFrameNativeBindings(
             LocalRangeAccessor frameBackedLocals,
@@ -718,7 +710,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             VirtualFrame frame,
             BytecodeNode bytecodeNode,
             int bytecodeIndex) {
-        closeOwnedReturnHome(frame, null);
+        // PRUIBA DE I115, en algún momento esto volverá a funcionar
+        // closeOwnedReturnHome(frame, null);
         return t;
     }
 
@@ -805,16 +798,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         };
     }
 
-    /**
-     * I112 / PLAT062-T return epilogue: for a root recorded by the lowerer as
-     * projecting (exactly where it used to emit that operation), the implicit
-     * final projection of {@link MaterializeReturnCarrier}: a primitive
-     * numeric carrier reaches only a caller that accepts it. Every other value,
-     * including a pending continuation or terminal transport, and every value
-     * of a non-projecting root, is returned unchanged. It never finishes a
-     * suspended invocation. I111-B: an auxiliary structured/C-prime root is
-     * never projecting, so it returns its values unchanged as before.
-     */
+    /** I115: direct return, following GraalPy's return epilogue. */
     @EpilogReturn(storeBytecodeIndex = true)
     public static final class EpilogForReturn {
         @Specialization
@@ -831,34 +815,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 root.traceOrProfileReturn(frame, bytecodeNode, value);
             }
             // I115: the definitive completion of this activation closes its own home.
-            closeOwnedReturnHome(frame, value);
-            // I115-H5 EXPERIMENTAL: the callee's value, primitive included, as is.
-            if (root.isExperimentalCalleeContextRoot()) {
-                return value;
-            }
-            /*
-             * I115-H7-R3 EXPERIMENTAL: an admitted compact callee returns its
-             * result as is, without a per-call caller test or carrier
-             * projection. The root flag is compilation-final, so only one
-             * epilogue survives partial evaluation. RECORDED DIVERGENCE: an
-             * internal carrier may reach any caller of such a root.
-             */
-            if (root.isExperimentalPrimitiveArgumentRoot()) {
-                return value;
-            }
-            /*
-             * I115-H7-R5: the admitted H7 signed-64 result stays a Java Long
-             * through the root epilogue, as on the GraalPy physical path.
-             * Other values retain the existing projection contract.
-             */
-            if (root.isExperimentalH7RawIntegerReturn()
-                    && value instanceof Long) {
-                return value;
-            }
-            if (!root.epilogProjectsReturnCarrier()) {
-                return value;
-            }
-            return MaterializeReturnCarrier.perform(value, frame);
+            // PRUIBA DE I115, en algún momento esto volverá a funcionar
+            // closeOwnedReturnHome(frame, value);
+            // PRUIBA DE I115, en algún momento esto volverá a funcionar
+            return value;
         }
     }
 
@@ -879,7 +839,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 root.traceOrProfileException(frame, bytecodeNode, exception);
             }
             // I115: a guest exception definitively abandons this activation.
-            closeOwnedReturnHome(frame, null);
+            // PRUIBA DE I115, en algún momento esto volverá a funcionar
+            // closeOwnedReturnHome(frame, null);
         }
     }
 
@@ -4335,15 +4296,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     frame.getArguments());
         }
 
-        @Specialization(replaces = "doLong")
-        public static long doRepresented(@Bind VirtualFrame frame) {
-            Object value = ProtosFrameArguments.experimentalSuppliedArgument0(
-                    frame.getArguments());
-            if (value instanceof Long carrier) {
-                return carrier.longValue();
-            }
-            return experimentalRepresentedLong(value);
-        }
+        // PRUIBA DE I115, en algún momento esto volverá a funcionar
+        // @Specialization(replaces = "doLong")
+        // public static long doRepresented(@Bind VirtualFrame frame) {
+        //     Object value = ProtosFrameArguments.experimentalSuppliedArgument0(
+        //             frame.getArguments());
+        //     if (value instanceof Long carrier) {
+        //         return carrier.longValue();
+        //     }
+        //     return experimentalRepresentedLong(value);
+        // }
 
         @NonIdempotent
         static boolean isLongArgument0(VirtualFrame frame) {
@@ -4352,11 +4314,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /* I115-H3: the long of a supplied small guest Integer value, out of line. */
-    @InliningCutoff
-    private static long experimentalRepresentedLong(Object value) {
-        return ((ProtosIntegerValue) value).longValue();
-    }
+    // PRUIBA DE I115, en algún momento esto volverá a funcionar
+    // /* I115-H3: the long of a supplied small guest Integer value, out of line. */
+    // @InliningCutoff
+    // private static long experimentalRepresentedLong(Object value) {
+    //     return ((ProtosIntegerValue) value).longValue();
+    // }
 
     /**
      * I115-H1-FIX: whether a staged Boolean-control receiver is exact
@@ -4448,20 +4411,21 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /**
-     * I091: the implicit final value of a source root. A primitive numeric
-     * carrier is returned as is only to a fused direct source send that
-     * accepts it; every other caller receives the guest value.
-     */
-    public static final class MaterializeReturnCarrier {
-        public static Object perform(Object value, VirtualFrame frame) {
-            if (ProtosNumericValueSupport.isPrimitiveCarrier(value)
-                    && ProtosFrameArguments.acceptsPrimitiveResult(frame.getArguments())) {
-                return value;
-            }
-            return ProtosNumericValueSupport.guestValue(value);
-        }
-    }
+    // PRUIBA DE I115, en algún momento esto volverá a funcionar
+    // /**
+     // * I091: the implicit final value of a source root. A primitive numeric
+     // * carrier is returned as is only to a fused direct source send that
+     // * accepts it; every other caller receives the guest value.
+     // */
+    // public static final class MaterializeReturnCarrier {
+        // public static Object perform(Object value, VirtualFrame frame) {
+            // if (ProtosNumericValueSupport.isPrimitiveCarrier(value)
+                    // && ProtosFrameArguments.acceptsPrimitiveResult(frame.getArguments())) {
+                // return value;
+            // }
+            // return ProtosNumericValueSupport.guestValue(value);
+        // }
+    // }
 
 
     /**

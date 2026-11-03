@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -47,11 +46,11 @@ class ProtosStandardNumberEqualityTest {
                 ProtosSignalException.class,
                 () ->
                         ProtosInvocation.invokeMessage(
-                                new ProtosIntegerValue(1L),
+                                Long.valueOf(1L),
                                 "==",
                                 List.of(
-                                        new ProtosIntegerValue(1L),
-                                        new ProtosIntegerValue(2L)),
+                                        Long.valueOf(1L),
+                                        Long.valueOf(2L)),
                                 prelude.newModuleActivation()));
     }
 
@@ -66,16 +65,16 @@ class ProtosStandardNumberEqualityTest {
         assertEquality(true, integer(twoTo53, prelude), new ProtosFloatValue(0x1p53), a);
         assertEquality(
                 false, integer(twoTo53.add(BigInteger.ONE), prelude), new ProtosFloatValue(0x1p53), a);
-        assertEquality(false, new ProtosIntegerValue(Long.MAX_VALUE), new ProtosFloatValue(0x1p63), a);
+        assertEquality(false, Long.valueOf(Long.MAX_VALUE), new ProtosFloatValue(0x1p63), a);
         assertEquality(true, integer(BigInteger.ONE.shiftLeft(63), prelude), new ProtosFloatValue(0x1p63), a);
-        assertEquality(true, new ProtosIntegerValue(Long.MIN_VALUE), new ProtosFloatValue(-0x1p63), a);
+        assertEquality(true, Long.valueOf(Long.MIN_VALUE), new ProtosFloatValue(-0x1p63), a);
         assertEquality(true, integer(twoTo1000, prelude), new ProtosFloatValue(0x1p1000), a);
         assertEquality(true, integer(twoTo1000.negate(), prelude), new ProtosFloatValue(-0x1p1000), a);
         assertEquality(
                 false, integer(twoTo1000.add(BigInteger.ONE), prelude), new ProtosFloatValue(0x1p1000), a);
         assertEquality(true, integer(twoTo1000, prelude), integer(twoTo1000, prelude), a);
         assertEquality(false, integer(twoTo1000, prelude), integer(twoTo1000.negate(), prelude), a);
-        assertEquality(false, new ProtosIntegerValue(1), integer(twoTo53.shiftLeft(11), prelude), a);
+        assertEquality(false, Long.valueOf(1), integer(twoTo53.shiftLeft(11), prelude), a);
         assertEquality(false, integer(twoTo1000, prelude), new ProtosFloatValue(Double.POSITIVE_INFINITY), a);
     }
 
@@ -86,9 +85,9 @@ class ProtosStandardNumberEqualityTest {
         ProtosFloatValue nan = new ProtosFloatValue(Double.NaN);
 
         assertEquality(false, nan, nan, a);
-        assertEquality(false, nan, new ProtosIntegerValue(0), a);
+        assertEquality(false, nan, Long.valueOf(0), a);
         assertEquality(true, new ProtosFloatValue(0.0d), new ProtosFloatValue(-0.0d), a);
-        assertEquality(true, new ProtosIntegerValue(0), new ProtosFloatValue(-0.0d), a);
+        assertEquality(true, Long.valueOf(0), new ProtosFloatValue(-0.0d), a);
     }
 
     @Test
@@ -98,7 +97,7 @@ class ProtosStandardNumberEqualityTest {
         Object[][] equalPairs = {
             {integer(BigInteger.ONE.shiftLeft(53), prelude), new ProtosFloatValue(0x1p53)},
             {integer(BigInteger.ONE.shiftLeft(1000), prelude), new ProtosFloatValue(0x1p1000)},
-            {new ProtosIntegerValue(0), new ProtosFloatValue(-0.0d)},
+            {Long.valueOf(0), new ProtosFloatValue(-0.0d)},
             {integer(BigInteger.ONE.shiftLeft(64), prelude), integer(BigInteger.ONE.shiftLeft(64), prelude)},
         };
         for (Object[] pair : equalPairs) {
@@ -114,7 +113,7 @@ class ProtosStandardNumberEqualityTest {
         Object large = integer(BigInteger.ONE.shiftLeft(64), prelude);
 
         assertEquality(false, large, new ProtosStringValue("18446744073709551616"), a);
-        assertEquality(false, new ProtosIntegerValue(1), new ProtosObjectValue(ProtosObjectValue.rootObject()), a);
+        assertEquality(false, Long.valueOf(1), new ProtosObjectValue(ProtosObjectValue.rootObject()), a);
         assertEquality(false, large, BigInteger.ONE.shiftLeft(64), a);
 
         ProtosObjectValue impostor = new ProtosObjectValue(prelude.numberPrototype());

@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -313,7 +312,7 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
         if (constant == null) {
             return "host-null";
         }
-        if (constant instanceof ProtosIntegerValue integer) {
+        if (constant instanceof Long integer) {
             return "ProtosInteger(" + integer.longValue() + ")";
         }
         if (constant instanceof ProtosFrameLexicalLayout layout) {

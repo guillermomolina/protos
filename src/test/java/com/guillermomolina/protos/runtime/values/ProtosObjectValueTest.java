@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.runtime.values;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -55,12 +54,12 @@ class ProtosObjectValueTest {
     void anyProtosValueMayBeADelegationParent() {
         ProtosObjectValue stringChild = new ProtosObjectValue(new ProtosStringValue("parent"));
         ProtosObjectValue numberChild =
-                new ProtosObjectValue(new ProtosIntegerValue(42));
+                new ProtosObjectValue(Long.valueOf(42));
         ProtosObjectValue booleanChild = new ProtosObjectValue(ProtosBooleanValue.TRUE);
         ProtosObjectValue nullChild = new ProtosObjectValue(ProtosNullValue.INSTANCE);
 
         assertTrue(stringChild.parent().orElseThrow() instanceof ProtosStringValue);
-        assertTrue(numberChild.parent().orElseThrow() instanceof ProtosIntegerValue);
+        assertTrue(numberChild.parent().orElseThrow() instanceof Long);
         assertSame(ProtosBooleanValue.TRUE, booleanChild.parent().orElseThrow());
         assertSame(ProtosNullValue.INSTANCE, nullChild.parent().orElseThrow());
     }

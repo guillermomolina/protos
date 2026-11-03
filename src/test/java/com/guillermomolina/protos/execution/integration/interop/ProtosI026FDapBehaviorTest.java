@@ -21,7 +21,6 @@ import com.guillermomolina.protos.execution.ProtosDapTestSupport.DapClient;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.oracle.truffle.api.CallTarget;
@@ -413,14 +412,14 @@ final class ProtosI026FDapBehaviorTest {
         ProtosObjectValue context = new ProtosObjectValue(ProtosObjectValue.rootObject());
         context.createLocalSlot("text", new ProtosStringValue("hello"));
         context.createLocalSlot("flag", ProtosBooleanValue.TRUE);
-        context.createLocalSlot("number", new ProtosIntegerValue(42));
+        context.createLocalSlot("number", Long.valueOf(42));
         context.createLocalSlot(
                 "array",
                 new ProtosArrayValue(
                         ProtosObjectValue.rootObject(),
                         List.of(
                                 new ProtosStringValue("first"),
-                                new ProtosIntegerValue(7))));
+                                Long.valueOf(7))));
         return new ProtosActivation(context, List.of(), context);
     }
 

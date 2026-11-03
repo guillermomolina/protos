@@ -330,7 +330,7 @@ final class ProtosPerf006Plat029TextReaderCallbackTest {
     private static ProtosBytesValue bytes(ProtosPrelude prelude, int... values) {
         ProtosBytesValue bytes = new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (int value : values) {
-            bytes.indexedAdd(new ProtosIntegerValue(value));
+            bytes.indexedAdd(Long.valueOf(value));
         }
         return bytes;
     }

@@ -19,7 +19,6 @@ package com.guillermomolina.protos.runtime.io;
 import com.guillermomolina.protos.execution.ProtosParallelRuntime;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -90,7 +89,7 @@ final class ProtosNetworkCapabilityTransferTest {
         ProtosPrelude prelude = core();
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue ordinary = new ProtosObjectValue(prelude.networkPrototype());
-        ordinary.createLocalSlot("payload", new ProtosIntegerValue(7));
+        ordinary.createLocalSlot("payload", Long.valueOf(7));
         ordinary.freeze();
 
         ProtosObjectValue actorCopy =

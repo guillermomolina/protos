@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -103,7 +102,7 @@ class ProtosDerivedInequalityBackendTest {
                 "==",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) ->
-                                new ProtosIntegerValue(1L)));
+                                Long.valueOf(1L)));
 
         assertThrows(
                 ProtosSignalException.class,

@@ -28,7 +28,6 @@ import com.guillermomolina.protos.execution.ProtosSourceCompiler;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -140,14 +139,14 @@ prelude.newModuleActivation());
                         new ProtosStringValue("completed"),
                         ProtosNullValue.INSTANCE,
                         ProtosNullValue.INSTANCE,
-                        new ProtosIntegerValue(0L));
+                        Long.valueOf(0L));
         ProtosArrayValue completed1 =
                 array(
                         prelude,
                         new ProtosStringValue("completed"),
                         ProtosNullValue.INSTANCE,
                         ProtosNullValue.INSTANCE,
-                        new ProtosIntegerValue(1L));
+                        Long.valueOf(1L));
 
         ProtosArrayValue attempts =
                 array(prelude, new ProtosStringValue("infra-a"));
@@ -160,17 +159,17 @@ prelude.newModuleActivation());
                 array(
                         prelude,
                         array(prelude),
-                        new ProtosIntegerValue(0L),
+                        Long.valueOf(0L),
                         attempts,
                         cutover,
-                        new ProtosIntegerValue(1L));
+                        Long.valueOf(1L));
         ProtosArrayValue aborted =
                 array(
                         prelude,
                         new ProtosStringValue("infrastructure-aborted"),
                         ProtosNullValue.INSTANCE,
                         abortPayload,
-                        new ProtosIntegerValue(3));
+                        Long.valueOf(3));
 
         assertEquals(0, ProtosCli.testToolExitCodeForRuntime(completed0, err));
         assertEquals(1, ProtosCli.testToolExitCodeForRuntime(completed1, err));
@@ -205,7 +204,7 @@ prelude.newModuleActivation());
                                 "infrastructure-aborted"),
                         ProtosNullValue.INSTANCE,
                         ProtosNullValue.INSTANCE,
-                        new ProtosIntegerValue(3));
+                        Long.valueOf(3));
 
         assertEquals(
                 3,

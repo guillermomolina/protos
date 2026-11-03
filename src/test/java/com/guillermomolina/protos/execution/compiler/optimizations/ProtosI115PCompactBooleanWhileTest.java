@@ -28,7 +28,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -437,7 +436,7 @@ final class ProtosI115PCompactBooleanWhileTest {
             ProtosSignalException direct = assertThrows(
                     ProtosSignalException.class,
                     () -> ProtosExperimentalLessNode.canonicalCondition(
-                            runRoot, module, new ProtosIntegerValue(1)),
+                            runRoot, module, Long.valueOf(1)),
                     "Lt accepts no truthiness");
             assertSame(
                     ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.ERROR),
@@ -445,14 +444,14 @@ final class ProtosI115PCompactBooleanWhileTest {
 
             // Canonical false: zero iterations.
             assertEquals("0", integerValue(
-                    enter(fastDirect(run, module, new ProtosIntegerValue(5)))));
+                    enter(fastDirect(run, module, Long.valueOf(5)))));
 
             ProtosClosureValue counted = closure(
                     "(limit) => { n: 0\n(() => n < limit).whileTrue() {\nn = n + 1\n}\nn }",
                     module);
             // Canonical true until the bound: three iterations.
             assertEquals("3", integerValue(
-                    enter(fastDirect(counted, module, new ProtosIntegerValue(3)))));
+                    enter(fastDirect(counted, module, Long.valueOf(3)))));
 
             ProtosObjectValue notBoolean =
                     new ProtosObjectValue(ProtosObjectValue.rootObject());

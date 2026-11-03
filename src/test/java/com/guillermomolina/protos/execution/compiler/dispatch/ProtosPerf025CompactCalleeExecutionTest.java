@@ -36,7 +36,6 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -89,14 +88,14 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     constantOrdinalOf(identity, "BindUnaryFrameParameter"),
                     "PERF029: the LocalRangeAccessor index is an instruction constant");
 
-            ProtosIntegerValue one = integer(1);
+            Long one = integer(1);
             Object[] method =
                     ProtosFrameArguments.compactImmediateMethodCall(
                             identity, newObject(), newObject(), module, new Object[] {one});
             assertSame(one, target(identity).call(method));
             assertSame(identity, method[0], "no activation was materialized or published");
 
-            ProtosIntegerValue two = integer(2);
+            Long two = integer(2);
             DirectEntry direct = fastDirect(identity, module, two);
             assertSame(two, enter(direct));
             assertSame(identity, direct.targetArguments()[0]);
@@ -115,7 +114,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         withCore(module -> {
             ProtosClosureValue identity =
                     closure("(value) => { value }", module);
-            ProtosIntegerValue value = integer(42);
+            Long value = integer(42);
 
             for (int attempt = 0; attempt < 8; attempt++) {
                 DirectEntry compact =
@@ -194,7 +193,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertContains(instructions, "BindUnaryFrameParameter");
             assertNone(instructions, "BindClosureFrameParameter");
 
-            ProtosIntegerValue value = integer(17);
+            Long value = integer(17);
             assertSame(value, enter(fastDirect(identity, module, value)));
 
             // The debugger keeps the same shared numeric site and no other ABI.
@@ -310,10 +309,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     @Test
     void i104RequiredPrefixIntegratesDefaultsRestAndContext() throws Exception {
         withCore(module -> {
-            ProtosIntegerValue a = integer(11);
-            ProtosIntegerValue b = integer(22);
-            ProtosIntegerValue c = integer(33);
-            ProtosIntegerValue d = integer(44);
+            Long a = integer(11);
+            Long b = integer(22);
+            Long c = integer(33);
+            Long d = integer(44);
 
             ProtosClosureValue defaults =
                     closure("(a, b, c: a) => { c }", module);
@@ -452,9 +451,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         withCore(module -> {
             ProtosClosureValue middle = closure("(a, b, c) => { b }", module);
             assertNone(instructionNames(middle), "CurrentActivation");
-            ProtosIntegerValue a = integer(1);
-            ProtosIntegerValue b = integer(2);
-            ProtosIntegerValue c = integer(3);
+            Long a = integer(1);
+            Long b = integer(2);
+            Long c = integer(3);
             DirectEntry ordinary = fastDirect(middle, module, a, b, c);
             assertSame(b, enter(ordinary));
             assertSame(middle, ordinary.targetArguments()[0]);
@@ -510,7 +509,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             // guest constant, so the raw entry already returns the guest
             // Integer and delivers no private carrier.
             Object raw = target(run).call(method);
-            assertInstanceOf(ProtosIntegerValue.class, raw);
+            assertInstanceOf(Long.class, raw);
             assertEquals("1", integerValue(raw));
             assertSame(
                     run,
@@ -737,7 +736,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                  * projected by the I112 EpilogForReturn.
                  */
                 Object raw = target(scalar).call(method);
-                assertInstanceOf(ProtosIntegerValue.class, raw, body.characters());
+                assertInstanceOf(Long.class, raw, body.characters());
                 assertEquals(Long.toString(body.expected()), integerValue(raw), body.characters());
                 assertSame(
                         scalar, method[0],
@@ -1781,7 +1780,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertNone(names, "CreateCurrentFrameLocal");
             assertNone(names, "ResolveRootFrameLocalWriteTarget");
             assertNone(names, "AssignRootFrameLocal");
-            ProtosIntegerValue a = integer(4);
+            Long a = integer(4);
             DirectEntry prepared = fastDirect(locals, module, a);
             assertSame(a, enter(prepared));
             assertSame(locals, prepared.targetArguments()[0], "no activation was materialized");
@@ -1843,7 +1842,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosFrameLexicalLayout foreign =
                     ProtosFrameLexicalLayout.of(
                             new String[] {"perf030Fallback"}, new int[] {0});
-            ProtosIntegerValue value = integer(3);
+            Long value = integer(3);
             assertSame(
                     value,
                     ProtosBytecodeRootNode.CreateCurrentIndexedLocalSlot.createIndexedCurrentLocalSlot(
@@ -1929,7 +1928,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         withCore(module -> {
             ProtosClosureValue earlier = closure("(a, b: a) => { b }", module);
             assertNone(instructionNames(earlier), "CurrentActivation");
-            ProtosIntegerValue a = integer(5);
+            Long a = integer(5);
             DirectEntry prepared = fastDirect(earlier, module, a);
             assertSame(a, enter(prepared));
             assertSame(earlier, prepared.targetArguments()[0]);
@@ -2473,8 +2472,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         outcome.value())));
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static String integerValue(Object value) {

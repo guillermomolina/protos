@@ -35,12 +35,12 @@ import org.junit.jupiter.api.Test;
 
 /**
  * I091 / PLAT056 Candidate C: a semantic Integer within the signed-64 range is a long-only
- * {@link ProtosIntegerValue}; outside it, a FROZEN ordinary {@link ProtosLargeIntegerValue} owned
+ * {@link Long}; outside it, a FROZEN ordinary {@link ProtosLargeIntegerValue} owned
  * by a Prelude. Every exact result is normalized, so the representation is a function of the value.
  * Under D197-C the long-only value delegates to the Prelude's SmallInteger and the large value to
  * its BigInteger; both concrete prototypes delegate to Integer.
  */
-final class ProtosIntegerValueRepresentationTest {
+final class ProtosLongRepresentationTest {
     private static final BigInteger LONG_MAX = BigInteger.valueOf(Long.MAX_VALUE);
     private static final BigInteger LONG_MIN = BigInteger.valueOf(Long.MIN_VALUE);
     private static final BigInteger ABOVE_LONG = LONG_MAX.add(BigInteger.ONE);
@@ -124,8 +124,8 @@ final class ProtosIntegerValueRepresentationTest {
 
     @Test
     void smallArithmeticStaysSmallAndOverflowPromotesExactly() {
-        ProtosIntegerValue forty = new ProtosIntegerValue(40L);
-        ProtosIntegerValue two = new ProtosIntegerValue(2L);
+        Long forty = Long.valueOf(40L);
+        Long two = Long.valueOf(2L);
 
         assertSmall(42L, ProtosNumericValueSupport.addIntegers(forty, two, null));
         assertSmall(38L, ProtosNumericValueSupport.subtractIntegers(forty, two, null));
@@ -136,13 +136,13 @@ final class ProtosIntegerValueRepresentationTest {
         assertLarge(
                 ABOVE_LONG,
                 ProtosNumericValueSupport.addIntegers(
-                        new ProtosIntegerValue(Long.MAX_VALUE), new ProtosIntegerValue(1L), prelude));
+                        Long.valueOf(Long.MAX_VALUE), Long.valueOf(1L), prelude));
         assertLarge(
                 BELOW_LONG,
                 ProtosNumericValueSupport.subtractIntegers(
-                        new ProtosIntegerValue(Long.MIN_VALUE), new ProtosIntegerValue(1L), prelude));
+                        Long.valueOf(Long.MIN_VALUE), Long.valueOf(1L), prelude));
 
-        ProtosIntegerValue multiplicand = new ProtosIntegerValue(3_037_000_500L);
+        Long multiplicand = Long.valueOf(3_037_000_500L);
         assertLarge(
                 BigInteger.valueOf(3_037_000_500L).pow(2),
                 ProtosNumericValueSupport.multiplyIntegers(multiplicand, multiplicand, prelude));
@@ -151,7 +151,7 @@ final class ProtosIntegerValueRepresentationTest {
     @Test
     void largeArithmeticNormalizesBackToTheLongRepresentationWhenTheResultFits() {
         Object above = ProtosNumericValueSupport.integer(ABOVE_LONG, prelude);
-        ProtosIntegerValue maximum = new ProtosIntegerValue(Long.MAX_VALUE);
+        Long maximum = Long.valueOf(Long.MAX_VALUE);
 
         assertSmall(1L, ProtosNumericValueSupport.subtractIntegers(above, maximum, null));
         assertSmall(0L, ProtosNumericValueSupport.subtractIntegers(above, above, null));
@@ -162,7 +162,7 @@ final class ProtosIntegerValueRepresentationTest {
         assertLarge(
                 BigInteger.ONE.shiftLeft(63),
                 ProtosNumericValueSupport.quotientIntegers(
-                        new ProtosIntegerValue(Long.MIN_VALUE), new ProtosIntegerValue(-1L), prelude));
+                        Long.valueOf(Long.MIN_VALUE), Long.valueOf(-1L), prelude));
 
         assertSmall(2L, quotient(7L, 3L));
         assertSmall(-2L, quotient(-7L, 3L));
@@ -178,8 +178,8 @@ final class ProtosIntegerValueRepresentationTest {
 
     @Test
     void comparisonAndSemanticIdentityDependOnlyOnTheMathematicalInteger() {
-        ProtosIntegerValue smallA = new ProtosIntegerValue(42L);
-        ProtosIntegerValue smallB = new ProtosIntegerValue(42L);
+        Long smallA = Long.valueOf(42L);
+        Long smallB = Long.valueOf(42L);
 
         Object positiveBigA = ProtosNumericValueSupport.integer(BigInteger.ONE.shiftLeft(100), prelude);
         Object positiveBigB = ProtosNumericValueSupport.integer(BigInteger.ONE.shiftLeft(100), prelude);
@@ -206,17 +206,17 @@ final class ProtosIntegerValueRepresentationTest {
 
     @Test
     void exactIntProjectionUsesTheLongRepresentationWithoutChangingIntegerSemantics() {
-        ProtosIntegerValue minimum = new ProtosIntegerValue(Integer.MIN_VALUE);
-        ProtosIntegerValue maximum = new ProtosIntegerValue(Integer.MAX_VALUE);
-        ProtosIntegerValue above = new ProtosIntegerValue((long) Integer.MAX_VALUE + 1L);
+        Long minimum = Long.valueOf(Integer.MIN_VALUE);
+        Long maximum = Long.valueOf(Integer.MAX_VALUE);
+        Long above = Long.valueOf((long) Integer.MAX_VALUE + 1L);
         Object huge = ProtosNumericValueSupport.integer(BigInteger.ONE.shiftLeft(100), prelude);
 
-        assertTrue(minimum.fitsInIntForRuntime());
-        assertTrue(maximum.fitsInIntForRuntime());
-        assertEquals(Integer.MIN_VALUE, minimum.intValueExactForRuntime());
-        assertEquals(Integer.MAX_VALUE, maximum.intValueExactForRuntime());
+        assertTrue(ProtosNumericValueSupport.isIntegerInIntRange(minimum));
+        assertTrue(ProtosNumericValueSupport.isIntegerInIntRange(maximum));
+        assertEquals(Integer.MIN_VALUE, ProtosNumericValueSupport.exactInt(minimum));
+        assertEquals(Integer.MAX_VALUE, ProtosNumericValueSupport.exactInt(maximum));
 
-        assertFalse(above.fitsInIntForRuntime());
+        assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(above));
         assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(huge));
         assertFalse(ProtosNumericValueSupport.isIntegerInLongRange(huge));
     }
@@ -234,9 +234,9 @@ final class ProtosIntegerValueRepresentationTest {
 
     @Test
     void overflowAndReturnPreserveSignAndMagnitudeAtBothBoundaries() {
-        ProtosIntegerValue maximum = new ProtosIntegerValue(Long.MAX_VALUE);
-        ProtosIntegerValue minimum = new ProtosIntegerValue(Long.MIN_VALUE);
-        ProtosIntegerValue one = new ProtosIntegerValue(1L);
+        Long maximum = Long.valueOf(Long.MAX_VALUE);
+        Long minimum = Long.valueOf(Long.MIN_VALUE);
+        Long one = Long.valueOf(1L);
 
         Object above = ProtosNumericValueSupport.addIntegers(maximum, one, prelude);
         assertLarge(ABOVE_LONG, above);
@@ -285,18 +285,18 @@ final class ProtosIntegerValueRepresentationTest {
 
     private static Object quotient(long left, long right) {
         return ProtosNumericValueSupport.quotientIntegers(
-                new ProtosIntegerValue(left), new ProtosIntegerValue(right), null);
+                Long.valueOf(left), Long.valueOf(right), null);
     }
 
     private static Object remainder(long left, long right) {
         return ProtosNumericValueSupport.remainderIntegers(
-                new ProtosIntegerValue(left), new ProtosIntegerValue(right), null);
+                Long.valueOf(left), Long.valueOf(right), null);
     }
 
     private static void assertSmall(long expected, Object actual) {
-        ProtosIntegerValue small = assertInstanceOf(ProtosIntegerValue.class, actual);
+        Long small = assertInstanceOf(Long.class, actual);
         assertEquals(expected, small.longValue());
-        assertSame(prelude.smallIntegerPrototype(), small.representedDelegationParent(prelude));
+        assertSame(prelude.smallIntegerPrototype(), ProtosValueLookup.delegationParent(small, prelude).orElseThrow());
         assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(actual));
     }
 

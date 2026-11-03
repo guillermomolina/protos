@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -301,7 +300,7 @@ final class ProtosI091PrimitiveCarrierPropagationTest {
     void carrierMaterializationIsTheOnlyRecognition() {
         Object integer = ProtosNumericValueSupport.guestValue(41L);
         Object floating = ProtosNumericValueSupport.guestValue(0.5d);
-        assertEquals(41L, ((ProtosIntegerValue) integer).longValue());
+        assertEquals(41L, ((Long) integer).longValue());
         assertEquals(0.5d, ((ProtosFloatValue) floating).value());
         Object other = new Object();
         assertSame(other, ProtosNumericValueSupport.guestValue(other));

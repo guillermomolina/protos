@@ -427,7 +427,7 @@ public final class ProtosValueLookup {
      * Returns whether {@code receiver} belongs to the semantic Integer
      * representation family, the only represented values admitted by
      * {@link #lookupGuardedInteger}. Membership is by representation, not by
-     * value or identity: every {@link ProtosIntegerValue} is an immutable
+     * value or identity: every {@link Long} is an immutable
      * carrier with no local slots whose delegation parent is fixed by its
      * representation contract to the owning prelude's SmallInteger prototype
      * (D197-C), which delegates to the common Integer prototype.
@@ -448,7 +448,8 @@ public final class ProtosValueLookup {
      * boundary are not Protos values and are never admitted by this test.
      */
     public static boolean isProtosValue(Object value) {
-        return value instanceof ProtosObjectValue
+        return value instanceof Long
+                || value instanceof ProtosObjectValue
                 || value instanceof ProtosRepresentedValue;
     }
 
@@ -633,6 +634,11 @@ public final class ProtosValueLookup {
 
         if (receiver instanceof ProtosObjectValue ordinary) {
             return ordinary.parent();
+        }
+        if (receiver instanceof Long) {
+            return Optional.of(
+                    ProtosRepresentedValue.requirePrelude(prelude, "SmallInteger")
+                            .smallIntegerPrototype());
         }
         if (receiver instanceof ProtosRepresentedValue represented) {
             return Optional.of(

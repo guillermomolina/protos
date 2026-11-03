@@ -28,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
@@ -113,8 +112,8 @@ final class ProtosPerf038EResidualCallGraphTest {
         withCore(module -> {
             ProtosClosureValue parsed =
                     parsedClosure("(a, b) => { a }", "perf038e-arguments.protos", module);
-            ProtosIntegerValue one = integer(1);
-            ProtosIntegerValue two = integer(2);
+            Long one = integer(1);
+            Long two = integer(2);
             Object[] arguments =
                     ProtosFrameArguments.compactImmediateMethodCall(
                             parsed, parsed, new ProtosObjectValue(parsed), module,
@@ -376,8 +375,8 @@ final class ProtosPerf038EResidualCallGraphTest {
         return assertInstanceOf(ProtosArrayValue.class, array).indexedSnapshot();
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static String integerValue(Object value) {

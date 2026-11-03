@@ -26,7 +26,6 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.io.ProtosFileValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
@@ -179,8 +178,8 @@ final class ProtosDiagnosticInspectorTest {
         assertFalse(rendered.contains("\n"), rendered);
     }
 
-    private static ProtosIntegerValue octet(int value) {
-        return new ProtosIntegerValue(value);
+    private static Long octet(int value) {
+        return Long.valueOf(value);
     }
 
 }

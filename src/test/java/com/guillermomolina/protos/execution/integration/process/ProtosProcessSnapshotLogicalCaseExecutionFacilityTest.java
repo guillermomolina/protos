@@ -25,7 +25,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -75,8 +74,8 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
                 runOneCase(source, List.of("only"), "only");
 
         assertEquals("completed", stringSlot(observation, "state"));
-        ProtosIntegerValue value =
-                assertInstanceOf(ProtosIntegerValue.class, observation.readLocalSlot("value").orElseThrow());
+        Long value =
+                assertInstanceOf(Long.class, observation.readLocalSlot("value").orElseThrow());
         // A value other than exactly 1 would mean the selected Test body ran zero or more than
         // once instead of exactly once.
         assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));

@@ -346,7 +346,7 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
                 new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (int value : values) {
             bytes.indexedAdd(
-                    new ProtosIntegerValue(value));
+                    Long.valueOf(value));
         }
         return bytes;
     }

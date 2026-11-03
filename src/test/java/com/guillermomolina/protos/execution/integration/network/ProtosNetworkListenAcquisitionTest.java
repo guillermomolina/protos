@@ -189,7 +189,7 @@ final class ProtosNetworkListenAcquisitionTest {
     private static ProtosObjectValue request(Object version,Object address,Object port){ ProtosObjectValue r=new ProtosObjectValue(ProtosObjectValue.rootObject()); r.createLocalSlot("ipVersion",version); r.createLocalSlot("address",address); r.createLocalSlot("port",port); return r; }
     private static ProtosObjectValue ipAddress(Fixture x,int version,long bits){ return ipAddress(x,version,BigInteger.valueOf(bits)); }
     private static ProtosObjectValue ipAddress(Fixture x,int version,BigInteger bits){ Object factory=x.prelude.ipAddressPrototypeForRuntime(); return (ProtosObjectValue)ProtosInvocation.invoke(factory,List.of(integer(version),com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(bits, x.prelude)),x.activation); }
-    private static ProtosIntegerValue integer(long v){ return new ProtosIntegerValue(v); }
+    private static Long integer(long v){ return Long.valueOf(v); }
     private static void assertFailedAs(ProtosFutureValue f,ProtosPrelude p,String name){ assertEquals(ProtosFutureValue.State.FAILED,f.state()); assertSame(p.bindings().readLocalSlot(name).orElseThrow(),f.failedError().orElseThrow().parent().orElseThrow()); }
 
     private record Fixture(ProtosPrelude prelude,ProtosActivation activation,RecordingNetworkBackend backend,ProtosNetworkCapabilityValue network) {}

@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosComplexArithmetic.Operation;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -161,7 +160,7 @@ final class ProtosComplexArithmeticTest {
         assertInstanceOf(ProtosLargeIntegerValue.class, ProtosComplexNumericSupport.real(sum));
         assertExactComponent(max, ProtosComplexNumericSupport.imaginary(sum));
         Object back = subtract(sum, integer(1));
-        assertInstanceOf(ProtosIntegerValue.class, ProtosComplexNumericSupport.real(back));
+        assertInstanceOf(Long.class, ProtosComplexNumericSupport.real(back));
 
         Object big = ProtosNumericValueSupport.integerFromHost(twoPow63, prelude);
         Object halves = divide(construct(big, integer(1)), integer(2));
@@ -635,7 +634,7 @@ final class ProtosComplexArithmeticTest {
     }
 
     private static Object integer(long value) {
-        return new ProtosIntegerValue(value);
+        return Long.valueOf(value);
     }
 
     private static Object fraction(long numerator, long denominator) {

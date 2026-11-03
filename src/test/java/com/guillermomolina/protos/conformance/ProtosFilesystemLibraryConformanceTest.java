@@ -40,7 +40,6 @@ import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.io.ProtosPathComponents;import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -715,7 +714,7 @@ final class ProtosFilesystemLibraryConformanceTest {
         ProtosBytesValue result = new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (int index = 0; index < size; index++) {
             result.indexedAdd(
-                    new ProtosIntegerValue((index * 31L + 7L) & 0xffL));
+                    Long.valueOf((index * 31L + 7L) & 0xffL));
         }
         return result;
     }

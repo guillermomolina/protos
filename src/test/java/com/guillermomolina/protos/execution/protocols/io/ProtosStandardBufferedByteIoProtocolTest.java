@@ -30,8 +30,8 @@ class ProtosStandardBufferedByteIoProtocolTest {
         return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
     }
 
-    private static ProtosIntegerValue i(long n) {
-        return new ProtosIntegerValue(n);
+    private static Long i(long n) {
+        return Long.valueOf(n);
     }
 
     private static ProtosBytesValue bytes(ProtosObjectValue prototype, int... values) {

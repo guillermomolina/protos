@@ -14,7 +14,6 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -117,7 +116,7 @@ class ProtosIdentityMapConformanceTest {
         put(map, new ProtosFloatValue(Double.longBitsToDouble(0x7ff8000000000001L)), "nan", a);
         put(map, new ProtosFloatValue(0.0d), "positiveZero", a);
         put(map, new ProtosFloatValue(-0.0d), "negativeZero", a);
-        put(map, new ProtosIntegerValue(1), "integer", a);
+        put(map, Long.valueOf(1), "integer", a);
         put(map, new ProtosFloatValue(1.0d), "float", a);
         put(map, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), prelude), "large", a);
         put(map, new ProtosFloatValue(0x1p64), "largeFloat", a);
@@ -128,7 +127,7 @@ class ProtosIdentityMapConformanceTest {
                 at(map, new ProtosFloatValue(Double.longBitsToDouble(0x7ff8000000000123L)), a));
         assertEquals("positiveZero", at(map, new ProtosFloatValue(0.0d), a));
         assertEquals("negativeZero", at(map, new ProtosFloatValue(-0.0d), a));
-        assertEquals("integer", at(map, new ProtosIntegerValue(1), a));
+        assertEquals("integer", at(map, Long.valueOf(1), a));
         assertEquals("float", at(map, new ProtosFloatValue(1.0d), a));
         assertEquals(
                 "large", at(map, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), prelude), a));

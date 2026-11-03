@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -176,15 +175,15 @@ final class ProtosNioTcpConnectionReadTest {
                         ProtosInvocation.invoke(
                                 addressFactory,
                                 List.of(
-                                        new ProtosIntegerValue(4),
-                                        new ProtosIntegerValue(0x7f000001L)),
+                                        Long.valueOf(4),
+                                        Long.valueOf(0x7f000001L)),
                                 activation);
         Object endpointFactory =
                 prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         endpointFactory,
-                        List.of(address, new ProtosIntegerValue(port)),
+                        List.of(address, Long.valueOf(port)),
                         activation);
     }
 
@@ -193,7 +192,7 @@ final class ProtosNioTcpConnectionReadTest {
                 ProtosInvocation.invokeMessage(
                         x.connection,
                         "read",
-                        List.of(new ProtosIntegerValue(maxBytes)),
+                        List.of(Long.valueOf(maxBytes)),
                         x.activation);
     }
 

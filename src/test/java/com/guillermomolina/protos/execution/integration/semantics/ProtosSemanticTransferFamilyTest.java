@@ -180,7 +180,7 @@ final class ProtosSemanticTransferFamilyTest {
     void semanticMapKeyKeepsAConsistentRecordedHashAfterMaterialization() {
         ProtosSemanticTransferValue key = PORTABLE.mint("k");
         ProtosMapValue map = prelude.newMap();
-        map.append(key, ProtosNumericHashKey.fromIdentity(key), new ProtosIntegerValue(1L));
+        map.append(key, ProtosNumericHashKey.fromIdentity(key), Long.valueOf(1L));
 
         List<?> delivered =
                 ProtosActorValueTransfer.materializeArguments(
@@ -375,7 +375,7 @@ final class ProtosSemanticTransferFamilyTest {
     @Test
     void ordinaryGraphTransferNeitherConsultsFamiliesNorImportsNorPaysMaterialization() {
         ProtosObjectValue node = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosArrayValue array = prelude.newArray(List.of(node, node, new ProtosIntegerValue(2L)));
+        ProtosArrayValue array = prelude.newArray(List.of(node, node, Long.valueOf(2L)));
         node.createLocalSlot("self", node);
         node.createLocalSlot("items", array);
         ProtosActivation activation = prelude.newModuleActivation();
@@ -469,7 +469,7 @@ final class ProtosSemanticTransferFamilyTest {
     @Test
     void pTransferWithoutPathOrRecordsKeepsTheSingleStage() {
         ProtosArrayValue array =
-                prelude.newArray(List.of(new ProtosStringValue("a"), new ProtosIntegerValue(1L)));
+                prelude.newArray(List.of(new ProtosStringValue("a"), Long.valueOf(1L)));
         boolean[] records = new boolean[1];
 
         List<Object> detached =

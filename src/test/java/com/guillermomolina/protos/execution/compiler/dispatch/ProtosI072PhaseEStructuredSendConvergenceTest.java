@@ -34,7 +34,6 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -177,8 +176,8 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
             ProtosArrayValue array =
                     prelude.newArray(
                             List.of(
-                                    new ProtosIntegerValue(1L),
-                                    new ProtosIntegerValue(2L)));
+                                    Long.valueOf(1L),
+                                    Long.valueOf(2L)));
             ProtosObjectValue overrideResult = new ProtosObjectValue(ProtosObjectValue.rootObject());
             AtomicInteger callbacks = new AtomicInteger();
             AtomicInteger overrideCalls = new AtomicInteger();

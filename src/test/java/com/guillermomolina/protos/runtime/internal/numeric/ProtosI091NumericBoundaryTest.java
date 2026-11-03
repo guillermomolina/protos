@@ -36,11 +36,11 @@ import org.junit.jupiter.api.Test;
 final class ProtosI091NumericBoundaryTest {
     @Test
     void intRangeRecognitionAndExtraction() {
-        assertTrue(ProtosNumericValueSupport.isIntegerInIntRange(new ProtosIntegerValue(65535)));
+        assertTrue(ProtosNumericValueSupport.isIntegerInIntRange(Long.valueOf(65535)));
         assertEquals(65535,
-                ProtosNumericValueSupport.exactInt(new ProtosIntegerValue(65535)));
+                ProtosNumericValueSupport.exactInt(Long.valueOf(65535)));
         assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(
-                new ProtosIntegerValue(1L + Integer.MAX_VALUE)));
+                Long.valueOf(1L + Integer.MAX_VALUE)));
         assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(
                 com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(80), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
         assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(new ProtosFloatValue(1.0)));
@@ -60,7 +60,7 @@ final class ProtosI091NumericBoundaryTest {
                 ProtosNumericValueSupport.unsignedBigEndianOrNull(max128, 16));
         assertNull(ProtosNumericValueSupport.unsignedBigEndianOrNull(max128, 4));
         assertNull(ProtosNumericValueSupport.unsignedBigEndianOrNull(
-                new ProtosIntegerValue(-1), 4));
+                Long.valueOf(-1), 4));
     }
 
     @Test
@@ -84,7 +84,7 @@ final class ProtosI091NumericBoundaryTest {
             }
             if (expected.bitLength() < Long.SIZE) {
                 // The signed-64 branch needs no Prelude.
-                ProtosIntegerValue integer = (ProtosIntegerValue)
+                Long integer = (Long)
                         ProtosBinary64Rounding.integralBinary64(value, null);
                 assertEquals(expected.longValue(), integer.longValue());
             }
@@ -99,8 +99,8 @@ final class ProtosI091NumericBoundaryTest {
         BigInteger exact = BigInteger.ONE.shiftLeft(100).add(BigInteger.valueOf(12345L));
         for (BigInteger value : new BigInteger[] {exact, exact.negate()}) {
             Object large = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(value, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
-            Object zero = new ProtosIntegerValue(0L);
-            Object one = new ProtosIntegerValue(1L);
+            Object zero = Long.valueOf(0L);
+            Object one = Long.valueOf(1L);
             assertSame(large, ProtosNumericValueSupport.addIntegers(large, zero, null));
             assertSame(large, ProtosNumericValueSupport.addIntegers(zero, large, null));
             assertSame(large, ProtosNumericValueSupport.subtractIntegers(large, zero, null));
@@ -114,7 +114,7 @@ final class ProtosI091NumericBoundaryTest {
             for (long divisor : new long[] {1L, -1L, 7L, -7L, 1L << 40, Long.MIN_VALUE,
                     Long.MAX_VALUE}) {
                 Object remainder = ProtosNumericValueSupport.remainderIntegers(
-                        large, new ProtosIntegerValue(divisor), null);
+                        large, Long.valueOf(divisor), null);
                 assertEquals(
                         value.remainder(BigInteger.valueOf(divisor)).longValueExact(),
                         exactLong(remainder));
@@ -123,7 +123,7 @@ final class ProtosI091NumericBoundaryTest {
     }
 
     private static long exactLong(Object integer) {
-        return ((ProtosIntegerValue) integer).longValue();
+        return ((Long) integer).longValue();
     }
 
     @Test
@@ -135,11 +135,11 @@ final class ProtosI091NumericBoundaryTest {
         assertTrue(ProtosIdentity.identical(
                 ProtosNumericValueSupport.octet(255), ProtosNumericValueSupport.integer(255)));
         assertEquals(255L,
-                ((ProtosIntegerValue) ProtosNumericValueSupport.octet(255)).longValue());
+                ((Long) ProtosNumericValueSupport.octet(255)).longValue());
         assertTrue(ProtosIdentity.identical(
-                ProtosNumericValueSupport.octet(7), new ProtosIntegerValue(7)));
+                ProtosNumericValueSupport.octet(7), Long.valueOf(7)));
         assertEquals(256L,
-                ((ProtosIntegerValue) ProtosNumericValueSupport.integer(256)).longValue());
+                ((Long) ProtosNumericValueSupport.integer(256)).longValue());
         assertThrows(IllegalArgumentException.class, () -> ProtosNumericValueSupport.octet(256));
     }
 

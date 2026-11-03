@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -532,7 +531,7 @@ final class ProtosPackageExecutionPlanV2AdapterTest {
     }
 
     private static void setInteger(ProtosObjectValue object, String name, long value) {
-        object.assignLocalSlot(name, new ProtosIntegerValue(value));
+        object.assignLocalSlot(name, Long.valueOf(value));
     }
 
     private static ProtosStringValue str(String value) {

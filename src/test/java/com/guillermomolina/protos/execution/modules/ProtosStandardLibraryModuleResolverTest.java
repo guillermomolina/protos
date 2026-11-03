@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -208,8 +207,8 @@ class ProtosStandardLibraryModuleResolverTest {
 
         assertSame(first, repeated);
         assertNotSame(first, otherActor);
-        ProtosIntegerValue value =
-                (ProtosIntegerValue) first.readLocalSlot("value").orElseThrow();
+        Long value =
+                (Long) first.readLocalSlot("value").orElseThrow();
         assertEquals(String.valueOf("7"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
     }
 

@@ -30,7 +30,6 @@ import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTask;
@@ -95,7 +94,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
         withCore(module -> {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "g6-excess.protos", module);
 
-            ProtosIntegerValue supplied = integer(5);
+            Long supplied = integer(5);
             DirectEntry single = fastDirect(one, module, supplied);
             assertSame(target(one), single.target());
             assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, single.targetArguments().length);
@@ -446,8 +445,8 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
         return assertInstanceOf(ProtosArrayValue.class, array).indexedSnapshot();
     }
 
-    private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(value);
+    private static Long integer(long value) {
+        return Long.valueOf(value);
     }
 
     private static String integerValue(Object value) {

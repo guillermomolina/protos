@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 
@@ -275,9 +274,9 @@ prelude.newModuleActivation());
                 array.indexedAt(index));
     }
 
-    private static ProtosIntegerValue integerAt(ProtosArrayValue array, int index) {
+    private static Long integerAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
-                ProtosIntegerValue.class,
+                Long.class,
                 array.indexedAt(index));
     }
 

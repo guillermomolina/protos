@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -80,8 +79,8 @@ final class ProtosPerf006B4BNonLocalReturnTest {
                             .getCallTarget()
                             .call(module);
 
-            ProtosIntegerValue integer =
-                    assertInstanceOf(ProtosIntegerValue.class, result);
+            Long integer =
+                    assertInstanceOf(Long.class, result);
             assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
         }
 
@@ -233,8 +232,8 @@ final class ProtosPerf006B4BNonLocalReturnTest {
             assertEquals(ProtosTask.State.SUSPENDED, task.state());
             assertEquals(1, prefixExecutions.get());
 
-            ProtosIntegerValue resolved =
-                    new ProtosIntegerValue(73);
+            Long resolved =
+                    Long.valueOf(73);
             assertTrue(future.resolve(resolved, creator));
             assertEquals(ProtosTask.State.RUNNABLE, task.state());
 
@@ -277,8 +276,8 @@ final class ProtosPerf006B4BNonLocalReturnTest {
                             .getCallTarget()
                             .call(module);
 
-            ProtosIntegerValue integer =
-                    assertInstanceOf(ProtosIntegerValue.class, result);
+            Long integer =
+                    assertInstanceOf(Long.class, result);
             assertEquals(String.valueOf("41"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
         }
 

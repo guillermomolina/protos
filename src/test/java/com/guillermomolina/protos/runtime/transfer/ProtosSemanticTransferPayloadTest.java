@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import java.math.BigInteger;
 import org.junit.jupiter.api.Test;
 
@@ -33,7 +32,7 @@ final class ProtosSemanticTransferPayloadTest {
                 ProtosSemanticTransferPayload.of(
                         ProtosSemanticTransferPayload.integer(42L),
                         ProtosSemanticTransferPayload.integer(
-                                new ProtosIntegerValue(-7L)));
+                                Long.valueOf(-7L)));
 
         assertInstanceOf(Long.class, payload.get(0));
         assertInstanceOf(Long.class, payload.get(1));
@@ -47,7 +46,7 @@ final class ProtosSemanticTransferPayloadTest {
         assertEquals(-1, payload.integerSignum(1));
         assertEquals(
                 42L,
-                ((ProtosIntegerValue) payload.semanticInteger(0, null)).longValue());
+                ((Long) payload.semanticInteger(0, null)).longValue());
     }
 
     @Test
