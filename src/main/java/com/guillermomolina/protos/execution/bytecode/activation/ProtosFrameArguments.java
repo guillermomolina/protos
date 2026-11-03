@@ -859,7 +859,8 @@ final class ProtosFrameArguments {
      */
     private static boolean isDeferredCallerCandidate(Object[] callerArguments) {
         if (callerArguments.length < HEADER_LENGTH
-                || !(callerArguments[RETURN_HOME_INDEX] instanceof ProtosReturnHome)
+                || (callerArguments[RETURN_HOME_INDEX] != null
+                        && !(callerArguments[RETURN_HOME_INDEX] instanceof ProtosReturnHome))
                 || !hasValidKindSlots(callerArguments)) {
             return false;
         }
@@ -1604,9 +1605,13 @@ final class ProtosFrameArguments {
         return normalizedReturnHome(arguments[RETURN_HOME_INDEX]);
     }
 
-    /* I091: the primitive-result marker denotes exactly the unobservable home. */
+    /*
+     * A no-home fast call only needs a semantic home if its activation escapes
+     * into the slow materialization path. Do not create a marker on entry.
+     */
     private static ProtosReturnHome normalizedReturnHome(Object home) {
-        return home == ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime()
+        return home == null
+                || home == ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime()
                 ? ProtosReturnHome.unobservable()
                 : (ProtosReturnHome) home;
     }
@@ -1775,7 +1780,8 @@ final class ProtosFrameArguments {
                 && arguments.length >= HEADER_LENGTH
                 && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue
                 && isCallerSlot(arguments, arguments[CALLER_INDEX])
-                && arguments[RETURN_HOME_INDEX] instanceof ProtosReturnHome;
+                && (arguments[RETURN_HOME_INDEX] == null
+                        || arguments[RETURN_HOME_INDEX] instanceof ProtosReturnHome);
     }
 
     private static boolean isCallerSlot(Object[] arguments, Object caller) {

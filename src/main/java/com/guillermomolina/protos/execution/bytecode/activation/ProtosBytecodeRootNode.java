@@ -576,6 +576,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
+     * I115: a closure's whole lexical subtree (including defaults and nested
+     * closures) cannot target this invocation's return home. The lowering
+     * records the proof once on the physical callee root, so a cached direct
+     * call does not inspect a closure's execution plan at runtime.
+     */
+    @CompilationFinal private transient boolean returnHomeProvenUnobservable;
+
+    final void recordReturnHomeProvenUnobservable(boolean proven) {
+        returnHomeProvenUnobservable = proven;
+    }
+
+    final boolean returnHomeProvenUnobservable() {
+        return returnHomeProvenUnobservable;
+    }
+
+    /*
      * I101-B: a NORMAL scalar-local root returns its private primitive Long
      * carrier without bytecode materialization. Only the caller completion
      * of this root may project that carrier into the observable guest domain.
