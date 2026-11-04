@@ -2921,9 +2921,38 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @ConstantOperand(type = boolean.class, name = "capturesCreatorContext")
     @ConstantOperand(type = boolean.class, name = "mayObserveReturnHome")
     public static final class MaterializeCurrentClosure {
-        @Specialization(guards = {
-                "!capturesCreatorContext",
-                "!mayObserveReturnHome"})
+        /*
+         * I115: each source-literal plan cell is frozen before guest execution.
+         * Cache the plan by cell identity so a fresh non-capturing Closure does
+         * not reload the cell at each invocation. This cache stores only the
+         * plan, never the Closure or any lexical/caller state. Other cells,
+         * including projected or rematerialized definitions, remain distinct.
+         */
+        @Specialization(
+                guards = {
+                    "!capturesCreatorContext",
+                    "!mayObserveReturnHome",
+                    "executionPlanCell == cachedCell"
+                },
+                limit = "3")
+        public static ProtosClosureValue nonCapturingCached(
+                boolean compactCapture,
+                boolean capturesCreatorContext,
+                boolean mayObserveReturnHome,
+                CanonicalClosure definition,
+                ProtosClosureExecutionPlanCell executionPlanCell,
+                @Cached("executionPlanCell") ProtosClosureExecutionPlanCell cachedCell,
+                @Cached("cachedCell.plan()") ProtosClosureExecutionPlan cachedPlan) {
+            return ProtosClosureValue.experimentalNonCapturing(
+                    definition, cachedPlan);
+        }
+
+        @Specialization(
+                guards = {
+                    "!capturesCreatorContext",
+                    "!mayObserveReturnHome"
+                },
+                replaces = "nonCapturingCached")
         public static ProtosClosureValue nonCapturing(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
