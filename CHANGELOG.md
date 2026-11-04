@@ -8,6 +8,35 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.41-SNAPSHOT
+
+- **I115 — cached non-capturing Closure materialization (historical).**
+  - Add the `nonCapturingCached` specialization to the Bytecode DSL
+    `MaterializeCurrentClosure` operation. It is admitted only when a
+    literal neither captures its creator Context nor may observe its
+    invocation `ReturnHome`; the source execution-plan cell is the PIC key.
+  - Cache the frozen `ProtosClosureExecutionPlan` from the identity of its
+    `ProtosClosureExecutionPlanCell` with `@Cached`, limit `3`. Reuse that
+    plan without reading the plan cell on every hit, but still construct a
+    **fresh** `ProtosClosureValue.experimentalNonCapturing` per invocation.
+    Neither the Closure nor lexical/caller state is retained by the cache.
+  - Preserve `nonCapturing` as the general specialization using
+    `replaces = "nonCapturingCached"` after saturation; capturing and
+    ReturnHome-observing Closure paths are unchanged by this commit.
+  - **Historical semantic limitations:** this PIC does not establish that
+    the full guest semantics have recovered. D013 / `Object.call` still
+    distinguishes implicit direct source-Closure calls from an explicit
+    instance-local `call` override. Correct `ReturnHome` proof and
+    publication, suspension and cancellation, Task/C-prime ownership,
+    non-local control transfer and D179 C0 lexical binding remain subject
+    to independent acceptance. Context-owned BigInteger promotion and
+    D197-C numeric-prototype delegation likewise remain unresolved.
+    Guest Integer stays `long` / `Long` (signed 64 bit), not a Java `int`
+    guest lane. No runtime tests, build, compiler graphs, or benchmarks
+    were executed during this historical replay; no performance claim.
+  - Original implementation: `2354f61720c9a2bd8931cfb66c3b3539a99c6f15`.
+    Its sole source blob and Git mode are preserved exactly.
+
 ## 0.4.40-SNAPSHOT
 
 - **I115 — opt-in Tier 2 compiler graph witness for run() (historical).**
