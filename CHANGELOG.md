@@ -8,6 +8,48 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.43-SNAPSHOT
+
+- **I115 — unified Bytecode DSL Boolean branches and `whileTrue` lowering (historical).**
+  - Replace separate compact and general Boolean-control emitters with the
+    single `emitI115UnifiedControl` in `CanonicalToBytecodeLowerer`. Lower
+    `ifTrue`, `ifFalse`, `ifTrueIfFalse` and `whileTrue` as internal
+    `IfThen` / `IfThenElse` / `While` Bytecode DSL control rather than an
+    ordinary selector send or Boolean method activation.
+  - Consolidate ordinary and compact callback selection. Stage eligible
+    non-inline operands left to right, then select the callback using
+    `ExperimentalCanonicalBooleanCondition`; reuse the existing I095
+    lexical/activation proof for normal-root inline literal callbacks.
+    Retain the generic Closure call dispatcher with continuation transport
+    for callbacks that cannot be inlined. Compact roots continue to use
+    their admitted literal callback bodies without allocating a Closure.
+  - Add `emitI115ProvenInlineCallback` to preserve isolated callback lexical
+    bindings, source statement tags and nested invocation lowering; restore
+    previous callback-local compiler state in `finally`. The same lowering
+    owns both conditional branches and loop bodies; remove the older
+    `emitExperimentalCompactWhile`, `emitExperimentalCompactBooleanControl`,
+    `emitExperimentalCompactBooleanDispatch` and associated branch emitters.
+  - **Historical semantic limitations:** the unified internal selection
+    bypasses user-defined `ifTrue` / `ifFalse` / `ifTrueIfFalse` / `whileTrue`
+    method overrides and normal selection for noncanonical receivers.
+    `ExperimentalCanonicalBooleanCondition` may reject an ordinary guest
+    object instead of dispatching its selector. Requiring fixed positional
+    callbacks without spread is not a general send-equivalence proof.
+    Eager/staged callback operand evaluation, the timing of captures, result
+    semantics, lexical publication, non-local returns and loop iteration
+    ordering require separate acceptance. The I095 admission proof does not
+    certify all callback shapes or all `D179 C0` lexical cases.
+  - Existing `D013` / `Object.call` dispatch divergence remains distinct.
+    `ReturnHome` observability, suspension, cancellation, Task/C-prime
+    ownership, `D197-C` Context-owned BigInteger numeric delegation and
+    signed-64 `long`/`Long` carrier correctness remain unverified by this
+    commit. There is no guest `int` numeric tier. No runtime tests, Maven
+    build, Graal compiler graphs or benchmarks were executed after the
+    version bump during this historical replay; no performance improvement
+    or complete semantic conformance is claimed.
+  - Original implementation: `75c3e289e083553ee0a9fd5e13d6443b49ce8738`.
+    The sole original source blob and its Git mode are reproduced exactly.
+
 ## 0.4.42-SNAPSHOT
 
 - **I115 — Bytecode DSL `ifTrue` control and primitive root-frame reads (historical).**
