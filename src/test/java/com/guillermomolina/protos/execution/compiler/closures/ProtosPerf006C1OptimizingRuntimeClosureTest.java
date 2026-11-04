@@ -113,7 +113,7 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
 
     /**
      * I130-C3: the Native JUnit profile selects exactly the two TLS classes by itself, so a direct
-     * {@code mvn -Pnative-tls-tests test} builds the same image as {@code build/native}, and a
+     * {@code mvn -Pnative-tls-tests test} builds the same image as {@code make test-native}, and a
      * stale Surefire unique-ID selection never reaches that image.
      */
     @Test
@@ -168,7 +168,7 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
     /** PLAT045 (#772): Native admission is interpreter-only and must never claim guest JIT. */
     @Test
     void nativeAdmissionValidatesInterpreterOnlyFallback() throws Exception {
-        String script = Files.readString(Path.of("build/native/test-native.sh"));
+        String script = Files.readString(Path.of("scripts/native-test.sh"));
 
         assertTrue(script.contains("NATIVE_GUEST_JIT=UNSUPPORTED_UPSTREAM_ORACLE_GRAAL_14579"));
         assertTrue(script.contains("NATIVE_INTERPRETER_ONLY=FAIL_FALLBACK_RUNTIME_NOT_SELECTED"));

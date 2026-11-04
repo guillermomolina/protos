@@ -39,6 +39,7 @@ DEVELOPMENT_BINDINGS = {
     "devcontainer.java_path",
     "ci.tests.container",
     "ci.tests.command",
+    "ci.tests.workers",
     "ci.tests.maven_cache",
 }
 
@@ -294,6 +295,23 @@ def load_contract(root):
         raise ToolchainError("GraalVM release and Graal/Truffle component version must match")
     if channel not in image or jdk_version not in image:
         raise ToolchainError("container image does not encode selected GraalVM channel/JDK")
+    selected_expected_prefix = (
+        "ghcr.io/graalvm/native-image-community:"
+        + channel
+        + "-"
+        + jdk_version
+        + "-ol10@sha256:"
+    )
+    if (
+        not image.startswith(selected_expected_prefix)
+        or re.fullmatch(
+            r"[0-9a-f]{64}",
+            image[len(selected_expected_prefix):],
+        ) is None
+    ):
+        raise ToolchainError(
+            "unified devcontainer requires an immutable Native Image OL10 digest"
+        )
     if "version" in maven_contract:
         raise ToolchainError("legacy exact Maven version field is not supported")
     maven_minimum_tuple = stable_maven_version_tuple(
@@ -472,19 +490,39 @@ def workflow_job_container_image(path, job_id):
 def workflow_job_test_command(path, job_id):
     # type: (Path, str) -> str
     text = workflow_job_text(path, job_id)
-    exact_commands = re.findall(
-        r"^[ \\t]*make test[ \\t]*$",
+    expected = [
+        ("Check repository", "make check"),
+        ("Run Java tests", "make test-java"),
+        ("Run Protos tests", "make test-protos"),
+        ("Run Native Image tests", "make test-native"),
+    ]
+    # Each phase must be a direct command in a dedicated, ordered step.
+    steps = re.findall(
+        r"(?m)^      - name: ([^\n]+)\n        run: (make [^\r\n]+)$",
         text,
-        flags=re.MULTILINE,
     )
-    if (
-        len(exact_commands) == 1
-        and "JAVA_TEST_JOBS" not in text
-        and "PROTOS_TEST_JOBS" not in text
-        and "devcontainers/ci@" not in text
-    ):
-        return "make test"
+    commands = re.findall(
+        r"(?m)^[ \t]*(?:run:[ \t]*)?(make[ \t]+[^\r\n#]+)$",
+        text,
+    )
+    if (steps == expected and len(commands) == len(expected)
+            and "devcontainers/ci@" not in text):
+        return " -> ".join(command for _, command in expected)
     return "<drift:%s.command>" % job_id
+
+
+def workflow_job_test_workers(path, job_id):
+    # type: (Path, str) -> str
+    text = workflow_job_text(path, job_id)
+    values = re.findall(
+        r"(?m)^      (JAVA_TEST_JOBS|PROTOS_TEST_JOBS):[ \t]*\"?([0-9]+)\"?[ \t]*$",
+        text,
+    )
+    if (re.search(r"(?m)^    env:[ \t]*$", text)
+            and values == [("JAVA_TEST_JOBS", "4"), ("PROTOS_TEST_JOBS", "4")]):
+        return "JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4"
+    return "<drift:%s.workers>" % job_id
+
 
 def workflow_job_maven_cache_contract(path, job_id):
     # type: (Path, str) -> str
@@ -512,17 +550,8 @@ def workflow_job_maven_cache_contract(path, job_id):
     return "<drift:%s.maven_cache>" % job_id
 
 
-def native_image_container(contract):
-    # type: (Dict[str, object]) -> str
-    graal = contract["graalvm"]
-    return "ghcr.io/graalvm/native-image-community:%s-%s-ol10" % (
-        graal["container_channel"],
-        graal["jdk_version"],
-    )
-
-
-def audit_bindings(root, contract, include_native=True):
-    # type: (Path, Dict[str, object], bool) -> List[Tuple[str, str, str]]
+def audit_bindings(root, contract):
+    # type: (Path, Dict[str, object]) -> List[Tuple[str, str, str]]
     graal = contract["graalvm"]
     bytecode = str(contract["java"]["bytecode_release"])
     components = str(contract["graal_components"]["version"])
@@ -585,33 +614,6 @@ def audit_bindings(root, contract, include_native=True):
     )
     rows.append(("devcontainer.java_path", "JAVA_HOME-first", docker_java_path))
 
-    if include_native:
-        native_docker = read_text(root / "build" / "native" / "Dockerfile")
-        rows.append((
-            "native.image",
-            native_image_container(contract),
-            first_match(native_docker, r"^FROM[ \t]+([^ \t\n]+)", "FROM"),
-        ))
-        native_maven_provisioning, native_maven_repository_scope = docker_maven_bindings(
-            native_docker
-        )
-        rows.append((
-            "native.maven_provisioning",
-            MAVEN_PROVISIONING_MODEL,
-            native_maven_provisioning,
-        ))
-        rows.append((
-            "native.maven_repository_scope",
-            MAVEN_REPOSITORY_SCOPE,
-            native_maven_repository_scope,
-        ))
-        native_java_path = (
-            "JAVA_HOME-first"
-            if 'ENV PATH="${JAVA_HOME}/bin:${PATH}"' in native_docker
-            else "missing"
-        )
-        rows.append(("native.java_path", "JAVA_HOME-first", native_java_path))
-
     ci_workflow = root / ".github" / "workflows" / "tests.yml"
     rows.append((
         "ci.tests.container",
@@ -620,8 +622,13 @@ def audit_bindings(root, contract, include_native=True):
     ))
     rows.append((
         "ci.tests.command",
-        "make test",
+        "make check -> make test-java -> make test-protos -> make test-native",
         workflow_job_test_command(ci_workflow, "test"),
+    ))
+    rows.append((
+        "ci.tests.workers",
+        "JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4",
+        workflow_job_test_workers(ci_workflow, "test"),
     ))
     rows.append((
         "ci.tests.maven_cache",
@@ -703,7 +710,7 @@ def print_contract(contract):
     print("PRIMARY_GRAALVM_RELEASE: %s" % graal["release"])
     print("PRIMARY_JDK_FEATURE: %s" % graal["jdk_feature"])
     print("PRIMARY_JDK_VERSION: %s" % graal["jdk_version"])
-    print("NATIVE_IMAGE_CONTAINER: %s" % native_image_container(contract))
+    print("PRIMARY_CONTAINER_IMAGE: %s" % graal["container_image"])
     print("GRAAL_COMPONENTS_VERSION: %s" % contract["graal_components"]["version"])
     print("MAVEN_MINIMUM_VERSION: %s" % contract["maven"]["minimum_version"])
     print("MAVEN_SUPPORTED_MAJOR: %s" % contract["maven"]["supported_major"])
@@ -737,7 +744,6 @@ def main(argv=None):
             rows = audit_bindings(
                 root,
                 contract,
-                include_native=args.scope == "all",
             )
             if args.scope == "development":
                 rows = [row for row in rows if row[0] in DEVELOPMENT_BINDINGS]

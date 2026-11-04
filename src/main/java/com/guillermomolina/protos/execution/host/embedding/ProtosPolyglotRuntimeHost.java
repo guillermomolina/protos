@@ -226,7 +226,7 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     /**
      * Returns the real bound endpoint for this debug RuntimeHost.
      *
-     * <p>GraalVM 25.4.4.1.1 publishes the endpoint while the DAP instrument is initialized during
+     * <p>The GraalVM DAP instrument publishes the endpoint while it is initialized during
      * Engine startup. Failing rather than guessing here protects D060 from an incompatible future
      * Graal readiness format.
      */

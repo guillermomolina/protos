@@ -37,9 +37,6 @@ DIST_FORMAT = "protos-native-image-posix-v1"
 ARTIFACT_KIND = "development-native-distribution"
 NATIVE_RUNTIME_KIND = "graalvm-native-image-truffle"
 
-PUBLIC_NATIVE_BUILD_CONTAINER = (
-    "ghcr.io/graalvm/native-image-community:25i4-25.0.4.1.1-ol10"
-)
 PUBLIC_NATIVE_TARGET_OS = "linux"
 PUBLIC_NATIVE_TARGET_ARCH = "x86_64"
 PUBLIC_NATIVE_LINKAGE = "dynamic"
@@ -252,10 +249,10 @@ def native_build_environment(root: Path) -> dict[str, str]:
 
 
 def native_build_container(root: Path) -> str:
-    dockerfile = (root / "build/native/Dockerfile").read_text(encoding="utf-8")
+    dockerfile = (root / ".devcontainer/Dockerfile").read_text(encoding="utf-8")
     match = re.search(r"^FROM[ \t]+([^ \t\r\n]+)", dockerfile, flags=re.MULTILINE)
     if not match:
-        fail("build/native/Dockerfile has no FROM authority")
+        fail(".devcontainer/Dockerfile has no FROM authority")
     return match.group(1)
 
 
@@ -557,7 +554,7 @@ def build(args: argparse.Namespace) -> Path:
     build_march = native_build_march(root)
     build_environment = native_build_environment(root)
     build_container = native_build_container(root)
-    if build_container != PUBLIC_NATIVE_BUILD_CONTAINER:
+    if build_container != graal["container_image"]:
         fail(
             "Native builder does not match the selected public build base: "
             + build_container
@@ -627,7 +624,7 @@ def build(args: argparse.Namespace) -> Path:
         f"jdk_version={graal['jdk_version']}",
         f"native_build_container={build_container}",
         "native_build_container_role=canonical-authority",
-        "native_build_authority=build/native/Dockerfile",
+        "native_build_authority=.devcontainer/Dockerfile",
         (
             "native_build_host_os_id="
             + build_environment["os_id"]

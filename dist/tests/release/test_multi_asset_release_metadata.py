@@ -144,7 +144,7 @@ def write_asset(
                 "25i4-25.0.4.1.1-ol10"
             ),
             "native_build_container_role": "canonical-authority",
-            "native_build_authority": "build/native/Dockerfile",
+            "native_build_authority": ".devcontainer/Dockerfile",
             "native_build_host_os_id": "ol",
             "native_build_host_os_version": "10.2",
             "native_build_host_glibc": "2.39",

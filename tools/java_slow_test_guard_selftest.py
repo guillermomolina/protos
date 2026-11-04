@@ -292,6 +292,10 @@ class GuardSelfTest(unittest.TestCase):
             makefile,
         )
 
+        self.assertIn("ifeq ($(GITHUB_ACTIONS),true)", makefile)
+        self.assertIn("JAVA_SLOW_TEST_GUARD=CI_ADVISORY_CONFIRMATION_SKIPPED", makefile)
+        self.assertIn("JAVA_SLOW_TEST_PHASE_TIMINGS=", makefile)
+
         self.assertIn(
             "\t@$(MAKE) --no-print-directory java-test-phase "
             "JAVA_TEST_PHASE=test-java-parallel",

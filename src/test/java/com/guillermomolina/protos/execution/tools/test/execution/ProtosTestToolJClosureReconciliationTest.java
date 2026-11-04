@@ -81,20 +81,29 @@ final class ProtosTestToolJClosureReconciliationTest {
             return;
         }
 
-        int repositoryTests = workflow.indexOf("- name: Run repository tests");
-
-        assertTrue(
-                repositoryTests >= 0,
-                "active CI must expose the repository test stage explicitly");
-        assertTrue(
-                workflow.contains("\n          make test\n"),
-                "active CI must execute the canonical complete repository command");
+        // DIST017: CI exposes full validation as four ordered Makefile-owned phases.
+        // The local Java + Protos aggregate remains `make test`.
+        String[] requiredStages = {
+            "- name: Check repository\n        run: make check",
+            "- name: Run Java tests\n        run: make test-java",
+            "- name: Run Protos tests\n        run: make test-protos",
+            "- name: Run Native Image tests\n        run: make test-native"
+        };
+        int previousStage = -1;
+        for (String stage : requiredStages) {
+            int stageAt = workflow.indexOf(stage);
+            assertTrue(stageAt > previousStage, "missing or out-of-order CI phase: " + stage);
+            previousStage = stageAt;
+        }
         assertFalse(
-                workflow.contains("JAVA_TEST_JOBS="),
-                "active CI must not override repository Java test parallelism");
-        assertFalse(
-                workflow.contains("PROTOS_TEST_JOBS="),
-                "active CI must not override repository Protos test parallelism");
+                workflow.contains("- name: Run repository tests"),
+                "CI must not duplicate the four explicit phases with make test");
+        assertTrue(
+                workflow.contains("JAVA_TEST_JOBS: \"4\""),
+                "CI Java concurrency must match its four-CPU runner");
+        assertTrue(
+                workflow.contains("PROTOS_TEST_JOBS: \"4\""),
+                "CI Protos concurrency must match its four-CPU runner");
         assertFalse(
                 workflow.contains("make test-budget"),
                 "active CI must not impose a fixed wall-clock budget");

@@ -1,8 +1,18 @@
-FROM ghcr.io/graalvm/graalvm-community:25i4-25.0.4.1.1-ol10@sha256:a7b4810d7c755e9627feaa1459eb5a93338643b16d745d4f3fc86db71e5da7f5
+FROM ghcr.io/graalvm/native-image-community:25i5-25.0.5.0.3-ol10@sha256:2800b5bd11cbb9bf11c92591d05ea37d9a735522bdc0e86827302d998843ad79
+
+# Native Image bases default to the native-image launcher. This shared dev/CI
+# image must accept arbitrary commands supplied by Docker and GitHub Actions.
+ENTRYPOINT []
+
+# Oracle Linux minimal glibc includes C.UTF-8, not necessarily en_US.UTF-8.
+# The JVM uses the process locale when encoding Unicode filesystem paths.
+ENV LANG=C.UTF-8
 
 USER root
 
 RUN microdnf install -y \
+        file \
+        binutils \
         findutils \
         diffutils \
         git \

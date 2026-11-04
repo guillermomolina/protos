@@ -518,7 +518,7 @@ durable implementation and closure history remains recorded in
 Protos can also be built as a GraalVM Native Image:
 
 ``` sh
-make -C build/native build
+make build-native
 ```
 
 The resulting executable is written to:
@@ -527,14 +527,14 @@ The resulting executable is written to:
 target/native/protos
 ```
 
-Native Image tooling is intentionally isolated under `build/native/`; it is
-separate from the ordinary JVM build, portable distribution creation, and
-release publication.
+Native Image and JVM builds use the same GraalVM devcontainer and root
+Makefile. Native build and test targets remain explicit; they are not part
+of ordinary JVM tests or release publication.
 
 To rebuild the Native Image and run its regression suite:
 
 ``` sh
-make -C build/native test
+make test-native
 ```
 
 The Native executable is a real GraalVM Native Image (AOT) host, but guest

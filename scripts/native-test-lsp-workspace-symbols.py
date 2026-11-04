@@ -28,7 +28,7 @@ from collections import deque
 from pathlib import Path
 
 TIMEOUT = 20
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def append_metadata_record(digest, name, content):
@@ -322,7 +322,7 @@ def assert_names(results, query, expected):
 
 def main():
     if len(sys.argv) != 2:
-        raise ValueError("Usage: test-lsp-workspace-symbols.py NATIVE_BINARY")
+        raise ValueError("Usage: native-test-lsp-workspace-symbols.py NATIVE_BINARY")
 
     native = Path(sys.argv[1]).resolve()
     if not native.is_file():

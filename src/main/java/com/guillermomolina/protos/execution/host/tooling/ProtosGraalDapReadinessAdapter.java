@@ -22,9 +22,10 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Version-bounded adapter from GraalVM 25.4.4.1.1 DAP startup output to a stable Protos endpoint.
+ * Version-bounded adapter from GraalVM DAP startup output to a stable Protos endpoint.
  *
  * <p>PLAT018 deliberately keeps Graal-specific readiness discovery behind this boundary. The
  * public D060 readiness record is produced later by the CLI and must never parse this text itself.
@@ -32,6 +33,7 @@ import java.util.Objects;
 final class ProtosGraalDapReadinessAdapter extends OutputStream {
     private static final String STARTED_PREFIX =
             "[Graal DAP] Starting server and listening on ";
+    private static final long STARTUP_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(10);
 
     private final OutputStream diagnostics;
     private final ByteArrayOutputStream pendingLine = new ByteArrayOutputStream();
@@ -62,6 +64,23 @@ final class ProtosGraalDapReadinessAdapter extends OutputStream {
     }
 
     synchronized ProtosPolyglotRuntimeHost.DebugEndpoint requireEndpoint() {
+        // GraalVM publishes its already-bound address from the DAP listener thread,
+        // which may run after Engine.Builder.build() has returned. wait() releases
+        // this monitor so write()/completeLine() can publish and notify readiness.
+        long deadline = System.nanoTime() + STARTUP_TIMEOUT_NANOS;
+        while (endpoint == null && readinessFailure == null) {
+            long remaining = deadline - System.nanoTime();
+            if (remaining <= 0) {
+                break;
+            }
+            try {
+                TimeUnit.NANOSECONDS.timedWait(this, remaining);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(
+                        "Interrupted while waiting for GraalVM DAP readiness", interrupted);
+            }
+        }
         if (readinessFailure != null) {
             throw new IllegalStateException(
                     "GraalVM DAP readiness output is incompatible with the retained adapter",
@@ -69,7 +88,7 @@ final class ProtosGraalDapReadinessAdapter extends OutputStream {
         }
         if (endpoint == null) {
             throw new IllegalStateException(
-                    "GraalVM DAP did not publish a bound endpoint during RuntimeHost startup");
+                    "GraalVM DAP did not publish a bound endpoint within the startup timeout");
         }
         return endpoint;
     }
@@ -96,6 +115,7 @@ final class ProtosGraalDapReadinessAdapter extends OutputStream {
             if (endpoint != null) {
                 readinessFailure =
                         new IllegalStateException("GraalVM DAP published readiness more than once");
+                notifyAll();
                 return;
             }
             try {
@@ -103,6 +123,7 @@ final class ProtosGraalDapReadinessAdapter extends OutputStream {
             } catch (RuntimeException failure) {
                 readinessFailure = failure;
             }
+            notifyAll();
             return;
         }
 
