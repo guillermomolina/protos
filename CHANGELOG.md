@@ -7,6 +7,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.443-SNAPSHOT
+
+- `DIST017` (#968): migrate the primary GraalVM, Truffle and Polyglot runtime baseline from 25.4.4.1.1 to 25.5.5.0.3 on GraalVM Community JDK 25, retaining Java 21 bytecode output.
+  - Pin the development container to the 25.5 Native Image Community image; align the root toolchain contract, Maven dependencies, distribution builders, launcher checks and documentation with the new runtime baseline.
+  - Consolidate JVM and Native Image development in the single `.devcontainer/Dockerfile` and root `Makefile`; retire the separate `build/native` Dockerfile and Makefile, and relocate native setup, smoke, DAP and LSP scripts to `scripts/` with their references and regression tests updated.
+  - Adapt real GraalVM DAP readiness discovery to asynchronous listener startup with bounded synchronization, preserving OS-assigned loopback endpoints and strict readiness validation; extend the regression coverage for debug-host startup and interoperability.
+  - Update the TEST009-D generated-bytecode BCI topology baseline for the two new, proven `CompilerDirectives.mergeExplodeKey(bci)` transitions, retaining zero risk or unknown transitions and the real-compilation guard.
+  - Enable explicit branch-dispatched publication of immutable CI images while keeping the mutable `:ci` alias restricted to `main`; pinning the newly published CI image digest is a subsequent publication step, not part of this implementation change.
+  - Validate the new toolchain with the rebuilt devcontainer, complete Java/Protos tests, generated-bytecode guards, Native Image smoke and TLS tests; native guest JIT remains subject to the recorded upstream oracle/graal#14579 limitation.
+
 ## 0.3.442-SNAPSHOT
 
 - `BUG034` (#1042): fix LM010-C Signature Help associating D237 named and mixed arguments with formals by source ordinal.

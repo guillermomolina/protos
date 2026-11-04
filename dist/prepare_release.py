@@ -175,7 +175,7 @@ def prepare(
 
     step(
         "native-image-build",
-        ["make", "-C", "build/native", "build"],
+        ["make", "build-native"],
         candidate,
     )
     step(

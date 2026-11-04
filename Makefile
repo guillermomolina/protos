@@ -2,12 +2,23 @@
 .DEFAULT_GOAL := help
 
 MVN ?= mvn
+BASH ?= bash
 PYTHON ?= python3
 SH ?= sh
 MVN_FLAGS ?=
 DIST_VALIDATE_FLAGS ?= --require-clean-source
 JAVA_TEST_JOBS ?= 6
 PROTOS_TEST_JOBS ?= 8
+
+# Explicit Native Image build, tests and clean; separate from regular make test.
+NATIVE_TEST := scripts/native-test.sh
+NATIVE_BIN := target/native/protos
+NATIVE_INIT_ARGS := target/native-image-init.args
+NATIVE_TLS_TESTS_BIN := target/native-tests
+NATIVE_TLS_TEST_REPORTS := target/native-test-reports
+NATIVE_TLS_TEST_IDS := target/maven-surefire-plugin-test-ids
+NATIVE_TLS_TEST_PACKAGE := com.guillermomolina.protos.execution
+NATIVE_TLS_TEST_CLASSES := ProtosTlsClientIntegrationTest ProtosTlsTrustTest
 
 # DAP tests own Graal tooling state and are not safe in the class-parallel lane.
 JAVA_SERIAL_TESTS := ProtosI026FDapBehaviorTest,ProtosI026FDapTransportTest,ProtosI116OptimizedDapAcceptanceTest,ProtosAud007DapPortOwnershipTest,ProtosTestToolPerf017AdmissionTest
@@ -63,7 +74,7 @@ TRUFFLE_ROOT_SELECTOR ?=
 TRUFFLE_ROOT_EXPANSION ?= method
 TRUFFLE_ROOT_DUMP_LEVEL ?= 1
 
-.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
+.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate build-native test-native clean-native
 
 help:
 	@printf '%s\n' \
@@ -71,6 +82,9 @@ help:
 		'  make toolchain      Verify the selected development toolchain contract' \
 		'  make compile        Compile production sources only (incremental)' \
 		'  make build          Clean and package without executing tests' \
+		'  make build-native   Build the Native Image executable (explicit)' \
+		'  make test-native    Rebuild Native and run CLI regression + Native TLS JUnit' \
+		'  make clean-native   Remove Native-specific build and test artifacts' \
 		'  make test           Run Java tests, then Protos tests' \
 		'  make test-java      Run the ordinary Java/JUnit test suite' \
 		'  make test-java-stress  Run explicit Java stress validation' \
@@ -117,7 +131,7 @@ help:
 		'  make dist           Build only the portable JVM distribution' \
 		'  make dist-validate  Build and validate the portable distribution' \
 		'' \
-		'Overrides: MVN=... PYTHON=... SH=... MVN_FLAGS=... JAVA_TEST_JOBS=... PROTOS_TEST_JOBS=... DIST_VALIDATE_FLAGS=...' \
+		'Overrides: MVN=... BASH=... PYTHON=... SH=... MVN_FLAGS=... JAVA_TEST_JOBS=... PROTOS_TEST_JOBS=... DIST_VALIDATE_FLAGS=...' \
 		'           TRUFFLE_COMPILATION_TEST_ARGS=... TRUFFLE_COMPILATION_TIMEOUT=...' \
 		'           TRUFFLE_COMPILATION_SHARD_WORKERS=... TRUFFLE_COMPILATION_DIAGNOSE_TEST_ARGS=...' \
 		'           TRUFFLE_ROOT_TEST_ARGS=... TRUFFLE_ROOT_SELECTOR=... TRUFFLE_ROOT_EXPANSION=...' \
@@ -131,6 +145,32 @@ compile:
 
 build:
 	$(MVN) $(MVN_FLAGS) clean package -DskipTests
+
+build-native:
+	$(MVN) $(MVN_FLAGS) -Pnative -DskipTests package
+
+test-native: build-native
+	$(BASH) $(NATIVE_TEST)
+	rm -rf $(NATIVE_TLS_TESTS_BIN) $(NATIVE_TLS_TEST_REPORTS) $(NATIVE_TLS_TEST_IDS)
+	$(MVN) $(MVN_FLAGS) -Pnative-tls-tests \
+		-Dtest=ProtosTlsClientIntegrationTest,ProtosTlsTrustTest test
+	@test -x $(NATIVE_TLS_TESTS_BIN) || \
+		{ echo 'NATIVE_TLS_JUNIT_EXECUTABLE=MISSING' >&2; exit 1; }
+	@for class in $(NATIVE_TLS_TEST_CLASSES); do \
+		grep -rqF --include='*.xml' "classname=\"$(NATIVE_TLS_TEST_PACKAGE).$$class\"" \
+			$(NATIVE_TLS_TEST_REPORTS) || \
+			{ echo "NATIVE_TLS_JUNIT_CLASS_NOT_RUN=$$class" >&2; exit 1; }; \
+	done
+	@if grep -rqE --include='*.xml' '<(failure|error)[ >]' $(NATIVE_TLS_TEST_REPORTS); then \
+		echo 'NATIVE_TLS_JUNIT=FAIL' >&2; exit 1; \
+	fi
+	@echo 'NATIVE_TLS_PEER_INTEGRATION=PASS'
+	@echo 'NATIVE_TLS_TRUST_PROVENANCE=PASS'
+
+clean-native:
+	rm -rf target/native
+	rm -f $(NATIVE_INIT_ARGS)
+	rm -rf $(NATIVE_TLS_TESTS_BIN) $(NATIVE_TLS_TEST_REPORTS) $(NATIVE_TLS_TEST_IDS)
 
 test: test-java test-protos
 

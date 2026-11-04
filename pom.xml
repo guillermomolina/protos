@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.3.442-SNAPSHOT</version>
+    <version>0.3.443-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -23,7 +23,7 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <graalvm.version>25.4.4.1.1</graalvm.version>
+        <graalvm.version>25.5.5.0.3</graalvm.version>
         <lsp4j.version>1.0.0</lsp4j.version>
         <protos.shade.skip>false</protos.shade.skip>
         <!-- TEST008: the slow-test confirmation run reports separately. -->
@@ -334,7 +334,7 @@
                                 <configuration>
                                     <target>
                                         <exec executable="bash" failonerror="true">
-                                            <arg value="${project.basedir}/build/native/generate-init-args.sh"/>
+                                            <arg value="${project.basedir}/scripts/native-generate-init-args.sh"/>
                                             <arg value="${project.build.outputDirectory}"/>
                                             <arg value="${project.build.directory}/native-image-init.args"/>
                                         </exec>
@@ -411,7 +411,7 @@
                                              never reach this image. -->
                                         <delete dir="${project.build.directory}/maven-surefire-plugin-test-ids" quiet="true"/>
                                         <exec executable="bash" failonerror="true">
-                                            <arg value="${project.basedir}/build/native/generate-init-args.sh"/>
+                                            <arg value="${project.basedir}/scripts/native-generate-init-args.sh"/>
                                             <arg value="${project.build.outputDirectory}"/>
                                             <arg value="${project.build.directory}/native-image-init.args"/>
                                         </exec>

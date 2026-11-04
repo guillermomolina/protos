@@ -259,6 +259,7 @@ class ArtifactSetTest(unittest.TestCase):
             "push",
         )
         steps = construction_steps()
+        self.assertEqual(dict(steps)["native-image-build"], ["make", "build-native"])
         self.assertEqual(
             [label for label, _ in steps],
             [

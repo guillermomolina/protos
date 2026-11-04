@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   publish:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -69,10 +69,13 @@ jobs:
           docker push "${IMAGE_NAME}:sha-${GITHUB_SHA}"
 
       - name: Publish controlled CI alias
+        if: github.ref == 'refs/heads/main'
         run: |
           docker push "${IMAGE_NAME}:ci"
 
       - name: Report published image identity
         run: |
           docker buildx imagetools inspect "${IMAGE_NAME}:sha-${GITHUB_SHA}"
-          docker buildx imagetools inspect "${IMAGE_NAME}:ci"
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            docker buildx imagetools inspect "${IMAGE_NAME}:ci"
+          fi

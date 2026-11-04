@@ -23,7 +23,7 @@ import threading
 from pathlib import Path
 
 TIMEOUT = 10
-root = Path(__file__).resolve().parents[2]
+root = Path(__file__).resolve().parents[1]
 native_bin = Path(sys.argv[1]).resolve()
 
 with tempfile.TemporaryDirectory(prefix="protos-native-dap-") as tmp:

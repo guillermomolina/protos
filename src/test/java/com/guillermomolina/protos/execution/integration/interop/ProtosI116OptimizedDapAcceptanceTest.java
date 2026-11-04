@@ -448,17 +448,17 @@ final class ProtosI116OptimizedDapAcceptanceTest {
                 future.cancel(true);
             }
 
-            if (connectionThread != null) {
-                awaitDapClientConnectionThreadTermination(
-                        connectionThread);
-            }
-
             if (context != null) {
                 context.close();
             }
 
             if (engine != null) {
                 engine.close();
+            }
+
+            if (connectionThread != null) {
+                awaitDapClientConnectionThreadTermination(
+                        connectionThread);
             }
 
             executor.shutdownNow();

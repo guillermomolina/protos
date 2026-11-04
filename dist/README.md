@@ -118,12 +118,12 @@ make artifacts
 ```
 
 Run it from a clean checkout inside the canonical Native builder environment
-(Oracle Linux 10 with the GraalVM from `build/native/Dockerfile`, as in the
-development container). It is substantially more expensive than `make dist`
+(Oracle Linux 10 with GraalVM Native Image pinned by `toolchain.json`
+and built using the single `.devcontainer/Dockerfile`). It is substantially more expensive than `make dist`
 because it includes a Native Image build.
 
 `dist/build_artifact_set.py` refuses a dirty checkout, runs `mvn clean`, then
-composes the existing builders (`make -C build/native build`,
+composes the existing builders (`make build-native`,
 `dist/build_native.py`, `dist/build_portable.py`) in development mode, and runs
 the Protos-owned D064 Standard Library documentation producer twice from the
 same checkout, requiring byte-identical output. The result is:
@@ -163,11 +163,11 @@ of the D064 artifact is the separate explicit step below.
 **Native check.** The Human Executor runs:
 
 ```sh
-make -C build/native build
-make -C build/native test
+make build-native
+make test-native
 ```
 
-The second command runs `build/native/test-native.sh` against the actual
+The second command runs `scripts/native-test.sh` against the actual
 `target/native/protos` executable. The mandatory TLS suites are:
 
 - `protos/tests/library/tls/client-admission.protos`
@@ -181,7 +181,7 @@ exactly three files must run, otherwise the script emits
 availability of the JSSE/X.509 primitives, ClientHello generation, identity,
 and controlled error paths. They use fixtures and simulated duplexes.
 
-`make -C build/native test` then runs two distinct Native checks:
+`make test-native` then runs two distinct Native checks:
 
 | Indicator | Executable | What runs |
 |---|---|---|

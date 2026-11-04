@@ -342,7 +342,7 @@ def construction_steps() -> list[tuple[str, list[str]]]:
     python = sys.executable
     return [
         ("clean", ["mvn", "-q", "clean"]),
-        ("native-image-build", ["make", "-C", "build/native", "build"]),
+        ("native-image-build", ["make", "build-native"]),
         ("native-archive-build", [python, "dist/build_native.py"]),
         ("portable-jvm-build", [python, "dist/build_portable.py"]),
     ]

@@ -83,7 +83,7 @@ final class ProtosNativeGeneratedStructurePolicyTest {
 
         Path output = temporary.resolve("native-image-init.args");
         Path generator =
-                repository.resolve("build/native/generate-init-args.sh");
+                repository.resolve("scripts/native-generate-init-args.sh");
 
         Process process =
                 new ProcessBuilder(

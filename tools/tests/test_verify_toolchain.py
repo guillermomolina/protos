@@ -28,13 +28,13 @@ TOOLCHAIN = {
     "java": {"bytecode_release": 21},
     "graalvm": {
         "distribution": "graalvm-community",
-        "release": "25.4.4.1.1",
+        "release": "25.5.5.0.3",
         "jdk_feature": 25,
-        "jdk_version": "25.0.4.1.1",
-        "container_channel": "25i4",
-        "container_image": "ghcr.io/graalvm/graalvm-community:25i4-25.0.4.1.1-ol10@sha256:a7b4810d7c755e9627feaa1459eb5a93338643b16d745d4f3fc86db71e5da7f5",
+        "jdk_version": "25.0.5.0.3",
+        "container_channel": "25i5",
+        "container_image": "ghcr.io/graalvm/native-image-community:25i5-25.0.5.0.3-ol10@sha256:2800b5bd11cbb9bf11c92591d05ea37d9a735522bdc0e86827302d998843ad79",
     },
-    "graal_components": {"version": "25.4.4.1.1"},
+    "graal_components": {"version": "25.5.5.0.3"},
     "maven": {"minimum_version": "3.9.9", "supported_major": 3},
     "policy": {
         "primary_runtime_alignment": "development-ci-distribution",
@@ -42,15 +42,6 @@ TOOLCHAIN = {
         "floating_primary_runtime": False,
     },
 }
-
-NATIVE_IMAGE = (
-    "ghcr.io/graalvm/native-image-community:"
-    "25i4-25.0.4.1.1-ol10"
-)
-STALE_NATIVE_IMAGE = (
-    "ghcr.io/graalvm/native-image-community:"
-    "25i3-25.0.4.1-ol10-20260825"
-)
 
 CI_IMAGE_LOCK = {
     "schema": "protos-ci-image-lock-v1",
@@ -103,7 +94,6 @@ def make_fixture(
     root,
     *,
     development_drift=False,
-    native_drift=False,
     old_c_state=False,
     ci_command_drift=False,
     ci_cache_drift=False,
@@ -115,26 +105,7 @@ def make_fixture(
         json.dumps(CI_IMAGE_LOCK, indent=2) + "\n",
     )
 
-    native_image = STALE_NATIVE_IMAGE if native_drift else NATIVE_IMAGE
-    native_maven = (
-        "RUN microdnf install -y \\\n"
-        "        maven \\\n"
-        "    && microdnf clean all\n"
-        if native_drift
-        else
-        "RUN microdnf install -y \\\n"
-        "        --enablerepo=ol10_codeready_builder \\\n"
-        "        maven \\\n"
-        "        maven-unbound \\\n"
-        "    && microdnf clean all\n"
-    )
-    write(
-        root / "build" / "native" / "Dockerfile",
-        "FROM %s\n%s"
-        'ENV PATH="${JAVA_HOME}/bin:${PATH}"\n' % (native_image, native_maven),
-    )
-
-    components = "24.0.0" if old_c_state else "25.4.4.1.1"
+    components = "24.0.0" if old_c_state else "25.5.5.0.3"
     graal_dependencies = """<dependencies>
 <dependency><groupId>org.graalvm.sdk</groupId><artifactId>graal-sdk</artifactId><version>${graalvm.version}</version></dependency>
 <dependency><groupId>org.graalvm.polyglot</groupId><artifactId>polyglot</artifactId><version>${graalvm.version}</version></dependency>
@@ -218,12 +189,12 @@ def make_fixture(
         graal_release = "24.0.0"
         launcher = "expected_feature=$(sed -n 's/^java_feature=//p' \"$RUNTIME_META\")\n"
     else:
-        dist_components = "25.4.4.1.1"
+        dist_components = "25.5.5.0.3"
         feature = "25"
-        java_version = "25.0.4.1.1"
-        graal_release = "25.4.4.1.1"
+        java_version = "25.0.5.0.3"
+        graal_release = "25.5.5.0.3"
         launcher = """expected_version=$(sed -n 's/^java_version=//p' "$RUNTIME_META")
-actual_version=25.0.4.1.1
+actual_version=25.0.5.0.3
 [ "$actual_version" = "$expected_version" ] || supported=0
 """
 
@@ -301,12 +272,12 @@ def main():
 
     good_maven_output = """Apache Maven 3.9.10 (Red Hat 3.9.10-1)
 Maven home: /usr/share/maven
-Java version: 25.0.4.1.1, vendor: GraalVM Community, runtime: /opt/graalvm-community-java25i4
+Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-community-java25i5
 """
     runtime_rows = evaluate_maven_runtime(
         TOOLCHAIN,
         good_maven_output,
-        "/opt/graalvm-community-java25i4",
+        "/opt/graalvm-community-java25i5",
         ["maven-3.9.10-1.el10.noarch", "maven-unbound-3.9.10-1.el10.noarch"],
     )
     require(
@@ -317,7 +288,7 @@ Java version: 25.0.4.1.1, vendor: GraalVM Community, runtime: /opt/graalvm-commu
     below_floor_rows = evaluate_maven_runtime(
         TOOLCHAIN,
         good_maven_output.replace("Apache Maven 3.9.10", "Apache Maven 3.9.8"),
-        "/opt/graalvm-community-java25i4",
+        "/opt/graalvm-community-java25i5",
         [],
     )
     require(
@@ -331,7 +302,7 @@ Java version: 25.0.4.1.1, vendor: GraalVM Community, runtime: /opt/graalvm-commu
     wrong_java_rows = evaluate_maven_runtime(
         TOOLCHAIN,
         good_maven_output.replace("vendor: GraalVM Community", "vendor: Oracle"),
-        "/opt/graalvm-community-java25i4",
+        "/opt/graalvm-community-java25i5",
         [],
     )
     require(
@@ -345,10 +316,10 @@ Java version: 25.0.4.1.1, vendor: GraalVM Community, runtime: /opt/graalvm-commu
     wrong_runtime_rows = evaluate_maven_runtime(
         TOOLCHAIN,
         good_maven_output.replace(
-            "runtime: /opt/graalvm-community-java25i4",
+            "runtime: /opt/graalvm-community-java25i5",
             "runtime: /usr/lib/jvm/java-25-openjdk",
         ),
-        "/opt/graalvm-community-java25i4",
+        "/opt/graalvm-community-java25i5",
         [],
     )
     require(
@@ -362,7 +333,7 @@ Java version: 25.0.4.1.1, vendor: GraalVM Community, runtime: /opt/graalvm-commu
     redundant_jdk_rows = evaluate_maven_runtime(
         TOOLCHAIN,
         good_maven_output,
-        "/opt/graalvm-community-java25i4",
+        "/opt/graalvm-community-java25i5",
         ["java-25-openjdk-headless-25.0.1.0.8-1.el10.x86_64"],
     )
     require(
@@ -430,32 +401,28 @@ Java version: 25.0.4.1.1, vendor: GraalVM Community, runtime: /opt/graalvm-commu
             result,
         )
 
-        root = tmp / "native-drift"
-        make_fixture(root, native_drift=True)
-
+        # A single source of container authority: changing the development
+        # Dockerfile image must fail the development-scope binding check.
+        root = tmp / "unified-container-drift"
+        make_fixture(root)
+        docker_path = root / ".devcontainer" / "Dockerfile"
+        old_docker = docker_path.read_text(encoding="utf-8")
+        selected = TOOLCHAIN["graalvm"]["container_image"]
+        unexpected = selected.replace(
+            "ghcr.io/graalvm/native-image-community:",
+            "ghcr.io/graalvm/graalvm-community:",
+            1,
+        )
+        require(unexpected != selected, "Fixture is not Native Image based")
+        require(old_docker.count("FROM " + selected) == 1,
+                "Cannot replace the unified Dockerfile test image")
+        write(docker_path, old_docker.replace("FROM " + selected,
+                                              "FROM " + unexpected, 1))
         result = run(verifier, root, "check", "development")
-        require(
-            result.returncode == 0,
-            "native-only drift should not affect development scope",
-            result,
-        )
-
-        result = run(verifier, root, "check")
-        require(
-            result.returncode == 1,
-            "native-only drift did not fail the all-surface check",
-            result,
-        )
-        for binding in (
-            "native.image",
-            "native.maven_provisioning",
-            "native.maven_repository_scope",
-        ):
-            require(
-                binding in result.stdout,
-                "native-only drift did not identify %s" % binding,
-                result,
-            )
+        require(result.returncode == 1,
+                "An inconsistent devcontainer image was accepted", result)
+        require("devcontainer.image" in result.stdout,
+                "The devcontainer image mismatch was not reported", result)
 
         root = tmp / "pre-c"
         make_fixture(root, old_c_state=True)

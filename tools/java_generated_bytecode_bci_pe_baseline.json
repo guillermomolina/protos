@@ -218,6 +218,7 @@
     "ProtosBytecodeRootNodeGen|CachedBytecodeNode.continueAt|default > case 7|bci += 8;|SEQUENTIAL_CONSTANT_DELTA|bci+8",
     "ProtosBytecodeRootNodeGen|CachedBytecodeNode.continueAt|default > case 8|bci += 2;|SEQUENTIAL_CONSTANT_DELTA|bci+2",
     "ProtosBytecodeRootNodeGen|CachedBytecodeNode.continueAt|default > case 9|bci += 4;|SEQUENTIAL_CONSTANT_DELTA|bci+4",
+    "ProtosBytecodeRootNodeGen|CachedBytecodeNode.continueAt|entry|bci = CompilerDirectives.mergeExplodeKey(bci);|MERGE_EXPLODE_KEY|mergeExplodeKey(bci)",
     "ProtosBytecodeRootNodeGen|CachedBytecodeNode.continueAt|entry|long bci = (int) startState;|START_STATE_DECODE|(int) startState",
     "ProtosBytecodeRootNodeGen|CachedBytecodeNodeTailCall.continueAt|case Instructions.ACCESS_CAPTURED_FRAME_LOCAL$PERFORM_|bci = handleAccessCapturedFrameLocal$Perform_(frame, bc, bci, vstate, cstate);|PROVEN_HANDLER_RETURN|handleAccessCapturedFrameLocal$Perform_ returns bci+12",
     "ProtosBytecodeRootNodeGen|CachedBytecodeNodeTailCall.continueAt|case Instructions.ACCESS_CAPTURED_FRAME_LOCAL_|bci = handleAccessCapturedFrameLocal_(frame, bc, bci, vstate, cstate);|PROVEN_HANDLER_RETURN|handleAccessCapturedFrameLocal_ returns bci+12",
@@ -563,6 +564,7 @@
     "ProtosBytecodeRootNodeGen|CachedBytecodeNodeTailCall.continueAt|case Instructions.TRY_PRIMITIVE_NUMERIC_SUBTRACT_|bci = handleTryPrimitiveNumericSubtract_(frame, bc, bci, vstate, cstate);|PROVEN_HANDLER_RETURN|handleTryPrimitiveNumericSubtract_ returns bci+8",
     "ProtosBytecodeRootNodeGen|CachedBytecodeNodeTailCall.continueAt|case Instructions.YIELD|bci = handleYield(frame, bc, bci, vstate, cstate);|DISPATCH_EXIT|handleYield -> return",
     "ProtosBytecodeRootNodeGen|CachedBytecodeNodeTailCall.continueAt|catch(Throwable)|bci = (int) state;|EXCEPTION_HANDLER_TABLE|handleException: originalBci|handler-table|tag enter/return bci|0xFFFFFFFF exit",
+    "ProtosBytecodeRootNodeGen|CachedBytecodeNodeTailCall.continueAt|entry|bci = CompilerDirectives.mergeExplodeKey(bci);|MERGE_EXPLODE_KEY|mergeExplodeKey(bci)",
     "ProtosBytecodeRootNodeGen|CachedBytecodeNodeTailCall.continueAt|entry|long bci = (int) startState;|START_STATE_DECODE|(int) startState"
   ]
 }

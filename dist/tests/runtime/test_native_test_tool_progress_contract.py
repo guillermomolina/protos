@@ -35,7 +35,7 @@ AUTHORITATIVE = (
 
 CONSUMERS = (
     ROOT / "dist/validate_native.py",
-    ROOT / "build/native/test-native.sh",
+    ROOT / "scripts/native-test.sh",
 )
 
 EXPECTED = (

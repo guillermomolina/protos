@@ -24,6 +24,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.net.InetAddress;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 final class ProtosLm009DDebugRuntimeHostTest {
@@ -52,6 +55,45 @@ final class ProtosLm009DDebugRuntimeHostTest {
         try (ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open()) {
             assertFalse(host.isDebugMode());
             assertThrows(IllegalStateException.class, host::debugEndpoint);
+        }
+    }
+
+    @Test
+    void readinessAdapterWaitsForAsynchronousListenerPublication() throws Exception {
+        ProtosGraalDapReadinessAdapter adapter =
+                new ProtosGraalDapReadinessAdapter(new ByteArrayOutputStream());
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<ProtosPolyglotRuntimeHost.DebugEndpoint> received =
+                new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread receiver = new Thread(() -> {
+            started.countDown();
+            try {
+                received.set(adapter.requireEndpoint());
+            } catch (Throwable error) {
+                failure.set(error);
+            } finally {
+                completed.countDown();
+            }
+        }, "protos-dap-readiness-test");
+        receiver.start();
+        try {
+            assertTrue(started.await(2, TimeUnit.SECONDS));
+            assertFalse(
+                    completed.await(50, TimeUnit.MILLISECONDS),
+                    "DAP readiness must not fail before the listener publishes its address");
+            adapter.write(
+                    ("[Graal DAP] Starting server and listening on /127.0.0.1:54324\n")
+                            .getBytes(StandardCharsets.UTF_8));
+            assertTrue(completed.await(2, TimeUnit.SECONDS));
+            assertTrue(failure.get() == null, "unexpected readiness error: " + failure.get());
+            assertEquals(
+                    new ProtosPolyglotRuntimeHost.DebugEndpoint("127.0.0.1", 54324),
+                    received.get());
+        } finally {
+            receiver.interrupt();
+            receiver.join(2000);
         }
     }
 

@@ -298,14 +298,16 @@ final class ProtosI026FDapBehaviorTest {
             if (guestFuture != null && !guestFuture.isDone()) {
                 guestFuture.cancel(true);
             }
-            if (dapClientConnectionThread != null) {
-                awaitDapClientConnectionThreadTermination(dapClientConnectionThread);
-            }
             if (context != null) {
                 context.close();
             }
             if (engine != null) {
                 engine.close();
+            }
+            // GraalVM 25.5 retains its DAP listener for reconnects.
+            // Engine disposal must precede the thread-leak assertion.
+            if (dapClientConnectionThread != null) {
+                awaitDapClientConnectionThreadTermination(dapClientConnectionThread);
             }
             guestExecutor.shutdownNow();
             assertTrue(
@@ -340,7 +342,7 @@ final class ProtosI026FDapBehaviorTest {
         thread.join(TIMEOUT.toMillis());
         assertFalse(
                 thread.isAlive(),
-                "GraalVM DAP client connection thread must terminate before Context.close()");
+                "GraalVM DAP client connection thread must terminate after Engine.close()");
     }
 
     static void initializeAndAttach(DapClient client) throws IOException {

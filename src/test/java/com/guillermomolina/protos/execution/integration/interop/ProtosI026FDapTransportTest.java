@@ -104,11 +104,12 @@ final class ProtosI026FDapTransportTest {
             if (client != null) {
                 client.close();
             }
-            if (dapClientConnectionThread != null) {
-                awaitDapClientConnectionThreadTermination(dapClientConnectionThread);
-            }
             if (context != null) {
                 closeAfterDapSession(context, disconnected);
+            }
+            // The implicitly owned engine is closed with the context.
+            if (dapClientConnectionThread != null) {
+                awaitDapClientConnectionThreadTermination(dapClientConnectionThread);
             }
         }
     }
@@ -178,7 +179,7 @@ final class ProtosI026FDapTransportTest {
         thread.join(TIMEOUT.toMillis());
         assertFalse(
                 thread.isAlive(),
-                "GraalVM DAP client connection thread must terminate before Context.close()");
+                "GraalVM DAP client connection thread must terminate after Context.close()");
     }
 
     private static void assertSuccessfulResponse(
