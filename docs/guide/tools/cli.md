@@ -264,7 +264,7 @@ protos lint --fail-on-warning src/main.protos
 
 | | Native Linux x86_64 | Portable JVM |
 |---|---|---|
-| Requirements | Linux x86_64, dynamic glibc 2.39 or newer; no JDK | GraalVM 25.4.4.1.1 (JDK 25.0.4.1.1) |
+| Requirements | Linux x86_64, dynamic glibc 2.39 or newer; no JDK | GraalVM 25.5.5.0.3 (JDK 25.0.5.0.3) |
 | Guest execution | Interpreter-only; guest JIT disabled (PLAT045) | Optimizing runtime with guest JIT |
 | Commands on this page | All available | All available |
 | `--foreign-provider-path` | Not available: no dynamic plugin loading | Available |

@@ -404,6 +404,10 @@ org.graalvm.truffle:truffle-runtime:24.0.0
 expected optimizing runtime: HotSpotTruffleRuntime
 ```
 
+The JDK 22/Truffle 24.0.0 selection above records the historical DIST001-A
+admission contract, not the current toolchain. For new development builds,
+use `toolchain.json`; each archive records its runtime in `RUNTIME.txt`.
+
 The project Maven bytecode target remains Java 21, but that is not by itself a
 distribution support claim.
 

@@ -108,7 +108,7 @@ signals an ordinary `Error` (see [Runtime inspection](inspect.md)):
   on the JVM, but results are identical. `std:runtime` deliberately reports which
   distribution is running through its `platform` field.
 - **Portable JVM** — runs on the supported external runtime, GraalVM
-  25.4.4.1.1 (JDK 25.0.4.1.1), with the optimizing runtime and guest JIT.
+  25.5.5.0.3 (JDK 25.0.5.0.3), with the optimizing runtime and guest JIT.
 
 `std:regex` depends on Unicode property data. Since Protos 0.3.312 that data is
 embedded in the Native executable, so `import("std:regex/Regex")` works in both
