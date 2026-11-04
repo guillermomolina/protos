@@ -182,9 +182,19 @@ test-java:
 	-$(JAVA_SLOW_TEST_GUARD) controls --state $(JAVA_SLOW_TEST_STATE) --jobs $(JAVA_TEST_JOBS)
 	@$(MAKE) --no-print-directory java-test-phase JAVA_TEST_PHASE=test-java-parallel
 	@$(MAKE) --no-print-directory java-test-phase JAVA_TEST_PHASE=test-java-serial
+# CI retains live Maven output, Surefire per-class timings, controls and phase
+# timings. The TEST008 baseline was calibrated on a 16-core local workstation;
+# CI confirmation re-executes slow classes and cannot provide comparable evidence.
+# Keep full reduced-contention confirmation available for local runs.
+ifeq ($(GITHUB_ACTIONS),true)
+	@echo 'JAVA_SLOW_TEST_GUARD=CI_ADVISORY_CONFIRMATION_SKIPPED'
+	@echo 'JAVA_SLOW_TEST_REPORTS=$(JAVA_SUREFIRE_REPORTS)'
+	@echo 'JAVA_SLOW_TEST_PHASE_TIMINGS=$(JAVA_SLOW_TEST_STATE)/phases.txt'
+else
 	-$(JAVA_SLOW_TEST_GUARD) check --reports $(JAVA_SUREFIRE_REPORTS) --baseline $(JAVA_SLOW_TEST_BASELINE) \
 		--state $(JAVA_SLOW_TEST_STATE) --jobs $(JAVA_TEST_JOBS) --log $(JAVA_TEST_LOG) \
 		--confirm-command "$(MAKE) --no-print-directory test-java-confirm" --advisory
+endif
 
 # Streams one test-java phase live to the terminal while appending it to the
 # retained log, records its wall time, and fails with the phase's own
