@@ -4,6 +4,10 @@ FROM ghcr.io/graalvm/native-image-community:25i5-25.0.5.0.3-ol10@sha256:2800b5bd
 # image must accept arbitrary commands supplied by Docker and GitHub Actions.
 ENTRYPOINT []
 
+# Oracle Linux minimal glibc includes C.UTF-8, not necessarily en_US.UTF-8.
+# The JVM uses the process locale when encoding Unicode filesystem paths.
+ENV LANG=C.UTF-8
+
 USER root
 
 RUN microdnf install -y \
