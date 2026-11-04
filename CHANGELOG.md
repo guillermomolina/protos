@@ -8,6 +8,41 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.40-SNAPSHOT
+
+- **I115 — opt-in Tier 2 compiler graph witness for run() (historical).**
+  - Add `ProtosI115Tier2RunGraphTest`, an opt-in compiler regression
+    that compiles the concrete `run()` root for a unary Closure identity
+    call and selects its own fresh BGV graph at the `After TruffleTier`
+    phase using Graal's graphio parser. It checks the selected root's
+    optimized CallTarget, cached Bytecode DSL tier, and natural Tier 2
+    compilation after 2,001 (`2001`) invocations, rather than consulting a prebuilt
+    graph summary.
+  - The executable assertions require `LoadFieldNode=0` and
+    `IsNullNode=0` on that selected compiled graph. The test also reports
+    `I115_RUN_TIER2_TOTAL_NODES`, but does **not** assert total nodes < 50,
+    notwithstanding the original commit's 'under 50 nodes' title. Do not
+    misrepresent the title as a measured acceptance criterion.
+  - Add `tools/i115_tier2_run_graph.sh` to run the witness with the GraalVM
+    JDK compiler module, synchronous Truffle compilation, stable root
+    identity and a fresh dump directory. The test is normally skipped
+    unless `protos.i115.graphCapture=true` is provided. Invoking this
+    historical script creates files under `target/truffle-compilation/`;
+    this replay does not run it or generate such artifacts.
+  - **Historical semantic limitations:** a Tier 2 graph node census does
+    not establish guest correctness, dynamic `Object.call` / D013 dispatch,
+    ReturnHome, suspension, cancellation, Task/C-prime ownership, non-local
+    control transfers, D179 C0 lexical behavior, or D197-C numeric-prototype
+    delegation of the Context-owned BigInteger factory. The signed-64
+    Integer representation remains `long` / `Long`; no Java int guest
+    integer lane is introduced here. No runtime tests, builds, compiler
+    captures, graph measurements, or benchmarks were executed during this
+    versioned replay; neither <50 total nodes nor the zero-node assertions
+    are claimed as observed results here.
+  - Original implementation: `cfb7ab8d266df7127965c9a3bb3aecea667099dc`.
+    Both original additions are preserved byte-for-byte, including
+    executable content and test assertions.
+
 ## 0.4.39-SNAPSHOT
 
 - **I115 — proof-driven null ReturnHome for direct Closure invocation (historical).**
