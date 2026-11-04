@@ -104,6 +104,74 @@ final class ProtosI115ARuntimeAdmissionTest {
         });
     }
 
+
+    @Test
+    void i115FactorialUsesDynamicBooleanControl() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    factorial: (n) => {
+                        result: 1
+                        (n > 1).ifTrue() {
+                            result = n * factorial(n - 1)
+                        }
+                        result
+                    }
+                    """, "i115-factorial-definition.protos", module);
+
+            assertInteger(
+                    1,
+                    evaluate("factorial(0)\n",
+                            "i115-factorial-zero.protos", module));
+            assertInteger(
+                    1,
+                    evaluate("factorial(1)\n",
+                            "i115-factorial-one.protos", module));
+            assertInteger(
+                    120,
+                    evaluate("factorial(5)\n",
+                            "i115-factorial-five.protos", module));
+            assertInteger(
+                    2432902008176640000L,
+                    evaluate("factorial(20)\n",
+                            "i115-factorial-twenty.protos", module));
+        });
+    }
+
+    @Test
+    void i115BooleanControlUsesSameSemanticsForDynamicReceivers()
+            throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    choose: (n) => {
+                        result: 10
+                        (n > 1).ifTrue() {
+                            result = result + 7
+                        }
+                        result
+                    }
+                    """, "i115-boolean-definition.protos", module);
+
+            assertInteger(
+                    10,
+                    evaluate("choose(0)\n",
+                            "i115-boolean-false.protos", module));
+            assertInteger(
+                    17,
+                    evaluate("choose(2)\n",
+                            "i115-boolean-true.protos", module));
+
+            assertInteger(
+                    42,
+                    evaluate("true.ifTrue(() => { 42 })\n",
+                            "i115-literal-true.protos", module));
+
+            assertSame(
+                    ProtosNullValue.INSTANCE,
+                    evaluate("false.ifTrue(() => { 42 })\n",
+                            "i115-literal-false.protos", module));
+        });
+    }
+
     @Test
     void freshClosuresOfOneDefinitionShareExecutableFactsButNotCaptures() throws Exception {
         withCore(module -> {

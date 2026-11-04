@@ -8,6 +8,44 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.42-SNAPSHOT
+
+- **I115 — Bytecode DSL `ifTrue` control and primitive root-frame reads (historical).**
+  - Lower a unary `ifTrue` send via `emitI115IfTrueScalar` into the
+    Bytecode DSL `IfThenElse` control structure, rather than entering
+    `GetMethod(ifTrue)` or a Boolean method activation. Stage the receiver
+    and callback-producing expression once, in that order; use
+    `ExperimentalCanonicalBooleanCondition` to select the true branch.
+    The true branch invokes the callback through the shared dispatcher and
+    continuation transport, while the false branch produces guest `null`
+    after evaluating, but not invoking, the callback.
+  - Change the experimental compact Boolean dispatch to use its structured
+    control path without the previous `IsCanonicalBooleanValue` fallback
+    and ordinary method-send MISS branch. Dynamic comparisons yielding
+    canonical Booleans are covered by the added factorial and `ifTrue`
+    source tests. Their historical addition does not mean they have run
+    during the versioned replay.
+  - Add a constant `localOffset` to `ReadRootFrameLocal`; use
+    `BytecodeNode.getLocalValue(bytecodeIndex, frame, localOffset)` in
+    compact and published-present specializations instead of
+    `LocalAccessor.getObject`. Adjust the lowerer and the D179 / I101
+    independent-builder test sites to supply their frame-layout offsets.
+  - **Historical semantic limitations:** unconditional internal lowering
+    of `ifTrue` can bypass a user-defined method override or a noncanonical
+    receiver's ordinary message selection. It does not establish full
+    Boolean-control behavior for all receiver shapes, inherited lookup or
+    error signaling. This is separate from the existing D013 / `Object.call`
+    divergence. Direct frame reads still require D179 C0 lexical binding
+    acceptance and correct materialization after publication. `ReturnHome`
+    proof, suspension, cancellation, Task/C-prime ownership, non-local
+    control transfer, and Context-owned BigInteger / D197-C prototype
+    delegation remain unverified. Guest Integer uses `long` / `Long`, with
+    no guest `int` tier. No tests, Maven build, Graal compiler graphs or
+    benchmarks were executed after the version bump in this historical
+    replay, and no performance or full-conformance claim is made.
+  - Original implementation: `64ebc59bb8b8a8e754dd144f4cf4231b09b8462d`.
+    All six original source/test blobs and Git modes are reproduced intact.
+
 ## 0.4.41-SNAPSHOT
 
 - **I115 — cached non-capturing Closure materialization (historical).**

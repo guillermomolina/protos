@@ -459,6 +459,7 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                             if (rootRead) {
                                 builder.emitReadRootFrameLocal(
                                         x,
+                                        layout.localOffsetAt(0),
                                         layout.presentContinuityAt(0),
                                         "x");
                             } else {

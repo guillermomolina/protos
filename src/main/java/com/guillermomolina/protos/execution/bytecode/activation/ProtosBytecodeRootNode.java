@@ -1550,6 +1550,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
     @Operation
     @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    @ConstantOperand(type = int.class, name = "localOffset")
     @ConstantOperand(type = Assumption.class, name = "presenceContinuity")
     @ConstantOperand(type = String.class, name = "name")
     public static final class ReadRootFrameLocal {
@@ -1567,16 +1568,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization(guards = "isCompact(frame)")
         public static Object compact(
                 LocalAccessor accessor,
+                int localOffset,
                 Assumption presenceContinuity,
                 String name,
                 @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind VirtualFrame frame) {
             /*
              * I091: may yield a frame-retained primitive carrier. The lowerer
              * materializes it for every consumer outside the guarded numeric
              * chain.
              */
-            return accessor.getObject(bytecodeNode, frame);
+            return bytecodeNode.getLocalValue(bytecodeIndex, frame, localOffset);
         }
 
         @Specialization(
@@ -1586,11 +1589,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 })
         public static Object publishedPresent(
                 LocalAccessor accessor,
+                int localOffset,
                 Assumption presenceContinuity,
                 String name,
                 @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind VirtualFrame frame) {
-            return accessor.getObject(bytecodeNode, frame);
+            return bytecodeNode.getLocalValue(bytecodeIndex, frame, localOffset);
         }
 
         @Specialization(
@@ -1600,6 +1605,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 })
         public static Object materialized(
                 LocalAccessor accessor,
+                int localOffset,
                 Assumption presenceContinuity,
                 String name,
                 @Bind BytecodeNode bytecodeNode,

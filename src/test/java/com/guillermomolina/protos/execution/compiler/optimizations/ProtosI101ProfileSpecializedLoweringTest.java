@@ -1442,6 +1442,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
                             builder.emitReadRootFrameLocal(
                                     local,
+                                    layout.localOffsetAt(0),
                                     layout.presentContinuityAt(0),
                                     "value");
 
@@ -1618,6 +1619,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
                             builder.emitReadRootFrameLocal(
                                     locals[1],
+                                    layout.localOffsetAt(1),
                                     layout.presentContinuityAt(1),
                                     "b");
 

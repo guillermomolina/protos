@@ -471,6 +471,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             // generic selection.
                             builder.emitReadRootFrameLocal(
                                     identity,
+                                    layout.localOffsetAt(0),
                                     layout.presentContinuityAt(0),
                                     "identity");
 
