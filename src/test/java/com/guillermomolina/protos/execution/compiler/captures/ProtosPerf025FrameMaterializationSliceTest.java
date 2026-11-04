@@ -508,6 +508,45 @@ final class ProtosPerf025FrameMaterializationSliceTest {
         System.out.println("RAW_VIRTUALFRAME_RETAINED_ACROSS_ROOT_LIFETIME=NO");
     }
 
+    /**
+     * I115 lazy-context experiment: a capturing ordinary Closure root starts
+     * frame-native and promotes at the capture; a second capture over the same
+     * activation installs nothing new, and the root's own frame-native creation
+     * after the promotion keeps that one authority.
+     */
+    @Test
+    void lazyPromotionAtCaptureInstallsOneAuthorityForTheActivation() throws Exception {
+        withFixture(
+                fixture -> {
+                    ClosureUnderTest plan =
+                            closurePlan(fixture,
+                                    "(x) => { g: () => x\n" + "h: () => x\n" + "y: x\n" + "context }");
+                    List<String> names = instructionNames(activationNode(plan));
+                    assertNoInstall(names);
+                    assertContains(names, "EnsureLiveFrameLexicalAuthority");
+
+                    ProtosObjectValue argument = newObject();
+                    ProtosActivation invocation = deferredInvocation(fixture, plan.closure, List.of(argument));
+                    ProtosObjectValue observed =
+                            assertInstanceOf(
+                                    ProtosObjectValue.class,
+                                    plan.plan.executeBytecodeActivationForTesting(invocation));
+                    ProtosFrameLexicalBindingAuthority authority =
+                            assertInstanceOf(
+                                    ProtosFrameLexicalBindingAuthority.class,
+                                    invocation.currentLexicalBindingAuthorityForRuntime());
+                    assertSame(
+                            authority,
+                            ((com.guillermomolina.protos.runtime.ProtosExecutionContextValue) observed)
+                                    .lexicalBindingAuthorityForRuntime());
+                    assertEquals(
+                            List.of("x", "g", "h", "y"),
+                            List.copyOf(authority.bindingsSnapshot().keySet()));
+                    assertSame(argument, observed.readLocalSlot("y").orElseThrow());
+                });
+        System.out.println("I115_LAZY_PROMOTION_SINGLE_AUTHORITY=PASS");
+    }
+
     private static void assertNoInstall(List<String> names) {
         assertTrue(
                 names.stream().noneMatch(name -> name.contains(INSTALL)),

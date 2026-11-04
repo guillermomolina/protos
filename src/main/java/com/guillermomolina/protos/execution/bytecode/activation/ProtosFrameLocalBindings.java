@@ -156,12 +156,13 @@ final class ProtosFrameLocalBindings {
             return;
         }
         if (activation.hasGenuineExecutionContextForRuntime()) {
-            installFrameLexicalAuthorityOnTransition(
+            ensureLiveFrameLexicalAuthority(
                     frameBackedLocals,
                     frameBackedLayout,
                     activation,
-                    bytecodeNode.getBytecodeLocation(bytecodeIndex),
-                    frame.materialize());
+                    bytecodeNode,
+                    bytecodeIndex,
+                    frame);
         }
         // I091: only unobserved frame-native storage retains a primitive carrier.
         activation.createCurrentLocalSlotForRuntime(
@@ -181,6 +182,10 @@ final class ProtosFrameLocalBindings {
             ProtosActivation activation,
             BytecodeLocation location,
             com.oracle.truffle.api.frame.Frame liveFrame) {
+        if (hasOwnFrameLexicalAuthority(
+                activation, frameBackedLayout, location.getBytecodeNode())) {
+            return;
+        }
         installFrameLexicalAuthorityOnTransition(
                 frameBackedLocals,
                 frameBackedLayout,
@@ -190,13 +195,58 @@ final class ProtosFrameLocalBindings {
     }
 
     /**
+     * I115 lazy-context experiment: the canonical on-demand transition of a
+     * live root that started frame-native. The idempotent check runs before
+     * {@code frame.materialize()}, and the bytecode location is created only
+     * when an installation actually happens. Every caller passes the live
+     * frame of {@code activation}'s own executing invocation of the root
+     * owning {@code bytecodeNode}.
+     */
+    static void ensureLiveFrameLexicalAuthority(
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            ProtosActivation activation,
+            BytecodeNode bytecodeNode,
+            int bytecodeIndex,
+            com.oracle.truffle.api.frame.Frame liveFrame) {
+        if (hasOwnFrameLexicalAuthority(activation, frameBackedLayout, bytecodeNode)) {
+            return;
+        }
+        installFrameLexicalAuthorityOnTransition(
+                frameBackedLocals,
+                frameBackedLayout,
+                activation,
+                bytecodeNode.getBytecodeLocation(bytecodeIndex),
+                liveFrame.materialize());
+    }
+
+    /**
+     * Whether {@code activation} already carries the frame authority this
+     * root installs over its own frame. An activation belongs to exactly one
+     * invocation of one root, so an authority declared by that root with
+     * that very layout on that activation can only have been installed over
+     * this invocation's frame; no materialized frame is needed to decide.
+     */
+    private static boolean hasOwnFrameLexicalAuthority(
+            ProtosActivation activation,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            BytecodeNode bytecodeNode) {
+        return activation.currentLexicalBindingAuthorityForRuntime()
+                        instanceof ProtosFrameLexicalBindingAuthority installed
+                && installed.storesLayout(frameBackedLayout)
+                && installed.isDeclaredBy(bytecodeNode);
+    }
+
+    /**
      * Installs the materialized-frame authority of a live root lowered
      * without {@link InstallFrameLexicalAuthority}, unless the authority
      * already installed is that root's own over this same frame. Callers pass
      * the frame of an activation that is still executing, and a location of
      * that activation's root (BUG018-C retained-frame reads translate it).
+     * The single transition behind {@link #promoteLiveFrameLexicalAuthority}
+     * and {@link #ensureLiveFrameLexicalAuthority}.
      */
-    static void installFrameLexicalAuthorityOnTransition(
+    private static void installFrameLexicalAuthorityOnTransition(
             LocalRangeAccessor frameBackedLocals,
             ProtosFrameLexicalLayout frameBackedLayout,
             ProtosActivation activation,

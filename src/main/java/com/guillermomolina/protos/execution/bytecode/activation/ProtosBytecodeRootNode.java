@@ -4469,6 +4469,44 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * I115 lazy-context experiment (EXPERIMENTAL): the on-demand promotion of
+     * an ordinary Closure root admitted to start frame-native although it may
+     * need durable lexical state. The lowerer emits it immediately before the
+     * operation that publishes or observes the root's execution context (a
+     * creator-capturing Closure creation, the {@code context} intrinsic), never
+     * at entry. It publishes the root's own activation exactly as {@link
+     * CurrentActivation} does and then takes the single live-frame transition
+     * ({@link ProtosFrameLocalBindings#ensureLiveFrameLexicalAuthority}), whose
+     * idempotent check precedes {@code frame.materialize()}. The installed
+     * authority keeps the frame locals as the only store; the VirtualFrame is
+     * never retained.
+     */
+    @Operation
+    @ConstantOperand(type = LocalRangeAccessor.class, name = "frameBackedLocals")
+    @ConstantOperand(type = ProtosFrameLexicalLayout.class, name = "frameBackedLayout")
+    public static final class EnsureLiveFrameLexicalAuthority {
+        @Specialization
+        public static void perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex) {
+            if (!ProtosFrameArguments.hasPublishedActivation(frame.getArguments())) {
+                root.requestCallerNeed(NEEDS_EXACT_ACTIVATION);
+            }
+            ProtosFrameLocalBindings.ensureLiveFrameLexicalAuthority(
+                    frameBackedLocals,
+                    frameBackedLayout,
+                    ProtosFrameArguments.activation(frame),
+                    bytecodeNode,
+                    bytecodeIndex,
+                    frame);
+        }
+    }
+
     @Operation
     public static final class StructuredWhileCondition {
         @Specialization

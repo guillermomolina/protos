@@ -8,6 +8,51 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.45-SNAPSHOT
+
+- **I115 — experimental lazy promotion of live-frame lexical authority (historical).**
+  - Introduce `RootFacts.admitsLazyFrameAuthority` alongside
+    `requiresPersistentFrameAuthority` in `CanonicalCompilationFacts`. For
+    qualifying ordinary Closure roots, start with frame-native locals even
+    if persistent lexical authority may later be needed. The admission proof
+    requires a matching lexical scope/body and fails closed for module roots,
+    parameter defaults, `Candidate` or `Dynamic` own-name lookup, foreign
+    ownership, Object construction, `compose` and other unproven demands.
+  - Add the `EnsureLiveFrameLexicalAuthority` Bytecode DSL operation and the
+    `ProtosFrameLocalBindings.ensureLiveFrameLexicalAuthority` transition.
+    The lowerer inserts it **before** creating a creator-capturing Closure or
+    observing the `context` intrinsic, rather than at root entry. Noncapturing
+    Closures and ordinary frame-local reads and writes need no promotion.
+    Roots that fail static admission retain the existing
+    `InstallFrameLexicalAuthority` entry prologue.
+  - Recognize an already-installed authority by its root and frame layout
+    before calling `frame.materialize()`. Promotion preserves the executing
+    activation and uses that root's live frame; a second capture/observation
+    does not install another authority, and no `VirtualFrame` is retained.
+    `ProtosFrameLexicalBindingAuthority.isDeclaredBy` supports this proof.
+    The lowerer saves/restores its per-root lazy-state during nested lowering.
+  - Add `ProtosI115LazyCapturedFrameTest` and extend the BUG013 and PERF025
+    suites. The historical tests cover capture-before-creation ordering,
+    escaped mutable captures, sibling state, context identity, dynamic
+    presence and removal/recreation, assignment effects, non-local returns,
+    completed ReturnHome errors and single-authority installation.
+    These tests were **added but not executed** during this versioned replay.
+  - **Historical semantic limitations:** this is an experimental admission
+    and publication policy, not proof of all capture and frame lifetime paths.
+    Dynamic `Candidate` presence, shadowing, D179 C0 lexical ownership,
+    `ReturnHome` observability, non-local return, suspension and cancellation,
+    Task/C-prime transfers and module/foreign contexts require independent
+    conformance. The existing D013 / `Object.call` divergence and unconditional
+    `ifTrue` / `whileTrue` internal lowering may still bypass user-overridden
+    methods; the Context-owned BigInteger factory and D197-C prototype
+    delegation remain separate concerns. Guest Integer is signed-64
+    `long` / `Long`, not a guest `int` tier. No runtime tests, Maven build,
+    BGV captures or benchmarks were executed after this historical version
+    bump, and no performance or full-conformance claim is made.
+  - Original implementation: `94d56ec200f1486d86c2d1f8f00b643eab12c4e3`.
+    The seven modified source/test blobs and one new test blob retain the
+    original content and Git modes; only Maven version and changelog differ.
+
 ## 0.4.44-SNAPSHOT
 
 - **I115 — unified Closure inlining and recursive captured-control callbacks (historical).**

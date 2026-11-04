@@ -107,7 +107,30 @@ final class CanonicalCompilationFacts {
     record RootFacts(
             CanonicalBindingAnalysis bindingAnalysis,
             CanonicalLexicalScope scope,
-            boolean requiresPersistentFrameAuthority) {}
+            boolean requiresPersistentFrameAuthority,
+            boolean admitsLazyFrameAuthority) {
+
+        /**
+         * I115 lazy-context experiment: {@code requiresPersistentFrameAuthority}
+         * states that the root may need durable lexical state;
+         * {@code admitsLazyFrameAuthority} states that it may nevertheless
+         * start frame-native and install that state on demand. The second is
+         * only ever true together with the first.
+         */
+        RootFacts {
+            if (admitsLazyFrameAuthority && !requiresPersistentFrameAuthority) {
+                throw new IllegalArgumentException(
+                        "a lazy frame authority proof requires a persistent-authority root");
+            }
+        }
+
+        RootFacts(
+                CanonicalBindingAnalysis bindingAnalysis,
+                CanonicalLexicalScope scope,
+                boolean requiresPersistentFrameAuthority) {
+            this(bindingAnalysis, scope, requiresPersistentFrameAuthority, false);
+        }
+    }
 
     private record CallCandidates(
             CanonicalLexicalScope scope,
@@ -285,11 +308,15 @@ final class CanonicalCompilationFacts {
         if (cached != null) {
             return cached;
         }
+        boolean requiresPersistent =
+                requiresPersistentFrameAuthority(body, definition, analysis, scope, false);
         RootFacts facts =
                 new RootFacts(
                         analysis,
                         scope,
-                        requiresPersistentFrameAuthority(body, definition, analysis, scope, false));
+                        requiresPersistent,
+                        requiresPersistent
+                                && admitsLazyFrameAuthority(body, definition, analysis, scope));
         byDefinition.put(definition, facts);
         return facts;
     }
@@ -766,11 +793,54 @@ final class CanonicalCompilationFacts {
                     || (parameter.defaultValue().isPresent()
                             && demandsPersistentFrame(
                                     parameter.defaultValue().orElseThrow(),
-                                    analysis, scope, ownBindingsOnly))) {
+                                    analysis, scope, ownBindingsOnly, false))) {
                 return true;
             }
         }
-        return demandsPersistentFrame(body, analysis, scope, ownBindingsOnly);
+        return demandsPersistentFrame(body, analysis, scope, ownBindingsOnly, false);
+    }
+
+    /**
+     * I115 lazy-context experiment (EXPERIMENTAL, see
+     * docs/design/I115_LAZY_CONTEXT_EXPERIMENT.md): whether an ordinary
+     * Closure root that {@link #requiresPersistentFrameAuthority requires a
+     * persistent frame authority} may nevertheless start frame-native and
+     * install that authority only while its frame is live, immediately before
+     * the first operation that publishes or observes its execution context.
+     *
+     * <p>The proof is the same traversal with exactly two forms reclassified
+     * as promotion points instead of demands: a nested Closure that {@link
+     * #capturesCreatorContext captures its creator}, and the {@code context}
+     * intrinsic. The lowerer emits the promotion before each of them. Every
+     * other demand still fails closed: Object construction and {@code
+     * compose} (their construction/composition activations keep the existing
+     * prologue in this slice), a {@code Candidate} or {@code Dynamic}
+     * reference to a name this root declares, a creation whose identity is
+     * not owned by this scope, an unknown form, a missing analysis or scope,
+     * and every parameter default. Module roots (no definition) are never
+     * admitted.
+     */
+    private static boolean admitsLazyFrameAuthority(
+            CanonicalSequence body,
+            CanonicalClosure activationDefinition,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        if (activationDefinition == null
+                || analysis == null
+                || scope == null
+                || analysis.scopeOf(activationDefinition).orElse(null) != scope
+                || body != activationDefinition.body()) {
+            return false;
+        }
+        for (CanonicalParameter parameter : activationDefinition.parameters()) {
+            if (parameter.defaultValue().isPresent()
+                    || analysis.identityOf(parameter)
+                            .map(identity -> identity.owner() != scope)
+                            .orElse(true)) {
+                return false;
+            }
+        }
+        return !demandsPersistentFrame(body, analysis, scope, false, true);
     }
 
     /**
@@ -819,19 +889,22 @@ final class CanonicalCompilationFacts {
             CanonicalExpression expression,
             CanonicalBindingAnalysis analysis,
             CanonicalLexicalScope scope,
-            boolean ownBindingsOnly) {
+            boolean ownBindingsOnly,
+            boolean promotable) {
         if (expression instanceof CanonicalLiteral) {
             return false;
         }
         if (expression instanceof CanonicalClosure closure) {
-            return capturesCreatorContext(closure, analysis);
+            // I115 lazy context: a capture is a promotion point, not a demand.
+            return !promotable && capturesCreatorContext(closure, analysis);
         }
         if (expression instanceof CanonicalObject
                 || expression instanceof CanonicalCompose) {
             return true;
         }
         if (expression instanceof CanonicalIntrinsic intrinsic) {
-            return intrinsic.kind() == CanonicalIntrinsic.Kind.CONTEXT;
+            // I115 lazy context: observing the context is a promotion point.
+            return !promotable && intrinsic.kind() == CanonicalIntrinsic.Kind.CONTEXT;
         }
         if (expression instanceof CanonicalLookup lookup) {
             return (ownBindingsOnly || scope.declaresName(lookup.name()))
@@ -839,22 +912,22 @@ final class CanonicalCompilationFacts {
         }
         if (expression instanceof CanonicalAssign assign) {
             if (assign.target().isPresent()) {
-                return demandsPersistentFrame(assign.target().orElseThrow(), analysis, scope, ownBindingsOnly)
-                        || demandsPersistentFrame(assign.value(), analysis, scope, ownBindingsOnly);
+                return demandsPersistentFrame(assign.target().orElseThrow(), analysis, scope, ownBindingsOnly, promotable)
+                        || demandsPersistentFrame(assign.value(), analysis, scope, ownBindingsOnly, promotable);
             }
             return ((ownBindingsOnly || scope.declaresName(assign.name()))
                             && !resolvedInScope(analysis.resolutionOf(assign), scope))
-                    || demandsPersistentFrame(assign.value(), analysis, scope, ownBindingsOnly);
+                    || demandsPersistentFrame(assign.value(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalCreate create) {
             if (create.target().isPresent()) {
-                return demandsPersistentFrame(create.target().orElseThrow(), analysis, scope, ownBindingsOnly)
-                        || demandsPersistentFrame(create.value(), analysis, scope, ownBindingsOnly);
+                return demandsPersistentFrame(create.target().orElseThrow(), analysis, scope, ownBindingsOnly, promotable)
+                        || demandsPersistentFrame(create.value(), analysis, scope, ownBindingsOnly, promotable);
             }
             return analysis.identityOf(create)
                             .map(identity -> identity.owner() != scope)
                             .orElse(true)
-                    || demandsPersistentFrame(create.value(), analysis, scope, ownBindingsOnly);
+                    || demandsPersistentFrame(create.value(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalMultipleCreate create) {
             return analysis.identitiesOf(create)
@@ -862,59 +935,59 @@ final class CanonicalCompilationFacts {
                                     || identities.stream()
                                             .anyMatch(identity -> identity.owner() != scope))
                             .orElse(true)
-                    || demandsPersistentFrame(create.value(), analysis, scope, ownBindingsOnly);
+                    || demandsPersistentFrame(create.value(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalSequence sequence) {
-            return anyDemandsPersistentFrame(sequence.expressions(), analysis, scope, ownBindingsOnly);
+            return anyDemandsPersistentFrame(sequence.expressions(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalCall call) {
-            return demandsPersistentFrame(call.receiver(), analysis, scope, ownBindingsOnly)
-                    || anyDemandsPersistentFrame(call.arguments(), analysis, scope, ownBindingsOnly);
+            return demandsPersistentFrame(call.receiver(), analysis, scope, ownBindingsOnly, promotable)
+                    || anyDemandsPersistentFrame(call.arguments(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalSend send) {
-            return demandsPersistentFrame(send.receiver(), analysis, scope, ownBindingsOnly)
-                    || anyDemandsPersistentFrame(send.arguments(), analysis, scope, ownBindingsOnly);
+            return demandsPersistentFrame(send.receiver(), analysis, scope, ownBindingsOnly, promotable)
+                    || anyDemandsPersistentFrame(send.arguments(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalSuperSend superSend) {
-            return anyDemandsPersistentFrame(superSend.arguments(), analysis, scope, ownBindingsOnly);
+            return anyDemandsPersistentFrame(superSend.arguments(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalMember member) {
-            return demandsPersistentFrame(member.receiver(), analysis, scope, ownBindingsOnly);
+            return demandsPersistentFrame(member.receiver(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalIdentity identity) {
-            return demandsPersistentFrame(identity.left(), analysis, scope, ownBindingsOnly)
-                    || demandsPersistentFrame(identity.right(), analysis, scope, ownBindingsOnly);
+            return demandsPersistentFrame(identity.left(), analysis, scope, ownBindingsOnly, promotable)
+                    || demandsPersistentFrame(identity.right(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalNotIdentity identity) {
-            return demandsPersistentFrame(identity.left(), analysis, scope, ownBindingsOnly)
-                    || demandsPersistentFrame(identity.right(), analysis, scope, ownBindingsOnly);
+            return demandsPersistentFrame(identity.left(), analysis, scope, ownBindingsOnly, promotable)
+                    || demandsPersistentFrame(identity.right(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalDerivedInequality inequality) {
-            return demandsPersistentFrame(inequality.left(), analysis, scope, ownBindingsOnly)
-                    || demandsPersistentFrame(inequality.right(), analysis, scope, ownBindingsOnly);
+            return demandsPersistentFrame(inequality.left(), analysis, scope, ownBindingsOnly, promotable)
+                    || demandsPersistentFrame(inequality.right(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalIndexedAssign indexed) {
-            return demandsPersistentFrame(indexed.receiver(), analysis, scope, ownBindingsOnly)
-                    || demandsPersistentFrame(indexed.index(), analysis, scope, ownBindingsOnly)
-                    || demandsPersistentFrame(indexed.value(), analysis, scope, ownBindingsOnly);
+            return demandsPersistentFrame(indexed.receiver(), analysis, scope, ownBindingsOnly, promotable)
+                    || demandsPersistentFrame(indexed.index(), analysis, scope, ownBindingsOnly, promotable)
+                    || demandsPersistentFrame(indexed.value(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalMapConstruction map) {
-            if (demandsPersistentFrame(map.factory(), analysis, scope, ownBindingsOnly)) {
+            if (demandsPersistentFrame(map.factory(), analysis, scope, ownBindingsOnly, promotable)) {
                 return true;
             }
             for (CanonicalMapConstruction.Entry entry : map.entries()) {
-                if (demandsPersistentFrame(entry.key(), analysis, scope, ownBindingsOnly)
-                        || demandsPersistentFrame(entry.value(), analysis, scope, ownBindingsOnly)) {
+                if (demandsPersistentFrame(entry.key(), analysis, scope, ownBindingsOnly, promotable)
+                        || demandsPersistentFrame(entry.value(), analysis, scope, ownBindingsOnly, promotable)) {
                     return true;
                 }
             }
             return false;
         }
         if (expression instanceof CanonicalReturn returnExpression) {
-            return demandsPersistentFrame(returnExpression.value(), analysis, scope, ownBindingsOnly);
+            return demandsPersistentFrame(returnExpression.value(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalSpread spread) {
-            return demandsPersistentFrame(spread.expression(), analysis, scope, ownBindingsOnly);
+            return demandsPersistentFrame(spread.expression(), analysis, scope, ownBindingsOnly, promotable);
         }
         return true;
     }
@@ -923,9 +996,10 @@ final class CanonicalCompilationFacts {
             List<CanonicalExpression> expressions,
             CanonicalBindingAnalysis analysis,
             CanonicalLexicalScope scope,
-            boolean ownBindingsOnly) {
+            boolean ownBindingsOnly,
+            boolean promotable) {
         for (CanonicalExpression expression : expressions) {
-            if (demandsPersistentFrame(expression, analysis, scope, ownBindingsOnly)) {
+            if (demandsPersistentFrame(expression, analysis, scope, ownBindingsOnly, promotable)) {
                 return true;
             }
         }
