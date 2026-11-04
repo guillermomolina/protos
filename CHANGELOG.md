@@ -8,6 +8,50 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.44-SNAPSHOT
+
+- **I115 — unified Closure inlining and recursive captured-control callbacks (historical).**
+  - Use `i115AdmitsInlineClosure` as the common static admission policy for
+    immediately invoked zero-argument Closure literals and structured Boolean
+    callbacks, including `ifTrue` and `whileTrue`. Refuse syntactic inlining
+    when lexical capture, `ReturnHome` or persistent frame authority cannot
+    be proved; dynamic/nonliteral closures still use dispatched callable
+    execution. Consolidate execution through `emitI115ClosureInvocation`
+    and the renamed `emitI115InlineClosureBody`, keeping a fresh Closure
+    for rejected callbacks instead of silently applying a second compact policy.
+  - Extend `CanonicalBindingAnalysis` with owner-and-depth proofs for
+    inlined module-owned `CapturedResolved` global reads and for
+    `CanonicalBindingResolution.Candidate` reads. Candidate is **not**
+    an assertion of runtime presence: preserve named, presence-aware lookup
+    and shadowing at the physical parent. Reads and writes have intentionally
+    different admission policies; captured assignments continue to require
+    a separate direct-parent proof. Emit `ReadGlobal` with the corrected
+    lexical depth after the callback activation is eliminated.
+  - Add optional `protos.i115.traceInlineAdmission` diagnostics for lexical
+    admission and capture proofs. Add
+    `ProtosI115FactorialControlInliningTest`, a structural oracle requiring
+    the exact `factorial(20)` value `2432902008176640000` and three physical
+    Bytecode DSL roots (module, factorial and run) rather than a fourth
+    physical root for the `ifTrue` callback. The historical test is present
+    but **was not executed** during this versioned replay.
+  - **Historical semantic limitations:** admitting Candidate reads requires
+    independent acceptance of runtime presence, shadowing, D179 C0 lexical
+    ownership and published binding behavior; a name/depth proof is not a
+    general PRESENT proof. Inlined recursive captures, assignments, closure
+    identity and non-local control transfer still require conformance.
+    The earlier unconditional `ifTrue` / `ifFalse` / `ifTrueIfFalse` /
+    `whileTrue` lowering may bypass user-defined selector overrides and
+    ordinary dynamic message selection. D013 / `Object.call` divergence,
+    `ReturnHome` observability, suspension, cancellation, Task/C-prime
+    lifetime and Context-owned BigInteger / D197-C numeric delegation also
+    remain unverified. Signed-64 guest Integer uses `long` / `Long` and no
+    guest `int` tier. No runtime tests, Maven build, compiler graph captures
+    or benchmarks were run after this version bump; this historical commit
+    does not establish full semantic conformance or a performance gain.
+  - Original implementation: `ab20a890f74a6d117f3b653055d107456fe880aa`.
+    Both modified production blobs and the newly added test blob and Git modes
+    are reproduced exactly, with only version metadata and changelog changed.
+
 ## 0.4.43-SNAPSHOT
 
 - **I115 — unified Bytecode DSL Boolean branches and `whileTrue` lowering (historical).**

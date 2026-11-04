@@ -125,22 +125,39 @@ final class CanonicalBindingAnalysis {
             CanonicalBindingResolution resolution =
                     enclosing.resolutionOf(lookup).orElse(null);
 
+            if (resolution instanceof CanonicalBindingResolution.Candidate candidate
+                    && admittedInlineCandidateRead(candidate, parentScope)) {
+                // The physical parent performs the regular presence-aware
+                // named lexical lookup. Never claim that Candidate is PRESENT.
+                continue;
+            }
+            if (Boolean.getBoolean("protos.i115.traceInlineAdmission")
+                    && parentFrameNames.contains("result")
+                    && parentFrameNames.contains("n")) {
+                System.err.println("I115_CAPTURE_LOOKUP name=" + lookup.name()
+                        + " resolution=" + resolution
+                        + " parentKind=" + parentScope.kind()
+                        + " parentNames=" + parentFrameNames
+                        + " inlineGlobal=" + (resolution instanceof
+                                CanonicalBindingResolution.CapturedResolved c
+                                && admittedInlineGlobalRead(c, parentScope)));
+            }
+
             if (!(resolution
                     instanceof CanonicalBindingResolution.CapturedResolved
                             captured)) {
                 return false;
             }
 
+            if (admittedInlineGlobalRead(captured, parentScope)) {
+                // The callback is removed physically: the enclosing root's
+                // global read uses the same lexical owner at depth minus one.
+                continue;
+            }
             if (captured.identity().owner() != parentScope
                     || captured.lexicalDepth() != 1
                     || !parentFrameNames.contains(
                             captured.identity().name())) {
-                return false;
-            }
-
-            // I115-R6: a module-owned read stays an exact ReadGlobal.
-            if (captured.identity().owner().kind()
-                    == CanonicalLexicalScope.Kind.ROOT) {
                 return false;
             }
         }
@@ -152,6 +169,12 @@ final class CanonicalBindingAnalysis {
 
             CanonicalBindingResolution resolution =
                     enclosing.resolutionOf(assign).orElse(null);
+            if (Boolean.getBoolean("protos.i115.traceInlineAdmission")
+                    && parentFrameNames.contains("result")
+                    && parentFrameNames.contains("n")) {
+                System.err.println("I115_CAPTURE_ASSIGN name=" + assign.name()
+                        + " resolution=" + resolution);
+            }
 
             if (!(resolution
                     instanceof CanonicalBindingResolution.CapturedResolved
@@ -206,13 +229,14 @@ final class CanonicalBindingAnalysis {
             }
             CanonicalBindingResolution parent =
                     enclosing.resolutionOf(entry.getKey()).orElse(null);
-            if (!directParentCapture(parent, parentScope, parentFrameNames)) {
-                return false;
+            if (parent instanceof CanonicalBindingResolution.Candidate candidate
+                    && admittedInlineCandidateRead(candidate, parentScope)) {
+                continue;
             }
-            // I115-R6: a module-owned read stays an exact ReadGlobal.
-            if (((CanonicalBindingResolution.CapturedResolved) parent)
-                            .identity().owner().kind()
-                    == CanonicalLexicalScope.Kind.ROOT) {
+            if (!(parent instanceof CanonicalBindingResolution.CapturedResolved captured)
+                    || (!admittedInlineGlobalRead(captured, parentScope)
+                            && !directParentCapture(
+                                    parent, parentScope, parentFrameNames))) {
                 return false;
             }
         }
@@ -230,6 +254,64 @@ final class CanonicalBindingAnalysis {
             }
         }
         return true;
+    }
+
+    /**
+     * I115: a read in an inlined callback may refer to an enclosing module
+     * declaration. The lexical owner and complete depth are proven against
+     * the current parent's scope chain; no name-only global assumption is
+     * allowed. Writes still use the separate direct-parent proof.
+     */
+    static boolean admittedInlineGlobalRead(
+            CanonicalBindingResolution.CapturedResolved captured,
+            CanonicalLexicalScope parentScope) {
+        if (parentScope == null
+                || captured.identity().owner().kind() != CanonicalLexicalScope.Kind.ROOT
+                || captured.lexicalDepth() < 2) {
+            return false;
+        }
+        int depth = 1;
+        if (Boolean.getBoolean("protos.i115.traceInlineAdmission")) {
+            System.err.println("I115_CAPTURE_GLOBAL owner=" + captured.identity().owner()
+                    + " name=" + captured.identity().name()
+                    + " sourceDepth=" + captured.lexicalDepth()
+                    + " parent=" + parentScope);
+        }
+        for (CanonicalLexicalScope current = parentScope;
+                current != null;
+                current = current.outwardScope(), depth++) {
+            if (current == captured.identity().owner()) {
+                return captured.lexicalDepth() == depth;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * I115: exact identity/depth proof for a Candidate read whose Closure
+     * activation is eliminated. Candidate is NOT a PRESENT proof. The
+     * physical enclosing root must execute the ordinary named lexical read
+     * so runtime presence, shadowing and dynamic lookup remain authoritative.
+     *
+     * Depth is counted from the original callback: the physical parent's
+     * depth to the owner is one less. Writes are intentionally excluded.
+     */
+    static boolean admittedInlineCandidateRead(
+            CanonicalBindingResolution.Candidate candidate,
+            CanonicalLexicalScope parentScope) {
+        if (parentScope == null || candidate.lexicalDepth() < 1) {
+            return false;
+        }
+        int depth = 1;
+        for (CanonicalLexicalScope current = parentScope;
+                current != null;
+                current = current.outwardScope(), depth++) {
+            if (current == candidate.identity().owner()) {
+                return candidate.lexicalDepth() == depth
+                        && current.declaresName(candidate.identity().name());
+            }
+        }
+        return false;
     }
 
     private static boolean directParentCapture(
