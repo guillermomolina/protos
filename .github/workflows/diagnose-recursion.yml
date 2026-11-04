@@ -6,6 +6,9 @@ on:
       - graalvm-25-5
     paths:
       - .github/workflows/diagnose-recursion.yml
+      - src/main/java/com/guillermomolina/protos/runtime/ProtosTask.java
+      - src/main/java/com/guillermomolina/protos/runtime/ProtosActorExecutionDomain.java
+      - src/main/java/com/guillermomolina/protos/runtime/process/ProtosProcessRuntime.java
 
 permissions:
   contents: read
@@ -39,6 +42,8 @@ jobs:
         run: mvn -B -DskipTests package
 
       - name: Test deep recursion in isolation
+        env:
+          JAVA_TOOL_OPTIONS: -Dprotos.diagnostics.termination=true
         run: |
           timeout --signal=QUIT --kill-after=5s 120s             bin/protos test             --file protos/tests/conformance/regression/deep-recursive-closure-call-stack-capacity.protos             --jobs 4
 

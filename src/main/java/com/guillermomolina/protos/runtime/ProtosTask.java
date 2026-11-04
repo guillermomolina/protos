@@ -192,6 +192,20 @@ public final class ProtosTask {
         return state;
     }
 
+    /** DIST017: opt-in host diagnostics only; returns inert Task state without guest execution. */
+    public synchronized String terminationDiagnosticForRuntime() {
+        return "task=" + Integer.toHexString(System.identityHashCode(this))
+                + " state=" + state
+                + " cancel=" + cancellationPhase
+                + " queued=" + queued
+                + " continuationStarted=" + continuationStarted
+                + " waitDependency="
+                + (waitDependency == null ? "none" : waitDependency.getClass().getName())
+                + " capturePending=" + (capturePendingDependency != null)
+                + " publishedContinuation=" + (publishedSuspensionContinuation != null)
+                + " children=" + (children == null ? 0 : children.size());
+    }
+
     /**
      * Whether the recorded cancellation request still awaits portable observation.
      *

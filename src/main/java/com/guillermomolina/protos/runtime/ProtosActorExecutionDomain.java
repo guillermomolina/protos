@@ -457,6 +457,34 @@ public final class ProtosActorExecutionDomain {
         while(true){ProtosTask.State s=root.state();if(s==ProtosTask.State.COMPLETED||s==ProtosTask.State.FAILED||s==ProtosTask.State.CANCELLED)return;if(dispatchOne()||helper.getAsBoolean())continue;synchronized(this){s=root.state();if(s==ProtosTask.State.COMPLETED||s==ProtosTask.State.FAILED||s==ProtosTask.State.CANCELLED)return;if(!runnable.isEmpty()||!targetedRuntimeCompletions.isEmpty())continue;try{wait();}catch(InterruptedException e){Thread.currentThread().interrupt();root.requestCancellation();}}}
     }
 
+    /** DIST017: snapshot under the domain lock, then inspect Tasks without holding it. */
+    public String terminationDiagnosticForRuntime() {
+        java.util.List<ProtosTask> tasks;
+        String summary;
+        synchronized (this) {
+            tasks = new java.util.ArrayList<>(liveTasks);
+            summary = "[DIST017] domain=" + Integer.toHexString(System.identityHashCode(this))
+                    + " terminationBegun=" + actorTerminationBegun
+                    + " liveTasks=" + tasks.size()
+                    + " runnable=" + runnable.size()
+                    + " targetedPending=" + targetedRuntimeCompletions.size()
+                    + " targetedActive=" + activeTargetedRuntimeCompletions
+                    + " ioOperations=" + actorIoOperations.size()
+                    + " ioReleases=" + actorIoReleases.size()
+                    + " ioCleanup=" + actorIoLifecycleCleanup.size()
+                    + " nonTaskFutures=" + actorNonTaskFutures.size();
+        }
+        StringBuilder result = new StringBuilder(summary);
+        for (int index = 0; index < Math.min(tasks.size(), 16); index++) {
+            result.append("\n[DIST017] ")
+                    .append(tasks.get(index).terminationDiagnosticForRuntime());
+        }
+        if (tasks.size() > 16) {
+            result.append("\n[DIST017] remainingTasks=").append(tasks.size() - 16);
+        }
+        return result.toString();
+    }
+
     public synchronized int runnableCount() {
         return runnable.size() + targetedRuntimeCompletions.size();
     }
