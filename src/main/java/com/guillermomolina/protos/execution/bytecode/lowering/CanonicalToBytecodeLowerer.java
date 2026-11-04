@@ -6035,6 +6035,18 @@ final class CanonicalToBytecodeLowerer {
         if (result == null || scratch == null || childResult == null || resumeValue == null) {
             throw new AssertionError("Bytecode invocation result/scratch locals were not allocated");
         }
+        if (shape == InvocationShape.CALL
+                && arguments.isEmpty()
+                && i115AdmitsInlineClosure(receiver)) {
+            builder.beginTag(StandardTags.CallTag.class);
+            builder.beginBlock();
+            emitI115ClosureInvocation(
+                    builder, receiver, null, true, result,
+                    scratch, childResult, resumeValue, primitiveCarrierResult);
+            builder.endBlock();
+            builder.endTag(StandardTags.CallTag.class);
+            return;
+        }
         if (shape == InvocationShape.SEND && i115ControlSelector(selector)) {
             emitI115UnifiedControl(
                     builder,
@@ -6111,7 +6123,7 @@ final class CanonicalToBytecodeLowerer {
      * Preserve nested invocation handling and source statement tags by
      * reusing the ordinary body expression lowerer.
      */
-    private void emitI115ProvenInlineCallback(
+    private void emitI115InlineClosureBody(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure closure,
             BytecodeLocal result,
@@ -6189,6 +6201,19 @@ final class CanonicalToBytecodeLowerer {
         };
     }
 
+    /**
+     * I115: one static admission policy for an immediately invoked Closure
+     * literal, whether invoked as a control callback or as an ordinary Call0.
+     * Nonliteral/dynamic callables are never statically inlined here; they use
+     * the ordinary callable dispatcher. In particular, a failed lexical or
+     * ReturnHome proof does not authorize a syntactic inline.
+     */
+    private boolean i115AdmitsInlineClosure(CanonicalExpression callable) {
+        return callable instanceof CanonicalClosure closure
+                && admitsNormalInlineControlBody(
+                        closure, currentControlSiteContext());
+    }
+
     private void emitI115UnifiedControl(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
@@ -6223,21 +6248,24 @@ final class CanonicalToBytecodeLowerer {
         for (int index = 0; index < operands.size(); index++) {
             CanonicalExpression operand = operands.get(index);
             boolean callback = loop || index > 0;
-            boolean admitted = callback
-                    && operand instanceof CanonicalClosure closure
-                    && (compact || (standardObjectPublished
-                            && admitsNormalInlineControlBody(
-                                    closure, currentControlSiteContext())));
-            if (compact && callback && !admitted) {
-                throw new AssertionError("I115 compact callback lost admission proof");
-            }
+            boolean admitted = callback && i115AdmitsInlineClosure(operand);
             inline.add(admitted);
-            if (compact || admitted) {
+            if (admitted || (compact && !callback)) {
+                // Inline body, or compact Boolean receiver consumed by its
+                // expression emitter: no Closure is materialized here.
                 values.add(null);
             } else {
                 BytecodeLocal local = builder.createLocal("i115ControlOperand", null);
-                stageOperand(builder, operand, local,
-                        scratch, childResult, resumeValue, stager);
+                if (compact) {
+                    // A rejected callback in an admitted compact root is a
+                    // genuine Closure value, not a second inline policy.
+                    builder.beginStoreLocal(local);
+                    emitExpression(builder, operand);
+                    builder.endStoreLocal();
+                } else {
+                    stageOperand(builder, operand, local,
+                            scratch, childResult, resumeValue, stager);
+                }
                 values.add(local);
             }
         }
@@ -6250,23 +6278,18 @@ final class CanonicalToBytecodeLowerer {
                 builder.endStoreLocal();
             }
             builder.beginWhile();
-            if (compact) {
-                emitExperimentalCompactCondition(
-                        builder, ((CanonicalClosure) send.receiver()).body());
-            } else {
-                // While's first child must produce a value. The callback
-                // invocation is statement-shaped (StoreLocal and possibly
-                // Yield/Resume), so compose it inside a value-producing Block.
-                builder.beginBlock();
-                BytecodeLocal condition = builder.createLocal("i115WhileCondition", null);
-                emitI115UnifiedCallback(builder, send.receiver(), values.get(0),
-                        inline.get(0), condition, scratch, childResult,
-                        resumeValue, primitiveCarrierResult);
-                builder.beginExperimentalCanonicalBooleanCondition();
-                builder.emitLoadLocal(condition);
-                builder.endExperimentalCanonicalBooleanCondition();
-                builder.endBlock();
-            }
+            // Both compact and general roots invoke the condition via the
+            // shared Closure mechanism. A While condition must be a value,
+            // so the statement-shaped invocation is wrapped in a Block.
+            builder.beginBlock();
+            BytecodeLocal condition = builder.createLocal("i115WhileCondition", null);
+            emitI115ClosureInvocation(builder, send.receiver(), values.get(0),
+                    inline.get(0), condition, scratch, childResult,
+                    resumeValue, primitiveCarrierResult);
+            builder.beginExperimentalCanonicalBooleanCondition();
+            builder.emitLoadLocal(condition);
+            builder.endExperimentalCanonicalBooleanCondition();
+            builder.endBlock();
             builder.beginBlock();
             // The loop's body is a void child. When the entire whileTrue
             // result is discarded, an invoked callback still needs a result
@@ -6274,7 +6297,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal bodyResult = result == null && !inline.get(1)
                     ? builder.createLocal("i115DiscardedWhileBody", null)
                     : result;
-            emitI115UnifiedCallback(builder, send.arguments().get(0),
+            emitI115ClosureInvocation(builder, send.arguments().get(0),
                     values.get(1), inline.get(1), bodyResult,
                     scratch, childResult, resumeValue, primitiveCarrierResult);
             builder.endBlock();
@@ -6329,14 +6352,14 @@ final class CanonicalToBytecodeLowerer {
                 builder.endStoreLocal();
             }
         } else {
-            emitI115UnifiedCallback(builder, send.arguments().get(index),
+            emitI115ClosureInvocation(builder, send.arguments().get(index),
                     values.get(index + 1), inline.get(index + 1), result,
                     scratch, childResult, resumeValue, primitiveCarrierResult);
         }
         builder.endBlock();
     }
 
-    private void emitI115UnifiedCallback(
+    private void emitI115ClosureInvocation(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression callback,
             BytecodeLocal callable,
@@ -6355,12 +6378,19 @@ final class CanonicalToBytecodeLowerer {
                     emitExperimentalCompactSequenceValue(builder, literal.body(), result);
                 }
             } else {
-                emitI115ProvenInlineCallback(
+                emitI115InlineClosureBody(
                         builder, literal, result, scratch, childResult, resumeValue);
             }
         } else {
+            BytecodeLocal destination = result != null
+                    ? result : builder.createLocal("i115IgnoredClosureResult", null);
+            BytecodeLocal callChildResult = childResult != null
+                    ? childResult : builder.createLocal("i115ClosureChildResult", null);
+            BytecodeLocal callResumeValue = resumeValue != null
+                    ? resumeValue : builder.createLocal("i115ClosureResumeValue", null);
             emitDispatchedCall(builder, callable, java.util.List.of(), null,
-                    childResult, result, resumeValue, primitiveCarrierResult);
+                    callChildResult, destination, callResumeValue,
+                    primitiveCarrierResult);
         }
     }
 
@@ -6891,7 +6921,15 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadLocal(own);
             return;
         }
-        if (currentNormalDirectParentCaptureReads) {
+        CanonicalBindingResolution inlineResolution =
+                currentNormalDirectParentCaptureReads && currentRootAnalysis != null
+                        ? currentRootAnalysis.resolutionOf(lookup).orElse(null)
+                        : null;
+        boolean inlineCandidate =
+                inlineResolution instanceof CanonicalBindingResolution.Candidate candidate
+                        && CanonicalBindingAnalysis.admittedInlineCandidateRead(
+                                candidate, currentRootTopScope);
+        if (currentNormalDirectParentCaptureReads && !inlineCandidate) {
             /*
              * The admitted lookup originally had lexical depth one
              * because it lived in a callback invocation. That
@@ -6909,12 +6947,28 @@ final class CanonicalToBytecodeLowerer {
 
             if (!(resolution
                     instanceof CanonicalBindingResolution.CapturedResolved
-                            captured)
-                    || captured.identity().owner() != currentRootTopScope
+                            captured)) {
+                throw new AssertionError(
+                        "I095-B4 admitted an unproven captured lookup: "
+                                + lookup.name());
+            }
+
+            if (CanonicalBindingAnalysis.admittedInlineGlobalRead(
+                    captured, currentRootTopScope)) {
+                builder.emitReadGlobal(
+                        frameBackedOrdinal(captured.identity()),
+                        TruffleString.fromJavaStringUncached(
+                                captured.identity().name(),
+                                TruffleString.Encoding.UTF_16),
+                        captured.lexicalDepth() - 1);
+                return;
+            }
+
+            if (captured.identity().owner() != currentRootTopScope
                     || captured.lexicalDepth() != 1
                     || currentRootFrameLayout == null) {
                 throw new AssertionError(
-                        "I095-B4 admitted an unproven captured lookup: "
+                        "I095-B4 admitted an unproven parent lookup: "
                                 + lookup.name());
             }
 
@@ -7732,6 +7786,11 @@ final class CanonicalToBytecodeLowerer {
             CanonicalClosure closure, ControlSiteContext context) {
         if (!closure.parameters().isEmpty()
                 || compilationFacts.mayObserveReturnHome(closure)) {
+            if (Boolean.getBoolean("protos.i115.traceInlineAdmission")) {
+                System.err.println("I115_INLINE_PROOF=REJECT_EARLY span=" + closure.span()
+                        + " params=" + closure.parameters().size()
+                        + " returnHome=" + compilationFacts.mayObserveReturnHome(closure));
+            }
             return false;
         }
 
@@ -7766,12 +7825,28 @@ final class CanonicalToBytecodeLowerer {
                                 context.frameNames(),
                                 context.hasFrameLayout());
 
-        return (ownScalarBindings
+        boolean requiresPersistentAuthority = compilationFacts.rootFacts(
+                        closure.body(), closure, analysis, scope)
+                .requiresPersistentFrameAuthority();
+        boolean admitted = (ownScalarBindings
                         || noOwnBindingsAndProvenCaptures
                         || mixedOwnBindingsAndParentCaptures)
-                && !compilationFacts.rootFacts(
-                                closure.body(), closure, analysis, scope)
-                        .requiresPersistentFrameAuthority();
+                && !requiresPersistentAuthority;
+        if (Boolean.getBoolean("protos.i115.traceInlineAdmission")) {
+            System.err.println("I115_INLINE_PROOF=" + (admitted ? "ADMIT" : "REJECT")
+                    + " span=" + closure.span()
+                    + " params=" + closure.parameters().size()
+                    + " ownNames=" + scope.declaredNames()
+                    + " scalarNames=" + scalarNames
+                    + " ownScalar=" + ownScalarBindings
+                    + " directCaptures=" + noOwnBindingsAndProvenCaptures
+                    + " mixed=" + mixedOwnBindingsAndParentCaptures
+                    + " persistentAuthority=" + requiresPersistentAuthority
+                    + " parentScope=" + context.topScope()
+                    + " parentFrameNames=" + context.frameNames()
+                    + " parentHasFrameLayout=" + context.hasFrameLayout());
+        }
+        return admitted;
     }
 
     /**
