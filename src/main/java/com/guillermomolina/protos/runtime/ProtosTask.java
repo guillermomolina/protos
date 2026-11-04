@@ -449,10 +449,31 @@ public final class ProtosTask {
             resumeContinuation = publishedSuspensionContinuation;
             publishedSuspensionContinuation = null;
         }
-        if (resumeContinuation != null) {
-            resumeContinuation.resume(this);
-        } else {
-            continuation.resume(this);
+        try {
+            if (resumeContinuation != null) {
+                resumeContinuation.resume(this);
+            } else {
+                continuation.resume(this);
+            }
+        } catch (RuntimeException | Error failure) {
+            if (Boolean.getBoolean("protos.diagnostics.termination")) {
+                System.err.println(
+                        "[DIST017] task-continuation-escaped task="
+                                + Integer.toHexString(System.identityHashCode(this))
+                                + " throwable=" + failure.getClass().getName()
+                                + " state=" + state());
+                StackTraceElement[] frames = failure.getStackTrace();
+                for (int index = 0; index < Math.min(24, frames.length); index++) {
+                    System.err.println("[DIST017]   at " + frames[index]);
+                }
+            }
+            throw failure;
+        }
+        if (Boolean.getBoolean("protos.diagnostics.termination")
+                && state() == State.RUNNING) {
+            System.err.println(
+                    "[DIST017] task-continuation-returned-running task="
+                            + Integer.toHexString(System.identityHashCode(this)));
         }
     }
 

@@ -1,4 +1,5 @@
 name: DIST017 focused recursion diagnosis
+# DIST017: capture exceptional and incomplete Task continuation exits.
 
 on:
   push:
