@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
@@ -31,11 +32,14 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
+import com.guillermomolina.protos.semantic.Canonicalizer;
+import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.frame.MaterializedFrame;
+import com.oracle.truffle.api.source.Source;
 import java.lang.reflect.Field;
 import java.util.List;
 import org.graalvm.polyglot.Context;
@@ -103,6 +107,72 @@ final class ProtosBug013FrameLexicalAuthorityMaterializationTest {
                 assertSame(
                         value,
                         observedContext.readLocalSlot("x").orElseThrow());
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    /**
+     * I115 lazy-context experiment: when a root that started frame-native is
+     * promoted on demand (here, before an escaping capture), the installed
+     * authority retains the same escape-safe materialized frame BUG013-B
+     * requires of the entry installation, and the escaped Closure reads the
+     * owner binding after the owner frame has returned. A second promotion of
+     * the same activation installs nothing new.
+     */
+    @Test
+    void lazyPromotionRetainsMaterializedFrameForEscapedCapture() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosPrelude prelude = prelude();
+                String characters = "(x) => { g: () => x\n" + "h: () => x\n" + "g }";
+                Source source = Source.newBuilder(
+                        ProtosLanguage.ID, characters, "bug013-lazy-promotion.protos").build();
+                CanonicalSequence canonical = (CanonicalSequence) new Canonicalizer()
+                        .canonicalize(new ProtosParser(characters).parseProgram());
+                ProtosClosureValue owner = assertInstanceOf(
+                        ProtosClosureValue.class,
+                        new CanonicalToBytecodeLowerer(language, source)
+                                .lowerRoot(canonical)
+                                .getCallTarget()
+                                .call(prelude.newModuleActivation()));
+
+                ProtosObjectValue argument =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosActivation activation = ProtosActivation.forImmediateMethodInvocationWithReturnHomeForRuntime(
+                        owner,
+                        List.of(argument),
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()),
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()),
+                        prelude,
+                        new ProtosActorModuleState(),
+                        null,
+                        new ProtosActorExecutionDomain(),
+                        new ProtosReturnHome());
+                ProtosClosureValue escaped = assertInstanceOf(
+                        ProtosClosureValue.class,
+                        owner.executionPlan().orElseThrow()
+                                .executeBytecodeActivationForTesting(activation));
+
+                ProtosFrameLexicalBindingAuthority authority =
+                        assertInstanceOf(
+                                ProtosFrameLexicalBindingAuthority.class,
+                                activation.currentLexicalBindingAuthorityForRuntime());
+                MaterializedFrame retainedFrame =
+                        assertInstanceOf(
+                                MaterializedFrame.class,
+                                privateField(authority, "frame"));
+                assertSame(
+                        retainedFrame,
+                        authority.retainedMaterializedFrameForCapturedAccess());
+                assertSame(argument, authority.readBinding("x").orElseThrow());
+                assertSame(
+                        argument,
+                        ProtosClosureInvoker.invoke(escaped, List.of()));
             } finally {
                 context.leave();
             }

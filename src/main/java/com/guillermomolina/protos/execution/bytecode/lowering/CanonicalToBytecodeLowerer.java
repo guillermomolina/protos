@@ -235,6 +235,16 @@ final class CanonicalToBytecodeLowerer {
      */
     private ProtosFrameLexicalLayout currentRootIndexedParameterLayout;
 
+    /**
+     * I115 lazy-context experiment: true while lowering an ordinary Closure
+     * root that {@link CanonicalCompilationFacts.RootFacts#admitsLazyFrameAuthority
+     * starts frame-native although it may need durable lexical state}. While
+     * true, {@link #beginLiveFrameAuthorityPromotion} emits the on-demand
+     * promotion before each operation that publishes or observes the root's
+     * execution context. Saved and restored with the other per-root context.
+     */
+    private boolean currentRootLazyFrameAuthority;
+
     /*
      * PERF034-C: direct BytecodeLocal storage is admitted only for a
      * statically complete, effect-free, straight-line local body.
@@ -937,6 +947,7 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal[] savedFrameNativeLocals = currentRootFrameNativeLocals;
         ProtosFrameLexicalLayout savedFrameNativeLayout = currentRootFrameNativeLayout;
         ProtosFrameLexicalLayout savedIndexedParameterLayout = currentRootIndexedParameterLayout;
+        boolean savedLazyFrameAuthority = currentRootLazyFrameAuthority;
         java.util.Set<String> savedScalarLocals = currentRootScalarLocals;
         java.util.Set<String> savedOrdinaryClosureLocals =
                 currentRootOrdinaryClosureLocals;
@@ -980,6 +991,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameNativeLocals = null;
             currentRootFrameNativeLayout = null;
             currentRootIndexedParameterLayout = null;
+            currentRootLazyFrameAuthority = false;
             currentRootScalarLocals = java.util.Set.of();
             currentRootOrdinaryClosureLocals = java.util.Set.of();
             currentRootArithmeticHints = java.util.Map.of();
@@ -1002,6 +1014,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameNativeLocals = savedFrameNativeLocals;
             currentRootFrameNativeLayout = savedFrameNativeLayout;
             currentRootIndexedParameterLayout = savedIndexedParameterLayout;
+            currentRootLazyFrameAuthority = savedLazyFrameAuthority;
             currentRootScalarLocals = savedScalarLocals;
             currentRootOrdinaryClosureLocals = savedOrdinaryClosureLocals;
             currentRootArithmeticHints = savedArithmeticHints;
@@ -1081,6 +1094,19 @@ final class CanonicalToBytecodeLowerer {
                 experimentalDirectUnaryBindings.add(binding);
             }
         }
+
+        /*
+         * I115 lazy-context experiment: an admitted ordinary Closure root
+         * starts frame-native and promotes its frame locals only before an
+         * operation that publishes or observes its context. Compact roots keep
+         * their own I115 promotion; a failed proof keeps the entry prologue.
+         */
+        boolean lazyFrameAuthority =
+                rootFacts.admitsLazyFrameAuthority()
+                        && experimentalCompact == null
+                        && activationDefinition != null;
+        boolean installsFrameAuthorityAtEntry =
+                requiresPersistentFrameAuthority && !lazyFrameAuthority;
 
         builder.beginSourceSection(
                 rootSpan.startOffset(),
@@ -1164,7 +1190,7 @@ final class CanonicalToBytecodeLowerer {
                  */
                 currentRootFrameNativeLocals = frameLocalRange;
                 currentRootFrameNativeLayout = frameLocalLayout;
-            } else if (requiresPersistentFrameAuthority
+            } else if (installsFrameAuthorityAtEntry
                     && experimentalCompact == null) {
                 builder.beginInstallFrameLexicalAuthority(
                         frameLocalRange,
@@ -1175,6 +1201,7 @@ final class CanonicalToBytecodeLowerer {
             } else {
                 currentRootFrameNativeLocals = frameLocalRange;
                 currentRootFrameNativeLayout = frameLocalLayout;
+                currentRootLazyFrameAuthority = lazyFrameAuthority;
             }
         }
 
@@ -1233,7 +1260,7 @@ final class CanonicalToBytecodeLowerer {
                     admitRequiredPrefix(
                             activationDefinition,
                             scopeForThisRoot,
-                            requiresPersistentFrameAuthority);
+                            installsFrameAuthorityAtEntry);
             if (requiredPrefixCount >= 2) {
                 // I104-B: each emitted ordinal is a constant operand.
                 for (int ordinal = 0;
@@ -1464,10 +1491,11 @@ final class CanonicalToBytecodeLowerer {
                                 builder, (CanonicalLookup) last, null);
                     } else if (closureTerminal) {
                         builder.beginReturn();
-                        beginClosureCapture(builder, (CanonicalClosure) last);
+                        boolean promoted =
+                                beginClosureCapture(builder, (CanonicalClosure) last);
                         builder.emitLoadConstant((CanonicalClosure) last);
                         builder.emitLoadConstant(terminalClosurePlan);
-                        endClosureCapture(builder);
+                        endClosureCapture(builder, promoted);
                         builder.endReturn();
                     } else if (last instanceof CanonicalLiteral literal
                             && primitiveNumberLiteralOrNull(literal) != null) {
@@ -3833,10 +3861,10 @@ final class CanonicalToBytecodeLowerer {
                 ProtosClosureExecutionPlanCell plan =
                         bytecodeClosurePlan(builder, closure);
                 builder.beginDiscardValue();
-                beginClosureCapture(builder, closure);
+                boolean promoted = beginClosureCapture(builder, closure);
                 builder.emitLoadConstant(closure);
                 builder.emitLoadConstant(plan);
-                endClosureCapture(builder);
+                endClosureCapture(builder, promoted);
                 builder.endDiscardValue();
                 endStatement(builder);
             } else {
@@ -3955,10 +3983,10 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure closure,
             ProtosClosureExecutionPlanCell plan) {
-        beginClosureCapture(builder, closure);
+        boolean promoted = beginClosureCapture(builder, closure);
         builder.emitLoadConstant(closure);
         builder.emitLoadConstant(plan);
-        endClosureCapture(builder);
+        endClosureCapture(builder, promoted);
     }
 
     /**
@@ -6784,10 +6812,19 @@ final class CanonicalToBytecodeLowerer {
      * classification of this exact Closure under the root's analysis; a
      * Closure that does not capture its creator is created from the
      * creator's own environment (GraalPy MakeFunction without freevars).
+     *
+     * I115 lazy-context experiment: a creator-capturing Closure is preceded
+     * by the root's on-demand promotion; the result tells endClosureCapture
+     * whether it must close the enclosing Block. A non-capturing Closure
+     * never promotes.
      */
-    private void beginClosureCapture(
+    private boolean beginClosureCapture(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure closure) {
+        boolean promoted =
+                CanonicalCompilationFacts.capturesCreatorContext(
+                                closure, currentRootAnalysis)
+                        && beginLiveFrameAuthorityPromotion(builder);
         if (currentActivationLocal == null) {
             // I115-H: the ReturnHome fact gates the lightweight representation.
             builder.beginMaterializeCurrentClosure(
@@ -6799,15 +6836,45 @@ final class CanonicalToBytecodeLowerer {
             builder.beginMaterializeClosure();
             emitCurrentActivation(builder);
         }
+        return promoted;
     }
 
     private void endClosureCapture(
-            ProtosBytecodeRootNodeGen.Builder builder) {
+            ProtosBytecodeRootNodeGen.Builder builder,
+            boolean promoted) {
         if (currentActivationLocal == null) {
             builder.endMaterializeCurrentClosure();
         } else {
             builder.endMaterializeClosure();
         }
+        if (promoted) {
+            builder.endBlock();
+        }
+    }
+
+    /**
+     * I115 lazy-context experiment: opens a Block whose first operation is
+     * the on-demand promotion of the root currently being lowered, when that
+     * root {@link #currentRootLazyFrameAuthority starts frame-native lazily}
+     * and the current activation is the root's own (never inside an inline
+     * Object body, whose construction activation is not the owner). The
+     * constant operands are that root's own frame-local range and layout, so a
+     * child scope's layout can never reach the parent's promotion. Returns
+     * whether the Block was opened; the caller closes it after the observing
+     * operation, so the Block yields that operation's value.
+     */
+    private boolean beginLiveFrameAuthorityPromotion(
+            ProtosBytecodeRootNodeGen.Builder builder) {
+        if (!currentRootLazyFrameAuthority
+                || currentActivationLocal != null
+                || currentRootFrameNativeLocals == null
+                || currentRootFrameNativeLayout == null) {
+            return false;
+        }
+        builder.beginBlock();
+        builder.emitEnsureLiveFrameLexicalAuthority(
+                currentRootFrameNativeLocals, currentRootFrameNativeLayout);
+        return true;
     }
 
     private void emitExpression(
@@ -6827,10 +6894,10 @@ final class CanonicalToBytecodeLowerer {
              * own argument evaluation.
              */
             ProtosClosureExecutionPlanCell cell = bytecodeClosurePlan(builder, closure);
-            beginClosureCapture(builder, closure);
+            boolean promoted = beginClosureCapture(builder, closure);
             builder.emitLoadConstant(closure);
             builder.emitLoadConstant(cell);
-            endClosureCapture(builder);
+            endClosureCapture(builder, promoted);
             return;
         }
         if (expression instanceof CanonicalLookup lookup) {
@@ -6838,10 +6905,16 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalIntrinsic intrinsic) {
+            boolean promoted =
+                    intrinsic.kind() == CanonicalIntrinsic.Kind.CONTEXT
+                            && beginLiveFrameAuthorityPromotion(builder);
             builder.beginLoadIntrinsic();
             emitCurrentActivation(builder);
             builder.emitLoadConstant(intrinsic.kind());
             builder.endLoadIntrinsic();
+            if (promoted) {
+                builder.endBlock();
+            }
             return;
         }
         if (expression instanceof CanonicalMember member) {

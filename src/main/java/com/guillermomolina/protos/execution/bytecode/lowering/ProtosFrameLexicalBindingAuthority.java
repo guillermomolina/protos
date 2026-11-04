@@ -485,6 +485,16 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         return declaringRoot == bytecodeNode.getBytecodeRootNode() && frame == candidate;
     }
 
+    /**
+     * I115 lazy-context experiment: true when the root owning {@code
+     * bytecodeNode} declared this authority. Unlike {@link #isInstalledFor}
+     * it needs no materialized frame, so a live-frame promotion can recognize
+     * its own earlier installation before calling {@code frame.materialize()}.
+     */
+    boolean isDeclaredBy(BytecodeNode bytecodeNode) {
+        return declaringRoot == bytecodeNode.getBytecodeRootNode();
+    }
+
     /** PERF037-C: the layout this authority stores, shared by its root's invocations. */
     ProtosFrameLexicalLayout storedLayout() {
         return frameBackedLayout;
