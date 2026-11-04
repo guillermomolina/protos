@@ -66,18 +66,18 @@ final class ProtosCurrentNumericRelations {
             return compare(left, right) == Comparison.EQUAL;
         }
 
-        if (left instanceof ProtosFloatValue leftFloat) {
-            if (right instanceof ProtosFloatValue rightFloat) {
-                return leftFloat.value() == rightFloat.value();
+        if (ProtosNumericValueSupport.isCurrentFloat(left)) {
+            double lf = ProtosNumericValueSupport.currentFloatValue(left);
+            if (ProtosNumericValueSupport.isCurrentFloat(right)) {
+                return lf == ProtosNumericValueSupport.currentFloatValue(right);
             }
             return floatEqualsExactInteger(
-                    leftFloat.value(),
-                    ProtosNumericValueSupport.requireCurrentInteger(right));
+                    lf, ProtosNumericValueSupport.requireCurrentInteger(right));
         }
 
-        if (right instanceof ProtosFloatValue rightFloat) {
+        if (ProtosNumericValueSupport.isCurrentFloat(right)) {
             return floatEqualsExactInteger(
-                    rightFloat.value(),
+                    ProtosNumericValueSupport.currentFloatValue(right),
                     ProtosNumericValueSupport.requireCurrentInteger(left));
         }
 
@@ -122,24 +122,24 @@ final class ProtosCurrentNumericRelations {
             return fromSign(Long.compare(leftInteger.longValue(), rightInteger.longValue()));
         }
 
-        if (left instanceof ProtosFloatValue leftFloat) {
-            if (right instanceof ProtosFloatValue rightFloat) {
-                return compareFloats(leftFloat.value(), rightFloat.value());
+        if (ProtosNumericValueSupport.isCurrentFloat(left)) {
+            double lf = ProtosNumericValueSupport.currentFloatValue(left);
+            if (ProtosNumericValueSupport.isCurrentFloat(right)) {
+                return compareFloats(lf, ProtosNumericValueSupport.currentFloatValue(right));
             }
             if (ProtosNumericValueSupport.isFraction(right)) {
-                return reverse(compareFractionToFloat(right, leftFloat.value()));
+                return reverse(compareFractionToFloat(right, lf));
             }
             return compareFloatToInteger(
-                    leftFloat.value(),
-                    ProtosNumericValueSupport.requireCurrentInteger(right));
+                    lf, ProtosNumericValueSupport.requireCurrentInteger(right));
         }
-        if (right instanceof ProtosFloatValue rightFloat) {
+        if (ProtosNumericValueSupport.isCurrentFloat(right)) {
+            double rf = ProtosNumericValueSupport.currentFloatValue(right);
             if (ProtosNumericValueSupport.isFraction(left)) {
-                return compareFractionToFloat(left, rightFloat.value());
+                return compareFractionToFloat(left, rf);
             }
             return reverse(compareFloatToInteger(
-                    rightFloat.value(),
-                    ProtosNumericValueSupport.requireCurrentInteger(left)));
+                    rf, ProtosNumericValueSupport.requireCurrentInteger(left)));
         }
         return fromSign(ProtosNumericValueSupport.compareExactRationals(left, right));
     }

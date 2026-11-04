@@ -99,21 +99,24 @@ public final class ProtosStandardNumericConversionProtocol {
                 if (ProtosNumericValueSupport.isCurrentInteger(value)) {
                     yield value;
                 }
-                if (value instanceof ProtosFloatValue floating) {
-                    yield ProtosBinary64Rounding.integralBinary64(floating.value(), prelude);
+                if (ProtosNumericValueSupport.isCurrentFloat(value)) {
+                    yield ProtosBinary64Rounding.integralBinary64(
+                            ProtosNumericValueSupport.currentFloatValue(value), prelude);
                 }
                 yield null;
             }
             case FLOAT -> {
-                if (value instanceof ProtosFloatValue floating) {
-                    yield floating;
+                if (ProtosNumericValueSupport.isCurrentFloat(value)) {
+                    yield ProtosNumericValueSupport.floating(
+                            ProtosNumericValueSupport.currentFloatValue(value));
                 }
                 if (ProtosNumericValueSupport.isCurrentInteger(value)) {
-                    yield new ProtosFloatValue(ProtosBinary64Rounding.roundExactInteger(value));
+                    yield ProtosNumericValueSupport.floating(
+                            ProtosBinary64Rounding.roundExactInteger(value));
                 }
                 if (ProtosNumericValueSupport.isFraction(value)) {
                     // D197-C: the exact quotient rounded once, nearest with ties to even.
-                    yield new ProtosFloatValue(
+                    yield ProtosNumericValueSupport.floating(
                             ProtosNumericValueSupport.roundFractionToBinary64(value));
                 }
                 yield null;

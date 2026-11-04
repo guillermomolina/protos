@@ -200,7 +200,7 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
         Object current = storage;
         int index = linearIndex(row, column, current);
         return current instanceof double[] packed
-                ? new ProtosFloatValue(packed[index])
+                ? Double.valueOf(packed[index])
                 : ((Object[]) current)[index];
     }
 
@@ -218,8 +218,8 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
         int existing = linearIndex(row, column, current);
         ProtosVectorValue.requireNumber(value);
         if (current instanceof double[] packed) {
-            if (value instanceof ProtosFloatValue floating) {
-                packed[existing] = floating.value();
+            if (ProtosNumericValueSupport.isCurrentFloat(value)) {
+                packed[existing] = ProtosNumericValueSupport.currentFloatValue(value);
                 return value;
             }
             Object[] unpacked = unpackedFloats(packed);
@@ -261,11 +261,11 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
         Object[] references = (Object[]) current;
         double[] packed = new double[references.length];
         for (int index = 0; index < packed.length; index++) {
-            if (!(references[index] instanceof ProtosFloatValue floating)) {
+            if (!ProtosNumericValueSupport.isCurrentFloat(references[index])) {
                 knownNotAllFloat = true;
                 return null;
             }
-            packed[index] = floating.value();
+            packed[index] = ProtosNumericValueSupport.currentFloatValue(references[index]);
         }
         // A concurrent first reader of a frozen Matrix may have packed it already; keep its array.
         Object witness = STORAGE.compareAndExchange(this, current, packed);
@@ -295,7 +295,7 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
     private static Object[] unpackedFloats(double[] packed) {
         Object[] unpacked = new Object[packed.length];
         for (int index = 0; index < unpacked.length; index++) {
-            unpacked[index] = new ProtosFloatValue(packed[index]);
+            unpacked[index] = Double.valueOf(packed[index]);
         }
         return unpacked;
     }

@@ -449,6 +449,7 @@ public final class ProtosValueLookup {
      */
     public static boolean isProtosValue(Object value) {
         return value instanceof Long
+                || value instanceof Double
                 || value instanceof ProtosObjectValue
                 || value instanceof ProtosRepresentedValue;
     }
@@ -639,6 +640,12 @@ public final class ProtosValueLookup {
             return Optional.of(
                     ProtosRepresentedValue.requirePrelude(prelude, "SmallInteger")
                             .smallIntegerPrototype());
+        }
+        // GraalPy GetClassNode.getDouble -> PFloat; regular Float lookup
+        // delegates through the observing Prelude's Float prototype.
+        if (receiver instanceof Double) {
+            return Optional.of(Objects.requireNonNull(prelude,
+                    "Float lookup requires a Core prelude").floatPrototype());
         }
         if (receiver instanceof ProtosRepresentedValue represented) {
             return Optional.of(

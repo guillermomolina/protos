@@ -279,14 +279,15 @@ final class ProtosComplexSemanticsTest {
                 genuine,
                 delegatingToNumber,
                 new ProtosStringValue("1"),
-                1.0,
                 BigInteger.ONE)) {
             assertThrows(IllegalArgumentException.class, () -> complex(invalid, one, prelude));
             assertThrows(IllegalArgumentException.class, () -> complex(one, invalid, prelude));
         }
-        // I115: Long is the physical representation of a semantic SmallInteger.
+        // I115: Long and Double are semantic Integer and Float representations.
         assertComplex(complex(1L, one, prelude), prelude);
         assertComplex(complex(one, 1L, prelude), prelude);
+        assertComplex(complex(1.0d, one, prelude), prelude);
+        assertComplex(complex(one, 1.0d, prelude), prelude);
         assertThrows(IllegalArgumentException.class,
                 () -> ProtosComplexNumericSupport.real(prelude.complexPrototype()));
 
@@ -759,8 +760,9 @@ final class ProtosComplexSemanticsTest {
     }
 
     private static long imaginaryBits(Object complex) {
-        return Double.doubleToRawLongBits(assertInstanceOf(
-                ProtosFloatValue.class, ProtosComplexNumericSupport.imaginary(complex)).value());
+        return Double.doubleToRawLongBits(
+                ProtosNumericValueSupport.currentFloatValue(
+                        ProtosComplexNumericSupport.imaginary(complex)));
     }
 
     private static boolean recognizes(

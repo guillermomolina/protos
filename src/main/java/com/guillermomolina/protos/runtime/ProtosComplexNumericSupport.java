@@ -150,8 +150,9 @@ public final class ProtosComplexNumericSupport {
     }
 
     private static Object componentDescriptor(Object component) {
-        if (component instanceof ProtosFloatValue floating) {
-            return new FloatBits(Double.doubleToRawLongBits(floating.value()));
+        if (ProtosNumericValueSupport.isCurrentFloat(component)) {
+            return new FloatBits(Double.doubleToRawLongBits(
+                    ProtosNumericValueSupport.currentFloatValue(component)));
         }
         if (ProtosNumericValueSupport.isFraction(component)) {
             return ProtosNumericValueSupport.fractionTransferDescriptor(component);

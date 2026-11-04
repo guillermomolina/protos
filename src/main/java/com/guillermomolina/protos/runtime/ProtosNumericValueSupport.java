@@ -54,8 +54,9 @@ public final class ProtosNumericValueSupport {
         return value instanceof ProtosLargeIntegerValue;
     }
 
+    /** GraalPy PyFloatCheckNode: a Double itself is a semantic Float. */
     public static boolean isCurrentFloat(Object value) {
-        return value instanceof ProtosFloatValue;
+        return value instanceof Double || value instanceof ProtosFloatValue;
     }
 
     /** Whether {@code value} is a genuine Core Number of any family, Complex included. */
@@ -387,8 +388,9 @@ public final class ProtosNumericValueSupport {
         if (value instanceof Long small) {
             return small;
         }
-        if (value instanceof Double floating) {
-            return new ProtosFloatValue(floating.doubleValue());
+        // GraalPy: double is already a semantic Float, not a carrier to box.
+        if (value instanceof Double) {
+            return value;
         }
         return value;
     }
@@ -1007,10 +1009,13 @@ public final class ProtosNumericValueSupport {
 
     /** The guest Float denoting {@code value}. */
     public static Object floating(double value) {
-        return new ProtosFloatValue(value);
+        return Double.valueOf(value);
     }
 
     public static double currentFloatValue(Object value) {
+        if (value instanceof Double floating) {
+            return floating.doubleValue();
+        }
         if (value instanceof ProtosFloatValue floating) {
             return floating.value();
         }
@@ -1062,10 +1067,9 @@ public final class ProtosNumericValueSupport {
         if (isCurrentInteger(left) && isCurrentInteger(right)) {
             return sameInteger(left, right);
         }
-        if (left instanceof ProtosFloatValue a
-                && right instanceof ProtosFloatValue b) {
-            double av = a.value();
-            double bv = b.value();
+        if (isCurrentFloat(left) && isCurrentFloat(right)) {
+            double av = currentFloatValue(left);
+            double bv = currentFloatValue(right);
             if (Double.isNaN(av) && Double.isNaN(bv)) {
                 return true;
             }
@@ -1090,8 +1094,8 @@ public final class ProtosNumericValueSupport {
         if (isCurrentInteger(value)) {
             return tagged(1, integerHashCode(value));
         }
-        if (value instanceof ProtosFloatValue floating) {
-            double number = floating.value();
+        if (isCurrentFloat(value)) {
+            double number = currentFloatValue(value);
             long bits = Double.isNaN(number)
                     ? 0x7ff8000000000000L
                     : Double.doubleToRawLongBits(number);
@@ -1123,8 +1127,11 @@ public final class ProtosNumericValueSupport {
         if (value instanceof ProtosLargeIntegerValue large) {
             return integer(large.exactValue(), destination);
         }
+        if (value instanceof Double floating) {
+            return floating;
+        }
         if (value instanceof ProtosFloatValue floating) {
-            return new ProtosFloatValue(floating.value());
+            return floating;
         }
         if (isFraction(value)) {
             FractionState state = fractionState(value);

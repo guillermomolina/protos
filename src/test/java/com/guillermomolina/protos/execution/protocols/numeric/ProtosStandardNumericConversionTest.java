@@ -92,8 +92,10 @@ class ProtosStandardNumericConversionTest {
         assertSame(integer,
                 ProtosStandardNumericConversionProtocol.convert(toInteger, integer, prelude));
         assertNull(ProtosStandardNumericConversionProtocol.convert(toInteger, "7", prelude));
-        assertNull(ProtosStandardNumericConversionProtocol.convert(
-                toInteger, Long.valueOf(7L), prelude));
+        // I115: a Long is already an authentic SmallInteger, not a foreign scalar.
+        assertEquals(7L, assertInstanceOf(Long.class,
+                ProtosStandardNumericConversionProtocol.convert(
+                        toInteger, Long.valueOf(7L), prelude)).longValue());
 
         // Integer -> Float rounds the exact value once, ties to even, at and beyond signed-64.
         BigInteger[] exact = {
@@ -105,15 +107,22 @@ class ProtosStandardNumericConversionTest {
             BigInteger.ONE.shiftLeft(1024).negate(),
         };
         for (BigInteger value : exact) {
-            ProtosFloatValue floating = assertInstanceOf(ProtosFloatValue.class,
+            Double floating = assertInstanceOf(Double.class,
                     ProtosStandardNumericConversionProtocol.convert(
                             toFloat, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(value, prelude), prelude));
-            assertEquals(new java.math.BigDecimal(value).doubleValue(), floating.value(),
+            assertEquals(new java.math.BigDecimal(value).doubleValue(), floating.doubleValue(),
                     value.toString());
         }
         ProtosFloatValue negativeZero = new ProtosFloatValue(-0.0d);
-        assertSame(negativeZero,
+        Double convertedNegativeZero = assertInstanceOf(Double.class,
                 ProtosStandardNumericConversionProtocol.convert(toFloat, negativeZero, prelude));
+        assertEquals(Double.doubleToRawLongBits(-0.0d),
+                Double.doubleToRawLongBits(convertedNegativeZero));
+        // GraalPy: an ordinary Double is itself a Float and must retain its binary64 bits.
+        Double canonicalNegativeZero = assertInstanceOf(Double.class,
+                ProtosStandardNumericConversionProtocol.convert(toFloat, -0.0d, prelude));
+        assertEquals(Double.doubleToRawLongBits(-0.0d),
+                Double.doubleToRawLongBits(canonicalNegativeZero));
         assertNull(ProtosStandardNumericConversionProtocol.convert(toFloat, "1.0", prelude));
     }
 }

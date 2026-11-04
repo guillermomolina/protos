@@ -8,6 +8,51 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.47-SNAPSHOT
+
+- **I115 — GraalPy-style direct `double` as the semantic Float representation (historical).**
+  - Normalize ordinary Float values to a direct Java `Double`: `ProtosNumericValueSupport.floating`
+    now returns `Double.valueOf`, `isCurrentFloat` recognizes both `Double`
+    and the legacy `ProtosFloatValue`, and `guestValue` no longer boxes a
+    `Double` into a representation object. A direct `Double` is an authentic
+    Protos Float in every invocation lane, rather than a temporary carrier.
+    Protos Integer remains signed-64 `long`/`Long`, not a guest `int` lane.
+  - Make numeric family identity and hash agree across direct `Double` and
+    legacy boxed Float; distinguish negative zero from positive zero by raw
+    IEEE-754 bits and normalize NaN identity. Copying/transferring a direct
+    immutable Float requires no representation allocation. `ProtosValueLookup`
+    admits `Double` and delegates method lookup to the observing Prelude's
+    Float prototype, preserving the normal method lookup home.
+  - Update numeric comparison and equality, fast-path family checks, the
+    standard Float/Integer/Fraction conversion protocols, mixed arithmetic,
+    exact-to-binary64 rounding, Complex arithmetic and transfer descriptors,
+    `ProtosSquareRoot`, and packed `ProtosMatrixValue` read/write/unpack to
+    recognize the direct Float representation. Foreign binary64 admissions
+    and actor value transfer also treat `Double` as a guest number, not an
+    impermissible host carrier.
+  - Add `ProtosI115DoubleSemanticTest` for direct Double family membership,
+    legacy-object identity/hash equivalence, negative-zero/NaN bits and
+    allocation-free copying. Reconcile existing numeric conversion, sqrt,
+    Complex, matrix, foreign, value-lookup and actor-transfer test expectations.
+    All original tests are preserved byte-for-byte and are not executed during
+    this versioned replay.
+  - **Historical semantic limitations:** this is a representation migration,
+    not a complete semantic acceptance of Float arithmetic, equality,
+    signed zero, NaN, infinities, overflow, precision, mixed Integer/Fraction
+    and BigInteger operations, conversion, prototype delegation, foreign
+    boundaries or actor transfer. The legacy `ProtosFloatValue` remains
+    recognized; callers outside this commit may still rely on boxed forms.
+    D197-C Context-owned BigInteger Prelude and dynamic numeric delegation,
+    D013 `Object.call` overrides, D179 C0 lexical binding, unconditional
+    `ifTrue` / `whileTrue` internal lowering, `ReturnHome`, non-local control
+    transfers, suspension, cancellation, terminal Futures and Task/C-prime
+    ownership remain independently unverified. No tests, Maven builds, Graal
+    compiler graphs or benchmarks are run after this version increment. No performance improvement or full semantic conformance is claimed.
+  - Original implementation: `b67281510e29c65ed9671167053f39ba2644bb46`.
+    Nineteen original modified files and one new test are reproduced as
+    exact Git blobs with their modes. Only root `pom.xml` and `CHANGELOG.md`
+    receive versioned metadata edits.
+
 ## 0.4.46-SNAPSHOT
 
 - **I115 — unified GraalPy-style numeric DSL operators and result projection (historical).**

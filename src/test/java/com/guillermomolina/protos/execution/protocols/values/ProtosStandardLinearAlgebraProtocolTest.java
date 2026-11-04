@@ -237,7 +237,6 @@ final class ProtosStandardLinearAlgebraProtocolTest {
                         List.of(integer(0), integer(-1)),
                         List.of(new ProtosFloatValue(1.0d), integer(1), integer(1)),
                         List.of(integer(1), fraction(1, 2, prelude), integer(1)),
-                        List.of(Long.valueOf(1L), integer(1), integer(1)),
                         List.of(huge, integer(1), integer(1)),
                         List.of(huge, huge, integer(1)),
                         List.of(integer(0), integer(0), integer(1)));
@@ -291,7 +290,6 @@ final class ProtosStandardLinearAlgebraProtocolTest {
             big(BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE), prelude),
             new ProtosFloatValue(1.0d),
             fraction(1, 2, prelude),
-            Long.valueOf(1L),
             BigInteger.ONE,
             ProtosNullValue.INSTANCE,
         };
@@ -814,7 +812,8 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         assertNull(packed(m));
         assertNotNull(references(m));
         assertContents(m, third, new ProtosFloatValue(0.5d));
-        assertInstanceOf(ProtosFloatValue.class, m.indexedAt(integer(0), integer(1)));
+        assertEquals(0.5d, assertInstanceOf(
+                Double.class, m.indexedAt(integer(0), integer(1))).doubleValue());
         assertSame(pair.get(1), m.parent().orElseThrow());
         assertTrue(ProtosIdentity.identical(integer(9), m.readLocalSlot("note").orElseThrow()));
         assertTrue(ProtosIdentity.identical(integer(1), m.rowsValue()));
@@ -1133,7 +1132,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
 
     private static void assertFloat(double expected, List<Object> results) {
         for (Object result : results) {
-            assertInstanceOf(ProtosFloatValue.class, result);
+            assertTrue(ProtosNumericValueSupport.isCurrentFloat(result));
             assertEquals(
                     Double.doubleToLongBits(expected),
                     Double.doubleToLongBits(ProtosNumericValueSupport.currentFloatValue(result)),
@@ -1178,8 +1177,6 @@ final class ProtosStandardLinearAlgebraProtocolTest {
                 new ProtosObjectValue(ProtosObjectValue.rootObject()),
                 new ProtosObjectValue(number),
                 new ProtosObjectValue(prelude.integerPrototype()),
-                Long.valueOf(1L),
-                Double.valueOf(1.0d),
                 BigInteger.ONE);
     }
 

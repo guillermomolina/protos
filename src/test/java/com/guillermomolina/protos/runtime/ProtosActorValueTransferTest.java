@@ -54,7 +54,9 @@ final class ProtosActorValueTransferTest {
         assertSame(
                 result,
                 ProtosActorValueTransfer.materializeArguments(result, prelude.newModuleActivation()));
-        assertNotSame(integer, result.get(0));
+        // I115: Long is the immutable semantic SmallInteger representation.
+        // Actor transfer preserves its value without rematerialization.
+        assertSame(integer, result.get(0));
         assertTrue(ProtosIdentity.identical(integer, result.get(0)));
         assertNotSame(string, result.get(1));
         assertTrue(ProtosIdentity.identical(string, result.get(1)));
@@ -1010,7 +1012,7 @@ final class ProtosActorValueTransferTest {
     }
 
     @Test
-    void hostNumericCarriersAndNonTransferableNeighboursOfLargeIntegersFailAtomically()
+    void directNumericValuesTransferButNonTransferableNeighboursFailAtomically()
             throws Exception {
         ProtosPrelude prelude = core();
         ProtosActivation source = prelude.newModuleActivation();
@@ -1019,10 +1021,20 @@ final class ProtosActorValueTransferTest {
         assertNonTransferable(
                 source,
                 () -> ProtosActorValueTransfer.snapshotValue(BigInteger.ONE.shiftLeft(64), source));
-        assertNonTransferable(
-                source, () -> ProtosActorValueTransfer.snapshotValue(Long.valueOf(7L), source));
-        assertNonTransferable(
-                source, () -> ProtosActorValueTransfer.snapshotValue(Double.valueOf(1.0d), source));
+        // GraalPy-style direct primitives are semantic Number values, not
+        // rejected host carriers. Integer and Float transfer without boxing.
+        Object copiedInteger =
+                ProtosActorValueTransfer.snapshotValue(Long.valueOf(7L), source);
+        assertEquals(7L, org.junit.jupiter.api.Assertions.assertInstanceOf(
+                Long.class, copiedInteger));
+
+        Object copiedFloat =
+                ProtosActorValueTransfer.snapshotValue(Double.valueOf(-0.0d), source);
+        assertEquals(
+                Double.doubleToRawLongBits(-0.0d),
+                Double.doubleToRawLongBits(
+                        org.junit.jupiter.api.Assertions.assertInstanceOf(
+                                Double.class, copiedFloat)));
 
         ProtosArrayValue array =
                 prelude.newArray(
