@@ -193,63 +193,12 @@ public final class ProtosProcessRuntime {
      */
     public void awaitTerminationForRuntime() {
         boolean interrupted = false;
-        // Keep the original synchronized wait exactly when diagnostics are disabled.
-        if (!Boolean.getBoolean("protos.diagnostics.termination")) {
-            synchronized (this) {
-                while (lifecycle != LifecycleState.TERMINATED) {
-                    try {
-                        wait();
-                    } catch (InterruptedException interruption) {
-                        interrupted = true;
-                    }
-                }
-            }
-            if (interrupted) {
-                Thread.currentThread().interrupt();
-            }
-            return;
-        }
-        long started = System.nanoTime();
-        boolean reported = false;
-        while (true) {
-            java.util.List<ProtosActor> actors = null;
-            LifecycleState observedLifecycle = null;
-            synchronized (this) {
-                if (lifecycle == LifecycleState.TERMINATED) {
-                    break;
-                }
+        synchronized (this) {
+            while (lifecycle != LifecycleState.TERMINATED) {
                 try {
-                    if (!reported) {
-                        wait(1000L);
-                    } else {
-                        wait();
-                    }
+                    wait();
                 } catch (InterruptedException interruption) {
                     interrupted = true;
-                }
-                if (!reported && System.nanoTime() - started >= 15_000_000_000L) {
-                    reported = true;
-                    observedLifecycle = lifecycle;
-                    actors = new java.util.ArrayList<>(liveActors);
-                }
-            }
-            // Never acquire an Actor/Task lock while holding the Process monitor.
-            if (actors != null) {
-                System.err.println("[DIST017] process="
-                        + Integer.toHexString(System.identityHashCode(this))
-                        + " lifecycle=" + observedLifecycle
-                        + " liveActors=" + actors.size()
-                        + " awaitSeconds>=15");
-                for (int index = 0; index < Math.min(actors.size(), 16); index++) {
-                    ProtosActor actor = actors.get(index);
-                    System.err.println("[DIST017] actor="
-                            + Integer.toHexString(System.identityHashCode(actor))
-                            + " root=" + actor.isRootActorForRuntime()
-                            + " lifecycle=" + actor.lifecycleState());
-                    System.err.println(actor.executionDomain().terminationDiagnosticForRuntime());
-                }
-                if (actors.size() > 16) {
-                    System.err.println("[DIST017] remainingActors=" + (actors.size() - 16));
                 }
             }
         }

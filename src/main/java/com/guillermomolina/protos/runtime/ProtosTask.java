@@ -192,20 +192,6 @@ public final class ProtosTask {
         return state;
     }
 
-    /** DIST017: opt-in host diagnostics only; returns inert Task state without guest execution. */
-    public synchronized String terminationDiagnosticForRuntime() {
-        return "task=" + Integer.toHexString(System.identityHashCode(this))
-                + " state=" + state
-                + " cancel=" + cancellationPhase
-                + " queued=" + queued
-                + " continuationStarted=" + continuationStarted
-                + " waitDependency="
-                + (waitDependency == null ? "none" : waitDependency.getClass().getName())
-                + " capturePending=" + (capturePendingDependency != null)
-                + " publishedContinuation=" + (publishedSuspensionContinuation != null)
-                + " children=" + (children == null ? 0 : children.size());
-    }
-
     /**
      * Whether the recorded cancellation request still awaits portable observation.
      *
@@ -449,31 +435,10 @@ public final class ProtosTask {
             resumeContinuation = publishedSuspensionContinuation;
             publishedSuspensionContinuation = null;
         }
-        try {
-            if (resumeContinuation != null) {
-                resumeContinuation.resume(this);
-            } else {
-                continuation.resume(this);
-            }
-        } catch (RuntimeException | Error failure) {
-            if (Boolean.getBoolean("protos.diagnostics.termination")) {
-                System.err.println(
-                        "[DIST017] task-continuation-escaped task="
-                                + Integer.toHexString(System.identityHashCode(this))
-                                + " throwable=" + failure.getClass().getName()
-                                + " state=" + state());
-                StackTraceElement[] frames = failure.getStackTrace();
-                for (int index = 0; index < Math.min(24, frames.length); index++) {
-                    System.err.println("[DIST017]   at " + frames[index]);
-                }
-            }
-            throw failure;
-        }
-        if (Boolean.getBoolean("protos.diagnostics.termination")
-                && state() == State.RUNNING) {
-            System.err.println(
-                    "[DIST017] task-continuation-returned-running task="
-                            + Integer.toHexString(System.identityHashCode(this)));
+        if (resumeContinuation != null) {
+            resumeContinuation.resume(this);
+        } else {
+            continuation.resume(this);
         }
     }
 
