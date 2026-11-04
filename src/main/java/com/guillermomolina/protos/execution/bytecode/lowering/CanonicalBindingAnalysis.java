@@ -361,6 +361,26 @@ final class CanonicalBindingAnalysis {
         return Optional.ofNullable(parameterIdentities.get(parameter));
     }
 
+    /** I115: the lowering-time storage of {@code identity}. */
+    static CanonicalLexicalScope.Storage storageOf(CanonicalBindingIdentity identity) {
+        return identity.owner().storageOf(identity.name());
+    }
+
+    /** I115: the lowering-time storage of {@code name} declared by {@code scope}. */
+    static CanonicalLexicalScope.Storage storageOf(CanonicalLexicalScope scope, String name) {
+        return scope.storageOf(name);
+    }
+
+    /** I115: the ordered names of {@code scope}'s own cell bindings. */
+    static List<String> cellNamesOf(CanonicalLexicalScope scope) {
+        return scope.cellNamesInDeclarationOrder();
+    }
+
+    /** I115: the ordered outer cells a Closure of {@code scope} carries. */
+    static List<CanonicalBindingIdentity> freeCellsOf(CanonicalLexicalScope scope) {
+        return scope.freeCells();
+    }
+
     /**
      * I068 Slice 5 source/parser rematerialization seam.
      *
@@ -371,10 +391,15 @@ final class CanonicalBindingAnalysis {
      * access kind and binding name.
      *
      * <p>The reconstructed CapturedResolved identity carries only a synthetic
-     * copy of the owner's declared-name layout. That is sufficient to preserve
-     * the stable frame ordinal used by captured frame access. No old AST node,
-     * runtime Context, Truffle Frame or Bytecode object becomes semantic
-     * Closure state.
+     * copy of the owner's declared-name layout and cell classification. No
+     * old AST node, runtime Context, Truffle Frame or Bytecode object becomes
+     * semantic Closure state.
+     *
+     * <p>I115: the storage classification is carried over unchanged. Every
+     * reparsed Closure scope receives the free-cell list of the original
+     * scope at the same source coordinates, in the same order, with owners
+     * remapped to the reparsed scope or to the portable owner copy, so a
+     * reparse never changes a captured-cell index or a binding's storage.
      */
     CanonicalBindingAnalysis rematerializeForReparsedClosure(
             CanonicalClosure reparsedDefinition) {
@@ -422,13 +447,16 @@ final class CanonicalBindingAnalysis {
         IdentityHashMap<CanonicalLexicalScope, CanonicalLexicalScope>
                 portableOwnerLayouts =
                         new IdentityHashMap<>();
+        IdentityHashMap<CanonicalLexicalScope, CanonicalLexicalScope>
+                reparsedByOriginal = reparsedScopesByOriginal(reparsed);
 
         for (CanonicalLookup lookup
                 : reparsed.lookupResolutions.keySet()) {
             CanonicalBindingResolution.CapturedResolved previous =
                     oldCapturedLookups.get(
                             CapturedSiteKey.lookup(lookup));
-            if (previous != null) {
+            if (previous != null
+                    && !reparsedByOriginal.containsKey(previous.identity().owner())) {
                 remappedLookups.put(
                         lookup,
                         portableCapturedResolution(
@@ -442,7 +470,8 @@ final class CanonicalBindingAnalysis {
             CanonicalBindingResolution.CapturedResolved previous =
                     oldCapturedAssigns.get(
                             CapturedSiteKey.assign(assign));
-            if (previous != null) {
+            if (previous != null
+                    && !reparsedByOriginal.containsKey(previous.identity().owner())) {
                 remappedAssigns.put(
                         assign,
                         portableCapturedResolution(
@@ -450,6 +479,8 @@ final class CanonicalBindingAnalysis {
                                 portableOwnerLayouts));
             }
         }
+
+        remapFreeCells(reparsedByOriginal, portableOwnerLayouts);
 
         return new CanonicalBindingAnalysis(
                 reparsed.topScope,
@@ -460,6 +491,66 @@ final class CanonicalBindingAnalysis {
                 reparsed.createIdentities,
                 reparsed.multipleCreateIdentities,
                 reparsed.parameterIdentities);
+    }
+
+    private IdentityHashMap<CanonicalLexicalScope, CanonicalLexicalScope>
+            reparsedScopesByOriginal(CanonicalBindingAnalysis reparsed) {
+        Map<ClosureSiteKey, CanonicalLexicalScope> originalScopes = new java.util.HashMap<>();
+        for (Map.Entry<CanonicalClosure, CanonicalLexicalScope> entry : closureScopes.entrySet()) {
+            originalScopes.put(ClosureSiteKey.of(entry.getKey()), entry.getValue());
+        }
+        IdentityHashMap<CanonicalLexicalScope, CanonicalLexicalScope> reparsedByOriginal =
+                new IdentityHashMap<>();
+        for (Map.Entry<CanonicalClosure, CanonicalLexicalScope> entry
+                : reparsed.closureScopes.entrySet()) {
+            CanonicalLexicalScope original = originalScopes.get(ClosureSiteKey.of(entry.getKey()));
+            if (original != null) {
+                reparsedByOriginal.put(original, entry.getValue());
+            }
+        }
+        return reparsedByOriginal;
+    }
+
+    private static void remapFreeCells(
+            IdentityHashMap<CanonicalLexicalScope, CanonicalLexicalScope> reparsedByOriginal,
+            IdentityHashMap<CanonicalLexicalScope, CanonicalLexicalScope> portableOwnerLayouts) {
+        for (Map.Entry<CanonicalLexicalScope, CanonicalLexicalScope> entry
+                : reparsedByOriginal.entrySet()) {
+            java.util.ArrayList<CanonicalBindingIdentity> remapped = new java.util.ArrayList<>();
+            for (CanonicalBindingIdentity free : entry.getKey().freeCells()) {
+                CanonicalLexicalScope reparsedOwner = reparsedByOriginal.get(free.owner());
+                remapped.add(
+                        reparsedOwner != null
+                                ? reparsedOwner.identity(free.name())
+                                : portableOwner(free.owner(), portableOwnerLayouts)
+                                        .identity(free.name()));
+            }
+            entry.getValue().replaceFreeCells(remapped);
+        }
+    }
+
+    private static CanonicalLexicalScope portableOwner(
+            CanonicalLexicalScope owner,
+            IdentityHashMap<CanonicalLexicalScope, CanonicalLexicalScope> portableOwnerLayouts) {
+        return portableOwnerLayouts.computeIfAbsent(
+                owner,
+                original -> {
+                    CanonicalLexicalScope copy =
+                            new CanonicalLexicalScope(original.kind(), null);
+                    for (String name : original.declaredNames()) {
+                        copy.declare(name);
+                        if (original.needsCell(name)) {
+                            copy.markCell(name);
+                        }
+                    }
+                    return copy;
+                });
+    }
+
+    private record ClosureSiteKey(int startOffset, int length) {
+        static ClosureSiteKey of(CanonicalClosure closure) {
+            return new ClosureSiteKey(closure.span().startOffset(), closure.span().length());
+        }
     }
 
     private static CanonicalBindingResolution.CapturedResolved
@@ -473,19 +564,7 @@ final class CanonicalBindingAnalysis {
                 previous.identity().owner();
 
         CanonicalLexicalScope portableOwner =
-                portableOwnerLayouts.computeIfAbsent(
-                        previousOwner,
-                        owner -> {
-                            CanonicalLexicalScope copy =
-                                    new CanonicalLexicalScope(
-                                            owner.kind(),
-                                            null);
-                            for (String name
-                                    : owner.declaredNames()) {
-                                copy.declare(name);
-                            }
-                            return copy;
-                        });
+                portableOwner(previousOwner, portableOwnerLayouts);
 
         return new CanonicalBindingResolution.CapturedResolved(
                 portableOwner.identity(

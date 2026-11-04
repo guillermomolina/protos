@@ -19,8 +19,10 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosLexicalCell;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
@@ -139,8 +141,9 @@ final class ProtosFrameArguments {
      *
      * It carries no Closure, receiver, methodHome, Task, caller, ReturnHome
      * or Context. Only the consumers the lowering admits for a static callee
-     * root recognize it (BindUnaryFrameParameter, ReadRootFrameLocal and the
-     * return epilogue); activation, caller, Task and Closure accessors do not
+     * root recognize it (the argument reads LoadArgument, HasArgument and
+     * ExperimentalLongArgument0, and the return epilogue); activation,
+     * caller, Task and Closure accessors do not
      * support it. A recorded divergence, not an equivalent ABI.
      */
     private static final Object EXPERIMENTAL_STATIC_UNARY_CALL = new Object();
@@ -1476,6 +1479,39 @@ final class ProtosFrameArguments {
                 : ProtosNullValue.INSTANCE;
     }
 
+    /**
+     * I115: the number of supplied positional arguments of a B5 call, in
+     * either state (publication never changes the supplied suffix), or of
+     * the static unary layout, which supplies exactly one.
+     */
+    static int suppliedArgumentCount(Object[] arguments) {
+        if (isExperimentalStaticUnaryCall(arguments)) {
+            return 1;
+        }
+        return arguments.length - SUPPLIED_ARGUMENT_OFFSET;
+    }
+
+    /**
+     * I115: the value of a rest parameter, read from the B5 supplied suffix:
+     * the frozen Array of the supplied arguments after the first {@code
+     * positionalParametersBeforeRest}, as guest values.
+     */
+    @TruffleBoundary
+    static Object restArgumentArray(Object[] arguments, int positionalParametersBeforeRest) {
+        int count = suppliedArgumentCount(arguments);
+        java.util.ArrayList<Object> rest = new java.util.ArrayList<>();
+        for (int index = positionalParametersBeforeRest; index < count; index++) {
+            rest.add(ProtosNumericValueSupport.guestValue(
+                    arguments[SUPPLIED_ARGUMENT_OFFSET + index]));
+        }
+        ProtosPrelude prelude = preludeOrNull(arguments);
+        if (prelude == null) {
+            throw new IllegalStateException(
+                    "parameter binding requires an owning Core prelude");
+        }
+        return prelude.newFrozenArray(rest);
+    }
+
     /** Supplied positional argument {@code index} of a B5 call. */
     static Object compactSuppliedArgument(Object[] arguments, int index) {
         if (index < 0) {
@@ -1486,6 +1522,26 @@ final class ProtosFrameArguments {
     }
 
     /** The callee Closure of a compact source call that is still unmaterialized. */
+    /**
+     * I115: the captured cells of the invoked Closure, read once at root
+     * entry from argument 0: the invoked Closure of a compact call (including
+     * the I115-H11 captured unary entry), or the published activation, which
+     * refers to the same array. Called only by
+     * roots whose scope declares free cells; each such root copies the cells
+     * into its own Bytecode locals, so no later access reads this header.
+     */
+    static ProtosLexicalCell[] capturedCells(Object[] arguments) {
+        Object invocation = arguments[CLOSURE_INDEX];
+        if (invocation instanceof ProtosClosureValue closure) {
+            return closure.capturedCellsForRuntime();
+        }
+        if (invocation instanceof ProtosActivation activation) {
+            return activation.capturedCellsForRuntime();
+        }
+        throw CompilerDirectives.shouldNotReachHere(
+                "I115 cell-capturing root entered without its Closure");
+    }
+
     static ProtosClosureValue compactClosure(Object[] arguments) {
         requireCompactCall(arguments);
         return (ProtosClosureValue) arguments[CLOSURE_INDEX];

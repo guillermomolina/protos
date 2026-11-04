@@ -34,8 +34,17 @@ import java.util.function.Function;
  * therefore either already bound to its materialized context object, or still
  * owned by the activation whose context remains deferred (PLAT040). In the
  * deferred state every membership/read query is answered through that
- * activation's single authoritative lexical store (PLAT036/I068), so no value
- * is ever copied here and no second binding store exists.
+ * activation's context, so no value is ever copied here and no second
+ * binding store exists.
+ *
+ * <p>I115: an environment node carries only NAME bindings (the module
+ * context and other materialized contexts). A Closure's LOCAL bindings never
+ * enter it, and its captured CELL bindings are carried by the Closure value
+ * itself as a constant-indexed array ({@link
+ * ProtosClosureValue#capturedCellsForRuntime}), never looked up here by name.
+ * The cells are not attached to environment nodes because a Closure that
+ * does not capture its creator's context reuses the creator's own chain, so a
+ * node's position does not identify the lexical owner of a cell.
  *
  * <p>Each activation creates at most one node for its own current context and
  * shares it, by reference, with every Closure it materializes and with the
@@ -211,20 +220,5 @@ public final class ProtosLexicalEnvironment {
     public boolean isFrozenForRuntime() {
         ProtosObjectValue existing = context;
         return existing != null && existing.isFrozen();
-    }
-
-    /**
-     * The single authoritative lexical store of this genuine execution
-     * context, without materializing it; {@code null} when this scope is not
-     * a genuine execution context or has no installed authority yet.
-     */
-    public ProtosLexicalBindingAuthority lexicalBindingAuthorityForRuntime() {
-        ProtosObjectValue existing = context;
-        if (existing != null) {
-            return existing instanceof ProtosExecutionContextValue executionContext
-                    ? executionContext.lexicalBindingAuthorityForRuntime()
-                    : null;
-        }
-        return resolveDeferredOwner().deferredContextAuthorityForRuntime();
     }
 }

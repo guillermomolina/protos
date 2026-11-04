@@ -41,6 +41,16 @@ public final class ProtosClosureValue extends ProtosObjectValue {
     private volatile boolean contextLocalExecutionProjectionRequired;
 
     /*
+     * I115 (GraalPy PFunction closure cells): the outer cell bindings this
+     * Closure references, in the constant order the lowering assigned to its
+     * scope. The same cell instances are shared with the owning activation
+     * and every other Closure capturing them; values are never copied here.
+     * Installed once by the creating operation, before the Closure escapes.
+     */
+    private static final ProtosLexicalCell[] NO_CAPTURED_CELLS = new ProtosLexicalCell[0];
+    private ProtosLexicalCell[] capturedCells = NO_CAPTURED_CELLS;
+
+    /*
      * Demand-driven stability of this instance's Context projection
      * requirement. Allocated only if a direct-call PIC requests it.
      */
@@ -478,12 +488,38 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return rematerializer.get();
     }
 
+    /** I115: the captured cells, shared by reference; never copied. */
+    public ProtosLexicalCell[] capturedCellsForRuntime() {
+        return capturedCells;
+    }
+
+    /**
+     * I115: installs the captured cells of a freshly created Closure. Called
+     * only by the creating operation, before the Closure escapes, and at
+     * most once.
+     */
+    public ProtosClosureValue installCapturedCellsForRuntime(ProtosLexicalCell[] cells) {
+        Objects.requireNonNull(cells, "cells");
+        if (capturedCells != NO_CAPTURED_CELLS) {
+            throw new IllegalStateException("captured cells are already installed");
+        }
+        capturedCells = cells;
+        return this;
+    }
+
     public java.util.Optional<ProtosNativeClosureBody> nativeBody() {
         return java.util.Optional.ofNullable(nativeBody);
     }
 
+    /*
+     * KNOWN I115 SEMANTIC DIVERGENCE: a parallel projection shares the
+     * captured cells by reference instead of isolating them; the I115
+     * cell representation has no isolated-copy form yet.
+     */
     public ProtosClosureValue parallelProjection(java.util.List<ProtosObjectValue> roots,Object receiver,ProtosPrelude prelude,ProtosClosureExecutionPlan plan) {
-        return new ProtosClosureValue(definition,roots,java.util.Objects.requireNonNull(receiver),null,null,java.util.Objects.requireNonNull(prelude),plan,nativeBody);
+        ProtosClosureValue projection = new ProtosClosureValue(definition,roots,java.util.Objects.requireNonNull(receiver),null,null,java.util.Objects.requireNonNull(prelude),plan,nativeBody);
+        projection.capturedCells = capturedCells;
+        return projection;
     }
 
     public ProtosClosureValue parallelProjectionDeferred(
@@ -491,10 +527,12 @@ public final class ProtosClosureValue extends ProtosObjectValue {
             Object receiver,
             ProtosPrelude prelude,
             java.util.function.Supplier<ProtosClosureExecutionPlan> executionPlanRematerializer) {
-        return new ProtosClosureValue(
+        ProtosClosureValue projection = new ProtosClosureValue(
                 definition, roots, java.util.Objects.requireNonNull(receiver), null, null,
                 java.util.Objects.requireNonNull(prelude), null, nativeBody,
                 executionPlanRematerializer);
+        projection.capturedCells = capturedCells;
+        return projection;
     }
 
     public ProtosClosureValue bindMethod(
@@ -504,6 +542,7 @@ public final class ProtosClosureValue extends ProtosObjectValue {
                 definition, capturedEnvironment, Objects.requireNonNull(receiver, "receiver"),
                 Objects.requireNonNull(home, "home"), returnHome, prelude, executionPlan, nativeBody,
                 executionPlanRematerializer);
+        bound.capturedCells = capturedCells;
         if (contextLocalExecutionProjectionRequired) {
             bound.requireContextLocalExecutionProjectionForRuntime();
         }

@@ -79,35 +79,32 @@ final class ProtosBytecodeTagTreeNodeExports {
             throw UnsupportedMessageException.create();
         }
         ProtosActivation activation = ProtosFrameArguments.activation(frame);
-        projectFrameNativeBindings(node, frame, activation);
         java.util.Map<String, Object> ownInlineBindings =
                 normalInlineCallbackBindings(node, frame.materialize());
         if (ownInlineBindings != null) {
             // I095-B6: virtual lexical scope; no carrier or guest activation.
             return new ProtosDebuggerScope(activation, ownInlineBindings);
         }
-        java.util.Map<String, Object> frameNativeBindings =
-                unprojectedFrameNativeBindings(node, frame, activation);
-        if (frameNativeBindings != null) {
+        java.util.Map<String, Object> rootBindings = toolingBindings(node, frame);
+        if (rootBindings != null) {
             /*
-             * PLAT067-B: the activation's Context already existed when this
-             * frame-native root ran, so the projection above could not apply.
-             * The live PRESENT frame bindings overlay that Context read-only.
+             * PLAT067-B / I115: a Closure root's LOCAL and CELL bindings are
+             * never part of its Context; the live established bindings
+             * overlay that Context read-only.
              */
-            return new ProtosDebuggerScope(activation, frameNativeBindings);
+            return new ProtosDebuggerScope(activation, rootBindings);
         }
         return debuggerScope(activation);
     }
 
-    private static java.util.Map<String, Object> unprojectedFrameNativeBindings(
-            TagTreeNode node, Frame frame, ProtosActivation activation) {
+    private static java.util.Map<String, Object> toolingBindings(TagTreeNode node, Frame frame) {
         if (node == null) {
             return null;
         }
         BytecodeNode bytecode = node.getBytecodeNode();
         return bytecode.getBytecodeRootNode() instanceof ProtosBytecodeRootNode root
-                ? root.unprojectedFrameNativeBindingsForTooling(
-                        bytecode, node.getEnterBytecodeIndex(), frame.materialize(), activation)
+                ? root.toolingBindingsOrNull(
+                        bytecode, node.getEnterBytecodeIndex(), frame.materialize())
                 : null;
     }
 
@@ -159,31 +156,6 @@ final class ProtosBytecodeTagTreeNodeExports {
         return inNormalInlineCallback
                 ? java.util.Collections.unmodifiableMap(bindings)
                 : null;
-    }
-
-    /**
-     * PERF025 frame-materialization slice: a root lowered without a persistent
-     * frame authority keeps its current bindings only in its live frame while
-     * its execution context is unobserved. Before projecting such an
-     * activation, tooling installs on it, while the queried frame is live, the
-     * same escape-safe materialized-frame authority the root would install on
-     * an observed activation, so the scope reads the exact bindings through the
-     * activation as for every other root.
-     */
-    private static void projectFrameNativeBindings(
-            TagTreeNode node,
-            Frame frame,
-            ProtosActivation activation) {
-        if (node == null || !activation.hasUnobservedFrameNativeExecutionContextForRuntime()) {
-            return;
-        }
-        BytecodeNode bytecode = node.getBytecodeNode();
-        if (bytecode.getBytecodeRootNode() instanceof ProtosBytecodeRootNode root) {
-            root.installFrameNativeAuthorityForTooling(
-                    activation,
-                    bytecode.getBytecodeLocation(node.getEnterBytecodeIndex()),
-                    frame);
-        }
     }
 
     @TruffleBoundary

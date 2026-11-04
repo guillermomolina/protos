@@ -25,7 +25,6 @@ import java.util.Optional;
 
 public final class ProtosActivation {
     private ProtosObjectValue context;
-    private ProtosLexicalBindingAuthority deferredContextAuthority;
     private final ProtosLexicalEnvironment capturedEnvironment;
     private ProtosLexicalEnvironment currentEnvironment;
     private final Object receiver;
@@ -43,6 +42,8 @@ public final class ProtosActivation {
     private ProtosIoOperation deferredCPrimeOperation;
     private ProtosIoReleaseExecution deferredCPrimeRelease;
     private ProtosDynamicControlState directDynamicControlState;
+    private static final ProtosLexicalCell[] NO_CAPTURED_CELLS = new ProtosLexicalCell[0];
+    private ProtosLexicalCell[] capturedCells = NO_CAPTURED_CELLS;
 
     private static final class DeferredSuppliedArguments {
         private final List<?> values;
@@ -238,19 +239,21 @@ public final class ProtosActivation {
         boolean ownsReturnHome = closure.returnHome().isEmpty();
         ProtosReturnHome invocationHome = closure.invocationReturnHomeForRuntime();
 
-        return new ProtosActivation(
-                prelude.newExecutionContext(),
-                closure.capturedLexicalEnvironmentForRuntime(),
-                closure.capturedReceiver(),
-                prelude,
-                prelude.newFrozenArray(supplied),
-                invocationHome,
-                closure.methodHome().orElse(null),
-                ownsReturnHome,
-                false,
-                actorModuleState,
-                currentModuleKey,
-                Objects.requireNonNull(executionDomain, "executionDomain"));
+        return withCapturedCells(
+                new ProtosActivation(
+                        prelude.newExecutionContext(),
+                        closure.capturedLexicalEnvironmentForRuntime(),
+                        closure.capturedReceiver(),
+                        prelude,
+                        prelude.newFrozenArray(supplied),
+                        invocationHome,
+                        closure.methodHome().orElse(null),
+                        ownsReturnHome,
+                        false,
+                        actorModuleState,
+                        currentModuleKey,
+                        Objects.requireNonNull(executionDomain, "executionDomain")),
+                closure);
     }
 
     public static ProtosActivation forImmediateMethodInvocation(
@@ -275,19 +278,21 @@ public final class ProtosActivation {
         boolean ownsReturnHome = closure.returnHome().isEmpty();
         ProtosReturnHome invocationHome = closure.invocationReturnHomeForRuntime();
 
-        return new ProtosActivation(
-                prelude.newExecutionContext(),
-                closure.capturedLexicalEnvironmentForRuntime(),
-                receiver,
-                prelude,
-                prelude.newFrozenArray(supplied),
-                invocationHome,
-                methodHome,
-                ownsReturnHome,
-                false,
-                actorModuleState,
-                currentModuleKey,
-                Objects.requireNonNull(executionDomain, "executionDomain"));
+        return withCapturedCells(
+                new ProtosActivation(
+                        prelude.newExecutionContext(),
+                        closure.capturedLexicalEnvironmentForRuntime(),
+                        receiver,
+                        prelude,
+                        prelude.newFrozenArray(supplied),
+                        invocationHome,
+                        methodHome,
+                        ownsReturnHome,
+                        false,
+                        actorModuleState,
+                        currentModuleKey,
+                        Objects.requireNonNull(executionDomain, "executionDomain")),
+                closure);
     }
 
     /**
@@ -381,20 +386,22 @@ public final class ProtosActivation {
                     "compact invocation return home does not match the Closure capture");
         }
 
-        return new ProtosActivation(
-                null,
-                closure.capturedLexicalEnvironmentForRuntime(),
-                receiver,
-                prelude,
-                null,
-                invocationHome,
-                methodHome,
-                ownsReturnHome,
-                false,
-                actorModuleState,
-                currentModuleKey,
-                Objects.requireNonNull(executionDomain, "executionDomain"),
-                new DeferredSuppliedArguments(supplied));
+        return withCapturedCells(
+                new ProtosActivation(
+                        null,
+                        closure.capturedLexicalEnvironmentForRuntime(),
+                        receiver,
+                        prelude,
+                        null,
+                        invocationHome,
+                        methodHome,
+                        ownsReturnHome,
+                        false,
+                        actorModuleState,
+                        currentModuleKey,
+                        Objects.requireNonNull(executionDomain, "executionDomain"),
+                        new DeferredSuppliedArguments(supplied)),
+                closure);
     }
 
     private ProtosActivation(
@@ -490,6 +497,23 @@ public final class ProtosActivation {
         this.executionDomain = Objects.requireNonNull(executionDomain, "executionDomain");
     }
 
+    /*
+     * I115: the activation of a Closure invocation refers to the invoked
+     * Closure's captured-cell array (the same array, never a copy), so a root
+     * entered with a published activation loads its free cells exactly as a
+     * compact entry loads them from the Closure.
+     */
+    private static ProtosActivation withCapturedCells(
+            ProtosActivation activation, ProtosClosureValue closure) {
+        activation.capturedCells = closure.capturedCellsForRuntime();
+        return activation;
+    }
+
+    /** I115: the invoked Closure's captured cells; empty for other activations. */
+    public ProtosLexicalCell[] capturedCellsForRuntime() {
+        return capturedCells;
+    }
+
     public static ProtosActivation forObjectConstruction(
             ProtosObjectValue object,
             ProtosActivation enclosing) {
@@ -517,71 +541,18 @@ public final class ProtosActivation {
         return construction;
     }
 
+    /**
+     * The guest execution context, materialized on first observation.
+     *
+     * <p>KNOWN I115 SEMANTIC DIVERGENCE: the context of a Closure activation
+     * holds only NAME bindings; its LOCAL and CELL bindings live in Bytecode
+     * DSL locals and cells and are not projected into it.
+     */
     public ProtosObjectValue context() {
         if (context == null) {
-            ProtosLexicalBindingAuthority authority =
-                    deferredContextAuthority;
-            if (authority != null) {
-                authority.prepareForContextObservation();
-                context =
-                        prelude.newExecutionContextForRuntime(
-                                authority);
-            } else {
-                context = prelude.newExecutionContext();
-            }
+            context = prelude.newExecutionContext();
         }
         return context;
-    }
-
-    /**
-     * I072-C backend seam: installs the current root's frame-backed lexical
-     * authority without forcing the guest execution-context object to exist.
-     * Repeated roots over one activation hand off the same authoritative
-     * bindings exactly as a materialized execution context does.
-     */
-    public void installFrameLexicalBindingAuthorityForRuntime(
-            ProtosLexicalBindingAuthority authority) {
-        Objects.requireNonNull(authority, "authority");
-
-        if (context != null) {
-            if (context instanceof ProtosExecutionContextValue executionContext) {
-                executionContext.installFrameLexicalBindingAuthority(authority);
-                deferredContextAuthority = authority;
-            }
-            return;
-        }
-
-        ProtosLexicalBindingAuthority replaced = deferredContextAuthority;
-        if (replaced != null && replaced != authority) {
-            ProtosLexicalBindingAuthorityCalls.transferAll(replaced, authority);
-        }
-
-        deferredContextAuthority = authority;
-        if (replaced != null && replaced != authority) {
-            replaced.retireInstallation();
-        }
-    }
-
-    /**
-     * PERF025 frame-materialization slice: true while this activation's
-     * current genuine execution context has neither been materialized as a
-     * guest Context nor been given a lexical-binding authority. In that state
-     * the executing root's frame locals are the only store its statically
-     * proven current bindings can have, so such a root may establish them
-     * directly in those locals while its frame is live. Any other state takes
-     * the existing authority path.
-     */
-    public boolean hasUnobservedFrameNativeExecutionContextForRuntime() {
-        return context == null && deferredContextAuthority == null;
-    }
-
-    /**
-     * The lexical-binding authority currently installed for this activation's
-     * execution context, or {@code null}. Backend-private; never materializes
-     * the guest Context.
-     */
-    public ProtosLexicalBindingAuthority currentLexicalBindingAuthorityForRuntime() {
-        return deferredContextAuthority;
     }
 
     /**
@@ -605,12 +576,7 @@ public final class ProtosActivation {
      */
     public boolean currentContextHasLocalSlotForRuntime(String name) {
         Objects.requireNonNull(name, "name");
-        if (context != null) {
-            return context.hasLocalSlot(name);
-        }
-        return deferredContextAuthority != null
-                && ProtosLexicalBindingAuthorityCalls.contains(
-                        deferredContextAuthority, name);
+        return context != null && context.hasLocalSlot(name);
     }
 
     /**
@@ -622,71 +588,20 @@ public final class ProtosActivation {
         return context != null && context.isFrozen();
     }
 
-    /**
-     * Reads the current lexical authority without materializing the guest Context.
-     */
+    /** Reads a current NAME binding without materializing the guest Context. */
     public Optional<Object> readCurrentLocalSlotForRuntime(String name) {
         Objects.requireNonNull(name, "name");
-        if (context != null) {
-            return context.readLocalSlot(name);
-        }
-        if (deferredContextAuthority == null) {
-            return Optional.empty();
-        }
-        return ProtosLexicalBindingAuthorityCalls.read(
-                deferredContextAuthority, name);
+        return context != null ? context.readLocalSlot(name) : Optional.empty();
     }
 
-    /**
-     * Establishes a current lexical binding directly in the single authoritative
-     * store. An unmaterialized execution context is necessarily still OPEN.
-     */
+    /** Establishes a current NAME binding in the execution context. */
     public void createCurrentLocalSlotForRuntime(
             String name,
             Object value) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(value, "value");
 
-        if (context != null) {
-            context.createLocalSlot(name, value);
-            return;
-        }
-
-        if (deferredContextAuthority == null) {
-            context().createLocalSlot(name, value);
-            return;
-        }
-
-        if (ProtosLexicalBindingAuthorityCalls.contains(
-                deferredContextAuthority, name)) {
-            throw new IllegalStateException(
-                    "local slot already exists: " + name);
-        }
-        ProtosLexicalBindingAuthorityCalls.put(
-                deferredContextAuthority, name, value);
-    }
-
-    /**
-     * PERF025-H1 backend seam: the installed lexical-binding authority when a
-     * current binding created now would take exactly its creation path, else
-     * {@code null}, in which case only {@link #createCurrentLocalSlotForRuntime}
-     * reproduces the exact creation rule. An unmaterialized execution context
-     * is necessarily OPEN; a materialized one qualifies only while it is an
-     * OPEN execution context whose own authority is still the installed one.
-     * The caller must still reject a PRESENT binding. Nothing else of {@link
-     * ProtosObjectValue#createLocalSlot} is bypassed: an execution context
-     * never registers lookup dependencies. Never materializes the guest Context.
-     */
-    public ProtosLexicalBindingAuthority currentAuthorityAdmittingLocalCreationForRuntime() {
-        ProtosLexicalBindingAuthority authority = deferredContextAuthority;
-        if (authority == null || context == null) {
-            return authority;
-        }
-        return context instanceof ProtosExecutionContextValue executionContext
-                        && executionContext.isOpen()
-                        && executionContext.lexicalBindingAuthorityForRuntime() == authority
-                ? authority
-                : null;
+        context().createLocalSlot(name, value);
     }
 
     public void assignCurrentLocalSlotForRuntime(
@@ -695,23 +610,7 @@ public final class ProtosActivation {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(value, "value");
 
-        if (context != null) {
-            context.assignLocalSlot(name, value);
-            return;
-        }
-
-        if (deferredContextAuthority == null) {
-            context().assignLocalSlot(name, value);
-            return;
-        }
-
-        if (!ProtosLexicalBindingAuthorityCalls.contains(
-                deferredContextAuthority, name)) {
-            throw new IllegalStateException(
-                    "local slot does not exist: " + name);
-        }
-        ProtosLexicalBindingAuthorityCalls.put(
-                deferredContextAuthority, name, value);
+        context().assignLocalSlot(name, value);
     }
 
     /**
@@ -726,19 +625,6 @@ public final class ProtosActivation {
     /** Innermost captured lexical scope, or {@code null} when none is captured. */
     public ProtosLexicalEnvironment capturedLexicalEnvironmentForRuntime() {
         return capturedEnvironment;
-    }
-
-    /**
-     * The current context's authority when the guest context is still
-     * deferred, or the materialized execution context's own authority.
-     */
-    ProtosLexicalBindingAuthority deferredContextAuthorityForRuntime() {
-        if (context != null) {
-            return context instanceof ProtosExecutionContextValue executionContext
-                    ? executionContext.lexicalBindingAuthorityForRuntime()
-                    : null;
-        }
-        return deferredContextAuthority;
     }
 
     public Object receiver() {
