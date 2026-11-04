@@ -81,9 +81,10 @@ class ProtosForeignValueAdmissionTest {
                     "héllo 😀",
                     assertInstanceOf(ProtosStringValue.class, fixture.eval(M + "m.text")).value());
             assertEquals(String.valueOf(String.valueOf(big)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fixture.eval(M + "m.big")));
-            assertEquals(
-                    0.1,
-                    assertInstanceOf(ProtosFloatValue.class, fixture.eval(M + "m.dbl")).value());
+            // GraalPy: foreign binary64 is a direct semantic Double, not an obligatory PFloat.
+            Object foreignFloat = fixture.eval(M + "m.dbl");
+            assertEquals(0.1d, assertInstanceOf(Double.class, foreignFloat));
+            org.junit.jupiter.api.Assertions.assertTrue(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.isCurrentFloat(foreignFloat));
             for (String raw : List.of("undef", "badText", "dec", "amb", "list", "map")) {
                 assertInstanceOf(ProtosRawForeignValue.class, fixture.eval(M + "m." + raw), raw);
             }

@@ -91,6 +91,16 @@ class ProtosRepresentedValueLookupTest {
         assertSame(floatCall, floatSelected.value());
         assertSame(prelude.floatPrototype(), floatSelected.home());
 
+        // GraalPy GetClassNode.getDouble: direct Double and the object form
+        // select the same Float prototype and the same inherited method.
+        Object direct = Double.valueOf(2.5d);
+        assertSame(prelude.floatPrototype(),
+                ProtosValueLookup.delegationParent(direct, prelude).orElseThrow());
+        ProtosSlotLookupResult directSelected =
+                ProtosValueLookup.lookup(direct, "call", prelude).orElseThrow();
+        assertSame(floatCall, directSelected.value());
+        assertSame(floatSelected.home(), directSelected.home());
+        org.junit.jupiter.api.Assertions.assertTrue(ProtosValueLookup.isProtosValue(direct));
     }
 
     // Deliberately Java-side: this fixes exact root lookup-home identity and the

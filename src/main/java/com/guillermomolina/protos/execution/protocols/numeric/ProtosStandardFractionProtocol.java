@@ -144,7 +144,7 @@ public final class ProtosStandardFractionProtocol {
                                     || !ProtosNumericValueSupport.isFraction(supplied.get(0))) {
                                 throw invalid(activation);
                             }
-                            return new ProtosFloatValue(
+                            return ProtosNumericValueSupport.floating(
                                     ProtosNumericValueSupport.roundFractionToBinary64(
                                             supplied.get(0)));
                         }));

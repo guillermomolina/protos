@@ -122,8 +122,8 @@ abstract class ProtosPrimitiveNumericSendFastPathsBase extends Node {
     }
 
     static boolean smallFloat(Object value, boolean carrierPermitted) {
-        return (carrierPermitted && value instanceof Double)
-                || value instanceof ProtosFloatValue;
+        // GraalPy: a Double is a semantic Float in every invocation lane.
+        return value instanceof Double || value instanceof ProtosFloatValue;
     }
 
     static boolean smallNumeric(Object value, boolean carrierPermitted) {

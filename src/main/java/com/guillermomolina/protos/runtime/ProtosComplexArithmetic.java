@@ -151,9 +151,11 @@ public final class ProtosComplexArithmetic {
                     ? ProtosNumericValueSupport.addIntegers(left, right, prelude)
                     : ProtosNumericValueSupport.multiplyIntegers(left, right, prelude);
         }
-        if (left instanceof ProtosFloatValue x && right instanceof ProtosFloatValue y) {
-            return new ProtosFloatValue(
-                    operation == Operation.ADD ? x.value() + y.value() : x.value() * y.value());
+        if (ProtosNumericValueSupport.isCurrentFloat(left)
+                && ProtosNumericValueSupport.isCurrentFloat(right)) {
+            double x = ProtosNumericValueSupport.currentFloatValue(left);
+            double y = ProtosNumericValueSupport.currentFloatValue(right);
+            return operation == Operation.ADD ? x + y : x * y;
         }
         return real(operation, left, right, prelude);
     }
@@ -206,7 +208,7 @@ public final class ProtosComplexArithmetic {
         // Operand-first rule: each exact operand is rounded once before the binary64 operation.
         double left = toBinary64(x);
         double right = toBinary64(y);
-        return new ProtosFloatValue(switch (operation) {
+        return ProtosNumericValueSupport.floating(switch (operation) {
             case ADD -> left + right;
             case SUBTRACT -> left - right;
             case MULTIPLY -> left * right;
@@ -215,8 +217,9 @@ public final class ProtosComplexArithmetic {
     }
 
     private static Object negate(Object x, ProtosPrelude prelude) {
-        if (x instanceof ProtosFloatValue floating) {
-            return new ProtosFloatValue(-floating.value());
+        if (ProtosNumericValueSupport.isCurrentFloat(x)) {
+            return ProtosNumericValueSupport.floating(
+                    -ProtosNumericValueSupport.currentFloatValue(x));
         }
         return Rational.of(x).negate().toValue(prelude);
     }
@@ -232,8 +235,8 @@ public final class ProtosComplexArithmetic {
 
     /* The standard Float(Integer) / Float(Fraction) conversion; a Float is itself. */
     private static double toBinary64(Object x) {
-        if (x instanceof ProtosFloatValue floating) {
-            return floating.value();
+        if (ProtosNumericValueSupport.isCurrentFloat(x)) {
+            return ProtosNumericValueSupport.currentFloatValue(x);
         }
         if (ProtosNumericValueSupport.isFraction(x)) {
             return ProtosNumericValueSupport.roundFractionToBinary64(x);
@@ -251,8 +254,8 @@ public final class ProtosComplexArithmetic {
             // The whole division enters the Float domain: the divisor is +0.0 and each component
             // is converted before two independent IEEE divisions.
             return complex(
-                    new ProtosFloatValue(toBinary64(a) / 0.0d),
-                    new ProtosFloatValue(toBinary64(b) / 0.0d),
+                    ProtosNumericValueSupport.floating(toBinary64(a) / 0.0d),
+                    ProtosNumericValueSupport.floating(toBinary64(b) / 0.0d),
                     prelude);
         }
         return complex(
@@ -476,7 +479,8 @@ public final class ProtosComplexArithmetic {
     }
 
     private static Object floatComplex(double real, double imaginary, ProtosPrelude prelude) {
-        return complex(new ProtosFloatValue(real), new ProtosFloatValue(imaginary), prelude);
+        return complex(ProtosNumericValueSupport.floating(real),
+                ProtosNumericValueSupport.floating(imaginary), prelude);
     }
 
     /* A temporary exact rational with a positive denominator; normalized only on output. */

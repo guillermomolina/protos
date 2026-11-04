@@ -62,8 +62,8 @@ public final class ProtosSquareRoot {
      */
     @TruffleBoundary
     public static Object sqrt(Object value, ProtosPrelude prelude) {
-        if (value instanceof ProtosFloatValue floating) {
-            return floatRoot(floating.value(), prelude);
+        if (ProtosNumericValueSupport.isCurrentFloat(value)) {
+            return floatRoot(ProtosNumericValueSupport.currentFloatValue(value), prelude);
         }
         if (ProtosNumericValueSupport.isCurrentInteger(value)
                 || ProtosNumericValueSupport.isFraction(value)) {
@@ -72,7 +72,8 @@ public final class ProtosSquareRoot {
         if (ProtosComplexNumericSupport.isComplex(value)) {
             Object real = ProtosComplexNumericSupport.real(value);
             Object imaginary = ProtosComplexNumericSupport.imaginary(value);
-            if (real instanceof ProtosFloatValue || imaginary instanceof ProtosFloatValue) {
+            if (ProtosNumericValueSupport.isCurrentFloat(real)
+                    || ProtosNumericValueSupport.isCurrentFloat(imaginary)) {
                 return floatBearingComplexRoot(real, imaginary, prelude);
             }
             return exactComplexRoot(Rational.ofExact(real), Rational.ofExact(imaginary), prelude);
@@ -127,10 +128,12 @@ public final class ProtosSquareRoot {
     /* N4, rows in priority order. An exact component is always finite and never zero here. */
     private static Object floatBearingComplexRoot(
             Object real, Object imaginary, ProtosPrelude prelude) {
-        double a = real instanceof ProtosFloatValue floating ? floating.value() : 0.0d;
-        double b = imaginary instanceof ProtosFloatValue floating ? floating.value() : 0.0d;
+        double a = ProtosNumericValueSupport.isCurrentFloat(real)
+                ? ProtosNumericValueSupport.currentFloatValue(real) : 0.0d;
+        double b = ProtosNumericValueSupport.isCurrentFloat(imaginary)
+                ? ProtosNumericValueSupport.currentFloatValue(imaginary) : 0.0d;
         boolean imaginaryNegative =
-                imaginary instanceof ProtosFloatValue
+                ProtosNumericValueSupport.isCurrentFloat(imaginary)
                         ? Double.doubleToRawLongBits(b) < 0L
                         : ProtosNumericValueSupport.isCurrentInteger(imaginary)
                                 ? ProtosNumericValueSupport.integerSignum(imaginary) < 0
@@ -288,8 +291,8 @@ public final class ProtosSquareRoot {
 
         /* An exact component or a finite Float as its exact value. */
         static Rational ofFinite(Object component) {
-            return component instanceof ProtosFloatValue floating
-                    ? ofDouble(floating.value())
+            return ProtosNumericValueSupport.isCurrentFloat(component)
+                    ? ofDouble(ProtosNumericValueSupport.currentFloatValue(component))
                     : ofExact(component);
         }
 

@@ -159,15 +159,15 @@ public final class ProtosStandardFloatProtocol {
                     "Core Float already defines a local " + selector + " slot");
         }
         ProtosNativeClosureBody delegate = (activation, supplied) -> {
-            ProtosFloatValue receiver = requireFloatReceiver(activation);
+            double receiver = requireFloatReceiver(activation);
             if (supplied.size() != 1) {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));
             }
             Object argument = supplied.get(0);
             double right;
-            if (argument instanceof ProtosFloatValue floating) {
-                right = floating.value();
+            if (ProtosNumericValueSupport.isCurrentFloat(argument)) {
+                right = ProtosNumericValueSupport.currentFloatValue(argument);
             } else if (ProtosNumericValueSupport.isCurrentInteger(argument)) {
                 right = ProtosBinary64Rounding.roundExactInteger(argument);
             } else if (ProtosNumericValueSupport.isFraction(argument)) {
@@ -186,8 +186,7 @@ public final class ProtosStandardFloatProtocol {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));
             }
-            return new ProtosFloatValue(
-                    operation.applyAsDouble(receiver.value(), right));
+            return operation.applyAsDouble(receiver, right);
         };
         CanonicalFloatBody canonical =
                 new CanonicalFloatBody(floatPrototype, selector, delegate);
@@ -216,11 +215,11 @@ public final class ProtosStandardFloatProtocol {
         }
     }
 
-    private static ProtosFloatValue requireFloatReceiver(
+    private static double requireFloatReceiver(
             com.guillermomolina.protos.runtime.ProtosActivation activation) {
-        if (!(activation.receiver() instanceof ProtosFloatValue floating)) {
+        if (!ProtosNumericValueSupport.isCurrentFloat(activation.receiver())) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }
-        return floating;
+        return ProtosNumericValueSupport.currentFloatValue(activation.receiver());
     }
 }

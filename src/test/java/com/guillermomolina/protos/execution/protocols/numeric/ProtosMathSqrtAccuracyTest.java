@@ -202,11 +202,11 @@ final class ProtosMathSqrtAccuracyTest {
      */
     private static void checkCoordinate(
             BigDecimal magnitude, boolean negative, Object coordinate, String label) {
-        if (!(coordinate instanceof ProtosFloatValue floating)) {
+        if (!ProtosNumericValueSupport.isCurrentFloat(coordinate)) {
             fail("family: " + label + " is not a Float");
             return;
         }
-        double actual = floating.value();
+        double actual = ProtosNumericValueSupport.currentFloatValue(coordinate);
         double oracle = Math.copySign(magnitude.doubleValue(), negative ? -1.0 : 1.0);
         long actualBits = Double.doubleToRawLongBits(actual);
         long oracleBits = Double.doubleToRawLongBits(oracle);

@@ -237,10 +237,12 @@ public final class ProtosStandardIntegerProtocol {
             return null;
         }
 
-        if (supplied0 instanceof ProtosFloatValue floating) {
+        // GraalPy: Double is a Float value, not merely a numeric carrier.
+        if (ProtosNumericValueSupport.isCurrentFloat(supplied0)) {
             return switch (operation) {
                 case ADD, SUBTRACT, MULTIPLY, EXACT_DIVIDE ->
-                        executeMixedFloatOperation(operation, receiver, floating);
+                        executeMixedFloatOperation(operation, receiver,
+                                ProtosNumericValueSupport.currentFloatValue(supplied0));
                 case QUOTIENT, REMAINDER -> null;
             };
         }
@@ -351,12 +353,11 @@ public final class ProtosStandardIntegerProtocol {
         };
     }
 
-    private static ProtosFloatValue executeMixedFloatOperation(
+    private static double executeMixedFloatOperation(
             CanonicalIntegerOperation operation,
             Object receiver,
-            ProtosFloatValue argument) {
+            double right) {
         double left = ProtosBinary64Rounding.roundExactInteger(receiver);
-        double right = argument.value();
         double result = switch (operation) {
             case ADD -> left + right;
             case SUBTRACT -> left - right;
@@ -366,7 +367,7 @@ public final class ProtosStandardIntegerProtocol {
                     throw new IllegalArgumentException(
                             "Integer-only operation cannot use a Float operand");
         };
-        return new ProtosFloatValue(result);
+        return result;
     }
 
     private static void installCanonical(
