@@ -872,22 +872,39 @@ final class ProtosI115BDeferredCallerTest {
                             assertInstanceOf(Double.class, carrier));
                 }
 
-                // An ordinary B5 caller never observes an
-                // internal Long or Double as a guest value.
+                // A direct RootCallTarget invocation bypasses the call-site
+                // dispatcher. Like GraalPy, the root epilogue returns the raw
+                // outcome even when its header does not admit a carrier.
                 Object[] ordinary =
                         ProtosFrameArguments.compactDirectClosureCallOne(
                                 forward, module, null,
                                 inner);
+                Object internal = target.call(ordinary);
+                if (name.equals("forwardInteger")) {
+                    assertEquals(7L, assertInstanceOf(Long.class, internal));
+                } else {
+                    assertEquals(7.5d, assertInstanceOf(Double.class, internal));
+                }
 
-                Object guest = target.call(ordinary);
-                assertFalse(
-                        ProtosNumericValueSupport.isPrimitiveCarrier(guest));
-
+                // The observable boundary is the source-call dispatcher,
+                // not RootCallTarget.call(): the callee epilogue stays raw,
+                // and an ordinary caller receives a proper Protos value.
+                Object[] dispatched =
+                        ProtosFrameArguments.compactDirectClosureCallOne(
+                                forward, module, null,
+                                inner);
+                Object guest = ProtosFunctionCallDispatchers.callUncached(
+                        forward, dispatched, module);
+                // Long is Protos' canonical Integer representation; the
+                // internal-carrier classifier also recognizes Long, so it
+                // cannot be used to reject an observable Integer result.
                 if (name.equals("forwardInteger")) {
                     assertInteger(7, guest);
                 } else {
-                    assertTrue(
-                            ProtosNumericValueSupport.isCurrentFloat(guest));
+                    // A Double, unlike Long, must be materialized to the
+                    // guest Float representation at the call boundary.
+                    assertFalse(ProtosNumericValueSupport.isPrimitiveCarrier(guest));
+                    assertTrue(ProtosNumericValueSupport.isCurrentFloat(guest));
                 }
             }
         });

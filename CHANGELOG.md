@@ -8,6 +8,55 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.46-SNAPSHOT
+
+- **I115 — unified GraalPy-style numeric DSL operators and result projection (historical).**
+  - Register five new Bytecode DSL operations: `NumberDivide` and
+    `RichCompareLt`, `RichCompareLe`, `RichCompareGt`, `RichCompareGe`.
+    The new nodes specialize `long`/`Long` and supported floating numeric
+    operands, with a cold composable generic send for other guest values.
+    Integer `/` returns a signed-64 quotient directly only for exact,
+    nonzero divisions without `Long.MIN_VALUE / -1` overflow. Nonintegral
+    results, zero and overflow defer to guest division semantics rather
+    than silently truncating a result.
+  - Route both ordinary and admitted compact numeric lowering through the
+    same DSL `NumberAdd`, `NumberSubtract`, `NumberMultiply`, `NumberDivide`
+    and `RichCompare` operations where selected. Evaluate receiver and
+    argument once, in source order. Compose any suspended generic result
+    through `emitDispatchedContinuationComposition` before exposing the
+    completed value, including the canonical Boolean branch condition.
+  - Add `ProtosFunctionCallDispatchers.sendOneComposable`: the cold
+    generic operator selects a guest method through `GetMethod` and the
+    shared call dispatcher without prematurely rejecting a suspended
+    continuation. Move completed primitive carrier projection to the
+    call-site contract with `projectForCaller`; direct callee epilogues
+    return raw outcomes, while an ordinary observable host call boundary
+    materializes guest Float and other necessary guest representations.
+    `ProtosClosureInvoker` establishes an entered Truffle Context for
+    synchronous Java-to-guest calls only when one is not already entered.
+  - Reconcile historical PERF040 numeric-operation structure, I115-B
+    deferred-caller carrier expectations, and complex-number semantics
+    after adopting `Long` as the physical SmallInteger representation.
+    Those original tests are preserved byte-for-byte, not executed here.
+  - **Historical semantic limitations:** this commit does not eliminate
+    all legacy compact numeric fallback operations. The compatibility
+    MISS/dispatch route remains for some arithmetic selectors, pending
+    further convergence. Generic division, comparison, custom operator
+    selection, dynamic prototype overrides, mixed types and exact
+    Fraction/BigInteger edge cases require independent conformance.
+    Suspension, cancellation, terminal continuations, Task/C-prime,
+    lexical captures, `ReturnHome`, non-local returns, D179 C0 and the
+    D013 `Object.call` divergence remain separate open concerns. The
+    Context-owned BigInteger Prelude / D197-C delegation and the earlier
+    unconditional `ifTrue` / `whileTrue` internal lowering also remain
+    unverified. Guest integers are signed-64 `long` / `Long` (no guest
+    `int` lane). No tests, Maven builds, Graal BGV traces or benchmarks
+    were executed after the version bump. No performance or full semantic
+    conformance claim is made for this historical replay.
+  - Original implementation: `937addb1f06d51a232b7e4270db7bf94cda2dd11`.
+    Seven modified and five newly added source/test blobs and their Git
+    file modes are preserved; only root pom.xml and CHANGELOG.md differ.
+
 ## 0.4.45-SNAPSHOT
 
 - **I115 — experimental lazy promotion of live-frame lexical authority (historical).**

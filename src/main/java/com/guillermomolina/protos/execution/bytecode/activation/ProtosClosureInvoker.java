@@ -76,8 +76,9 @@ public final class ProtosClosureInvoker {
         requireOutsideTask(caller, "synchronous Closure invocation");
         return synchronous(
                 caller,
-                () -> ProtosFunctionCallDispatchers.callFunctionUncached(
-                        closure, supplied.toArray(), caller));
+                () -> callWithEnteredContext(
+                        () -> ProtosFunctionCallDispatchers.callFunctionUncached(
+                                closure, supplied.toArray(), caller)));
     }
 
     public static Object invokeImmediateMethod(
@@ -94,8 +95,9 @@ public final class ProtosClosureInvoker {
         requireOutsideTask(caller, "synchronous method invocation");
         return synchronous(
                 caller,
-                () -> ProtosFunctionCallDispatchers.callMethodUncached(
-                        closure, receiver, methodHome, supplied.toArray(), caller));
+                () -> callWithEnteredContext(
+                        () -> ProtosFunctionCallDispatchers.callMethodUncached(
+                                closure, receiver, methodHome, supplied.toArray(), caller)));
     }
 
     /*
@@ -129,8 +131,28 @@ public final class ProtosClosureInvoker {
         requireOutsideTask(caller, "synchronous invocation");
         return synchronous(
                 caller,
-                () -> ProtosFunctionCallDispatchers.callFunctionUncached(
-                        callable, supplied.toArray(), caller));
+                () -> callWithEnteredContext(
+                        () -> ProtosFunctionCallDispatchers.callFunctionUncached(
+                                callable, supplied.toArray(), caller)));
+    }
+
+    /**
+     * Shared boundary for synchronous Java-to-guest invocations with a caller.
+     * The dispatcher is always entered under a Truffle Context; ordinary
+     * guest-to-guest calls already have one and incur no additional host.
+     * This is the same bounded host entry used for a published source call.
+     */
+    private static Object callWithEnteredContext(java.util.function.Supplier<Object> action) {
+        if (ProtosLanguageContext.currentIfEnteredForRuntime() != null) {
+            return action.get();
+        }
+        try (ProtosPolyglotExecutionContext temporaryHost =
+                ProtosPolyglotExecutionContext.open(
+                        java.io.InputStream.nullInputStream(),
+                        java.io.OutputStream.nullOutputStream(),
+                        java.io.OutputStream.nullOutputStream())) {
+            return temporaryHost.callEntered(action);
+        }
     }
 
     private static void requireOutsideTask(ProtosActivation caller, String what) {

@@ -550,6 +550,8 @@ final class ProtosFunctionCallDispatchers {
                 Object[] arguments,
                 Object callerReference,
                 ProtosBytecodeRootNode root) {
+            // The caller's result contract precedes the callee's header completion.
+            boolean acceptsCarrier = ProtosFrameArguments.acceptsPrimitiveResult(arguments);
             prepareArguments(callee, closure, arguments, callerReference, root);
             Object outcome;
             try {
@@ -565,10 +567,10 @@ final class ProtosFunctionCallDispatchers {
              * whole-root proof includes defaults and effective-body
              * transformations; an unproven callee keeps the general path.
              */
-            if (callee != null && callee.provablyNonSuspendingBody()) {
-                return outcome;
-            }
-            return completed(frame, inliningTarget, terminal, outcome);
+            Object completedOutcome = callee != null && callee.provablyNonSuspendingBody()
+                    ? outcome
+                    : completed(frame, inliningTarget, terminal, outcome);
+            return projectForCaller(completedOutcome, acceptsCarrier);
         }
     }
 
@@ -601,6 +603,7 @@ final class ProtosFunctionCallDispatchers {
                 Object callerReference,
                 ProtosBytecodeRootNode root,
                 @Cached(inline = false) IndirectCallNode callNode) {
+            boolean acceptsCarrier = ProtosFrameArguments.acceptsPrimitiveResult(arguments);
             prepareArguments(callee, closure, arguments, callerReference, root);
             Object outcome;
             try {
@@ -608,7 +611,8 @@ final class ProtosFunctionCallDispatchers {
             } catch (ProtosBytecodeControlTransferException bridged) {
                 throw bridged.transfer();
             }
-            return completed(frame, inliningTarget, terminal, outcome);
+            return projectForCaller(
+                    completed(frame, inliningTarget, terminal, outcome), acceptsCarrier);
         }
     }
 
@@ -641,9 +645,21 @@ final class ProtosFunctionCallDispatchers {
     }
 
     /*
-     * The root epilogue owns guest-boundary projection. A terminal suspended
-     * outcome is returned in the terminal transport; a non-terminal outcome
-     * is returned unchanged and composed by the caller's continuation loop.
+     * Call-site result projection. As in GraalPy, the callee epilogue always
+     * returns its value unchanged. Only a caller without an admitted primitive
+     * carrier contract materializes an ordinary completed numeric result.
+     * Suspended outcomes retain their continuation transport unchanged.
+     */
+    private static Object projectForCaller(Object outcome, boolean acceptsCarrier) {
+        if (acceptsCarrier || ProtosTailCallContinuation.isSuspended(outcome)) {
+            return outcome;
+        }
+        return ProtosNumericValueSupport.guestValue(outcome);
+    }
+
+    /*
+     * Terminal suspended outcomes are deferred by the dispatcher; the
+     * non-terminal result stays available to the composing caller.
      */
     private static Object completed(
             VirtualFrame frame, Node inliningTarget, boolean terminal, Object outcome) {
@@ -693,8 +709,12 @@ final class ProtosFunctionCallDispatchers {
      * calling activation.
      */
     static Object callUncached(Object callable, Object[] arguments, ProtosActivation caller) {
-        return ProtosFunctionCallDispatchersFactory.CallNodeGen.getUncached()
+        // This host-side entry is an observable guest-value boundary, unlike
+        // an admitted direct/indirect guest call whose caller may accept carriers.
+        // The callee epilogue and internal dispatcher return carriers unchanged.
+        Object outcome = ProtosFunctionCallDispatchersFactory.CallNodeGen.getUncached()
                 .execute(null, false, callable, arguments, caller, null);
+        return projectForCaller(outcome, false);
     }
 
     /**
@@ -702,6 +722,27 @@ final class ProtosFunctionCallDispatchers {
      * and the shared dispatcher. A non-terminal route cannot compose a
      * suspension, which is rejected with an Error.
      */
+    /**
+     * Cold generic path for one-argument operators. The caller must compose
+     * the returned continuation with emitDispatchedContinuationComposition.
+     * In particular, do not reject a suspended outcome as sendOne(false) does.
+     */
+    @TruffleBoundary
+    static Object sendOneComposable(
+            ProtosBytecodeRootNode root,
+            Object caller,
+            Object receiver,
+            String selector,
+            Object argument) {
+        ProtosActivation activation = exactCaller(root, caller);
+        Object method = ProtosExperimentalGetMethodNode.select(
+                ProtosNumericValueSupport.guestValue(receiver), selector, root, activation);
+        return callFunctionUncached(
+                method,
+                new Object[] {ProtosNumericValueSupport.guestValue(argument)},
+                activation);
+    }
+
     @TruffleBoundary
     static Object sendOne(
             ProtosBytecodeRootNode root,
