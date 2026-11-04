@@ -17,8 +17,13 @@ concurrency:
 
 jobs:
   test:
-    timeout-minutes: 60
+    timeout-minutes: 120
     runs-on: ubuntu-latest
+
+    # Four workers for the four-vCPU GitHub runner; local Makefile defaults are eight.
+    env:
+      JAVA_TEST_JOBS: "4"
+      PROTOS_TEST_JOBS: "4"
 
     container:
       image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
@@ -33,9 +38,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify repository toolchain
-        run: python3 tools/verify_toolchain.py --mode check --scope development
-
       - name: Trust checked-out repository
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
@@ -47,10 +49,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - name: Check directory file limit
-        run: make check-directory-file-limit
-
-      - name: Run repository tests
+      - name: Report available CPU resources
         run: |
-          make test
-          echo "CI_REPOSITORY_TESTS: PASS"
+          printf 'CPU_NPROC=%s\n' "$(nproc)"
+          printf 'CPU_ONLINE=%s\n' "$(getconf _NPROCESSORS_ONLN)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            printf 'CPU_CGROUP_MAX='
+            cat /sys/fs/cgroup/cpu.max
+          fi
+          java -XshowSettings:system -version
+          printf 'JAVA_TEST_JOBS=%s\n' "$JAVA_TEST_JOBS"
+          printf 'PROTOS_TEST_JOBS=%s\n' "$PROTOS_TEST_JOBS"
+
+      - name: Check repository
+        run: make check
+
+      - name: Run Java tests
+        run: make test-java
+
+      - name: Run Protos tests
+        run: make test-protos
+
+      - name: Run Native Image tests
+        run: make test-native

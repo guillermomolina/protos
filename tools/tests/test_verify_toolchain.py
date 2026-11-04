@@ -60,8 +60,11 @@ def write(path, text):
     path.write_text(text, encoding="utf-8")
 
 
-def ci_job(name, image, command, cache_action="actions/cache@v6"):
+def ci_job(name, image, command, cache_action="actions/cache@v6", workers="4"):
     return """  %s:
+    env:
+      JAVA_TEST_JOBS: "%s"
+      PROTOS_TEST_JOBS: "%s"
     container:
       image: %s
     steps:
@@ -72,22 +75,29 @@ def ci_job(name, image, command, cache_action="actions/cache@v6"):
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
-      - name: Run repository tests
-        run: |
-          %s
-""" % (name, image, cache_action, command)
+      - name: Check repository
+        run: make check
+      - name: Run Java tests
+        run: make test-java
+      - name: Run Protos tests
+        run: %s
+      - name: Run Native Image tests
+        run: make test-native
+""" % (name, workers, workers, image, cache_action, command)
 
 
 def ci_workflow(
     test_image,
     test_command,
     cache_action="actions/cache@v6",
+    workers="4",
 ):
     return "jobs:\n" + ci_job(
         "test",
         test_image,
         test_command,
         cache_action,
+        workers,
     )
 
 def make_fixture(
@@ -97,6 +107,7 @@ def make_fixture(
     old_c_state=False,
     ci_command_drift=False,
     ci_cache_drift=False,
+    ci_workers_drift=False,
 ):
     selected_image = TOOLCHAIN["graalvm"]["container_image"]
     write(root / "toolchain.json", json.dumps(TOOLCHAIN, indent=2) + "\n")
@@ -172,11 +183,8 @@ def make_fixture(
         )
 
     test_ci_image = STALE_CI_IMAGE if development_drift else CI_IMAGE
-    test_command = (
-        "make test JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4"
-        if ci_command_drift
-        else "make test"
-    )
+    test_command = "make test" if ci_command_drift else "make test-protos"
+    test_workers = "6" if ci_workers_drift else "4"
     test_cache_action = (
         "actions/cache@v5"
         if ci_cache_drift
@@ -204,6 +212,7 @@ actual_version=25.0.5.0.3
             test_ci_image,
             test_command,
             test_cache_action,
+            test_workers,
         ),
     )
 
@@ -384,6 +393,20 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
         require(
             "ci.tests.command" in result.stdout,
             "CI command drift did not identify ci.tests.command",
+            result,
+        )
+
+        root = tmp / "ci-workers-drift"
+        make_fixture(root, ci_workers_drift=True)
+        result = run(verifier, root, "check", "development")
+        require(
+            result.returncode == 1,
+            "CI worker drift did not fail closed",
+            result,
+        )
+        require(
+            "ci.tests.workers" in result.stdout,
+            "CI worker drift did not identify ci.tests.workers",
             result,
         )
 

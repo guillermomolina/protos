@@ -39,6 +39,7 @@ DEVELOPMENT_BINDINGS = {
     "devcontainer.java_path",
     "ci.tests.container",
     "ci.tests.command",
+    "ci.tests.workers",
     "ci.tests.maven_cache",
 }
 
@@ -489,19 +490,39 @@ def workflow_job_container_image(path, job_id):
 def workflow_job_test_command(path, job_id):
     # type: (Path, str) -> str
     text = workflow_job_text(path, job_id)
-    exact_commands = re.findall(
-        r"^[ \\t]*make test[ \\t]*$",
+    expected = [
+        ("Check repository", "make check"),
+        ("Run Java tests", "make test-java"),
+        ("Run Protos tests", "make test-protos"),
+        ("Run Native Image tests", "make test-native"),
+    ]
+    # Each phase must be a direct command in a dedicated, ordered step.
+    steps = re.findall(
+        r"(?m)^      - name: ([^\n]+)\n        run: (make [^\r\n]+)$",
         text,
-        flags=re.MULTILINE,
     )
-    if (
-        len(exact_commands) == 1
-        and "JAVA_TEST_JOBS" not in text
-        and "PROTOS_TEST_JOBS" not in text
-        and "devcontainers/ci@" not in text
-    ):
-        return "make test"
+    commands = re.findall(
+        r"(?m)^[ \t]*(?:run:[ \t]*)?(make[ \t]+[^\r\n#]+)$",
+        text,
+    )
+    if (steps == expected and len(commands) == len(expected)
+            and "devcontainers/ci@" not in text):
+        return " -> ".join(command for _, command in expected)
     return "<drift:%s.command>" % job_id
+
+
+def workflow_job_test_workers(path, job_id):
+    # type: (Path, str) -> str
+    text = workflow_job_text(path, job_id)
+    values = re.findall(
+        r"(?m)^      (JAVA_TEST_JOBS|PROTOS_TEST_JOBS):[ \t]*\"?([0-9]+)\"?[ \t]*$",
+        text,
+    )
+    if (re.search(r"(?m)^    env:[ \t]*$", text)
+            and values == [("JAVA_TEST_JOBS", "4"), ("PROTOS_TEST_JOBS", "4")]):
+        return "JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4"
+    return "<drift:%s.workers>" % job_id
+
 
 def workflow_job_maven_cache_contract(path, job_id):
     # type: (Path, str) -> str
@@ -601,8 +622,13 @@ def audit_bindings(root, contract):
     ))
     rows.append((
         "ci.tests.command",
-        "make test",
+        "make check -> make test-java -> make test-protos -> make test-native",
         workflow_job_test_command(ci_workflow, "test"),
+    ))
+    rows.append((
+        "ci.tests.workers",
+        "JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4",
+        workflow_job_test_workers(ci_workflow, "test"),
     ))
     rows.append((
         "ci.tests.maven_cache",

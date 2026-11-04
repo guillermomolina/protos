@@ -7,7 +7,7 @@ PYTHON ?= python3
 SH ?= sh
 MVN_FLAGS ?=
 DIST_VALIDATE_FLAGS ?= --require-clean-source
-JAVA_TEST_JOBS ?= 6
+JAVA_TEST_JOBS ?= 8
 PROTOS_TEST_JOBS ?= 8
 
 # Explicit Native Image build, tests and clean; separate from regular make test.
