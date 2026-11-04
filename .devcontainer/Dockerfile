@@ -1,5 +1,9 @@
 FROM ghcr.io/graalvm/native-image-community:25i5-25.0.5.0.3-ol10@sha256:2800b5bd11cbb9bf11c92591d05ea37d9a735522bdc0e86827302d998843ad79
 
+# Native Image bases default to the native-image launcher. This shared dev/CI
+# image must accept arbitrary commands supplied by Docker and GitHub Actions.
+ENTRYPOINT []
+
 USER root
 
 RUN microdnf install -y \
