@@ -52,7 +52,6 @@ import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
-import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.bytecode.StackValue;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.source.Source;
@@ -210,41 +209,23 @@ final class CanonicalToBytecodeLowerer {
      */
     private CanonicalBindingAnalysis currentRootAnalysis;
     private CanonicalLexicalScope currentRootTopScope;
+    /*
+     * I115: the Bytecode DSL locals of the genuine CLOSURE root being lowered,
+     * keyed by declared name: the value of each LOCAL binding, or the cell
+     * reference of each CELL binding. Empty for a module ROOT, whose
+     * bindings live in its module context (NAME storage).
+     */
     private java.util.Map<String, BytecodeLocal> currentRootFrameLocals =
             java.util.Map.of();
-    private ProtosFrameLexicalLayout currentRootFrameLayout;
 
-    /**
-     * PERF025 frame-materialization slice: the frame-binding range and layout
-     * of the genuine root currently being lowered when its {@link
-     * CanonicalCompilationFacts.RootFacts} proved it needs no persistent frame
-     * authority, else {@code null}. While non-null, that root's own statically
-     * proven current bindings are established through the frame-native
-     * operations instead of the named-slot authority path. Saved and restored
-     * with the other per-root fast-path context.
+    /*
+     * I115: the cell references reachable from the root being lowered, keyed
+     * by binding identity: the root's own CELL bindings and the free cells
+     * its Closure carries, each copied once at entry into a root-scoped
+     * Bytecode DSL local. Saved and restored with the other per-root state.
      */
-    private BytecodeLocal[] currentRootFrameNativeLocals;
-    private ProtosFrameLexicalLayout currentRootFrameNativeLayout;
-
-    /**
-     * PERF025-H1: the frame-binding layout of the genuine root currently being
-     * lowered when it installs its persistent frame authority at entry, else
-     * {@code null}. While non-null, that root's statically proven parameters
-     * are established at their layout ordinal ({@link
-     * #indexedParameterOrdinal}). Saved and restored with the other per-root
-     * fast-path context.
-     */
-    private ProtosFrameLexicalLayout currentRootIndexedParameterLayout;
-
-    /**
-     * I115 lazy-context experiment: true while lowering an ordinary Closure
-     * root that {@link CanonicalCompilationFacts.RootFacts#admitsLazyFrameAuthority
-     * starts frame-native although it may need durable lexical state}. While
-     * true, {@link #beginLiveFrameAuthorityPromotion} emits the on-demand
-     * promotion before each operation that publishes or observes the root's
-     * execution context. Saved and restored with the other per-root context.
-     */
-    private boolean currentRootLazyFrameAuthority;
+    private java.util.Map<CanonicalBindingIdentity, BytecodeLocal> currentRootCellLocals =
+            java.util.Map.of();
 
     /*
      * PERF034-C: direct BytecodeLocal storage is admitted only for a
@@ -252,15 +233,6 @@ final class CanonicalToBytecodeLowerer {
      * This is per-root lowering state, not runtime/global state.
      */
     private java.util.Set<String> currentRootScalarLocals =
-            java.util.Set.of();
-
-    /*
-     * I115 / PLAT066-C: the bindings of the root being lowered that are
-     * ordinary Bytecode DSL locals while its frame is compact, GraalPy's
-     * non-cell varnames ({@link #ordinaryClosureLocalNamesForRoot}).
-     * Per-root lowering state, saved and restored with the other root state.
-     */
-    private java.util.Set<String> currentRootOrdinaryClosureLocals =
             java.util.Set.of();
 
     /*
@@ -350,6 +322,11 @@ final class CanonicalToBytecodeLowerer {
      */
     // Physical storage is in the parent root; lexical ownership remains the callback.
     // Tooling uses this prefix to project a virtual callback scope on demand.
+    /* I115: root-level Closure creation never materializes its creator (see beginClosureCapture). */
+    private static final boolean COMPACT_ROOT_CLOSURE_CAPTURE = true;
+
+    /* I115: the name prefix of the root local holding one free cell. */
+    static final String FREE_CELL_LOCAL_PREFIX = "i115FreeCell:";
     static final String NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX =
             "i095CallbackScalar:";
     private java.util.Map<String, BytecodeLocal> currentNormalCallbackScalarLocals =
@@ -400,61 +377,6 @@ final class CanonicalToBytecodeLowerer {
     private BytecodeLocal currentActivationLocal;
 
 
-
-    /**
-     * PERF013 Slice B1 backend-private registry of the frame-backed {@link
-     * BytecodeLocal}s created for every genuine lexical scope this lowerer has
-     * lowered so far, keyed by the exact {@link CanonicalLexicalScope} object
-     * the whole-tree binding analysis assigned it. A captured read or write
-     * (Slice B2) whose owner scope is proven ({@link
-     * #capturedOwnerMatchesCurrentRoot}) to be part of the current shared
-     * {@code BytecodeRootNodes} group looks its owner's stable {@link
-     * BytecodeLocal} up here (see {@link #capturedOwnerBytecodeLocal}) instead
-     * of resolving it dynamically from the runtime frame-lexical-binding
-     * authority. Populated by {@link
-     * #emitRootBody} for every genuine execution-context root, before that
-     * root's own body (and therefore any nested Closure root that might
-     * capture one of its bindings) is lowered, so the owner's current
-     * entry is always fresh by the time a nested captured read needs it —
-     * including on a {@code BytecodeRootNodes} reparse replay, since the owner
-     * root in the group is always replayed before its nested children and
-     * simply overwrites its own entry with the current parse's {@link
-     * BytecodeLocal} objects.
-     */
-    private final java.util.IdentityHashMap<CanonicalLexicalScope, java.util.Map<String, BytecodeLocal>>
-            frameLocalsByScope = new java.util.IdentityHashMap<>();
-
-    /*
-     * I101-A: the top scopes of the genuine roots open in the builder at the
-     * current emission point of this parse. A frameLocalsByScope entry is a
-     * usable materialized-access target only while its root is open, i.e.
-     * encloses the root being emitted: the Bytecode DSL rejects a
-     * materialized access to a local whose root scope has ended. Before
-     * I101-A every Closure root was first lowered inside its lexical owner;
-     * a root now omits the roots of inlined, unselected or folded
-     * Boolean callbacks, so an I096 inline copy of that root may lower such a
-     * callback for the first time at its own site, where the owner's root is
-     * already closed.
-     */
-    private final java.util.Set<CanonicalLexicalScope> openRootScopes =
-            java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-
-    /*
-     * PERF025-D179-A: BytecodeRootNodes may invoke its retained parser again
-     * to materialize source/instrumentation metadata. BytecodeLocal objects
-     * are parse-local and are intentionally refreshed in frameLocalsByScope,
-     * but lexical membership speculation must retain one exact identity for
-     * the lifetime of the logical lowered root. CanonicalLexicalScope identity
-     * is stable across those parser replays because the binding analysis is
-     * retained by this lowerer.
-     *
-     * Reusing the whole immutable layout also guarantees that every reparse
-     * carries the same root/name Assumption constants. Otherwise an escaped
-     * authority created before a reparse could invalidate an obsolete token
-     * while newly generated ReadFrameLocal instructions trusted a fresh one.
-     */
-    private final java.util.IdentityHashMap<CanonicalLexicalScope, ProtosFrameLexicalLayout>
-            frameLayoutsByScope = new java.util.IdentityHashMap<>();
 
     /**
      * PLAT067-B: one proof-optimized lowering for every Context. Whether the
@@ -569,8 +491,9 @@ final class CanonicalToBytecodeLowerer {
 
     /**
      * The control-admission state of one emission point; at a root's entry
-     * it is fully determined by the root's analysis and scope (its frame
-     * locals are exactly its declared names, see {@link #emitRootBody}).
+     * it is fully determined by the root's analysis and scope (a CLOSURE
+     * root's locals are exactly its declared names, a module ROOT has none;
+     * see {@link #emitRootBody}).
      */
     private record ControlSiteContext(
             CanonicalBindingAnalysis analysis,
@@ -582,7 +505,10 @@ final class CanonicalToBytecodeLowerer {
 
         static ControlSiteContext rootEntry(
                 CanonicalBindingAnalysis analysis, CanonicalLexicalScope scope) {
-            java.util.Set<String> names = scope.declaredNames();
+            java.util.Set<String> names =
+                    scope.kind() == CanonicalLexicalScope.Kind.CLOSURE
+                            ? scope.declaredNames()
+                            : java.util.Set.of();
             return new ControlSiteContext(
                     analysis, scope, names, !names.isEmpty(), false, false);
         }
@@ -593,7 +519,7 @@ final class CanonicalToBytecodeLowerer {
                 currentRootAnalysis,
                 currentRootTopScope,
                 currentRootFrameLocals.keySet(),
-                currentRootFrameLayout != null,
+                !currentRootFrameLocals.isEmpty(),
                 false,
                 currentActivationLocal != null);
     }
@@ -704,8 +630,7 @@ final class CanonicalToBytecodeLowerer {
      * <p>I101-A: a callee root omits the roots of the Boolean
      * callbacks it inlines, folds or never selects, so its inline copy, which
      * keeps the ordinary send, lowers such a callback here for the first
-     * time; captures of the closed callee scope then take the
-     * runtime-authority path ({@link #capturedOwnerBytecodeLocal}).
+     * time.
      */
     private ProtosClosureExecutionPlanCell bytecodeClosurePlan(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -944,14 +869,9 @@ final class CanonicalToBytecodeLowerer {
         java.util.Map<String, BytecodeLocal> savedFrameLocals =
                 currentRootFrameLocals;
         BytecodeLocal savedActivationLocal = currentActivationLocal;
-        ProtosFrameLexicalLayout savedFrameLayout = currentRootFrameLayout;
-        BytecodeLocal[] savedFrameNativeLocals = currentRootFrameNativeLocals;
-        ProtosFrameLexicalLayout savedFrameNativeLayout = currentRootFrameNativeLayout;
-        ProtosFrameLexicalLayout savedIndexedParameterLayout = currentRootIndexedParameterLayout;
-        boolean savedLazyFrameAuthority = currentRootLazyFrameAuthority;
+        java.util.Map<CanonicalBindingIdentity, BytecodeLocal> savedCellLocals =
+                currentRootCellLocals;
         java.util.Set<String> savedScalarLocals = currentRootScalarLocals;
-        java.util.Set<String> savedOrdinaryClosureLocals =
-                currentRootOrdinaryClosureLocals;
         var savedArithmeticHints = currentRootArithmeticHints;
         CanonicalSend savedTerminalIntegerSend = currentRootTerminalIntegerSend;
         var savedTerminalIntegerAddition = currentRootTerminalIntegerAddition;
@@ -962,7 +882,6 @@ final class CanonicalToBytecodeLowerer {
         boolean savedInlineClosureCallBody = currentInlineClosureCallBody;
         boolean savedContinuationPath = currentRootEmittedContinuationPath;
         boolean savedTerminalInvocation = currentRootEmittedTerminalInvocation;
-        boolean openedRootScope = openRootScopes.add(scopeForThisRoot);
         try {
             currentInlineClosureCallBody = false;
             currentRootEmittedContinuationPath = false;
@@ -987,14 +906,9 @@ final class CanonicalToBytecodeLowerer {
             currentExperimentalRootDefinition = activationDefinition;
             currentRootTopScope = scopeForThisRoot;
             currentRootFrameLocals = java.util.Map.of();
-            currentRootFrameLayout = null;
+            currentRootCellLocals = java.util.Map.of();
             currentActivationLocal = null;
-            currentRootFrameNativeLocals = null;
-            currentRootFrameNativeLayout = null;
-            currentRootIndexedParameterLayout = null;
-            currentRootLazyFrameAuthority = false;
             currentRootScalarLocals = java.util.Set.of();
-            currentRootOrdinaryClosureLocals = java.util.Set.of();
             currentRootArithmeticHints = java.util.Map.of();
             currentRootTerminalIntegerSend = null;
             currentRootTerminalIntegerAddition = null;
@@ -1010,23 +924,15 @@ final class CanonicalToBytecodeLowerer {
             currentExperimentalRootDefinition = savedExperimentalDefinition;
             currentRootTopScope = savedTopScope;
             currentRootFrameLocals = savedFrameLocals;
-            currentRootFrameLayout = savedFrameLayout;
+            currentRootCellLocals = savedCellLocals;
             currentActivationLocal = savedActivationLocal;
-            currentRootFrameNativeLocals = savedFrameNativeLocals;
-            currentRootFrameNativeLayout = savedFrameNativeLayout;
-            currentRootIndexedParameterLayout = savedIndexedParameterLayout;
-            currentRootLazyFrameAuthority = savedLazyFrameAuthority;
             currentRootScalarLocals = savedScalarLocals;
-            currentRootOrdinaryClosureLocals = savedOrdinaryClosureLocals;
             currentRootArithmeticHints = savedArithmeticHints;
             currentRootTerminalIntegerSend = savedTerminalIntegerSend;
             currentRootTerminalIntegerAddition = savedTerminalIntegerAddition;
             currentRootBindingCallCandidates = savedBindingCallCandidates;
             currentRootMaterializedClosures = savedMaterializedClosures;
             currentInlineClosureCallBody = savedInlineClosureCallBody;
-            if (openedRootScope) {
-                openRootScopes.remove(scopeForThisRoot);
-            }
         }
     }
 
@@ -1070,16 +976,7 @@ final class CanonicalToBytecodeLowerer {
             RootEmissionPlan rootPlan) {
         CanonicalCompilationFacts.RootFacts rootFacts = rootPlan.rootFacts();
         CanonicalLexicalScope scopeForThisRoot = rootFacts.scope();
-        boolean requiresPersistentFrameAuthority =
-                rootFacts.requiresPersistentFrameAuthority();
         SourceSpan rootSpan = sequence.span();
-        UnaryNormalEntry unaryEntry =
-                admitUnaryNormalEntry(
-                        sequence,
-                        activationDefinition,
-                        currentRootAnalysis,
-                        scopeForThisRoot,
-                        requiresPersistentFrameAuthority);
 
         // I115-M EXPERIMENTAL: whole-root compact lowering admission.
         ExperimentalCompactRoot experimentalCompact =
@@ -1096,32 +993,20 @@ final class CanonicalToBytecodeLowerer {
             }
         }
 
-        /*
-         * I115 lazy-context experiment: an admitted ordinary Closure root
-         * starts frame-native and promotes its frame locals only before an
-         * operation that publishes or observes its context. Compact roots keep
-         * their own I115 promotion; a failed proof keeps the entry prologue.
-         */
-        boolean lazyFrameAuthority =
-                rootFacts.admitsLazyFrameAuthority()
-                        && experimentalCompact == null
-                        && activationDefinition != null;
-        boolean installsFrameAuthorityAtEntry =
-                requiresPersistentFrameAuthority && !lazyFrameAuthority;
-
         builder.beginSourceSection(
                 rootSpan.startOffset(),
                 rootSpan.length());
         builder.beginRoot();
 
         /*
-         * PLAT036 Candidate D, I068 Slice 4: every statically
-         * declared binding owned by this genuine execution-context
-         * root, including Closure parameters, receives one stable
-         * BytecodeLocal. Allocating that physical local does not
-         * establish semantic presence: it stays cleared until the
-         * binding point (the frame-backed authority, or the PERF025
-         * frame-native establishment operation) writes it.
+         * I115: the storage of every binding of this root is fixed here,
+         * before its body is emitted, from the binding analysis. A module
+         * ROOT allocates no local for its declarations: they are NAME
+         * bindings created in its module context. A CLOSURE root allocates
+         * exactly one root-scoped Bytecode DSL local per declared binding,
+         * including parameters (the value of a LOCAL binding or the cell
+         * reference of a CELL binding), plus one local per free cell its
+         * Closure carries. Allocating a local does not establish the binding.
          *
          * I111-A: these locals are created before the root Block so they
          * stay root-scoped and are live at every location of this root,
@@ -1129,19 +1014,24 @@ final class CanonicalToBytecodeLowerer {
          */
         java.util.Map<String, BytecodeLocal> frameLocals =
                 new java.util.LinkedHashMap<>();
-        for (String name : scopeForThisRoot.declaredNames()) {
-            BytecodeLocal local = builder.createLocal(name, null);
-            frameLocals.put(name, local);
+        java.util.Map<CanonicalBindingIdentity, BytecodeLocal> cellLocals =
+                new java.util.LinkedHashMap<>();
+        if (scopeForThisRoot.kind() == CanonicalLexicalScope.Kind.CLOSURE) {
+            for (String name : scopeForThisRoot.declaredNames()) {
+                BytecodeLocal local = builder.createLocal(name, null);
+                frameLocals.put(name, local);
+                if (scopeForThisRoot.needsCell(name)) {
+                    cellLocals.put(scopeForThisRoot.identity(name), local);
+                }
+            }
+            for (CanonicalBindingIdentity free : scopeForThisRoot.freeCells()) {
+                cellLocals.put(
+                        free,
+                        builder.createLocal(FREE_CELL_LOCAL_PREFIX + free.name(), null));
+            }
         }
-        currentRootFrameLocals = java.util.Map.copyOf(frameLocals);
-        /*
-         * PERF013 Slice B1: register this root's own frame locals under its
-         * own scope identity before its body (and therefore any nested
-         * Closure root that might capture one of these bindings) is lowered,
-         * so a captured read reached while lowering this root's own body
-         * already sees a fresh entry.
-         */
-        frameLocalsByScope.put(scopeForThisRoot, currentRootFrameLocals);
+        currentRootFrameLocals = java.util.Collections.unmodifiableMap(frameLocals);
+        currentRootCellLocals = java.util.Collections.unmodifiableMap(cellLocals);
 
         /*
          * I111-A: this physical root is a genuine semantic source activation.
@@ -1156,66 +1046,16 @@ final class CanonicalToBytecodeLowerer {
          * frame stays compact until an operation that needs the rich
          * activation loads it through emitCurrentActivation.
          */
-
-        BytecodeLocal[] frameLocalRange = null;
-        ProtosFrameLexicalLayout frameLocalLayout = null;
-        boolean prologFrameAuthority =
-                experimentalCompact == null
-                        && requiresPersistentFrameAuthority
-                        && !frameLocals.isEmpty()
-                        && admitsPrologFrameAuthority(sequence, activationDefinition);
-        if (!frameLocals.isEmpty()) {
-            frameLocalRange =
-                    frameLocals.values().toArray(BytecodeLocal[]::new);
-            String[] frameLocalNames =
-                    frameLocals.keySet().toArray(String[]::new);
-            frameLocalLayout =
-                    frameLexicalLayoutForScope(
-                            scopeForThisRoot,
-                            frameLocalNames,
-                            frameLocalRange);
-            currentRootFrameLayout = frameLocalLayout;
-            /*
-             * PERF025 / I115-E1: declaring a binding does not
-             * materialize its frame. Admitted module roots defer durable
-             * authority until their first frame-native binding creation;
-             * other persistent-authority roots retain their existing
-             * installation path.
-             */
-            if (prologFrameAuthority) {
-                /*
-                 * I115-E1: the admitted module uses frame-native
-                 * creation and read operations. The first creation
-                 * performs the existing live-frame transition to durable
-                 * authority. EnterRoot performs no installation.
-                 */
-                currentRootFrameNativeLocals = frameLocalRange;
-                currentRootFrameNativeLayout = frameLocalLayout;
-            } else if (installsFrameAuthorityAtEntry
-                    && experimentalCompact == null) {
-                builder.beginInstallFrameLexicalAuthority(
-                        frameLocalRange,
-                        frameLocalLayout);
-                emitCurrentActivation(builder);
-                builder.endInstallFrameLexicalAuthority();
-                currentRootIndexedParameterLayout = frameLocalLayout;
-            } else {
-                currentRootFrameNativeLocals = frameLocalRange;
-                currentRootFrameNativeLayout = frameLocalLayout;
-                currentRootLazyFrameAuthority = lazyFrameAuthority;
-            }
-        }
+        emitCellPrologue(builder, scopeForThisRoot);
 
         currentRootScalarLocals =
-                currentRootFrameNativeLayout == null
+                currentRootFrameLocals.isEmpty()
                         ? java.util.Set.of()
                         : scalarLocalNamesForRoot(
                                 sequence,
                                 activationDefinition,
                                 currentRootAnalysis,
                                 scopeForThisRoot);
-        currentRootOrdinaryClosureLocals =
-                ordinaryClosureLocalNamesForRoot(sequence, activationDefinition);
 
         /*
          * I101-B: the lowering can encode a closed, proven sequence of
@@ -1257,34 +1097,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         if (activationDefinition != null) {
-            int requiredPrefixCount =
-                    admitRequiredPrefix(
-                            activationDefinition,
-                            scopeForThisRoot,
-                            installsFrameAuthorityAtEntry);
-            if (requiredPrefixCount >= 2) {
-                // I104-B: each emitted ordinal is a constant operand.
-                for (int ordinal = 0;
-                        ordinal < requiredPrefixCount;
-                        ordinal++) {
-                    CanonicalParameter parameter =
-                            activationDefinition.parameters().get(ordinal);
-                    builder.beginBindRequiredFrameParameter(
-                            currentRootFrameNativeLocals,
-                            currentRootFrameNativeLayout,
-                            ordinal);
-                    builder.emitLoadConstant(parameter.name());
-                    builder.endBindRequiredFrameParameter();
-                }
-                emitClosureParameterBindings(
-                        builder,
-                        activationDefinition,
-                        defaultValue,
-                        defaultPreparedCall,
-                        defaultChildResult,
-                        defaultResumeValue,
-                        requiredPrefixCount);
-            } else if (experimentalCompact != null
+            if (experimentalCompact != null
                     && experimentalCompact.experimentalRecursiveInteger()) {
                 /*
                  * I115-H3 EXPERIMENTAL: the admitted recursive Integer root
@@ -1298,50 +1111,18 @@ final class CanonicalToBytecodeLowerer {
                 builder.endStoreLocal();
             } else if (experimentalCompact != null
                     && !experimentalCompact.dispatches()
-                    && activationDefinition.parameters().size() == 1
-                    && currentActivationLocal == null
-                    && currentRootFrameNativeLocals != null
-                    && currentRootFrameNativeLayout != null) {
+                    && activationDefinition.parameters().size() == 1) {
                 /*
                  * I115-H7 EXPERIMENTAL: a non-dispatching compact unary root
                  * copies its argument from the B5 position into the
                  * parameter's frame local (GraalPy CopyArguments); the body
                  * reads it with a plain LoadLocal.
                  */
-                String parameterName = activationDefinition.parameters().get(0).name();
-                int ordinal = frameNativeOrdinal(parameterName);
-                if (ordinal < 0) {
-                    throw new AssertionError(
-                            "I115-H7 admitted parameter without a frame local");
-                }
-                builder.emitCopyArguments(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout,
-                        ordinal,
-                        parameterName);
+                builder.beginStoreLocal(experimentalCompactLocal(
+                        activationDefinition.parameters().get(0).name()));
+                builder.emitCopyArguments();
+                builder.endStoreLocal();
                 experimentalPrimitiveArgumentRoot = true;
-            } else if ((unaryEntry != null
-                            || (experimentalCompact != null
-                                    && activationDefinition.parameters().size() == 1))
-                    && currentActivationLocal == null
-                    && currentRootFrameNativeLocals != null
-                    && currentRootFrameNativeLayout != null) {
-                // I115-R1: the compact unary admission shares the
-                // existing I104 unary binding operation.
-                String parameterName = unaryEntry != null
-                        ? unaryEntry.name()
-                        : activationDefinition.parameters().get(0).name();
-                int ordinal = frameNativeOrdinal(parameterName);
-                if (ordinal < 0) {
-                    throw new AssertionError(
-                            "I115-R1 admitted parameter without a frame local");
-                }
-
-                builder.emitBindUnaryFrameParameter(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout,
-                        ordinal,
-                        parameterName);
             } else {
                 emitClosureParameterBindings(
                         builder,
@@ -1386,8 +1167,7 @@ final class CanonicalToBytecodeLowerer {
                 && sequence.expressions().size() == 1
                 && sequence.expressions().get(0) instanceof CanonicalCreate create
                 && create.target().isEmpty()
-                && create.value() instanceof CanonicalClosure
-                && indexedCreateOrdinal(create) >= 0) {
+                && create.value() instanceof CanonicalClosure) {
             // I115-L: experimental fused module creation and return.
             emitExperimentalModuleClosureReturn(builder, create);
         } else if (directScalarLocalBody) {
@@ -1487,16 +1267,12 @@ final class CanonicalToBytecodeLowerer {
                                             builder, (CanonicalClosure) last)
                                     : null;
                     if (scalarTerminal) {
-                        // Preserve the PERF034-E compact/D179-aware selection.
                         emitScalarLocalRead(
                                 builder, (CanonicalLookup) last, null);
                     } else if (closureTerminal) {
                         builder.beginReturn();
-                        boolean promoted =
-                                beginClosureCapture(builder, (CanonicalClosure) last);
-                        builder.emitLoadConstant((CanonicalClosure) last);
-                        builder.emitLoadConstant(terminalClosurePlan);
-                        endClosureCapture(builder, promoted);
+                        emitClosureCapture(
+                                builder, (CanonicalClosure) last, terminalClosurePlan);
                         builder.endReturn();
                     } else if (last instanceof CanonicalLiteral literal
                             && primitiveNumberLiteralOrNull(literal) != null) {
@@ -1706,6 +1482,7 @@ final class CanonicalToBytecodeLowerer {
                         && (loweringRefinementAccepted
                                 || rootPlan.plannedEffectiveRoot().proven()));
         result.recordDirectScalarLocalCarrierBody(directScalarLocalBody);
+        recordToolingBindings(result, scopeForThisRoot);
         if (ProtosDiagnosticRootIdentity.ENABLED) {
             ProtosDiagnosticRootIdentity.record(
                     result,
@@ -1717,13 +1494,32 @@ final class CanonicalToBytecodeLowerer {
                                     ? ProtosDiagnosticRootIdentity.TOP_LEVEL
                                     : ProtosDiagnosticRootIdentity.CLOSURE));
         }
-        if (currentRootFrameNativeLayout != null) {
-            result.recordFrameNativeBindings(
-                    LocalRangeAccessor.constantOf(
-                            currentRootFrameNativeLocals),
-                    currentRootFrameNativeLayout);
-        }
         return result;
+    }
+
+    /*
+     * I115: tooling-only description of a Closure root's LOCAL/CELL
+     * bindings, so a debugger scope can read the live frame. Guest
+     * execution never consults it.
+     */
+    private void recordToolingBindings(
+            ProtosBytecodeRootNode root,
+            CanonicalLexicalScope scope) {
+        if (currentRootFrameLocals.isEmpty()) {
+            return;
+        }
+        int count = currentRootFrameLocals.size();
+        String[] names = new String[count];
+        int[] offsets = new int[count];
+        boolean[] cells = new boolean[count];
+        int index = 0;
+        for (java.util.Map.Entry<String, BytecodeLocal> entry : currentRootFrameLocals.entrySet()) {
+            names[index] = entry.getKey();
+            offsets[index] = entry.getValue().getLocalOffset();
+            cells[index] = scope.needsCell(entry.getKey());
+            index++;
+        }
+        root.recordToolingBindings(names, offsets, cells);
     }
 
     /**
@@ -1740,7 +1536,8 @@ final class CanonicalToBytecodeLowerer {
                 || !definition.parameters().isEmpty()
                 || currentRootAnalysis == null
                 || scope == null
-                || currentRootFrameNativeLayout == null
+                || currentRootFrameLocals.isEmpty()
+                || !currentRootCellLocals.isEmpty()
                 || sequence.expressions().isEmpty()) {
             return false;
         }
@@ -2318,61 +2115,6 @@ final class CanonicalToBytecodeLowerer {
 
 
     /**
-     * I104-A: immutable pre-lowering proof for the one-required-parameter
-     * identity body. This is deliberately independent of I101 constant folding:
-     * the parameter value is supplied dynamically and is never a known
-     * compile-time constant.
-     *
-     * The identity is established before the body lookup, no expression can
-     * remove or mutate it, and no Context observer or lexical capture exists.
-     * The runtime binding operation still preserves materialized-entry
-     * authority and D179 presence semantics.
-     */
-    private record UnaryNormalEntry(String name) {}
-
-    private static UnaryNormalEntry admitUnaryNormalEntry(
-            CanonicalSequence body,
-            CanonicalClosure definition,
-            CanonicalBindingAnalysis analysis,
-            CanonicalLexicalScope scope,
-            boolean requiresPersistentFrameAuthority) {
-        if (definition == null
-                || analysis == null
-                || scope == null
-                || analysis.scopeOf(definition).orElse(null) != scope
-                || definition.parameters().size() != 1
-                || body.expressions().size() != 1) {
-            return null;
-        }
-
-        CanonicalParameter parameter = definition.parameters().get(0);
-        if (parameter.rest()
-                || parameter.defaultValue().isPresent()
-                || !scope.declaredNames().equals(
-                        java.util.Set.of(parameter.name()))
-                || !(body.expressions().get(0) instanceof CanonicalLookup lookup)
-                || !lookup.name().equals(parameter.name())) {
-            return null;
-        }
-
-        CanonicalBindingIdentity parameterIdentity =
-                analysis.identityOf(parameter).orElse(null);
-        CanonicalBindingResolution resolution =
-                analysis.resolutionOf(lookup).orElse(null);
-
-        if (parameterIdentity == null
-                || parameterIdentity.owner() != scope
-                || !parameterIdentity.name().equals(parameter.name())
-                || !(resolution instanceof CanonicalBindingResolution.Resolved resolved)
-                || resolved.identity() != parameterIdentity
-                || requiresPersistentFrameAuthority) {
-            return null;
-        }
-
-        return new UnaryNormalEntry(parameter.name());
-    }
-
-    /**
      * PERF034-C: only a parameterless source Closure with an effect-free
      * straight-line body may use builtin StoreLocal/LoadLocal for its own
      * bindings. Each creation must establish a fresh, statically owned
@@ -2751,114 +2493,7 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
-    /**
-     * PERF025-D179-A: returns the one frame layout owned by {@code scope} for
-     * the complete lifetime of this lowerer's retained Bytecode parser.
-     *
-     * <p>The first parse creates it. Later BytecodeRootNodes reparses validate
-     * that declaration order is unchanged and reuse the exact object, so its
-     * root/name one-way membership assumptions cannot be silently renewed.
-     * BUG018-C: a root lowering ({@code rootFrameLocals} non-null) also binds
-     * the public offsets of those root-scoped locals, the same array that forms
-     * the root's LocalRangeAccessor, and validates them on replay. An inline
-     * callback lowering of the same scope passes null: its block-scoped locals
-     * have context-dependent offsets and never back a frame authority.
-     */
-    private ProtosFrameLexicalLayout frameLexicalLayoutForScope(
-            CanonicalLexicalScope scope,
-            String[] frameLocalNames,
-            BytecodeLocal[] rootFrameLocals) {
-        ProtosFrameLexicalLayout layout = frameLayoutsByScope.get(scope);
-        if (layout != null) {
-            layout.requireSameNames(frameLocalNames);
-        } else {
-            layout = ProtosFrameLexicalLayout.of(frameLocalNames);
-            frameLayoutsByScope.put(scope, layout);
-        }
-        if (rootFrameLocals != null) {
-            layout.bindRootLocalOffsets(
-                    ProtosFrameLexicalLayout.localOffsetsOf(rootFrameLocals));
-        }
-        return layout;
-    }
-
-    /**
-     * The frame-layout ordinal through which a statically proven current
-     * binding named {@code name} is established frame-natively, or {@code -1}
-     * when no eligible frame-native layout is active. Besides a genuine root,
-     * PERF025 admits the explicit semantic Activation of a PLAT044 B-prime
-     * inline callback. Inline Object bodies remain excluded.
-     */
-    private int frameNativeOrdinal(String name) {
-        if (currentRootFrameNativeLayout == null
-                || currentActivationLocal != null
-                || !currentRootFrameLocals.containsKey(name)) {
-            return -1;
-        }
-        Integer ordinal = currentRootFrameNativeLayout.offsetOf(name);
-        return ordinal == null ? -1 : ordinal;
-    }
-
-    /**
-     * PERF025-H1: the layout ordinal at which {@code parameter} of a root that
-     * installs its persistent frame authority is established, or {@code -1}
-     * when its static identity is not proven: the root has no such authority,
-     * the current activation is not the root's own, or the binding analysis
-     * gives the parameter no identity owned by this root's own scope and
-     * backed by one of its frame locals. The ordinal is taken from the very
-     * layout instance the indexed operation carries, so it denotes exactly
-     * that parameter's binding; presence is still checked at run time.
-     */
-    private int indexedParameterOrdinal(CanonicalParameter parameter) {
-        String name = parameter.name();
-        if (currentRootIndexedParameterLayout == null
-                || currentActivationLocal != null
-                || currentRootAnalysis == null
-                || !currentRootFrameLocals.containsKey(name)
-                || currentRootAnalysis.identityOf(parameter)
-                        .map(identity -> identity.owner() != currentRootTopScope
-                                || !identity.name().equals(name))
-                        .orElse(true)) {
-            return -1;
-        }
-        Integer ordinal = currentRootIndexedParameterLayout.offsetOf(name);
-        return ordinal == null ? -1 : ordinal;
-    }
-
-    /**
-     * PERF030: the layout ordinal at which the target-less {@code create} of a
-     * root that installs its persistent frame authority is established, or
-     * {@code -1} when its static identity is not proven, under exactly the
-     * conditions of {@link #indexedParameterOrdinal}. Presence is still
-     * checked at run time.
-     */
-    private int indexedCreateOrdinal(CanonicalCreate create) {
-        String name = create.name();
-        if (currentRootIndexedParameterLayout == null
-                || currentActivationLocal != null
-                || currentRootAnalysis == null
-                || !currentRootFrameLocals.containsKey(name)
-                || currentRootAnalysis.identityOf(create)
-                        .map(identity -> identity.owner() != currentRootTopScope
-                                || !identity.name().equals(name))
-                        .orElse(true)) {
-            return -1;
-        }
-        Integer ordinal = currentRootIndexedParameterLayout.offsetOf(name);
-        return ordinal == null ? -1 : ordinal;
-    }
-
-    /**
-     * Emits each expression of {@code sequence} as one source statement
-     * (StatementTag + ExpressionTag over its exact span), storing each value
-     * into {@code result}. Shared by root bodies and inline object-construction
-     * bodies so both keep identical statement/expression tag membership.
-     */
-    /**
-     * PERF034-C: the compact lane reads the builtin local directly.
-     * An observed activation instead uses the existing D179-aware
-     * ReadRootFrameLocal path at the same source position.
-     */
+    /** PERF034-C / I115: an admitted scalar read stored into {@code result}. */
     private void emitScalarLocalReadToResult(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup,
@@ -2877,40 +2512,27 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * PERF034-C/E: one admitted scalar read with its own compact check.
-     * Stores the value into {@code result}, or, when {@code result} is
-     * {@code null}, returns it directly from the root (PERF034-E final
-     * read). Each read re-checks {@code IsCompactLocalFrame}, so a D179
-     * materialization observed earlier is never bypassed.
+     * I115 / GraalPy load.local: a statically resolved current-root scalar
+     * reads its Bytecode DSL local directly, with no compact/published switch.
+     *
+     * <p>KNOWN I115 SEMANTIC DIVERGENCE (D179 C0, PERF034-C/E): after context
+     * publication, dynamic removal/recreation or lexical redirection of this
+     * binding is not observed by this read. I115 explicitly assumes those
+     * operations do not occur; restore their semantics in a separate change,
+     * not by adding a fallback to the ordinary local path.
      */
     private void emitScalarLocalRead(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup,
             BytecodeLocal result) {
-        BytecodeLocal local =
-                currentRootFrameLocals.get(lookup.name());
-
+        BytecodeLocal local = currentRootFrameLocals.get(lookup.name());
         if (local == null) {
             throw new AssertionError(
                     "admitted scalar local is missing: " + lookup.name());
         }
-
-        builder.beginIfThenElse();
-        builder.emitIsCompactLocalFrame();
-
-        builder.beginBlock();
         beginScalarReadSink(builder, result);
         builder.emitLoadLocal(local);
         endScalarReadSink(builder, result);
-        builder.endBlock();
-
-        builder.beginBlock();
-        beginScalarReadSink(builder, result);
-        emitLookup(builder, lookup);
-        endScalarReadSink(builder, result);
-        builder.endBlock();
-
-        builder.endIfThenElse();
     }
 
     private static void beginScalarReadSink(
@@ -3250,132 +2872,20 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * Emits the PERF028-A destination selection of a statically resolved
-     * captured assignment, before its RHS is evaluated.
+     * I115: binds every parameter of {@code definition}, left to right,
+     * directly into its classified storage. Each supplied value is read from
+     * the B5 call ABI, whose supplied positions keep their offsets after
+     * publication, so no activation is materialized to bind a parameter.
+     *
+     * <p>D203: parameter {@code k} reads supplied position {@code k}; an
+     * unsupplied position evaluates its default, if any, after every earlier
+     * parameter is bound, or binds canonical null. Excess supplied arguments
+     * are ignored without rest, so no upper-bound check is emitted. A rest
+     * parameter binds the frozen Array of the remaining supplied values.
+     *
+     * <p>KNOWN I115 SEMANTIC DIVERGENCE: parameter establishment does not
+     * check for a duplicate creation through an observed context.
      */
-    private void emitResolveCapturedWriteTarget(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalAssign assign,
-            CanonicalBindingResolution.CapturedResolved captured,
-            BytecodeLocal capturedOwnerLocal) {
-        if (capturedOwnerLocal != null) {
-            {
-                builder.beginAccessCapturedMaterializedLocal(true,
-                        capturedOwnerLocal);
-                emitCurrentActivation(builder);
-            }
-            builder.emitLoadConstant(assign.name());
-            builder.emitLoadConstant(captured.lexicalDepth());
-            {
-                builder.endAccessCapturedMaterializedLocal();
-            }
-            return;
-        }
-        int frameOrdinal = frameBackedOrdinal(captured.identity());
-        {
-            builder.beginAccessCapturedFrameLocal(true, frameOrdinal);
-            emitCurrentActivation(builder);
-        }
-        builder.emitLoadConstant(assign.name());
-        builder.emitLoadConstant(captured.lexicalDepth());
-        {
-            builder.endAccessCapturedFrameLocal();
-        }
-    }
-
-    /**
-     * Emits the write of a statically resolved captured assignment to the
-     * destination retained in {@code mutationTarget}.
-     */
-    private void emitAssignCaptured(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalAssign assign,
-            CanonicalBindingResolution.CapturedResolved captured,
-            BytecodeLocal capturedOwnerLocal,
-            BytecodeLocal mutationTarget,
-            BytecodeLocal value) {
-        if (capturedOwnerLocal != null) {
-            {
-                builder.beginAssignCapturedMaterializedLocal(capturedOwnerLocal);
-                emitCurrentActivation(builder);
-            }
-        } else {
-            builder.beginAssignCapturedFrameLocal(
-                    frameBackedOrdinal(captured.identity()));
-            emitCurrentActivation(builder);
-        }
-        builder.emitLoadLocal(mutationTarget);
-        builder.emitLoadConstant(assign.name());
-        builder.emitLoadLocal(value);
-        if (capturedOwnerLocal != null) {
-            {
-                builder.endAssignCapturedMaterializedLocal();
-            }
-        } else {
-            builder.endAssignCapturedFrameLocal();
-        }
-    }
-
-
-    /**
-     * I104-B: only a root whose leading parameters without a default
-     * occupy the initial physical frame-local ordinals can copy that prefix
-     * (an unsupplied position binds canonical null, D203). The binding
-     * analysis, rather than name equality alone, proves ownership. No
-     * default, rest or persistent-authority semantics enter this lane; the
-     * first default or rest parameter ends the prefix.
-     */
-    private int admitRequiredPrefix(
-            CanonicalClosure definition,
-            CanonicalLexicalScope scope,
-            boolean requiresPersistentFrameAuthority) {
-        if (currentActivationLocal != null
-                || currentRootAnalysis == null
-                || scope == null
-                || currentRootFrameNativeLocals == null
-                || currentRootFrameNativeLayout == null
-                || definition.parameters().size() < 2
-                || currentRootAnalysis.scopeOf(definition).orElse(null) != scope
-                || requiresPersistentFrameAuthority) {
-            return 0;
-        }
-
-        int count = 0;
-        for (CanonicalParameter parameter : definition.parameters()) {
-            if (parameter.rest() || parameter.defaultValue().isPresent()) {
-                break;
-            }
-            count++;
-        }
-
-        if (count < 2
-                || currentRootFrameNativeLocals.length < count
-                || currentRootFrameNativeLayout.length() < count) {
-            return 0;
-        }
-
-        var declarations = scope.declaredNames().iterator();
-        for (int index = 0; index < count; index++) {
-            CanonicalParameter parameter = definition.parameters().get(index);
-            var identity = currentRootAnalysis.identityOf(parameter).orElse(null);
-
-            if (parameter.rest()
-                    || parameter.defaultValue().isPresent()
-                    || identity == null
-                    || identity.owner() != scope
-                    || !identity.name().equals(parameter.name())
-                    || !declarations.hasNext()
-                    || !declarations.next().equals(parameter.name())
-                    || frameNativeOrdinal(parameter.name()) != index
-                    || !currentRootFrameNativeLayout.nameAt(index)
-                            .equals(parameter.name())) {
-                return 0;
-            }
-        }
-
-        return count;
-    }
-
     private void emitClosureParameterBindings(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition,
@@ -3383,74 +2893,12 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal defaultPreparedCall,
             BytecodeLocal defaultChildResult,
             BytecodeLocal defaultResumeValue) {
-        emitClosureParameterBindings(
-                builder,
-                definition,
-                defaultValue,
-                defaultPreparedCall,
-                defaultChildResult,
-                defaultResumeValue,
-                0);
-    }
-
-    /**
-     * I104-C: the leading parameters without a default may already have been
-     * established by BindRequiredFrameParameter. Resume the normative
-     * left-to-right binding algorithm at the first remaining parameter.
-     *
-     * <p>D203: parameter {@code k} reads supplied position {@code k}; an
-     * unsupplied position evaluates its default, if any, or binds canonical
-     * null. Each slot is created only when its turn comes. Excess supplied
-     * arguments are ignored without rest, so no upper-bound check is emitted.
-     */
-    private void emitClosureParameterBindings(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalClosure definition,
-            BytecodeLocal defaultValue,
-            BytecodeLocal defaultPreparedCall,
-            BytecodeLocal defaultChildResult,
-            BytecodeLocal defaultResumeValue,
-            int alreadyBoundRequired) {
-        if (alreadyBoundRequired < 0
-                || alreadyBoundRequired > definition.parameters().size()) {
-            throw new AssertionError(
-                    "invalid required parameter prefix");
-        }
-
-        int positionalIndex = alreadyBoundRequired;
-
-        for (int parameterIndex = alreadyBoundRequired;
-                parameterIndex < definition.parameters().size();
-                parameterIndex++) {
-            CanonicalParameter parameter =
-                    definition.parameters().get(parameterIndex);
+        int positionalIndex = 0;
+        for (CanonicalParameter parameter : definition.parameters()) {
             if (parameter.rest()) {
-                int restOrdinal = frameNativeOrdinal(parameter.name());
-                int indexedRestOrdinal = indexedParameterOrdinal(parameter);
-                if (restOrdinal >= 0) {
-                    builder.beginBindInlineClosureFrameParameter(
-                            currentRootFrameNativeLocals,
-                            currentRootFrameNativeLayout,
-                            restOrdinal);
-                    emitCurrentActivation(builder);
-                    builder.emitLoadConstant(parameter.name());
-                    builder.emitLoadConstant(positionalIndex);
-                    builder.endBindInlineClosureFrameParameter();
-                } else if (indexedRestOrdinal >= 0) {
-                    builder.beginBindClosureIndexedParameter(true,
-                            currentRootIndexedParameterLayout,
-                            indexedRestOrdinal);
-                    emitCurrentActivation(builder);
-                    builder.emitLoadConstant(parameter.name());
-                    builder.emitLoadConstant(positionalIndex);
-                    builder.endBindClosureIndexedParameter();
-                } else {
-                    builder.beginBindClosureParameter(true);
-                    emitCurrentActivation(builder);
-                    builder.emitLoadConstant(parameter.name());
-                    builder.emitLoadConstant(positionalIndex);
-                    builder.endBindClosureParameter();
-                }
+                beginStoreParameter(builder, parameter);
+                builder.emitLoadRestArguments(positionalIndex);
+                endStoreParameter(builder, parameter);
                 continue;
             }
 
@@ -3459,17 +2907,7 @@ final class CanonicalToBytecodeLowerer {
                         parameter.defaultValue().orElseThrow();
 
                 builder.beginIfThenElse();
-
-                if (currentActivationLocal == null) {
-                    builder.beginHasFrameClosureArgument();
-                    builder.emitLoadConstant(positionalIndex);
-                    builder.endHasFrameClosureArgument();
-                } else {
-                    builder.beginHasClosureArgument();
-                    emitCurrentActivation(builder);
-                    builder.emitLoadConstant(positionalIndex);
-                    builder.endHasClosureArgument();
-                }
+                builder.emitHasSuppliedArgument(positionalIndex);
 
                 builder.beginBlock();
                 emitBindSuppliedClosureParameter(
@@ -3508,14 +2946,13 @@ final class CanonicalToBytecodeLowerer {
                             defaultResumeValue);
                     emitBindDefaultLocal(builder, parameter, defaultValue);
                 } else {
-                    ParameterBindingForm form =
-                            beginBindClosureParameter(builder, parameter);
+                    beginStoreParameter(builder, parameter);
                     builder.beginSourceSection(
                             defaultExpression.span().startOffset(),
                             defaultExpression.span().length());
                     emitExpression(builder, defaultExpression);
                     builder.endSourceSection();
-                    endBindClosureParameter(builder, form);
+                    endStoreParameter(builder, parameter);
                 }
                 builder.endBlock();
 
@@ -3538,194 +2975,284 @@ final class CanonicalToBytecodeLowerer {
         if (defaultValue == null) {
             throw new AssertionError("composed default value local was not allocated");
         }
-        ParameterBindingForm form = beginBindClosureParameter(builder, parameter);
+        beginStoreParameter(builder, parameter);
         builder.emitLoadLocal(defaultValue);
-        endBindClosureParameter(builder, form);
+        endStoreParameter(builder, parameter);
     }
 
-    /** The binding operation opened for one Closure parameter. */
-    private enum ParameterBindingForm {
-        FRAME_NATIVE,
-        INLINE_FRAME_NATIVE,
-        INDEXED,
-        NAMED
+    /** I115: a supplied (or D203 canonical null) parameter value, stored directly. */
+    private void emitBindSuppliedClosureParameter(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalParameter parameter,
+            int positionalIndex) {
+        beginStoreParameter(builder, parameter);
+        builder.emitLoadSuppliedArgument(positionalIndex);
+        endStoreParameter(builder, parameter);
     }
 
     /**
-     * Opens the binding operation of one Closure parameter: the PERF025
-     * frame-native {@code BindClosureFrameParameter} for a parameter of a
-     * root lowered without a persistent frame authority; the PERF025-H1
-     * {@code BindClosureIndexedParameter} for a statically proven parameter
-     * of a root that installs one; otherwise the unchanged named {@code
-     * BindClosureParameter}. Each then takes the value operand. The
-     * frame-native form (only ever opened for the root's own activation)
-     * takes no activation operand, so binding a parameter of a compact
-     * source call does not materialize one (PERF025-H1).
+     * I115: opens the store of {@code parameter} into its classified storage
+     * ({@code StoreCell} into its cell, otherwise {@code StoreLocal}),
+     * leaving only the value operand to emit.
      */
-    private ParameterBindingForm beginBindClosureParameter(
+    private void beginStoreParameter(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalParameter parameter) {
-        String name = parameter.name();
-        int ordinal = frameNativeOrdinal(name);
-        if (ordinal >= 0) {
-            builder.beginBindClosureFrameParameter(
-                    currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout,
-                    ordinal);
-            builder.emitLoadConstant(name);
-            return ParameterBindingForm.FRAME_NATIVE;
+        BytecodeLocal cell = parameterCellLocalOrNull(parameter);
+        if (cell != null) {
+            builder.beginStoreCell();
+            builder.emitLoadLocal(cell);
+            return;
         }
-        ordinal = indexedParameterOrdinal(parameter);
-        if (ordinal >= 0) {
-            builder.beginBindClosureIndexedParameter(false,
-                    currentRootIndexedParameterLayout,
-                    ordinal);
-            emitCurrentActivation(builder);
-            builder.emitLoadConstant(name);
-            return ParameterBindingForm.INDEXED;
-        }
-        builder.beginBindClosureParameter(false);
-        emitCurrentActivation(builder);
-        builder.emitLoadConstant(name);
-        return ParameterBindingForm.NAMED;
+        builder.beginStoreLocal(parameterLocal(parameter));
     }
 
-    private static void endBindClosureParameter(
+    private void endStoreParameter(
             ProtosBytecodeRootNodeGen.Builder builder,
-            ParameterBindingForm form) {
-        switch (form) {
-            case FRAME_NATIVE -> builder.endBindClosureFrameParameter();
-            case INLINE_FRAME_NATIVE ->
-                    builder.endBindInlineClosureFrameParameter();
-            case INDEXED -> builder.endBindClosureIndexedParameter();
-            case NAMED -> builder.endBindClosureParameter();
+            CanonicalParameter parameter) {
+        if (parameterCellLocalOrNull(parameter) != null) {
+            builder.endStoreCell();
+        } else {
+            builder.endStoreLocal();
+        }
+    }
+
+    private BytecodeLocal parameterCellLocalOrNull(CanonicalParameter parameter) {
+        return currentRootTopScope.needsCell(parameterIdentity(parameter).name())
+                ? currentRootCellLocals.get(parameterIdentity(parameter))
+                : null;
+    }
+
+    private BytecodeLocal parameterLocal(CanonicalParameter parameter) {
+        BytecodeLocal local = currentRootFrameLocals.get(parameterIdentity(parameter).name());
+        if (local == null) {
+            throw new AssertionError("I115 parameter has no local: " + parameter.name());
+        }
+        return local;
+    }
+
+    private CanonicalBindingIdentity parameterIdentity(CanonicalParameter parameter) {
+        CanonicalBindingIdentity identity =
+                currentRootAnalysis == null
+                        ? null
+                        : currentRootAnalysis.identityOf(parameter).orElse(null);
+        if (identity == null
+                || identity.owner() != currentRootTopScope
+                || currentActivationLocal != null) {
+            throw new AssertionError("I115 unclassified parameter: " + parameter.name());
+        }
+        return identity;
+    }
+
+    /*
+     * I115: the root-scoped locals of the cells visible to a CLOSURE root are
+     * established once at entry: a fresh cell for each own CELL binding
+     * (uninitialized until its binding point) and the Closure's captured
+     * cell for each free cell, at its constant captured-cell index.
+     */
+    private void emitCellPrologue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalLexicalScope scope) {
+        if (scope.kind() != CanonicalLexicalScope.Kind.CLOSURE) {
+            return;
+        }
+        for (String name : scope.cellNamesInDeclarationOrder()) {
+            builder.beginStoreLocal(currentRootCellLocals.get(scope.identity(name)));
+            builder.emitCreateCell();
+            builder.endStoreLocal();
+        }
+        java.util.List<CanonicalBindingIdentity> free = scope.freeCells();
+        for (int index = 0; index < free.size(); index++) {
+            builder.beginStoreLocal(currentRootCellLocals.get(free.get(index)));
+            builder.emitLoadCapturedCell(index);
+            builder.endStoreLocal();
         }
     }
 
     /**
-     * Emits the target-less creation of {@code name} from {@code value}: the
-     * PERF025 frame-native {@code CreateCurrentFrameLocal} for a binding of a
-     * root lowered without a persistent frame authority, otherwise the
-     * PERF030 {@code CreateCurrentIndexedLocalSlot} for a statically proven
-     * binding of a root that installs one, otherwise the unchanged {@code
-     * CreateCurrentLocalSlot}.
+     * I115: the static binding identity of a classified site, or {@code null}
+     * for a {@code Dynamic} (or unanalyzed) site, which is a name operation.
+     */
+    private static CanonicalBindingIdentity staticIdentityOrNull(
+            CanonicalBindingResolution resolution) {
+        if (resolution instanceof CanonicalBindingResolution.Resolved resolved) {
+            return resolved.identity();
+        }
+        if (resolution instanceof CanonicalBindingResolution.CapturedResolved captured) {
+            return captured.identity();
+        }
+        if (resolution instanceof CanonicalBindingResolution.Candidate candidate) {
+            return candidate.identity();
+        }
+        return null;
+    }
+
+    /**
+     * I115: the cell local of {@code identity} when its storage is CELL, else
+     * {@code null}. A cell binding is always reachable from the root being
+     * lowered (its owner, or a root carrying it as a free cell); anything
+     * else is a lowering defect, never a reason to choose another storage.
+     */
+    private BytecodeLocal cellLocalOrNull(CanonicalBindingIdentity identity) {
+        if (CanonicalBindingAnalysis.storageOf(identity) != CanonicalLexicalScope.Storage.CELL) {
+            return null;
+        }
+        BytecodeLocal local = currentRootCellLocals.get(identity);
+        if (local == null) {
+            throw new AssertionError("I115 cell is not reachable from this root: " + identity.name());
+        }
+        return local;
+    }
+
+    /**
+     * I115: the Bytecode DSL local of a LOCAL binding owned by the CLOSURE
+     * root being lowered, else {@code null} (NAME or MEMBER storage). A LOCAL
+     * binding is only ever accessed from its own root; another owner is a
+     * lowering defect.
+     */
+    private BytecodeLocal ownLocalOrNull(CanonicalBindingIdentity identity) {
+        if (CanonicalBindingAnalysis.storageOf(identity) != CanonicalLexicalScope.Storage.LOCAL) {
+            return null;
+        }
+        BytecodeLocal local =
+                identity.owner() == currentRootTopScope
+                        ? currentRootFrameLocals.get(identity.name())
+                        : null;
+        if (local == null) {
+            throw new AssertionError("I115 local is not owned by this root: " + identity.name());
+        }
+        return local;
+    }
+
+    /**
+     * I115: whether a classified site accesses a LOCAL binding before its
+     * binding point. A LOCAL binding is never referenced across a Closure
+     * boundary, so a {@code Candidate} (not yet established at this program
+     * point) of LOCAL storage executes in place, strictly before the binding
+     * point: the access is statically the uninitialized-binding Error. It is
+     * never redirected to another binding or storage.
+     */
+    private static boolean isUninitializedLocalAccess(
+            CanonicalBindingResolution resolution,
+            CanonicalBindingIdentity identity) {
+        return resolution instanceof CanonicalBindingResolution.Candidate
+                && CanonicalBindingAnalysis.storageOf(identity)
+                        == CanonicalLexicalScope.Storage.LOCAL;
+    }
+
+    /**
+     * Emits the target-less creation of {@code create} from {@code value}
+     * into its classified storage, yielding the created value: {@code
+     * StoreCell} for a CELL binding, {@code StoreLocal} for a LOCAL binding,
+     * and the {@code CreateCurrentLocalSlot} name operation for a module
+     * (NAME) or object-body (MEMBER) binding. The value is evaluated once,
+     * by the caller, before this operation.
+     *
+     * <p>KNOWN I115 SEMANTIC DIVERGENCE (D179 C0, PERF025, PERF030): a
+     * LOCAL/CELL creation does not detect a duplicate creation and is not
+     * observed through the activation's context.
      */
     private void emitCreateCurrentBinding(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create,
             BytecodeLocal value) {
-        String name = create.name();
-        int ordinal = frameNativeOrdinal(name);
-        if (ordinal >= 0) {
-            emitCreateCurrentFrameLocal(builder, ordinal, name);
-            builder.emitLoadLocal(value);
-            builder.endCreateCurrentFrameLocal();
-            return;
-        }
-        ordinal = indexedCreateOrdinal(create);
-        if (ordinal >= 0) {
-            builder.beginCreateCurrentIndexedLocalSlot(
-                    currentRootIndexedParameterLayout,
-                    ordinal);
-            emitCurrentActivation(builder);
-            builder.emitLoadConstant(name);
-            builder.emitLoadLocal(value);
-            builder.endCreateCurrentIndexedLocalSlot();
+        CanonicalBindingIdentity identity =
+                currentRootAnalysis == null
+                        ? null
+                        : currentRootAnalysis.identityOf(create).orElse(null);
+        if (identity != null && emitStoreBinding(builder, identity, value)) {
             return;
         }
         builder.beginCreateCurrentLocalSlot();
         emitCurrentActivation(builder);
-        builder.emitLoadConstant(name);
+        builder.emitLoadConstant(create.name());
         builder.emitLoadLocal(value);
         builder.endCreateCurrentLocalSlot();
     }
 
     /**
-     * PERF034-C/E: one admitted scalar creation with its own compact check.
-     * The compact lane stores {@code emitValue}'s operand into the builtin
-     * local and yields that binding's value; an observed activation instead
-     * takes the authoritative {@code CreateCurrentFrameLocal} with the same
-     * operand. {@code emitValue} must be effect-free (a constant or an
-     * already-evaluated local).
+     * I115: when {@code identity} has LOCAL or CELL storage, emits its store
+     * of the guest value in {@code value} followed by that value, and returns
+     * {@code true}; returns {@code false} for NAME and MEMBER storage.
+     */
+    private boolean emitStoreBinding(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalBindingIdentity identity,
+            BytecodeLocal value) {
+        BytecodeLocal cell = cellLocalOrNull(identity);
+        if (cell != null) {
+            builder.beginBlock();
+            builder.beginStoreCell();
+            builder.emitLoadLocal(cell);
+            builder.emitLoadLocal(value);
+            builder.endStoreCell();
+            builder.emitLoadLocal(value);
+            builder.endBlock();
+            return true;
+        }
+        BytecodeLocal local = ownLocalOrNull(identity);
+        if (local != null) {
+            builder.beginBlock();
+            builder.beginStoreLocal(local);
+            builder.emitLoadLocal(value);
+            builder.endStoreLocal();
+            builder.emitLoadLocal(local);
+            builder.endBlock();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * PERF034-C/E: one admitted scalar creation. A scalar root contains no
+     * Closure literal, so its bindings are always LOCAL: {@code emitValue}'s
+     * operand is stored into the builtin local, which then yields the
+     * binding's value. {@code emitValue} must be effect-free (a constant or
+     * an already-evaluated local).
      */
     private void emitScalarCreate(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create,
             BytecodeLocal result,
             Runnable emitValue) {
-        String name = create.name();
-        BytecodeLocal local = currentRootFrameLocals.get(name);
-        int ordinal = frameNativeOrdinal(name);
-        if (local == null || ordinal < 0) {
+        BytecodeLocal local = currentRootFrameLocals.get(create.name());
+        if (local == null) {
             throw new AssertionError(
-                    "admitted scalar creation is missing: " + name);
+                    "I115 missing scalar creation local: " + create.name());
         }
 
-        builder.beginIfThenElse();
-        builder.emitIsCompactLocalFrame();
-
-        builder.beginBlock();
         builder.beginStoreLocal(local);
         emitValue.run();
         builder.endStoreLocal();
+
         builder.beginStoreLocal(result);
         builder.emitLoadLocal(local);
         builder.endStoreLocal();
-        builder.endBlock();
-
-        builder.beginBlock();
-        builder.beginStoreLocal(result);
-        emitCreateCurrentFrameLocal(builder, ordinal, name);
-        emitValue.run();
-        builder.endCreateCurrentFrameLocal();
-        builder.endStoreLocal();
-        builder.endBlock();
-
-        builder.endIfThenElse();
     }
 
     /**
-     * Opens a frame-native {@code CreateCurrentFrameLocal} of {@code name} at
-     * {@code ordinal}, a constant operand, leaving only its value operand to
-     * emit.
-     */
-    private void emitCreateCurrentFrameLocal(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            int ordinal,
-            String name) {
-        if (currentActivationLocal != null) {
-            throw new AssertionError(
-                    "frame-native creation inside an unsupported inline "
-                            + "activation region: "
-                            + name);
-        }
-        builder.beginCreateCurrentFrameLocal(
-                currentRootFrameNativeLocals,
-                currentRootFrameNativeLayout,
-                ordinal,
-                name);
-    }
-
-    /**
-     * Emits a multiple creation from {@code source}. When every name is a
-     * frame-native binding (PERF025), PERF030-I lowers it to one observation
-     * of the complete fixed prefix, retained in a local, followed by one
-     * scalar frame-native creation per name in source order, each owning its
-     * ordinal as a constant operand; a failing creation leaves the earlier
-     * ones in place, and the whole expression yields {@code source}.
-     * Otherwise the unchanged {@code MultipleCreateLocalSlots}.
+     * Emits a multiple creation from {@code source}. When the names are
+     * LOCAL/CELL bindings of the root being lowered, the complete fixed
+     * prefix is observed once, before any binding is created, and each value
+     * is then stored, in source order, into its own classified storage; a
+     * failing observation creates nothing. The whole expression yields
+     * {@code source}. NAME and MEMBER bindings keep the {@code
+     * CreateCurrentLocalSlot} name operation over all names.
      */
     private void emitMultipleCreateCurrentBindings(
             ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<String> names,
+            java.util.List<CanonicalBindingIdentity> identities,
             BytecodeLocal source) {
-        int[] ordinals = new int[names.size()];
-        boolean frameNative = true;
-        for (int index = 0; index < ordinals.length && frameNative; index++) {
-            ordinals[index] = frameNativeOrdinal(names.get(index));
-            frameNative = ordinals[index] >= 0;
-        }
-        if (!frameNative) {
+        boolean direct =
+                identities != null
+                        && !identities.isEmpty()
+                        && identities.stream().allMatch(identity ->
+                                CanonicalBindingAnalysis.storageOf(identity)
+                                                == CanonicalLexicalScope.Storage.LOCAL
+                                        || CanonicalBindingAnalysis.storageOf(identity)
+                                                == CanonicalLexicalScope.Storage.CELL);
+        if (!direct) {
             builder.beginCreateCurrentLocalSlot();
             emitCurrentActivation(builder);
             builder.emitLoadConstant(multipleCreateNamesConstant(names));
@@ -3736,27 +3263,23 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
         BytecodeLocal observed = builder.createLocal("multipleCreateObserved", null);
         builder.beginStoreLocal(observed);
-        {
-            builder.beginObserveMultipleCreatePrefix();
-            emitCurrentActivation(builder);
-        }
-        builder.emitLoadConstant(ordinals.length);
+        builder.beginObserveMultipleCreatePrefix();
+        emitCurrentActivation(builder);
+        builder.emitLoadConstant(identities.size());
         builder.emitLoadLocal(source);
-        {
-            builder.endObserveMultipleCreatePrefix();
-        }
+        builder.endObserveMultipleCreatePrefix();
         builder.endStoreLocal();
-        for (int index = 0; index < ordinals.length; index++) {
-            {
-                emitCreateCurrentFrameLocal(builder, ordinals[index], names.get(index));
-            }
+        BytecodeLocal element = builder.createLocal("multipleCreateElement", null);
+        for (int index = 0; index < identities.size(); index++) {
+            builder.beginStoreLocal(element);
             builder.beginObservedMultipleCreateValue();
             builder.emitLoadLocal(observed);
             builder.emitLoadConstant(index);
             builder.endObservedMultipleCreateValue();
-            {
-                builder.endCreateCurrentFrameLocal();
-            }
+            builder.endStoreLocal();
+            builder.beginDiscardValue();
+            emitStoreBinding(builder, identities.get(index), element);
+            builder.endDiscardValue();
         }
         builder.emitLoadLocal(source);
         builder.endBlock();
@@ -3866,10 +3389,7 @@ final class CanonicalToBytecodeLowerer {
                 ProtosClosureExecutionPlanCell plan =
                         bytecodeClosurePlan(builder, closure);
                 builder.beginDiscardValue();
-                boolean promoted = beginClosureCapture(builder, closure);
-                builder.emitLoadConstant(closure);
-                builder.emitLoadConstant(plan);
-                endClosureCapture(builder, promoted);
+                emitClosureCapture(builder, closure, plan);
                 builder.endDiscardValue();
                 endStatement(builder);
             } else {
@@ -3910,58 +3430,42 @@ final class CanonicalToBytecodeLowerer {
             throw new AssertionError(
                     "admitted scalar local is missing: " + lookup.name());
         }
-
-        builder.beginIfThenElse();
-        builder.emitIsCompactLocalFrame();
-
-        builder.beginBlock();
         builder.beginDiscardValue();
         builder.emitLoadLocal(local);
         builder.endDiscardValue();
-        builder.endBlock();
-
-        builder.beginBlock();
-        builder.beginDiscardValue();
-        emitLookup(builder, lookup);
-        builder.endDiscardValue();
-        builder.endBlock();
-
-        builder.endIfThenElse();
     }
 
     /**
-     * I112: a statement {@code name: <Closure literal>} creating a
-     * frame-native binding of the genuine root being lowered. Its value
-     * cannot suspend or observe the binding, so the creation consumes the
-     * Closure value directly, without a value local or staged sequence
-     * result. The rule is structural; every other creation keeps {@link
-     * #emitBodyCreate}.
+     * I112: a statement {@code name: <Closure literal>} creating a LOCAL or
+     * CELL binding of the genuine root being lowered. Its value cannot
+     * suspend or observe the binding, so the creation consumes the Closure
+     * value directly, without a value local or staged sequence result. The
+     * rule is structural; every other creation keeps {@link #emitBodyCreate}.
      */
     private boolean admitsCompactClosureCreate(CanonicalExpression expression) {
-        return expression instanceof CanonicalCreate create
-                && create.target().isEmpty()
-                && create.value() instanceof CanonicalClosure
-                && currentActivationLocal == null
-                && currentNormalCallbackScalarLocals.isEmpty()
-                && !currentRootScalarLocals.contains(create.name())
-                && frameNativeOrdinal(create.name()) >= 0;
+        if (!(expression instanceof CanonicalCreate create)
+                || create.target().isPresent()
+                || !(create.value() instanceof CanonicalClosure)
+                || currentActivationLocal != null
+                || !currentNormalCallbackScalarLocals.isEmpty()
+                || currentRootScalarLocals.contains(create.name())
+                || currentRootAnalysis == null) {
+            return false;
+        }
+        CanonicalBindingIdentity identity =
+                currentRootAnalysis.identityOf(create).orElse(null);
+        return identity != null
+                && identity.owner() == currentRootTopScope
+                && currentRootFrameLocals.containsKey(create.name());
     }
 
     /**
      * I112: one admitted {@link #admitsCompactClosureCreate} statement. The
      * nested root and its plan cell are registered before any consuming
      * operation opens; the Closure is created at the statement and its
-     * identity is the value the binding receives. The statement value is
-     * discarded by the enclosing sequence.
-     *
-     * <p>I115 / PLAT066-C: an ordinary Closure local ({@link
-     * #ordinaryClosureLocalNamesForRoot}) is stored with a plain {@code
-     * StoreLocal}, GraalPy's {@code store.local} of a non-cell local: no
-     * creation operation, no authority, no frame materialization and no
-     * compact/published selection. KNOWN DIVERGENCE: when the activation is
-     * published (uncached D013 fallback, debugger), the frame-backed
-     * authority and tooling observe this local without the presence
-     * bookkeeping of {@code CreateCurrentFrameLocal}.
+     * identity is stored directly in the binding's classified storage
+     * (GraalPy {@code store.local} or {@code store.cell}). The statement
+     * value is discarded by the enclosing sequence.
      */
     private void emitCompactClosureCreate(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -3969,17 +3473,18 @@ final class CanonicalToBytecodeLowerer {
         CanonicalClosure closure = (CanonicalClosure) create.value();
         beginStatement(builder, create);
         ProtosClosureExecutionPlanCell plan = bytecodeClosurePlan(builder, closure);
-        boolean ordinaryLocal =
-                currentRootOrdinaryClosureLocals.contains(create.name());
-        if (ordinaryLocal) {
-            builder.beginStoreLocal(currentRootFrameLocals.get(create.name()));
+        CanonicalBindingIdentity identity =
+                currentRootAnalysis.identityOf(create).orElseThrow();
+        BytecodeLocal cell = cellLocalOrNull(identity);
+        if (cell != null) {
+            builder.beginStoreCell();
+            builder.emitLoadLocal(cell);
+            emitClosureCapture(builder, closure, plan);
+            builder.endStoreCell();
+        } else {
+            builder.beginStoreLocal(ownLocalOrNull(identity));
             emitClosureCapture(builder, closure, plan);
             builder.endStoreLocal();
-        } else {
-            emitCreateCurrentFrameLocal(
-                    builder, frameNativeOrdinal(create.name()), create.name());
-            emitClosureCapture(builder, closure, plan);
-            builder.endCreateCurrentFrameLocal();
         }
         endStatement(builder);
     }
@@ -3988,135 +3493,10 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure closure,
             ProtosClosureExecutionPlanCell plan) {
-        boolean promoted = beginClosureCapture(builder, closure);
+        java.util.List<CanonicalBindingIdentity> cells = beginClosureCapture(builder, closure);
         builder.emitLoadConstant(closure);
         builder.emitLoadConstant(plan);
-        endClosureCapture(builder, promoted);
-    }
-
-    /**
-     * I115 / PLAT066-C: the bindings of a frame-native Closure root that are
-     * ordinary locals, GraalPy's {@code varnames} that are not {@code
-     * cellvars}. Conservative structural admission: every statement but the
-     * last is a target-less creation {@code name: <Closure literal>} of a
-     * distinct name that is neither a parameter nor a scalar local, and the
-     * last is such a creation or a call whose receiver and arguments are
-     * direct values. A frame-native root contains no capturing Closure,
-     * {@code context}, {@code compose} or Object construction ({@code
-     * CanonicalCompilationFacts#requiresPersistentFrameAuthority}), so
-     * nothing but these statements writes or removes the binding, and a
-     * {@code Resolved} read follows its single creation. Every other root,
-     * name or shape keeps the frame-native operations, which observe
-     * presence, duplicate creation, removal and dynamic resolution.
-     */
-    private java.util.Set<String> ordinaryClosureLocalNamesForRoot(
-            CanonicalSequence sequence,
-            CanonicalClosure activationDefinition) {
-        java.util.List<CanonicalExpression> expressions = sequence.expressions();
-        if (activationDefinition == null
-                || currentActivationLocal != null
-                || currentRootFrameNativeLayout == null
-                || expressions.isEmpty()) {
-            return java.util.Set.of();
-        }
-        java.util.Set<String> parameters = new java.util.HashSet<>();
-        for (CanonicalParameter parameter : activationDefinition.parameters()) {
-            parameters.add(parameter.name());
-        }
-        java.util.Set<String> names = new java.util.LinkedHashSet<>();
-        for (int index = 0; index < expressions.size(); index++) {
-            CanonicalExpression expression = expressions.get(index);
-            if (expression instanceof CanonicalCreate create
-                    && create.target().isEmpty()
-                    && create.value() instanceof CanonicalClosure) {
-                String name = create.name();
-                if (parameters.contains(name)
-                        || currentRootScalarLocals.contains(name)
-                        || frameNativeOrdinal(name) < 0
-                        || !names.add(name)) {
-                    return java.util.Set.of();
-                }
-                continue;
-            }
-            boolean directTerminalCall =
-                    index == expressions.size() - 1
-                            && expression instanceof CanonicalCall call
-                            && !hasSpreadArgument(call.arguments())
-                            && isTerminalCallOperand(call.receiver())
-                            && call.arguments().stream()
-                                    .allMatch(CanonicalToBytecodeLowerer::isTerminalCallOperand);
-            if (!directTerminalCall) {
-                return java.util.Set.of();
-            }
-        }
-        return java.util.Set.copyOf(names);
-    }
-
-    /**
-     * I112 / PLAT062-T: a module root whose persistent frame authority
-     * EnterRoot installs at entry. Conservative structural admission: every
-     * statement but the last creates a binding of this root from a Closure
-     * literal ({@code name: <Closure>}) or is a call whose receiver and
-     * arguments are direct values, and the last is such a call (the admitted
-     * terminal shape). Every other module keeps the
-     * InstallFrameLexicalAuthority body operation.
-     */
-    private boolean admitsPrologFrameAuthority(
-            CanonicalSequence sequence,
-            CanonicalClosure activationDefinition) {
-        java.util.List<CanonicalExpression> expressions = sequence.expressions();
-
-        /*
-         * I115-R4 EXPERIMENTAL:
-         *
-         * A module consisting entirely of named Closure creations
-         * may use the existing frame-native binding operations.
-         *
-         * Its first creation performs the durable-authority
-         * transition. The module does not require an eager
-         * InstallFrameLexicalAuthority instruction.
-         *
-         * This also admits a terminal Closure creation, whose
-         * resulting value is returned by the ordinary terminal
-         * expression lowering.
-         */
-        if (activationDefinition == null
-                && currentActivationLocal == null
-                && expressions.size() >= 2
-                && expressions.stream().allMatch(expression ->
-                        expression instanceof CanonicalCreate create
-                                && create.target().isEmpty()
-                                && create.value() instanceof CanonicalClosure)) {
-            return true;
-        }
-
-        if (activationDefinition != null
-                || currentActivationLocal != null
-                || expressions.size() < 2
-                || !(expressions.get(expressions.size() - 1) instanceof CanonicalCall call)
-                || hasVectorArgument(call.arguments())
-                || !isTerminalCallOperand(call.receiver())
-                || call.arguments().stream()
-                        .anyMatch(argument -> !isTerminalCallOperand(argument))) {
-            return false;
-        }
-        for (int index = 0; index < expressions.size() - 1; index++) {
-            CanonicalExpression expression = expressions.get(index);
-            boolean closureCreate =
-                    expression instanceof CanonicalCreate create
-                            && create.target().isEmpty()
-                            && create.value() instanceof CanonicalClosure;
-            boolean directCall =
-                    expression instanceof CanonicalCall prefixCall
-                            && !hasVectorArgument(prefixCall.arguments())
-                            && isTerminalCallOperand(prefixCall.receiver())
-                            && prefixCall.arguments().stream()
-                                    .allMatch(CanonicalToBytecodeLowerer::isTerminalCallOperand);
-            if (!closureCreate && !directCall) {
-                return false;
-            }
-        }
-        return true;
+        endClosureCapture(builder, cells);
     }
 
     /**
@@ -4278,7 +3658,8 @@ final class CanonicalToBytecodeLowerer {
         if (!(last instanceof CanonicalCall call)
                 || call.arguments().size() != 1
                 || !(call.receiver() instanceof CanonicalLookup lookup)
-                || !currentRootOrdinaryClosureLocals.contains(lookup.name())) {
+                || !currentRootFrameLocals.containsKey(lookup.name())
+                || currentRootTopScope.needsCell(lookup.name())) {
             return false;
         }
         CanonicalClosure created = null;
@@ -5237,10 +4618,12 @@ final class CanonicalToBytecodeLowerer {
      * dynamic-control authority and homes; see {@link
      * com.guillermomolina.protos.runtime.ProtosActivation#forObjectConstruction}).
      *
-     * <p>The body is not a lexical execution context: it receives no frame
-     * lexical authority and never takes the direct-local fast path, and its
-     * binding-analysis selection is exactly that of a non-genuine root, so
-     * Closures nested inside it resolve and capture exactly as before.
+     * <p>The body is not a lexical capture scope. I115: it keeps the
+     * enclosing root's analysis and storage, so a reference to an enclosing
+     * Closure binding uses that binding's own LOCAL or CELL storage, Closures
+     * nested in the body capture cells from the enclosing root, and the
+     * body's own bindings are MEMBER bindings created through its
+     * construction activation.
      */
     private void emitInlineObjectConstruction(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -5273,23 +4656,13 @@ final class CanonicalToBytecodeLowerer {
         bindingAnalysisFor(object.body(), null);
 
         if (!object.body().expressions().isEmpty()) {
-            CanonicalBindingAnalysis savedAnalysis = currentRootAnalysis;
-            CanonicalLexicalScope savedTopScope = currentRootTopScope;
-            java.util.Map<String, BytecodeLocal> savedFrameLocals =
-                    currentRootFrameLocals;
             BytecodeLocal savedActivationLocal = currentActivationLocal;
             try {
-                currentRootAnalysis = null;
-                currentRootTopScope = null;
-                currentRootFrameLocals = java.util.Map.of();
                 currentActivationLocal = constructionActivation;
                 BytecodeLocal bodyResult =
                         builder.createLocal("objectBodyResult", null);
                 emitStatementsToLocal(builder, object.body(), bodyResult);
             } finally {
-                currentRootAnalysis = savedAnalysis;
-                currentRootTopScope = savedTopScope;
-                currentRootFrameLocals = savedFrameLocals;
                 currentActivationLocal = savedActivationLocal;
             }
         }
@@ -5343,12 +4716,20 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal value = builder.createLocal("createValue", null);
         if (create.target().isEmpty()) {
             /*
-             * I091: a frame-native creation may retain a primitive carrier
-             * from the guarded numeric chain; its own value is a guest value.
+             * I091: a LOCAL creation may retain a primitive carrier from the
+             * guarded numeric chain; its own value is a guest value. A cell
+             * holds guest values only.
              */
+            CanonicalBindingIdentity identity =
+                    currentRootAnalysis == null
+                            ? null
+                            : currentRootAnalysis.identityOf(create).orElse(null);
             boolean carrierCreate =
                     !scalarCreate
-                            && frameNativeOrdinal(create.name()) >= 0
+                            && currentActivationLocal == null
+                            && identity != null
+                            && CanonicalBindingAnalysis.storageOf(identity)
+                                    == CanonicalLexicalScope.Storage.LOCAL
                             && primitiveNumericCarrierValue(create.value());
             if (carrierCreate) {
                 emitPrimitiveNumericOperandToLocal(
@@ -5434,7 +4815,13 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue);
 
         builder.beginStoreLocal(result);
-        emitMultipleCreateCurrentBindings(builder, create.names(), source);
+        emitMultipleCreateCurrentBindings(
+                builder,
+                create.names(),
+                currentRootAnalysis == null
+                        ? null
+                        : currentRootAnalysis.identitiesOf(create).orElse(null),
+                source);
         builder.endStoreLocal();
     }
 
@@ -5490,12 +4877,12 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * PERF036-A: one admitted scalar assignment with its own compact check.
-     * The compact lane's context is unobserved (hence OPEN), its destination
-     * is PRESENT, and its RHS is effect-free, so writing the builtin local
-     * directly is indistinguishable from selecting the destination first;
-     * the assignment yields the exact RHS value. An observed activation
-     * instead takes the unchanged authoritative assignment.
+     * I115 / GraalPy store.local: write an admitted scalar binding directly.
+     *
+     * <p>KNOWN I115 SEMANTIC DIVERGENCE (D179 C0, PERF036-A): a published
+     * context may remove/recreate the binding or change the lexical write
+     * destination. This direct write intentionally ignores those operations
+     * under the I115 assumption; there is no authoritative fallback.
      */
     private void emitScalarAssign(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -5509,11 +4896,6 @@ final class CanonicalToBytecodeLowerer {
             throw new AssertionError(
                     "admitted scalar assignment is missing: " + assign.name());
         }
-
-        builder.beginIfThenElse();
-        builder.emitIsCompactLocalFrame();
-
-        builder.beginBlock();
         builder.beginStoreLocal(local);
         if (assign.value() instanceof CanonicalLiteral literal) {
             emitLiteral(builder, literal);
@@ -5529,16 +4911,23 @@ final class CanonicalToBytecodeLowerer {
         builder.beginStoreLocal(result);
         builder.emitLoadLocal(local);
         builder.endStoreLocal();
-        builder.endBlock();
-
-        builder.beginBlock();
-        emitResolvedBodyAssign(
-                builder, assign, result, preparedCall, childResult, resumeValue);
-        builder.endBlock();
-
-        builder.endIfThenElse();
     }
 
+    /**
+     * Emits a bare or member assignment outside the admitted scalar lane.
+     *
+     * <p>I115: a bare assignment classified to a LOCAL or CELL binding
+     * evaluates its RHS once and stores it directly into that storage
+     * (GraalPy {@code store.local}/{@code store.cell}). A NAME binding
+     * (module, object body or dynamic name) keeps one name operation that
+     * selects its destination before the RHS, then assigns it. A member
+     * assignment keeps the existing member operations.
+     *
+     * <p>KNOWN I115 SEMANTIC DIVERGENCE (D179 C0, PERF028-A): a LOCAL/CELL
+     * destination is fixed at lowering time. It is not re-selected before the
+     * RHS, so a removal, recreation or nearer late creation of the name
+     * through an observed context is not observed by the assignment.
+     */
     private void emitResolvedBodyAssign(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
@@ -5547,48 +4936,28 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         BytecodeLocal value = builder.createLocal("assignValue", null);
-        BytecodeLocal mutationTarget = builder.createLocal("assignMutationTarget", null);
-        java.util.Optional<CanonicalBindingResolution.CapturedResolved> capturedResolution =
-                capturedResolvedAssignment(assign);
-        BytecodeLocal capturedOwnerLocal =
-                capturedResolution.map(this::capturedOwnerBytecodeLocal).orElse(null);
-        BytecodeLocal currentFrameLocal = currentResolvedAssignmentBytecodeLocal(assign);
-
-        /*
-         * I095-B5: the captured destination was proven to
-         * belong to this exact physical root.
-         *
-         * The existing root operations preserve destination
-         * selection before evaluation of the RHS.
-         */
-        if (currentNormalDirectParentCaptureReads
-                && capturedResolution.isPresent()) {
-            CanonicalBindingResolution.CapturedResolved captured =
-                    capturedResolution.orElseThrow();
-
-            if (captured.lexicalDepth() != 1
-                    || captured.identity().owner() != currentRootTopScope
-                    || !captured.identity().name().equals(assign.name())
-                    || currentRootFrameLayout == null) {
-                throw new AssertionError(
-                        "I095-B5 unproven captured assignment: "
-                                + assign.name());
+        CanonicalBindingIdentity identity = assignmentIdentityOrNull(assign);
+        if (emitUninitializedLocalAssign(builder, assign, identity, result)) {
+            return;
+        }
+        if (identity != null) {
+            BytecodeLocal cell = cellLocalOrNull(identity);
+            BytecodeLocal local = cell == null ? ownLocalOrNull(identity) : null;
+            if (cell != null || local != null) {
+                boolean carrier = local != null && primitiveNumericCarrierValue(assign.value());
+                if (carrier) {
+                    emitPrimitiveNumericOperandToLocal(
+                            builder, assign.value(), value, preparedCall, childResult, resumeValue);
+                } else {
+                    emitBodyExpressionToLocal(
+                            builder, assign.value(), value, preparedCall, childResult, resumeValue);
+                }
+                emitStoreAssignedValue(builder, cell, local, value, result, carrier);
+                return;
             }
-
-            currentFrameLocal =
-                    currentRootFrameLocals.get(assign.name());
-
-            if (currentFrameLocal == null
-                    || currentRootFrameLayout.offsetOf(assign.name())
-                            == null) {
-                throw new AssertionError(
-                        "I095-B5 missing parent frame local: "
-                                + assign.name());
-            }
-
-            capturedResolution = java.util.Optional.empty();
         }
 
+        BytecodeLocal mutationTarget = builder.createLocal("assignMutationTarget", null);
         if (assign.target().isPresent()) {
             BytecodeLocal rawTarget = builder.createLocal("assignRawTarget", null);
             emitBodyExpressionToLocal(
@@ -5598,109 +4967,118 @@ final class CanonicalToBytecodeLowerer {
                     preparedCall,
                     childResult,
                     resumeValue);
-            builder.beginStoreLocal(mutationTarget);
-            builder.beginRequireObjectMutationTarget();
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(rawTarget);
-            builder.endRequireObjectMutationTarget();
-            builder.endStoreLocal();
-        } else if (capturedResolution.isPresent()) {
-            CanonicalBindingResolution.CapturedResolved captured =
-                    capturedResolution.orElseThrow();
-            /*
-             * Critical ordering invariant: resolve and retain the exact
-             * destination before the RHS is evaluated.
-             */
-            builder.beginStoreLocal(mutationTarget);
-            emitResolveCapturedWriteTarget(builder, assign, captured, capturedOwnerLocal);
-            builder.endStoreLocal();
-        } else if (currentFrameLocal != null) {
-            /* PERF028-A: select (and retain) the destination before RHS evaluation. */
-            builder.beginStoreLocal(mutationTarget);
-            if (currentActivationLocal == null) {
-                builder.beginResolveRootFrameLocalWriteTarget(currentFrameLocal);
-                builder.emitLoadConstant(assign.name());
-                builder.endResolveRootFrameLocalWriteTarget();
-            } else {
-                builder.beginResolveCurrentFrameLocalWriteTarget(currentFrameLocal);
-                emitCurrentActivation(builder);
-                builder.emitLoadConstant(assign.name());
-                builder.endResolveCurrentFrameLocalWriteTarget();
-            }
-            builder.endStoreLocal();
+            emitRequireMutationTarget(builder, mutationTarget, rawTarget);
         } else {
-            /* AST authority resolves the writable lexical destination before RHS evaluation. */
-            builder.beginStoreLocal(mutationTarget);
-            builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.RESOLVE_WRITE);
-            emitCurrentActivation(builder);
-            builder.emitLoadConstant(assign.name());
-            builder.endAccessNamedLexical();
-            builder.endStoreLocal();
+            emitResolveNamedWriteTarget(builder, assign, mutationTarget);
         }
+        emitBodyExpressionToLocal(
+                builder, assign.value(), value, preparedCall, childResult, resumeValue);
+        emitNamedOrMemberAssign(builder, assign, mutationTarget, value, result);
+    }
 
-        /*
-         * I091: a bare lexical assignment may retain a primitive carrier from
-         * the guarded numeric chain. Only direct frame storage keeps it (every
-         * other destination materializes); the assignment's own value is
-         * always a guest value.
-         */
-        boolean carrierAssignment =
-                assign.target().isEmpty()
-                        && (capturedResolution.isPresent() || currentFrameLocal != null)
-                        && primitiveNumericCarrierValue(assign.value());
-        if (carrierAssignment) {
-            emitPrimitiveNumericOperandToLocal(
-                    builder, assign.value(), value, preparedCall, childResult, resumeValue);
-        } else {
-            emitBodyExpressionToLocal(
-                    builder, assign.value(), value, preparedCall, childResult, resumeValue);
+    /*
+     * I115: an assignment to a LOCAL binding before its binding point selects
+     * no destination; it signals the uninitialized-binding Error before the
+     * RHS evaluates, exactly where a destination would have been selected.
+     */
+    private boolean emitUninitializedLocalAssign(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalAssign assign,
+            CanonicalBindingIdentity identity,
+            BytecodeLocal result) {
+        if (identity == null
+                || !isUninitializedLocalAccess(
+                        currentRootAnalysis.resolutionOf(assign).orElse(null), identity)) {
+            return false;
         }
         builder.beginStoreLocal(result);
-        if (carrierAssignment) {
+        builder.emitUninitializedBinding();
+        builder.endStoreLocal();
+        return true;
+    }
+
+    /** I115: the static identity of a bare assignment, or {@code null}. */
+    private CanonicalBindingIdentity assignmentIdentityOrNull(CanonicalAssign assign) {
+        if (assign.target().isPresent() || currentRootAnalysis == null) {
+            return null;
+        }
+        return staticIdentityOrNull(currentRootAnalysis.resolutionOf(assign).orElse(null));
+    }
+
+    /*
+     * I115: stores the already evaluated RHS into exactly one LOCAL or CELL
+     * storage; the assignment yields the guest value of the RHS.
+     */
+    private static void emitStoreAssignedValue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal cell,
+            BytecodeLocal local,
+            BytecodeLocal value,
+            BytecodeLocal result,
+            boolean carrier) {
+        if (cell != null) {
+            builder.beginStoreCell();
+            builder.emitLoadLocal(cell);
+            builder.emitLoadLocal(value);
+            builder.endStoreCell();
+        } else {
+            builder.beginStoreLocal(local);
+            builder.emitLoadLocal(value);
+            builder.endStoreLocal();
+        }
+        builder.beginStoreLocal(result);
+        if (carrier) {
             builder.beginMaterializePrimitiveNumericCarrier();
         }
-        if (capturedResolution.isPresent()) {
-            emitAssignCaptured(
-                    builder,
-                    assign,
-                    capturedResolution.orElseThrow(),
-                    capturedOwnerLocal,
-                    mutationTarget,
-                    value);
-        } else if (assign.target().isPresent()) {
-            builder.beginMutateLocalSlot(ProtosSlotMutation.ASSIGN);
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(mutationTarget);
-            builder.emitLoadConstant(assign.name());
-            builder.emitLoadLocal(value);
-            builder.endMutateLocalSlot();
-        } else if (currentFrameLocal != null) {
-            if (currentActivationLocal == null) {
-                builder.beginAssignRootFrameLocal(currentFrameLocal);
-                builder.emitLoadLocal(mutationTarget);
-                builder.emitLoadConstant(assign.name());
-                builder.emitLoadLocal(value);
-                builder.endAssignRootFrameLocal();
-            } else {
-                builder.beginAssignCurrentFrameLocal(currentFrameLocal);
-                emitCurrentActivation(builder);
-                builder.emitLoadLocal(mutationTarget);
-                builder.emitLoadConstant(assign.name());
-                builder.emitLoadLocal(value);
-                builder.endAssignCurrentFrameLocal();
-            }
-        } else {
-            builder.beginMutateLocalSlot(ProtosSlotMutation.ASSIGN_RESOLVED);
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(mutationTarget);
-            builder.emitLoadConstant(assign.name());
-            builder.emitLoadLocal(value);
-            builder.endMutateLocalSlot();
-        }
-        if (carrierAssignment) {
+        builder.emitLoadLocal(value);
+        if (carrier) {
             builder.emitLoadConstant(true);
             builder.endMaterializePrimitiveNumericCarrier();
         }
+        builder.endStoreLocal();
+    }
+
+    private void emitRequireMutationTarget(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal mutationTarget,
+            BytecodeLocal rawTarget) {
+        builder.beginStoreLocal(mutationTarget);
+        builder.beginRequireObjectMutationTarget();
+        emitCurrentActivation(builder);
+        builder.emitLoadLocal(rawTarget);
+        builder.endRequireObjectMutationTarget();
+        builder.endStoreLocal();
+    }
+
+    /* The NAME destination is selected before the RHS evaluates. */
+    private void emitResolveNamedWriteTarget(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalAssign assign,
+            BytecodeLocal mutationTarget) {
+        builder.beginStoreLocal(mutationTarget);
+        builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.RESOLVE_WRITE);
+        emitCurrentActivation(builder);
+        builder.emitLoadConstant(assign.name());
+        builder.endAccessNamedLexical();
+        builder.endStoreLocal();
+    }
+
+    private void emitNamedOrMemberAssign(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalAssign assign,
+            BytecodeLocal mutationTarget,
+            BytecodeLocal value,
+            BytecodeLocal result) {
+        builder.beginStoreLocal(result);
+        builder.beginMutateLocalSlot(
+                assign.target().isPresent()
+                        ? ProtosSlotMutation.ASSIGN
+                        : ProtosSlotMutation.ASSIGN_RESOLVED);
+        emitCurrentActivation(builder);
+        builder.emitLoadLocal(mutationTarget);
+        builder.emitLoadConstant(assign.name());
+        builder.emitLoadLocal(value);
+        builder.endMutateLocalSlot();
         builder.endStoreLocal();
     }
 
@@ -5811,10 +5189,21 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue);
 
         builder.beginStoreLocal(result);
-        emitMultipleCreateCurrentBindings(builder, create.names(), source);
+        emitMultipleCreateCurrentBindings(
+                builder,
+                create.names(),
+                currentRootAnalysis == null
+                        ? null
+                        : currentRootAnalysis.identitiesOf(create).orElse(null),
+                source);
         builder.endStoreLocal();
     }
 
+    /*
+     * I115: the parameter default-expression counterpart of
+     * emitResolvedBodyAssign, with the same single-storage selection and the
+     * same KNOWN I115 SEMANTIC DIVERGENCE (D179 C0, PERF028-A).
+     */
     private void emitDefaultAssign(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
@@ -5823,13 +5212,22 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         BytecodeLocal value = builder.createLocal("defaultAssignValue", null);
-        BytecodeLocal mutationTarget = builder.createLocal("defaultAssignMutationTarget", null);
-        java.util.Optional<CanonicalBindingResolution.CapturedResolved> capturedResolution =
-                capturedResolvedAssignment(assign);
-        BytecodeLocal capturedOwnerLocal =
-                capturedResolution.map(this::capturedOwnerBytecodeLocal).orElse(null);
-        BytecodeLocal currentFrameLocal = currentResolvedAssignmentBytecodeLocal(assign);
+        CanonicalBindingIdentity identity = assignmentIdentityOrNull(assign);
+        if (emitUninitializedLocalAssign(builder, assign, identity, result)) {
+            return;
+        }
+        if (identity != null) {
+            BytecodeLocal cell = cellLocalOrNull(identity);
+            BytecodeLocal local = cell == null ? ownLocalOrNull(identity) : null;
+            if (cell != null || local != null) {
+                emitDefaultExpressionToLocal(
+                        builder, assign.value(), value, preparedCall, childResult, resumeValue);
+                emitStoreAssignedValue(builder, cell, local, value, result, false);
+                return;
+            }
+        }
 
+        BytecodeLocal mutationTarget = builder.createLocal("defaultAssignMutationTarget", null);
         if (assign.target().isPresent()) {
             BytecodeLocal rawTarget = builder.createLocal("defaultAssignRawTarget", null);
             emitDefaultExpressionToLocal(
@@ -5839,82 +5237,13 @@ final class CanonicalToBytecodeLowerer {
                     preparedCall,
                     childResult,
                     resumeValue);
-            builder.beginStoreLocal(mutationTarget);
-            builder.beginRequireObjectMutationTarget();
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(rawTarget);
-            builder.endRequireObjectMutationTarget();
-            builder.endStoreLocal();
-        } else if (capturedResolution.isPresent()) {
-            CanonicalBindingResolution.CapturedResolved captured =
-                    capturedResolution.orElseThrow();
-            builder.beginStoreLocal(mutationTarget);
-            emitResolveCapturedWriteTarget(builder, assign, captured, capturedOwnerLocal);
-            builder.endStoreLocal();
-        } else if (currentFrameLocal != null) {
-            builder.beginStoreLocal(mutationTarget);
-            if (currentActivationLocal == null) {
-                builder.beginResolveRootFrameLocalWriteTarget(currentFrameLocal);
-                builder.emitLoadConstant(assign.name());
-                builder.endResolveRootFrameLocalWriteTarget();
-            } else {
-                builder.beginResolveCurrentFrameLocalWriteTarget(currentFrameLocal);
-                emitCurrentActivation(builder);
-                builder.emitLoadConstant(assign.name());
-                builder.endResolveCurrentFrameLocalWriteTarget();
-            }
-            builder.endStoreLocal();
+            emitRequireMutationTarget(builder, mutationTarget, rawTarget);
         } else {
-            builder.beginStoreLocal(mutationTarget);
-            builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.RESOLVE_WRITE);
-            emitCurrentActivation(builder);
-            builder.emitLoadConstant(assign.name());
-            builder.endAccessNamedLexical();
-            builder.endStoreLocal();
+            emitResolveNamedWriteTarget(builder, assign, mutationTarget);
         }
-
         emitDefaultExpressionToLocal(
                 builder, assign.value(), value, preparedCall, childResult, resumeValue);
-        builder.beginStoreLocal(result);
-        if (capturedResolution.isPresent()) {
-            emitAssignCaptured(
-                    builder,
-                    assign,
-                    capturedResolution.orElseThrow(),
-                    capturedOwnerLocal,
-                    mutationTarget,
-                    value);
-        } else if (assign.target().isPresent()) {
-            builder.beginMutateLocalSlot(ProtosSlotMutation.ASSIGN);
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(mutationTarget);
-            builder.emitLoadConstant(assign.name());
-            builder.emitLoadLocal(value);
-            builder.endMutateLocalSlot();
-        } else if (currentFrameLocal != null) {
-            if (currentActivationLocal == null) {
-                builder.beginAssignRootFrameLocal(currentFrameLocal);
-                builder.emitLoadLocal(mutationTarget);
-                builder.emitLoadConstant(assign.name());
-                builder.emitLoadLocal(value);
-                builder.endAssignRootFrameLocal();
-            } else {
-                builder.beginAssignCurrentFrameLocal(currentFrameLocal);
-                emitCurrentActivation(builder);
-                builder.emitLoadLocal(mutationTarget);
-                builder.emitLoadConstant(assign.name());
-                builder.emitLoadLocal(value);
-                builder.endAssignCurrentFrameLocal();
-            }
-        } else {
-            builder.beginMutateLocalSlot(ProtosSlotMutation.ASSIGN_RESOLVED);
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(mutationTarget);
-            builder.emitLoadConstant(assign.name());
-            builder.emitLoadLocal(value);
-            builder.endMutateLocalSlot();
-        }
-        builder.endStoreLocal();
+        emitNamedOrMemberAssign(builder, assign, mutationTarget, value, result);
     }
 
     private void emitDefaultIndexedAssign(
@@ -6639,36 +5968,6 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
-    private void emitBindSuppliedClosureParameter(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalParameter parameter,
-            int positionalIndex) {
-        ParameterBindingForm form = beginBindClosureParameter(builder, parameter);
-        if (currentActivationLocal == null) {
-            /*
-             * I091: a direct source caller may supply a primitive carrier.
-             * Only frame-native parameter storage retains it.
-             */
-            boolean materialize = form != ParameterBindingForm.FRAME_NATIVE;
-            if (materialize) {
-                builder.beginMaterializePrimitiveNumericCarrier();
-            }
-            builder.beginLoadFrameClosureArgument();
-            builder.emitLoadConstant(positionalIndex);
-            builder.endLoadFrameClosureArgument();
-            if (materialize) {
-                builder.emitLoadConstant(true);
-                builder.endMaterializePrimitiveNumericCarrier();
-            }
-        } else {
-            builder.beginLoadClosureArgument();
-            emitCurrentActivation(builder);
-            builder.emitLoadConstant(positionalIndex);
-            builder.endLoadClosureArgument();
-        }
-        endBindClosureParameter(builder, form);
-    }
-
     private void validateSupported(CanonicalSequence sequence) {
         for (CanonicalExpression expression : sequence.expressions()) {
             validateSupportedExpression(expression);
@@ -6824,37 +6123,55 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
-    private boolean useCompactClosureCapture() {
-        return currentActivationLocal == null && currentRootFrameLocals.isEmpty();
-    }
-
     /*
      * I112: at root level the creating activation is the root's own frame
      * argument 0, bound by MaterializeCurrentClosure itself rather than
-     * loaded as an operand; its compact capture remains restricted to the
-     * I092 admission. Inline regions keep their explicit activation operand.
+     * loaded as an operand. I115: a root's LOCAL and CELL bindings are never
+     * part of its context, so a still-compact root always captures without
+     * materializing its activation. Inline object regions keep their
+     * explicit activation operand.
      *
      * I115 / PLAT066-C: the second constant operand carries the capture
      * classification of this exact Closure under the root's analysis; a
      * Closure that does not capture its creator is created from the
      * creator's own environment (GraalPy MakeFunction without freevars).
      *
-     * I115 lazy-context experiment: a creator-capturing Closure is preceded
-     * by the root's on-demand promotion; the result tells endClosureCapture
-     * whether it must close the enclosing Block. A non-capturing Closure
-     * never promotes.
+     * I115 (GraalPy MakeFunction closure tuple): a Closure whose scope
+     * carries free cells is wrapped by CaptureClosureCells, which installs
+     * the creator's cell references, in the Closure scope's constant order,
+     * before the Closure escapes. Returns those cells for endClosureCapture.
      */
-    private boolean beginClosureCapture(
+    private java.util.List<CanonicalBindingIdentity> beginClosureCapture(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure closure) {
-        boolean promoted =
-                CanonicalCompilationFacts.capturesCreatorContext(
-                                closure, currentRootAnalysis)
-                        && beginLiveFrameAuthorityPromotion(builder);
+        java.util.List<CanonicalBindingIdentity> cells =
+                currentRootAnalysis == null
+                        ? java.util.List.of()
+                        : currentRootAnalysis.scopeOf(closure)
+                                .map(CanonicalBindingAnalysis::freeCellsOf)
+                                .orElse(java.util.List.of());
+        if (!cells.isEmpty()) {
+            builder.beginCaptureClosureCells();
+        }
         if (currentActivationLocal == null) {
-            // I115-H: the ReturnHome fact gates the lightweight representation.
+            /*
+             * I115 invariant of the compactCapture operand: it answers whether
+             * capturing the creator may defer its activation instead of
+             * materializing it. Under the I115 storage model the creator's
+             * frame never holds lexical state a captured context must expose:
+             * LOCAL bindings are invisible to captures, CELL bindings are
+             * transported explicitly by CaptureClosureCells, and NAME bindings
+             * already live in the creator's context object. The deferred owner
+             * keeps the B5 header (argument 0, ReturnHome, prelude) and resolves
+             * that same activation on demand, so the answer is statically true
+             * for every root-level creation; only an inline object region,
+             * which has an explicit activation, uses MaterializeClosure. The
+             * operation's other modes are thereby unreachable from lowering.
+             *
+             * I115-H: the ReturnHome fact gates the lightweight representation.
+             */
             builder.beginMaterializeCurrentClosure(
-                    useCompactClosureCapture(),
+                    COMPACT_ROOT_CLOSURE_CAPTURE,
                     CanonicalCompilationFacts.capturesCreatorContext(
                             closure, currentRootAnalysis),
                     compilationFacts.mayObserveReturnHome(closure));
@@ -6862,45 +6179,29 @@ final class CanonicalToBytecodeLowerer {
             builder.beginMaterializeClosure();
             emitCurrentActivation(builder);
         }
-        return promoted;
+        return cells;
     }
 
     private void endClosureCapture(
             ProtosBytecodeRootNodeGen.Builder builder,
-            boolean promoted) {
+            java.util.List<CanonicalBindingIdentity> cells) {
         if (currentActivationLocal == null) {
             builder.endMaterializeCurrentClosure();
         } else {
             builder.endMaterializeClosure();
         }
-        if (promoted) {
-            builder.endBlock();
+        if (!cells.isEmpty()) {
+            for (CanonicalBindingIdentity cell : cells) {
+                BytecodeLocal local = currentRootCellLocals.get(cell);
+                if (local == null) {
+                    throw new AssertionError(
+                            "I115 captured cell is not reachable from its creator: "
+                                    + cell.name());
+                }
+                builder.emitLoadLocal(local);
+            }
+            builder.endCaptureClosureCells();
         }
-    }
-
-    /**
-     * I115 lazy-context experiment: opens a Block whose first operation is
-     * the on-demand promotion of the root currently being lowered, when that
-     * root {@link #currentRootLazyFrameAuthority starts frame-native lazily}
-     * and the current activation is the root's own (never inside an inline
-     * Object body, whose construction activation is not the owner). The
-     * constant operands are that root's own frame-local range and layout, so a
-     * child scope's layout can never reach the parent's promotion. Returns
-     * whether the Block was opened; the caller closes it after the observing
-     * operation, so the Block yields that operation's value.
-     */
-    private boolean beginLiveFrameAuthorityPromotion(
-            ProtosBytecodeRootNodeGen.Builder builder) {
-        if (!currentRootLazyFrameAuthority
-                || currentActivationLocal != null
-                || currentRootFrameNativeLocals == null
-                || currentRootFrameNativeLayout == null) {
-            return false;
-        }
-        builder.beginBlock();
-        builder.emitEnsureLiveFrameLexicalAuthority(
-                currentRootFrameNativeLocals, currentRootFrameNativeLayout);
-        return true;
     }
 
     private void emitExpression(
@@ -6920,10 +6221,7 @@ final class CanonicalToBytecodeLowerer {
              * own argument evaluation.
              */
             ProtosClosureExecutionPlanCell cell = bytecodeClosurePlan(builder, closure);
-            boolean promoted = beginClosureCapture(builder, closure);
-            builder.emitLoadConstant(closure);
-            builder.emitLoadConstant(cell);
-            endClosureCapture(builder, promoted);
+            emitClosureCapture(builder, closure, cell);
             return;
         }
         if (expression instanceof CanonicalLookup lookup) {
@@ -6931,16 +6229,14 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalIntrinsic intrinsic) {
-            boolean promoted =
-                    intrinsic.kind() == CanonicalIntrinsic.Kind.CONTEXT
-                            && beginLiveFrameAuthorityPromotion(builder);
+            /*
+             * KNOWN I115 SEMANTIC DIVERGENCE: the observed context of a
+             * Closure activation does not contain its LOCAL or CELL bindings.
+             */
             builder.beginLoadIntrinsic();
             emitCurrentActivation(builder);
             builder.emitLoadConstant(intrinsic.kind());
             builder.endLoadIntrinsic();
-            if (promoted) {
-                builder.endBlock();
-            }
             return;
         }
         if (expression instanceof CanonicalMember member) {
@@ -6968,38 +6264,29 @@ final class CanonicalToBytecodeLowerer {
                         + expression.getClass().getSimpleName());
     }
 
-    /**
-     * PLAT036 Candidate D, Slice 3 key direct/fast path: a reference that is
-     * statically {@link CanonicalBindingResolution.Resolved} in the exact
-     * genuine execution-context scope currently being lowered compiles
-     * straight to a {@code ReadFrameLocal} of its own stable {@link
-     * com.oracle.truffle.api.bytecode.LocalAccessor}, bypassing the generic {@code AccessNamedLexical} operation and exact name-based
-     * lexical fallback entirely. This uses the
-     * same accessor-based mechanism the installed frame-backed authority uses
-     * to write this local (see {@code ProtosFrameLexicalBindingAuthority}),
-     * deliberately never the raw generated {@code LoadLocal} instruction: a
-     * local written only through the dynamic accessor API does not
-     * participate in the frame-slot-kind speculation the DSL's own literal
-     * {@code StoreLocal}/{@code LoadLocal} pair relies on. A
-     * {@code Resolved} classification proves that the binding was established
-     * before this exact program point; PERF025-D179-A combines that proof with
-     * a root/name-scoped one-way Assumption so the ordinary path need not read
-     * cleared state until the first actual D179 removal invalidates it.
-     * {@code Candidate} and {@code Dynamic} resolutions, and any
-     * {@code Resolved} binding owned by a different scope (an {@code
-     * OBJECT_BODY} or a different root entirely), always fall through to the
-     * unchanged generic path.
-     */
     private void emitLookup(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup) {
         emitLookup(builder, lookup, false);
     }
 
-    /*
-     * I091: carrierOperand is true only for an operand of the guarded
-     * primitive numeric chain, which may then receive a frame-retained
+    /**
+     * I115: emits exactly one access for a bare read, selected at lowering
+     * time from its static classification: {@code LoadLocal} for a LOCAL
+     * binding of this root, {@code LoadCell} for a CELL binding (owned or
+     * carried as a free cell), {@code ReadGlobal} for a module binding
+     * captured by a Closure root, and otherwise one {@code
+     * AccessNamedLexical} name operation (a module binding read in its own
+     * root, an object-body member, or a dynamic name). No access is ever
+     * followed by another storage when it does not find the binding.
+     *
+     * <p>I091: carrierOperand is true only for an operand of the guarded
+     * primitive numeric chain, which may then receive a local-retained
      * primitive carrier. Every other read yields a guest value.
+     *
+     * <p>KNOWN I115 SEMANTIC DIVERGENCE (D179 C0, PLAT066-C): a LOCAL or
+     * CELL read does not observe removal/recreation of the binding through an
+     * observed context, nor a later lexical redirection of the name.
      */
     private void emitLookup(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -7020,386 +6307,61 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadLocal(own);
             return;
         }
-        CanonicalBindingResolution inlineResolution =
-                currentNormalDirectParentCaptureReads && currentRootAnalysis != null
-                        ? currentRootAnalysis.resolutionOf(lookup).orElse(null)
-                        : null;
-        boolean inlineCandidate =
-                inlineResolution instanceof CanonicalBindingResolution.Candidate candidate
-                        && CanonicalBindingAnalysis.admittedInlineCandidateRead(
-                                candidate, currentRootTopScope);
-        if (currentNormalDirectParentCaptureReads && !inlineCandidate) {
-            /*
-             * The admitted lookup originally had lexical depth one
-             * because it lived in a callback invocation. That
-             * invocation has been eliminated physically, so read
-             * its proven owner directly from the enclosing root.
-             *
-             * ReadRootFrameLocal retains D179 presence handling and
-             * the same private numeric-carrier contract.
-             */
-            CanonicalBindingResolution resolution =
-                    currentRootAnalysis == null
-                            ? null
-                            : currentRootAnalysis.resolutionOf(lookup)
-                                    .orElse(null);
 
-            if (!(resolution
-                    instanceof CanonicalBindingResolution.CapturedResolved
-                            captured)) {
-                throw new AssertionError(
-                        "I095-B4 admitted an unproven captured lookup: "
-                                + lookup.name());
-            }
-
-            if (CanonicalBindingAnalysis.admittedInlineGlobalRead(
-                    captured, currentRootTopScope)) {
-                builder.emitReadGlobal(
-                        frameBackedOrdinal(captured.identity()),
-                        TruffleString.fromJavaStringUncached(
-                                captured.identity().name(),
-                                TruffleString.Encoding.UTF_16),
-                        captured.lexicalDepth() - 1);
+        CanonicalBindingResolution resolution =
+                currentRootAnalysis == null
+                        ? null
+                        : currentRootAnalysis.resolutionOf(lookup).orElse(null);
+        CanonicalBindingIdentity identity = staticIdentityOrNull(resolution);
+        if (identity != null) {
+            BytecodeLocal cell = cellLocalOrNull(identity);
+            if (cell != null) {
+                builder.beginLoadCell();
+                builder.emitLoadLocal(cell);
+                builder.endLoadCell();
                 return;
             }
-
-            if (captured.identity().owner() != currentRootTopScope
-                    || captured.lexicalDepth() != 1
-                    || currentRootFrameLayout == null) {
-                throw new AssertionError(
-                        "I095-B4 admitted an unproven parent lookup: "
-                                + lookup.name());
+            if (isUninitializedLocalAccess(resolution, identity)) {
+                builder.emitUninitializedBinding();
+                return;
             }
-
-            String name = captured.identity().name();
-            BytecodeLocal owner = currentRootFrameLocals.get(name);
-            Integer ordinal = currentRootFrameLayout.offsetOf(name);
-
-            if (owner == null || ordinal == null) {
-                throw new AssertionError(
-                        "I095-B4 captured owner has no root frame local: "
-                                + name);
-            }
-
-            if (!carrierOperand) {
-                builder.beginMaterializePrimitiveNumericCarrier();
-            }
-
-            builder.emitReadRootFrameLocal(
-                    owner,
-                    currentRootFrameLayout.localOffsetAt(ordinal),
-                    currentRootFrameLayout.presentContinuityAt(ordinal),
-                    name);
-
-            if (!carrierOperand) {
-                builder.emitLoadConstant(true);
-                builder.endMaterializePrimitiveNumericCarrier();
-            }
-            return;
-        }
-
-        if (currentRootAnalysis != null) {
-            java.util.Optional<CanonicalBindingResolution> resolution =
-                    currentRootAnalysis.resolutionOf(lookup);
-            if (resolution.isPresent()
-                    && resolution.orElseThrow() instanceof CanonicalBindingResolution.Resolved resolved
-                    && resolved.identity().owner() == currentRootTopScope) {
-                String resolvedName = resolved.identity().name();
-                BytecodeLocal local =
-                        currentRootFrameLocals.get(resolvedName);
-                Integer ordinal =
-                        currentRootFrameLayout == null
-                                ? null
-                                : currentRootFrameLayout.offsetOf(resolvedName);
-                if (local != null
-                        && ordinal != null
-                        && currentActivationLocal == null) {
-                    /*
-                     * I115 / PLAT066-C: an ordinary Closure local is read
-                     * with a plain LoadLocal (GraalPy load.local), with no
-                     * compact/published selection and no carrier
-                     * projection: it only ever holds a Closure.
-                     */
-                    if (currentRootOrdinaryClosureLocals.contains(resolvedName)) {
-                        builder.emitLoadLocal(local);
-                        return;
-                    }
-                    if (!carrierOperand) {
-                        builder.beginMaterializePrimitiveNumericCarrier();
-                    }
-                    builder.emitReadRootFrameLocal(
-                            local,
-                            currentRootFrameLayout.localOffsetAt(ordinal),
-                            currentRootFrameLayout.presentContinuityAt(ordinal),
-                            resolvedName);
-                    if (!carrierOperand) {
-                        builder.emitLoadConstant(true);
-                        builder.endMaterializePrimitiveNumericCarrier();
-                    }
-                    return;
+            BytecodeLocal local = ownLocalOrNull(identity);
+            if (local != null) {
+                if (!carrierOperand) {
+                    builder.beginMaterializePrimitiveNumericCarrier();
                 }
-                if (local != null && ordinal != null) {
-                    builder.beginReadFrameLocal(
-                            local,
-                            currentRootFrameLayout.presentContinuityAt(ordinal));
-                    emitCurrentActivation(builder);
-                    builder.emitLoadConstant(resolvedName);
-                    builder.endReadFrameLocal();
-                    return;
+                builder.emitLoadLocal(local);
+                if (!carrierOperand) {
+                    builder.emitLoadConstant(true);
+                    builder.endMaterializePrimitiveNumericCarrier();
                 }
+                return;
             }
-
-            if (resolution.isPresent()
-                    && resolution.orElseThrow()
-                            instanceof CanonicalBindingResolution.CapturedResolved captured
-                    && captured.identity().owner().kind()
-                            == CanonicalLexicalScope.Kind.ROOT
-) {
+            if (resolution instanceof CanonicalBindingResolution.CapturedResolved captured
+                    && identity.owner().kind() == CanonicalLexicalScope.Kind.ROOT
+                    && currentActivationLocal == null) {
                 /*
-                 * I115-R6 (experimental): a read proven to a module
-                 * declaration reads the module scope directly
-                 * (GraalPy ReadGlobal): no nearer-scope selection, no
-                 * receiver fallback, no conditional bytecode. ReadGlobal
-                 * resolves from the frame of a physical root; a read inside
-                 * a frame-native inline callback keeps the inline captured
-                 * reads below, with the same identity and lexical depth.
+                 * I115-R6: a module binding read from a Closure root reads
+                 * the captured module context (GraalPy ReadGlobal). Inside
+                 * an inline callback the physical root is one scope nearer.
                  */
-                // I115-H4-B: the name operand is a TruffleString.
-                builder.emitReadGlobal(
-                        frameBackedOrdinal(captured.identity()),
-                        TruffleString.fromJavaStringUncached(
-                                captured.identity().name(),
-                                TruffleString.Encoding.UTF_16),
-                        captured.lexicalDepth());
-                return;
-            }
-
-            if (resolution.isPresent()
-                    && resolution.orElseThrow()
-                            instanceof CanonicalBindingResolution.CapturedResolved captured) {
-                BytecodeLocal ownerLocal = capturedOwnerBytecodeLocal(captured);
-                /*
-                 * I115-R5: a statically identified captured owner uses the
-                 * generated materialized-local read below. Its owner-frame
-                 * selection retains the existing guarded cache and its
-                 * LoadLocalMaterialized handles cross-root frame kinds.
-                 *
-                 * R4's compact single-operation reader reduced DSL size
-                 * but expanded the factorial run Tier 1 graph. Keep that
-                 * reader for captures without a known owner local.
-                 */
-                if (ownerLocal != null) {
-                    emitGuestCapturedMaterializedRead(
-                            builder, captured, ownerLocal, false, carrierOperand);
+                int physicalDepth =
+                        currentNormalDirectParentCaptureReads
+                                ? captured.lexicalDepth() - 1
+                                : captured.lexicalDepth();
+                if (physicalDepth >= 1) {
+                    builder.emitReadGlobal(
+                            TruffleString.fromJavaStringUncached(
+                                    identity.name(), TruffleString.Encoding.UTF_16),
+                            physicalDepth);
                     return;
                 }
-
-                if (currentActivationLocal == null) {
-                    builder.emitReadCapturedFrameLocalAtRoot(
-                            frameBackedOrdinal(captured.identity()),
-                            captured.identity().name(),
-                            captured.lexicalDepth());
-                    return;
-                }
-                builder.beginAccessCapturedFrameLocal(false,
-                        frameBackedOrdinal(captured.identity()));
-                emitCurrentActivation(builder);
-                builder.emitLoadConstant(captured.identity().name());
-                builder.emitLoadConstant(captured.lexicalDepth());
-                builder.endAccessCapturedFrameLocal();
-                return;
             }
         }
         builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.LOOKUP);
         emitCurrentActivation(builder);
         builder.emitLoadConstant(lookup.name());
         builder.endAccessNamedLexical();
-    }
-
-    /*
-     * I091: the builtin materialized load reads the owner frame directly, so
-     * a retained primitive carrier is materialized unless the read is an
-     * operand of the guarded primitive numeric chain.
-     */
-    private void emitGuestCapturedMaterializedRead(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalBindingResolution.CapturedResolved captured,
-            BytecodeLocal ownerLocal,
-            boolean inlineCallback,
-            boolean carrierOperand) {
-        if (carrierOperand) {
-            emitCapturedMaterializedRead(builder, captured, ownerLocal, inlineCallback);
-            return;
-        }
-        builder.beginMaterializePrimitiveNumericCarrier();
-        emitCapturedMaterializedRead(builder, captured, ownerLocal, inlineCallback);
-        builder.emitLoadConstant(true);
-        builder.endMaterializePrimitiveNumericCarrier();
-    }
-
-    /**
-     * PERF013 Slice B1 / BUG018-C: the direct read of a proven captured
-     * binding whose owner {@link BytecodeLocal} is known. The owner frame is
-     * selected dynamically (nearer bindings, owner authority, PRESENT check)
-     * without reading the value; a selected frame is then read with the
-     * builtin {@code LoadLocalMaterialized} of {@code ownerLocal}, which
-     * tolerates the owner root's cached local-kind metadata disagreeing with
-     * a frame retained from another activation. No selected frame takes the
-     * generic captured lookup, so presence never depends on the value and
-     * {@code PRESENT(null)} stays distinct from {@code ABSENT}. The inline
-     * form selects without materializing the callback activation whenever
-     * the existing direct path admits it.
-     */
-    private void emitCapturedMaterializedRead(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalBindingResolution.CapturedResolved captured,
-            BytecodeLocal ownerLocal,
-            boolean inlineCallback) {
-        String name = captured.identity().name();
-        builder.beginBlock();
-        BytecodeLocal selectedOwnerFrame =
-                builder.createLocal("capturedOwnerFrame", null);
-
-        builder.beginStoreLocal(selectedOwnerFrame);
-        if (currentActivationLocal == null) {
-            builder.emitSelectCapturedMaterializedOwnerFrameAtRoot(
-                    ownerLocal, name, captured.lexicalDepth());
-        } else {
-            builder.beginAccessCapturedMaterializedLocal(false, ownerLocal);
-            emitCurrentActivation(builder);
-            builder.emitLoadConstant(name);
-            builder.emitLoadConstant(captured.lexicalDepth());
-            builder.endAccessCapturedMaterializedLocal();
-        }
-        builder.endStoreLocal();
-
-        builder.beginConditional();
-        builder.beginIsResultKind(ProtosResultKind.CAPTURED_OWNER_FRAME_SELECTED);
-        builder.emitLoadLocal(selectedOwnerFrame);
-        builder.endIsResultKind();
-
-        builder.beginLoadLocalMaterialized(ownerLocal);
-        builder.emitLoadLocal(selectedOwnerFrame);
-        builder.endLoadLocalMaterialized();
-
-        if (currentActivationLocal == null) {
-            builder.emitReadCapturedFallbackAtRoot(name);
-        } else {
-            builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.CAPTURED_FALLBACK);
-            emitCurrentActivation(builder);
-            builder.emitLoadConstant(name);
-            builder.endAccessNamedLexical();
-        }
-        builder.endConditional();
-        builder.endBlock();
-    }
-
-    /**
-     * PERF013 Slice B1 (reads) / Slice B2 (writes): the owner {@link
-     * BytecodeLocal} for a proven captured access, when and only when {@code
-     * captured}'s owner scope is both structurally reachable from the exact
-     * root currently being lowered ({@link #capturedOwnerMatchesCurrentRoot})
-     * and already registered in {@link #frameLocalsByScope} — meaning owner
-     * and this Closure share the same physical {@code BytecodeRootNodes}
-     * group. Returns {@code null} (never partial/best-effort metadata)
-     * whenever either condition fails, so the caller falls back to the exact
-     * existing {@code ReadCapturedFrameLocal}/{@code
-     * ResolveCapturedWritableLexicalTarget} runtime-authority path unchanged.
-     * This is expected, not an error, for an owner root reached through an
-     * isolated Closure rebuild/rematerialization that does not include its
-     * lexical owner in the same lowering group (PERF013 Slice C).
-     */
-    private BytecodeLocal capturedOwnerBytecodeLocal(
-            CanonicalBindingResolution.CapturedResolved captured) {
-        /*
-         * I096: inside an inline candidate body the inlined callee scope has
-         * no physical frame (its own root is closed, and its bindings live on
-         * the invocation's named activation), so no captured owner is proven
-         * here; the runtime-authority path selects the real owner.
-         *
-         * I101-A: the same holds for a Closure root first lowered inside such
-         * a body: its owner's root is closed (openRootScopes), so it takes the
-         * same runtime-authority path instead of a materialized access to a
-         * local whose root scope has ended.
-         */
-        if (currentInlineClosureCallBody
-                || !capturedOwnerMatchesCurrentRoot(captured)
-                || !openRootScopes.contains(captured.identity().owner())) {
-            return null;
-        }
-        java.util.Map<String, BytecodeLocal> ownerFrameLocals =
-                frameLocalsByScope.get(captured.identity().owner());
-        if (ownerFrameLocals == null) {
-            return null;
-        }
-        return ownerFrameLocals.get(captured.identity().name());
-    }
-
-    private java.util.Optional<CanonicalBindingResolution.CapturedResolved>
-            capturedResolvedAssignment(CanonicalAssign assign) {
-        if (assign.target().isPresent() || currentRootAnalysis == null) {
-            return java.util.Optional.empty();
-        }
-
-        java.util.Optional<CanonicalBindingResolution> resolution =
-                currentRootAnalysis.resolutionOf(assign);
-        if (resolution.isPresent()
-                && resolution.orElseThrow()
-                        instanceof CanonicalBindingResolution.CapturedResolved captured) {
-            return java.util.Optional.of(captured);
-        }
-        return java.util.Optional.empty();
-    }
-
-    /**
-     * PERF028-A: the current root's own {@link BytecodeLocal} for a bare
-     * assignment statically {@code Resolved} in the exact genuine scope being
-     * lowered, mirroring the {@code ReadFrameLocal} admission in {@link
-     * #emitLookup}; {@code null} keeps the unchanged generic write path.
-     */
-    private BytecodeLocal currentResolvedAssignmentBytecodeLocal(CanonicalAssign assign) {
-        if (assign.target().isPresent() || currentRootAnalysis == null) {
-            return null;
-        }
-
-        java.util.Optional<CanonicalBindingResolution> resolution =
-                currentRootAnalysis.resolutionOf(assign);
-        if (resolution.isPresent()
-                && resolution.orElseThrow() instanceof CanonicalBindingResolution.Resolved resolved
-                && resolved.identity().owner() == currentRootTopScope) {
-            return currentRootFrameLocals.get(resolved.identity().name());
-        }
-        return null;
-    }
-
-    private boolean capturedOwnerMatchesCurrentRoot(
-            CanonicalBindingResolution.CapturedResolved captured) {
-        if (currentRootTopScope == null) {
-            return false;
-        }
-
-        CanonicalLexicalScope scope = currentRootTopScope;
-        for (int depth = 0; depth < captured.lexicalDepth(); depth++) {
-            scope = scope.outwardScope();
-            if (scope == null) {
-                return false;
-            }
-        }
-        return scope == captured.identity().owner();
-    }
-
-    private static int frameBackedOrdinal(
-            CanonicalBindingIdentity identity) {
-        int ordinal = 0;
-        for (String declaredName : identity.owner().declaredNames()) {
-            if (declaredName.equals(identity.name())) {
-                return ordinal;
-            }
-            ordinal++;
-        }
-        throw new AssertionError(
-                "binding identity owner no longer declares its own name: "
-                        + identity.name());
     }
 
     /*
@@ -7896,6 +6858,21 @@ final class CanonicalToBytecodeLowerer {
             return false;
         }
 
+        /*
+         * I115: an inline callback keeps its own bindings in plain locals of
+         * the physical root. A callback owning a cell binding (captured by a
+         * Closure nested in it) stays a genuine Closure, whose root creates
+         * that cell.
+         */
+        CanonicalLexicalScope wholeTreeScope =
+                context.analysis() == null
+                        ? null
+                        : context.analysis().scopeOf(closure).orElse(null);
+        if (wholeTreeScope != null
+                && !wholeTreeScope.cellNamesInDeclarationOrder().isEmpty()) {
+            return false;
+        }
+
         // Deliberately isolated: the own-binding and direct-parent-capture
         // proofs below compare it against the current root's analysis.
         CanonicalBindingAnalysis analysis =
@@ -8265,6 +7242,15 @@ final class CanonicalToBytecodeLowerer {
             return null;
         }
         CanonicalLexicalScope scope = rootFacts.scope();
+        /*
+         * I115: the compact subset stores every binding with StoreLocal.
+         * A root whose bindings include a cell (captured by a Closure,
+         * including a callback materialized on a MISS path) is not compact.
+         */
+        if (scope.kind() != CanonicalLexicalScope.Kind.CLOSURE
+                || !scope.cellNamesInDeclarationOrder().isEmpty()) {
+            return null;
+        }
         java.util.List<CanonicalParameter> parameters =
                 activationDefinition.parameters();
 
@@ -8330,10 +7316,6 @@ final class CanonicalToBytecodeLowerer {
             currentExperimentalRecursiveIntegerAdmission =
                     savedRecursiveAdmission;
         }
-        if (!experimentalCompactCreationsFollowLayout(
-                sequence, scope, unaryRequired ? parameters.get(0).name() : null)) {
-            return null;
-        }
         CanonicalExpression terminal =
                 sequence.expressions().get(sequence.expressions().size() - 1);
         boolean guestIntegerLiteralReturn =
@@ -8367,58 +7349,6 @@ final class CanonicalToBytecodeLowerer {
                 experimentalRecursiveInteger,
                 java.util.Collections.unmodifiableSet(dispatchingControls),
                 invokes);
-    }
-
-    /*
-     * I115-H1-FIX: PromoteFrameLexicalAuthority adopts the PRESENT frame
-     * locals as established in ascending layout order
-     * (ProtosFrameLexicalBindingAuthority#adoptPresentFrameBackedBindings).
-     * In a compact root every establishment is static and unconditional:
-     * the unary parameter at entry, then each root-level creation, an inner
-     * creation of a value before its outer one, each evaluated exactly once
-     * (callbacks create nothing). That execution order must be the root's
-     * layout order, the iteration of declaredNames() from which emitRootBody
-     * allocates the frame locals, which that order alone does not guarantee;
-     * otherwise the root keeps the general lowerer.
-     */
-    private static boolean experimentalCompactCreationsFollowLayout(
-            CanonicalSequence sequence,
-            CanonicalLexicalScope scope,
-            String parameter) {
-        java.util.List<String> layout = java.util.List.copyOf(scope.declaredNames());
-        java.util.List<String> established = new java.util.ArrayList<>();
-        if (parameter != null) {
-            established.add(parameter);
-        }
-        for (CanonicalExpression expression : sequence.expressions()) {
-            collectExperimentalCompactCreations(expression, established);
-        }
-        int previous = -1;
-        for (String name : established) {
-            int ordinal = layout.indexOf(name);
-            if (ordinal <= previous) {
-                return false;
-            }
-            previous = ordinal;
-        }
-        return true;
-    }
-
-    /* I115-H1-FIX: creations of an admitted expression, in execution order. */
-    private static void collectExperimentalCompactCreations(
-            CanonicalExpression expression,
-            java.util.List<String> established) {
-        if (expression instanceof CanonicalCreate create) {
-            collectExperimentalCompactCreations(create.value(), established);
-            established.add(create.name());
-        } else if (expression instanceof CanonicalAssign assign) {
-            collectExperimentalCompactCreations(assign.value(), established);
-        } else if (expression instanceof CanonicalSend send) {
-            collectExperimentalCompactCreations(send.receiver(), established);
-            for (CanonicalExpression argument : send.arguments()) {
-                collectExperimentalCompactCreations(argument, established);
-            }
-        }
     }
 
     /*
@@ -9319,21 +8249,14 @@ final class CanonicalToBytecodeLowerer {
             String name,
             CanonicalExpression value) {
         /*
-         * I115-H1-FIX: in a root that may promote its locals
-         * (PromoteFrameLexicalAuthority on a MISS path), a creation is the
-         * existing frame-native establishment: unobserved, it writes the
-         * ABSENT local directly, without materializing; after a promotion it
-         * creates through the installed authority, which records the
-         * establishment and keeps the duplicate-creation Error. An
-         * assignment stays a local store over the same storage.
+         * I115: a compact root has no cell bindings (see
+         * admitExperimentalCompactRoot), so creation and assignment are the
+         * same GraalPy store.local over the binding's own local.
+         *
+         * KNOWN I115 SEMANTIC DIVERGENCE: a duplicate creation is not
+         * detected.
          */
-        boolean establish = binding instanceof CanonicalCreate
-                && currentExperimentalCompactScratch != null;
-        if (establish) {
-            emitCreateCurrentFrameLocal(builder, frameNativeOrdinal(name), name);
-        } else {
-            builder.beginStoreLocal(experimentalCompactLocal(name));
-        }
+        builder.beginStoreLocal(experimentalCompactLocal(name));
         if (currentExperimentalGuestIntegerBinding != null
                 && value instanceof CanonicalLiteral literal
                 && primitiveNumberLiteralOrNull(literal) instanceof Long
@@ -9356,11 +8279,7 @@ final class CanonicalToBytecodeLowerer {
         } else {
             emitExperimentalCompactValue(builder, value);
         }
-        if (establish) {
-            builder.endCreateCurrentFrameLocal();
-        } else {
-            builder.endStoreLocal();
-        }
+        builder.endStoreLocal();
     }
 
     /*
@@ -9416,7 +8335,6 @@ final class CanonicalToBytecodeLowerer {
             if (global != null) {
                 // I115-H7: the module binding, read in place at this position.
                 builder.emitReadGlobal(
-                        frameBackedOrdinal(global.identity()),
                         TruffleString.fromJavaStringUncached(
                                 global.identity().name(),
                                 TruffleString.Encoding.UTF_16),
@@ -9705,7 +8623,6 @@ final class CanonicalToBytecodeLowerer {
             // selectors. Removal requires retiring their old operations.
             BytecodeLocal attempt = beginPrimitiveNumericMiss(
                     builder, send, receiverValue, argumentValue, true, true);
-            emitExperimentalCompactAuthorityPromotion(builder);
             emitDispatchedSendOfLocals(
                     builder, send.message(), receiverValue, java.util.List.of(argumentValue),
                     result, scratch.childResult(), scratch.resumeValue());
@@ -9784,25 +8701,6 @@ final class CanonicalToBytecodeLowerer {
      * emitExperimentalCompactBooleanDispatch.
      */
     /*
-     * I115-H1-FIX: before an ordinary send of a compact root, install its
-     * frame locals as the activation's lexical authority through the
-     * existing live-frame transition, so whatever the send observes or
-     * captures shares the bindings the compact code reads and writes. Only
-     * MISS paths emit it; a root without frame locals has nothing to share.
-     */
-    private void emitExperimentalCompactAuthorityPromotion(
-            ProtosBytecodeRootNodeGen.Builder builder) {
-        if (currentRootFrameNativeLocals == null
-                || currentRootFrameNativeLayout == null) {
-            return;
-        }
-        builder.beginPromoteFrameLexicalAuthority(
-                currentRootFrameNativeLocals, currentRootFrameNativeLayout);
-        emitCurrentActivation(builder);
-        builder.endPromoteFrameLexicalAuthority();
-    }
-
-    /*
      * I115-N: the receiver evaluated once as a Java boolean, converted by one
      * ExperimentalCanonicalBooleanCondition only after the value is known to
      * be exact canonical true or false. I115-H1-FIX: a comparison is the
@@ -9867,23 +8765,18 @@ final class CanonicalToBytecodeLowerer {
             CanonicalCreate create) {
         CanonicalClosure closure =
                 (CanonicalClosure) create.value();
-        int ordinal = indexedCreateOrdinal(create);
-        if (ordinal < 0) {
-            throw new AssertionError(
-                    "I115-L module binding lacks indexed authority");
-        }
 
         ProtosClosureExecutionPlanCell plan =
                 bytecodeClosurePlan(builder, closure);
 
+        // I115: a module binding is a NAME binding of the module context.
         beginStatement(builder, create);
         builder.beginReturn();
-        builder.beginCreateCurrentIndexedLocalSlot(
-                currentRootIndexedParameterLayout, ordinal);
+        builder.beginCreateCurrentLocalSlot();
         emitCurrentActivation(builder);
         builder.emitLoadConstant(create.name());
         emitClosureCapture(builder, closure, plan);
-        builder.endCreateCurrentIndexedLocalSlot();
+        builder.endCreateCurrentLocalSlot();
         builder.endReturn();
         endStatement(builder);
     }

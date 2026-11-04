@@ -36,9 +36,6 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosIoOperation;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import java.util.List;
-import com.guillermomolina.protos.execution.ProtosCapturedLexicalAccess.CapturedLexicalWriteTarget;
-import com.guillermomolina.protos.execution.ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence;
-import com.guillermomolina.protos.execution.ProtosCapturedLexicalAccess.CapturedOwnerFrameCache;
 import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedArgumentVector;
 import com.guillermomolina.protos.execution.ProtosPreparedCalls.StructuredNativeInvocation;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedBooleanCall;
@@ -52,6 +49,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 // PRUIBA DE I115, en algún momento esto volverá a funcionar
 // import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosLexicalCell;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -68,7 +66,6 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.Truffle;
-import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
@@ -79,9 +76,6 @@ import com.oracle.truffle.api.bytecode.EpilogReturn;
 import com.oracle.truffle.api.bytecode.ForceQuickening;
 import com.oracle.truffle.api.bytecode.GenerateBytecode;
 import com.oracle.truffle.api.bytecode.Instrumentation;
-import com.oracle.truffle.api.bytecode.LocalAccessor;
-import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
-import com.oracle.truffle.api.bytecode.MaterializedLocalAccessor;
 import com.oracle.truffle.api.bytecode.Operation;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.bytecode.Prolog;
@@ -125,9 +119,9 @@ import com.oracle.truffle.api.source.Source;
  * interpreter does not infer guest identity from the mere existence of a
  * physical root. Object bodies are lowered inline
  * and never become roots. Lexically nested Closure roots are created in the same
- * {@code BytecodeRootNodes} parse as their owner, so PERF013 materialized
- * captured accesses use a {@link MaterializedLocalAccessor} of this interpreter
- * only against an owner frame of this interpreter.
+ * {@code BytecodeRootNodes} parse as their owner. I115: a captured Closure
+ * binding is a shared cell held in a local of each root that reaches it, so
+ * no root reads another root's frame.
  *
  * <p>Structured standard natives are not executed inside a semantic root. {@link
  * ProtosBuiltinCallRootNode} enters the auxiliary structured/C-prime root
@@ -138,8 +132,7 @@ import com.oracle.truffle.api.source.Source;
  * {@link ProtosFunctionCallDispatchers} (the {@code Call*Method}, {@code
  * GetMethod} and {@code CallRequest} operations); structured protocol state
  * lives with its domain owners ({@link ProtosPreparedCalls}, the structured
- * state families, {@link ProtosCapturedLexicalAccess} and {@link
- * ProtosFrameLocalBindings}). The operations used only by auxiliary roots are
+ * state families and {@link ProtosFrameLocalBindings}). The operations used only by auxiliary roots are
  * declared last.
  */
 /*
@@ -147,8 +140,7 @@ import com.oracle.truffle.api.source.Source;
  * default automatic RootTag/RootBodyTag tagging, no block scoping,
  * serialization, the bytecode index stored in the frame, an uncached
  * threshold of 4 and int-only boxing elimination. NOT PORTABLE: Materialized
- * local accesses stay enabled, because existing operations depend on
- * MaterializedLocalAccessor; illegalLocalException/Factory are not
+ * local accesses stay enabled; illegalLocalException/Factory are not
  * configured, so uninitialized locals keep their existing behavior; the
  * root extends RootNode, not a PRootNode. With serialization enabled, every
  * mutable field of this root is transient: they hold per-parse lowering
@@ -439,12 +431,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * PERF025 frame-materialization slice: the frame-binding range and layout
-     * of a Closure root lowered without InstallFrameLexicalAuthority, or null.
-     * Read only by tooling scope projection, which receives the live frame.
+     * I115: the declared names of a Closure root's LOCAL/CELL bindings, with
+     * the offsets of their Bytecode DSL locals and whether each local holds a
+     * cell, or null. Read only by tooling scope projection, which receives
+     * the live frame; never consulted by guest execution.
      */
-    private transient LocalRangeAccessor frameNativeBindingLocals;
-    private transient ProtosFrameLexicalLayout frameNativeBindingLayout;
+    private transient String[] toolingBindingNames;
+    private transient int[] toolingBindingOffsets;
+    private transient boolean[] toolingBindingCells;
 
     /*
      * TEST009-V: the exact root span, recorded by the lowerer only while the diagnostic stable
@@ -626,72 +620,49 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     // PRUIBA DE I115, en algún momento esto volverá a funcionar
     // Removed per-root numeric return-projection state.
 
-    final void recordFrameNativeBindings(
-            LocalRangeAccessor frameBackedLocals,
-            ProtosFrameLexicalLayout frameBackedLayout) {
-        this.frameNativeBindingLocals = frameBackedLocals;
-        this.frameNativeBindingLayout = frameBackedLayout;
+    final void recordToolingBindings(String[] names, int[] offsets, boolean[] cells) {
+        this.toolingBindingNames = names;
+        this.toolingBindingOffsets = offsets;
+        this.toolingBindingCells = cells;
     }
 
     /**
-     * PLAT067-B tooling-only read of this root's PRESENT frame-native bindings
-     * at {@code bytecodeIndex} of {@code frame}, in layout order, or {@code
-     * null} when this root keeps no frame-native bindings or {@code
-     * activation} already projects them through this frame's authority. A
-     * cleared (not yet created) local is ABSENT and omitted; a primitive
-     * carrier is answered as its guest value. Nothing is installed, published
-     * or retained: the activation and its Context are left unchanged.
+     * PLAT067-B / I115 tooling-only read of this root's established LOCAL
+     * and CELL bindings at {@code bytecodeIndex} of {@code frame}, in
+     * declaration order, or {@code null} when this root records none. An
+     * unestablished local or cell is ABSENT and omitted; a primitive carrier
+     * is answered as its guest value. Nothing is installed, published or
+     * retained: the activation and its Context are left unchanged.
+     *
+     * <p>KNOWN I115 SEMANTIC DIVERGENCE: this view is read-only; a debugger
+     * write to these bindings through the scope does not reach the frame.
      */
     @TruffleBoundary
-    final java.util.Map<String, Object> unprojectedFrameNativeBindingsForTooling(
+    final java.util.Map<String, Object> toolingBindingsOrNull(
             BytecodeNode bytecodeNode,
             int bytecodeIndex,
-            com.oracle.truffle.api.frame.MaterializedFrame materialized,
-            ProtosActivation activation) {
-        if (frameNativeBindingLocals == null) {
-            return null;
-        }
-        if (activation.currentLexicalBindingAuthorityForRuntime()
-                        instanceof ProtosFrameLexicalBindingAuthority installed
-                && installed.isInstalledFor(bytecodeNode, materialized)) {
+            com.oracle.truffle.api.frame.MaterializedFrame materialized) {
+        if (toolingBindingNames == null) {
             return null;
         }
         java.util.LinkedHashMap<String, Object> present = new java.util.LinkedHashMap<>();
-        for (int ordinal = 0; ordinal < frameNativeBindingLayout.length(); ordinal++) {
-            if (frameNativeBindingLocals.isCleared(bytecodeNode, materialized, ordinal)) {
-                continue;
+        for (int index = 0; index < toolingBindingNames.length; index++) {
+            Object stored =
+                    bytecodeNode.getLocalValue(
+                            bytecodeIndex, materialized, toolingBindingOffsets[index]);
+            Object value = stored;
+            if (toolingBindingCells[index]) {
+                value = stored instanceof ProtosLexicalCell cell
+                        ? cell.valueOrNullForRuntime()
+                        : null;
             }
-            present.put(
-                    frameNativeBindingLayout.nameAt(ordinal),
-                    ProtosNumericValueSupport.guestValue(
-                            bytecodeNode.getLocalValue(
-                                    bytecodeIndex,
-                                    materialized,
-                                    frameNativeBindingLayout.localOffsetAt(ordinal))));
+            if (value != null) {
+                present.put(
+                        toolingBindingNames[index],
+                        ProtosNumericValueSupport.guestValue(value));
+            }
         }
         return java.util.Collections.unmodifiableMap(present);
-    }
-
-    /**
-     * Installs, for tooling scope projection, the materialized-frame authority
-     * of this root over {@code frame} on {@code activation}, when this root was
-     * lowered without a persistent frame authority. {@code frame} must be the
-     * live frame of an executing activation of this root, and {@code location}
-     * a location of this root; only the frame's materialized form is retained.
-     */
-    final void installFrameNativeAuthorityForTooling(
-            ProtosActivation activation,
-            BytecodeLocation location,
-            com.oracle.truffle.api.frame.Frame frame) {
-        if (frameNativeBindingLocals == null) {
-            return;
-        }
-        ProtosFrameLocalBindings.promoteLiveFrameLexicalAuthority(
-                frameNativeBindingLocals,
-                frameNativeBindingLayout,
-                activation,
-                location,
-                frame);
     }
 
     @Override
@@ -942,134 +913,137 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     // ---- Closure parameter binding -------------------------------------------------
 
+    /*
+     * I115 parameter operations. Supplied positional values keep their B5
+     * offsets after publication, so a parameter is read from the frame
+     * arguments in every state and stored immediately in its local or cell by
+     * the lowering; no activation is materialized to bind a parameter. D203:
+     * a position the call did not supply reads canonical null; no
+     * Closure-binding operation signals an argument-count Error.
+     */
+
+    /** Supplied positional argument {@code index}, or canonical null (D203). */
     @Operation
-    public static final class HasClosureArgument {
+    @ConstantOperand(type = int.class, name = "index")
+    public static final class LoadSuppliedArgument {
         @Specialization
-        public static boolean perform(ProtosActivation activation, int positionalIndex) {
-            return activation.hasSuppliedParameterForRuntime(
-                    positionalIndex);
+        public static Object perform(int index, @Bind VirtualFrame frame) {
+            return ProtosFrameArguments.compactSuppliedArgumentOrNull(frame.getArguments(), index);
         }
     }
 
+    /** Whether the call supplied positional argument {@code index}. */
     @Operation
-    public static final class LoadClosureArgument {
+    @ConstantOperand(type = int.class, name = "index")
+    public static final class HasSuppliedArgument {
         @Specialization
-        public static Object perform(ProtosActivation activation, int positionalIndex) {
-            List<?> arguments =
-                    ProtosFrameLocalBindings.closureArguments(activation);
-            // D203: an unsupplied parameter without a default binds canonical null.
-            if (positionalIndex >= arguments.size()) {
-                return ProtosNullValue.INSTANCE;
-            }
-            return arguments.get(positionalIndex);
+        public static boolean perform(int index, @Bind VirtualFrame frame) {
+            return ProtosFrameArguments.suppliedArgumentCount(frame.getArguments()) > index;
         }
     }
+
+    /**
+     * The frozen Array of the supplied arguments after the first {@code
+     * positionalParametersBeforeRest}, the value of a rest parameter.
+     */
+    @Operation
+    @ConstantOperand(type = int.class, name = "positionalParametersBeforeRest")
+    public static final class LoadRestArguments {
+        @Specialization
+        public static Object perform(int positionalParametersBeforeRest, @Bind VirtualFrame frame) {
+            return ProtosFrameArguments.restArgumentArray(
+                    frame.getArguments(), positionalParametersBeforeRest);
+        }
+    }
+
+    // ---- I115 lexical cells --------------------------------------------------------
 
     /*
-     * PERF025-H1 root-level parameter operations. The lowerer emits these
-     * instead of the activation-operand forms whenever the current activation
-     * is the root's own (never inside an inline Object body or inline callback
-     * region). While the frame is still in compact source-call form, the
-     * supplied positional values are read directly from the frame arguments.
-     * D203: a position the call did not supply reads canonical null on both
-     * paths; no Closure-binding operation signals an argument-count Error.
-     *
-     * PERF038-C: each operation's compact path and its activation path are
-     * separate specializations (the PERF038-B BindClosureFrameParameter
-     * shape). A site that has only ever run in compact frames compiles the
-     * frame-argument read alone; the materialization and the activation
-     * implementation are reached only through the respecializing fallback.
-     * The guards are re-evaluated on every execution and are exact
-     * complements of the former in-line conditions.
+     * I115 (GraalPy cell variables): a Closure binding captured by a nested
+     * Closure is one ProtosLexicalCell held in a Bytecode DSL local of its
+     * owning root. The owner creates the cell at entry; a capturing Closure
+     * receives the same cell instance at creation and copies it into its own
+     * local at entry. Reads and writes use the cell directly: there is no
+     * owner-frame selection and no name-based fallback.
      */
 
+    /** A fresh, uninitialized cell for one owned CELL binding. */
     @Operation
-    public static final class HasFrameClosureArgument {
-        @Specialization(guards = "isCompact(frame)")
-        public static boolean compact(int positionalIndex, @Bind VirtualFrame frame) {
-            /* PERF038-F: the supplied-count comparison without the layout branch. */
-            return ProtosFrameArguments.compactHasSuppliedArgument(
-                    frame.getArguments(), positionalIndex);
-        }
-
-        @Specialization(guards = "!isCompact(frame)")
-        public static boolean materialized(int positionalIndex, @Bind VirtualFrame frame) {
-            return HasClosureArgument.perform(
-                    ProtosFrameArguments.activation(frame.getArguments()), positionalIndex);
-        }
-
-        @NonIdempotent
-        static boolean isCompact(VirtualFrame frame) {
-            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
+    public static final class CreateCell {
+        @Specialization
+        public static ProtosLexicalCell perform() {
+            return new ProtosLexicalCell();
         }
     }
 
+    /** Captured cell {@code index} of the invoked Closure, read at root entry. */
     @Operation
-    public static final class LoadFrameClosureArgument {
-        @Specialization(guards = "isCompact(frame)")
-        public static Object compact(int positionalIndex, @Bind VirtualFrame frame) {
-            return ProtosFrameArguments.compactSuppliedArgumentOrNull(
-                    frame.getArguments(), positionalIndex);
-        }
-
-        @Specialization(guards = "!isCompact(frame)")
-        public static Object materialized(int positionalIndex, @Bind VirtualFrame frame) {
-            return LoadClosureArgument.perform(
-                    ProtosFrameArguments.activation(frame.getArguments()), positionalIndex);
-        }
-
-        @NonIdempotent
-        static boolean isCompact(VirtualFrame frame) {
-            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
+    @ConstantOperand(type = int.class, name = "index")
+    public static final class LoadCapturedCell {
+        @Specialization
+        public static ProtosLexicalCell perform(int index, @Bind VirtualFrame frame) {
+            return ProtosFrameArguments.capturedCells(frame.getArguments())[index];
         }
     }
 
     /**
-     * Binds a named Closure parameter to {@code value}; with {@code rest}
-     * (builder-fixed) {@code value} is the Integer count of positional
-     * parameters before the rest parameter, which binds the frozen rest Array.
+     * The value of a cell. A read before the binding point signals the
+     * unqualified-lookup Error at this boundary.
      */
     @Operation
-    @ConstantOperand(type = boolean.class, name = "rest")
-    public static final class BindClosureParameter {
+    public static final class LoadCell {
         @Specialization
-        public static void perform(boolean rest, ProtosActivation activation, String name, Object value) {
-            ProtosFrameLocalBindings.createClosureParameterSlot(
-                    activation,
-                    name,
-                    rest
-                            ? ProtosFrameLocalBindings.closureRestArray(activation, (int) value)
-                            : value);
+        public static Object perform(ProtosLexicalCell cell, @Bind VirtualFrame frame) {
+            Object value = cell.valueOrNullForRuntime();
+            if (value == null) {
+                throw uninitializedCellError(frame.getArguments());
+            }
+            return value;
+        }
+    }
+
+    @TruffleBoundary
+    static ProtosSignalException uninitializedCellError(Object[] arguments) {
+        return new ProtosSignalException(
+                ProtosCoreErrors.newUnqualifiedLookupError(
+                        ProtosFrameArguments.activation(arguments)));
+    }
+
+    /** Stores the guest value {@code value} into {@code cell}. */
+    @Operation
+    public static final class StoreCell {
+        @Specialization
+        public static void perform(ProtosLexicalCell cell, Object value) {
+            cell.setForRuntime(value);
         }
     }
 
     /**
-     * The indexed form of {@link BindClosureParameter}: a statically proven
-     * parameter at {@code ordinal}; with {@code rest} the rest parameter.
+     * An access to a LOCAL binding that the lowering proved precedes its
+     * binding point: the uninitialized-binding Error, with no lookup.
      */
     @Operation
-    @ConstantOperand(type = boolean.class, name = "rest")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    @ConstantOperand(type = int.class, name = "ordinal")
-    public static final class BindClosureIndexedParameter {
+    public static final class UninitializedBinding {
         @Specialization
-        public static void perform(
-                boolean rest,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                ProtosActivation activation,
-                String name,
-                Object value) {
-            ProtosFrameLocalBindings.bindIndexedClosureParameter(
-                    frameBackedLayout,
-                    activation,
-                    ordinal,
-                    name,
-                    rest
-                            ? ProtosFrameLocalBindings.closureRestArray(activation, (int) value)
-                            : value);
+        public static Object perform(@Bind VirtualFrame frame) {
+            throw uninitializedCellError(frame.getArguments());
+        }
+    }
+
+    /**
+     * Installs the creator's cells, in the Closure scope's constant
+     * captured-cell order, into a Closure created by the enclosed operation.
+     */
+    @Operation
+    public static final class CaptureClosureCells {
+        @Specialization
+        public static ProtosClosureValue perform(
+                ProtosClosureValue closure, @Variadic Object[] cells) {
+            ProtosLexicalCell[] captured = new ProtosLexicalCell[cells.length];
+            for (int index = 0; index < cells.length; index++) {
+                captured[index] = (ProtosLexicalCell) cells[index];
+            }
+            return closure.installCapturedCellsForRuntime(captured);
         }
     }
 
@@ -1091,414 +1065,35 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    @Operation
-    @ConstantOperand(
-            type = LocalRangeAccessor.class,
-            name = "frameBackedLocals")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    public static final class InstallFrameLexicalAuthority {
-        @Specialization
-        public static void perform(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                ProtosActivation activation,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind VirtualFrame frame) {
-            MaterializedFrame materializedFrame = frame.materialize();
-            activation.installFrameLexicalBindingAuthorityForRuntime(
-                    new ProtosFrameLexicalBindingAuthority(
-                            frameBackedLayout,
-                            frameBackedLocals,
-                            bytecodeNode.getBytecodeLocation(bytecodeIndex),
-                            materializedFrame));
-        }
-    }
-
-
-    /**
-     * I104-B: establish one required parameter per Bytecode DSL
-     * instruction. Each local ordinal is an exact constant operand.
-     */
-    @Operation
-    @ConstantOperand(type = LocalRangeAccessor.class, name = "frameBackedLocals")
-    @ConstantOperand(type = ProtosFrameLexicalLayout.class, name = "frameBackedLayout")
-    @ConstantOperand(type = int.class, name = "ordinal")
-    public static final class BindRequiredFrameParameter {
-        @Specialization(
-                guards = "isCompactUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
-        public static void compact(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                String name,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            Object value =
-                    ProtosFrameArguments.compactSuppliedArgumentOrNull(
-                            frame.getArguments(), ordinal);
-            frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
-        }
-
-        @Specialization(
-                guards = "!isCompactUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
-        public static void authoritative(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                String name,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind VirtualFrame frame) {
-            ProtosFrameLocalBindings.bindRequiredFrameParameterSlow(
-                    frameBackedLocals, frameBackedLayout, ordinal, name,
-                    bytecodeNode, bytecodeIndex, frame.materialize());
-        }
-
-        @NonIdempotent
-        static boolean isCompactUnbound(
-                LocalRangeAccessor frameBackedLocals,
-                int ordinal,
-                BytecodeNode bytecodeNode,
-                VirtualFrame frame) {
-            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments())
-                    && frameBackedLocals.isCleared(
-                            bytecodeNode, frame, ordinal);
-        }
-    }
-
-    @Operation
-    @ConstantOperand(
-            type = LocalRangeAccessor.class,
-            name = "frameBackedLocals")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    @ConstantOperand(type = int.class, name = "ordinal")
-    public static final class BindClosureFrameParameter {
-        /**
-         * PERF025-H1: a frame still in compact source-call form has no
-         * materialized activation, hence an unobserved execution context
-         * without an authority; the frame local is then the binding's only
-         * store, exactly as {@code createCurrentFrameBinding} treats an
-         * unobserved context. Any other state, including a duplicate
-         * creation's Error, takes the unchanged activation path.
-         *
-         * <p>PERF029: {@code ordinal} is a constant operand, not a stack
-         * operand, because every {@link LocalRangeAccessor} local operation
-         * requires its index to be a partial-evaluation constant.
-         *
-         * <p>PERF038-B: the compact direct store and the authoritative
-         * activation path are separate specializations. A site that has only
-         * ever bound into compact unobserved frames compiles the guard and
-         * the slot store alone; the activation, lexical-authority and
-         * duplicate-creation machinery is reached only through the
-         * respecializing fallback, and even when that fallback is active it
-         * stays behind a boundary (the PERF034-B {@code CreateCurrentFrameLocal}
-         * shape). The guard is re-evaluated on every execution, so a frame
-         * materialized or an ordinal already established since the last
-         * execution always takes the fallback.
-         */
-        @Specialization(guards = "isCompactUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
-        public static void compact(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                String name,
-                Object value,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
-        }
-
-        @Specialization(guards = "!isCompactUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
-        public static void materialized(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                String name,
-                Object value,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind VirtualFrame frame) {
-            ProtosFrameLocalBindings.bindClosureFrameParameterSlow(
-                    frameBackedLocals, frameBackedLayout, ordinal,
-                    frame.getArguments(), name, value, bytecodeNode, bytecodeIndex,
-                    frame.materialize());
-        }
-
-        @NonIdempotent
-        static boolean isCompactUnbound(
-                LocalRangeAccessor frameBackedLocals,
-                int ordinal,
-                BytecodeNode bytecodeNode,
-                VirtualFrame frame) {
-            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments())
-                    && frameBackedLocals.isCleared(bytecodeNode, frame, ordinal);
-        }
-
-        public static void perform(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                ProtosActivation activation,
-                String name,
-                Object value,
-                BytecodeNode bytecodeNode,
-                int bytecodeIndex,
-                VirtualFrame frame) {
-            try {
-                ProtosFrameLocalBindings.createCurrentFrameBinding(
-                        frameBackedLocals, frameBackedLayout, activation,
-                        ordinal, name, value, bytecodeNode, bytecodeIndex, frame);
-            } catch (IllegalStateException invalidCreation) {
-                throw new ProtosSignalException(
-                        ProtosCoreErrors.newError(activation));
-            }
-        }
-}
-
-    /**
-     * I104-A: fused unary NORMAL entry. The parameter's identity, layout,
-     * ordinal and spelling are compilation constants. Only its supplied
-     * value is dynamic.
-     *
-     * The compact specialization combines the former frame argument load
-     * and frame-local binding into one Bytecode DSL operation; an unsupplied
-     * argument binds canonical null (D203). Published or otherwise
-     * non-compact activations retain the original authoritative operations,
-     * including duplicate-binding Errors.
-     */
-    @Operation
-    @ConstantOperand(
-            type = LocalRangeAccessor.class,
-            name = "frameBackedLocals")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    @ConstantOperand(type = int.class, name = "ordinal")
-    @ConstantOperand(type = String.class, name = "name")
-    public static final class BindUnaryFrameParameter {
-        @Specialization(
-                guards = "isCompactUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
-        public static void compact(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                String name,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            Object value = ProtosFrameArguments.compactSuppliedArgumentOrNull(
-                    frame.getArguments(), 0);
-            frameBackedLocals.setObject(
-                    bytecodeNode, frame, ordinal, value);
-        }
-
-        @Specialization(
-                guards = "!isCompactUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
-        public static void authoritative(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                String name,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind VirtualFrame frame) {
-            ProtosFrameLocalBindings.bindUnaryFrameParameterAuthoritatively(
-                    frameBackedLocals,
-                    frameBackedLayout,
-                    ordinal,
-                    name,
-                    frame.getArguments(),
-                    bytecodeNode,
-                    bytecodeIndex,
-                    frame.materialize());
-        }
-
-        @NonIdempotent
-        static boolean isCompactUnbound(
-                LocalRangeAccessor frameBackedLocals,
-                int ordinal,
-                BytecodeNode bytecodeNode,
-                VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            return (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                            || ProtosFrameArguments.isExperimentalStaticUnaryCall(arguments))
-                    && frameBackedLocals.isCleared(
-                            bytecodeNode, frame, ordinal);
-        }
-    }
-
     /**
      * I115-H7 EXPERIMENTAL (GraalPy {@code PBytecodeDSLRootNode.CopyArguments}):
      * the prologue of an admitted compact unary Closure root. I115-H7-R3:
-     * {@link #copy} stores supplied argument 0, read directly from its B5
+     * {@link #copy} yields supplied argument 0, read directly from its B5
      * position (unchanged by publication, and shared with the static unary
-     * layout), into the parameter's own frame local. Nothing is checked,
-     * materialized or published per execution.
+     * layout); the lowering stores it into the parameter's own local with
+     * StoreLocal. Nothing is checked, materialized or published per execution.
      *
      * <p>RECORDED DIVERGENCES: the experimental admission guarantees exactly
      * one supplied argument; a call with a different arity is not recovered
-     * (no BindUnaryFrameParameter fallback), and excess supplied arguments
+     * (no other binding path), and excess supplied arguments
      * are not inspected.
      */
     @Operation
-    @ConstantOperand(
-            type = LocalRangeAccessor.class,
-            name = "frameBackedLocals")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    @ConstantOperand(type = int.class, name = "ordinal")
-    @ConstantOperand(type = String.class, name = "name")
     public static final class CopyArguments {
         @Specialization
-        public static void copy(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                String name,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            frameBackedLocals.setObject(
-                    bytecodeNode,
-                    frame,
-                    ordinal,
-                    ProtosFrameArguments.experimentalSuppliedArgument0(
-                            frame.getArguments()));
+        public static Object copy(@Bind VirtualFrame frame) {
+            return ProtosFrameArguments.experimentalSuppliedArgument0(frame.getArguments());
         }
     }
-
-    @Operation
-    @ConstantOperand(
-            type = LocalRangeAccessor.class,
-            name = "frameBackedLocals")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    @ConstantOperand(type = int.class, name = "ordinal")
-    public static final class BindInlineClosureFrameParameter {
-        /**
-         * I113 (former BindClosureFrameRest): the frame-backed rest parameter of
-         * an ordinary root, bound from its activation.
-         */
-        @Specialization
-        public static void rest(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                ProtosActivation activation,
-                String name,
-                int positionalParametersBeforeRest,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind VirtualFrame frame) {
-            Object rest = ProtosFrameLocalBindings.closureRestArray(activation, positionalParametersBeforeRest);
-            try {
-                ProtosFrameLocalBindings.createCurrentFrameBinding(
-                        frameBackedLocals, frameBackedLayout, activation,
-                        ordinal, name, rest, bytecodeNode, bytecodeIndex, frame);
-            } catch (IllegalStateException invalidCreation) {
-                throw new ProtosSignalException(
-                        ProtosCoreErrors.newError(activation));
-            }
-        }
-    }
-
-    /**
-     * PERF034-C: a bytecode-local scalar lane is valid only while the
-     * current source-call activation remains compact and unobserved.
-     * A materialized activation continues through the authoritative
-     * frame-local creation/read operations.
-     */
-    @Operation
-    public static final class IsCompactLocalFrame {
-        @Specialization
-        public static boolean perform(@Bind VirtualFrame frame) {
-            return ProtosFrameArguments.isUnmaterializedCompactScalarLocalCall(
-                    frame.getArguments());
-        }
-    }
-
-    @Operation
-    @ConstantOperand(
-            type = LocalRangeAccessor.class,
-            name = "frameBackedLocals")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    @ConstantOperand(type = int.class, name = "ordinal")
-    @ConstantOperand(type = String.class, name = "name")
-    public static final class CreateCurrentFrameLocal {
-        /**
-         * PERF025 compact callee execution: the body-level counterpart of
-         * {@link BindClosureFrameParameter}. While the frame is still in
-         * compact source-call form the context is unobserved and has no
-         * authority, so an ABSENT local is established directly in the frame;
-         * a PRESENT one (duplicate creation) or any other state takes the
-         * unchanged activation path, including its exact creation Error.
-         *
-         * <p>PERF030: {@code ordinal} is a constant operand for the same
-         * reason as in {@link BindClosureFrameParameter}.
-         */
-        @Specialization
-        public static Object perform(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                String name,
-                Object value,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    && frameBackedLocals.isCleared(bytecodeNode, frame, ordinal)) {
-                frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
-                return value;
-            }
-            return ProtosFrameLocalBindings.createCurrentFrameLocalSlow(
-                    frameBackedLocals, frameBackedLayout, ordinal,
-                    arguments, name, value, bytecodeNode, bytecodeIndex,
-                    frame.materialize());
-        }
-
-        public static Object performForActivation(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                ProtosActivation activation,
-                String name,
-                Object value,
-                BytecodeNode bytecodeNode,
-                int bytecodeIndex,
-                VirtualFrame frame) {
-            try {
-                ProtosFrameLocalBindings.createCurrentFrameBinding(
-                        frameBackedLocals, frameBackedLayout, activation,
-                        ordinal, name, value, bytecodeNode, bytecodeIndex, frame);
-            } catch (IllegalStateException invalidMutation) {
-                throw new ProtosSignalException(
-                        ProtosCoreErrors.newError(activation));
-            }
-            return value;
-        }
-}
-
 
     /*
-     * PERF030-I frame-native multiple creation. The lowerer splits it into one
-     * prefix observation, which observes the complete fixed source prefix
-     * before any binding is created, followed by one scalar
-     * CreateCurrentFrameLocal or CreateInlineCurrentFrameLocal per name, in
-     * source order, each owning its ordinal as a constant operand. A failing
-     * creation leaves the earlier ones in place (no rollback), exactly as
-     * MultipleCreateLocalSlots. No ordinal array is ever indexed at run time.
+     * PERF030-I / I115 multiple creation of LOCAL/CELL bindings. The lowerer
+     * splits it into one prefix observation, which observes the complete
+     * fixed source prefix before any binding is created, followed by one
+     * store per name, in source order, into that binding's own storage.
      */
 
-    /** The observed prefix of a frame-native root multiple creation. */
+    /** The observed prefix of a multiple creation. */
     @Operation
     public static final class ObserveMultipleCreatePrefix {
         @Specialization
@@ -1508,7 +1103,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-
     /** Element {@code index} of an observed multiple-creation prefix. */
     @Operation
     public static final class ObservedMultipleCreateValue {
@@ -1517,548 +1111,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return observed[index];
         }
     }
-
-    @Operation
-    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
-    @ConstantOperand(type = Assumption.class, name = "presenceContinuity")
-    public static final class ReadFrameLocal {
-        @Specialization
-        public static Object perform(
-                LocalAccessor accessor,
-                Assumption presenceContinuity,
-                ProtosActivation activation,
-                String name,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            return ProtosNumericValueSupport.guestValue(
-                    ProtosFrameLocalBindings.readRetainingCarrier(
-                            accessor, presenceContinuity, activation, name, bytecodeNode, frame));
-        }
-}
-
-    /**
-     * PERF025-H1 root-level form of {@link ReadFrameLocal}, emitted when the
-     * current activation is the root's own. It has three paths:
-     * <ol>
-     * <li>a frame still in compact source-call form denotes a genuine,
-     * unobserved execution context, so the local is read directly;</li>
-     * <li>a published activation whose execution context is genuine reads the
-     * local directly while its binding is PRESENT, either because the
-     * presence continuity is still valid or because the slot is not
-     * cleared;</li>
-     * <li>every other case (an ABSENT binding, or a non-genuine context)
-     * resumes the general lexical resolution on the materialized frame.</li>
-     * </ol>
-     * The static identity of the binding does not guarantee its presence:
-     * D179 C0 structural removal may make it ABSENT, and that invalidation
-     * keeps the dynamic resolution exact.
-     */
-    @Operation
-    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
-    @ConstantOperand(type = int.class, name = "localOffset")
-    @ConstantOperand(type = Assumption.class, name = "presenceContinuity")
-    @ConstantOperand(type = String.class, name = "name")
-    public static final class ReadRootFrameLocal {
-        /*
-         * The lowerer emitted this operation only for a current Resolved
-         * binding. While the call is still compact its guest Context has
-         * never become observable, so no D179 structural removal could have
-         * made that established binding ABSENT.
-         *
-         * PERF038-C: the compact read and the presence-aware fallback are
-         * separate specializations, so a site that has only read compact
-         * frames compiles no fallback call; the guard is re-evaluated on
-         * every execution.
-         */
-        @Specialization(guards = "isCompact(frame)")
-        public static Object compact(
-                LocalAccessor accessor,
-                int localOffset,
-                Assumption presenceContinuity,
-                String name,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind VirtualFrame frame) {
-            /*
-             * I091: may yield a frame-retained primitive carrier. The lowerer
-             * materializes it for every consumer outside the guarded numeric
-             * chain.
-             */
-            return bytecodeNode.getLocalValue(bytecodeIndex, frame, localOffset);
-        }
-
-        @Specialization(
-                guards = {
-                    "!isCompact(frame)",
-                    "canReadPublishedFrameLocal(accessor, presenceContinuity, bytecodeNode, frame)"
-                })
-        public static Object publishedPresent(
-                LocalAccessor accessor,
-                int localOffset,
-                Assumption presenceContinuity,
-                String name,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind VirtualFrame frame) {
-            return bytecodeNode.getLocalValue(bytecodeIndex, frame, localOffset);
-        }
-
-        @Specialization(
-                guards = {
-                    "!isCompact(frame)",
-                    "!canReadPublishedFrameLocal(accessor, presenceContinuity, bytecodeNode, frame)"
-                })
-        public static Object materialized(
-                LocalAccessor accessor,
-                int localOffset,
-                Assumption presenceContinuity,
-                String name,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            return ProtosFrameLocalBindings.readRootFrameLocalSlow(
-                    accessor, presenceContinuity, frame.getArguments(),
-                    name, bytecodeNode, frame.materialize());
-        }
-
-        @NonIdempotent
-        static boolean canReadPublishedFrameLocal(
-                LocalAccessor accessor,
-                Assumption presenceContinuity,
-                BytecodeNode bytecodeNode,
-                VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            if (!ProtosFrameArguments.hasPublishedActivation(arguments)) {
-                return false;
-            }
-
-            ProtosActivation activation =
-                    ProtosFrameArguments.publishedActivation(arguments);
-
-            return activation.hasGenuineExecutionContextForRuntime()
-                    && (presenceContinuity.isValid()
-                            || !accessor.isCleared(bytecodeNode, frame));
-        }
-
-        @NonIdempotent
-        static boolean isCompact(VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    || ProtosFrameArguments.isExperimentalStaticUnaryCall(arguments);
-        }
-    }
-
-
-    /*
-     * PERF037-B root-level captured reads. The lowerer emits these instead of
-     * the activation-operand forms whenever the current activation is the
-     * root's own. While the frame is still in compact source-call form the
-     * invocation's guest Context has never become observable, so it cannot
-     * hold a binding the static analysis did not declare (D179 C0 late
-     * creation needs that Context), and the captured lexical chain is the
-     * invoked Closure's own: the nearer-scope presence checks and the owner
-     * selection then run without materializing the activation. A
-     * materialized frame, and every fallback, take the unchanged
-     * activation path.
-     */
-
-    /*
-     * PERF037-C: the name and lexical depth are constant operands, so the
-     * nearer-scope walk has a partial-evaluation-constant length. The compact
-     * and materialized-activation forms are separate specializations, so a
-     * root whose invocations stay compact never compiles the activation path.
-     * The compact form retains a CapturedNearerScopeAbsence proof instead of
-     * asking each nearer scope for membership; the uncached interpreter uses
-     * an unproven one and walks exactly as before.
-     */
-
-    @Operation
-    @ConstantOperand(type = int.class, name = "frameOrdinal")
-    @ConstantOperand(type = String.class, name = "name")
-    @ConstantOperand(type = int.class, name = "lexicalDepth")
-    public static final class ReadCapturedFrameLocalAtRoot {
-        /*
-         * PERF038-C: compact and materialized frames are separate
-         * specializations (guard re-evaluated on every execution), and the
-         * compact miss materializes and looks up behind one boundary instead
-         * of two, so a compact-only site compiles no activation path.
-         */
-        @Specialization(guards = "isCompact(frame)")
-        public static Object compact(
-                int frameOrdinal,
-                String name,
-                int lexicalDepth,
-                @Bind VirtualFrame frame,
-                @Cached(
-                                value = "createNearerScopeAbsence(frame, name, lexicalDepth)",
-                                uncached = "unprovenNearerScopeAbsence(lexicalDepth)")
-                        CapturedNearerScopeAbsence nearerAbsence) {
-            Object[] arguments = frame.getArguments();
-            if (lexicalDepth > 0) {
-                Object value =
-                        ProtosCapturedLexicalAccess.readOwnerFrameBindingOrNull(
-                                nearerAbsence.ownerOrNull(
-                                        ProtosFrameArguments.compactCapturedLexicalEnvironment(
-                                                arguments),
-                                        name),
-                                name,
-                                frameOrdinal);
-                if (value != null) {
-                    return value;
-                }
-            }
-            return lookupCapturedFallbackAtRoot(arguments, name);
-        }
-
-        /*
-         * I115: after publication the read keeps its own nearer-scope proof
-         * (built from the published activation's captured chain, the same
-         * chain the compact form reads), so it neither publishes a caller
-         * nor walks the nearer scopes' membership on every execution.
-         */
-        @Specialization(guards = "!isCompact(frame)")
-        public static Object materialized(
-                int frameOrdinal,
-                String name,
-                int lexicalDepth,
-                @Bind VirtualFrame frame,
-                @Cached(
-                                value = "createPublishedNearerScopeAbsence(frame, name, lexicalDepth)",
-                                uncached = "unprovenNearerScopeAbsence(lexicalDepth)")
-                        CapturedNearerScopeAbsence nearerAbsence) {
-            return ProtosCapturedLexicalAccess.readCapturedFrameLocal(
-                    frameOrdinal,
-                    ProtosFrameArguments.activation(frame.getArguments()),
-                    name,
-                    lexicalDepth,
-                    nearerAbsence);
-        }
-
-        @NonIdempotent
-        static boolean isCompact(VirtualFrame frame) {
-            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
-        }
-
-        static CapturedNearerScopeAbsence createPublishedNearerScopeAbsence(
-                VirtualFrame frame, String name, int lexicalDepth) {
-            return CapturedNearerScopeAbsence.create(
-                    ProtosFrameArguments.activation(frame.getArguments())
-                            .capturedLexicalEnvironmentForRuntime(),
-                    name,
-                    lexicalDepth);
-        }
-
-        static CapturedNearerScopeAbsence createNearerScopeAbsence(
-                VirtualFrame frame, String name, int lexicalDepth) {
-            return CapturedNearerScopeAbsence.create(
-                    ProtosFrameArguments.compactCapturedLexicalEnvironment(frame.getArguments()),
-                    name,
-                    lexicalDepth);
-        }
-
-        static CapturedNearerScopeAbsence unprovenNearerScopeAbsence(int lexicalDepth) {
-            return CapturedNearerScopeAbsence.unproven(lexicalDepth);
-        }
-    }
-
-    @Operation
-    @ConstantOperand(type = MaterializedLocalAccessor.class)
-    @ConstantOperand(type = String.class, name = "name")
-    @ConstantOperand(type = int.class, name = "lexicalDepth")
-    public static final class SelectCapturedMaterializedOwnerFrameAtRoot {
-        /* PERF038-C: compact and materialized frames specialize separately. */
-        @Specialization(guards = "isCompact(frame)")
-        public static MaterializedFrame compact(
-                MaterializedLocalAccessor accessor,
-                String name,
-                int lexicalDepth,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame,
-                @Cached(
-                                value = "createNearerScopeAbsence(frame, name, lexicalDepth)",
-                                uncached = "unprovenNearerScopeAbsence(lexicalDepth)")
-                        CapturedNearerScopeAbsence nearerAbsence,
-                @Cached(
-                                value = "createOwnerFrameCache()",
-                                uncached = "retiredOwnerFrameCache()")
-                        CapturedOwnerFrameCache ownerFrameCache) {
-            if (lexicalDepth > 0) {
-                return ownerFrameCache.ownerFrameOrNull(
-                        accessor,
-                        nearerAbsence.ownerOrNull(
-                                ProtosFrameArguments.compactCapturedLexicalEnvironment(
-                                        frame.getArguments()),
-                                name),
-                        name,
-                        bytecodeNode,
-                        nearerAbsence);
-            }
-            return null;
-        }
-
-        @Specialization(guards = "!isCompact(frame)")
-        public static MaterializedFrame materialized(
-                MaterializedLocalAccessor accessor,
-                String name,
-                int lexicalDepth,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            return ProtosCapturedLexicalAccess.selectCapturedMaterializedOwnerFrame(
-                    accessor,
-                    ProtosFrameArguments.activation(frame.getArguments()),
-                    name,
-                    lexicalDepth,
-                    bytecodeNode);
-        }
-
-        @NonIdempotent
-        static boolean isCompact(VirtualFrame frame) {
-            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
-        }
-
-        static CapturedNearerScopeAbsence createNearerScopeAbsence(
-                VirtualFrame frame, String name, int lexicalDepth) {
-            return CapturedNearerScopeAbsence.create(
-                    ProtosFrameArguments.compactCapturedLexicalEnvironment(frame.getArguments()),
-                    name,
-                    lexicalDepth);
-        }
-
-        static CapturedNearerScopeAbsence unprovenNearerScopeAbsence(int lexicalDepth) {
-            return CapturedNearerScopeAbsence.uncached(lexicalDepth);
-        }
-
-        static CapturedOwnerFrameCache createOwnerFrameCache() {
-            return CapturedOwnerFrameCache.create();
-        }
-
-        static CapturedOwnerFrameCache retiredOwnerFrameCache() {
-            return CapturedOwnerFrameCache.retired();
-        }
-    }
-
-    @Operation
-    @ConstantOperand(type = String.class, name = "name")
-    public static final class ReadCapturedFallbackAtRoot {
-        @Specialization
-        public static Object perform(String name, @Bind VirtualFrame frame) {
-            return lookupCapturedFallbackAtRoot(frame.getArguments(), name);
-        }
-    }
-
-    /**
-     * PERF038-C: the generic captured lookup of a root-level read, including
-     * the exact activation materialization and publication it may require,
-     * as one host call instead of a materialization call followed by a
-     * lookup call. Receives the frame-argument array, never the frame.
-     */
-    @TruffleBoundary
-    static Object lookupCapturedFallbackAtRoot(Object[] arguments, String name) {
-        return ProtosCapturedLexicalAccess.lookupCapturedFallback(
-                ProtosFrameArguments.activation(arguments), name);
-    }
-
-    /**
-     * I113: a captured frame binding: its read, or with {@code resolveWrite}
-     * its write target (resolution stays separate from the assignment).
-     */
-    @Operation
-    @ConstantOperand(type = boolean.class, name = "resolveWrite")
-    @ConstantOperand(type = int.class, name = "frameOrdinal")
-    public static final class AccessCapturedFrameLocal {
-        @Specialization
-        public static Object perform(
-                boolean resolveWrite,
-                int frameOrdinal,
-                ProtosActivation activation,
-                String name,
-                int lexicalDepth) {
-            if (resolveWrite) {
-                return ProtosCapturedLexicalAccess.resolveCapturedFrameWriteTarget(
-                        frameOrdinal, activation, name, lexicalDepth);
-            }
-            return ProtosCapturedLexicalAccess.readCapturedFrameLocal(
-                    frameOrdinal, activation, name, lexicalDepth);
-        }
-    }
-
-    /*
-     * BUG018-C: a proven captured-materialized read is lowered as owner-frame
-     * selection, IsResultKind(CAPTURED_OWNER_FRAME_SELECTED), then either the builtin
-     * LoadLocalMaterialized of the owner local from the selected frame or the
-     * generic captured lookup. Selection never inspects the value.
-     */
-
-    /**
-     * I113: a captured materialized binding: its owner-frame selection, or
-     * with {@code resolveWrite} its write target.
-     */
-    @Operation
-    @ConstantOperand(type = boolean.class, name = "resolveWrite")
-    @ConstantOperand(type = MaterializedLocalAccessor.class)
-    public static final class AccessCapturedMaterializedLocal {
-        @Specialization
-        public static Object perform(
-                boolean resolveWrite,
-                MaterializedLocalAccessor accessor,
-                ProtosActivation activation,
-                String name,
-                int lexicalDepth,
-                @Bind BytecodeNode bytecodeNode) {
-            if (resolveWrite) {
-                return ProtosCapturedLexicalAccess.resolveCapturedMaterializedWriteTarget(
-                        accessor, activation, name, lexicalDepth, bytecodeNode);
-            }
-            return ProtosCapturedLexicalAccess.selectCapturedMaterializedOwnerFrame(
-                    accessor, activation, name, lexicalDepth, bytecodeNode);
-        }
-    }
-
-    @Operation
-    @ConstantOperand(type = int.class, name = "frameOrdinal")
-    public static final class AssignCapturedFrameLocal {
-        @Specialization
-        public static Object perform(
-                int frameOrdinal,
-                ProtosActivation activation,
-                CapturedLexicalWriteTarget destination,
-                String name,
-                Object value) {
-            try {
-                ProtosCapturedLexicalAccess.assignCapturedFrameDestination(destination, name, frameOrdinal, value);
-            } catch (IllegalStateException invalidMutation) {
-                throw new ProtosSignalException(
-                        ProtosCoreErrors.newError(activation));
-            }
-            return value;
-        }
-    }
-
-    @Operation
-    @ConstantOperand(type = MaterializedLocalAccessor.class)
-    public static final class AssignCapturedMaterializedLocal {
-        @Specialization
-        public static Object perform(
-                MaterializedLocalAccessor accessor,
-                ProtosActivation activation,
-                CapturedLexicalWriteTarget destination,
-                String name,
-                Object value,
-                @Bind BytecodeNode bytecodeNode) {
-            try {
-                ProtosCapturedLexicalAccess.assignCapturedMaterializedDestination(
-                        accessor, destination, name, value, bytecodeNode);
-            } catch (IllegalStateException invalidMutation) {
-                throw new ProtosSignalException(
-                        ProtosCoreErrors.newError(activation));
-            }
-            return value;
-        }
-    }
-
-    @Operation
-    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
-    public static final class ResolveCurrentFrameLocalWriteTarget {
-        @Specialization
-        public static ResolvedLexicalWriteTarget perform(
-                LocalAccessor accessor,
-                ProtosActivation activation,
-                String name,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            if (activation.hasGenuineExecutionContextForRuntime()
-                    && !accessor.isCleared(bytecodeNode, frame)) {
-                return ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL;
-            }
-            return ProtosFrameLocalBindings.resolveWritableLexicalTarget(activation, name);
-        }
-    }
-
-    @Operation
-    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
-    public static final class AssignCurrentFrameLocal {
-        @Specialization
-        public static Object perform(
-                LocalAccessor accessor,
-                ProtosActivation activation,
-                ResolvedLexicalWriteTarget destination,
-                String name,
-                Object value,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            if (destination != ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL) {
-                // I091: only direct frame storage may retain a primitive carrier.
-                return ProtosFrameLocalBindings.assignResolvedLexicalTarget(
-                        activation, destination, name,
-                        ProtosNumericValueSupport.guestValue(value));
-            }
-            if (activation.currentContextIsFrozenForRuntime()
-                    || accessor.isCleared(bytecodeNode, frame)) {
-                throw new ProtosSignalException(
-                        ProtosCoreErrors.newError(activation));
-            }
-            accessor.setObject(bytecodeNode, frame, value);
-            return value;
-        }
-    }
-
-    /**
-     * PERF025 compact callee execution: root-level form of {@link
-     * ResolveCurrentFrameLocalWriteTarget}, emitted when the current
-     * activation is the root's own. A frame still in compact source-call form
-     * denotes a genuine, unobserved (hence OPEN, non-FROZEN) execution
-     * context, so a PRESENT local is selected directly; an ABSENT one (D179
-     * C0) materializes the exact activation and runs the unchanged selection.
-     */
-    @Operation
-    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
-    public static final class ResolveRootFrameLocalWriteTarget {
-        @Specialization
-        public static ResolvedLexicalWriteTarget perform(
-                LocalAccessor accessor,
-                String name,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    && !accessor.isCleared(bytecodeNode, frame)) {
-                return ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL;
-            }
-            return ResolveCurrentFrameLocalWriteTarget.perform(
-                    accessor, ProtosFrameArguments.activation(arguments), name, bytecodeNode, frame);
-        }
-    }
-
-    /**
-     * PERF025 compact callee execution: root-level form of {@link
-     * AssignCurrentFrameLocal}. The retained static destination of a still
-     * compact (never FROZEN) context is written directly when PRESENT; a local
-     * cleared by the RHS, and every other destination, takes the unchanged
-     * activation path and its exact mutation Error.
-     */
-    @Operation
-    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
-    public static final class AssignRootFrameLocal {
-        @Specialization
-        public static Object perform(
-                LocalAccessor accessor,
-                ResolvedLexicalWriteTarget destination,
-                String name,
-                Object value,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            if (destination == ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL
-                    && ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    && !accessor.isCleared(bytecodeNode, frame)) {
-                accessor.setObject(bytecodeNode, frame, value);
-                return value;
-            }
-            return AssignCurrentFrameLocal.perform(
-                    accessor, ProtosFrameArguments.activation(arguments),
-                    destination, name, value, bytecodeNode, frame);
-        }
-    }
-
 
     // ---- Slot creation/assignment, members, identity, intrinsics -------------------
 
@@ -2117,61 +1169,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return source;
         }
     }
-
-    /**
-     * PERF030: {@link CreateCurrentLocalSlot} for a statically proven current
-     * binding of a root that installs its persistent frame authority. The
-     * {@code ordinal} is a constant operand because the frame-local accesses
-     * of {@link ProtosFrameLexicalBindingAuthority#createFrameBackedBindingAt}
-     * require a partial-evaluation constant index; only the unchanged named
-     * fallback resolves {@code name}.
-     */
-    @Operation
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    @ConstantOperand(type = int.class, name = "ordinal")
-    public static final class CreateCurrentIndexedLocalSlot {
-        @Specialization
-        public static Object perform(
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                ProtosActivation activation,
-                String name,
-                Object value) {
-            return ProtosBytecodeRootNode.CreateCurrentIndexedLocalSlot.createIndexedCurrentLocalSlot(
-                    frameBackedLayout, activation, ordinal, name, value);
-        }
-
-
-        /**
-         * PERF030: target-less creation of a statically proven current binding of
-         * a root that installs its persistent frame authority, at the ordinal the
-         * lowerer took from {@code frameBackedLayout}. Admitted exactly like
-         * {@link #bindIndexedClosureParameter}, still rejecting a PRESENT binding
-         * as a duplicate creation; any other state takes the unchanged named
-         * {@link CreateCurrentLocalSlot} path.
-         */
-        static Object createIndexedCurrentLocalSlot(
-                ProtosFrameLexicalLayout frameBackedLayout,
-                ProtosActivation activation,
-                int ordinal,
-                String name,
-                Object value) {
-            if (activation.currentAuthorityAdmittingLocalCreationForRuntime()
-                            instanceof ProtosFrameLexicalBindingAuthority authority
-                    && authority.storesLayout(frameBackedLayout)) {
-                try {
-                    authority.createFrameBackedBindingAt(ordinal, value);
-                } catch (IllegalStateException invalidCreation) {
-                    throw new ProtosSignalException(
-                            ProtosCoreErrors.newError(activation));
-                }
-                return value;
-            }
-            return CreateCurrentLocalSlot.perform(activation, name, value);
-        }
-}
 
     /**
      * I113: a local slot mutation selected by the builder-fixed
@@ -4440,75 +3437,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Fallback
         public static boolean doOther(Object value) {
             return false;
-        }
-    }
-
-    /**
-     * I115-H1-FIX: the existing frame-native to persistent transition of a
-     * live root lowered without {@link InstallFrameLexicalAuthority}
-     * ({@link ProtosFrameLocalBindings#promoteLiveFrameLexicalAuthority}),
-     * emitted only on a path whose ordinary send may observe the activation
-     * or capture its Context. The installed authority adopts the PRESENT
-     * frame locals and keeps them as its storage, so the root's own local
-     * reads and writes and every observer share one binding authority; a
-     * repeated promotion over the same frame installs nothing.
-     */
-    @Operation
-    @ConstantOperand(type = LocalRangeAccessor.class, name = "frameBackedLocals")
-    @ConstantOperand(type = ProtosFrameLexicalLayout.class, name = "frameBackedLayout")
-    public static final class PromoteFrameLexicalAuthority {
-        @Specialization
-        public static void perform(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                ProtosActivation activation,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind VirtualFrame frame) {
-            ProtosFrameLocalBindings.promoteLiveFrameLexicalAuthority(
-                    frameBackedLocals,
-                    frameBackedLayout,
-                    activation,
-                    bytecodeNode.getBytecodeLocation(bytecodeIndex),
-                    frame);
-        }
-    }
-
-    /**
-     * I115 lazy-context experiment (EXPERIMENTAL): the on-demand promotion of
-     * an ordinary Closure root admitted to start frame-native although it may
-     * need durable lexical state. The lowerer emits it immediately before the
-     * operation that publishes or observes the root's execution context (a
-     * creator-capturing Closure creation, the {@code context} intrinsic), never
-     * at entry. It publishes the root's own activation exactly as {@link
-     * CurrentActivation} does and then takes the single live-frame transition
-     * ({@link ProtosFrameLocalBindings#ensureLiveFrameLexicalAuthority}), whose
-     * idempotent check precedes {@code frame.materialize()}. The installed
-     * authority keeps the frame locals as the only store; the VirtualFrame is
-     * never retained.
-     */
-    @Operation
-    @ConstantOperand(type = LocalRangeAccessor.class, name = "frameBackedLocals")
-    @ConstantOperand(type = ProtosFrameLexicalLayout.class, name = "frameBackedLayout")
-    public static final class EnsureLiveFrameLexicalAuthority {
-        @Specialization
-        public static void perform(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex) {
-            if (!ProtosFrameArguments.hasPublishedActivation(frame.getArguments())) {
-                root.requestCallerNeed(NEEDS_EXACT_ACTIVATION);
-            }
-            ProtosFrameLocalBindings.ensureLiveFrameLexicalAuthority(
-                    frameBackedLocals,
-                    frameBackedLayout,
-                    ProtosFrameArguments.activation(frame),
-                    bytecodeNode,
-                    bytecodeIndex,
-                    frame);
         }
     }
 

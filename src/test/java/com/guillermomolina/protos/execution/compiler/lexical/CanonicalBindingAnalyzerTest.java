@@ -30,8 +30,10 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
+import com.guillermomolina.protos.semantic.ast.CanonicalObject;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -281,6 +283,174 @@ class CanonicalBindingAnalyzerTest {
                                 com.guillermomolina.protos.runtime.ProtosStringValue.class,
                                 result)
                         .value());
+    }
+
+    @Test
+    void i115ModuleDeclarationsAreNameStorageEvenWhenANestedClosureReadsThem() {
+        CanonicalSequence program = canonicalizeProgram("x: 1\n(() => x)");
+        CanonicalCreate create = assertInstanceOf(CanonicalCreate.class, program.expressions().get(0));
+        CanonicalClosure closure = assertInstanceOf(CanonicalClosure.class, program.expressions().get(1));
+
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeModule(program);
+
+        CanonicalBindingIdentity identity = analysis.identityOf(create).orElseThrow();
+        assertEquals(CanonicalLexicalScope.Storage.NAME, CanonicalBindingAnalysis.storageOf(identity));
+        assertEquals(List.of(), CanonicalBindingAnalysis.cellNamesOf(analysis.topScope()));
+        assertEquals(
+                List.of(),
+                CanonicalBindingAnalysis.freeCellsOf(analysis.scopeOf(closure).orElseThrow()));
+    }
+
+    @Test
+    void i115UncapturedClosureBindingsAreLocalStorage() {
+        CanonicalSequence program = canonicalizeProgram("(n) => { a: n\n b: a\n b }");
+        CanonicalClosure closure = assertInstanceOf(CanonicalClosure.class, program.expressions().get(0));
+
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeModule(program);
+        CanonicalLexicalScope scope = analysis.scopeOf(closure).orElseThrow();
+
+        for (String name : List.of("n", "a", "b")) {
+            assertEquals(CanonicalLexicalScope.Storage.LOCAL, scope.storageOf(name), name);
+        }
+        assertEquals(List.of(), CanonicalBindingAnalysis.cellNamesOf(scope));
+        assertEquals(List.of(), CanonicalBindingAnalysis.freeCellsOf(scope));
+    }
+
+    @Test
+    void i115ABindingReadByANestedClosureIsACellCarriedByThatClosure() {
+        CanonicalSequence program = canonicalizeProgram("(() => { a: 1\n b: 2\n (() => a) })");
+        CanonicalClosure outer = assertInstanceOf(CanonicalClosure.class, program.expressions().get(0));
+        CanonicalClosure inner =
+                assertInstanceOf(CanonicalClosure.class, outer.body().expressions().get(2));
+        CanonicalCreate createA =
+                assertInstanceOf(CanonicalCreate.class, outer.body().expressions().get(0));
+
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeModule(program);
+        CanonicalLexicalScope outerScope = analysis.scopeOf(outer).orElseThrow();
+        CanonicalBindingIdentity a = analysis.identityOf(createA).orElseThrow();
+
+        assertEquals(CanonicalLexicalScope.Storage.CELL, CanonicalBindingAnalysis.storageOf(a));
+        assertEquals(CanonicalLexicalScope.Storage.LOCAL, outerScope.storageOf("b"));
+        assertEquals(List.of("a"), CanonicalBindingAnalysis.cellNamesOf(outerScope));
+        assertEquals(
+                List.of(a),
+                CanonicalBindingAnalysis.freeCellsOf(analysis.scopeOf(inner).orElseThrow()));
+    }
+
+    @Test
+    void i115ANestedCaptureIsCarriedByEveryCrossedClosure() {
+        CanonicalSequence program = canonicalizeProgram("(() => { a: 1\n (() => (() => a)) })");
+        CanonicalClosure outer = assertInstanceOf(CanonicalClosure.class, program.expressions().get(0));
+        CanonicalClosure middle =
+                assertInstanceOf(CanonicalClosure.class, outer.body().expressions().get(1));
+        CanonicalClosure inner =
+                assertInstanceOf(CanonicalClosure.class, middle.body().expressions().get(0));
+
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeModule(program);
+        CanonicalBindingIdentity a = analysis.scopeOf(outer).orElseThrow().identity("a");
+
+        assertEquals(CanonicalLexicalScope.Storage.CELL, CanonicalBindingAnalysis.storageOf(a));
+        assertEquals(List.of(a), CanonicalBindingAnalysis.freeCellsOf(analysis.scopeOf(middle).orElseThrow()));
+        assertEquals(List.of(a), CanonicalBindingAnalysis.freeCellsOf(analysis.scopeOf(inner).orElseThrow()));
+        assertEquals(0, analysis.scopeOf(inner).orElseThrow().freeCellIndex(a));
+    }
+
+    @Test
+    void i115ACandidateOwnedByAnOuterClosureSelectsThatOwnersCell() {
+        CanonicalSequence program = canonicalizeProgram("(() => { reader: (() => a)\n a: 1\n reader })");
+        CanonicalClosure outer = assertInstanceOf(CanonicalClosure.class, program.expressions().get(0));
+        CanonicalCreate readerCreate =
+                assertInstanceOf(CanonicalCreate.class, outer.body().expressions().get(0));
+        CanonicalClosure reader = assertInstanceOf(CanonicalClosure.class, readerCreate.value());
+        CanonicalLookup read =
+                assertInstanceOf(CanonicalLookup.class, reader.body().expressions().get(0));
+
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeModule(program);
+        CanonicalBindingResolution.Candidate candidate =
+                assertInstanceOf(
+                        CanonicalBindingResolution.Candidate.class,
+                        analysis.resolutionOf(read).orElseThrow());
+
+        assertSame(analysis.scopeOf(outer).orElseThrow(), candidate.identity().owner());
+        assertEquals(
+                CanonicalLexicalScope.Storage.CELL,
+                CanonicalBindingAnalysis.storageOf(candidate.identity()));
+        assertEquals(
+                List.of(candidate.identity()),
+                CanonicalBindingAnalysis.freeCellsOf(analysis.scopeOf(reader).orElseThrow()));
+    }
+
+    @Test
+    void i115DynamicNamesCreateNoCells() {
+        CanonicalSequence program = canonicalizeProgram("(() => unknownName)");
+        CanonicalClosure closure = assertInstanceOf(CanonicalClosure.class, program.expressions().get(0));
+        CanonicalLookup read =
+                assertInstanceOf(CanonicalLookup.class, closure.body().expressions().get(0));
+
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeModule(program);
+
+        assertInstanceOf(
+                CanonicalBindingResolution.Dynamic.class,
+                analysis.resolutionOf(read).orElseThrow());
+        assertEquals(
+                List.of(),
+                CanonicalBindingAnalysis.freeCellsOf(analysis.scopeOf(closure).orElseThrow()));
+    }
+
+    @Test
+    void i115AnObjectBodyIsNotACaptureScopeAndItsBindingsAreMembers() {
+        CanonicalSequence program = canonicalizeProgram("(() => { a: 1\n o: { b: a }\n o })");
+        CanonicalClosure closure = assertInstanceOf(CanonicalClosure.class, program.expressions().get(0));
+        CanonicalCreate objectCreate =
+                assertInstanceOf(CanonicalCreate.class, closure.body().expressions().get(1));
+        CanonicalObject object = assertInstanceOf(CanonicalObject.class, objectCreate.value());
+
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeModule(program);
+        CanonicalLexicalScope closureScope = analysis.scopeOf(closure).orElseThrow();
+        CanonicalLexicalScope objectScope = analysis.scopeOf(object).orElseThrow();
+
+        assertEquals(CanonicalLexicalScope.Storage.LOCAL, closureScope.storageOf("a"));
+        assertEquals(CanonicalLexicalScope.Storage.MEMBER, objectScope.storageOf("b"));
+        assertEquals(List.of(), CanonicalBindingAnalysis.cellNamesOf(closureScope));
+    }
+
+    @Test
+    void i115StorageClassificationIsStableAcrossClosureRematerialization() {
+        String source = "(() => { a: 1\n (() => a) })";
+        CanonicalSequence program = canonicalizeProgram(source);
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeModule(program);
+
+        CanonicalSequence reparsedProgram = canonicalizeProgram(source);
+        CanonicalClosure reparsedOuter =
+                assertInstanceOf(CanonicalClosure.class, reparsedProgram.expressions().get(0));
+        CanonicalClosure reparsedInner =
+                assertInstanceOf(CanonicalClosure.class, reparsedOuter.body().expressions().get(1));
+
+        CanonicalBindingAnalysis outerRematerialized =
+                analysis.rematerializeForReparsedClosure(reparsedOuter);
+        CanonicalLexicalScope outerScope = outerRematerialized.scopeOf(reparsedOuter).orElseThrow();
+        assertEquals(List.of("a"), CanonicalBindingAnalysis.cellNamesOf(outerScope));
+        assertEquals(
+                List.of(outerScope.identity("a")),
+                CanonicalBindingAnalysis.freeCellsOf(
+                        outerRematerialized.scopeOf(reparsedInner).orElseThrow()));
+
+        CanonicalBindingAnalysis innerRematerialized =
+                analysis.rematerializeForReparsedClosure(reparsedInner);
+        CanonicalLexicalScope innerScope = innerRematerialized.scopeOf(reparsedInner).orElseThrow();
+        List<CanonicalBindingIdentity> freeCells = CanonicalBindingAnalysis.freeCellsOf(innerScope);
+        assertEquals(1, freeCells.size());
+        assertEquals("a", freeCells.get(0).name());
+        assertEquals(
+                CanonicalLexicalScope.Storage.CELL,
+                CanonicalBindingAnalysis.storageOf(freeCells.get(0)));
+        CanonicalLookup read =
+                assertInstanceOf(CanonicalLookup.class, reparsedInner.body().expressions().get(0));
+        CanonicalBindingResolution.CapturedResolved captured =
+                assertInstanceOf(
+                        CanonicalBindingResolution.CapturedResolved.class,
+                        innerRematerialized.resolutionOf(read).orElseThrow());
+        assertSame(freeCells.get(0), captured.identity());
     }
 
     private CanonicalSequence canonicalizeProgram(String source) {

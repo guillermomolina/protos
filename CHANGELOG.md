@@ -8,6 +8,56 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.48-SNAPSHOT
+
+- **I115 — GraalPy-style NAME/LOCAL/CELL lexical storage convergence (historical).**
+  - Replace the earlier frame-authority/storage-selection infrastructure
+    with one compile-time storage classification in `CanonicalLexicalScope`:
+    `NAME` for module ROOT declarations in the module context, `MEMBER` for
+    object-body members, `LOCAL` for uncaptured Closure bindings held directly
+    by Bytecode DSL locals, and `CELL` for Closure bindings captured through
+    nested Closure boundaries. `CanonicalBindingAnalyzer` records free cells
+    in deterministic order and distinguishes `Resolved`, `CapturedResolved`,
+    `Candidate` and `Dynamic` identities without selecting storage at runtime.
+  - Add `ProtosLexicalCell`, a shared-by-reference guest-value cell with Java
+    `null` exclusively marking an uninitialized binding; a guest null value
+    remains distinct. `ProtosClosureValue` and `ProtosActivation` carry arrays
+    of captured cells, and B5 invocation arguments expose those cells to the
+    callee. Repeated captures share the same actual cell rather than copying
+    a frame slot, context or a captured value. Module `NAME` reads use
+    `ProtosModuleBindingLocation` with a specialized `DynamicObject` getter;
+    removal/recreation of the module slot can be observed by its NAME path.
+  - Retire `ProtosCapturedLexicalAccess`,
+    `ProtosFrameLexicalBindingAuthority` and `ProtosFrameLexicalLayout`.
+    Rework root operations, name lookup, lexical capture and assignments,
+    parameter binding and source lowering around their single preselected
+    storage. Preserve the explicit `MEMBER` path and dynamic NAME lookup.
+    Add `ProtosI115LexicalStorageConvergenceTest` and update the canonical
+    binding analyzer tests; these historical tests are not executed here.
+  - **Historical semantic limitations and recorded divergences:** D179 C0
+    presence and shadowing are NOT fully preserved by this change. A
+    statically classified `LOCAL` or `CELL` does not track `removeSlot` and
+    recreation through an observed Context, and a `Candidate` read before
+    its binding point can raise an Error instead of finding an outer name.
+    Classified captured cells do not dynamically retarget to late nearer
+    bindings. Parallel Closure projection shares cells rather than providing
+    isolated copies, leaving Actor confinement and cross-Actor transfer
+    semantics independently unverified. The new bytecode storage model is
+    not proof of full lexical semantics, stable context identity or all
+    return/closure cases. D013 `Object.call` overrides, Boolean control
+    selector overrides (`ifTrue`/`whileTrue`), `ReturnHome`, non-local
+    control transfer, suspension, cancellation, terminal Futures,
+    Task/C-prime ownership, D197-C BigInteger prototype delegation and
+    numeric behavior remain separate acceptance concerns. Integer is a
+    semantic `long`/`Long` value (not a guest `int` lane); Float now uses
+    direct `Double`, as in V66. No tests, Maven build, compiler graphs or
+    benchmarks have been run in this versioned replay after the version
+    increment; no performance gain or full conformance is claimed.
+  - Original implementation: `3b59add7397d75038922f6498c2028ddedae9ee6`.
+    Sixteen modified files, three new files and three deletions are replayed
+    as exact historical Git blobs and modes. Only root `pom.xml` and
+    `CHANGELOG.md` receive versioned metadata edits.
+
 ## 0.4.47-SNAPSHOT
 
 - **I115 — GraalPy-style direct `double` as the semantic Float representation (historical).**

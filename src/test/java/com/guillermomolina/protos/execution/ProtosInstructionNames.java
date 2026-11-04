@@ -48,7 +48,6 @@ public final class ProtosInstructionNames {
                     ProtosSlotMutation.ASSIGN_RESOLVED, "AssignResolvedLexicalTarget")),
             Map.entry("AccessNamedLexical", Map.of(
                     ProtosNamedLexicalAccess.LOOKUP, "Lookup",
-                    ProtosNamedLexicalAccess.CAPTURED_FALLBACK, "ReadCapturedFallback",
                     ProtosNamedLexicalAccess.RESOLVE_WRITE, "ResolveWritableLexicalTarget")),
             Map.entry("AdmitsInlineLiteralWhileChild", Map.of(
                     false, "AdmitsInlineLiteralWhileCondition", true, "AdmitsInlineLiteralWhileBody")),

@@ -24,19 +24,26 @@ import java.util.Objects;
  * reference site (a {@code CanonicalLookup}, or the destination of a
  * target-empty {@code CanonicalAssign}).
  *
- * <p>Preserves {@code STATIC_BINDING_IDENTITY != SEMANTIC_PRESENCE}: knowing
- * which declaration a name would refer to is never conflated with knowing
- * that the binding is PRESENT at runtime. {@link Resolved} identifies
- * a binding already established at this program point, but under D179 C0 its
- * stable identity/layout does not guarantee that runtime presence survives a
- * later removeSlot. {@link Candidate} deliberately carries no presence
- * guarantee even though it carries the same kind of identity. {@link
- * CapturedResolved} identifies a statically established binding owned by an outer
- * genuine lexical scope; runtime lowering must still preserve nearer-context
- * retargeting before taking its direct captured path. {@link Dynamic} means
- * no scope in the static chain declares the name anywhere, so
- * the existing exact String-keyed runtime lookup/receiver-fallback path
- * remains the only correct resolution, unchanged by this slice.
+ * <p>Keeps {@code STATIC_BINDING_IDENTITY != SEMANTIC_PRESENCE} in the
+ * analysis: knowing which declaration a name would refer to is never
+ * conflated with knowing that the binding is PRESENT at runtime. {@link
+ * Resolved} identifies a binding of the reference's own scope already
+ * established at this program point; {@link CapturedResolved} one owned by
+ * an outer genuine lexical scope; {@link Candidate} the nearest declaring
+ * scope without a presence guarantee; {@link Dynamic} means no scope in the
+ * static chain declares the name.
+ *
+ * <p>I115: Bytecode lowering consumes the result as the static storage
+ * classification of the site. The owner's {@link CanonicalLexicalScope.Storage}
+ * selects exactly one access: a Bytecode DSL local, a shared cell, a module
+ * context name operation, or an object member operation; {@link Dynamic}
+ * selects one name operation. No classified site is lowered with a runtime
+ * presence guard or a fallback to another storage.
+ *
+ * <p>KNOWN I115 SEMANTIC DIVERGENCE: because presence is no longer
+ * re-checked at a classified site, a {@code LOCAL}/{@code CELL} binding does
+ * not observe D179 removal/recreation, and a {@link Candidate} read before
+ * its establishment does not reach an outer binding of the same name.
  */
 sealed interface CanonicalBindingResolution {
     /** The current scope already established this binding at this exact program point. */
@@ -47,13 +54,12 @@ sealed interface CanonicalBindingResolution {
     }
 
     /**
-     * An already-PRESENT binding owned by an outer genuine lexical scope.
+     * An already-established binding owned by an outer genuine lexical scope.
      *
      * <p>{@code lexicalDepth} counts genuine execution-context hops; object
      * construction scopes are skipped by {@link CanonicalLexicalScope#outwardScope()}.
-     * The owner is stable, but a nearer execution context may still acquire the
-     * same name later, so captured lowering must retain an exact nearer-presence
-     * guard before taking a direct frame-backed path.
+     * I115 lowers it directly to the owner's storage: the owner's cell, or
+     * its module context name.
      */
     record CapturedResolved(CanonicalBindingIdentity identity, int lexicalDepth)
             implements CanonicalBindingResolution {
@@ -68,8 +74,8 @@ sealed interface CanonicalBindingResolution {
     /**
      * The nearest scope (by {@code lexicalDepth} hops from the reference)
      * that statically declares this name anywhere, without a presence
-     * guarantee at this program point. A runtime presence/topology check or
-     * exact dynamic fallback remains required.
+     * guarantee at this program point. I115 lowers it to that owner's
+     * storage; an access before establishment signals the lookup Error.
      */
     record Candidate(CanonicalBindingIdentity identity, int lexicalDepth) implements CanonicalBindingResolution {
         public Candidate {
@@ -80,6 +86,6 @@ sealed interface CanonicalBindingResolution {
         }
     }
 
-    /** No scope in the static chain declares this name anywhere; exact dynamic fallback remains required. */
+    /** No scope in the static chain declares this name anywhere; I115 lowers one name operation. */
     record Dynamic() implements CanonicalBindingResolution {}
 }

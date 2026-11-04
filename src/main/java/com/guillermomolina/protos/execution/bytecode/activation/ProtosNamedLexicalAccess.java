@@ -23,8 +23,9 @@ import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 
 /**
- * I113: the residual name-keyed lexical accesses of an
- * {@code AccessNamedLexical} instruction. Each constant carries its own
+ * I113 / I115: the name-keyed lexical accesses of an
+ * {@code AccessNamedLexical} instruction, the single operation of a NAME
+ * binding (module context, object body or dynamic name). Each constant carries its own
  * body, so the call on the builder-fixed constant devirtualizes under
  * partial evaluation.
  */
@@ -39,14 +40,6 @@ public enum ProtosNamedLexicalAccess {
                                     new ProtosSignalException(
                                             ProtosCoreErrors.newUnqualifiedLookupError(
                                                     activation)));
-        }
-    },
-
-    /** The captured-binding fallback read. */
-    CAPTURED_FALLBACK {
-        @Override
-        Object access(ProtosActivation activation, String name) {
-            return ProtosCapturedLexicalAccess.lookupCapturedFallback(activation, name);
         }
     },
 

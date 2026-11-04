@@ -74,13 +74,26 @@ import java.util.Objects;
  *
  * <p>A reference classifies as {@link CanonicalBindingResolution.Resolved}
  * only when the owning scope is the reference's own current scope AND that
- * scope has already established the name at this exact program point.
- * Under D179 C0 this proves stable binding identity/layout, not permanent
- * runtime presence, so direct lowering must retain the applicable presence
- * guard. Any other statically discoverable owner classifies as {@link
- * CanonicalBindingResolution.Candidate}; a name no scope in the chain ever
- * declares classifies as {@link CanonicalBindingResolution.Dynamic}, exactly
- * preserving today's receiver/member-fallback dynamic path.
+ * scope has already established the name at this exact program point. Any
+ * other statically discoverable owner classifies as {@link
+ * CanonicalBindingResolution.Candidate} or {@link
+ * CanonicalBindingResolution.CapturedResolved}; a name no scope in the chain
+ * ever declares classifies as {@link CanonicalBindingResolution.Dynamic}.
+ *
+ * <p>I115 storage classification, computed by the same walk and complete
+ * before lowering: a {@code ROOT} declaration is {@code NAME} storage (the
+ * module context), an {@code OBJECT_BODY} declaration is {@code MEMBER}
+ * storage, and a {@code CLOSURE} declaration is {@code LOCAL} unless a
+ * reference crosses at least one nested Closure boundary to reach it, which
+ * makes it {@code CELL}. Every Closure scope crossed by such a reference
+ * records the owner's identity among its free cells. A {@code Candidate}
+ * owned by an outer Closure selects that owner's cell; no reference is ever
+ * classified as "cell or lookup".
+ *
+ * <p>KNOWN I115 SEMANTIC DIVERGENCE (D179): a reference statically
+ * classified to a cell no longer observes a later dynamic redirection of the
+ * name (a nearer late creation, or removeSlot followed by a lookup that would
+ * reach an outer binding). There is deliberately no runtime fallback.
  */
 final class CanonicalBindingAnalyzer {
     private final Map<CanonicalClosure, CanonicalLexicalScope> closureScopes = new IdentityHashMap<>();
@@ -368,12 +381,23 @@ final class CanonicalBindingAnalyzer {
         walkSequence(object.body(), objectScope);
     }
 
+    /*
+     * I115: identity is purely lexical. The nearest declaring scope owns the
+     * reference whether or not its binding point has executed; establishment
+     * only distinguishes Resolved/CapturedResolved from Candidate and never
+     * moves the reference to an outer binding. The owner's LOCAL or CELL
+     * storage signals the uninitialized-binding Error on an early access.
+     *
+     * KNOWN I115 SEMANTIC DIVERGENCE (D179): a read before the binding point
+     * no longer reaches an outer binding of the same name.
+     */
     private CanonicalBindingResolution resolve(String name, CanonicalLexicalScope referenceScope) {
         CanonicalLexicalScope scope = referenceScope;
         int depth = 0;
         while (scope != null) {
             if (scope.declaresName(name)) {
                 CanonicalBindingIdentity identity = scope.identity(name);
+                classifyClosureCapture(identity, referenceScope);
                 if (scope.isEstablished(name)) {
                     if (depth == 0) {
                         return new CanonicalBindingResolution.Resolved(identity);
@@ -386,5 +410,35 @@ final class CanonicalBindingAnalyzer {
             depth++;
         }
         return new CanonicalBindingResolution.Dynamic();
+    }
+
+    /*
+     * I115: a reference reaching a Closure-owned binding through one or more
+     * nested Closure scopes makes that binding a cell, and each crossed
+     * Closure scope carries the cell. Object construction scopes are not
+     * capture scopes and are skipped exactly as outwardScope() skips them.
+     */
+    private static void classifyClosureCapture(
+            CanonicalBindingIdentity identity,
+            CanonicalLexicalScope referenceScope) {
+        CanonicalLexicalScope owner = identity.owner();
+        if (owner.kind() != CanonicalLexicalScope.Kind.CLOSURE) {
+            return;
+        }
+        List<CanonicalLexicalScope> crossed = new ArrayList<>();
+        for (CanonicalLexicalScope scope = referenceScope;
+                scope != null && scope != owner;
+                scope = scope.outwardScope()) {
+            if (scope.kind() == CanonicalLexicalScope.Kind.CLOSURE) {
+                crossed.add(scope);
+            }
+        }
+        if (crossed.isEmpty()) {
+            return;
+        }
+        owner.markCell(identity.name());
+        for (CanonicalLexicalScope closureScope : crossed) {
+            closureScope.addFreeCell(identity);
+        }
     }
 }

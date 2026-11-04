@@ -17,15 +17,13 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.execution.ProtosFrameLexicalBindingAuthority.ExperimentalGlobalReadLocation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
+import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
-import com.oracle.truffle.api.bytecode.ForceQuickening;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
@@ -34,29 +32,26 @@ import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.object.DynamicObject;
 import com.oracle.truffle.api.strings.TruffleString;
 
 /**
- * I115-R6 / I115-H4-B / I115-H5 / I115-H7 EXPERIMENTAL, proxied as the {@code
- * ReadGlobal} operation: a bare read statically resolved to a module (ROOT)
- * declaration, as one DSL operation (GraalPy {@code ReadGlobalOrBuiltinNode}
- * shape: resolution separated from the fast access, both specialized in this
- * node, no caller-side branch).
+ * I115-R6 EXPERIMENTAL, proxied as the {@code ReadGlobal} operation: a bare
+ * read from a Closure root statically resolved to a module (ROOT)
+ * declaration. I115: module declarations are NAME bindings of the module
+ * context, so this is one name operation over the captured module scope at
+ * the constant {@code lexicalDepth}, then the scopes outside it (the
+ * prelude). It never reads a frame.
  *
- * <p>I115-H7-R4: {@link #readCached} is guarded by the identity of the
- * invoked compact Closure (at most three entries) and by the validity of
- * its cached {@link ExperimentalGlobalReadLocation}. Module selection and
- * physical location admission happen once during PIC installation, behind
- * a {@link TruffleBoundary}. The specialized execution reads the current
- * Object value directly from the retained Protos frame without traversing
- * the captured lexical chain or converting a numeric carrier.
- *
- * <p>Published calls, bindings without an admitted Object location and PIC
- * misses use {@link #readGeneric}. The cached location never stores a copy
- * of the binding value, so Object rebinding remains observable.
- *
- * <p>RECORDED DIVERGENCE (I115-H7-R3): the specialized read does not
- * re-validate presence or layout metadata of the cached location.
+ * <p>{@link #readCached} is guarded by the identity of the invoked compact
+ * Closure (at most three entries). A Closure's captured environment, and so
+ * its module context and that context's single store, never change, which
+ * justifies reusing the {@link ProtosModuleBindingLocation} resolved once at
+ * specialization: the hot read is one inlined {@code DynamicObject} get of the
+ * current value, with no chain walk, boundary call or allocation. A binding
+ * absent at that location (removed) takes the unspecialized NAME read over
+ * the same storage; published activations and PIC misses use {@link
+ * #readGeneric}.
  *
  * <p>RECORDED DIVERGENCE (owner-authorized): only the statically resolved
  * module scope and the scopes outside it are consulted; no nearer-scope or
@@ -65,41 +60,44 @@ import com.oracle.truffle.api.strings.TruffleString;
 @GenerateUncached
 @GenerateInline(false)
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
-@ConstantOperand(type = int.class, name = "frameOrdinal")
 @ConstantOperand(type = TruffleString.class, name = "name")
 @ConstantOperand(type = int.class, name = "lexicalDepth")
 abstract class ProtosExperimentalReadGlobalNode extends Node {
 
-    abstract Object execute(
-            VirtualFrame frame, int frameOrdinal, TruffleString name, int lexicalDepth);
+    abstract Object execute(VirtualFrame frame, TruffleString name, int lexicalDepth);
 
     @Specialization(
             excludeForUncached = true,
             guards = {
                 "closure != null",
                 "closure == cachedClosure",
-                "cachedLocation != null",
-                "cachedLocation.isCurrent()"
+                "location != null"
             },
             limit = "3")
-    @ForceQuickening
     static Object readCached(
             VirtualFrame frame,
-            int frameOrdinal,
             TruffleString name,
             int lexicalDepth,
-            @Bind("compactClosureOrNull(frame.getArguments())")
-                    ProtosClosureValue closure,
+            @Bind("compactClosureOrNull(frame.getArguments())") ProtosClosureValue closure,
             @Cached("closure") ProtosClosureValue cachedClosure,
-            @Cached("locationOrNull(cachedClosure, name, frameOrdinal, lexicalDepth)")
-                    ExperimentalGlobalReadLocation cachedLocation) {
-        return cachedLocation.read();
+            @Cached("locationOrNull(cachedClosure, name, lexicalDepth)")
+                    ProtosModuleBindingLocation location,
+            @Cached DynamicObject.GetNode getNode) {
+        Object value = location.readOrNull(getNode);
+        if (value == null) {
+            return readModuleBinding(frame.getArguments(), name, lexicalDepth);
+        }
+        return value;
+    }
+
+    @Specialization(replaces = "readCached")
+    static Object readGeneric(VirtualFrame frame, TruffleString name, int lexicalDepth) {
+        return readModuleBinding(frame.getArguments(), name, lexicalDepth);
     }
 
     /*
-     * I115-H7-R4: B5's first field identifies the invoked Closure while
-     * the call is compact. A published activation is deliberately not admitted.
-     * This is a discriminator for an admitted root, not a general ABI validator.
+     * I115-H7-R4: B5's first field identifies the invoked Closure while the
+     * call is compact; a published activation is deliberately not admitted.
      */
     static ProtosClosureValue compactClosureOrNull(Object[] arguments) {
         if (arguments.length < ProtosFrameArguments.HEADER_LENGTH) {
@@ -109,64 +107,28 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
         return arguments[0] instanceof ProtosClosureValue closure ? closure : null;
     }
 
-    /*
-     * I115-H7-R4 installation only: resolve the captured module and its
-     * existing Protos frame authority once for this Closure identity.
-     * No module traversal, binding lookup or conversion runs in readCached.
-     */
+    /* Specialization time only: the module binding's location for this Closure. */
     @TruffleBoundary
-    static ExperimentalGlobalReadLocation locationOrNull(
-            ProtosClosureValue closure,
-            TruffleString name,
-            int frameOrdinal,
-            int lexicalDepth) {
+    static ProtosModuleBindingLocation locationOrNull(
+            ProtosClosureValue closure, TruffleString name, int lexicalDepth) {
         if (closure == null) {
             return null;
         }
-
         ProtosLexicalEnvironment module =
                 ProtosLexicalEnvironment.at(
-                        closure.capturedLexicalEnvironmentForRuntime(),
-                        lexicalDepth - 1);
-
-        if (module != null
-                && module.lexicalBindingAuthorityForRuntime()
-                        instanceof ProtosFrameLexicalBindingAuthority authority) {
-            return authority.experimentalGlobalReadLocationOrNull(
-                    name.toJavaStringUncached(), frameOrdinal);
-        }
-        return null;
+                        closure.capturedLexicalEnvironmentForRuntime(), lexicalDepth - 1);
+        return module == null
+                ? null
+                : ProtosModuleBindingLocation.ofOrNull(module.context(), name.toJavaStringUncached());
     }
 
-    @Specialization(replaces = "readCached")
-    @InliningCutoff
-    static Object readGeneric(
-            VirtualFrame frame,
-            int frameOrdinal,
-            TruffleString name,
-            int lexicalDepth) {
-        return resolveInitial(frame.getArguments(), frameOrdinal, name, lexicalDepth);
-    }
-
-    /*
-     * The generic resolution (fallback tier, uncached execution and the
-     * cached tier's miss). The module scope of the invocation's captured chain, then
-     * the scopes outside it (the prelude).
-     */
     @TruffleBoundary
-    static Object resolveInitial(
-            Object[] arguments, int frameOrdinal, TruffleString name, int lexicalDepth) {
+    static Object readModuleBinding(
+            Object[] arguments, TruffleString name, int lexicalDepth) {
         String javaName = name.toJavaStringUncached();
         ProtosLexicalEnvironment module = capturedModuleOrNull(arguments, lexicalDepth);
         if (module == null) {
             return readOutsideModuleGlobal(arguments, null, javaName);
-        }
-        // Java null is the frame-authority miss sentinel, never guest null.
-        Object value =
-                ProtosCapturedLexicalAccess.readOwnerFrameBindingOrNull(
-                        module, javaName, frameOrdinal);
-        if (value != null) {
-            return value;
         }
         java.util.Optional<Object> present = module.readLocalSlotForRuntime(javaName);
         if (present.isPresent()) {
