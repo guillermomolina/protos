@@ -177,6 +177,11 @@ import com.oracle.truffle.api.source.Source;
 @OperationProxy(value = ProtosNumericLessEqualNode.class, name = "TryPrimitiveNumericLessEqual")
 @OperationProxy(value = ProtosNumericGreaterNode.class, name = "TryPrimitiveNumericGreater")
 @OperationProxy(value = ProtosNumericGreaterEqualNode.class, name = "TryPrimitiveNumericGreaterEqual")
+@OperationProxy(value = ProtosNumberDivideNode.class, name = "NumberDivide")
+@OperationProxy(value = ProtosRichCompareLtNode.class, name = "RichCompareLt")
+@OperationProxy(value = ProtosRichCompareLeNode.class, name = "RichCompareLe")
+@OperationProxy(value = ProtosRichCompareGtNode.class, name = "RichCompareGt")
+@OperationProxy(value = ProtosRichCompareGeNode.class, name = "RichCompareGe")
 @OperationProxy(value = ProtosExperimentalReadGlobalNode.class, name = "ReadGlobal")
 // I115-H7 EXPERIMENTAL: GraalPy-shaped method call, numeric and comparison operations.
 @OperationProxy(value = ProtosCallNilaryMethodNode.class, name = "CallNilaryMethod")

@@ -279,12 +279,14 @@ final class ProtosComplexSemanticsTest {
                 genuine,
                 delegatingToNumber,
                 new ProtosStringValue("1"),
-                1L,
                 1.0,
                 BigInteger.ONE)) {
             assertThrows(IllegalArgumentException.class, () -> complex(invalid, one, prelude));
             assertThrows(IllegalArgumentException.class, () -> complex(one, invalid, prelude));
         }
+        // I115: Long is the physical representation of a semantic SmallInteger.
+        assertComplex(complex(1L, one, prelude), prelude);
+        assertComplex(complex(one, 1L, prelude), prelude);
         assertThrows(IllegalArgumentException.class,
                 () -> ProtosComplexNumericSupport.real(prelude.complexPrototype()));
 

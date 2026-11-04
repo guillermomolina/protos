@@ -68,11 +68,11 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                     "+", "NumberAdd",
                     "-", "NumberSubtract",
                     "*", "NumberMultiply",
-                    "/", "TryPrimitiveNumericDivide",
-                    "<", "TryPrimitiveNumericLess",
-                    "<=", "TryPrimitiveNumericLessEqual",
-                    ">", "TryPrimitiveNumericGreater",
-                    ">=", "TryPrimitiveNumericGreaterEqual");
+                    "/", "NumberDivide",
+                    "<", "RichCompareLt",
+                    "<=", "RichCompareLe",
+                    ">", "RichCompareGt",
+                    ">=", "RichCompareGe");
 
     private static final List<Class<?>> NODES =
             List.of(
@@ -540,9 +540,12 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                     root.contains("@OperationProxy(value = " + node + ".class, name = \""
                             + operation + "\")"),
                     operation);
-            assertTrue(OPERATIONS.containsValue(operation)
-                    || java.util.Set.of("TryPrimitiveNumericAdd", "TryPrimitiveNumericSubtract",
-                            "TryPrimitiveNumericMultiply").contains(operation), operation);
+            assertTrue(java.util.Set.of(
+                    "TryPrimitiveNumericAdd", "TryPrimitiveNumericSubtract",
+                    "TryPrimitiveNumericMultiply", "TryPrimitiveNumericDivide",
+                    "TryPrimitiveNumericLess", "TryPrimitiveNumericLessEqual",
+                    "TryPrimitiveNumericGreater", "TryPrimitiveNumericGreaterEqual")
+                    .contains(operation), operation);
         }
         System.out.println("PERF040_E1_SOURCE_STRUCTURE=PASS");
     }

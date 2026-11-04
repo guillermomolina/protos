@@ -9546,56 +9546,61 @@ final class CanonicalToBytecodeLowerer {
      * in evaluation order. {@code condition} selects the Java-boolean form
      * of a comparison consumed directly by a Bytecode branch.
      */
+    /**
+     * I115: recursive compact roots use exactly the same Number and
+     * RichCompare DSL operations as ordinary roots. Each operand is evaluated
+     * once. The generic operation may return a continuation; it is composed
+     * in the current root before a consumer observes the resulting value.
+     * A branch condition converts only the *completed* canonical Boolean.
+     */
     private void emitExperimentalCompactSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             boolean condition) {
         String selector = send.message();
-        switch (selector) {
-            case "+" -> builder.beginExperimentalIntegerAdd();
-            case "-" -> builder.beginExperimentalIntegerSubtract();
-            case "*" -> builder.beginExperimentalIntegerMultiply();
-            case "<" -> {
-                if (condition) builder.beginExperimentalIntegerLessBool();
-                else builder.beginExperimentalIntegerLess();
-            }
-            case "<=" -> {
-                if (condition) builder.beginExperimentalIntegerLessEqualBool();
-                else builder.beginExperimentalIntegerLessEqual();
-            }
-            case ">" -> {
-                if (condition) builder.beginExperimentalIntegerGreaterBool();
-                else builder.beginExperimentalIntegerGreater();
-            }
-            case ">=" -> {
-                if (condition) builder.beginExperimentalIntegerGreaterEqualBool();
-                else builder.beginExperimentalIntegerGreaterEqual();
-            }
-            default -> throw new AssertionError(
-                    "I115-M unadmitted compact selector: " + selector);
+        if (condition) {
+            builder.beginExperimentalCanonicalBooleanCondition();
         }
+        builder.beginBlock();
+        BytecodeLocal receiver = builder.createLocal("recursiveNumericReceiver", null);
+        BytecodeLocal argument = builder.createLocal("recursiveNumericArgument", null);
+        BytecodeLocal result = builder.createLocal("recursiveNumericResult", null);
+        BytecodeLocal resumed = builder.createLocal("recursiveNumericResumed", null);
+        builder.beginStoreLocal(receiver);
         emitExperimentalCompactValue(builder, send.receiver());
+        builder.endStoreLocal();
+        builder.beginStoreLocal(argument);
         emitExperimentalCompactValue(builder, send.arguments().get(0));
+        builder.endStoreLocal();
+        builder.beginStoreLocal(result);
         switch (selector) {
-            case "+" -> builder.endExperimentalIntegerAdd();
-            case "-" -> builder.endExperimentalIntegerSubtract();
-            case "*" -> builder.endExperimentalIntegerMultiply();
-            case "<" -> {
-                if (condition) builder.endExperimentalIntegerLessBool();
-                else builder.endExperimentalIntegerLess();
-            }
-            case "<=" -> {
-                if (condition) builder.endExperimentalIntegerLessEqualBool();
-                else builder.endExperimentalIntegerLessEqual();
-            }
-            case ">" -> {
-                if (condition) builder.endExperimentalIntegerGreaterBool();
-                else builder.endExperimentalIntegerGreater();
-            }
-            default -> {
-                if (condition) builder.endExperimentalIntegerGreaterEqualBool();
-                else builder.endExperimentalIntegerGreaterEqual();
-            }
+            case "+" -> builder.beginNumberAdd();
+            case "-" -> builder.beginNumberSubtract();
+            case "*" -> builder.beginNumberMultiply();
+            case "<" -> builder.beginRichCompareLt();
+            case "<=" -> builder.beginRichCompareLe();
+            case ">" -> builder.beginRichCompareGt();
+            case ">=" -> builder.beginRichCompareGe();
+            default -> throw new AssertionError("I115 unadmitted compact selector: " + selector);
+        }
+        builder.emitLoadLocal(receiver);
+        builder.emitLoadLocal(argument);
+        switch (selector) {
+            case "+" -> builder.endNumberAdd();
+            case "-" -> builder.endNumberSubtract();
+            case "*" -> builder.endNumberMultiply();
+            case "<" -> builder.endRichCompareLt();
+            case "<=" -> builder.endRichCompareLe();
+            case ">" -> builder.endRichCompareGt();
+            case ">=" -> builder.endRichCompareGe();
+            default -> throw new AssertionError("I115 unadmitted compact selector: " + selector);
+        }
+        builder.endStoreLocal();
+        emitDispatchedContinuationComposition(builder, result, resumed);
+        builder.emitLoadLocal(result);
+        builder.endBlock();
+        if (condition) {
+            builder.endExperimentalCanonicalBooleanCondition();
         }
     }
 
@@ -9635,14 +9640,47 @@ final class CanonicalToBytecodeLowerer {
         emitExperimentalCompactValue(builder, send.arguments().get(0));
         builder.endStoreLocal();
 
-        BytecodeLocal attempt = beginPrimitiveNumericMiss(
-                builder, send, receiverValue, argumentValue, true, true);
-        // The selected method may observe this activation.
-        emitExperimentalCompactAuthorityPromotion(builder);
-        emitDispatchedSendOfLocals(
-                builder, send.message(), receiverValue, java.util.List.of(argumentValue),
-                result, scratch.childResult(), scratch.resumeValue());
-        endPrimitiveNumericMiss(builder, attempt, result, true);
+        if ("/".equals(send.message()) || "<".equals(send.message())
+                || "<=".equals(send.message()) || ">".equals(send.message())
+                || ">=".equals(send.message())) {
+            // The same DSL operation used by ordinary roots. There is no
+            // numeric MISS or separate GetMethod dispatch on this path.
+            builder.beginStoreLocal(scratch.childResult());
+            switch (send.message()) {
+                case "/" -> builder.beginNumberDivide();
+                case "<" -> builder.beginRichCompareLt();
+                case "<=" -> builder.beginRichCompareLe();
+                case ">" -> builder.beginRichCompareGt();
+                case ">=" -> builder.beginRichCompareGe();
+                default -> throw new AssertionError("not a unified numeric selector");
+            }
+            builder.emitLoadLocal(receiverValue);
+            builder.emitLoadLocal(argumentValue);
+            switch (send.message()) {
+                case "/" -> builder.endNumberDivide();
+                case "<" -> builder.endRichCompareLt();
+                case "<=" -> builder.endRichCompareLe();
+                case ">" -> builder.endRichCompareGt();
+                case ">=" -> builder.endRichCompareGe();
+                default -> throw new AssertionError("not a unified numeric selector");
+            }
+            builder.endStoreLocal();
+            emitDispatchedContinuationComposition(
+                    builder, scratch.childResult(), scratch.resumeValue());
+            builder.beginStoreLocal(result);
+            builder.emitLoadLocal(scratch.childResult());
+            builder.endStoreLocal();
+        } else {
+            // Temporary compatibility for remaining compact arithmetic
+            // selectors. Removal requires retiring their old operations.
+            BytecodeLocal attempt = beginPrimitiveNumericMiss(
+                    builder, send, receiverValue, argumentValue, true, true);
+            emitExperimentalCompactAuthorityPromotion(builder);
+            emitDispatchedSendOfLocals(
+                    builder, send.message(), receiverValue, java.util.List.of(argumentValue),
+                    result, scratch.childResult(), scratch.resumeValue());
+            endPrimitiveNumericMiss(builder, attempt, result, true);
+        }
 
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
@@ -9827,6 +9865,62 @@ final class CanonicalToBytecodeLowerer {
      * Each operand is evaluated exactly once, from left to right. The
      * operation owns its generic fallback, as in PyNumber{Add,Subtract,Multiply}.
      */
+    /**
+     * I115 GraalPy-shaped ordinary comparison and division. The operator
+     * itself chooses the primitive or generic implementation. A generic
+     * result can suspend and is composed exactly like every other call.
+     */
+    private void emitI115UnifiedNumericSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+        BytecodeLocal receiver = builder.createLocal("numericReceiver", null);
+        BytecodeLocal argument = builder.createLocal("numericArgument", null);
+        emitPrimitiveNumericOperandToLocal(
+                builder, send.receiver(), receiver, scratch, childResult, resumeValue);
+        emitPrimitiveNumericOperandToLocal(
+                builder, send.arguments().get(0), argument, scratch, childResult, resumeValue);
+        builder.beginStoreLocal(childResult);
+        switch (send.message()) {
+            case "/" -> builder.beginNumberDivide();
+            case "<" -> builder.beginRichCompareLt();
+            case "<=" -> builder.beginRichCompareLe();
+            case ">" -> builder.beginRichCompareGt();
+            case ">=" -> builder.beginRichCompareGe();
+            default -> throw new AssertionError("not a unified numeric selector");
+        }
+        builder.emitLoadLocal(receiver);
+        builder.emitLoadLocal(argument);
+        switch (send.message()) {
+            case "/" -> builder.endNumberDivide();
+            case "<" -> builder.endRichCompareLt();
+            case "<=" -> builder.endRichCompareLe();
+            case ">" -> builder.endRichCompareGt();
+            case ">=" -> builder.endRichCompareGe();
+            default -> throw new AssertionError("not a unified numeric selector");
+        }
+        builder.endStoreLocal();
+        emitDispatchedContinuationComposition(builder, childResult, resumeValue);
+        builder.beginStoreLocal(result);
+        if (primitiveCarrierResult) {
+            builder.emitLoadLocal(childResult);
+        } else {
+            builder.beginMaterializePrimitiveNumericCarrier();
+            builder.emitLoadLocal(childResult);
+            builder.emitLoadConstant(true);
+            builder.endMaterializePrimitiveNumericCarrier();
+        }
+        builder.endStoreLocal();
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
     private void emitGraalPyGeneralArithmeticSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
@@ -9883,6 +9977,18 @@ final class CanonicalToBytecodeLowerer {
                         || "*".equals(send.message()))) {
             emitGraalPyGeneralArithmeticSend(
                     builder, send, result, scratch, childResult, resumeValue);
+            return;
+        }
+        if (send.arguments().size() == 1
+                && !hasSpreadArgument(send.arguments())
+                && ("/".equals(send.message())
+                        || "<".equals(send.message())
+                        || "<=".equals(send.message())
+                        || ">".equals(send.message())
+                        || ">=".equals(send.message()))) {
+            emitI115UnifiedNumericSend(
+                    builder, send, result, scratch, childResult, resumeValue,
+                    primitiveCarrierResult);
             return;
         }
         if (!primitiveNumericSendCandidate(send)) {
