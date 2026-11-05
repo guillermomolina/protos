@@ -50,6 +50,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 // import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalCell;
+import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -64,8 +65,6 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
-import com.oracle.truffle.api.RootCallTarget;
-import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
@@ -88,7 +87,6 @@ import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
-import com.oracle.truffle.api.frame.FrameInstance;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.ControlFlowException;
@@ -171,22 +169,14 @@ import com.oracle.truffle.api.source.Source;
             ProtosNonLocalReturnException.class,
             ProtosTaskCancellationException.class
         })
-@OperationProxy(value = ProtosCanonicalBooleanOneNode.class, name = "TryCompactCanonicalBooleanOne")
-@OperationProxy(value = ProtosNumericAddNode.class, name = "TryPrimitiveNumericAdd")
-@OperationProxy(value = ProtosNumericSubtractNode.class, name = "TryPrimitiveNumericSubtract")
-@OperationProxy(value = ProtosNumericMultiplyNode.class, name = "TryPrimitiveNumericMultiply")
-@OperationProxy(value = ProtosNumericDivideNode.class, name = "TryPrimitiveNumericDivide")
-@OperationProxy(value = ProtosNumericLessNode.class, name = "TryPrimitiveNumericLess")
-@OperationProxy(value = ProtosNumericLessEqualNode.class, name = "TryPrimitiveNumericLessEqual")
-@OperationProxy(value = ProtosNumericGreaterNode.class, name = "TryPrimitiveNumericGreater")
-@OperationProxy(value = ProtosNumericGreaterEqualNode.class, name = "TryPrimitiveNumericGreaterEqual")
 @OperationProxy(value = ProtosNumberDivideNode.class, name = "NumberDivide")
 @OperationProxy(value = ProtosRichCompareLtNode.class, name = "RichCompareLt")
 @OperationProxy(value = ProtosRichCompareLeNode.class, name = "RichCompareLe")
 @OperationProxy(value = ProtosRichCompareGtNode.class, name = "RichCompareGt")
 @OperationProxy(value = ProtosRichCompareGeNode.class, name = "RichCompareGe")
 @OperationProxy(value = ProtosExperimentalReadGlobalNode.class, name = "ReadGlobal")
-// I115-H7 EXPERIMENTAL: GraalPy-shaped method call, numeric and comparison operations.
+@OperationProxy(value = ProtosExperimentalWriteGlobalNode.class, name = "SelectWriteGlobal")
+// I115: GraalPy-shaped method call and numeric operations shared by every source root.
 @OperationProxy(value = ProtosCallNilaryMethodNode.class, name = "CallNilaryMethod")
 // PRUIBA DE I115, en algún momento esto volverá a funcionar
 // Original operation proxy:
@@ -200,8 +190,6 @@ import com.oracle.truffle.api.source.Source;
 @OperationProxy(value = ProtosExperimentalNumberAddNode.class, name = "NumberAdd")
 @OperationProxy(value = ProtosExperimentalNumberSubtractNode.class, name = "NumberSubtract")
 @OperationProxy(value = ProtosExperimentalNumberMultiplyNode.class, name = "NumberMultiply")
-@OperationProxy(value = ProtosExperimentalNumberInPlaceAddNode.class, name = "NumberInPlaceAdd")
-@OperationProxy(value = ProtosExperimentalLessNode.class, name = "Lt")
 abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNode {
     protected ProtosBytecodeRootNode(
             ProtosLanguage language,
@@ -225,74 +213,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     final boolean isSemanticActivationRoot() {
         return semanticActivationRoot;
-    }
-
-    /*
-     * I115-H4-B EXPERIMENTAL: whether this root is an experimental callee
-     * context root (the focal run root and the H3 recursive Integer roots),
-     * whose prolog checks that it was entered with a B5 header. Set once by
-     * the lowerer after endRoot(); a reparse replays that lowering. Protos
-     * keeps no GraalPy-style per-invocation callee state: the invocation and
-     * its caller (B5[3]) are carried by the B5 header itself.
-     */
-    @CompilationFinal private transient boolean experimentalCalleeContextRoot;
-
-    final void markExperimentalCalleeContextRoot() {
-        this.experimentalCalleeContextRoot = true;
-    }
-
-    final boolean isExperimentalCalleeContextRoot() {
-        return experimentalCalleeContextRoot;
-    }
-
-    /*
-     * I115-H7 EXPERIMENTAL: whether this root binds its single parameter with
-     * CopyArguments, so its compact body accepts the long carrier of the H7
-     * operations as its argument, and returns a long result as is to a
-     * caller whose header accepts primitive results. Set once by the lowerer
-     * after endRoot(); a reparse replays that lowering.
-     */
-    @CompilationFinal private transient boolean experimentalPrimitiveArgumentRoot;
-
-    final void markExperimentalPrimitiveArgumentRoot() {
-        this.experimentalPrimitiveArgumentRoot = true;
-    }
-
-    final boolean isExperimentalPrimitiveArgumentRoot() {
-        return experimentalPrimitiveArgumentRoot;
-    }
-
-    /*
-     * I115-H11-B1 EXPERIMENTAL: whether a compact unary callee
-     * executes ReadGlobal and therefore needs its selected Closure
-     * as the lexical owner. The lowerer establishes this fact once
-     * after building the physical root; it remains compilation-final.
-     */
-    @CompilationFinal
-    private transient boolean experimentalUnaryNeedsCapturedOwner;
-
-    final void markExperimentalUnaryNeedsCapturedOwner() {
-        experimentalUnaryNeedsCapturedOwner = true;
-    }
-
-    final boolean experimentalUnaryNeedsCapturedOwner() {
-        return experimentalUnaryNeedsCapturedOwner;
-    }
-
-    /*
-     * I115-H7-R5 EXPERIMENTAL: an admitted compact root containing H7
-     * sends may return its signed-64 long carrier without creating a guest
-     * Integer. The same root fact governs the host boundary. This does not
-     * change generic roots or the conversion of double and guest values.
-     */
-    @CompilationFinal private transient boolean experimentalH7RawIntegerReturn;
-
-    final void markExperimentalH7RawIntegerReturn() {
-        experimentalH7RawIntegerReturn = true;
-    }
-
-    final boolean isExperimentalH7RawIntegerReturn() {
-        return experimentalH7RawIntegerReturn;
     }
 
     /**
@@ -601,22 +521,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return returnHomeProvenUnobservable;
     }
 
-    /*
-     * I101-B: a NORMAL scalar-local root returns its private primitive Long
-     * carrier without bytecode materialization. Only the caller completion
-     * of this root may project that carrier into the observable guest domain.
-     * It remains a private carrier for explicitly accepting fused call sites.
-     */
-    @CompilationFinal private transient boolean directScalarLocalCarrierBody;
-
-    final void recordDirectScalarLocalCarrierBody(boolean proven) {
-        directScalarLocalCarrierBody = proven;
-    }
-
-    final boolean directScalarLocalCarrierBody() {
-        return directScalarLocalCarrierBody;
-    }
-
     // PRUIBA DE I115, en algún momento esto volverá a funcionar
     // Removed per-root numeric return-projection state.
 
@@ -767,38 +671,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * exception or suspension.
      *
      * Keeping the Prolog preserves the Bytecode DSL root shape.
-     */
-    /*
-     * I115-H4-B EXPERIMENTAL (GraalPy EnterCalleeContext): an experimental
-     * callee context root asserts its B5 header; every other root does
-     * nothing, as before. No ProtosActivation is
-     * materialized and no Object.call, ReturnHome, Task or suspension check
-     * runs.
+     *
+     * I115 (GraalPy EnterCalleeContext): every source root is entered with
+     * the same B5 invocation header and runs the same empty prologue. No
+     * ProtosActivation is materialized and no Object.call, ReturnHome, Task
+     * or suspension check runs.
      */
     @Prolog(storeBytecodeIndex = false)
     public static final class EnterRoot {
         @Specialization
-        public static void perform(
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root) {
-            if (root.isExperimentalCalleeContextRoot()) {
-                assert admittedExperimentalEntry(frame.getArguments())
-                        : "experimental callee context root entered without an admitted header";
-            }
+        public static void perform() {
         }
-    }
-
-    /*
-     * I115: the headers an experimental callee context root is entered with:
-     * B5, the static unary layout, or an H11 unary entry (minimal or
-     * captured, each optionally extended with the requested Prelude).
-     */
-    static boolean admittedExperimentalEntry(Object[] arguments) {
-        return switch (arguments.length) {
-            case 1 -> true;
-            case 2, 3 -> ProtosFrameArguments.isExperimentalReducedCall(arguments);
-            default -> arguments.length >= ProtosFrameArguments.HEADER_LENGTH;
-        };
     }
 
     /** I115: direct return, following GraalPy's return epilogue. */
@@ -1066,23 +949,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115-H7 EXPERIMENTAL (GraalPy {@code PBytecodeDSLRootNode.CopyArguments}):
-     * the prologue of an admitted compact unary Closure root. I115-H7-R3:
-     * {@link #copy} yields supplied argument 0, read directly from its B5
-     * position (unchanged by publication, and shared with the static unary
-     * layout); the lowering stores it into the parameter's own local with
-     * StoreLocal. Nothing is checked, materialized or published per execution.
-     *
-     * <p>RECORDED DIVERGENCES: the experimental admission guarantees exactly
-     * one supplied argument; a call with a different arity is not recovered
-     * (no other binding path), and excess supplied arguments
-     * are not inspected.
+     * I115: the assignment of a statically classified module (ROOT) NAME
+     * binding through the destination {@code SelectWriteGlobal} selected
+     * before the right-hand side ran. The value is stored through the
+     * module context's authoritative assignment and is the operation's
+     * result. A destination made unwritable meanwhile (a frozen context or a
+     * removed binding) signals the assignment Error, exactly as the generic
+     * NAME assignment does; no other owner is searched.
      */
     @Operation
-    public static final class CopyArguments {
+    public static final class WriteGlobal {
         @Specialization
-        public static Object copy(@Bind VirtualFrame frame) {
-            return ProtosFrameArguments.experimentalSuppliedArgument0(frame.getArguments());
+        public static Object perform(
+                ProtosModuleBindingLocation destination,
+                Object value,
+                @Bind VirtualFrame frame) {
+            assignGlobal(frame.getArguments(), destination, value);
+            return value;
+        }
+
+        @TruffleBoundary
+        private static void assignGlobal(
+                Object[] arguments, ProtosModuleBindingLocation destination, Object value) {
+            try {
+                destination.assign(value);
+            } catch (IllegalStateException invalidMutation) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(ProtosFrameArguments.activation(arguments)));
+            }
         }
     }
 
@@ -2958,175 +2852,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115-J/I115-M EXPERIMENTAL: GraalPy-style direct integer operations
-     * (PyNumber*FastPathsBase). Each operation has its own primitive path over
-     * two Java longs, the signed-64 Integer representation; there is no
-     * 32-bit guest integer level. A signed-64 overflow and every operand that
-     * is not a long carrier leave the primitive path: the exact Integer
-     * service computes them behind a Truffle boundary, minting a value beyond
-     * signed-64 with the BigInteger prototype of the invocation's Prelude,
-     * exactly as the generic '+', '-' and '*' do. No protocol lookup,
-     * user-defined numeric method or generic numeric fallback is supported
-     * by this experimental lane.
-     */
-    @TruffleBoundary
-    private static int experimentalCompareGeneric(Object left, Object right) {
-        return ProtosNumericValueSupport.compareIntegers(
-                ProtosNumericValueSupport.guestValue(left),
-                ProtosNumericValueSupport.guestValue(right));
-    }
-
-    private static final int EXPERIMENTAL_ADD = 0;
-    private static final int EXPERIMENTAL_SUBTRACT = 1;
-    private static final int EXPERIMENTAL_MULTIPLY = 2;
-
-    /*
-     * I115-M: the exact Integer result of an admitted compact operation that
-     * left the long fast path. No host ArithmeticException reaches the guest.
-     */
-    @TruffleBoundary
-    private static Object experimentalExactInteger(
-            int operation,
-            Object left,
-            Object right,
-            ProtosBytecodeRootNode root,
-            Object[] frameArguments) {
-        ProtosPrelude prelude = experimentalEffectivePrelude(root, frameArguments);
-        if (prelude == null) {
-            throw new IllegalStateException(
-                    "I115: exact Integer result without a Prelude provenance");
-        }
-        Object a = ProtosNumericValueSupport.guestValue(left);
-        Object b = ProtosNumericValueSupport.guestValue(right);
-        return switch (operation) {
-            case EXPERIMENTAL_ADD -> ProtosNumericValueSupport.addIntegers(a, b, prelude);
-            case EXPERIMENTAL_SUBTRACT -> ProtosNumericValueSupport.subtractIntegers(a, b, prelude);
-            default -> ProtosNumericValueSupport.multiplyIntegers(a, b, prelude);
-        };
-    }
-
-    /**
-     * I115 EXPERIMENTAL (GraalPy CallContext / caller flags): the effective
-     * Prelude of the running invocation of {@code root}, whose frame
-     * arguments are {@code arguments}, in this order:
-     *
-     * <ol>
-     *   <li>a reduced layout's explicitly transported Prelude;</li>
-     *   <li>the own Prelude of the Closure a reduced layout retains (both
-     *       read by ProtosFrameArguments#experimentalTransportedPreludeOrNull);</li>
-     *   <li>otherwise the inherited Prelude, which the producer did not
-     *       transport because {@code root} had not requested it: only now
-     *       does {@code root} register NEEDS_CALLER_PRELUDE, and this read
-     *       recovers it cold from the real caller chain ({@link
-     *       #experimentalRecoveredPrelude});</li>
-     *   <li>a B5 header answers through the admitted accessors (published
-     *       activation, the Closure's own Prelude, the explicit caller
-     *       chain), which register the need only for an untransported
-     *       inherited Prelude.</li>
-     * </ol>
-     */
-    static ProtosPrelude experimentalEffectivePrelude(
-            ProtosBytecodeRootNode root, Object[] arguments) {
-        if (ProtosFrameArguments.isExperimentalReducedCall(arguments)) {
-            ProtosPrelude carried =
-                    ProtosFrameArguments.experimentalTransportedPreludeOrNull(arguments);
-            if (carried != null) {
-                return carried;
-            }
-            root.requestCallerNeed(NEEDS_CALLER_PRELUDE);
-            return experimentalRecoveredPrelude(root, arguments);
-        }
-        return ProtosFunctionCallDispatchers.admittedCallerPrelude(root, arguments);
-    }
-
-    /**
-     * I115 EXPERIMENTAL (GraalPy cold caller-frame recovery): the inherited
-     * Prelude of the invocation of {@code root} whose frame arguments are
-     * {@code arguments} (identity), which its producer did not transport.
-     *
-     * <p>Provenance: the walk first locates that exact invocation, by root
-     * and frame-arguments identity, wherever the iteration starts, so no
-     * other invocation of the same root is taken for it. From there each
-     * caller must be the next Protos Bytecode frame, and the call site that
-     * entered the previous frame, when the runtime reports one, must belong
-     * to that caller's root. Any other root (the host or interop entry,
-     * another language) ends the chain, and with it the Context. A reduced
-     * caller that carries a Prelude answers; one that does not registers
-     * its own NEEDS_CALLER_PRELUDE, so the need propagates to every producer
-     * that must transport it, and the walk continues. The first B5 caller
-     * answers through its admitted, explicitly linked accessors. Without a
-     * verifiable chain to such an authority the read fails; no Prelude is
-     * chosen arbitrarily. Once the needs are registered the producers
-     * transport the Prelude and the walk is not repeated.
-     */
-    @TruffleBoundary
-    static ProtosPrelude experimentalRecoveredPrelude(
-            ProtosBytecodeRootNode root, Object[] arguments) {
-        boolean[] located = {false};
-        Node[] enteringSite = {null};
-        ProtosPrelude recovered = Truffle.getRuntime().iterateFrames(instance -> {
-            ProtosBytecodeRootNode frameRoot = protosRootOrNull(instance);
-            if (!located[0]) {
-                if (frameRoot == root
-                        && instance.getFrame(FrameInstance.FrameAccess.READ_ONLY)
-                                .getArguments() == arguments) {
-                    located[0] = true;
-                    enteringSite[0] = instance.getCallNode();
-                }
-                return null;
-            }
-            if (frameRoot == null) {
-                throw new IllegalStateException(
-                        "I115: no verifiable Prelude provenance in the invocation chain");
-            }
-            Node site = enteringSite[0];
-            if (site != null && site.getRootNode() != null && site.getRootNode() != frameRoot) {
-                throw new IllegalStateException(
-                        "I115: the entering call site does not belong to the caller frame");
-            }
-            Object[] callerArguments =
-                    instance.getFrame(FrameInstance.FrameAccess.READ_ONLY).getArguments();
-            if (ProtosFrameArguments.isExperimentalReducedCall(callerArguments)) {
-                ProtosPrelude carried =
-                        ProtosFrameArguments.experimentalTransportedPreludeOrNull(callerArguments);
-                if (carried != null) {
-                    return carried;
-                }
-                frameRoot.requestCallerNeed(NEEDS_CALLER_PRELUDE);
-                enteringSite[0] = instance.getCallNode();
-                return null;
-            }
-            ProtosPrelude admitted =
-                    ProtosFunctionCallDispatchers.admittedCallerPrelude(frameRoot, callerArguments);
-            if (admitted == null) {
-                throw new IllegalStateException("I115: the invocation chain has no Prelude");
-            }
-            return admitted;
-        });
-        if (!located[0]) {
-            throw new IllegalStateException("I115: the requesting invocation is not on the stack");
-        }
-        if (recovered == null) {
-            throw new IllegalStateException(
-                    "I115: no verifiable Prelude provenance in the invocation chain");
-        }
-        return recovered;
-    }
-
-    private static ProtosBytecodeRootNode protosRootOrNull(FrameInstance instance) {
-        return instance.getCallTarget() instanceof RootCallTarget target
-                        && target.getRootNode() instanceof ProtosBytecodeRootNode protos
-                ? protos
-                : null;
-    }
-
-    /**
-     * I115-N EXPERIMENTAL: the Java boolean of a canonical Boolean for a
-     * structured Bytecode branch. No truthiness: a compact Boolean-control
-     * receiver is proven canonical by admission, and a compact whileTrue
-     * condition result that is not exact canonical true or false (for
-     * example the result of an ordinarily dispatched comparison) signals the
-     * fresh standard Error of the standard whileTrue behavior.
+     * I115-N: the Java boolean of a canonical Boolean for the structured
+     * Bytecode branch of the unified Boolean control lowering. No
+     * truthiness: a receiver or whileTrue condition result that is not exact
+     * canonical true or false (for example the result of an ordinarily
+     * dispatched comparison) signals the fresh standard Error of the standard
+     * control behavior.
      */
     @Operation
     public static final class ExperimentalCanonicalBooleanCondition {
@@ -3145,298 +2876,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             // The signal of PreparedWhileCall.conditionResult.
             throw ProtosCoreErrors.signal(
                     activation, ProtosCoreErrors.newError(activation));
-        }
-    }
-
-    /*
-     * I115 EXPERIMENTAL: the compact integer comparisons compare two longs
-     * directly. Every other operand pair (a large Integer, or a guest Integer
-     * value) is compared exactly by the out-of-line fallback.
-     */
-    @Operation
-    public static final class ExperimentalIntegerLessBool {
-        @Specialization
-        public static boolean doLong(long left, long right) {
-            return left < right;
-        }
-
-        @Fallback
-        @InliningCutoff
-        public static boolean doGeneric(Object left, Object right) {
-            return experimentalCompareGeneric(left, right) < 0;
-        }
-    }
-
-    @Operation
-    public static final class ExperimentalIntegerLessEqualBool {
-        @Specialization
-        public static boolean doLong(long left, long right) {
-            return left <= right;
-        }
-
-        @Fallback
-        @InliningCutoff
-        public static boolean doGeneric(Object left, Object right) {
-            return experimentalCompareGeneric(left, right) <= 0;
-        }
-    }
-
-    @Operation
-    public static final class ExperimentalIntegerGreaterBool {
-        @Specialization
-        public static boolean doLong(long left, long right) {
-            return left > right;
-        }
-
-        @Fallback
-        @InliningCutoff
-        public static boolean doGeneric(Object left, Object right) {
-            return experimentalCompareGeneric(left, right) > 0;
-        }
-    }
-
-    @Operation
-    public static final class ExperimentalIntegerGreaterEqualBool {
-        @Specialization
-        public static boolean doLong(long left, long right) {
-            return left >= right;
-        }
-
-        @Fallback
-        @InliningCutoff
-        public static boolean doGeneric(Object left, Object right) {
-            return experimentalCompareGeneric(left, right) >= 0;
-        }
-    }
-
-    @Operation
-    public static final class ExperimentalIntegerLess {
-        @Specialization
-        public static Object doLong(long left, long right) {
-            return (left < right) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
-        }
-
-        @Fallback
-        @InliningCutoff
-        public static Object doGeneric(Object left, Object right) {
-            return (experimentalCompareGeneric(left, right) < 0) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
-        }
-    }
-
-    @Operation
-    public static final class ExperimentalIntegerLessEqual {
-        @Specialization
-        public static Object doLong(long left, long right) {
-            return (left <= right) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
-        }
-
-        @Fallback
-        @InliningCutoff
-        public static Object doGeneric(Object left, Object right) {
-            return (experimentalCompareGeneric(left, right) <= 0) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
-        }
-    }
-
-    @Operation
-    public static final class ExperimentalIntegerGreater {
-        @Specialization
-        public static Object doLong(long left, long right) {
-            return (left > right) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
-        }
-
-        @Fallback
-        @InliningCutoff
-        public static Object doGeneric(Object left, Object right) {
-            return (experimentalCompareGeneric(left, right) > 0) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
-        }
-    }
-
-    @Operation
-    public static final class ExperimentalIntegerGreaterEqual {
-        @Specialization
-        public static Object doLong(long left, long right) {
-            return (left >= right) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
-        }
-
-        @Fallback
-        @InliningCutoff
-        public static Object doGeneric(Object left, Object right) {
-            return (experimentalCompareGeneric(left, right) >= 0) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
-        }
-    }
-
-    /*
-     * I115 EXPERIMENTAL (GraalPy PyNumberAddFastPathsBase): the exact long
-     * sum; after the first overflow, the long sum while it fits and the
-     * exact large Integer only on a real signed-64 overflow.
-     */
-    @Operation
-    public static final class ExperimentalIntegerAdd {
-        @Specialization(rewriteOn = ArithmeticException.class)
-        public static long doLong(long left, long right) {
-            return Math.addExact(left, right);
-        }
-
-        @Specialization(replaces = "doLong")
-        public static Object doLongWithOverflow(
-                long left,
-                long right,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root) {
-            long result = left + right;
-            if (((left ^ result) & (right ^ result)) < 0) {
-                return experimentalExactInteger(
-                        EXPERIMENTAL_ADD, left, right, root, frame.getArguments());
-            }
-            return result;
-        }
-
-        @Fallback
-        @InliningCutoff
-        public static Object doGeneric(
-                Object left,
-                Object right,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root) {
-            return experimentalExactInteger(
-                    EXPERIMENTAL_ADD, left, right, root, frame.getArguments());
-        }
-    }
-
-    /* I115 EXPERIMENTAL (GraalPy PyNumberSubtractFastPathsBase). */
-    @Operation
-    public static final class ExperimentalIntegerSubtract {
-        @Specialization(rewriteOn = ArithmeticException.class)
-        public static long doLong(long left, long right) {
-            return Math.subtractExact(left, right);
-        }
-
-        @Specialization(replaces = "doLong")
-        public static Object doLongWithOverflow(
-                long left,
-                long right,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root) {
-            long result = left - right;
-            if (((left ^ right) & (left ^ result)) < 0) {
-                return experimentalExactInteger(
-                        EXPERIMENTAL_SUBTRACT, left, right, root, frame.getArguments());
-            }
-            return result;
-        }
-
-        @Fallback
-        @InliningCutoff
-        public static Object doGeneric(
-                Object left,
-                Object right,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root) {
-            return experimentalExactInteger(
-                    EXPERIMENTAL_SUBTRACT, left, right, root, frame.getArguments());
-        }
-    }
-
-    /* I115 EXPERIMENTAL (GraalPy PyNumberMultiplyFastPathsBase). */
-    @Operation
-    public static final class ExperimentalIntegerMultiply {
-        @Specialization(rewriteOn = ArithmeticException.class)
-        public static long doLong(long left, long right) {
-            return Math.multiplyExact(left, right);
-        }
-
-        /*
-         * The product overflows only when an operand magnitude needs more
-         * than 31 bits and the division check fails, or for
-         * Long.MIN_VALUE * -1, whose wrapped quotient check passes.
-         */
-        @Specialization(replaces = "doLong")
-        public static Object doLongWithOverflow(
-                long left,
-                long right,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root) {
-            long result = left * right;
-            long magnitudes = Math.abs(left) | Math.abs(right);
-            if (magnitudes >>> 31 != 0
-                    && ((right != 0 && result / right != left)
-                            || (left == Long.MIN_VALUE && right == -1L))) {
-                return experimentalExactInteger(
-                        EXPERIMENTAL_MULTIPLY, left, right, root, frame.getArguments());
-            }
-            return result;
-        }
-
-        @Fallback
-        @InliningCutoff
-        public static Object doGeneric(
-                Object left,
-                Object right,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root) {
-            return experimentalExactInteger(
-                    EXPERIMENTAL_MULTIPLY, left, right, root, frame.getArguments());
-        }
-    }
-
-    /**
-     * I115-H3 EXPERIMENTAL: supplied argument 0 of an admitted recursive
-     * Integer root as a long, stored by the lowering with the built-in
-     * StoreLocal into the parameter's own frame local. The static unary
-     * layout and B5 keep it at the same position. The recurrent long carrier
-     * is the only test of the primitive path; a supplied guest Integer value
-     * generalizes the node to the path that also unboxes it out of line. No
-     * binding presence, activation or layout is consulted.
-     */
-    @Operation
-    public static final class ExperimentalLongArgument0 {
-        @Specialization(guards = "isLongArgument0(frame)")
-        public static long doLong(@Bind VirtualFrame frame) {
-            return (Long) ProtosFrameArguments.experimentalSuppliedArgument0(
-                    frame.getArguments());
-        }
-
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // @Specialization(replaces = "doLong")
-        // public static long doRepresented(@Bind VirtualFrame frame) {
-        //     Object value = ProtosFrameArguments.experimentalSuppliedArgument0(
-        //             frame.getArguments());
-        //     if (value instanceof Long carrier) {
-        //         return carrier.longValue();
-        //     }
-        //     return experimentalRepresentedLong(value);
-        // }
-
-        @NonIdempotent
-        static boolean isLongArgument0(VirtualFrame frame) {
-            return ProtosFrameArguments.experimentalSuppliedArgument0(
-                    frame.getArguments()) instanceof Long;
-        }
-    }
-
-    // PRUIBA DE I115, en algún momento esto volverá a funcionar
-    // /* I115-H3: the long of a supplied small guest Integer value, out of line. */
-    // @InliningCutoff
-    // private static long experimentalRepresentedLong(Object value) {
-    //     return ((ProtosIntegerValue) value).longValue();
-    // }
-
-    /**
-     * I115-H1-FIX: whether a staged Boolean-control receiver is exact
-     * canonical true or false. It selects the compact structured control
-     * (the receiver's standard behavior, I095) or the ordinary send of the
-     * control selector; it converts nothing.
-     */
-    @Operation
-    public static final class IsCanonicalBooleanValue {
-        @Specialization
-        public static boolean doBoolean(ProtosBooleanValue value) {
-            return true;
-        }
-
-        @Fallback
-        public static boolean doOther(Object value) {
-            return false;
         }
     }
 

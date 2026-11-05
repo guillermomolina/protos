@@ -22,23 +22,29 @@ import com.oracle.truffle.api.object.DynamicObject;
 import java.util.Objects;
 
 /**
- * I115 (GraalPy ReadGlobal over the module dict storage): the stable physical
- * location of one NAME binding in a module execution context, resolved once
- * when a ReadGlobal site specializes.
+ * I115 (GraalPy ReadGlobal/WriteGlobal over the module dict storage): the
+ * stable physical location of one NAME binding in a module execution
+ * context, resolved once when a ReadGlobal or WriteGlobal site specializes.
  *
- * <p>It is only an address: the module context's single map-backed store and
- * the binding's interned key. No value is copied here, so every legal
+ * <p>It is only an address: the module context, its single map-backed store
+ * and the binding's interned key. No value is copied here, so every legal
  * assignment stays observable. The store instance is fixed for the lifetime
  * of the context (I115 installs no other authority), so the address stays
  * valid across removal and recreation of the binding: a removed binding reads
  * as absent ({@code null}), and the caller then takes its unspecialized NAME
- * read over the same storage.
+ * access over the same storage.
  */
 public final class ProtosModuleBindingLocation {
+    /* Private absence marker of a store read; never a stored value. */
+    private static final Object ABSENT = new Object();
+
+    private final ProtosObjectValue context;
     private final DynamicObject store;
     private final String key;
 
-    private ProtosModuleBindingLocation(DynamicObject store, String key) {
+    private ProtosModuleBindingLocation(
+            ProtosObjectValue context, DynamicObject store, String key) {
+        this.context = Objects.requireNonNull(context, "context");
         this.store = Objects.requireNonNull(store, "store");
         this.key = Objects.requireNonNull(key, "key");
     }
@@ -56,7 +62,9 @@ public final class ProtosModuleBindingLocation {
             return null;
         }
         ProtosMapBackedLexicalBindingAuthority.SlotCell cell = mapBacked.slotCellFor(name);
-        return cell == null ? null : new ProtosModuleBindingLocation(cell.storage(), cell.key());
+        return cell == null
+                ? null
+                : new ProtosModuleBindingLocation(context, cell.storage(), cell.key());
     }
 
     /** The current guest value of the binding, or {@code null} when it is absent. */
@@ -65,5 +73,30 @@ public final class ProtosModuleBindingLocation {
         return stored instanceof Long integer
                 ? ProtosNumericValueSupport.integer(integer.longValue())
                 : stored;
+    }
+
+    /** Whether the binding is currently present at this location. */
+    public boolean isPresent(DynamicObject.GetNode getNode) {
+        return getNode.execute(store, key, ABSENT) != ABSENT;
+    }
+
+    /**
+     * Assigns {@code value} to the binding at this fixed location through
+     * the context's authoritative assignment, so the stored representation
+     * (an internal {@code long} for a signed-64 Integer), the frozen-context
+     * rule, the slot-presence rule and the invalidation of value-lookup
+     * dependencies are exactly those of every other assignment of the
+     * binding. No other store or owner is consulted and the name is never
+     * resolved again: when the binding was removed, or the context frozen,
+     * after this location was selected (for example by the right-hand side
+     * of the assignment), the assignment fails instead of being redirected or
+     * creating a binding.
+     *
+     * @throws IllegalStateException when the context is frozen or the
+     *     binding is absent, as {@link ProtosObjectValue#assignLocalSlot}
+     */
+    @TruffleBoundary
+    public void assign(Object value) {
+        context.assignLocalSlot(key, value);
     }
 }

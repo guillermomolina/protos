@@ -24,10 +24,13 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 
 /**
  * I113 / I115: the name-keyed lexical accesses of an
- * {@code AccessNamedLexical} instruction, the single operation of a NAME
- * binding (module context, object body or dynamic name). Each constant carries its own
- * body, so the call on the builder-fixed constant devirtualizes under
- * partial evaluation.
+ * {@code AccessNamedLexical} instruction: a dynamic name, or an access
+ * inside an inline object-construction body, whose lookup also observes the
+ * object under construction. A statically resolved module binding uses
+ * {@code ReadGlobal}/{@code SelectWriteGlobal} at every physical depth, and
+ * LOCAL/CELL bindings never reach this access. Each constant
+ * carries its own body, so the call on the builder-fixed constant
+ * devirtualizes under partial evaluation.
  */
 public enum ProtosNamedLexicalAccess {
     /** The unqualified lookup; signals the lookup Error on absence. */

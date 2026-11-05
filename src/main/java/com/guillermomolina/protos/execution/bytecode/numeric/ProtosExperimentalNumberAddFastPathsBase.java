@@ -76,21 +76,6 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
     }
 
     /*
-     * The effective Prelude of the running root, read only on the overflow
-     * and generic Integer routes: the Prelude its reduced H11 entry carries
-     * or its B5 header's admitted Prelude. When it was not transported, the
-     * root registers NEEDS_CALLER_PRELUDE once and the value is recovered
-     * cold (ProtosBytecodeRootNode#experimentalEffectivePrelude).
-     */
-    /*
-     * PRUIBA DE I115, en algún momento esto volverá a funcionar
-     * Retired caller-frame arithmetic provenance; not executed:
-     * static ProtosPrelude callerPrelude(ProtosBytecodeRootNode root, VirtualFrame frame) {
-     *     return ProtosBytecodeRootNode.experimentalEffectivePrelude(root, frame.getArguments());
-     * }
-     */
-
-    /*
      * doLLOvf (declared by each proxied subclass, which can bind its root):
      * the long sum, or on signed-64 overflow the exact large Integer of the
      * caller's Prelude.

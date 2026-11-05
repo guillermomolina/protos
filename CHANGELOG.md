@@ -8,6 +8,56 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.49-SNAPSHOT
+
+- **I115 — retire compact-root lowering; use a single GraalPy-shaped Bytecode DSL path (historical).**
+  - Remove the separate experimental compact-root emitter and its repeated
+    control and numeric lowering. `CanonicalToBytecodeLowerer` now routes
+    ordinary and previously compact source roots through one Bytecode DSL
+    lowering strategy, using the existing internal structured `ifTrue`,
+    `ifFalse`, `ifTrueIfFalse`, `whileTrue` and unified Number/RichCompare
+    operations. The historical source changes are replayed unchanged; this
+    version does not independently prove the correct guest semantics.
+  - Retire the experimental static/minimal unary frame argument layouts in
+    `ProtosFrameArguments` and compact-only root/result classifications.
+    Consolidate closure parameter access, source-root execution and host
+    result transport around the remaining B5 invocation contract; retain
+    signed-64 `long`/`Long` Integer and direct `Double` Float from V66.
+  - Rework `ReadGlobal` for own module roots and captured-module reads with
+    cached module-context/Closure identities and physical lexical depth.
+    Add `ProtosExperimentalWriteGlobalNode` (`SelectWriteGlobal`): select the
+    module NAME destination before evaluating the RHS, hold its fixed
+    `ProtosModuleBindingLocation`, check runtime presence and signal
+    `SlotNotFound` if absent. The write then uses the already-selected
+    location rather than resolving a different name after RHS side effects.
+  - Delete twelve obsolete numeric/compact-only classes, including
+    `ProtosNumericCoreAdmission`, `ProtosPrimitiveNumericSendFastPathsBase`,
+    `ProtosNumericAddNode`, `ProtosNumericDivideNode`,
+    `ProtosNumericLessNode`, `ProtosNumericGreaterNode`,
+    `ProtosExperimentalLessNode` and
+    `ProtosExperimentalNumberInPlaceAddNode`. Retain the shared
+    `NumberDivide` and `RichCompare` nodes from V65. One new source file is
+    introduced, thirteen others are modified and twelve are deleted.
+  - **Historical semantic limitations and divergences:** V67's D179 C0
+    lexical classification is not fully correct for dynamic `Candidate`
+    presence, `LOCAL`/`CELL` removeSlot and recreation, or nearer-scope
+    shadowing; this refactor does not restore those behaviors. `ReadGlobal`
+    and `SelectWriteGlobal` use static module ownership and do not recover
+    arbitrary dynamic lookup retargeting. Closure captures, parallel Actor
+    projection, context identity and non-local ReturnHome transfers still
+    require separate semantic acceptance. Internal Boolean controls can
+    bypass overridden `ifTrue`/`whileTrue` methods, while D013 `Object.call`
+    override behavior remains independently unresolved. Suspension,
+    cancellation, terminal Futures, Task/C-prime ownership, D197-C
+    BigInteger prototype delegation, dynamic numeric dispatch, and the
+    `Double` migration remain separately unverified. The removal of legacy
+    operations does not itself prove runtime correctness or a performance
+    improvement. No tests, Maven build, Graal compiler graphs or benchmarks
+    were run after this version bump in the historical replay.
+  - Original implementation: `100e03e479ddf33d14b5d0d02dee492a0c4419ea`.
+    All 26 original source blobs and Git modes are preserved byte-for-byte;
+    only root `pom.xml` and `CHANGELOG.md` receive versioned metadata edits.
+
 ## 0.4.48-SNAPSHOT
 
 - **I115 — GraalPy-style NAME/LOCAL/CELL lexical storage convergence (historical).**
