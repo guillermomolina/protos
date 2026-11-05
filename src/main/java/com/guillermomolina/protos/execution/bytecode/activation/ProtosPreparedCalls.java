@@ -23,7 +23,6 @@ import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.Prepare
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedErrorHandlerCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardImportCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardObjectCall;
-import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedWhileCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedArrayEachCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedArrayMatchCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedBytesEachCall;
@@ -72,7 +71,6 @@ final class ProtosPreparedCalls {
     private static final class StructuredCallCapabilities {
         final boolean ensure;
         final boolean errorHandler;
-        final ProtosStandardObjectProtocol.StructuredLoopKind whileLoop;
         final ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind;
         final boolean arrayEach;
         final boolean bytesEach;
@@ -89,7 +87,6 @@ final class ProtosPreparedCalls {
         private StructuredCallCapabilities(
                 boolean ensure,
                 boolean errorHandler,
-                ProtosStandardObjectProtocol.StructuredLoopKind whileLoop,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind,
                 boolean arrayEach,
                 boolean bytesEach,
@@ -104,7 +101,6 @@ final class ProtosPreparedCalls {
                 ProtosModuleRuntime importRuntime) {
             this.ensure = ensure;
             this.errorHandler = errorHandler;
-            this.whileLoop = whileLoop;
             this.booleanKind = booleanKind;
             this.arrayEach = arrayEach;
             this.bytesEach = bytesEach;
@@ -120,7 +116,6 @@ final class ProtosPreparedCalls {
             int controlCapabilities =
                     (ensure ? 1 : 0)
                             + (errorHandler ? 1 : 0)
-                            + (whileLoop != null ? 1 : 0)
                             + (booleanKind != null ? 1 : 0)
                             + (arrayEach ? 1 : 0)
                             + (bytesEach ? 1 : 0)
@@ -143,7 +138,6 @@ final class ProtosPreparedCalls {
         static StructuredCallCapabilities of(
                 boolean ensure,
                 boolean errorHandler,
-                ProtosStandardObjectProtocol.StructuredLoopKind whileLoop,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind,
                 boolean arrayEach,
                 boolean bytesEach,
@@ -159,7 +153,6 @@ final class ProtosPreparedCalls {
             boolean any =
                     ensure
                             || errorHandler
-                            || whileLoop != null
                             || booleanKind != null
                             || arrayEach
                             || bytesEach
@@ -178,7 +171,6 @@ final class ProtosPreparedCalls {
             return new StructuredCallCapabilities(
                     ensure,
                     errorHandler,
-                    whileLoop,
                     booleanKind,
                     arrayEach,
                     bytesEach,
@@ -234,7 +226,6 @@ final class ProtosPreparedCalls {
                             StructuredCallCapabilities.of(
                                     ProtosStandardObjectProtocol.isStandardEnsureImplementation(closure),
                                     ProtosStandardErrorProtocol.isStandardHandleImplementation(closure),
-                                    ProtosStandardObjectProtocol.structuredLoopKindForImplementation(closure),
                                     ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(closure),
                                     ProtosStandardArrayProtocol.isStandardEachImplementation(closure),
                                     ProtosStandardBytesProtocol.isStandardEachImplementation(closure),
@@ -271,8 +262,6 @@ final class ProtosPreparedCalls {
         boolean isStructuredErrorHandler() {
             return structured != null && structured.errorHandler;
         }
-
-        boolean isStructuredWhile() { return structured != null && structured.whileLoop != null; }
 
         boolean isStructuredBoolean() {
             return structured != null && structured.booleanKind != null;
@@ -323,7 +312,6 @@ final class ProtosPreparedCalls {
                             || structured.importRuntime != null
                             || structured.ensure
                             || structured.errorHandler
-                            || structured.whileLoop != null
                             || structured.booleanKind != null
                             || structured.arrayEach
                             || structured.bytesEach
@@ -422,24 +410,6 @@ final class ProtosPreparedCalls {
             return new PreparedEnsureCall(
                     ProtosCallRequest.call(body, List.of(), activation),
                     ProtosCallRequest.call(cleanup, List.of(), activation));
-        }
-
-        PreparedWhileCall prepareStructuredWhile() {
-            if (structured == null || structured.whileLoop == null) {
-                throw new IllegalStateException(
-                        "prepared Closure call has no structured while capability");
-            }
-            if (!(activation.receiver() instanceof ProtosClosureValue receiver)
-                    || supplied.size() != 1
-                    || !(supplied.get(0) instanceof ProtosClosureValue argument)) {
-                throw ProtosCoreErrors.signal(
-                        activation,
-                        ProtosCoreErrors.newError(activation));
-            }
-            ProtosStandardObjectProtocol.StructuredLoopKind kind = structured.whileLoop;
-            return kind.postTest()
-                    ? new PreparedWhileCall(kind, argument, receiver, activation)
-                    : new PreparedWhileCall(kind, receiver, argument, activation);
         }
 
         PreparedErrorHandlerCall prepareStructuredErrorHandler() {

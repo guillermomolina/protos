@@ -41,7 +41,6 @@ import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.Prepare
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedIndexedEachCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedLocalEachCall;
 import com.guillermomolina.protos.execution.ProtosStructuredMapUpdateCalls.PreparedMapInitialDefinition;
-import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedWhileCall;
 import com.guillermomolina.protos.execution.ProtosFrameLocalBindings.ResolvedLexicalWriteTarget;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -2446,15 +2445,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         @Specialization
-        public static ProtosCallRequest whileLoop(
-                ProtosStructuredPhase phase,
-                PreparedWhileCall prepared) {
-            return phase == ProtosStructuredPhase.SECONDARY_CHILD
-                    ? prepared.prepareBody()
-                    : prepared.prepareCondition();
-        }
-
-        @Specialization
         public static ProtosCallRequest mapInitialDefinition(
                 ProtosStructuredPhase phase,
                 PreparedMapInitialDefinition prepared) {
@@ -2613,11 +2603,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         public static Object standardImport(PreparedStandardImportCall prepared, Object result) {
             return prepared.finish(result);
-        }
-
-        @Specialization
-        public static Object whileLoop(PreparedWhileCall prepared, Object result) {
-            return prepared.result(result);
         }
     }
 
@@ -2782,69 +2767,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     // ReturnHome (see CanonicalToBytecodeLowerer#emitInlineClosureLiteralCall).
 
 
-    // ---- PLAT044 B′ inline literal whileTrue (PERF026-C1) ---------------------------
-    //
-    // A selected standard whileTrue whose receiver and body are exactly the
-    // send site's staged literals is sequenced locally in this root; every
-    // other while keeps the structured-dispatch root. The loop state machine
-    // and Boolean condition authority stay owned by
-    // ProtosStructuredControlCalls.PreparedWhileCall.
-
-
     /**
-     * D212: whether the prepared standard loop is post-test, so the lowering
-     * runs the body before each condition. Fixed by the selected standard
-     * behavior when the loop was prepared.
+     * I115: the single validation of a canonical control condition
+     * (ifTrue, ifFalse, ifTrueIfFalse and the standard loops). It accepts
+     * exactly canonical {@code true} or {@code false} and yields the
+     * primitive decision {@code value == polarity}, so the lowering inverts
+     * ifFalse and the false-polarity loops without a {@code not()} send. Any
+     * other value (no truthiness, no Future await/adoption) signals the
+     * fresh standard Error; the exact activation is resolved only on that
+     * error path, so the success path allocates nothing.
      */
     @Operation
-    public static final class StructuredWhilePostTest {
+    @ConstantOperand(type = boolean.class, name = "polarity")
+    public static final class CanonicalControlCondition {
         @Specialization
-        public static boolean perform(PreparedWhileCall prepared) {
-            return prepared.postTest();
-        }
-    }
-
-    /**
-     * I115-N: the Java boolean of a canonical Boolean for the structured
-     * Bytecode branch of the unified Boolean control lowering. No
-     * truthiness: a receiver or whileTrue condition result that is not exact
-     * canonical true or false (for example the result of an ordinarily
-     * dispatched comparison) signals the fresh standard Error of the standard
-     * control behavior.
-     */
-    @Operation
-    public static final class ExperimentalCanonicalBooleanCondition {
-        @Specialization
-        public static boolean doBoolean(ProtosBooleanValue value) {
-            return value.value();
+        public static boolean doBoolean(boolean polarity, ProtosBooleanValue value) {
+            return value.value() == polarity;
         }
 
         @Fallback
         public static boolean doOther(
+                boolean polarity,
                 Object value,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root) {
             root.requestCallerNeed(NEEDS_EXACT_ACTIVATION);
             ProtosActivation activation = ProtosFrameArguments.activation(frame);
-            // The signal of PreparedWhileCall.conditionResult.
             throw ProtosCoreErrors.signal(
                     activation, ProtosCoreErrors.newError(activation));
-        }
-    }
-
-    @Operation
-    public static final class StructuredWhileCondition {
-        @Specialization
-        public static boolean perform(PreparedWhileCall prepared, Object result) {
-            return prepared.conditionResult(result);
-        }
-    }
-
-    @Operation
-    public static final class StructuredWhileRetainBodyResult {
-        @Specialization
-        public static Object perform(PreparedWhileCall prepared, Object bodyResult) {
-            return prepared.retainedBodyResult(bodyResult);
         }
     }
 
