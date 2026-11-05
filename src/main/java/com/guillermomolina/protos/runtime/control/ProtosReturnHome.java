@@ -17,6 +17,8 @@
 
 package com.guillermomolina.protos.runtime.control;
 
+import com.guillermomolina.protos.runtime.ProtosTask;
+
 /**
  * The Smalltalk-style return home an owning invocation establishes.
  *
@@ -39,6 +41,15 @@ public final class ProtosReturnHome {
     private static final ProtosReturnHome UNOBSERVABLE_PRIMITIVE_RESULT = new ProtosReturnHome(false);
 
     private boolean active;
+    /*
+     * PLAT070: the exact Task whose invocation owns this materialized home, or null for a
+     * Task-free owner. Written at most once, when that invocation is established, and read by
+     * RaiseNonLocalReturn with a plain identity comparison. Volatile so a captured Closure running
+     * on another carrier observes it. Cleared by complete() after the home becomes inactive, so a
+     * completed home never retains its Task; the volatile clear publishes the inactive state to a
+     * reader that observes the cleared owner. Never a guest-visible property.
+     */
+    private volatile ProtosTask ownerTask;
 
     public ProtosReturnHome() {
         this(true);
@@ -63,6 +74,31 @@ public final class ProtosReturnHome {
         return this != UNOBSERVABLE && this != UNOBSERVABLE_PRIMITIVE_RESULT;
     }
 
+    /**
+     * PLAT070: binds the exact Task whose invocation owns this home. Idempotent for the same
+     * Task; rejects a different Task. The shared unobservable markers have no owner and are left
+     * untouched. Only the owning invocation may call this; a Closure capturing the home never
+     * does.
+     */
+    public void bindOwnerTaskForRuntime(ProtosTask task) {
+        if (task == null || !isMaterialized() || !active) {
+            return;
+        }
+        ProtosTask current = ownerTask;
+        if (current == task) {
+            return;
+        }
+        if (current != null) {
+            throw new IllegalStateException("return home already belongs to another Task");
+        }
+        ownerTask = task;
+    }
+
+    /** PLAT070: the owning Task, or {@code null} for a Task-free owner. No allocation. */
+    public ProtosTask ownerTaskForRuntime() {
+        return ownerTask;
+    }
+
     public boolean isActive() {
         return active;
     }
@@ -72,5 +108,7 @@ public final class ProtosReturnHome {
             throw new IllegalStateException("return home is already completed");
         }
         active = false;
+        // PLAT070: release the owner after deactivation; see ownerTask.
+        ownerTask = null;
     }
 }

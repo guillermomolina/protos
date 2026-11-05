@@ -26,6 +26,7 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayDeque;
@@ -160,6 +161,36 @@ final class ProtosDapTestSupport {
                 deferred.addLast(message);
             }
             throw new IOException("Timed out waiting for DAP event " + eventName);
+        }
+
+        /**
+         * Returns the first {@code eventName} event that arrives within {@code window}, or {@code
+         * null} when none does. Other messages stay deferred. Intended for asserting that an event
+         * is absent after the debuggee has already finished observable work.
+         */
+        String pollEvent(String eventName, Duration window) throws IOException {
+            String existing = removeDeferredEvent(eventName);
+            if (existing != null) {
+                return existing;
+            }
+            int previousTimeout = socket.getSoTimeout();
+            socket.setSoTimeout((int) Math.max(1, window.toMillis()));
+            try {
+                long deadline = System.nanoTime() + window.toNanos();
+                while (System.nanoTime() < deadline) {
+                    String message = read();
+                    if ("event".equals(optionalStringField(message, "type"))
+                            && eventName.equals(optionalStringField(message, "event"))) {
+                        return message;
+                    }
+                    deferred.addLast(message);
+                }
+                return null;
+            } catch (SocketTimeoutException quiet) {
+                return null;
+            } finally {
+                socket.setSoTimeout(previousTimeout);
+            }
         }
 
         void bestEffortDisconnect() {

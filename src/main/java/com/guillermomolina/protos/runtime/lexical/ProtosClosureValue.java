@@ -281,6 +281,14 @@ public final class ProtosClosureValue extends ProtosObjectValue {
     }
 
     /**
+     * PLAT070: whether an invocation of this Closure owns the home {@link
+     * #invocationReturnHomeForRuntime} answers, i.e. the Closure captured none.
+     */
+    public boolean ownsInvocationReturnHomeForRuntime() {
+        return returnHome == null;
+    }
+
+    /**
      * I114: exactly {@code invocationReturnHomeForRuntime() ==
      * ProtosReturnHome.unobservable()}, without obtaining or constructing a
      * home and without rematerializing the execution plan. Admission decisions

@@ -145,6 +145,13 @@ public final class ProtosTextReaderCPrimeExecution {
             return new SourceInvocation(true, null, exactError);
         }
 
+        /** PLAT070: the escaping transfer is accounted as a failed source invocation. */
+        void transferEscaped() {
+            if (!operation.terminal()) {
+                reader.invocationFailedForCPrimeRuntime(operation, null);
+            }
+        }
+
         Object awaitSourceFuture(SourceInvocation invocation) {
             Objects.requireNonNull(invocation, "invocation");
             if (invocation.failed) {
@@ -200,6 +207,9 @@ public final class ProtosTextReaderCPrimeExecution {
                         BytecodeConfig.DEFAULT,
                         builder -> {
                             builder.beginRoot();
+                            // PLAT070: account internal transfers crossing this root.
+                            BytecodeLocal transferAccounting =
+                                    ProtosIoCPrimeTransferAccounting.begin(builder);
 
                             BytecodeLocal advance = builder.createLocal("textReaderAdvance", null);
                             BytecodeLocal prepared = builder.createLocal("textReaderSourceCall", null);
@@ -339,9 +349,13 @@ public final class ProtosTextReaderCPrimeExecution {
                             builder.endBlock();
                             builder.endWhile();
 
+                            ProtosIoCPrimeTransferAccounting.markCompleted(
+                                    builder, transferAccounting);
                             builder.beginReturn();
                             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
                             builder.endReturn();
+                            ProtosIoCPrimeTransferAccounting.end(
+                                    builder, transferAccounting);
                             builder.endRoot();
                         });
         return new Plan(roots.getNode(0).getCallTarget());

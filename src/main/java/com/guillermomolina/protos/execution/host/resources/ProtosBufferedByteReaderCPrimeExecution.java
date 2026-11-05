@@ -118,6 +118,13 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
             return new TargetInvocation(true, null);
         }
 
+        /** PLAT070: the escaping transfer is accounted as the failed target invocation it is. */
+        void transferEscaped() {
+            if (!operation.terminal()) {
+                reader.readInvocationFailedForCPrimeRuntime(operation);
+            }
+        }
+
         Object awaitTargetFuture(TargetInvocation invocation) {
             Objects.requireNonNull(invocation, "invocation");
             if (invocation.failed) {
@@ -156,6 +163,9 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
                         BytecodeConfig.DEFAULT,
                         builder -> {
                             builder.beginRoot();
+                            // PLAT070: account internal transfers crossing this root.
+                            BytecodeLocal transferAccounting =
+                                    ProtosIoCPrimeTransferAccounting.begin(builder);
 
                             BytecodeLocal prepared =
                                     builder.createLocal("bufferedReaderTargetCall", null);
@@ -274,9 +284,13 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
                             builder.endBlock();
                             builder.endWhile();
 
+                            ProtosIoCPrimeTransferAccounting.markCompleted(
+                                    builder, transferAccounting);
                             builder.beginReturn();
                             builder.emitLoadLocal(lowerOutcome);
                             builder.endReturn();
+                            ProtosIoCPrimeTransferAccounting.end(
+                                    builder, transferAccounting);
                             builder.endRoot();
                         });
         return new Plan(roots.getNode(0).getCallTarget());

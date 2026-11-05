@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
+import com.oracle.truffle.api.nodes.ControlFlowException;
 import java.util.Objects;
 
 /**
@@ -70,6 +71,8 @@ final class ProtosBytecodeTaskExecution {
             throw new IllegalArgumentException(
                     "Task-owned C-prime Closure entry requires a source-backed Bytecode call");
         }
+        // PLAT070: the entered invocation's own home belongs to this Task before it runs.
+        ProtosFrameArguments.bindOwnedReturnHomeForTaskEntry(prepared.targetArguments(), task);
         runPreparedSegment(
                 task,
                 prepared,
@@ -88,6 +91,10 @@ final class ProtosBytecodeTaskExecution {
                 && prepared.activation().task().orElse(null) != task) {
             throw new IllegalArgumentException(
                     "Task C-prime entry prepared call belongs to another Task");
+        }
+        if (!prepared.isImmediate()) {
+            // PLAT070: idempotent; binds the invocation-owned home to this Task before entry.
+            prepared.activation().attachTask(task);
         }
 
         runSegment(
@@ -133,22 +140,23 @@ final class ProtosBytecodeTaskExecution {
                             segment.get(),
                             "Task-owned Closure C-prime segment returned null");
             drivePreparedOutcome(task, prepared, outcome);
-        } catch (ProtosBytecodeControlTransferException bridged) {
+        } catch (ControlFlowException transfer) {
+            /*
+             * PLAT070: the original transfer reaches the Task boundary directly. The prepared
+             * call consumes a non-local return of its own home; anything else escapes it.
+             */
             try {
-                Object handled =
-                        prepared.handleControlTransfer(
-                                bridged.transfer());
+                Object handled = prepared.handleControlTransfer(transfer);
                 drivePreparedOutcome(task, prepared, handled);
             } catch (ProtosTaskCancellationException cancelled) {
                 prepared.complete();
                 finishCancellationUnwind(task);
             } catch (ProtosNonLocalReturnException escaped) {
                 /*
-                 * D177: the captured return home is not reachable from this Task's own
-                 * activation chain (it belongs to a different, currently-suspended Task).
-                 * Treat it exactly like a completed home per CALLABLES.md §14: signal
-                 * InvalidReturn as an ordinary Task failure instead of letting the raw
-                 * escape propagate uncaught.
+                 * D177 defensive boundary: a cross-Task return is normally signalled as
+                 * InvalidReturn at its ^ (PLAT070). A transfer still escaping this Task is
+                 * treated exactly like a completed home per CALLABLES.md §14: an ordinary
+                 * Task failure instead of an uncaught escape. It carries no trace.
                  */
                 prepared.complete();
                 /*
@@ -158,12 +166,8 @@ final class ProtosBytecodeTaskExecution {
                  */
                 task.fail(
                         ProtosCoreErrors.newInvalidReturn(
-                                ProtosFrameArguments.activation(prepared.targetArguments())),
-                        ProtosDiagnosticTraceCapture.capture(bridged));
+                                ProtosFrameArguments.activation(prepared.targetArguments())));
             }
-        } catch (ProtosTaskCancellationException cancelled) {
-            prepared.complete();
-            finishCancellationUnwind(task);
         } catch (ProtosSignalException signalled) {
             prepared.complete();
             task.fail(signalled.error(), ProtosDiagnosticTraceCapture.capture(signalled));
@@ -260,31 +264,14 @@ final class ProtosBytecodeTaskExecution {
                             segment.get(),
                             "Bytecode C-prime segment returned null");
             driveOutcome(task, activation, outcome);
-        } catch (ProtosBytecodeControlTransferException bridged) {
-            if (bridged.transfer() instanceof ProtosTaskCancellationException) {
-                finishCancellationUnwind(task);
-                return;
-            }
-            if (bridged.transfer() instanceof ProtosNonLocalReturnException) {
-                /*
-                 * D177: the captured return home is not reachable from this Task's own
-                 * activation chain. Treat it exactly like a completed home per
-                 * CALLABLES.md §14: signal InvalidReturn as an ordinary Task failure
-                 * instead of letting the raw escape propagate uncaught.
-                 */
-                task.fail(
-                        ProtosCoreErrors.newInvalidReturn(activation),
-                        ProtosDiagnosticTraceCapture.capture(bridged));
-                return;
-            }
-            throw bridged;
         } catch (ProtosTaskCancellationException cancelled) {
             finishCancellationUnwind(task);
         } catch (ProtosNonLocalReturnException escaped) {
             /*
-             * CLI008-C1: a raw ControlFlowException carries no guest stack and its frames have
-             * already unwound; the frames still live here belong to the Task's host, so no trace
-             * is attributed to this occurrence.
+             * D177 defensive boundary: a cross-Task return is normally signalled as
+             * InvalidReturn at its ^ (PLAT070). A transfer still escaping this Task is
+             * treated exactly like a completed home per CALLABLES.md §14: an ordinary
+             * Task failure instead of an uncaught escape. It carries no trace.
              */
             task.fail(ProtosCoreErrors.newInvalidReturn(activation));
         } catch (ProtosSignalException signalled) {
@@ -389,14 +376,15 @@ final class ProtosBytecodeTaskExecution {
             }
             Objects.requireNonNull(outcome, "nested synchronous C-prime call returned null");
             return entryRoot ? outcome : prepared.finish(outcome);
-        } catch (ProtosBytecodeControlTransferException bridged) {
+        } catch (ControlFlowException transfer) {
+            // The entry root already owns its finish and own-return-home handling.
             if (entryRoot) {
-                throw bridged.transfer();
+                throw transfer;
             }
             Object handled;
             try {
-                handled = prepared.handleControlTransfer(bridged.transfer());
-            } catch (RuntimeException escaped) {
+                handled = prepared.handleControlTransfer(transfer);
+            } catch (RuntimeException | Error escaped) {
                 prepared.complete();
                 throw escaped;
             }

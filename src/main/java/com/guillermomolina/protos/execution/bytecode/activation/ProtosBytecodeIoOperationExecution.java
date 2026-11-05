@@ -162,8 +162,6 @@ final class ProtosBytecodeIoOperationExecution
                         "operation-owned C-prime continuation returned null");
             }
             driveOutcome(outcome);
-        } catch (ProtosBytecodeControlTransferException bridged) {
-            throw bridged.transfer();
         } catch (ProtosSignalException signalled) {
             finishFailure(signalled.error());
         }

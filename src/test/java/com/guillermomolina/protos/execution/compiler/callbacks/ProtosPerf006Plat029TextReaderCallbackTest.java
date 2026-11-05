@@ -7,10 +7,13 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.*;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.callables.ProtosSuspensionCapableNativeClosureBody;
+import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
+import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
 import java.util.List;
@@ -210,6 +213,209 @@ final class ProtosPerf006Plat029TextReaderCallbackTest {
 
         System.out.println("PLAT029_TEXT_READER_READ_CALLBACK_CPRIME=YES");
         System.out.println("PLAT029_TEXT_READER_CLOSE_INCLUDED=NO");
+    }
+
+    /*
+     * PLAT070: an internal control transfer escaping the guest source.read callback unwinds
+     * directly through the operation-owned C-prime. Its TryFinally applies the TextReader
+     * invocation-failure lane exactly once (a non-Error transfer maps to IOError); the transfer
+     * keeps its identity, the read prefix is never replayed and later reads are not blocked.
+     */
+    @Test
+    void plat070DirectNonLocalReturnFromSourceReadAppliesTheFailureLaneOnce()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosReturnHome home = new ProtosReturnHome();
+            AtomicInteger reads = probe(f, "readProbe");
+            f.source.createLocalSlot(
+                    "read",
+                    homedSourceClosure(
+                            scope.language(), f.module, "(max) => { readProbe()\n^1 }",
+                            "plat070-text-reader-return-read.protos", home));
+            f.module.context().createLocalSlot("reader", reader(f, false));
+
+            ProtosFutureValue outer =
+                    invokeCPrimeReturningFuture(
+                            scope.language(), f, "reader.readLine()",
+                            "plat070-text-reader-nlr.protos");
+            ControlFlowException escaped = dispatchCapturingTransfer(f.domain);
+
+            assertNotNull(escaped, "the original transfer leaves the dispatch");
+            assertSame(home, ((ProtosNonLocalReturnException) escaped).target());
+            assertEquals(1, reads.get());
+            assertIoErrorFailure(f, outer);
+            assertLaterReadNotBlocked(scope.language(), f);
+        }
+
+        System.out.println("PLAT070_TEXT_READER_NLR_ACCOUNTED=PASS");
+    }
+
+    @Test
+    void plat070CancellationFromSourceReadKeepsIdentityAndAppliesTheFailureLaneOnce()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosTaskCancellationException cancellation = new ProtosTaskCancellationException();
+            AtomicInteger reads = new AtomicInteger();
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                reads.incrementAndGet();
+                                throw cancellation;
+                            }));
+            f.module.context().createLocalSlot("reader", reader(f, false));
+
+            ProtosFutureValue outer =
+                    invokeCPrimeReturningFuture(
+                            scope.language(), f, "reader.readLine()",
+                            "plat070-text-reader-cancel.protos");
+
+            assertSame(cancellation, dispatchCapturingTransfer(f.domain));
+            assertEquals(1, reads.get());
+            assertIoErrorFailure(f, outer);
+            assertLaterReadNotBlocked(scope.language(), f);
+        }
+
+        System.out.println("PLAT070_TEXT_READER_CANCELLATION_ACCOUNTED=PASS");
+    }
+
+    @Test
+    void plat070GuestErrorFromSourceReadKeepsItsExactIdentity() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosObjectValue failure = ProtosCoreErrors.newError(f.module);
+            f.module.context().createLocalSlot("failure", failure);
+            AtomicInteger reads = probe(f, "readProbe");
+            f.source.createLocalSlot(
+                    "read",
+                    sourceClosure(
+                            scope.language(), f.module,
+                            "(max) => { readProbe()\nfailure.signal() }",
+                            "plat070-text-reader-error-read.protos"));
+            f.module.context().createLocalSlot("reader", reader(f, false));
+
+            ProtosFutureValue outer =
+                    invokeCPrimeReturningFuture(
+                            scope.language(), f, "reader.readLine()",
+                            "plat070-text-reader-error.protos");
+
+            assertNull(dispatchCapturingTransfer(f.domain), "a guest Error is not a transfer");
+            assertEquals(1, reads.get());
+            assertEquals(ProtosFutureValue.State.FAILED, outer.state());
+            assertSame(failure, outer.failedError().orElseThrow());
+        }
+
+        System.out.println("PLAT070_TEXT_READER_GUEST_ERROR_IDENTITY=PRESERVED");
+    }
+
+    @Test
+    void plat070NonLocalReturnAfterSuspendedSourceReadAppliesTheFailureLaneOnce()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosReturnHome home = new ProtosReturnHome();
+            ProtosFutureValue gate = future(f);
+            AtomicInteger reads = probe(f, "readProbe");
+            f.module.context().createLocalSlot(
+                    "readGate",
+                    ProtosClosureValue.nativeClosure((activation, supplied) -> gate));
+            f.source.createLocalSlot(
+                    "read",
+                    homedSourceClosure(
+                            scope.language(), f.module,
+                            "(max) => { readProbe()\nreadGate().value()\n^1 }",
+                            "plat070-text-reader-suspended-read.protos", home));
+            f.module.context().createLocalSlot("reader", reader(f, false));
+
+            ProtosFutureValue outer =
+                    invokeCPrimeReturningFuture(
+                            scope.language(), f, "reader.readLine()",
+                            "plat070-text-reader-suspended.protos");
+            assertNull(dispatchCapturingTransfer(f.domain));
+            assertEquals(1, reads.get());
+            assertEquals(ProtosFutureValue.State.PENDING, outer.state());
+
+            assertTrue(gate.resolve(ProtosNullValue.INSTANCE, f.module));
+            ControlFlowException escaped = dispatchCapturingTransfer(f.domain);
+            assertNotNull(escaped);
+            assertSame(home, ((ProtosNonLocalReturnException) escaped).target());
+            assertEquals(1, reads.get(), "the suspended read prefix is never replayed");
+            assertIoErrorFailure(f, outer);
+            assertLaterReadNotBlocked(scope.language(), f);
+        }
+
+        System.out.println("PLAT070_TEXT_READER_NLR_AFTER_SUSPENSION=PASS");
+    }
+
+    private static AtomicInteger probe(Fixture f, String name) {
+        AtomicInteger count = new AtomicInteger();
+        f.module.context().createLocalSlot(
+                name,
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            count.incrementAndGet();
+                            return ProtosNullValue.INSTANCE;
+                        }));
+        return count;
+    }
+
+    /** A later read reaches a terminal state: no operation is left blocked behind the failure. */
+    private static void assertLaterReadNotBlocked(ProtosLanguage language, Fixture f)
+            throws Exception {
+        f.module = siblingModule(f.module);
+        ProtosFutureValue later =
+                invokeCPrimeReturningFuture(
+                        language, f, "reader.readLine()", "plat070-text-reader-later.protos");
+        dispatchCapturingTransfer(f.domain);
+        assertNotEquals(ProtosFutureValue.State.PENDING, later.state());
+        assertEquals(0, f.domain.liveTaskCount());
+    }
+
+    private static void assertIoErrorFailure(Fixture f, ProtosFutureValue outer) {
+        assertEquals(ProtosFutureValue.State.FAILED, outer.state());
+        assertSame(
+                f.prelude.bindings().readLocalSlot("IOError").orElseThrow(),
+                outer.failedError().orElseThrow().parent().orElseThrow());
+    }
+
+    /** Dispatches until idle; answers the internal transfer that left a dispatch, or null. */
+    private static ControlFlowException dispatchCapturingTransfer(
+            ProtosActorExecutionDomain domain) {
+        ControlFlowException escaped = null;
+        for (int dispatches = 0; dispatches < 32; dispatches++) {
+            try {
+                if (!domain.dispatchOne()) {
+                    return escaped;
+                }
+            } catch (ControlFlowException transfer) {
+                escaped = transfer;
+            }
+        }
+        throw new AssertionError("TextReader C-prime did not become idle");
+    }
+
+    /** A source Closure whose ^ targets {@code home} (a Task-free home: a valid transfer). */
+    private static ProtosClosureValue homedSourceClosure(
+            ProtosLanguage language,
+            ProtosActivation creator,
+            String characters,
+            String sourceName,
+            ProtosReturnHome home)
+            throws Exception {
+        CanonicalClosure definition = closureDefinition(characters);
+        ProtosClosureExecutionPlan plan =
+                ProtosClosureExecutionPlan.bytecode(
+                        definition, language, source(characters, sourceName));
+        return new ProtosClosureValue(
+                definition,
+                creator.lexicalContextsForClosureCapture(),
+                creator.receiver(),
+                creator.methodHome().orElse(null),
+                home,
+                creator.prelude().orElseThrow(),
+                plan);
     }
 
     private static ProtosFutureValue invokeCPrimeReturningFuture(

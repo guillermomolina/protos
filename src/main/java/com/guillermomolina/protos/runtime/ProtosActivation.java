@@ -818,6 +818,11 @@ public final class ProtosActivation {
         return Optional.ofNullable(task);
     }
 
+    /** PLAT070: the attached Task, or {@code null}, without Optional allocation. */
+    public ProtosTask taskForRuntime() {
+        return task;
+    }
+
     /** PLAT029 private owner for non-Task deferred C-prime operation execution. */
     public Optional<ProtosIoOperation> deferredCPrimeOperationForRuntime() {
         return Optional.ofNullable(deferredCPrimeOperation);
@@ -924,6 +929,14 @@ public final class ProtosActivation {
         }
         if (this.task != null && this.task != task) {
             throw new IllegalStateException("activation already belongs to another task");
+        }
+        /*
+         * PLAT070: the invocation that owns a materialized home establishes its owning Task. A
+         * captured home (ownsReturnHome false) is never rebound. Bound before this.task is
+         * published, so a rejected binding leaves the activation unchanged.
+         */
+        if (ownsReturnHome && returnHome != null) {
+            returnHome.bindOwnerTaskForRuntime(task);
         }
         this.task = task;
     }

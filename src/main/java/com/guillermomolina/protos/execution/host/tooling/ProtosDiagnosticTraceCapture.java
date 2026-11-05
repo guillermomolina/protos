@@ -97,8 +97,7 @@ final class ProtosDiagnosticTraceCapture {
 
     /**
      * Records the innermost semantic bytecode position of an Error transfer. Called from semantic
-     * root exception interception for every crossing; only the first crossing is kept. A bridged
-     * control transfer records its position when the semantic root creates the bridge instead.
+     * root exception interception for every crossing; only the first crossing is kept.
      * Deliberately a plain inlinable field update, not a boundary call.
      */
     static void recordOrigin(
@@ -413,10 +412,6 @@ final class ProtosDiagnosticTraceCapture {
                 return new Origin(
                         signal.originBytecodeForRuntime(),
                         signal.originBytecodeIndexForRuntime());
-            }
-            if (occurrence instanceof ProtosBytecodeControlTransferException bridged
-                    && bridged.originBytecode() != null) {
-                return new Origin(bridged.originBytecode(), bridged.originBytecodeIndex());
             }
             return null;
         }

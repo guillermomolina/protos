@@ -184,12 +184,12 @@ final class ProtosCli008C1DiagnosticTraceTest {
     }
 
     /**
-     * D177: a non-local return whose home is active in another (suspended) Task reaches the
-     * child Task boundary as a bridged control transfer, and the Task fails directly with a
-     * fabricated InvalidReturn; no ProtosSignalException exists on that route.
+     * D177 / PLAT070: a non-local return whose home is active in another (suspended) Task signals
+     * the standard InvalidReturn at its ^, as an ordinary guest Error of the producer Task, which
+     * fails with the ordinary CLI008 Error trace of its own frames.
      */
     @Test
-    void directTaskFailureFromBridgedTransferProjectsOnlyItsOwnTask() throws Exception {
+    void crossTaskInvalidReturnProjectsOnlyItsOwnTask() throws Exception {
         String name = "cli008c1-direct-invalid-return.protos";
         ProtosPrelude prelude = prelude();
         ProtosExecutionOutcome outcome =
@@ -221,12 +221,194 @@ final class ProtosCli008C1DiagnosticTraceTest {
         ProtosDiagnosticTrace trace = producer.failureDiagnosticTraceForRuntime().orElseThrow();
         assertGuestOnly(trace, name);
         List<Integer> lines = lines(trace);
+        /*
+         * PLAT070 provenance: CALLABLES.md section 14 makes executing the `^` (line 2) the act
+         * that signals InvalidReturn, so line 2 is the semantic origin. The retired bridge only
+         * recorded the first generated root its transfer crossed and could report the producer
+         * call site (line 4) or no frame at all; the InvalidReturn is now raised at the `^`.
+         */
+        assertEquals(List.of(2, 4), lines, "the ^ site, then its producer-Task caller");
+        assertFalse(trace.truncated());
         assertFalse(lines.contains(6), "consumer frames must not enter the producer trace");
         assertFalse(lines.contains(9), "consumer frames must not enter the producer trace");
-        if (!lines.isEmpty()) {
-            assertEquals(4, lines.get(0));
-        }
         System.out.println("CLI008_C1_DIRECT_TASK_FAILURE_TRACE=PASS");
+        System.out.println("PLAT070_INVALID_RETURN_ORIGIN=CARET_SITE");
+    }
+
+    /**
+     * PLAT070: an InvalidReturn raised at a ^ reached after a resumed terminal transport records
+     * the caller that already returned the transport as one logical frame, in innermost-first
+     * order, without duplicating a physical frame.
+     */
+    @Test
+    void crossTaskInvalidReturnAcrossResumedTerminalCallerKeepsLogicalOrder() throws Exception {
+        String name = "plat070-escaped-return-resumed.protos";
+        ProtosPrelude prelude = prelude();
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        name,
+                        """
+                        m: () => {
+                            escape: () => { ^1 }
+                            child: (() => {
+                                run(escape)
+                            }).future()
+                            Error.handle(() => { child.value() }, (caught) => { 0 })
+                            child
+                        }
+                        run: (f) => {
+                            (() => { 1 }).future().value()
+                            f()
+                        }
+                        m()
+                        """,
+                        prelude.newModuleActivation());
+
+        ProtosDiagnosticTrace trace = producerInvalidReturnTrace(outcome, prelude, name);
+        assertEquals(List.of(2, 11, 4), lines(trace), "^ site, resumed callee, logical caller");
+        assertFalse(trace.truncated());
+        System.out.println("PLAT070_ESCAPED_RETURN_RESUMED_CALLER_ORDER=STABLE");
+    }
+
+    /**
+     * PLAT070: the cross-Task InvalidReturn trace is an ordinary guest Error trace. The reference
+     * is the same program with a guest Error signalled at the same site (line 2) in the same
+     * producer Task: both traces must be identical, including the 64-frame bound.
+     */
+    @Test
+    void crossTaskInvalidReturnTraceRetainsTheInnermostBoundedFrames() throws Exception {
+        String template =
+                """
+                m: () => {
+                    escape: () => { ORIGIN }
+                    child: (() => {
+                        down(100, escape)
+                    }).future()
+                    Error.handle(() => { child.value() }, (caught) => { 0 })
+                    child
+                }
+                down: (n, f) => {
+                    (n == 0).ifTrue(() => {
+                        f()
+                    })
+                    down(n - 1, f)
+                }
+                m()
+                """;
+        String name = "plat070-escaped-return-truncation.protos";
+        ProtosPrelude prelude = prelude();
+        ProtosDiagnosticTrace trace =
+                producerInvalidReturnTrace(
+                        ProtosTestExecutionSupport.execute(
+                                name,
+                                template.replace("ORIGIN", "^1"),
+                                prelude.newModuleActivation()),
+                        prelude,
+                        name);
+
+        ProtosExecutionOutcome reference =
+                ProtosTestExecutionSupport.execute(
+                        name,
+                        template.replace("ORIGIN", "Error().signal()"),
+                        prelude.newModuleActivation());
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                reference.state(),
+                () -> "error=" + reference.error());
+        ProtosDiagnosticTrace errorTrace =
+                assertInstanceOf(ProtosFutureValue.class, reference.value())
+                        .producerTask()
+                        .orElseThrow()
+                        .failureDiagnosticTraceForRuntime()
+                        .orElseThrow();
+        assertGuestOnly(errorTrace, name);
+
+        assertEquals(ProtosDiagnosticTrace.MAX_FRAMES, trace.frames().size());
+        assertTrue(trace.truncated());
+        assertEquals(2, lines(trace).get(0), "the ^ site is the innermost frame");
+        assertEquals(lines(errorTrace), lines(trace), "same projection as a guest Error");
+        assertEquals(errorTrace.truncated(), trace.truncated());
+        System.out.println("PLAT070_ESCAPED_RETURN_TRACE_BOUND=64");
+        System.out.println("PLAT070_ESCAPED_RETURN_TRACE_MATCHES_ERROR_PROJECTION=YES");
+    }
+
+    /**
+     * PLAT070: an InvalidReturn raised in a nested Task (a Task started by another Task) after a
+     * resumed terminal call keeps only the nested Task's frames; neither the intermediate Task
+     * that consumes it nor the root consumer contributes a frame.
+     */
+    @Test
+    void nestedTaskInvalidReturnExcludesEveryConsumerTaskFrame() throws Exception {
+        String name = "plat070-nested-task-escaped-return.protos";
+        ProtosPrelude prelude = prelude();
+        ProtosActivation module = prelude.newModuleActivation();
+        Object[] captured = new Object[1];
+        com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody capture =
+                (activation, supplied) -> {
+                    captured[0] = supplied.get(0);
+                    return com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE;
+                };
+        module.context()
+                .createLocalSlot(
+                        "capture",
+                        com.guillermomolina.protos.runtime.ProtosClosureValue
+                                .suspensionCapableNativeClosure(capture, capture));
+
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        name,
+                        """
+                        m: () => {
+                            escape: () => { ^1 }
+                            outer: (() => {
+                                inner: (() => {
+                                    run(escape)
+                                }).future()
+                                Error.handle(() => { inner.value() }, (caught) => { 0 })
+                                capture(inner)
+                            }).future()
+                            outer.value()
+                        }
+                        run: (f) => {
+                            (() => { 1 }).future().value()
+                            f()
+                        }
+                        m()
+                        """,
+                        module);
+
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> "error=" + outcome.error());
+        ProtosFutureValue inner = assertInstanceOf(ProtosFutureValue.class, captured[0]);
+        ProtosObjectValue invalidReturn = inner.failedError().orElseThrow();
+        assertSame(prelude.invalidReturnPrototype(), invalidReturn.parent().orElseThrow());
+        ProtosDiagnosticTrace trace =
+                inner.producerTask().orElseThrow().failureDiagnosticTraceForRuntime().orElseThrow();
+        assertGuestOnly(trace, name);
+        assertEquals(
+                List.of(2, 14, 5),
+                lines(trace),
+                "^ site, resumed callee, logical caller; no intermediate or root consumer frame");
+        assertFalse(trace.truncated());
+        System.out.println("PLAT070_NESTED_TASK_CONSUMER_FRAMES=NONE");
+    }
+
+    private static ProtosDiagnosticTrace producerInvalidReturnTrace(
+            ProtosExecutionOutcome outcome, ProtosPrelude prelude, String name) {
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> "error=" + outcome.error());
+        ProtosFutureValue child = assertInstanceOf(ProtosFutureValue.class, outcome.value());
+        ProtosObjectValue invalidReturn = child.failedError().orElseThrow();
+        assertSame(prelude.invalidReturnPrototype(), invalidReturn.parent().orElseThrow());
+        ProtosTask producer = child.producerTask().orElseThrow();
+        assertSame(invalidReturn, producer.failure().orElseThrow());
+        ProtosDiagnosticTrace trace = producer.failureDiagnosticTraceForRuntime().orElseThrow();
+        assertGuestOnly(trace, name);
+        return trace;
     }
 
     @Test

@@ -632,6 +632,73 @@ final class ProtosPerf006B4FStructuredWhileTest {
         System.out.println("D210_NO_STANDARD_WHILE_MEMBER=PASS");
     }
 
+    /*
+     * PLAT070: a non-local return raised in a structured while body unwinds directly through the
+     * structured dispatcher root and the enclosing ensure to its home, without entering another
+     * condition activation.
+     */
+    @Test
+    void directUnwindReturnLeavesStructuredWhileThroughEnsureExactlyOnce() throws Exception {
+        ProtosActivation module = core().newModuleActivation();
+        AtomicInteger conditions = new AtomicInteger();
+        AtomicInteger ticks = new AtomicInteger();
+        AtomicInteger cleanups = new AtomicInteger();
+        module.context().createLocalSlot(
+                "condition",
+                nativeClosure(
+                        (activation, supplied) -> {
+                            conditions.incrementAndGet();
+                            return ProtosBooleanValue.TRUE;
+                        }));
+        module.context().createLocalSlot(
+                "tick",
+                nativeClosure(
+                        (activation, supplied) -> {
+                            ticks.incrementAndGet();
+                            return ProtosNullValue.INSTANCE;
+                        }));
+        module.context().createLocalSlot(
+                "cleanup",
+                nativeClosure(
+                        (activation, supplied) -> {
+                            cleanups.incrementAndGet();
+                            return ProtosNullValue.INSTANCE;
+                        }));
+
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        "plat070-while-nlr.protos",
+                        """
+                        m: () => {
+                            (() => {
+                                condition.whileTrue(() => {
+                                    tick()
+                                    ^8
+                                })
+                            }).ensure(cleanup)
+                            0
+                        }
+                        m()
+                        """,
+                        module);
+
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> "error=" + outcome.error());
+        Object value = outcome.value();
+        assertEquals(
+                8L,
+                value instanceof com.guillermomolina.protos.runtime.ProtosIntegerValue integer
+                        ? integer.longValue()
+                        : value);
+        assertEquals(1, conditions.get());
+        assertEquals(1, ticks.get());
+        assertEquals(1, cleanups.get());
+
+        System.out.println("PLAT070_WHILE_DIRECT_UNWIND_NLR=PASS");
+    }
+
     private static ProtosClosureValue nativeClosure(
             com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody body) {
         return ProtosClosureValue.suspensionCapableNativeClosure(body, body);

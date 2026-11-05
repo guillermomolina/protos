@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -135,6 +136,191 @@ final class ProtosPerf006B4BNonLocalReturnTest {
         System.out.println("PERF006_B4B_EXACT_RETURN_HOME=PASS");
         System.out.println("PERF006_B4B_EXACT_RETURN_PAYLOAD=PASS");
         System.out.println("PERF006_B4B_MISMATCH_PROPAGATION=PASS");
+    }
+
+    /**
+     * PLAT070: a Task-free invocation returning to a Task-free home keeps the synchronous
+     * non-local-return semantics: the original transfer, carrying only its target and value.
+     */
+    @Test
+    void taskFreeTransferToATaskFreeHomeIsThePlainOriginalTransfer() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation creator = activation(prelude, domain);
+
+            String closureCharacters = "() => ^42";
+            CanonicalClosure definition = closureDefinition(closureCharacters);
+            ProtosClosureExecutionPlan plan =
+                    ProtosClosureExecutionPlan.bytecode(
+                            definition,
+                            scope.language(),
+                            source(closureCharacters, "plat070-no-task-closure.protos"));
+            ProtosReturnHome capturedHome = new ProtosReturnHome();
+            ProtosActivation invocation =
+                    ProtosActivation.forClosureInvocation(
+                            semanticClosureWithHome(definition, plan, creator, capturedHome),
+                            List.of(),
+                            prelude,
+                            creator.actorModuleState(),
+                            creator.currentModuleKey().orElse(null),
+                            domain);
+
+            ProtosNonLocalReturnException transfer =
+                    assertThrows(
+                            ProtosNonLocalReturnException.class,
+                            () -> plan.executeBody(invocation));
+            assertSame(capturedHome, transfer.target());
+            assertNull(capturedHome.ownerTaskForRuntime(), "a captured home is never rebound");
+            assertTrue(
+                    java.util.Arrays.stream(
+                                    ProtosNonLocalReturnException.class.getDeclaredFields())
+                            .filter(field -> !java.lang.reflect.Modifier.isStatic(
+                                    field.getModifiers()))
+                            .map(java.lang.reflect.Field::getName)
+                            .allMatch(name -> name.equals("target") || name.equals("value")),
+                    "the transfer carries only its semantic state");
+        }
+
+        System.out.println("PLAT070_TASK_FREE_NLR=ORIGINAL_TRANSFER");
+    }
+
+    /**
+     * PLAT070 / D177: in a Task, a ^ whose home is not owned by that Task signals the standard
+     * InvalidReturn at the ^ itself, so the Task fails with an ordinary guest Error whose trace
+     * starts at the raising site.
+     */
+    @Test
+    void unreachableHomeFailsTheTaskWithInvalidReturnAndSourceSiteTrace() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+
+            String closureCharacters = "() => ^42";
+            String closureName = "plat070-unreachable-home-closure.protos";
+            CanonicalClosure definition = closureDefinition(closureCharacters);
+            ProtosClosureExecutionPlan plan =
+                    ProtosClosureExecutionPlan.bytecode(
+                            definition,
+                            scope.language(),
+                            source(closureCharacters, closureName));
+            ProtosReturnHome foreignHome = new ProtosReturnHome();
+            module.context().createLocalSlot(
+                    "entry",
+                    semanticClosureWithHome(definition, plan, module, foreignHome));
+
+            ProtosBytecodeRootNode root =
+                    lowerRoot(scope.language(), "entry()", "plat070-unreachable-home-top.protos");
+            ProtosTask task =
+                    domain.createTask(
+                            null,
+                            current ->
+                                    ProtosBytecodeTaskExecution.execute(
+                                            current, root.getCallTarget(), module));
+            assertTrue(domain.dispatchOne());
+
+            assertEquals(ProtosTask.State.FAILED, task.state());
+            ProtosObjectValue failure =
+                    assertInstanceOf(ProtosObjectValue.class, task.failure().orElseThrow());
+            assertSame(prelude.invalidReturnPrototype(), failure.parent().orElseThrow());
+            assertTrue(foreignHome.isActive(), "a home owned by no frame is never completed");
+            com.guillermomolina.protos.runtime.diagnostics.ProtosDiagnosticTrace trace =
+                    task.failureDiagnosticTraceForRuntime().orElseThrow();
+            assertFalse(trace.frames().isEmpty());
+            assertEquals(closureName, trace.frames().get(0).sourceName());
+            assertEquals(1, trace.frames().get(0).line());
+        }
+
+        System.out.println("PLAT070_TASK_ESCAPED_NLR_INVALID_RETURN=PASS");
+        System.out.println("PLAT070_TASK_ESCAPED_NLR_SOURCE_SITE_TRACE=PASS");
+    }
+
+    /** PLAT070: many valid Task-backed returns complete with exact values and no failure. */
+    @Test
+    void manyValidTaskBackedNonLocalReturnsCompleteWithExactValues() throws Exception {
+        int iterations = 5000;
+        List<Long> values = new java.util.ArrayList<>();
+        int[] remaining = {iterations};
+        ProtosActivation module =
+                new ProtosCoreBootstrap()
+                        .bootstrap(Path.of("protos", "lib", "core"))
+                        .newModuleActivation();
+        module.context().createLocalSlot(
+                "more",
+                nativeClosure(
+                        (activation, supplied) ->
+                                remaining[0]-- > 0
+                                        ? com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE
+                                        : com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE));
+        module.context().createLocalSlot(
+                "record",
+                nativeClosure(
+                        (activation, supplied) -> {
+                            values.add(Long.parseLong(
+                                    com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                                            .integerDecimalText(supplied.get(0))));
+                            return ProtosNullValue.INSTANCE;
+                        }));
+
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        "plat070-many-valid-returns.protos",
+                        """
+                        hit: () => {
+                            (() => { ^3 })()
+                            0
+                        }
+                        more.whileTrue(() => {
+                            record(hit())
+                        })
+                        """,
+                        module);
+
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> "error=" + outcome.error());
+        assertEquals(iterations, values.size());
+        assertTrue(values.stream().allMatch(value -> value == 3L));
+        System.out.println("PLAT070_MANY_VALID_TASK_RETURNS=PASS");
+    }
+
+    /**
+     * PLAT070 architecture: a valid ^ performs no stack inspection. RaiseNonLocalReturn has no
+     * path to TruffleStackTrace, frame iteration or diagnostic capture, and the removed
+     * escaped-return carriers no longer exist.
+     */
+    @Test
+    void validRaiseNonLocalReturnHasNoStackInspectionPath() throws Exception {
+        String root =
+                java.nio.file.Files.readString(
+                        Path.of(
+                                "src/main/java/com/guillermomolina/protos/execution/bytecode/"
+                                        + "activation/ProtosBytecodeRootNode.java"),
+                        java.nio.charset.StandardCharsets.UTF_8);
+        int start = root.indexOf("public static final class RaiseNonLocalReturn {");
+        assertTrue(start > 0);
+        int end = root.indexOf("\n    }\n", start);
+        String operation = root.substring(start, end);
+        for (String forbidden :
+                List.of(
+                        "TruffleStackTrace",
+                        "fillIn",
+                        "iterateFrames",
+                        "ProtosDiagnosticTraceCapture",
+                        "BytecodeLocation",
+                        "EscapedReturn")) {
+            assertFalse(operation.contains(forbidden), forbidden);
+        }
+        assertTrue(operation.contains("ownerTaskForRuntime()"));
+        for (String removed :
+                List.of(
+                        "com.guillermomolina.protos.runtime.diagnostics.ProtosEscapedReturnOrigin",
+                        "com.guillermomolina.protos.runtime.diagnostics.ProtosEscapedReturnTrace")) {
+            assertThrows(ClassNotFoundException.class, () -> Class.forName(removed));
+        }
+        System.out.println("PLAT070_VALID_TASK_NONLOCAL_RETURN_STACK_WALK=NONE");
     }
 
     @Test
@@ -283,6 +469,11 @@ final class ProtosPerf006B4BNonLocalReturnTest {
         }
 
         System.out.println("PERF006_B4B_DEFAULT_RETURN_HOME=PASS");
+    }
+
+    private static ProtosClosureValue nativeClosure(
+            com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody body) {
+        return ProtosClosureValue.suspensionCapableNativeClosure(body, body);
     }
 
     private static LanguageScope languageScope() {

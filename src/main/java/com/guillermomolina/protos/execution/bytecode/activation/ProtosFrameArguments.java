@@ -126,6 +126,7 @@ final class ProtosFrameArguments {
             ProtosActivation caller,
             ProtosReturnHome returnHome,
             Object[] supplied) {
+        bindOwnedReturnHome(closure, returnHome, caller.taskForRuntime());
         if (supplied.length == 0) {
             return new Object[] {closure, receiver, methodHome, caller, returnHome};
         }
@@ -144,6 +145,7 @@ final class ProtosFrameArguments {
             ProtosObjectValue methodHome,
             ProtosActivation caller,
             ProtosReturnHome returnHome) {
+        bindOwnedReturnHome(closure, returnHome, caller.taskForRuntime());
         return new Object[] {closure, receiver, methodHome, caller, returnHome};
     }
 
@@ -158,6 +160,7 @@ final class ProtosFrameArguments {
             ProtosActivation caller,
             ProtosReturnHome returnHome,
             Object supplied0) {
+        bindOwnedReturnHome(closure, returnHome, caller.taskForRuntime());
         return new Object[] {
             closure, receiver, methodHome, caller, returnHome, supplied0
         };
@@ -177,6 +180,8 @@ final class ProtosFrameArguments {
         Objects.requireNonNull(caller, "caller");
         Objects.requireNonNull(supplied, "supplied");
         ProtosReturnHome returnHome = closure.invocationReturnHomeForRuntime();
+        bindOwnedReturnHome(
+                closure, returnHome, task != null ? task : caller.taskForRuntime());
         if (supplied.length == 0) {
             return new Object[] {closure, DIRECT_CLOSURE_CALL, task, caller, returnHome};
         }
@@ -197,6 +202,7 @@ final class ProtosFrameArguments {
             ProtosClosureValue closure,
             ProtosActivation caller,
             ProtosReturnHome returnHome) {
+        bindOwnedReturnHome(closure, returnHome, caller.taskForRuntime());
         return new Object[] {closure, DIRECT_CLOSURE_CALL, null, caller, returnHome};
     }
 
@@ -209,6 +215,7 @@ final class ProtosFrameArguments {
             ProtosActivation caller,
             ProtosReturnHome returnHome,
             Object supplied0) {
+        bindOwnedReturnHome(closure, returnHome, caller.taskForRuntime());
         return new Object[] {
             closure, DIRECT_CLOSURE_CALL, null, caller, returnHome, supplied0
         };
@@ -225,14 +232,49 @@ final class ProtosFrameArguments {
             Object supplied0) {
         Objects.requireNonNull(closure, "closure");
         Objects.requireNonNull(caller, "caller");
+        ProtosReturnHome returnHome = closure.invocationReturnHomeForRuntime();
+        bindOwnedReturnHome(
+                closure, returnHome, task != null ? task : caller.taskForRuntime());
         return new Object[] {
             closure,
             DIRECT_CLOSURE_CALL,
             task,
             caller,
-            closure.invocationReturnHomeForRuntime(),
+            returnHome,
             supplied0
         };
+    }
+
+    /*
+     * PLAT070: a compact invocation whose Closure captured no home owns the materialized home in
+     * its header; that home is bound to the invocation's known Task (the explicit Task of a
+     * Task-owned entry, otherwise the exact caller's Task) before the callee body can create a
+     * Closure capturing it. A captured home, a shared unobservable marker or an unknown Task
+     * (Task-free invocation) is never bound. Ordinary-call cost: one field read and, for a fresh
+     * home, one write; no activation, Context or caller chain is materialized.
+     */
+    private static void bindOwnedReturnHome(
+            ProtosClosureValue closure, ProtosReturnHome returnHome, ProtosTask task) {
+        if (task != null && closure.ownsInvocationReturnHomeForRuntime()) {
+            returnHome.bindOwnerTaskForRuntime(task);
+        }
+    }
+
+    /**
+     * PLAT070: binds the home owned by the compact or published invocation in {@code arguments}
+     * to {@code task} before a Task-owned entry runs it, without materializing an activation.
+     */
+    static void bindOwnedReturnHomeForTaskEntry(Object[] arguments, ProtosTask task) {
+        Object first = arguments[CLOSURE_INDEX];
+        if (first instanceof ProtosActivation published) {
+            published.attachTask(task);
+            return;
+        }
+        if (first instanceof ProtosClosureValue closure
+                && arguments.length > RETURN_HOME_INDEX
+                && arguments[RETURN_HOME_INDEX] instanceof ProtosReturnHome home) {
+            bindOwnedReturnHome(closure, home, task);
+        }
     }
 
     /**

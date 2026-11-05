@@ -535,6 +535,198 @@ final class ProtosPerf006B4ECancellationUnwindTest {
         System.out.println("PERF006_B4E_STRUCTURED_CHILD_DRAIN=PASS");
     }
 
+    /*
+     * PLAT070: selected transfers unwind directly and never enter a guest TryCatch, so a
+     * catch-only supersession strategy cannot observe a non-local return escaping cleanup. This
+     * case fails against that strategy: the cancellation would stay UNWINDING while a normal
+     * result completes the Task.
+     */
+    @Test
+    void cleanupNonLocalReturnEscapingSupersedesCancellation() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosFutureValue bodyWait = new ProtosFutureValue(prelude.futurePrototype(), domain);
+            List<ProtosTask.CancellationPhase> phases = new ArrayList<>();
+
+            module.context().createLocalSlot("bodyWait", bodyWait);
+            module.context().createLocalSlot("phaseProbe", phaseProbe(phases));
+            module.context().createLocalSlot(
+                    "body",
+                    sourceClosure(
+                            scope.language(),
+                            module,
+                            "() => bodyWait.value()",
+                            "plat070-cancel-nlr-body.protos"));
+
+            Execution execution =
+                    executeWithFuture(
+                            domain,
+                            prelude,
+                            module,
+                            lowerRoot(
+                                    scope.language(),
+                                    """
+                                    m: () => {
+                                        body.ensure(() => {
+                                            phaseProbe()
+                                            ^5
+                                        })
+                                        0
+                                    }
+                                    r: m()
+                                    phaseProbe()
+                                    r
+                                    """,
+                                    "plat070-cancel-nlr-top.protos"));
+
+            assertTrue(domain.dispatchOne());
+            assertEquals(ProtosTask.State.SUSPENDED, execution.task().state());
+            assertTrue(execution.future().cancelRequest());
+            assertTrue(domain.dispatchOne());
+
+            assertEquals(
+                    List.of(
+                            ProtosTask.CancellationPhase.UNWINDING,
+                            ProtosTask.CancellationPhase.SUPERSEDED),
+                    phases);
+            assertEquals(ProtosTask.State.COMPLETED, execution.task().state());
+            assertEquals(ProtosFutureValue.State.RESOLVED, execution.future().state());
+            Object result = execution.task().result().orElseThrow();
+            assertEquals(
+                    5L,
+                    result instanceof com.guillermomolina.protos.runtime.ProtosIntegerValue integer
+                            ? integer.longValue()
+                            : result);
+            assertEquals(ProtosFutureValue.State.PENDING, bodyWait.state());
+            assertFalse(domain.dispatchOne(), "cancellation must not be redelivered");
+        }
+
+        System.out.println("PLAT070_CANCELLATION_SUPERSESSION=TRY_FINALLY_BASED");
+        System.out.println("PLAT070_ESCAPING_NLR_SUPERSEDES_CANCELLATION=PASS");
+    }
+
+    @Test
+    void cleanupNonLocalReturnHandledInsideCleanupKeepsCancellation() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosFutureValue bodyWait = new ProtosFutureValue(prelude.futurePrototype(), domain);
+            List<ProtosTask.CancellationPhase> phases = new ArrayList<>();
+            AtomicInteger after = new AtomicInteger();
+
+            module.context().createLocalSlot("bodyWait", bodyWait);
+            module.context().createLocalSlot("phaseProbe", phaseProbe(phases));
+            module.context().createLocalSlot(
+                    "afterProbe",
+                    nativeClosure(
+                            (activation, supplied) -> {
+                                after.incrementAndGet();
+                                return ProtosNullValue.INSTANCE;
+                            }));
+            module.context().createLocalSlot(
+                    "body",
+                    sourceClosure(
+                            scope.language(),
+                            module,
+                            "() => bodyWait.value()",
+                            "plat070-cancel-handled-body.protos"));
+
+            Execution execution =
+                    executeWithFuture(
+                            domain,
+                            prelude,
+                            module,
+                            lowerRoot(
+                                    scope.language(),
+                                    """
+                                    handledLocally: () => {
+                                        (() => { ^0 })()
+                                        1
+                                    }
+                                    m: () => {
+                                        body.ensure(() => {
+                                            handledLocally()
+                                            phaseProbe()
+                                        })
+                                        afterProbe()
+                                        0
+                                    }
+                                    m()
+                                    afterProbe()
+                                    """,
+                                    "plat070-cancel-handled-top.protos"));
+
+            assertTrue(domain.dispatchOne());
+            assertTrue(execution.future().cancelRequest());
+            assertTrue(domain.dispatchOne());
+
+            assertEquals(List.of(ProtosTask.CancellationPhase.UNWINDING), phases);
+            assertEquals(0, after.get(), "the original cancellation must survive cleanup");
+            assertEquals(ProtosTask.State.CANCELLED, execution.task().state());
+            assertEquals(ProtosFutureValue.State.CANCELLED, execution.future().state());
+            assertEquals(
+                    ProtosTask.CancellationPhase.TERMINAL,
+                    execution.task().cancellationPhase());
+        }
+
+        System.out.println("PLAT070_CLEANUP_HANDLED_NLR_SUPERSEDES_CANCELLATION=NO");
+    }
+
+    @Test
+    void normalCleanupPreservesUnwindingUntilTerminalization() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosFutureValue bodyWait = new ProtosFutureValue(prelude.futurePrototype(), domain);
+            List<ProtosTask.CancellationPhase> phases = new ArrayList<>();
+
+            module.context().createLocalSlot("bodyWait", bodyWait);
+            module.context().createLocalSlot("cleanup", phaseProbe(phases));
+            module.context().createLocalSlot(
+                    "body",
+                    sourceClosure(
+                            scope.language(),
+                            module,
+                            "() => bodyWait.value()",
+                            "plat070-cancel-normal-body.protos"));
+
+            Execution execution =
+                    executeWithFuture(
+                            domain,
+                            prelude,
+                            module,
+                            lowerRoot(
+                                    scope.language(),
+                                    "body.ensure(cleanup)",
+                                    "plat070-cancel-normal-top.protos"));
+
+            assertTrue(domain.dispatchOne());
+            assertEquals(ProtosTask.CancellationPhase.NONE, execution.task().cancellationPhase());
+            assertTrue(execution.future().cancelRequest());
+            assertTrue(domain.dispatchOne());
+
+            assertEquals(List.of(ProtosTask.CancellationPhase.UNWINDING), phases);
+            assertEquals(ProtosTask.State.CANCELLED, execution.task().state());
+            assertEquals(
+                    ProtosTask.CancellationPhase.TERMINAL,
+                    execution.task().cancellationPhase());
+        }
+
+        System.out.println("PLAT070_NORMAL_CLEANUP_KEEPS_UNWINDING=PASS");
+    }
+
+    private static ProtosClosureValue phaseProbe(List<ProtosTask.CancellationPhase> phases) {
+        return nativeClosure(
+                (activation, supplied) -> {
+                    phases.add(activation.task().orElseThrow().cancellationPhase());
+                    return ProtosNullValue.INSTANCE;
+                });
+    }
+
     private static ProtosClosureValue nativeClosure(
             com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody body) {
         return ProtosClosureValue.suspensionCapableNativeClosure(body, body);

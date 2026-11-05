@@ -7,10 +7,13 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.*;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.callables.ProtosSuspensionCapableNativeClosureBody;
+import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
+import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
 import java.util.List;
@@ -353,6 +356,209 @@ final class ProtosPerf006Plat031BufferedWriterCPrimeTest {
         System.out.println("PLAT031_BUFFERED_WRITER_FLUSH_SUSPENSION_CAPABLE=YES");
         System.out.println("PLAT031_BUFFERED_WRITER_WRITE_LOCAL_LEAF=YES");
         System.out.println("PLAT031_BUFFERED_WRITER_CLOSE_INCLUDED=NO");
+    }
+
+    /*
+     * PLAT070: an internal control transfer escaping either buffered-flush phase is accounted as
+     * the failed target invocation of exactly the phase it interrupted; neither the write nor the
+     * flush is invoked again, and the transfer keeps its identity.
+     */
+    private enum Phase { FIRST_WRITE, FOLLOWUP_FLUSH }
+
+    private enum Escape { NON_LOCAL_RETURN, CANCELLATION }
+
+    @Test
+    void plat070NonLocalReturnEscapingTheInitialWriteIsAccountedToTheFirstPhase()
+            throws Exception {
+        assertPhaseEscape(Phase.FIRST_WRITE, Escape.NON_LOCAL_RETURN);
+        System.out.println("PLAT070_BUFFERED_WRITER_NLR_FIRST_PHASE=PASS");
+    }
+
+    @Test
+    void plat070NonLocalReturnEscapingTheFollowupFlushIsAccountedToTheFollowupPhase()
+            throws Exception {
+        assertPhaseEscape(Phase.FOLLOWUP_FLUSH, Escape.NON_LOCAL_RETURN);
+        System.out.println("PLAT070_BUFFERED_WRITER_NLR_FOLLOWUP_PHASE=PASS");
+    }
+
+    @Test
+    void plat070CancellationEscapingEitherPhaseKeepsIdentityAndIsAccountedOnce()
+            throws Exception {
+        assertPhaseEscape(Phase.FIRST_WRITE, Escape.CANCELLATION);
+        assertPhaseEscape(Phase.FOLLOWUP_FLUSH, Escape.CANCELLATION);
+        System.out.println("PLAT070_BUFFERED_WRITER_CANCELLATION_EITHER_PHASE=PASS");
+    }
+
+    private static void assertPhaseEscape(Phase phase, Escape kind) throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosReturnHome home = new ProtosReturnHome();
+            ProtosTaskCancellationException cancellation = new ProtosTaskCancellationException();
+            AtomicInteger writes = new AtomicInteger();
+            AtomicInteger flushes = new AtomicInteger();
+            ProtosClosureValue returning =
+                    homedSourceClosure(
+                            scope.language(), f.module, "() => { ^1 }",
+                            "plat070-buffered-writer-return.protos", home);
+            com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody escaping =
+                    (activation, supplied) -> {
+                        if (kind == Escape.CANCELLATION) {
+                            throw cancellation;
+                        }
+                        return ProtosClosureInvoker.invoke(returning, List.of());
+                    };
+            f.target.createLocalSlot(
+                    "write",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                writes.incrementAndGet();
+                                if (phase == Phase.FIRST_WRITE) {
+                                    return escaping.execute(activation, supplied);
+                                }
+                                ProtosFutureValue resolved = future(f);
+                                resolved.resolve(f.target, activation);
+                                return resolved;
+                            }));
+            f.target.createLocalSlot(
+                    "flush",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                flushes.incrementAndGet();
+                                return escaping.execute(activation, supplied);
+                            }));
+
+            ProtosObjectValue writer = writer(f);
+            ProtosInvocation.invokeMessage(
+                    writer, "write", List.of(bytes(f.prelude, 1, 2)), f.module);
+            f.module.context().createLocalSlot("writer", writer);
+            ProtosFutureValue outer =
+                    invokeCPrimeReturningFuture(
+                            scope.language(), f, "writer.flush()",
+                            "plat070-buffered-writer-" + phase + "-" + kind + ".protos");
+
+            ControlFlowException escaped = dispatchCapturingTransfer(f.domain);
+            assertNotNull(escaped, "the original transfer leaves the dispatch");
+            if (kind == Escape.CANCELLATION) {
+                assertSame(cancellation, escaped);
+            } else {
+                assertSame(home, ((ProtosNonLocalReturnException) escaped).target());
+            }
+            assertEquals(1, writes.get(), "the write is never duplicated");
+            assertEquals(
+                    phase == Phase.FIRST_WRITE ? 0 : 1,
+                    flushes.get(),
+                    "no follow-up flush after a first-phase transfer, and never twice");
+            assertEquals(ProtosFutureValue.State.FAILED, outer.state());
+            assertSame(
+                    f.prelude.bindings().readLocalSlot("IOError").orElseThrow(),
+                    outer.failedError().orElseThrow().parent().orElseThrow());
+            assertFalse(f.domain.dispatchOne());
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+    }
+
+    @Test
+    void plat070NonLocalReturnAfterSuspendedLowerWriteResumesIsAFollowupFailure()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosReturnHome home = new ProtosReturnHome();
+            ProtosFutureValue writeLower = future(f);
+            ProtosFutureValue flushGate = future(f);
+            AtomicInteger writes = new AtomicInteger();
+            AtomicInteger flushes = new AtomicInteger();
+            f.module.context().createLocalSlot(
+                    "flushProbe",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                flushes.incrementAndGet();
+                                return ProtosNullValue.INSTANCE;
+                            }));
+            f.module.context().createLocalSlot(
+                    "flushGate",
+                    ProtosClosureValue.nativeClosure((activation, supplied) -> flushGate));
+            f.target.createLocalSlot(
+                    "write",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                writes.incrementAndGet();
+                                return writeLower;
+                            }));
+            f.target.createLocalSlot(
+                    "flush",
+                    homedSourceClosure(
+                            scope.language(), f.module,
+                            "() => { flushProbe()\nflushGate().value()\n^1 }",
+                            "plat070-buffered-writer-suspended-flush.protos", home));
+
+            ProtosObjectValue writer = writer(f);
+            ProtosInvocation.invokeMessage(
+                    writer, "write", List.of(bytes(f.prelude, 3)), f.module);
+            f.module.context().createLocalSlot("writer", writer);
+            ProtosFutureValue outer =
+                    invokeCPrimeReturningFuture(
+                            scope.language(), f, "writer.flush()",
+                            "plat070-buffered-writer-suspended.protos");
+
+            assertNull(dispatchCapturingTransfer(f.domain), "the first lower write suspends");
+            assertEquals(1, writes.get());
+            assertEquals(0, flushes.get());
+            assertTrue(writeLower.resolve(f.target, f.module));
+            assertNull(dispatchCapturingTransfer(f.domain), "the follow-up flush suspends");
+            assertEquals(1, flushes.get());
+            assertEquals(ProtosFutureValue.State.PENDING, outer.state());
+
+            assertTrue(flushGate.resolve(ProtosNullValue.INSTANCE, f.module));
+            ControlFlowException escaped = dispatchCapturingTransfer(f.domain);
+            assertNotNull(escaped);
+            assertSame(home, ((ProtosNonLocalReturnException) escaped).target());
+            assertEquals(1, writes.get(), "the committed write is not repeated");
+            assertEquals(1, flushes.get(), "the flush prefix is not replayed");
+            assertEquals(ProtosFutureValue.State.FAILED, outer.state());
+            assertSame(
+                    f.prelude.bindings().readLocalSlot("IOError").orElseThrow(),
+                    outer.failedError().orElseThrow().parent().orElseThrow());
+        }
+
+        System.out.println("PLAT070_BUFFERED_WRITER_NLR_AFTER_SUSPENSION=PASS");
+    }
+
+    /** Dispatches until idle; answers the internal transfer that left a dispatch, or null. */
+    private static ControlFlowException dispatchCapturingTransfer(
+            ProtosActorExecutionDomain domain) {
+        ControlFlowException escaped = null;
+        for (int dispatches = 0; dispatches < 32; dispatches++) {
+            try {
+                if (!domain.dispatchOne()) {
+                    return escaped;
+                }
+            } catch (ControlFlowException transfer) {
+                escaped = transfer;
+            }
+        }
+        throw new AssertionError("BufferedWriter C-prime did not become idle");
+    }
+
+    /** A source Closure whose ^ targets {@code home} (a Task-free home: a valid transfer). */
+    private static ProtosClosureValue homedSourceClosure(
+            ProtosLanguage language,
+            ProtosActivation creator,
+            String characters,
+            String sourceName,
+            ProtosReturnHome home)
+            throws Exception {
+        CanonicalClosure definition = closureDefinition(characters);
+        ProtosClosureExecutionPlan plan =
+                ProtosClosureExecutionPlan.bytecode(
+                        definition, language, source(characters, sourceName));
+        return new ProtosClosureValue(
+                definition,
+                creator.lexicalContextsForClosureCapture(),
+                creator.receiver(),
+                creator.methodHome().orElse(null),
+                home,
+                creator.prelude().orElseThrow(),
+                plan);
     }
 
     private static ProtosObjectValue writer(Fixture f) {

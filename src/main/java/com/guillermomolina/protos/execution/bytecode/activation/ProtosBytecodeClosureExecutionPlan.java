@@ -325,12 +325,9 @@ final class ProtosBytecodeClosureExecutionPlan {
      */
     Object executeActivation(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");
-        try {
-            return ProtosNumericValueSupport.guestValue(
-                    activationTarget.call(
-                            ProtosFrameArguments.publishedInvocation(activation)));
-        } catch (ProtosBytecodeControlTransferException bridged) {
-            throw bridged.transfer();
-        }
+        // A control transfer leaving the call propagates as the original object.
+        return ProtosNumericValueSupport.guestValue(
+                activationTarget.call(
+                        ProtosFrameArguments.publishedInvocation(activation)));
     }
 }

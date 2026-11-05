@@ -30,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.TruffleSafepoint;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
+import com.oracle.truffle.api.nodes.ControlFlowException;
 import java.util.List;
 import java.util.Objects;
 
@@ -123,17 +124,13 @@ final class ProtosHostEntrySuspension {
         ProtosPreparedCalls.PreparedClosureCall prepared =
                 ProtosClosureCallPreparation.prepareHostEntrySelectedCall(
                         closure, selected, List.of(supplied), caller);
-        Object outcome;
-        try {
-            outcome =
-                    Objects.requireNonNull(
-                            ProtosTaskCPrimeEntryExecution.planForEnteredContext()
-                                    .target()
-                                    .call(prepared.activation(), prepared),
-                            "host-entry C-prime entry returned null");
-        } catch (ProtosBytecodeControlTransferException bridged) {
-            throw bridged.transfer();
-        }
+        // A control transfer leaving the entry root propagates as the original object.
+        Object outcome =
+                Objects.requireNonNull(
+                        ProtosTaskCPrimeEntryExecution.planForEnteredContext()
+                                .target()
+                                .call(prepared.activation(), prepared),
+                        "host-entry C-prime entry returned null");
         return drive(embedding, prepared, outcome, true);
     }
 
@@ -163,11 +160,12 @@ final class ProtosHostEntrySuspension {
                                 ProtosTailCallContinuation.resume(
                                         continuation, ProtosNullValue.INSTANCE),
                                 "resumed host-entry continuation returned null");
-            } catch (ProtosBytecodeControlTransferException bridged) {
+            } catch (ControlFlowException transfer) {
+                // An entry root already owns its finish and own-ReturnHome handling.
                 if (entryRoot) {
-                    throw bridged.transfer();
+                    throw transfer;
                 }
-                outcome = prepared.handleControlTransfer(bridged.transfer());
+                outcome = prepared.handleControlTransfer(transfer);
             } catch (AbstractTruffleException transfer) {
                 throw transfer;
             } catch (RuntimeException failure) {

@@ -570,6 +570,250 @@ final class ProtosPerf006B4CStructuredEnsureTest {
                 plan);
     }
 
+    /*
+     * PLAT070 cross-product of the original pending outcome of an ensure body and the outcome of
+     * its cleanup. Selected transfers unwind directly, so cleanup supersession must not depend on
+     * guest catch interception. Marks: 1 body entered, 2 cleanup entered, 9 handler, 3 after.
+     */
+    private static final String ENSURE_MATRIX_TEMPLATE =
+            """
+            handledLocally: () => {
+                (() => { ^0 })()
+                1
+            }
+            m: () => {
+                r: Error.handle(() => {
+                    (() => {
+                        mark(1)
+                        BODY
+                    }).ensure(() => {
+                        mark(2)
+                        CLEANUP
+                    })
+                }, (caught) => {
+                    mark(9)
+                    caught
+                })
+                mark(3)
+                r
+            }
+            m()
+            """;
+
+    private enum BodyOutcome {
+        NORMAL("10"),
+        RETURN("^20"),
+        ERROR("bodyError.signal()");
+
+        final String source;
+
+        BodyOutcome(String source) {
+            this.source = source;
+        }
+    }
+
+    private enum CleanupOutcome {
+        NORMAL("30"),
+        RETURN_ESCAPES("^40"),
+        ERROR_ESCAPES("cleanupError.signal()"),
+        RETURN_HANDLED_LOCALLY("handledLocally()");
+
+        final String source;
+
+        CleanupOutcome(String source) {
+            this.source = source;
+        }
+    }
+
+    @Test
+    void directUnwindEnsureCrossProductKeepsTheSurvivingTransfer() throws Exception {
+        ProtosPrelude prelude = core();
+        for (BodyOutcome body : BodyOutcome.values()) {
+            for (CleanupOutcome cleanup : CleanupOutcome.values()) {
+                assertEnsureCase(prelude, body, cleanup);
+            }
+        }
+
+        System.out.println("PLAT070_ENSURE_CROSS_PRODUCT=PASS");
+        System.out.println("PLAT070_LATER_ESCAPING_TRANSFER_SUPERSEDES=PASS");
+        System.out.println("PLAT070_CLEANUP_HANDLED_TRANSFER_SUPERSEDES=NO");
+    }
+
+    private static void assertEnsureCase(
+            ProtosPrelude prelude, BodyOutcome body, CleanupOutcome cleanup) {
+        ProtosActivation module = prelude.newModuleActivation();
+        ProtosObjectValue bodyError = ProtosCoreErrors.newError(module);
+        ProtosObjectValue cleanupError = ProtosCoreErrors.newError(module);
+        List<Long> marks = new ArrayList<>();
+        module.context().createLocalSlot("bodyError", bodyError);
+        module.context().createLocalSlot("cleanupError", cleanupError);
+        module.context().createLocalSlot("mark", marker(marks));
+        String name = "plat070-ensure-" + body + "-" + cleanup + ".protos";
+        String program =
+                ENSURE_MATRIX_TEMPLATE
+                        .replace("BODY", body.source)
+                        .replace("CLEANUP", cleanup.source);
+
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(name, program, module);
+
+        String label = body + " x " + cleanup;
+        switch (cleanup) {
+            case RETURN_ESCAPES -> {
+                // The later escaping return supersedes every original outcome.
+                assertCompleted(outcome, label);
+                assertEquals(40L, integer(outcome.value()), label);
+                assertEquals(List.of(1L, 2L), marks, label);
+            }
+            case ERROR_ESCAPES -> {
+                if (body == BodyOutcome.ERROR) {
+                    // The handler selected for the body Error is consumed; the replacement escapes.
+                    assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state(), label);
+                    assertSame(cleanupError, outcome.error(), label);
+                    assertEquals(List.of(1L, 2L), marks, label);
+                } else {
+                    assertCompleted(outcome, label);
+                    assertSame(cleanupError, outcome.value(), label);
+                    assertEquals(List.of(1L, 2L, 9L, 3L), marks, label);
+                }
+            }
+            case NORMAL, RETURN_HANDLED_LOCALLY -> {
+                // A cleanup that completes normally keeps the original pending outcome.
+                assertCompleted(outcome, label);
+                switch (body) {
+                    case NORMAL -> {
+                        assertEquals(10L, integer(outcome.value()), label);
+                        assertEquals(List.of(1L, 2L, 3L), marks, label);
+                    }
+                    case RETURN -> {
+                        assertEquals(20L, integer(outcome.value()), label);
+                        assertEquals(List.of(1L, 2L), marks, label);
+                    }
+                    case ERROR -> {
+                        assertSame(bodyError, outcome.value(), label);
+                        assertEquals(List.of(1L, 2L, 9L, 3L), marks, label);
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void cleanupSuspensionResumesWithoutReplayUnderEveryPendingOutcome() throws Exception {
+        ProtosPrelude prelude = core();
+        String template =
+                """
+                gate: (() => { 1 }).future()
+                m: () => {
+                    r: Error.handle(() => {
+                        (() => {
+                            mark(1)
+                            BODY
+                        }).ensure(() => {
+                            mark(2)
+                            gate.value()
+                            mark(4)
+                            CLEANUP
+                        })
+                    }, (caught) => {
+                        mark(9)
+                        caught
+                    })
+                    mark(3)
+                    r
+                }
+                m()
+                """;
+        for (BodyOutcome body : BodyOutcome.values()) {
+            for (CleanupOutcome cleanup :
+                    List.of(CleanupOutcome.NORMAL, CleanupOutcome.RETURN_ESCAPES)) {
+                ProtosActivation module = prelude.newModuleActivation();
+                ProtosObjectValue bodyError = ProtosCoreErrors.newError(module);
+                List<Long> marks = new ArrayList<>();
+                module.context().createLocalSlot("bodyError", bodyError);
+                module.context().createLocalSlot("mark", marker(marks));
+                String label = "suspending cleanup " + body + " x " + cleanup;
+
+                ProtosExecutionOutcome outcome =
+                        ProtosTestExecutionSupport.execute(
+                                "plat070-ensure-suspend-" + body + "-" + cleanup + ".protos",
+                                template.replace("BODY", body.source)
+                                        .replace("CLEANUP", cleanup.source),
+                                module);
+
+                assertCompleted(outcome, label);
+                if (cleanup == CleanupOutcome.RETURN_ESCAPES) {
+                    assertEquals(40L, integer(outcome.value()), label);
+                    assertEquals(List.of(1L, 2L, 4L), marks, label);
+                } else if (body == BodyOutcome.NORMAL) {
+                    assertEquals(10L, integer(outcome.value()), label);
+                    assertEquals(List.of(1L, 2L, 4L, 3L), marks, label);
+                } else if (body == BodyOutcome.RETURN) {
+                    assertEquals(20L, integer(outcome.value()), label);
+                    assertEquals(List.of(1L, 2L, 4L), marks, label);
+                } else {
+                    assertSame(bodyError, outcome.value(), label);
+                    assertEquals(List.of(1L, 2L, 4L, 9L, 3L), marks, label);
+                }
+            }
+        }
+
+        System.out.println("PLAT070_ENSURE_CLEANUP_SUSPENSION=PASS");
+        System.out.println("PLAT070_ENSURE_CLEANUP_PREFIX_REPLAY=NO");
+    }
+
+    @Test
+    void nestedEnsuresRunLifoOnceForADirectUnwindReturn() throws Exception {
+        ProtosActivation module = core().newModuleActivation();
+        List<Long> marks = new ArrayList<>();
+        module.context().createLocalSlot("mark", marker(marks));
+
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        "plat070-ensure-lifo.protos",
+                        """
+                        m: () => {
+                            (() => {
+                                (() => {
+                                    (() => { ^7 }).ensure(() => { mark(1) })
+                                }).ensure(() => { mark(2) })
+                            }).ensure(() => { mark(3) })
+                            0
+                        }
+                        m()
+                        """,
+                        module);
+
+        assertCompleted(outcome, "nested ensure");
+        assertEquals(7L, integer(outcome.value()));
+        assertEquals(List.of(1L, 2L, 3L), marks);
+
+        System.out.println("PLAT070_ENSURE_LIFO_EXACTLY_ONCE=PASS");
+    }
+
+    private static void assertCompleted(ProtosExecutionOutcome outcome, String label) {
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> label + ": error=" + outcome.error());
+    }
+
+    private static ProtosClosureValue marker(List<Long> marks) {
+        com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody body =
+                (activation, supplied) -> {
+                    marks.add(integer(supplied.get(0)));
+                    return ProtosNullValue.INSTANCE;
+                };
+        return ProtosClosureValue.suspensionCapableNativeClosure(body, body);
+    }
+
+    private static long integer(Object value) {
+        if (value instanceof ProtosIntegerValue integer) {
+            return integer.longValue();
+        }
+        return assertInstanceOf(Long.class, value);
+    }
+
     private static ProtosClosureValue sourceClosureWithHome(
             ProtosLanguage language,
             ProtosActivation creator,

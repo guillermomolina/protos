@@ -90,6 +90,12 @@ final class ProtosStructuredDispatchLowerer {
                 builder.createLocal("structuredEnsureCall", null);
         BytecodeLocal structuredEnsureCancellationWasUnwinding =
                 builder.createLocal("structuredEnsureCancellationWasUnwinding", null);
+        /*
+         * PLAT070: whether the current ensure cleanup Closure invocation completed normally. It
+         * lives in this root's frame, so a cleanup that yields keeps it in the continuation.
+         */
+        BytecodeLocal structuredEnsureCleanupCompletedNormally =
+                builder.createLocal("structuredEnsureCleanupCompletedNormally", null);
         BytecodeLocal structuredChild =
                 builder.createLocal("structuredEnsureChildCall", null);
         BytecodeLocal structuredHandler =
@@ -572,12 +578,33 @@ final class ProtosStructuredDispatchLowerer {
                             });
 
                     /*
-                     * TryCatch is deliberately inside the generated finally.
-                     * It sees only a later transfer escaping cleanup; the
-                     * original pending transfer is rethrown by the outer
-                     * TryFinally after this generator returns.
+                     * PLAT070: a later transfer escaping cleanup supersedes a
+                     * cancellation that was already unwinding. Selected
+                     * internal transfers unwind directly and never enter a
+                     * guest TryCatch, so escape is detected by a nested
+                     * TryFinally and a normal-completion marker instead: the
+                     * marker becomes true only after the cleanup Closure
+                     * invocation completes normally (including a transfer it
+                     * handled itself), so any escaping Error, non-local
+                     * return or cancellation leaves it false. The original
+                     * pending transfer is rethrown by the outer TryFinally
+                     * after this generator returns.
                      */
-                    builder.beginTryCatch();
+                    builder.beginBlock();
+                    builder.beginStoreLocal(structuredEnsureCleanupCompletedNormally);
+                    builder.emitLoadConstant(false);
+                    builder.endStoreLocal();
+
+                    builder.beginTryFinally(
+                            () -> {
+                                builder.beginSupersedeCancellationUnwindIfActive();
+                                emitActivation.accept(builder);
+                                builder.emitLoadLocal(
+                                        structuredEnsureCancellationWasUnwinding);
+                                builder.emitLoadLocal(
+                                        structuredEnsureCleanupCompletedNormally);
+                                builder.endSupersedeCancellationUnwindIfActive();
+                            });
 
                     builder.beginBlock();
                     builder.beginStoreLocal(structuredChild);
@@ -591,20 +618,13 @@ final class ProtosStructuredDispatchLowerer {
                             structuredChild,
                             childResult,
                             resumeValue);
+                    builder.beginStoreLocal(structuredEnsureCleanupCompletedNormally);
+                    builder.emitLoadConstant(true);
+                    builder.endStoreLocal();
                     builder.endBlock();
 
-                    builder.beginBlock();
-                    builder.beginSupersedeCancellationUnwindIfActive();
-                    emitActivation.accept(builder);
-                    builder.emitLoadLocal(
-                            structuredEnsureCancellationWasUnwinding);
-                    builder.endSupersedeCancellationUnwindIfActive();
-                    builder.beginRethrowTruffleException();
-                    builder.emitLoadException();
-                    builder.endRethrowTruffleException();
+                    builder.endTryFinally();
                     builder.endBlock();
-
-                    builder.endTryCatch();
                     builder.endTryFinally();
                 });
         builder.beginBlock();

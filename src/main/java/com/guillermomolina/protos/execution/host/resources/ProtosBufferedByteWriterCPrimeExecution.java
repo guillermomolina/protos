@@ -97,6 +97,7 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
         private final boolean writeFirst;
         private final int pendingLength;
         private final List<?> firstArguments;
+        private boolean firstOutcomeApplied;
 
         CallState(
                 ProtosIoOperation operation,
@@ -160,8 +161,30 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                     });
         }
 
+        /**
+         * PLAT070: the escaping transfer is accounted as the failed target invocation of the
+         * phase it interrupted (first write/flush, or the follow-up flush).
+         */
+        void transferEscaped() {
+            if (operation.terminal()) {
+                return;
+            }
+            if (firstOutcomeApplied) {
+                writer.flushFollowupUnknownFailureForCPrimeRuntime(operation);
+            } else {
+                writer.flushFirstLowerUnknownFailureForCPrimeRuntime(operation);
+            }
+        }
+
         boolean applyFirstOutcome(LowerOutcome outcome) {
             Objects.requireNonNull(outcome, "outcome");
+            boolean runFollowupFlush = applyFirstOutcomeToWriter(outcome);
+            // PLAT070: the first phase counts as completed only once the writer committed it.
+            firstOutcomeApplied = true;
+            return runFollowupFlush;
+        }
+
+        private boolean applyFirstOutcomeToWriter(LowerOutcome outcome) {
             return switch (outcome.kind) {
                 case RESOLVED ->
                         writer.flushFirstLowerResolvedForCPrimeRuntime(
@@ -217,6 +240,9 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                         BytecodeConfig.DEFAULT,
                         builder -> {
                             builder.beginRoot();
+                            // PLAT070: account internal transfers crossing this root.
+                            BytecodeLocal transferAccounting =
+                                    ProtosIoCPrimeTransferAccounting.begin(builder);
 
                             BytecodeLocal runFirst =
                                     builder.createLocal("bufferedWriterRunFirst", null);
@@ -487,9 +513,13 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endBlock();
                             builder.endWhile();
 
+                            ProtosIoCPrimeTransferAccounting.markCompleted(
+                                    builder, transferAccounting);
                             builder.beginReturn();
                             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
                             builder.endReturn();
+                            ProtosIoCPrimeTransferAccounting.end(
+                                    builder, transferAccounting);
                             builder.endRoot();
                         });
         return new Plan(roots.getNode(0).getCallTarget());

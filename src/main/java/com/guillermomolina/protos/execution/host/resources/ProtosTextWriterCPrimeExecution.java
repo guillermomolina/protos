@@ -94,13 +94,16 @@ public final class ProtosTextWriterCPrimeExecution {
         private final Object target;
         private final String selector;
         private final List<?> arguments;
+        private final Completion completion;
 
         CallState(
                 ProtosIoOperation operation,
                 Object target,
                 String selector,
-                List<?> arguments) {
+                List<?> arguments,
+                Completion completion) {
             this.operation = Objects.requireNonNull(operation, "operation");
+            this.completion = Objects.requireNonNull(completion, "completion");
             this.target = Objects.requireNonNull(target, "target");
             this.selector = Objects.requireNonNull(selector, "selector");
             this.arguments = List.copyOf(Objects.requireNonNull(arguments, "arguments"));
@@ -126,6 +129,13 @@ public final class ProtosTextWriterCPrimeExecution {
 
         TargetInvocation invocationFailed() {
             return new TargetInvocation(true, null);
+        }
+
+        /** PLAT070: the escaping transfer is accounted as the failed target invocation it is. */
+        void transferEscaped() {
+            if (!operation.terminal()) {
+                completion.invocationFailed();
+            }
         }
 
         Object awaitTargetFuture(TargetInvocation invocation) {
@@ -163,6 +173,9 @@ public final class ProtosTextWriterCPrimeExecution {
                         BytecodeConfig.DEFAULT,
                         builder -> {
                             builder.beginRoot();
+                            // PLAT070: account internal transfers crossing this root.
+                            BytecodeLocal transferAccounting =
+                                    ProtosIoCPrimeTransferAccounting.begin(builder);
 
                             BytecodeLocal prepared =
                                     builder.createLocal("textWriterTargetCall", null);
@@ -292,9 +305,13 @@ public final class ProtosTextWriterCPrimeExecution {
                             builder.endBlock();
                             builder.endWhile();
 
+                            ProtosIoCPrimeTransferAccounting.markCompleted(
+                                    builder, transferAccounting);
                             builder.beginReturn();
                             builder.emitLoadLocal(lowerOutcome);
                             builder.endReturn();
+                            ProtosIoCPrimeTransferAccounting.end(
+                                    builder, transferAccounting);
                             builder.endRoot();
                         });
         return new Plan(roots.getNode(0).getCallTarget());
@@ -311,7 +328,7 @@ public final class ProtosTextWriterCPrimeExecution {
         Objects.requireNonNull(operation, "operation");
         Objects.requireNonNull(completion, "completion");
 
-        CallState state = new CallState(operation, target, selector, arguments);
+        CallState state = new CallState(operation, target, selector, arguments, completion);
         ProtosBytecodeIoOperationExecution.installAndScheduleWithEntryState(
                 operation,
                 plan.target,

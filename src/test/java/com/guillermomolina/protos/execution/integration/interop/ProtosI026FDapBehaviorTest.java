@@ -48,6 +48,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class ProtosI026FDapBehaviorTest {
@@ -317,6 +318,292 @@ final class ProtosI026FDapBehaviorTest {
         }
     }
 
+    /*
+     * PLAT070 / BUG025, two separate claims with the real DAP adapter and the "uncaught" filter:
+     *
+     * 1. Observed result: with this adapter, a valid non-local return produced no "stopped"
+     *    event and the program completed (strict on that observation). This is evidence for
+     *    BUG025, not a contractual guarantee of the "uncaught" filter, and it does not by itself
+     *    resolve BUG025.
+     * 2. Guest Error and InvalidReturn Task failures: the program outcome is asserted exactly,
+     *    while the DAP events are only recorded. Which events the adapter reports for a failing
+     *    Task is the adapter's guarantee, not an assumption of this test, and a Task failure is
+     *    not treated as equivalent to an "uncaught" exception event.
+     *
+     * The "all" filter is deliberately not exercised.
+     */
+    /**
+     * The BUG025 findIndex program without print: this bare debugger harness binds no Process
+     * standard streams, so print is exercised through the real CLI instead
+     * ({@code ProtosCli008C1GuestStackCliTest}).
+     */
+    private static final String FIND_INDEX_VALUE_PROGRAM =
+            """
+            Arrays: import("std:collections/Array")
+
+            Arrays.findIndex([1, 2, 3], (value) => {
+                value == 2
+            })
+            """;
+    private static final String UNHANDLED_ERROR_PROGRAM = "Error().signal()\n";
+    private static final String INVALID_RETURN_TASK_PROGRAM =
+            """
+            m: () => {
+                escape: () => { ^1 }
+                child: (() => {
+                    escape()
+                }).future()
+                Error.handle(() => { child.value() }, (caught) => { caught })
+            }
+            m()
+            """;
+
+    @Test
+    void realDapObservedNoUncaughtStopForAValidNonLocalReturn() throws Exception {
+        withExceptionFilteredSession(
+                (client, context, executor, files, out) -> {
+                    ExceptionRun value =
+                            runUnderExceptionFilter(
+                                    client, context, executor, files, FIND_INDEX_VALUE_PROGRAM,
+                                    true);
+                    assertEquals(
+                            ProtosExecutionOutcome.State.COMPLETED,
+                            value.outcome().state(),
+                            () -> describe(value.outcome(), value.prelude()));
+                    assertEquals(
+                            "1",
+                            com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                                    .integerDecimalText(value.outcome().value()));
+
+                    assertTrue(value.stops().isEmpty(), () -> "unexpected stops " + value.stops());
+                });
+        System.out.println("PLAT070_DAP_VALID_NLR_OBSERVED_UNCAUGHT_STOP=NO");
+    }
+
+    @Test
+    void realDapTaskFailuresKeepTheirExactOutcomeWhateverTheAdapterReports() throws Exception {
+        withExceptionFilteredSession(
+                (client, context, executor, files, out) -> {
+                    ExceptionRun unhandled =
+                            runUnderExceptionFilter(
+                                    client, context, executor, files, UNHANDLED_ERROR_PROGRAM,
+                                    false);
+                    assertEquals(ProtosExecutionOutcome.State.FAILED, unhandled.outcome().state());
+                    System.out.println(
+                            "PLAT070_DAP_UNHANDLED_ERROR_OBSERVED_STOPS=" + unhandled.stops());
+
+                    ExceptionRun invalidReturn =
+                            runUnderExceptionFilter(
+                                    client, context, executor, files,
+                                    INVALID_RETURN_TASK_PROGRAM, false);
+                    assertEquals(
+                            ProtosExecutionOutcome.State.COMPLETED,
+                            invalidReturn.outcome().state(),
+                            () -> "error=" + invalidReturn.outcome().error());
+                    ProtosObjectValue failure =
+                            (ProtosObjectValue) invalidReturn.outcome().value();
+                    assertSame(
+                            invalidReturn.prelude().invalidReturnPrototype(),
+                            failure.parent().orElseThrow(),
+                            "the producer Task fails with the standard InvalidReturn");
+                    System.out.println(
+                            "PLAT070_DAP_INVALID_RETURN_TASK_OBSERVED_STOPS="
+                                    + invalidReturn.stops());
+                });
+    }
+
+    @FunctionalInterface
+    private interface SessionBody {
+        void run(
+                DapClient client,
+                ProtosPolyglotExecutionContext context,
+                ExecutorService executor,
+                List<Path> files,
+                java.io.ByteArrayOutputStream out)
+                throws Exception;
+    }
+
+    private static void withExceptionFilteredSession(SessionBody body) throws Exception {
+        ProtosGraalDapReadinessAdapter readiness = ProtosDapTestSupport.newReadiness();
+        ExecutorService guestExecutor = Executors.newSingleThreadExecutor();
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        List<Path> files = new ArrayList<>();
+        Engine engine = null;
+        ProtosPolyglotExecutionContext context = null;
+        DapClient client = null;
+        boolean disconnected = false;
+        Set<Thread> dapClientConnectionThreadsBefore = dapClientConnectionThreads();
+        Thread dapClientConnectionThread = null;
+
+        try {
+            engine =
+                    Engine.newBuilder(ProtosLanguage.ID)
+                            .option("dap", ProtosDapTestSupport.EPHEMERAL_LOOPBACK)
+                            .option("dap.Suspend", "false")
+                            .option("dap.WaitAttached", "false")
+                            .out(readiness)
+                            .build();
+            context =
+                    ProtosPolyglotExecutionContext.open(
+                            engine,
+                            java.io.InputStream.nullInputStream(),
+                            out,
+                            java.io.OutputStream.nullOutputStream(),
+                            () -> {});
+
+            client = DapClient.connect(readiness, TIMEOUT);
+            initializeAndAttach(client);
+            dapClientConnectionThread =
+                    newDapClientConnectionThread(dapClientConnectionThreadsBefore);
+
+            int exceptionBreakpoints =
+                    client.request("setExceptionBreakpoints", "{\"filters\":[\"uncaught\"]}");
+            assertSuccessfulResponse(
+                    client.awaitResponse(exceptionBreakpoints, TIMEOUT),
+                    exceptionBreakpoints,
+                    "setExceptionBreakpoints");
+            int configurationDone = client.request("configurationDone", "{}");
+            assertSuccessfulResponse(
+                    client.awaitResponse(configurationDone, TIMEOUT),
+                    configurationDone,
+                    "configurationDone");
+
+            body.run(client, context, guestExecutor, files, out);
+
+            int disconnect =
+                    client.request(
+                            "disconnect",
+                            "{\"restart\":false,\"terminateDebuggee\":false}");
+            assertSuccessfulResponse(
+                    client.awaitResponse(disconnect, TIMEOUT), disconnect, "disconnect");
+            disconnected = true;
+        } finally {
+            if (client != null) {
+                if (!disconnected) {
+                    client.bestEffortDisconnect();
+                }
+                client.close();
+            }
+            if (context != null) {
+                context.close();
+            }
+            if (engine != null) {
+                engine.close();
+            }
+            if (dapClientConnectionThread != null) {
+                awaitDapClientConnectionThreadTermination(dapClientConnectionThread);
+            }
+            guestExecutor.shutdownNow();
+            assertTrue(
+                    guestExecutor.awaitTermination(TIMEOUT.toSeconds(), TimeUnit.SECONDS),
+                    "DAP exception-classification executor must terminate");
+            for (Path file : files) {
+                Files.deleteIfExists(file);
+            }
+        }
+    }
+
+    private record ExceptionRun(
+            ProtosExecutionOutcome outcome,
+            com.guillermomolina.protos.runtime.ProtosPrelude prelude,
+            List<String> stops) {}
+
+    /**
+     * Runs {@code program} once under the configured "uncaught" filter. Every real {@code
+     * stopped} event is recorded together with the adapter's {@code exceptionInfo} answer and
+     * then continued. With {@code noStopAllowed} the program must finish without any stop.
+     */
+    private static ExceptionRun runUnderExceptionFilter(
+            DapClient client,
+            ProtosPolyglotExecutionContext context,
+            ExecutorService guestExecutor,
+            List<Path> files,
+            String program,
+            boolean noStopAllowed)
+            throws Exception {
+        Path file = Files.createTempFile("protos-plat070-dap-", ".protos");
+        files.add(file);
+        Files.writeString(file, program, StandardCharsets.UTF_8);
+        CallTarget target =
+                context.callEntered(
+                        () -> {
+                            ProtosLanguageContext languageContext =
+                                    ProtosLanguageContext.current();
+                            return languageContext.parsePublic(
+                                    languageContext.materializeFileSource(file, program));
+                        });
+        com.guillermomolina.protos.runtime.ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(
+                                Path.of("protos", "lib", "core"),
+                                // The findIndex program imports std:collections/Array.
+                                new ProtosStandardLibraryModuleResolver(
+                                        Path.of("protos", "lib")));
+        ProtosActivation activation = prelude.newModuleActivation();
+        Future<ProtosExecutionOutcome> guest =
+                guestExecutor.submit(
+                        () ->
+                                context.callEntered(
+                                        () -> ProtosRootTaskExecution.execute(target, activation)));
+
+        List<String> stops = new ArrayList<>();
+        long deadline = System.nanoTime() + TIMEOUT.toNanos();
+        while (!guest.isDone() && System.nanoTime() < deadline) {
+            String stopped = client.pollEvent("stopped", Duration.ofMillis(200));
+            if (stopped == null) {
+                continue;
+            }
+            int threadId = integerField(stopped, "threadId");
+            int info = client.request("exceptionInfo", "{\"threadId\":" + threadId + "}");
+            String evidence = stopped + " exceptionInfo=" + client.awaitResponse(info, TIMEOUT);
+            if (noStopAllowed) {
+                int frames = client.request("stackTrace", "{\"threadId\":" + threadId + "}");
+                evidence += " stackTrace=" + client.awaitResponse(frames, TIMEOUT);
+            }
+            stops.add(evidence);
+            int continueRequest = client.request("continue", "{\"threadId\":" + threadId + "}");
+            assertSuccessfulResponse(
+                    client.awaitResponse(continueRequest, TIMEOUT), continueRequest, "continue");
+        }
+        ProtosExecutionOutcome outcome = guest.get(TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+        String late = client.pollEvent("stopped", Duration.ofMillis(300));
+        if (late != null) {
+            stops.add(late);
+        }
+        if (noStopAllowed && !stops.isEmpty()) {
+            throw new AssertionError(
+                    "valid program suspended under the uncaught filter; "
+                            + describe(outcome, prelude)
+                            + " stops="
+                            + stops);
+        }
+        return new ExceptionRun(outcome, prelude, stops);
+    }
+
+    /** Test evidence: the outcome state, the failing Error's identity and its guest trace. */
+    private static String describe(
+            ProtosExecutionOutcome outcome,
+            com.guillermomolina.protos.runtime.ProtosPrelude prelude) {
+        StringBuilder text = new StringBuilder("outcome=").append(outcome.state());
+        if (outcome.state() == ProtosExecutionOutcome.State.FAILED) {
+            Object parent = outcome.error().parent().orElse(null);
+            String kind =
+                    parent == prelude.invalidReturnPrototype()
+                            ? "InvalidReturn"
+                            : parent == prelude.errorPrototype() ? "Error" : "Error subtype";
+            text.append(" error=").append(kind);
+            outcome.failureDiagnosticTrace()
+                    .ifPresent(
+                            trace ->
+                                    text.append(" trace=")
+                                            .append(
+                                                    trace.frames().stream()
+                                                            .map(frame -> frame.line() + ":"
+                                                                    + frame.column())
+                                                            .toList()));
+        }
+        return text.toString();
+    }
 
     static Set<Thread> dapClientConnectionThreads() {
         return Thread.getAllStackTraces().keySet().stream()

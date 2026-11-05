@@ -148,7 +148,16 @@ import com.oracle.truffle.api.profiles.InlinedBranchProfile;
         enableTailCallHandlers = true,
         enableUncachedInterpreter = true,
         boxingEliminationTypes = {int.class, long.class, double.class, boolean.class},
-        tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class)
+        tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class,
+        /*
+         * PLAT070: the two internal Protos control transfers unwind directly through generated
+         * frames. Active TryFinally cleanup runs for them; guest TryCatch handlers never see
+         * them. Guest Errors (ProtosSignalException) keep the ordinary guest exception lane.
+         */
+        unwindExceptions = {
+            ProtosNonLocalReturnException.class,
+            ProtosTaskCancellationException.class
+        })
 @OperationProxy(value = ProtosCanonicalBooleanOneNode.class, name = "TryCompactCanonicalBooleanOne")
 @OperationProxy(value = ProtosNumericAddNode.class, name = "TryPrimitiveNumericAdd")
 @OperationProxy(value = ProtosNumericSubtractNode.class, name = "TryPrimitiveNumericSubtract")
@@ -396,25 +405,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 activation,
                 location,
                 frame);
-    }
-
-    @Override
-    public Object interceptControlFlowException(
-            ControlFlowException transfer,
-            VirtualFrame frame,
-            BytecodeNode bytecodeNode,
-            int bytecodeIndex)
-            throws Throwable {
-        /*
-         * I111-B: only a semantic activation root is a CLI008 origin; an
-         * auxiliary root bridges the transfer without a position, exactly as
-         * the former structured/C-prime interpreter did. Exceptional path only;
-         * the classification is a compilation-final property of this root.
-         */
-        if (!semanticActivationRoot) {
-            throw ProtosBytecodeControlTransferException.bridge(transfer);
-        }
-        throw ProtosBytecodeControlTransferException.bridge(transfer, bytecodeNode, bytecodeIndex);
     }
 
     @Override
@@ -2683,6 +2673,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * Raises a non-local return (PLAT070). An inactive or missing home signals InvalidReturn. An
+     * active home is reachable only from the Task that owns it (CALLABLES.md section 14, D177):
+     * the owner registered on the home when its invocation was established is compared by
+     * identity with the executing Task ({@code null} on both sides for Task-free execution). A
+     * mismatch signals the ordinary guest InvalidReturn here, at the {@code ^}; a match throws
+     * the original {@link ProtosNonLocalReturnException}, which unwinds directly through
+     * generated frames. A valid return performs no stack inspection and attaches nothing.
+     */
     @Operation
     public static final class RaiseNonLocalReturn {
         @Specialization
@@ -2693,7 +2692,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 throw new IllegalStateException(
                         "non-local return reached a return home proven unobservable");
             }
-            if (target == null || !target.isActive()) {
+            if (target == null) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newInvalidReturn(activation));
+            }
+            /*
+             * The owner is read before the active state: complete() deactivates the home and only
+             * then clears its owner (a volatile write), so a reader that observes a cleared owner
+             * also observes the inactive home and can never mistake a completed home for a valid
+             * Task-free one.
+             */
+            ProtosTask owner = target.ownerTaskForRuntime();
+            if (!target.isActive() || owner != activation.taskForRuntime()) {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newInvalidReturn(activation));
             }
@@ -4232,12 +4242,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                 .compactDirectClosureCallZeroNoHome(
                                         closure, caller);
 
-                try {
-                    return ProtosNumericValueSupport.guestValue(
-                            node.call(arguments));
-                } catch (ProtosBytecodeControlTransferException bridged) {
-                    throw bridged.transfer();
-                }
+                return ProtosNumericValueSupport.guestValue(
+                        node.call(arguments));
             }
 
             /*
@@ -4727,12 +4733,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
                 Object[] frameArguments = ProtosFrameArguments.compactDirectClosureCallOneNoHome(closure, caller, supplied0);
 
-                try {
-                    return ProtosNumericValueSupport.guestValue(
-                            node.call(frameArguments));
-                } catch (ProtosBytecodeControlTransferException bridged) {
-                    throw bridged.transfer();
-                }
+                return ProtosNumericValueSupport.guestValue(
+                        node.call(frameArguments));
             }
 
             /*
@@ -4925,12 +4927,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
                 Object[] frameArguments = ProtosFrameArguments.compactDirectClosureCall(closure, caller, null, supplied);
 
-                try {
-                    return ProtosNumericValueSupport.guestValue(
-                            node.call(frameArguments));
-                } catch (ProtosBytecodeControlTransferException bridged) {
-                    throw bridged.transfer();
-                }
+                return ProtosNumericValueSupport.guestValue(
+                        node.call(frameArguments));
             }
 
             /*
@@ -5239,12 +5237,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosFrameArguments.compactDirectClosureCall(
                             closure, caller, null, supplied);
 
-            try {
-                return ProtosNumericValueSupport.guestValue(
-                        node.call(frameArguments));
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
+            return ProtosNumericValueSupport.guestValue(
+                    node.call(frameArguments));
         }
 
         @Specialization(guards = "temporarilyRejected(receiver, caller)")
@@ -7974,8 +7968,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("create(cachedTarget)") DirectCallNode node) {
             try {
                 return node.call(prepared.activation(), prepared);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                return prepared.handleControlTransfer(bridged.transfer());
+            } catch (ControlFlowException transfer) {
+                return prepared.handleControlTransfer(transfer);
             } catch (AbstractTruffleException transfer) {
                 prepared.failIfModuleInitialization();
                 throw transfer;
@@ -8008,8 +8002,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         target,
                         prepared.activation(),
                         prepared);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                return prepared.handleControlTransfer(bridged.transfer());
+            } catch (ControlFlowException transfer) {
+                return prepared.handleControlTransfer(transfer);
             } catch (AbstractTruffleException transfer) {
                 prepared.failIfModuleInitialization();
                 throw transfer;
@@ -8182,16 +8176,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                     cachedSend.methodHome(),
                                     exactCaller);
 
-            try {
-                return ProtosNumericValueSupport.guestValue(
-                        node.call(frameArguments));
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                /*
-                 * The admission excludes ownership of a materialized
-                 * ReturnHome, so no transfer can be consumed here.
-                 */
-                throw bridged.transfer();
-            }
+            /*
+             * The admission excludes ownership of a materialized ReturnHome,
+             * so a control transfer leaving the call propagates unchanged.
+             */
+            return ProtosNumericValueSupport.guestValue(
+                    node.call(frameArguments));
         }
 
         @Specialization(replaces = "guardedSource")
@@ -8309,16 +8299,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
                             supplied0);
 
-            try {
-                return node.call(frameArguments);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                /*
-                 * Exactly the no-home OrdinarySourceCall bridge:
-                 * there is no owned materialized home able to
-                 * consume this control transfer.
-                 */
-                throw bridged.transfer();
-            }
+            /*
+             * Exactly the no-home OrdinarySourceCall shape: no owned
+             * materialized home can consume a control transfer, so it
+             * propagates unchanged.
+             */
+            return node.call(frameArguments);
         }
 
         @Specialization(replaces = "guardedSource")
@@ -8421,12 +8407,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                     cachedGuarded.closure(),
                                     exactCaller);
 
-            try {
-                return ProtosNumericValueSupport.guestValue(
-                        node.call(frameArguments));
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
+            return ProtosNumericValueSupport.guestValue(
+                    node.call(frameArguments));
         }
 
         /**
@@ -8496,12 +8478,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                     closure,
                                     exactCaller);
 
-            try {
-                return ProtosNumericValueSupport.guestValue(
-                        node.call(frameArguments));
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
+            return ProtosNumericValueSupport.guestValue(
+                    node.call(frameArguments));
         }
 
         /**
@@ -8696,12 +8674,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                     exactCaller,
                                     supplied0);
 
-            try {
-                return ProtosNumericValueSupport.guestValue(
-                        node.call(frameArguments));
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
+            return ProtosNumericValueSupport.guestValue(
+                    node.call(frameArguments));
         }
 
         /** PERF042: the Call1 counterpart of {@link InvokeClosureZero#definitionSource}. */
@@ -8760,12 +8734,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                     exactCaller,
                                     supplied0);
 
-            try {
-                return ProtosNumericValueSupport.guestValue(
-                        node.call(frameArguments));
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
+            return ProtosNumericValueSupport.guestValue(
+                    node.call(frameArguments));
         }
 
         /** PERF042: see {@link InvokeClosureZero#rejectedSource}. */
@@ -9103,11 +9073,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 DirectCallNode node,
                 Object[] frameArguments) {
             Object outcome;
-            try {
-                outcome = node.call(frameArguments);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
+            outcome = node.call(frameArguments);
             java.util.Objects.requireNonNull(outcome, "terminal Closure invocation returned null");
             if (ProtosTailCallContinuation.isSuspended(outcome)) {
                 return ProtosTailCallContinuation.deferDirect(
@@ -9163,11 +9129,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 DirectCallNode node,
                 Object[] frameArguments) {
             Object outcome;
-            try {
-                outcome = node.call(frameArguments);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
+            outcome = node.call(frameArguments);
             java.util.Objects.requireNonNull(outcome, "terminal Closure invocation returned null");
             return outcome;
         }
@@ -9738,8 +9700,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         /*
          * PERF038-H: no-home ordinary calls do not own a lifecycle, cannot
          * consume a non-local return and never remap runtime failures.
-         * Their only required exception adaptation is unwrapping the
-         * bytecode control-flow bridge.
+         * A control transfer leaving the call propagates unchanged.
          */
                 @Specialization(
                 guards = {
@@ -9753,11 +9714,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         RootCallTarget cachedTarget,
                 @Cached("create(cachedTarget)")
                         DirectCallNode node) {
-            try {
-                return node.call(prepared.targetArguments());
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
+            return node.call(prepared.targetArguments());
         }
 
         @Specialization(
@@ -9774,8 +9731,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         DirectCallNode node) {
             try {
                 return node.call(prepared.targetArguments());
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                return prepared.handleControlTransfer(bridged.transfer());
+            } catch (ControlFlowException transfer) {
+                return prepared.handleControlTransfer(transfer);
             } catch (AbstractTruffleException transfer) {
                 prepared.failIfModuleInitialization();
                 throw transfer;
@@ -9792,8 +9749,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return node.call(
                         prepared.bodyTarget(),
                         prepared.targetArguments());
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                return prepared.handleControlTransfer(bridged.transfer());
+            } catch (ControlFlowException transfer) {
+                return prepared.handleControlTransfer(transfer);
             } catch (AbstractTruffleException transfer) {
                 prepared.failIfModuleInitialization();
                 throw transfer;
@@ -9821,8 +9778,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         DirectCallNode node) {
             try {
                 return node.call(prepared.targetArguments());
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                return prepared.handleControlTransfer(bridged.transfer());
+            } catch (ControlFlowException transfer) {
+                return prepared.handleControlTransfer(transfer);
             } catch (AbstractTruffleException transfer) {
                 prepared.failIfModuleInitialization();
                 throw transfer;
@@ -9839,8 +9796,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return node.call(
                         prepared.bodyTarget(),
                         prepared.targetArguments());
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                return prepared.handleControlTransfer(bridged.transfer());
+            } catch (ControlFlowException transfer) {
+                return prepared.handleControlTransfer(transfer);
             } catch (AbstractTruffleException transfer) {
                 prepared.failIfModuleInitialization();
                 throw transfer;
@@ -10026,8 +9983,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object resumeValue) {
             try {
                 return ProtosTailCallContinuation.resume(transport, resumeValue);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                return prepared.handleControlTransfer(bridged.transfer());
+            } catch (ControlFlowException transfer) {
+                return prepared.handleControlTransfer(transfer);
             } catch (AbstractTruffleException transfer) {
                 prepared.failIfModuleInitialization();
                 throw transfer;
@@ -10051,8 +10008,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return node.call(
                         result.getFrame(),
                         resumeValue);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                return prepared.handleControlTransfer(bridged.transfer());
+            } catch (ControlFlowException transfer) {
+                return prepared.handleControlTransfer(transfer);
             } catch (AbstractTruffleException transfer) {
                 prepared.failIfModuleInitialization();
                 throw transfer;
@@ -10072,8 +10029,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         result.getContinuationCallTarget(),
                         result.getFrame(),
                         resumeValue);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                return prepared.handleControlTransfer(bridged.transfer());
+            } catch (ControlFlowException transfer) {
+                return prepared.handleControlTransfer(transfer);
             } catch (AbstractTruffleException transfer) {
                 prepared.failIfModuleInitialization();
                 throw transfer;
@@ -10146,14 +10103,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * entry plan and the I/O C-prime executions).
      */
 
-    @Operation
-    public static final class RethrowTruffleException {
-        @Specialization
-        public static void perform(AbstractTruffleException exception) {
-            throw exception;
-        }
-    }
-
     /**
      * Snapshots, on entry to an {@code ensure} cleanup, whether a delivered cancellation is
      * unwinding through it. Only then is the cleanup also published as its Task's D121
@@ -10192,13 +10141,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * PLAT070: on every exit of an {@code ensure} cleanup invocation, supersedes the cancellation
+     * that was already unwinding on entry to cleanup when the cleanup did not complete normally,
+     * i.e. a later Error, non-local return or cancellation is escaping it. A normal completion,
+     * including one after a transfer handled inside cleanup, supersedes nothing.
+     */
     @Operation
     public static final class SupersedeCancellationUnwindIfActive {
         @Specialization
         public static void perform(
                 ProtosActivation activation,
-                boolean cancellationWasUnwindingBeforeCleanup) {
-            if (!cancellationWasUnwindingBeforeCleanup) {
+                boolean cancellationWasUnwindingBeforeCleanup,
+                boolean cleanupCompletedNormally) {
+            if (cleanupCompletedNormally || !cancellationWasUnwindingBeforeCleanup) {
                 return;
             }
             ProtosTask task = activation.task().orElse(null);
@@ -10400,6 +10356,193 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * The failure phase of the protocols whose failure takes no argument;
      * TextReader keeps {@link TextReaderSourceInvocationFailed}.
      */
+    /**
+     * PLAT070: the {@code TryFinally} handler of an I/O C-prime root (see {@code
+     * ProtosIoCPrimeTransferAccounting}). When the root body neither completed nor left through a
+     * guest Error, an internal control transfer is crossing it: the protocol records it with its
+     * own failed-invocation bookkeeping. The transfer is not observed, caught or replaced here.
+     */
+    @Operation
+    public static final class IoAccountEscapingTransfer {
+        @Specialization
+        public static void bufferedReader(
+                ProtosBufferedByteReaderCPrimeExecution.CallState state,
+                boolean completedOrSignalled) {
+            if (!completedOrSignalled) {
+                escaped(state::transferEscaped);
+            }
+        }
+
+        @Specialization
+        public static void bufferedWriter(
+                ProtosBufferedByteWriterCPrimeExecution.CallState state,
+                boolean completedOrSignalled) {
+            if (!completedOrSignalled) {
+                escaped(state::transferEscaped);
+            }
+        }
+
+        @Specialization
+        public static void textReader(
+                ProtosTextReaderCPrimeExecution.CallState state,
+                boolean completedOrSignalled) {
+            if (!completedOrSignalled) {
+                escaped(state::transferEscaped);
+            }
+        }
+
+        @Specialization
+        public static void textWriter(
+                ProtosTextWriterCPrimeExecution.CallState state,
+                boolean completedOrSignalled) {
+            if (!completedOrSignalled) {
+                escaped(state::transferEscaped);
+            }
+        }
+
+        @TruffleBoundary
+        private static void escaped(Runnable accounting) {
+            accounting.run();
+        }
+    }
+
+    /**
+     * PLAT070: in the lifecycle-release root's finally handler, answers whether an internal
+     * control transfer is leaving the release body; if so, the interrupted step is accounted and
+     * pending mandatory finalizers are left for the transfer cleanup step loop.
+     */
+    @Operation
+    public static final class IoReleaseBeginTransferCleanup {
+        @Specialization
+        @TruffleBoundary
+        public static boolean perform(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                boolean completedOrSignalled) {
+            return sequence.beginTransferCleanup(completedOrSignalled);
+        }
+    }
+
+    /**
+     * PLAT070: enters a mandatory finalizer during lifecycle-release transfer cleanup. TEST009-J:
+     * specialized on the four concrete prepared-call representations.
+     */
+    @Operation
+    public static final class IoReleaseEnterFinalizer {
+        @Specialization
+        public static Object ordinary(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                OrdinarySourceCall prepared,
+                @Shared("finalizerCall") @Cached IndirectCallNode node) {
+            return ProtosIoReleaseCPrimeExecution.enterFinalizer(sequence, prepared, node);
+        }
+
+        @Specialization
+        public static Object nativeCall(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                NativeCall prepared,
+                @Shared("finalizerCall") @Cached IndirectCallNode node) {
+            return ProtosIoReleaseCPrimeExecution.enterFinalizer(sequence, prepared, node);
+        }
+
+        @Specialization
+        public static Object immediate(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                ImmediateResultCall prepared,
+                @Shared("finalizerCall") @Cached IndirectCallNode node) {
+            return ProtosIoReleaseCPrimeExecution.enterFinalizer(sequence, prepared, node);
+        }
+
+        @Specialization
+        public static Object moduleInitialization(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                ModuleInitializationCall prepared,
+                @Shared("finalizerCall") @Cached IndirectCallNode node) {
+            return ProtosIoReleaseCPrimeExecution.enterFinalizer(sequence, prepared, node);
+        }
+    }
+
+    /**
+     * PLAT070: resumes a mandatory finalizer during lifecycle-release transfer cleanup. TEST009-J:
+     * specialized on the four concrete prepared-call representations.
+     */
+    @Operation
+    public static final class IoReleaseResumeFinalizer {
+        @Specialization
+        @TruffleBoundary
+        public static Object ordinary(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                OrdinarySourceCall prepared,
+                Object child,
+                Object resumeValue) {
+            return ProtosIoReleaseCPrimeExecution.resumeFinalizer(
+                    sequence, prepared, child, resumeValue);
+        }
+
+        @Specialization
+        @TruffleBoundary
+        public static Object nativeCall(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                NativeCall prepared,
+                Object child,
+                Object resumeValue) {
+            return ProtosIoReleaseCPrimeExecution.resumeFinalizer(
+                    sequence, prepared, child, resumeValue);
+        }
+
+        @Specialization
+        @TruffleBoundary
+        public static Object immediate(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                ImmediateResultCall prepared,
+                Object child,
+                Object resumeValue) {
+            return ProtosIoReleaseCPrimeExecution.resumeFinalizer(
+                    sequence, prepared, child, resumeValue);
+        }
+
+        @Specialization
+        @TruffleBoundary
+        public static Object moduleInitialization(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                ModuleInitializationCall prepared,
+                Object child,
+                Object resumeValue) {
+            return ProtosIoReleaseCPrimeExecution.resumeFinalizer(
+                    sequence, prepared, child, resumeValue);
+        }
+    }
+
+    /** PLAT070: terminalizes the release after transfer cleanup ran its mandatory finalizers. */
+    @Operation
+    public static final class IoReleaseFinishTransferCleanup {
+        @Specialization
+        @TruffleBoundary
+        public static void perform(ProtosIoReleaseCPrimeExecution.Sequence sequence) {
+            sequence.finishTransferCleanup();
+        }
+    }
+
+    /** PLAT070: accounts a later transfer escaping a mandatory finalizer during transfer cleanup. */
+    @Operation
+    public static final class IoReleaseAbandonTransferCleanup {
+        @Specialization
+        @TruffleBoundary
+        public static void perform(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                boolean cleanupCompleted) {
+            sequence.abandonTransferCleanup(cleanupCompleted);
+        }
+    }
+
+    /** Rethrows the exact guest Error caught by an I/O C-prime accounting extent. */
+    @Operation
+    public static final class RethrowTruffleException {
+        @Specialization
+        public static void perform(AbstractTruffleException exception) {
+            throw exception;
+        }
+    }
+
     @Operation
     public static final class IoInvocationFailed {
         @Specialization

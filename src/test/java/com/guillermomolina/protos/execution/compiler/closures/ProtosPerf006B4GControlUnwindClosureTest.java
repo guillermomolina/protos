@@ -37,22 +37,28 @@ final class ProtosPerf006B4GControlUnwindClosureTest {
                 new ProtosPerf006B4CStructuredEnsureTest();
         ensure.nonLocalReturnRunsCleanupThenPropagatesExactOriginalTransfer();
         ensure.cleanupNonLocalReturnSupersedesPendingBodyNonLocalReturn();
+        ensure.directUnwindEnsureCrossProductKeepsTheSurvivingTransfer();
 
         ProtosPerf006B4DErrorHandlersTest handlers =
                 new ProtosPerf006B4DErrorHandlersTest();
         handlers.selectedInnerHandlerIsInactiveBeforeCrossedEnsureCleanup();
         handlers.selectedHandlerRemainsRemovedWhileItsHandlerClosureSuspends();
+        handlers.directUnwindNonLocalReturnNeverEntersErrorHandle();
+        handlers.directUnwindCancellationNeverEntersErrorHandle();
 
         ProtosPerf006B4ECancellationUnwindTest cancellation =
                 new ProtosPerf006B4ECancellationUnwindTest();
         cancellation.cancellationCleanupMaySuspendWithoutRedeliveryOrReplay();
         cancellation.cleanupErrorSupersedesCancellationBeforeOuterHandlerRuns();
+        cancellation.cleanupNonLocalReturnEscapingSupersedesCancellation();
+        cancellation.cleanupNonLocalReturnHandledInsideCleanupKeepsCancellation();
 
         ProtosPerf006B4FStructuredWhileTest loop =
                 new ProtosPerf006B4FStructuredWhileTest();
         loop.conditionAndBodySuspensionResumeWithoutReplay();
         loop.cancellationThroughSuspendedConditionCrossesOuterEnsureExactlyOnce();
         loop.bodyErrorStopsLoopBeforeAnotherConditionActivation();
+        loop.directUnwindReturnLeavesStructuredWhileThroughEnsureExactlyOnce();
 
         System.out.println("PERF006_B4G_NLR_ENSURE_CPRIME_CROSS_PRODUCT=PASS");
         System.out.println("PERF006_B4G_ERROR_HANDLER_ENSURE_CROSS_PRODUCT=PASS");
@@ -88,6 +94,30 @@ final class ProtosPerf006B4GControlUnwindClosureTest {
 
         System.out.println("PERF006_B4G_BYTECODE_REPLAY_CURSOR=NO");
         System.out.println("PERF006_B4G_LEGACY_REPLAY_BACKEND_RETIRED=YES");
+    }
+
+    @Test
+    void controlTransfersUseDirectUnwindWithoutABridgeOrGuestCatchSupersession()
+            throws Exception {
+        String production =
+                read("src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java")
+                        + read("src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosTailCallContinuation.java")
+                        + read("src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeTaskExecution.java")
+                        + read("src/main/java/com/guillermomolina/protos/execution/host/embedding/ProtosHostEntrySuspension.java")
+                        + read("src/main/java/com/guillermomolina/protos/execution/host/tooling/ProtosDiagnosticTraceCapture.java");
+        String structured = read(
+                "src/main/java/com/guillermomolina/protos/execution/bytecode/lowering/ProtosStructuredDispatchLowerer.java");
+
+        assertFalse(production.contains("ProtosBytecodeControlTransferException"));
+        assertFalse(production.contains("interceptControlFlowException"));
+        assertTrue(production.contains("unwindExceptions"));
+        assertTrue(structured.contains("structuredEnsureCleanupCompletedNormally"));
+        assertFalse(
+                structured.contains("RethrowTruffleException"),
+                "ensure supersession must not depend on a guest catch of the escaping transfer");
+
+        System.out.println("PLAT070_CONTROL_TRANSFER_BRIDGE=REMOVED");
+        System.out.println("PLAT070_CANCELLATION_SUPERSESSION=TRY_FINALLY_BASED");
     }
 
     private static String read(String path) throws Exception {

@@ -520,6 +520,97 @@ final class ProtosPerf006B4DErrorHandlersTest {
         System.out.println("PERF006_B4D_VALIDATION_BEFORE_HANDLER_INSTALL=PASS");
     }
 
+    @Test
+    void directUnwindNonLocalReturnNeverEntersErrorHandle() throws Exception {
+        ProtosActivation module = core().newModuleActivation();
+        AtomicInteger handlerCalls = new AtomicInteger();
+        ProtosObjectValue token = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        module.context().createLocalSlot("token", token);
+        module.context().createLocalSlot(
+                "handler",
+                nativeClosure(
+                        (activation, supplied) -> {
+                            handlerCalls.incrementAndGet();
+                            return supplied.get(0);
+                        }));
+
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        "plat070-handler-nlr.protos",
+                        """
+                        m: () => {
+                            Error.handle(() => {
+                                Error.handle(() => { ^token }, handler)
+                            }, handler)
+                            0
+                        }
+                        m()
+                        """,
+                        module);
+
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> "error=" + outcome.error());
+        assertSame(token, outcome.value());
+        assertEquals(0, handlerCalls.get());
+
+        System.out.println("PLAT070_NLR_ENTERS_ERROR_HANDLE=NO");
+    }
+
+    @Test
+    void directUnwindCancellationNeverEntersErrorHandle() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosFutureValue bodyWait = new ProtosFutureValue(prelude.futurePrototype(), domain);
+            AtomicInteger handlerCalls = new AtomicInteger();
+
+            module.context().createLocalSlot("bodyWait", bodyWait);
+            module.context().createLocalSlot(
+                    "body",
+                    sourceClosure(
+                            scope.language(),
+                            module,
+                            "() => bodyWait.value()",
+                            "plat070-handler-cancel-body.protos"));
+            module.context().createLocalSlot(
+                    "handler",
+                    nativeClosure(
+                            (activation, supplied) -> {
+                                handlerCalls.incrementAndGet();
+                                return supplied.get(0);
+                            }));
+
+            ProtosBytecodeRootNode root =
+                    lowerRoot(
+                            scope.language(),
+                            "Error.handle(body, handler)",
+                            "plat070-handler-cancel-top.protos");
+            ProtosFutureValue future = new ProtosFutureValue(prelude.futurePrototype(), domain);
+            ProtosTask task =
+                    domain.createTask(
+                            null,
+                            future,
+                            current ->
+                                    ProtosBytecodeTaskExecution.execute(
+                                            current, root.getCallTarget(), module));
+            future.attachProducerTask(task, module);
+
+            assertTrue(domain.dispatchOne());
+            assertEquals(ProtosTask.State.SUSPENDED, task.state());
+            assertTrue(future.cancelRequest());
+            assertTrue(domain.dispatchOne());
+
+            assertEquals(ProtosTask.State.CANCELLED, task.state());
+            assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+            assertEquals(0, handlerCalls.get());
+        }
+
+        System.out.println("PLAT070_CANCELLATION_ENTERS_ERROR_HANDLE=NO");
+    }
+
     private static ProtosClosureValue nativeClosure(
             com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody body) {
         return ProtosClosureValue.suspensionCapableNativeClosure(body, body);

@@ -711,6 +711,63 @@ final class ProtosI112TailContinuationTest {
         }
     }
 
+    /*
+     * PLAT070: the original non-local return reaches the terminal invocation's owner directly.
+     * The owner must still consume a return to its own home (completing it exactly once), never
+     * merely complete and propagate it.
+     */
+    @Test
+    void directUnwindReturnToTheTerminalOwnersHomeIsConsumedThere() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosObjectValue payload = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            module.context().createLocalSlot("payload", payload);
+
+            ProtosTask task =
+                    execute(domain, module,
+                            lowerRoot(scope.language(),
+                                    "callee: (f) => {\n    f()\n}\n"
+                                            + "m: () => {\n    callee(() => { ^payload })\n}\n"
+                                            + "m()",
+                                    "plat070-terminal-owner-top.protos"));
+            drainUntil(domain, task, ProtosTask.State.COMPLETED);
+            assertSame(payload, task.result().orElseThrow());
+        }
+    }
+
+    @Test
+    void directUnwindReturnAfterResumedTerminalTransportReachesItsHomeOnce() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosFutureValue wait = new ProtosFutureValue(prelude.futurePrototype(), domain);
+            ProtosObjectValue payload = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            AtomicInteger after = new AtomicInteger();
+            module.context().createLocalSlot("wait", wait);
+            module.context().createLocalSlot("payload", payload);
+            module.context().createLocalSlot("after", counter(after));
+
+            ProtosTask task =
+                    execute(domain, module,
+                            lowerRoot(scope.language(),
+                                    "callee: (f) => {\n    wait.value()\n    f()\n}\n"
+                                            + "m: () => {\n    callee(() => { ^payload })\n}\n"
+                                            + "r: m()\nafter()\nr",
+                                    "plat070-resumed-terminal-top.protos"));
+            assertTrue(domain.dispatchOne());
+            assertEquals(ProtosTask.State.SUSPENDED, task.state());
+            assertEquals(0, after.get());
+
+            assertTrue(wait.resolve(ProtosNullValue.INSTANCE, module));
+            drainUntil(domain, task, ProtosTask.State.COMPLETED);
+            assertSame(payload, task.result().orElseThrow());
+            assertEquals(1, after.get(), "the caller suffix runs exactly once");
+        }
+    }
+
     // ---- 14, 15. Cancellation before and after publication; ensure during unwinding -----
 
     @Test

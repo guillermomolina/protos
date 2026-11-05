@@ -17,34 +17,32 @@
 
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.parser.ProtosParser;
-import com.guillermomolina.protos.parser.ast.SurfaceSequence;
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.guillermomolina.protos.semantic.Canonicalizer;
-import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
-import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.nodes.ControlFlowException;
-import com.oracle.truffle.api.source.Source;
-import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
-import org.graalvm.polyglot.Context;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 final class ProtosPerf006B4ATransferSubstrateTest {
-    private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
-            LanguageReference.create(ProtosLanguage.class);
-
     @Test
     void guestErrorLaneIsTruffleCatchableWithoutReplacingTheProtosOccurrence() {
         ProtosObjectValue error = ProtosObjectValue.rootObject();
@@ -78,96 +76,151 @@ final class ProtosPerf006B4ATransferSubstrateTest {
     }
 
     @Test
-    void bytecodeEhBridgePreservesExactInternalTransferIdentityAndRejectsForeignControl()
-            throws Exception {
-        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
-            context.initialize(ProtosLanguage.ID);
-            context.enter();
-            try {
-                ProtosBytecodeRootNode root = bytecodeRoot("null");
-                ProtosReturnHome home = new ProtosReturnHome();
-                Object value = ProtosNullValue.INSTANCE;
-                ProtosNonLocalReturnException nonLocalReturn =
-                        new ProtosNonLocalReturnException(home, value);
+    void directUnwindReplacesTheRetiredBridgeAndInterceptor() throws Exception {
+        assertThrows(
+                ClassNotFoundException.class,
+                () ->
+                        Class.forName(
+                                "com.guillermomolina.protos.execution."
+                                        + "ProtosBytecodeControlTransferException"));
+        assertTrue(
+                Arrays.stream(ProtosBytecodeRootNode.class.getDeclaredMethods())
+                        .noneMatch(
+                                method ->
+                                        method.getName()
+                                                .equals("interceptControlFlowException")),
+                "selected transfers must not be intercepted into another representation");
+        assertTrue(
+                Arrays.stream(ProtosBytecodeRootNode.class.getDeclaredMethods())
+                        .anyMatch(method -> method.getName().equals("interceptTruffleException")),
+                "the guest Error lane keeps its interception");
 
-                ProtosBytecodeControlTransferException bridgedReturn =
-                        assertThrows(
-                                ProtosBytecodeControlTransferException.class,
-                                () ->
-                                        root.interceptControlFlowException(
-                                                nonLocalReturn,
-                                                null,
-                                                null,
-                                                0));
-                assertSame(nonLocalReturn, bridgedReturn.transfer());
-                assertSame(home, nonLocalReturn.target());
-                assertSame(value, nonLocalReturn.value());
+        String root = read(
+                "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java");
+        int unwind = root.indexOf("unwindExceptions = {");
+        assertTrue(unwind > 0, "the generated interpreter must configure direct unwind");
+        String configured = root.substring(unwind, root.indexOf('}', unwind));
+        assertTrue(configured.contains("ProtosNonLocalReturnException.class"));
+        assertTrue(configured.contains("ProtosTaskCancellationException.class"));
+        assertFalse(configured.contains("ProtosSignalException"));
+        assertFalse(configured.contains("ControlFlowException.class"));
+        assertFalse(configured.contains("Throwable.class"));
 
-                ProtosTaskCancellationException cancellation =
-                        new ProtosTaskCancellationException();
-                ProtosBytecodeControlTransferException bridgedCancellation =
-                        assertThrows(
-                                ProtosBytecodeControlTransferException.class,
-                                () ->
-                                        root.interceptControlFlowException(
-                                                cancellation,
-                                                null,
-                                                null,
-                                                0));
-                assertSame(cancellation, bridgedCancellation.transfer());
-
-                ControlFlowException foreign = new ControlFlowException();
-                ControlFlowException observedForeign =
-                        assertThrows(
-                                ControlFlowException.class,
-                                () ->
-                                        root.interceptControlFlowException(
-                                                foreign,
-                                                null,
-                                                null,
-                                                0));
-                assertSame(foreign, observedForeign);
-            } finally {
-                context.leave();
-            }
-        }
-
-        System.out.println("PERF006_B4A_NARROW_EH_BRIDGE=PASS");
-        System.out.println("PERF006_B4A_FOREIGN_CONTROL_BRIDGED=NO");
+        System.out.println("PLAT070_TRUFFLE_UNWIND_EXCEPTIONS=EXACT_NLR_AND_CANCELLATION");
+        System.out.println("PLAT070_CONTROL_TRANSFER_BRIDGE=REMOVED");
+        System.out.println("PLAT070_CONTROL_TRANSFER_INTERCEPTOR=REMOVED");
     }
 
     @Test
-    void bridgeIsPackagePrivateAndCarriesNoGlobalMutableAuthority() {
-        assertFalse(
-                Modifier.isPublic(
-                        ProtosBytecodeControlTransferException.class.getModifiers()));
-        assertTrue(
-                Arrays.stream(
-                                ProtosBytecodeControlTransferException.class
-                                        .getDeclaredFields())
-                        .noneMatch(
-                                field ->
-                                        Modifier.isStatic(field.getModifiers())
-                                                && !Modifier.isFinal(field.getModifiers())));
+    void selectedTransfersRunActiveFinallyCleanupButNeverEnterGuestCatches() throws Exception {
+        ProtosActivation module = module();
+        AtomicInteger cleanups = new AtomicInteger();
+        AtomicInteger handlers = new AtomicInteger();
+        module.context().createLocalSlot("cleanup", counter(cleanups));
+        module.context().createLocalSlot("handlerProbe", counter(handlers));
 
-        System.out.println("PERF006_B4A_BRIDGE_PUBLIC=NO");
-        System.out.println("PERF006_B4A_GLOBAL_TRANSFER_AUTHORITY=NO");
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        "plat070-direct-unwind.protos",
+                        """
+                        m: () => {
+                            Error.handle(() => {
+                                (() => { ^7 }).ensure(cleanup)
+                            }, (caught) => { handlerProbe() })
+                            0
+                        }
+                        m()
+                        """,
+                        module);
+
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> "error=" + outcome.error());
+        assertEquals(7L, integer(outcome.value()));
+        assertEquals(1, cleanups.get(), "the crossed ensure cleanup runs exactly once");
+        assertEquals(0, handlers.get(), "a non-local return never enters Error.handle");
+
+        System.out.println("PLAT070_SELECTED_TRANSFER_FINALLY=RUN");
+        System.out.println("PLAT070_SELECTED_TRANSFER_GUEST_CATCH=NO");
     }
 
-    private static ProtosBytecodeRootNode bytecodeRoot(String characters) {
-        ProtosLanguage language = LANGUAGE_REF.get(null);
-        Source source =
-                Source.newBuilder(
-                                ProtosLanguage.ID,
-                                characters,
-                                "perf006-b4a-transfer-substrate.protos")
-                        .build();
-        return new CanonicalToBytecodeLowerer(language, source)
-                .lowerRoot(canonicalize(characters));
+    @Test
+    void guestErrorsRemainCatchableUnderDirectUnwind() throws Exception {
+        ProtosActivation module = module();
+        AtomicInteger cleanups = new AtomicInteger();
+        module.context().createLocalSlot("cleanup", counter(cleanups));
+
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        "plat070-guest-error-lane.protos",
+                        """
+                        Error.handle(() => {
+                            (() => { Error().signal() }).ensure(cleanup)
+                        }, (caught) => { 5 })
+                        """,
+                        module);
+
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> "error=" + outcome.error());
+        assertEquals(5L, integer(outcome.value()));
+        assertEquals(1, cleanups.get());
+
+        System.out.println("PLAT070_GUEST_ERROR_LANE=UNCHANGED");
     }
 
-    private static CanonicalSequence canonicalize(String characters) {
-        SurfaceSequence surface = new ProtosParser(characters).parseProgram();
-        return (CanonicalSequence) new Canonicalizer().canonicalize(surface);
+    @Test
+    void unselectedControlFlowExceptionIsNeverConvertedByAPreparedOwner() {
+        ProtosReturnHome home = new ProtosReturnHome();
+        ProtosPreparedCalls.PreparedClosureCall immediate =
+                ProtosPreparedCalls.PreparedClosureCall.immediateResult(
+                        ProtosNullValue.INSTANCE);
+        ControlFlowException foreign = new ControlFlowException();
+        assertSame(
+                foreign,
+                assertThrows(
+                        ControlFlowException.class,
+                        () -> immediate.handleControlTransfer(foreign)));
+
+        ProtosNonLocalReturnException nonLocalReturn =
+                new ProtosNonLocalReturnException(home, ProtosNullValue.INSTANCE);
+        assertSame(
+                nonLocalReturn,
+                assertThrows(
+                        ProtosNonLocalReturnException.class,
+                        () -> immediate.handleControlTransfer(nonLocalReturn)),
+                "a call owning no home propagates the original transfer object");
+        assertTrue(home.isActive());
+
+        System.out.println("PLAT070_FOREIGN_CONTROL_CONVERTED=NO");
+        System.out.println("PLAT070_ORIGINAL_CFE_IDENTITY=PRESERVED");
+    }
+
+    private static ProtosClosureValue counter(AtomicInteger count) {
+        ProtosNativeClosureBody body =
+                (activation, supplied) -> {
+                    count.incrementAndGet();
+                    return ProtosNullValue.INSTANCE;
+                };
+        return ProtosClosureValue.suspensionCapableNativeClosure(body, body);
+    }
+
+    private static long integer(Object value) {
+        if (value instanceof ProtosIntegerValue integer) {
+            return integer.longValue();
+        }
+        return assertInstanceOf(Long.class, value);
+    }
+
+    private static ProtosActivation module() throws Exception {
+        return new ProtosCoreBootstrap()
+                .bootstrap(Path.of("protos", "lib", "core"))
+                .newModuleActivation();
+    }
+
+    private static String read(String path) throws Exception {
+        return Files.readString(Path.of(path), StandardCharsets.UTF_8);
     }
 }

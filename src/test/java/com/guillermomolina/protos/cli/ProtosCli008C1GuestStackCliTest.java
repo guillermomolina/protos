@@ -111,6 +111,48 @@ final class ProtosCli008C1GuestStackCliTest {
         assertTrue(result.err().isBlank(), result.err());
     }
 
+    /** PLAT070: a valid direct-unwind non-local return is ordinary control, never an Error. */
+    @Test
+    void validNonLocalReturnPrintsNoErrorOrGuestStack() {
+        Result result =
+                run(
+                        InputStream.nullInputStream(),
+                        "-e",
+                        """
+                        m: () => {
+                            (() => { ^7 })()
+                            0
+                        }
+                        print(m())
+                        """);
+
+        assertEquals(0, result.code(), result.err());
+        assertEquals("7\n", result.out());
+        assertTrue(result.err().isBlank(), result.err());
+        System.out.println("PLAT070_VALID_NLR_CLI_ERROR=NO");
+    }
+
+    /** BUG025 program: a valid ^index inside Array.findIndex prints its result and no error. */
+    @Test
+    void findIndexNonLocalReturnPrintsItsResultWithoutError() {
+        Result result =
+                run(
+                        InputStream.nullInputStream(),
+                        "-e",
+                        """
+                        Arrays: import("std:collections/Array")
+
+                        print(Arrays.findIndex([1, 2, 3], (value) => {
+                            value == 2
+                        }))
+                        """);
+
+        assertEquals(0, result.code(), result.err());
+        assertEquals("1\n", result.out());
+        assertTrue(result.err().isBlank(), result.err());
+        System.out.println("PLAT070_FIND_INDEX_CLI_OUTPUT=1");
+    }
+
     private static void assertFrameLines(
             List<String> frames, String source, List<Integer> expectedLines) {
         assertEquals(expectedLines.size(), frames.size(), () -> String.join("\n", frames));

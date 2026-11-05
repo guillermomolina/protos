@@ -22,10 +22,13 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.*;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.callables.ProtosSuspensionCapableNativeClosureBody;
+import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
+import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -809,6 +812,204 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
         }
 
         System.out.println("BUG029_CLOSE_BEFORE_DISPATCH_RETIRES_READS=PASS");
+    }
+
+    /*
+     * PLAT070: internal control transfers unwind directly through the operation-owned C-prime and
+     * never enter its guest TryCatch. The root's TryFinally accounts them as the failed target
+     * invocation exactly once; the transfer keeps its identity and leaves the dispatch.
+     */
+    @Test
+    void plat070DirectNonLocalReturnFromTargetReadIsAccountedOnce() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosReturnHome home = new ProtosReturnHome();
+            AtomicInteger escapes = new AtomicInteger();
+            AtomicInteger reads = new AtomicInteger();
+            ProtosClosureValue returning =
+                    homedSourceClosure(
+                            scope.language(), f.module, "() => { ^1 }",
+                            "plat070-buffered-reader-return.protos", home);
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                reads.incrementAndGet();
+                                if (escapes.getAndIncrement() == 0) {
+                                    return ProtosClosureInvoker.invoke(returning, List.of());
+                                }
+                                return resolvedFuture(f, 'Z');
+                            }));
+
+            List<ProtosFutureValue> queued =
+                    captureTurn(
+                            scope.language(),
+                            f,
+                            "capture(reader.read(1))\ncapture(reader.read(1))",
+                            "plat070-buffered-reader-nlr.protos");
+            ControlFlowException escaped = dispatchCapturingTransfer(f.domain);
+
+            assertNotNull(escaped, "the original transfer leaves the dispatch");
+            assertSame(home, ((ProtosNonLocalReturnException) escaped).target());
+            assertIoErrorFailure(f, queued.get(0));
+            assertNotEquals(
+                    ProtosFutureValue.State.PENDING,
+                    queued.get(1).state(),
+                    "a queued read is not left blocked");
+            assertTrue(reads.get() <= 2, "no guest read is replayed");
+            assertFalse(f.domain.dispatchOne());
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+
+        System.out.println("PLAT070_BUFFERED_READER_NLR_ACCOUNTED=PASS");
+    }
+
+    @Test
+    void plat070CancellationFromTargetReadKeepsIdentityAndIsAccountedOnce() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosTaskCancellationException cancellation = new ProtosTaskCancellationException();
+            AtomicInteger reads = new AtomicInteger();
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                reads.incrementAndGet();
+                                throw cancellation;
+                            }));
+            f.module.context().createLocalSlot("reader", reader(f));
+
+            ProtosFutureValue outer =
+                    invokeCPrimeReturningFuture(
+                            scope.language(), f, "reader.read(1)",
+                            "plat070-buffered-reader-cancel.protos");
+
+            assertSame(cancellation, dispatchCapturingTransfer(f.domain));
+            assertEquals(1, reads.get());
+            assertIoErrorFailure(f, outer);
+            assertFalse(f.domain.dispatchOne());
+        }
+
+        System.out.println("PLAT070_BUFFERED_READER_CANCELLATION_ACCOUNTED=PASS");
+    }
+
+    @Test
+    void plat070GuestErrorFromTargetReadKeepsTheInvocationFailureLane() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            AtomicInteger reads = new AtomicInteger();
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                reads.incrementAndGet();
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }));
+            f.module.context().createLocalSlot("reader", reader(f));
+
+            ProtosFutureValue outer =
+                    invokeCPrimeReturningFuture(
+                            scope.language(), f, "reader.read(1)",
+                            "plat070-buffered-reader-error.protos");
+
+            assertNull(dispatchCapturingTransfer(f.domain), "a guest Error is not a transfer");
+            assertEquals(1, reads.get());
+            assertIoErrorFailure(f, outer);
+        }
+
+        System.out.println("PLAT070_BUFFERED_READER_GUEST_ERROR_LANE=UNCHANGED");
+    }
+
+    @Test
+    void plat070NonLocalReturnAfterSuspendedTargetReadResumesIsAccountedOnce()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosReturnHome home = new ProtosReturnHome();
+            ProtosFutureValue gate = future(f);
+            AtomicInteger reads = new AtomicInteger();
+            f.module.context().createLocalSlot(
+                    "readProbe",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                reads.incrementAndGet();
+                                return ProtosNullValue.INSTANCE;
+                            }));
+            f.module.context().createLocalSlot(
+                    "readGate",
+                    ProtosClosureValue.nativeClosure((activation, supplied) -> gate));
+            f.source.createLocalSlot(
+                    "read",
+                    homedSourceClosure(
+                            scope.language(), f.module,
+                            "(max) => { readProbe()\nreadGate().value()\n^1 }",
+                            "plat070-buffered-reader-suspended-read.protos", home));
+            f.module.context().createLocalSlot("reader", reader(f));
+
+            ProtosFutureValue outer =
+                    invokeCPrimeReturningFuture(
+                            scope.language(), f, "reader.read(1)",
+                            "plat070-buffered-reader-suspended.protos");
+            assertNull(dispatchCapturingTransfer(f.domain));
+            assertEquals(1, reads.get());
+            assertEquals(ProtosFutureValue.State.PENDING, outer.state());
+
+            assertTrue(gate.resolve(ProtosNullValue.INSTANCE, f.module));
+            ControlFlowException escaped = dispatchCapturingTransfer(f.domain);
+            assertNotNull(escaped);
+            assertSame(home, ((ProtosNonLocalReturnException) escaped).target());
+            assertEquals(1, reads.get(), "the suspended read prefix is never replayed");
+            assertIoErrorFailure(f, outer);
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+
+        System.out.println("PLAT070_BUFFERED_READER_NLR_AFTER_SUSPENSION=PASS");
+    }
+
+    /** Dispatches until idle; answers the internal transfer that left a dispatch, or null. */
+    private static ControlFlowException dispatchCapturingTransfer(
+            ProtosActorExecutionDomain domain) {
+        ControlFlowException escaped = null;
+        for (int dispatches = 0; dispatches < 32; dispatches++) {
+            try {
+                if (!domain.dispatchOne()) {
+                    return escaped;
+                }
+            } catch (ControlFlowException transfer) {
+                escaped = transfer;
+            }
+        }
+        throw new AssertionError("BufferedReader C-prime did not become idle");
+    }
+
+    private static void assertIoErrorFailure(Fixture f, ProtosFutureValue outer) {
+        assertEquals(ProtosFutureValue.State.FAILED, outer.state());
+        assertSame(
+                f.prelude.bindings().readLocalSlot("IOError").orElseThrow(),
+                outer.failedError().orElseThrow().parent().orElseThrow());
+    }
+
+    /** A source Closure whose ^ targets {@code home} (a Task-free home: a valid transfer). */
+    private static ProtosClosureValue homedSourceClosure(
+            ProtosLanguage language,
+            ProtosActivation creator,
+            String characters,
+            String sourceName,
+            ProtosReturnHome home)
+            throws Exception {
+        CanonicalClosure definition = closureDefinition(characters);
+        ProtosClosureExecutionPlan plan =
+                ProtosClosureExecutionPlan.bytecode(
+                        definition, language, source(characters, sourceName));
+        return new ProtosClosureValue(
+                definition,
+                creator.lexicalContextsForClosureCapture(),
+                creator.receiver(),
+                creator.methodHome().orElse(null),
+                home,
+                creator.prelude().orElseThrow(),
+                plan);
     }
 
     private static List<ProtosFutureValue> captureReads(

@@ -57,11 +57,11 @@ import java.util.Objects;
  * entry without a prepared call has no owner and only projects its result to
  * the guest domain.
  *
- * <p>Like a Bytecode root, the transport reports a control transfer leaving it
- * in bridged form ({@link ProtosBytecodeControlTransferException}), so callers
- * compose it exactly like a child {@link ContinuationResult}. Nested
- * transports complete innermost first: an inner transport finishes its owner
- * before returning its result to the outer one.
+ * <p>Like a Bytecode root, the transport lets a control transfer leaving it
+ * propagate as the original {@link ControlFlowException} (PLAT070 direct
+ * unwind), so callers compose it exactly like a child {@link
+ * ContinuationResult}. Nested transports complete innermost first: an inner
+ * transport finishes its owner before returning its result to the outer one.
  *
  * <p>Diagnostic continuity (CLI008): the transport keeps the logical location of its terminal
  * call, created only when the transport itself is, i.e. only on a real suspension. When an
@@ -265,9 +265,6 @@ final class ProtosTailCallContinuation implements TruffleObject {
             next = Objects.requireNonNull(
                     resumeInner(resumeValue),
                     "resumed terminal Closure continuation returned null");
-        } catch (ProtosBytecodeControlTransferException bridged) {
-            state = State.DONE;
-            return completeTransfer(bridged.transfer());
         } catch (ControlFlowException transfer) {
             state = State.DONE;
             return completeTransfer(transfer);
@@ -336,13 +333,13 @@ final class ProtosTailCallContinuation implements TruffleObject {
     }
 
     /*
-     * The invocation left through a control transfer. Its owner selects its own
-     * non-local return; any other transfer completes the owner and continues
-     * unwinding in the bridged form a Bytecode root would produce.
+     * The resumed invocation left through a control transfer. Its owner selects
+     * its own non-local return; any other transfer completes the owner and
+     * continues unwinding as the same object.
      */
     private Object completeTransfer(ControlFlowException transfer) {
         if (owner == null) {
-            throw ProtosBytecodeControlTransferException.bridge(transfer);
+            throw transfer;
         }
         Object handled;
         try {
@@ -351,7 +348,7 @@ final class ProtosTailCallContinuation implements TruffleObject {
             if (ownerFinishesHere) {
                 owner.complete();
             }
-            throw ProtosBytecodeControlTransferException.bridge(escaped);
+            throw escaped;
         } catch (RuntimeException | Error escaped) {
             if (ownerFinishesHere) {
                 owner.complete();
@@ -400,10 +397,16 @@ final class ProtosTailCallContinuation implements TruffleObject {
         Object outcome;
         try {
             outcome = enterTerminalPreparedCall(prepared, indirectCall);
-        } catch (ProtosBytecodeControlTransferException bridged) {
+        } catch (ControlFlowException transfer) {
+            /*
+             * PLAT070: the original transfer reaches this owner directly. A
+             * matching non-local return of the owned home is consumed; any
+             * other transfer completes the owner once and propagates as the
+             * same object.
+             */
             Object handled;
             try {
-                handled = prepared.handleControlTransfer(bridged.transfer());
+                handled = prepared.handleControlTransfer(transfer);
             } catch (RuntimeException | Error escaped) {
                 if (ownerFinishesHere) {
                     prepared.complete();
@@ -417,11 +420,6 @@ final class ProtosTailCallContinuation implements TruffleObject {
                 prepared.complete();
             }
             throw failure;
-        } catch (ControlFlowException transfer) {
-            if (ownerFinishesHere) {
-                prepared.complete();
-            }
-            throw transfer;
         } catch (RuntimeException failure) {
             if (ownerFinishesHere) {
                 prepared.complete();
