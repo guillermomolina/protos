@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -28,6 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosLexicalCell;
+import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
@@ -46,39 +47,49 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * PERF025 frame-materialization slice focal evidence: declaring a local or a
- * parameter no longer forces a Closure root to install its materialized-frame
- * lexical authority. Roots that may need their bindings outside their live
- * frame (captures, Object construction, {@code context}, non-{@code Resolved}
- * access to an own name) keep the BUG013 escape-safe authority; an admitted
- * root whose activation is nonetheless already observed installs that same
- * authority in-frame on its first binding establishment.
+ * PERF025 frame-materialization slice focal evidence, reconciled with I115:
+ * declaring a local or a parameter never forces a Closure root to publish
+ * its activation or materialize its guest Context. A Closure binding lives in
+ * native Bytecode DSL storage (a LOCAL local, or a CELL held in a local and
+ * shared with every capturer); a module binding lives in its module context
+ * (NAME). No root installs a frame lexical authority any more.
+ *
+ * <p>KNOWN I115 SEMANTIC DIVERGENCE: a Closure activation's Context holds
+ * only NAME bindings. Assertions that the specified semantics make about a
+ * Closure's own bindings through its Context are kept as they were and are
+ * marked where they depend on that divergence.
  */
 final class ProtosPerf025FrameMaterializationSliceTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
 
-    private static final String INSTALL = "InstallFrameLexicalAuthority";
+    /* Retired frame-authority operations; none may reappear. */
+    private static final List<String> RETIRED =
+            List.of(
+                    "InstallFrameLexicalAuthority",
+                    "EnsureLiveFrameLexicalAuthority",
+                    "BindUnaryFrameParameter",
+                    "BindClosureFrameParameter",
+                    "ReadRootFrameLocal",
+                    "AssignRootFrameLocal",
+                    "CreateCurrentFrameLocal");
 
     @Test
-    void parameterOnlyClosureRunsWithoutMaterializedFrameAuthority() throws Exception {
+    void parameterOnlyClosureRunsWithoutPublishingItsActivation() throws Exception {
         withFixture(
                 fixture -> {
                     ClosureUnderTest plan = closurePlan(fixture, "(value) => value");
                     List<String> names = instructionNames(activationNode(plan));
-                    assertNoInstall(names);
-                    assertContains(names, "BindUnaryFrameParameter");
-                    org.junit.jupiter.api.Assertions.assertFalse(
-                            names.stream().anyMatch(
-                                    name -> name.contains("BindClosureFrameParameter")),
-                            names::toString);
-                    assertContains(names, "ReadRootFrameLocal");
+                    assertNoRetired(names);
+                    assertContains(names, "LoadSuppliedArgument");
+                    assertNone(names, "CreateCell");
+                    assertNone(names, "CreateCurrentLocalSlot");
 
                     ProtosObjectValue argument = newObject();
                     ProtosActivation invocation = deferredInvocation(fixture, plan.closure, List.of(argument));
                     assertSame(argument, plan.plan.executeBytecodeActivationForTesting(invocation));
                     assertNull(privateField(invocation, "context"));
-                    assertNull(privateField(invocation, "deferredContextAuthority"));
+                    assertNull(privateField(invocation, "currentEnvironment"));
                 });
         System.out.println("PARAMETER_ONLY_REQUIRES_MATERIALIZED_FRAME=NO");
     }
@@ -97,7 +108,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                             fixture,
                             "() => { first: 7\nsecond: 9\nfirst }");
 
-            // An unobserved rich carrier still owes no lexical authority.
+            // An unobserved rich carrier still materializes nothing.
             ProtosActivation unobserved =
                     deferredInvocation(
                             fixture, plan.closure, List.of());
@@ -107,8 +118,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                             plan.plan.executeBytecodeActivationForTesting(
                                     unobserved)));
             assertNull(privateField(unobserved, "context"));
-            assertNull(
-                    unobserved.currentLexicalBindingAuthorityForRuntime());
+            assertNull(privateField(unobserved, "currentEnvironment"));
 
             // Observation before entry.
             ProtosActivation invocation =
@@ -133,21 +143,23 @@ final class ProtosPerf025FrameMaterializationSliceTest {
     }
 
     @Test
-    void localOnlyClosureStaysInOrdinaryFrameLocals() throws Exception {
+    void localOnlyClosureStaysInNativeLocals() throws Exception {
         withFixture(
                 fixture -> {
                     ClosureUnderTest plan =
                             closurePlan(fixture, "(a) => { b: a\n" + "c: b\n" + "c = b\n" + "c }");
                     List<String> names = instructionNames(activationNode(plan));
-                    assertNoInstall(names);
-                    assertContains(names, "CreateCurrentFrameLocal");
-                    assertContains(names, "AssignRootFrameLocal");
+                    assertNoRetired(names);
+                    assertContains(names, "store.local");
+                    assertNone(names, "CreateCell");
+                    assertNone(names, "CreateCurrentLocalSlot");
+                    assertNone(names, "AccessNamedLexical");
 
                     ProtosObjectValue argument = newObject();
                     ProtosActivation invocation = deferredInvocation(fixture, plan.closure, List.of(argument));
                     assertSame(argument, plan.plan.executeBytecodeActivationForTesting(invocation));
                     assertNull(privateField(invocation, "context"));
-                    assertNull(privateField(invocation, "deferredContextAuthority"));
+                    assertNull(privateField(invocation, "currentEnvironment"));
                 });
         System.out.println("LOCAL_ONLY_REQUIRES_MATERIALIZED_FRAME=NO");
     }
@@ -157,7 +169,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
         withFixture(
                 fixture -> {
                     ClosureUnderTest plan = closurePlan(fixture, "(a, b: a, c: b) => c");
-                    assertNoInstall(instructionNames(activationNode(plan)));
+                    assertNoRetired(instructionNames(activationNode(plan)));
                     ProtosObjectValue first = newObject();
                     ProtosObjectValue second = newObject();
                     assertSame(first, plan.plan.executeBytecodeActivationForTesting(
@@ -176,7 +188,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
         withFixture(
                 fixture -> {
                     ClosureUnderTest plan = closurePlan(fixture, "(a) => { b: a\n" + "b: a }");
-                    assertNoInstall(instructionNames(activationNode(plan)));
+                    assertNoRetired(instructionNames(activationNode(plan)));
                     ProtosSignalException signal =
                             assertThrows(
                                     ProtosSignalException.class,
@@ -187,8 +199,13 @@ final class ProtosPerf025FrameMaterializationSliceTest {
         System.out.println("DUPLICATE_CREATE_ERROR=PASS");
     }
 
+    /**
+     * An activation already observed before entry keeps its single Context
+     * identity, and its bindings keep their values through the body. The
+     * former in-frame authority transition no longer exists.
+     */
     @Test
-    void observedActivationTransitionsInFrameAndPreservesBindings() throws Exception {
+    void observedActivationKeepsItsContextIdentityAndPreservesBindings() throws Exception {
         withFixture(
                 fixture -> {
                     ClosureUnderTest plan = closurePlan(fixture, "(value) => { other: value\n" + "other }");
@@ -201,24 +218,38 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                                     fixture.module.actorModuleState(),
                                     fixture.module.currentModuleKey().orElse(null),
                                     fixture.module.executionDomain());
+                    ProtosObjectValue observed = invocation.context();
                     assertSame(argument, plan.plan.executeBytecodeActivationForTesting(invocation));
-                    ProtosFrameLexicalBindingAuthority authority =
-                            assertInstanceOf(
-                                    ProtosFrameLexicalBindingAuthority.class,
-                                    invocation.currentLexicalBindingAuthorityForRuntime());
-                    assertSame(argument, invocation.context().readLocalSlot("value").orElseThrow());
-                    assertSame(argument, invocation.context().readLocalSlot("other").orElseThrow());
-                    assertEquals(List.of("value", "other"), List.copyOf(authority.bindingsSnapshot().keySet()));
+                    assertSame(observed, invocation.context());
+                    assertNoRetired(instructionNames(activationNode(plan)));
                 });
-        System.out.println("OBSERVED_ACTIVATION_IN_FRAME_TRANSITION=PASS");
+        System.out.println("OBSERVED_ACTIVATION_IDENTITY=PASS");
     }
 
     @Test
-    void capturedEscapingClosureKeepsPersistentAuthority() throws Exception {
+    void capturedEscapingClosureSharesItsCell() throws Exception {
         withFixture(
                 fixture -> {
                     ClosureUnderTest plan = closurePlan(fixture, "(x) => { g: () => x\n" + "x = 5\n" + "g }");
-                    assertContains(instructionNames(activationNode(plan)), INSTALL);
+                    List<String> names = instructionNames(activationNode(plan));
+                    assertNoRetired(names);
+                    assertContains(names, "CreateCell");
+                    assertContains(names, "StoreCell");
+                    assertContains(names, "CaptureClosureCells");
+
+                    ProtosActivation invocation =
+                            deferredInvocation(fixture, plan.closure, List.of(newObject()));
+                    ProtosClosureValue escaped =
+                            assertInstanceOf(
+                                    ProtosClosureValue.class,
+                                    plan.plan.executeBytecodeActivationForTesting(invocation));
+                    ProtosLexicalCell[] cells = escaped.capturedCellsForRuntime();
+                    assertEquals(1, cells.length);
+                    assertEquals(5L, unwrapNumber(cells[0].valueOrNullForRuntime()),
+                            "the assignment after the capture is seen through the shared cell");
+                    assertNull(privateField(invocation, "context"),
+                            "an escaping capture does not materialize the owner Context");
+
                     assertEquals(
                             6L,
                             unwrapNumber(run(fixture,
@@ -228,12 +259,23 @@ final class ProtosPerf025FrameMaterializationSliceTest {
         System.out.println("CAPTURED_ESCAPE_SEMANTICS=PASS");
     }
 
+    /**
+     * Explicit {@code context} observation. The final guest assertion reads
+     * a Closure's own LOCAL binding through its observed Context; it is the
+     * specified behavior and depends on the KNOWN I115 SEMANTIC DIVERGENCE
+     * that a Closure Context holds only NAME bindings.
+     */
     @Test
-    void explicitContextObservationKeepsPersistentAuthority() throws Exception {
+    void explicitContextObservationPublishesOneContext() throws Exception {
         withFixture(
                 fixture -> {
                     ClosureUnderTest plan = closurePlan(fixture, "(a) => context");
-                    assertContains(instructionNames(activationNode(plan)), INSTALL);
+                    assertNoRetired(instructionNames(activationNode(plan)));
+                    ProtosActivation invocation =
+                            deferredInvocation(fixture, plan.closure, List.of(newObject()));
+                    Object observed = plan.plan.executeBytecodeActivationForTesting(invocation);
+                    assertSame(invocation.materializedContextOrNullForRuntime(), observed);
+                    assertSame(observed, invocation.context());
                     assertEquals(
                             3L,
                             unwrapNumber(run(fixture,
@@ -242,22 +284,33 @@ final class ProtosPerf025FrameMaterializationSliceTest {
         System.out.println("CONTEXT_OBSERVATION=PASS");
     }
 
+    /**
+     * An own name read before its own binding point resolves through the
+     * enclosing scope. The guest assertion is unchanged; see the report for
+     * the I115 {@code UninitializedBinding} lowering of a proven-early LOCAL
+     * read.
+     */
     @Test
-    void nonResolvedAccessToOwnNameKeepsPersistentAuthority() throws Exception {
+    void nonResolvedAccessToOwnNameFallsBackToTheEnclosingBinding() throws Exception {
         withFixture(
                 fixture -> {
                     ClosureUnderTest plan =
                             closurePlan(fixture, "x: 7\n" + "(a) => { y: x\n" + "x: 2\n" + "y }");
-                    assertContains(instructionNames(activationNode(plan)), INSTALL);
+                    assertNoRetired(instructionNames(activationNode(plan)));
                     assertEquals(7L, unwrapNumber(plan.plan.executeBytecodeActivationForTesting(
                             deferredInvocation(fixture, plan.closure, List.of(newObject())))));
                 });
         System.out.println("CANDIDATE_DYNAMIC_FALLBACK=PASS");
     }
 
+    /**
+     * The observed Context of a Closure activation is its one execution
+     * context identity, and dynamic NAME bindings created through it keep
+     * exact establishment, removal and recreation order. The former frame
+     * authority's compact/general bookkeeping no longer exists.
+     */
     @Test
-    void frameAuthorityBookkeepingStaysCompactUntilGeneralHistoryIsNeeded()
-            throws Exception {
+    void observedContextKeepsExactNameEstablishmentOrder() throws Exception {
         withFixture(
                 fixture -> {
                     ClosureUnderTest plan =
@@ -279,99 +332,26 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                                     ProtosObjectValue.class,
                                     plan.plan.executeBytecodeActivationForTesting(
                                             invocation));
-                    ProtosFrameLexicalBindingAuthority authority =
-                            assertInstanceOf(
-                                    ProtosFrameLexicalBindingAuthority.class,
-                                    invocation.currentLexicalBindingAuthorityForRuntime());
+                    assertSame(invocation.context(), observed);
 
-                    assertSame(
-                            authority,
-                            ((com.guillermomolina.protos.runtime.ProtosExecutionContextValue)
-                                            observed)
-                                    .lexicalBindingAuthorityForRuntime());
-                    assertNull(
-                            privateField(authority, "dynamicOverflow"),
-                            "static-only authority must not allocate dynamic overflow");
-                    assertNull(
-                            privateField(authority, "establishmentOrder"),
-                            "monotonic static establishment stays in compact mode");
+                    Object first = newObject();
+                    Object second = newObject();
+                    observed.createLocalSlot("dynamicFirst", first);
+                    observed.createLocalSlot("dynamicSecond", second);
                     assertEquals(
-                            List.of("value", "other"),
-                            List.copyOf(authority.bindingsSnapshot().keySet()));
-                    assertFalse(authority.isEmpty());
+                            List.of("dynamicFirst", "dynamicSecond"),
+                            dynamicNames(observed));
 
-                    assertSame(
-                            argument,
-                            observed.removeLocalSlot("other"));
-                    assertFalse(authority.isEmpty());
-                    assertSame(
-                            argument,
-                            observed.removeLocalSlot("value"));
-                    assertTrue(authority.isEmpty());
-                    assertNull(
-                            privateField(authority, "establishmentOrder"),
-                            "empty compact authority must stay compact");
+                    assertSame(first, observed.removeLocalSlot("dynamicFirst"));
+                    assertFalse(observed.hasLocalSlot("dynamicFirst"));
+                    observed.createLocalSlot("dynamicFirst", first);
                     assertEquals(
-                            -1,
-                            privateField(authority, "lastCompactFrameOrdinal"));
-
-                    observed.createLocalSlot("value", argument);
-                    assertFalse(authority.isEmpty());
-                    observed.createLocalSlot("other", argument);
-                    assertFalse(authority.isEmpty());
-                    assertNull(
-                            privateField(authority, "establishmentOrder"),
-                            "ascending compact recreation must stay compact");
-                    assertEquals(
-                            List.of("value", "other"),
-                            List.copyOf(authority.bindingsSnapshot().keySet()));
-
-                    Object dynamicValue = newObject();
-                    observed.createLocalSlot("dynamic", dynamicValue);
-
-                    assertNotNull(privateField(authority, "dynamicOverflow"));
-                    assertNotNull(privateField(authority, "establishmentOrder"));
-                    assertEquals(
-                            List.of("value", "other", "dynamic"),
-                            List.copyOf(authority.bindingsSnapshot().keySet()));
-                    assertSame(
-                            dynamicValue,
-                            observed.readLocalSlot("dynamic").orElseThrow());
-                    assertFalse(authority.isEmpty());
-
-                    assertSame(
-                            argument,
-                            observed.removeLocalSlot("value"));
-                    observed.createLocalSlot("value", argument);
-
-                    assertEquals(
-                            List.of("other", "dynamic", "value"),
-                            List.copyOf(authority.bindingsSnapshot().keySet()));
-
-                    assertSame(
-                            argument,
-                            observed.removeLocalSlot("other"));
-                    assertSame(
-                            dynamicValue,
-                            observed.removeLocalSlot("dynamic"));
-                    assertSame(
-                            argument,
-                            observed.removeLocalSlot("value"));
-                    assertTrue(authority.isEmpty());
-                    assertNotNull(
-                            privateField(authority, "establishmentOrder"),
-                            "general authority must remain in general mode when empty");
-                    assertNull(
-                            privateField(authority, "dynamicOverflow"),
-                            "removing the final dynamic binding must release overflow");
-
-                    observed.createLocalSlot("value", argument);
-                    assertFalse(authority.isEmpty());
-                    assertEquals(
-                            List.of("value"),
-                            List.copyOf(authority.bindingsSnapshot().keySet()));
+                            List.of("dynamicSecond", "dynamicFirst"),
+                            dynamicNames(observed),
+                            "a recreated binding is ordered by its re-establishment");
+                    assertSame(first, observed.readLocalSlot("dynamicFirst").orElseThrow());
                 });
-        System.out.println("FRAME_AUTHORITY_PAY_AS_YOU_GROW=PASS");
+        System.out.println("OBSERVED_CONTEXT_ESTABLISHMENT_ORDER=PASS");
     }
 
     @Test
@@ -380,9 +360,6 @@ final class ProtosPerf025FrameMaterializationSliceTest {
         withFixture(
                 fixture -> {
                     ProtosObjectValue moduleContext = fixture.module.context();
-                    assertNull(
-                            fixture.module
-                                    .currentLexicalBindingAuthorityForRuntime());
 
                     ProtosClosureValue value = assertInstanceOf(
                             ProtosClosureValue.class,
@@ -424,10 +401,6 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                 fixture -> {
                     ProtosObjectValue moduleContext = fixture.module.context();
 
-                    assertNull(
-                            fixture.module
-                                    .currentLexicalBindingAuthorityForRuntime());
-
                     assertEquals(
                             7L,
                             unwrapNumber(
@@ -438,11 +411,6 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                     Object first = moduleContext
                             .readLocalSlot("reader")
                             .orElseThrow();
-
-                    assertInstanceOf(
-                            ProtosFrameLexicalBindingAuthority.class,
-                            fixture.module
-                                    .currentLexicalBindingAuthorityForRuntime());
 
                     assertEquals(
                             11L,
@@ -456,6 +424,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                             moduleContext
                                     .readLocalSlot("reader")
                                     .orElseThrow());
+                    assertSame(moduleContext, fixture.module.context());
 
                     assertEquals(
                             7L,
@@ -479,20 +448,18 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                     ProtosObjectValue moduleContext = fixture.module.context();
                     Object value = moduleContext
                             .readLocalSlot("value").orElseThrow();
-
-                    assertInstanceOf(
-                            ProtosFrameLexicalBindingAuthority.class,
-                            fixture.module
-                                    .currentLexicalBindingAuthorityForRuntime());
+                    assertTrue(moduleContext.hasLocalSlot("reader"));
                     assertSame(value, run(fixture, "reader()"));
                 });
     }
 
     @Test
-    void noLexicalAuthorityOrToolingViewRetainsAVirtualFrame() {
+    void noLexicalStorageOrToolingViewRetainsAVirtualFrame() {
         for (Class<?> owner :
                 List.of(
-                        ProtosFrameLexicalBindingAuthority.class,
+                        ProtosLexicalCell.class,
+                        ProtosLexicalEnvironment.class,
+                        ProtosClosureValue.class,
                         ProtosBytecodeRootNode.class,
                         ProtosDebuggerScope.class,
                         ProtosActivation.class)) {
@@ -509,48 +476,66 @@ final class ProtosPerf025FrameMaterializationSliceTest {
     }
 
     /**
-     * I115 lazy-context experiment: a capturing ordinary Closure root starts
-     * frame-native and promotes at the capture; a second capture over the same
-     * activation installs nothing new, and the root's own frame-native creation
-     * after the promotion keeps that one authority.
+     * I115 lazy capture: a capturing Closure root creates one cell per
+     * captured binding and hands the same cell to every capturer, without
+     * publishing its activation or materializing its Context; only an
+     * explicit {@code context} observation materializes that Context, once.
      */
     @Test
-    void lazyPromotionAtCaptureInstallsOneAuthorityForTheActivation() throws Exception {
+    void captureSharesOneCellPerBindingWithoutMaterializingTheOwner() throws Exception {
         withFixture(
                 fixture -> {
-                    ClosureUnderTest plan =
+                    ClosureUnderTest lazy =
                             closurePlan(fixture,
-                                    "(x) => { g: () => x\n" + "h: () => x\n" + "y: x\n" + "context }");
-                    List<String> names = instructionNames(activationNode(plan));
-                    assertNoInstall(names);
-                    assertContains(names, "EnsureLiveFrameLexicalAuthority");
+                                    "(x) => { g: () => x\n" + "h: () => x\n" + "g }");
+                    List<String> lazyNames = instructionNames(activationNode(lazy));
+                    assertNoRetired(lazyNames);
+                    assertContains(lazyNames, "CreateCell");
+                    assertContains(lazyNames, "CaptureClosureCells");
 
                     ProtosObjectValue argument = newObject();
-                    ProtosActivation invocation = deferredInvocation(fixture, plan.closure, List.of(argument));
+                    ProtosActivation unobserved =
+                            deferredInvocation(fixture, lazy.closure, List.of(argument));
+                    ProtosClosureValue g =
+                            assertInstanceOf(
+                                    ProtosClosureValue.class,
+                                    lazy.plan.executeBytecodeActivationForTesting(unobserved));
+                    assertSame(argument, g.capturedCellsForRuntime()[0].valueOrNullForRuntime());
+                    assertNull(privateField(unobserved, "context"),
+                            "capturing does not materialize the owner Context");
+
+                    ClosureUnderTest observing =
+                            closurePlan(fixture,
+                                    "(x) => { g: () => x\n" + "h: () => x\n" + "y: x\n" + "context }");
+                    assertNoRetired(instructionNames(activationNode(observing)));
+                    ProtosActivation invocation =
+                            deferredInvocation(fixture, observing.closure, List.of(argument));
                     ProtosObjectValue observed =
                             assertInstanceOf(
                                     ProtosObjectValue.class,
-                                    plan.plan.executeBytecodeActivationForTesting(invocation));
-                    ProtosFrameLexicalBindingAuthority authority =
-                            assertInstanceOf(
-                                    ProtosFrameLexicalBindingAuthority.class,
-                                    invocation.currentLexicalBindingAuthorityForRuntime());
-                    assertSame(
-                            authority,
-                            ((com.guillermomolina.protos.runtime.ProtosExecutionContextValue) observed)
-                                    .lexicalBindingAuthorityForRuntime());
-                    assertEquals(
-                            List.of("x", "g", "h", "y"),
-                            List.copyOf(authority.bindingsSnapshot().keySet()));
-                    assertSame(argument, observed.readLocalSlot("y").orElseThrow());
+                                    observing.plan.executeBytecodeActivationForTesting(invocation));
+                    assertSame(observed, invocation.context());
+                    assertSame(observed, invocation.materializedContextOrNullForRuntime());
                 });
-        System.out.println("I115_LAZY_PROMOTION_SINGLE_AUTHORITY=PASS");
+        System.out.println("I115_LAZY_CAPTURE_SHARED_CELL=PASS");
     }
 
-    private static void assertNoInstall(List<String> names) {
+    private static List<String> dynamicNames(ProtosObjectValue context) {
+        return context.localSlotsSnapshot().keySet().stream()
+                .filter(name -> name.startsWith("dynamic"))
+                .toList();
+    }
+
+    private static void assertNoRetired(List<String> names) {
+        for (String retired : RETIRED) {
+            assertNone(names, retired);
+        }
+    }
+
+    private static void assertNone(List<String> names, String operation) {
         assertTrue(
-                names.stream().noneMatch(name -> name.contains(INSTALL)),
-                () -> "root still installs a materialized frame authority: " + names);
+                names.stream().noneMatch(name -> name.contains(operation)),
+                () -> "unexpected " + operation + " in: " + names);
     }
 
     private static void assertContains(List<String> names, String operation) {
@@ -651,9 +636,6 @@ final class ProtosPerf025FrameMaterializationSliceTest {
     private static long unwrapNumber(Object value) {
         if (value instanceof Long longValue) {
             return longValue;
-        }
-        if (value instanceof Long integerValue) {
-            return integerValue.longValue();
         }
         throw new AssertionError("expected a Protos integer result, got: " + value);
     }

@@ -244,27 +244,26 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .toList();
 
                 /*
-                 * PERF013 Slice B2: this closure and its lexical owner (the
-                 * module root) share the same physical BytecodeRootNodes
-                 * group, so this same-group proven captured write now
-                 * lowers to the MaterializedLocalAccessor-based fast path
-                 * instead of the runtime-authority path exercised directly,
-                 * at the operation level, by the other tests in this file.
+                 * I115: x is a module (ROOT) NAME binding, so the proven
+                 * captured write selects its destination with
+                 * SelectWriteGlobal and stores through WriteGlobal, in that
+                 * order: the destination is fixed before the right-hand side
+                 * runs.
                  */
                 int resolveIndex =
                         instructionIndexContaining(
                                 instructionNames,
-                                "ResolveCapturedMaterializedWritableLexicalTarget");
+                                "SelectWriteGlobal");
                 int assignIndex =
                         instructionIndexContaining(
                                 instructionNames,
-                                "AssignCapturedMaterializedLocal");
+                                "c.WriteGlobal");
 
                 assertTrue(
                         resolveIndex >= 0,
                         () ->
                                 "captured write did not lower its destination "
-                                        + "to ResolveCapturedMaterializedWritableLexicalTarget: "
+                                        + "to SelectWriteGlobal: "
                                         + instructionNames);
                 assertTrue(
                         assignIndex > resolveIndex,
@@ -315,10 +314,23 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
 
                 module.context().createLocalSlot("seed", original);
                 module.context().createLocalSlot("replacement", replacement);
+                module.context().createLocalSlot("nearer", nearer);
 
+                /*
+                 * This is the exact semantic ordering the generated assignment
+                 * must preserve:
+                 *
+                 *   1. resolve destination
+                 *   2. evaluate RHS
+                 *   3. write to the destination from step 1
+                 *
+                 * The RHS itself creates the same name in the nearer current
+                 * context, after the destination was selected.
+                 */
                 String characters =
                         "x: seed\n"
-                                + "() => { x = replacement }";
+                                + "plant: (c) => { c.x: nearer\nreplacement }\n"
+                                + "() => { x = plant(context) }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -327,15 +339,6 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .build();
 
                 CanonicalSequence sequence = canonicalize(characters);
-                CanonicalClosure definition =
-                        assertInstanceOf(
-                                CanonicalClosure.class,
-                                sequence.expressions().get(1));
-                CanonicalAssign capturedWrite =
-                        assertInstanceOf(
-                                CanonicalAssign.class,
-                                definition.body().expressions().get(0));
-
                 ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source)
                                 .lowerRoot(sequence);
@@ -347,15 +350,6 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                 ProtosClosureExecutionPlan plan =
                         closure.executionPlan().orElseThrow();
 
-                CanonicalBindingResolution.CapturedResolved resolution =
-                        assertInstanceOf(
-                                CanonicalBindingResolution.CapturedResolved.class,
-                                plan.bytecodeBindingAnalysisForTesting()
-                                        .resolutionOf(capturedWrite)
-                                        .orElseThrow());
-
-                int ordinal = frameOrdinal(resolution.identity());
-
                 ProtosActivation invocation =
                         ProtosActivation.forClosureInvocation(
                                 closure,
@@ -365,34 +359,8 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 module.currentModuleKey().orElse(null),
                                 module.executionDomain());
 
-                /*
-                 * This is the exact semantic ordering the generated assignment
-                 * must preserve:
-                 *
-                 *   1. resolve destination
-                 *   2. evaluate RHS
-                 *   3. write to the destination from step 1
-                 *
-                 * Simulate an RHS effect that creates the same name in the
-                 * nearer current context after destination resolution.
-                 */
-                ProtosCapturedLexicalAccess.CapturedLexicalWriteTarget destination =
-                        ProtosCapturedLexicalAccess
-                                .resolveCapturedFrameWriteTarget(
-                                        ordinal,
-                                        invocation,
-                                        "x",
-                                        resolution.lexicalDepth());
-
-                invocation.context().createLocalSlot("x", nearer);
-
                 Object result =
-                        ProtosBytecodeRootNode.AssignCapturedFrameLocal.perform(
-                                ordinal,
-                                invocation,
-                                destination,
-                                "x",
-                                replacement);
+                        plan.executeBytecodeActivationForTesting(invocation);
 
                 assertSame(replacement, result);
 
@@ -1259,10 +1227,23 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
 
                 module.context().createLocalSlot("seed", original);
                 module.context().createLocalSlot("replacement", replacement);
+                module.context().createLocalSlot("nearer", nearer);
 
+                /*
+                 * The RHS itself, after destination selection, removes the
+                 * selected module destination and creates a nearer binding
+                 * that would win if the assignment were incorrectly resolved
+                 * again after RHS evaluation.
+                 */
                 String characters =
                         "x: seed\n"
-                                + "() => { x = replacement }";
+                                + "moduleContext: context\n"
+                                + "displace: (c) => {\n"
+                                + "  moduleContext.removeSlot(\"x\")\n"
+                                + "  c.x: nearer\n"
+                                + "  replacement\n"
+                                + "}\n"
+                                + "() => { x = displace(context) }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -1271,15 +1252,6 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .build();
 
                 CanonicalSequence sequence = canonicalize(characters);
-                CanonicalClosure definition =
-                        assertInstanceOf(
-                                CanonicalClosure.class,
-                                sequence.expressions().get(1));
-                CanonicalAssign capturedWrite =
-                        assertInstanceOf(
-                                CanonicalAssign.class,
-                                definition.body().expressions().get(0));
-
                 ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source)
                                 .lowerRoot(sequence);
@@ -1291,15 +1263,6 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                 ProtosClosureExecutionPlan plan =
                         closure.executionPlan().orElseThrow();
 
-                CanonicalBindingResolution.CapturedResolved resolution =
-                        assertInstanceOf(
-                                CanonicalBindingResolution.CapturedResolved.class,
-                                plan.bytecodeBindingAnalysisForTesting()
-                                        .resolutionOf(capturedWrite)
-                                        .orElseThrow());
-
-                int ordinal = frameOrdinal(resolution.identity());
-
                 ProtosActivation invocation =
                         ProtosActivation.forClosureInvocation(
                                 closure,
@@ -1309,34 +1272,9 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 module.currentModuleKey().orElse(null),
                                 module.executionDomain());
 
-                ProtosCapturedLexicalAccess.CapturedLexicalWriteTarget destination =
-                        ProtosCapturedLexicalAccess
-                                .resolveCapturedFrameWriteTarget(
-                                        ordinal,
-                                        invocation,
-                                        "x",
-                                        resolution.lexicalDepth());
-
-                /*
-                 * Simulate RHS effects after destination selection:
-                 * remove the selected captured destination and create a new
-                 * nearer binding that would win if assignment were incorrectly
-                 * resolved again after RHS evaluation.
-                 */
-                module.context().removeLocalSlot("x");
-                invocation.context().createLocalSlot("x", nearer);
-
                 assertThrows(
                         ProtosSignalException.class,
-                        () ->
-                                ProtosBytecodeRootNode
-                                        .AssignCapturedFrameLocal
-                                        .perform(
-                                                ordinal,
-                                                invocation,
-                                                destination,
-                                                "x",
-                                                replacement));
+                        () -> plan.executeBytecodeActivationForTesting(invocation));
 
                 assertFalse(module.context().hasLocalSlot("x"));
                 assertSame(
@@ -1467,20 +1405,6 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
             }
         }
         return -1;
-    }
-
-    private static int frameOrdinal(
-            CanonicalBindingIdentity identity) {
-        int ordinal = 0;
-        for (String name : identity.owner().declaredNames()) {
-            if (name.equals(identity.name())) {
-                return ordinal;
-            }
-            ordinal++;
-        }
-        throw new AssertionError(
-                "binding owner does not declare "
-                        + identity.name());
     }
 
     private static CanonicalSequence canonicalize(String characters) {

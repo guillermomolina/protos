@@ -28,17 +28,13 @@ import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.CallTarget;
-import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.dsl.Specialization;
-import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.source.Source;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -46,17 +42,20 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * PERF040-E1 acceptance: the per-selector primitive numeric operations, their
- * Prelude-certified admission, and the guarded negative specialization that
- * never displaces a numeric lane, whatever order operand families arrive in.
+ * PERF040-E1 acceptance, reconciled with I115: the per-selector numeric
+ * operations ({@code NumberAdd}, {@code NumberSubtract}, {@code
+ * NumberMultiply}, {@code NumberDivide}, {@code RichCompare*}) keep every
+ * numeric result exact whatever order operand families arrive in, and every
+ * non-primitive pair takes the single in-node generic route.
+ *
+ * <p>I115 records as a divergence that no Prelude numeric-protocol admission
+ * certificate is consulted (see {@code
+ * ProtosExperimentalNumberAddFastPathsBase}); the former certificate tests
+ * have no observable equivalent and are not asserted here.
  */
 final class ProtosPerf040E1NumericOperationReconciliationTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -74,16 +73,17 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                     ">", "RichCompareGt",
                     ">=", "RichCompareGe");
 
-    private static final List<Class<?>> NODES =
-            List.of(
-                    ProtosNumericAddNode.class,
-                    ProtosNumericSubtractNode.class,
-                    ProtosNumericMultiplyNode.class,
-                    ProtosNumericDivideNode.class,
-                    ProtosNumericLessNode.class,
-                    ProtosNumericLessEqualNode.class,
-                    ProtosNumericGreaterNode.class,
-                    ProtosNumericGreaterEqualNode.class);
+    /* The surviving node behind each canonical operation, in OPERATIONS order of meaning. */
+    private static final Map<String, Class<?>> NODES =
+            Map.of(
+                    "NumberAdd", ProtosExperimentalNumberAddNode.class,
+                    "NumberSubtract", ProtosExperimentalNumberSubtractNode.class,
+                    "NumberMultiply", ProtosExperimentalNumberMultiplyNode.class,
+                    "NumberDivide", ProtosNumberDivideNode.class,
+                    "RichCompareLt", ProtosRichCompareLtNode.class,
+                    "RichCompareLe", ProtosRichCompareLeNode.class,
+                    "RichCompareGt", ProtosRichCompareGtNode.class,
+                    "RichCompareGe", ProtosRichCompareGeNode.class);
 
     /* Matrix 1-9, 14, 16: each sequence reuses one syntactic operation site. */
     private static final List<String> SAME_SITE_SEQUENCES =
@@ -226,7 +226,7 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                             + "(add(\"a\", \"b\") == \"ab\") && BigInteger.recognizes(add(big, 1))"
                             + " && (add(1, 2) == 3) && (add(\"c\", \"d\") == \"cd\")"
                             + " && BigInteger.recognizes(add(big, 2)) && (add(3, 4) == 7)",
-                    // 16. MISS keeps evaluation, materialization and Error semantics
+                    // 16. the generic route keeps evaluation, materialization and Error semantics
                     "count: 0\n"
                             + "next: () => {\n"
                             + "    count = count + 1\n"
@@ -240,6 +240,42 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                             + "Error.handle(() => { next() + \"x\" }, error => { 0 })\n"
                             + "failed && (sum == 3) && (count == 3) && (add(a, 1) == 4)"
                             + " && (a.parent() === SmallInteger)");
+
+    /*
+     * Former direct-node arrival-order matrices, now executed on one real
+     * operation site each: generic operands before and after the numeric
+     * lanes, overflow, Fraction and zero divisor from inside the integral
+     * lane, and ordering with NaN and signed zeros.
+     */
+    private static final List<String> ARRIVAL_ORDER_SEQUENCES =
+            List.of(
+                    // Generic -> Integer -> Integer
+                    "add: (x, y) => x + y\n"
+                            + "(add(\"a\", \"b\") == \"ab\") && (add(1, 2) == 3) && (add(3, 4) == 7)",
+                    // Integer -> Generic -> Integer -> overflow -> Integer -> Float -> Integer
+                    "add: (x, y) => x + y\n"
+                            + "(add(1, 2) == 3) && (add(\"a\", \"b\") == \"ab\") && (add(3, 4) == 7)"
+                            + " && BigInteger.recognizes(add(9223372036854775807, 1))"
+                            + " && (add(5, 6) == 11) && (add(1, 1.5) == 2.5)"
+                            + " && Float.recognizes(add(1, 1.5)) && (add(4, 5) == 9)"
+                            + " && SmallInteger.recognizes(add(4, 5))",
+                    // Divide: Fraction and zero divisor leave the integral lane exactly
+                    "div: (x, y) => x / y\n"
+                            + "failed: false\n"
+                            + "(div(6, 3) == 2) && Fraction.recognizes(div(5, 2))"
+                            + " && (div(5, 2) == (10 / 4))"
+                            + " && Error.handle(() => { div(5, 0) }, error => { failed = true; true })"
+                            + " && failed && (div(8, 2) == 4) && SmallInteger.recognizes(div(8, 2))",
+                    // Ordering: generic before and after, NaN unordered, signed zeros equal
+                    "lt: (x, y) => x < y\n"
+                            + "le: (x, y) => x <= y\n"
+                            + "Error.handle(() => { lt(\"a\", 1) }, error => { false })\n"
+                            + "n: 0.0 / 0.0\n"
+                            + "z: 0.0 * (0.0 - 1.0)\n"
+                            + "lt(1, 2) && !lt(n, 1) && !lt(z, 0.0) && lt(1.5, 2)"
+                            + " && le(z, 0) && !le(n, n)"
+                            + " && Error.handle(() => { lt(1, \"a\") }, error => { true })"
+                            + " && lt(1, 2)");
 
     private static String orderingSequence(String selector, String numeric) {
         return "lt: (x, y) => x " + selector + " y\n"
@@ -277,196 +313,241 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
         }
     }
 
-    /** Matrix 13: certification is per Prelude, immutable, and never a guest slot. */
+    /**
+     * Matrix 13, reconciled: each Prelude owns its own frozen numeric
+     * prototypes. The former per-Prelude admission certificate no longer
+     * exists (I115 recorded divergence), so only the prototype structure it
+     * certified is asserted.
+     */
     @Test
-    void canonicalCorePreludesAreCertifiedIndependently() throws Exception {
+    void canonicalCoreNumericPrototypesAreFrozenPerPrelude() throws Exception {
         ProtosPrelude first = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosPrelude second = new ProtosCoreBootstrap().bootstrap(CORE);
 
-        assertNotSame(first.numericCoreAdmission(), second.numericCoreAdmission());
-        assertSame(first.numericCoreAdmission(), first.numericCoreAdmission());
-        for (int lane : allLanes()) {
-            assertTrue(first.numericCoreAdmission().admits(lane), "lane " + lane);
-            assertTrue(second.numericCoreAdmission().admits(lane), "lane " + lane);
-        }
+        assertNotSame(first.integerPrototype(), second.integerPrototype());
+        assertNotSame(first.floatPrototype(), second.floatPrototype());
         for (String binding : List.of("Number", "Integer", "SmallInteger", "Float")) {
             ProtosObjectValue prototype =
                     (ProtosObjectValue) first.bindings().readLocalSlot(binding).orElseThrow();
             assertTrue(prototype.isFrozen(), binding);
-            for (Object slot : prototype.localSlotsSnapshot().values()) {
-                assertFalse(slot instanceof ProtosNumericCoreAdmission, binding);
+        }
+        System.out.println("PERF040_E1_PER_PRELUDE_PROTOTYPES=PASS");
+    }
+
+    /**
+     * Matrix 11, execution level: in a noncanonical Prelude whose Integer
+     * prototype selects a genuinely different {@code +}, an ordinary
+     * {@code +} send on Integers runs that selected method, before and at
+     * signed-64 overflow, at the same operation site. This is the specified
+     * dispatch semantics; I115 records as a divergence that the standard
+     * Integer {@code +} is assumed (see the report).
+     */
+    @Test
+    void alternativeIntegerPlusIsTheSelectedMethod() throws Exception {
+        withAlternativeIntegerPlus(module -> {
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            assertEquals(ALTERNATIVE_PLUS_RESULT, normalized(call(add, module, 1L, 2L)));
+            assertEquals(ALTERNATIVE_PLUS_RESULT,
+                    normalized(call(add, module, Long.MAX_VALUE, 1L)),
+                    "overflow does not bypass the selected method");
+            assertEquals(ALTERNATIVE_PLUS_RESULT, normalized(call(add, module, 3L, 4L)));
+        });
+        System.out.println("PERF040_E1_ALTERNATIVE_CORE_SELECTION=PASS");
+    }
+
+    /**
+     * Matrix 11, per selector: replacing Integer {@code +} leaves every other
+     * selector and the untouched Float prototype on standard behavior, with
+     * exact results, in that same noncanonical Prelude.
+     */
+    @Test
+    void alternativeCoreKeepsUntouchedSelectorsStandard() throws Exception {
+        withAlternativeIntegerPlus(module -> {
+            ProtosClosureValue subtract = closure("(x, y) => x - y", module);
+            ProtosClosureValue multiply = closure("(x, y) => x * y", module);
+            ProtosClosureValue divide = closure("(x, y) => x / y", module);
+            ProtosClosureValue less = closure("(x, y) => x < y", module);
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+
+            assertEquals(-1L, normalized(call(subtract, module, 2L, 3L)));
+            assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                    call(multiply, module, Long.MAX_VALUE, 2L)));
+            assertEquals(2L, normalized(call(divide, module, 6L, 3L)));
+            assertTrue(ProtosNumericValueSupport.isFraction(call(divide, module, 5L, 2L)));
+            assertSame(ProtosBooleanValue.TRUE, call(less, module, 1L, 2L));
+            assertEquals(2.5d, call(add, module, 1.5d, 1.0d), "Float + is untouched");
+        });
+        System.out.println("PERF040_E1_ALTERNATIVE_CORE_PER_SELECTOR=PASS");
+    }
+
+    /**
+     * Matrix 10, execution level: an ordinary object delegating to a numeric
+     * prototype is never a numeric value; its own selected method runs at
+     * the numeric operation site, between and after genuine numeric calls.
+     */
+    @Test
+    void delegatingLookAlikeUsesItsOwnSelection() throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.preludeOrNullForRuntime();
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            ProtosClosureValue less = closure("(x, y) => x < y", module);
+            for (ProtosObjectValue prototype : List.of(
+                    prelude.numberPrototype(),
+                    prelude.integerPrototype(),
+                    prelude.floatPrototype())) {
+                ProtosObjectValue lookAlike = new ProtosObjectValue(prototype);
+                lookAlike.createLocalSlot("+", answering(17L));
+                lookAlike.createLocalSlot("<", answeringFalse());
+
+                assertEquals(3L, normalized(call(add, module, 1L, 2L)));
+                assertEquals(17L, normalized(call(add, module, lookAlike, 1L)));
+                assertEquals(3L, normalized(call(add, module, 1L, 2L)));
+                assertSame(ProtosBooleanValue.TRUE, call(less, module, 1L, 2L));
+                assertSame(ProtosBooleanValue.FALSE, call(less, module, lookAlike, 2L));
+                assertSame(ProtosBooleanValue.TRUE, call(less, module, 1L, 2L));
             }
-        }
-        System.out.println("PERF040_E1_PER_PRELUDE_CERTIFICATE=PASS");
-    }
-
-    /** Matrix 11: a genuinely different selected method is not admitted for that selector. */
-    @Test
-    void alternativeCoreSelectionIsNotAdmitted() throws Exception {
-        ProtosPrelude canonical = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosObjectValue number = canonical.numberPrototype();
-
-        ProtosObjectValue integer = new ProtosObjectValue(number);
-        for (String selector : List.of("+", "-", "*", "/")) {
-            ProtosClosureValue standard = (ProtosClosureValue)
-                    canonical.integerPrototype().readLocalSlot(selector).orElseThrow();
-            // The same native body behind a different Closure is a different selection.
-            integer.createLocalSlot(
-                    selector,
-                    ProtosClosureValue.nativeClosure(standard.nativeBody().orElseThrow()));
-        }
-        ProtosObjectValue smallInteger = new ProtosObjectValue(integer);
-        ProtosObjectValue bigInteger = new ProtosObjectValue(integer);
-        integer.freeze();
-        smallInteger.freeze();
-        bigInteger.freeze();
-
-        ProtosPrelude alternative =
-                syntheticPrelude(
-                        canonical,
-                        Map.of(
-                                "Number", number,
-                                "Integer", integer,
-                                "SmallInteger", smallInteger,
-                                "BigInteger", bigInteger,
-                                "Float", canonical.floatPrototype()));
-        ProtosNumericCoreAdmission admission = alternative.numericCoreAdmission();
-
-        for (int lane : List.of(
-                ProtosNumericCoreAdmission.INTEGER_ADD,
-                ProtosNumericCoreAdmission.INTEGER_SUBTRACT,
-                ProtosNumericCoreAdmission.INTEGER_MULTIPLY,
-                ProtosNumericCoreAdmission.INTEGER_DIVIDE)) {
-            assertFalse(admission.admits(lane), "alternative Integer lane " + lane);
-        }
-        // Certification is per selector: the untouched standard lanes remain admitted.
-        assertTrue(admission.admits(ProtosNumericCoreAdmission.INTEGER_LESS));
-        assertTrue(admission.admits(ProtosNumericCoreAdmission.FLOAT_ADD));
-        assertTrue(admission.admits(ProtosNumericCoreAdmission.FLOAT_GREATER_EQUAL));
-
-        assertFalse(
-                ProtosPrimitiveNumericSendFastPathsBase.admittedCanonicalNumericLane(
-                        1L, true, 2L, true, alternative,
-                        ProtosNumericAddNode.INTEGER_LANE, ProtosNumericAddNode.FLOAT_LANE));
-        assertTrue(
-                ProtosPrimitiveNumericSendFastPathsBase.admittedCanonicalNumericLane(
-                        1.5d, true, 2L, true, alternative,
-                        ProtosNumericAddNode.INTEGER_LANE, ProtosNumericAddNode.FLOAT_LANE));
-        System.out.println("PERF040_E1_ALTERNATIVE_CORE=PASS");
-    }
-
-    /** Matrix 12: a synthetic Prelude without canonical numeric structure admits nothing. */
-    @Test
-    void syntheticPreludeIsNotCertified() throws Exception {
-        ProtosPrelude canonical = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosPrelude synthetic = syntheticPrelude(canonical, Map.of());
-
-        for (int lane : allLanes()) {
-            assertFalse(synthetic.numericCoreAdmission().admits(lane), "lane " + lane);
-        }
-        // Names alone admit nothing: unfrozen look-alike prototypes are rejected.
-        ProtosObjectValue openNumber = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosPrelude lookAlike =
-                syntheticPrelude(canonical, Map.of("Number", openNumber));
-        for (int lane : allLanes()) {
-            assertFalse(lookAlike.numericCoreAdmission().admits(lane), "lane " + lane);
-        }
-        assertFalse(ProtosPrimitiveNumericSendFastPathsBase.admits(null,
-                ProtosNumericCoreAdmission.INTEGER_ADD));
-        assertFalse(
-                ProtosPrimitiveNumericSendFastPathsBase.admittedCanonicalNumericLane(
-                        1L, true, 2L, true, synthetic,
-                        ProtosNumericAddNode.INTEGER_LANE, ProtosNumericAddNode.FLOAT_LANE));
-        System.out.println("PERF040_E1_SYNTHETIC_PRELUDE=PASS");
-    }
-
-    /** Matrix 10: ordinary objects, even delegating to Number, are never a positive domain. */
-    @Test
-    void ordinaryDelegatesAndUnauthorizedCarriersAreOutsideEveryLane() throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        List<Object> outside =
-                List.of(
-                        new ProtosObjectValue(prelude.numberPrototype()),
-                        new ProtosObjectValue(prelude.integerPrototype()),
-                        new ProtosObjectValue(prelude.floatPrototype()),
-                        new ProtosObjectValue(ProtosObjectValue.rootObject()));
-        for (Object value : outside) {
-            for (int[] lanes : lanePairs()) {
-                assertFalse(
-                        ProtosPrimitiveNumericSendFastPathsBase.admittedCanonicalNumericLane(
-                                value, true, 1L, true, prelude, lanes[0], lanes[1]));
-                assertFalse(
-                        ProtosPrimitiveNumericSendFastPathsBase.admittedCanonicalNumericLane(
-                                1L, true, value, true, prelude, lanes[0], lanes[1]));
-            }
-        }
-        // I115-LONG-4: a signed-64 Long is always a semantic Integer.
-        assertTrue(
-                ProtosPrimitiveNumericSendFastPathsBase.admittedCanonicalNumericLane(
-                        1L, false, 2L, true, prelude,
-                        ProtosNumericAddNode.INTEGER_LANE, ProtosNumericAddNode.FLOAT_LANE));
-        assertTrue(
-                ProtosPrimitiveNumericSendFastPathsBase.admittedCanonicalNumericLane(
-                        Long.valueOf(1L), false, new ProtosFloatValue(2.0d), false,
-                        prelude,
-                        ProtosNumericAddNode.INTEGER_LANE, ProtosNumericAddNode.FLOAT_LANE));
+        });
         System.out.println("PERF040_E1_ORDINARY_DELEGATES=PASS");
     }
 
     /**
-     * Structural evidence over the declared DSL operations: positive lanes are
-     * guarded by certification, the single negative specialization is guarded
-     * by the negated lane union and replaces nothing, and the only rewriteOn /
-     * replaces are the doLL -> doLLOvf overflow generalizations of '+', '-'
-     * and '*': a long-returning primitive rewritten on ArithmeticException
-     * and replaced by a specialization with exactly the same guards and
-     * operand types. The generated cached nodes exist.
+     * Replacement and invalidation at one operation site: a nonstandard
+     * receiver's selected method is replaced between calls and the site
+     * runs the new selection, while Integer receivers keep standard results
+     * at the same site, for '+', '/' and '<'.
      */
     @Test
-    void negativeSpecializationIsDisjointAndOnlyOverflowGeneralizes() throws Exception {
-        for (Class<?> node : NODES) {
-            List<Method> specializations = new ArrayList<>();
-            for (Method method : node.getDeclaredMethods()) {
-                if (method.isAnnotationPresent(Specialization.class)) {
-                    specializations.add(method);
-                }
+    void replacedReceiverMethodInvalidatesTheNumericSite() throws Exception {
+        withCore(module -> {
+            for (Map.Entry<String, Object[]> entry : Map.of(
+                    "+", new Object[] {3L},
+                    "/", new Object[] {2L},
+                    "<", new Object[] {ProtosBooleanValue.FALSE}).entrySet()) {
+                String selector = entry.getKey();
+                ProtosClosureValue site = closure("(x, y) => x " + selector + " y", module);
+                ProtosObjectValue custom = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                custom.createLocalSlot(selector, answering(41L));
+
+                Object standard = normalized(call(site, module, 6L, 3L));
+                assertEquals(entry.getValue()[0], standard, selector);
+                assertEquals(41L, normalized(call(site, module, custom, 1L)), selector);
+                custom.assignLocalSlot(selector, answering(42L));
+                assertEquals(42L, normalized(call(site, module, custom, 1L)),
+                        selector + ": the replaced selection is observed");
+                assertEquals(standard, normalized(call(site, module, 6L, 3L)), selector);
             }
-            assertTrue(specializations.size() >= 3, node.getSimpleName());
-            int negative = 0;
-            for (Method method : specializations) {
-                Specialization specialization = method.getAnnotation(Specialization.class);
-                String where = node.getSimpleName() + "." + method.getName();
-                assertOverflowGeneralizationOnly(node, method, specializations);
-                List<String> guards = Arrays.asList(specialization.guards());
-                assertFalse(guards.isEmpty(), where + " is an unguarded catch-all");
-                if (method.getName().equals("ordinaryMiss")) {
-                    negative++;
-                    assertEquals(
-                            List.of("!admittedCanonicalNumericLane(receiver, receiverCarrier, "
-                                    + "argument, argumentCarrier, prelude, INTEGER_LANE, "
-                                    + "FLOAT_LANE)"),
-                            guards, where);
-                } else {
-                    assertTrue(
-                            guards.contains("admits(prelude, INTEGER_LANE)")
-                                    || guards.contains("admits(prelude, FLOAT_LANE)"),
-                            where + " is not certified");
-                }
-            }
-            assertEquals(1, negative, node.getSimpleName());
-            assertTrue(Class.forName(node.getName() + "Gen").getSuperclass() == node);
-        }
-        System.out.println("PERF040_E1_DISJOINT_NEGATIVE=PASS");
+        });
+        System.out.println("PERF040_E1_REPLACEMENT_INVALIDATION=PASS");
     }
 
-    /* The authorized primitive -> generalization pairs of '+', '-' and '*'. */
-    private static final Map<String, String> OVERFLOW_GENERALIZATIONS =
-            Map.of("doLLOvf", "doLL");
+    /*
+     * Retired with no surviving behavioral contract (reported):
+     * certificationIsDeferredToFirstUseAndMemoized,
+     * negativeCertificationIsStableAndPerPrelude,
+     * concurrentFirstUsePublishesOneCertificate and
+     * syntheticPreludeIsNotCertified tested the lifecycle, memoization and
+     * publication of the ProtosNumericCoreAdmission object itself.
+     */
+
+    private static final long ALTERNATIVE_PLUS_RESULT = 99L;
+
+    private static ProtosClosureValue answering(long value) {
+        return ProtosClosureValue.nativeClosure((activation, supplied) -> Long.valueOf(value));
+    }
+
+    private static ProtosClosureValue answeringFalse() {
+        return ProtosClosureValue.nativeClosure((activation, supplied) -> ProtosBooleanValue.FALSE);
+    }
+
+    /**
+     * Runs {@code test} in a module of a noncanonical Prelude: every
+     * canonical binding, except an Integer prototype (with fresh
+     * SmallInteger and BigInteger below it) whose {@code +} is a different
+     * selected method; its other selectors are the standard ones.
+     */
+    private static void withAlternativeIntegerPlus(CoreTest test) throws Exception {
+        try (Context context = context(false)) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosPrelude canonical = new ProtosCoreBootstrap().bootstrap(CORE);
+                ProtosObjectValue integer = new ProtosObjectValue(canonical.numberPrototype());
+                for (Map.Entry<String, Object> slot :
+                        canonical.integerPrototype().localSlotsSnapshot().entrySet()) {
+                    integer.createLocalSlot(
+                            slot.getKey(),
+                            slot.getKey().equals("+")
+                                    ? answering(ALTERNATIVE_PLUS_RESULT)
+                                    : slot.getValue());
+                }
+                ProtosObjectValue smallInteger = new ProtosObjectValue(integer);
+                ProtosObjectValue bigInteger = new ProtosObjectValue(integer);
+                integer.freeze();
+                smallInteger.freeze();
+                bigInteger.freeze();
+
+                ProtosObjectValue bindings = new ProtosObjectValue(canonical.contextPrototype());
+                Map<String, ProtosObjectValue> replaced = Map.of(
+                        "Integer", integer,
+                        "SmallInteger", smallInteger,
+                        "BigInteger", bigInteger);
+                for (Map.Entry<String, Object> binding :
+                        canonical.bindings().localSlotsSnapshot().entrySet()) {
+                    bindings.createLocalSlot(
+                            binding.getKey(),
+                            replaced.containsKey(binding.getKey())
+                                    ? replaced.get(binding.getKey())
+                                    : binding.getValue());
+                }
+                bindings.freeze();
+                ProtosPrelude alternative = new ProtosPrelude(bindings, canonical.contextPrototype());
+                assertNotSame(canonical.integerPrototype(), alternative.integerPrototype());
+                test.run(alternative.newModuleActivation());
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    /**
+     * Structural evidence over the surviving DSL operations: the only
+     * rewriteOn / replaces are the doLL -> doLLOvf overflow generalizations
+     * of '+', '-' and '*': a long-returning primitive rewritten on
+     * ArithmeticException and replaced by a specialization over exactly the
+     * same operand types. Every other specialization neither rewrites nor
+     * replaces. The generated nodes exist.
+     */
+    @Test
+    void onlyOverflowGeneralizesAndGeneratedNodesExist() throws Exception {
+        for (Map.Entry<String, Class<?>> entry : NODES.entrySet()) {
+            Class<?> node = entry.getValue();
+            List<Method> specializations = new ArrayList<>();
+            for (Class<?> type = node; type != null && type != Object.class;
+                    type = type.getSuperclass()) {
+                for (Method method : type.getDeclaredMethods()) {
+                    if (method.isAnnotationPresent(Specialization.class)) {
+                        specializations.add(method);
+                    }
+                }
+            }
+            assertTrue(specializations.size() >= 2, node.getSimpleName());
+            assertTrue(specializations.stream().anyMatch(m -> m.getName().equals("doLL")),
+                    node.getSimpleName() + " has no long x long specialization");
+            assertTrue(specializations.stream().anyMatch(m -> m.getName().equals("doDD")),
+                    node.getSimpleName() + " has no double x double specialization");
+            for (Method method : specializations) {
+                assertOverflowGeneralizationOnly(node, method, specializations);
+            }
+            assertTrue(Class.forName(node.getName() + "Gen").getSuperclass() == node,
+                    node.getSimpleName());
+        }
+        System.out.println("PERF040_E1_OVERFLOW_ONLY_GENERALIZATION=PASS");
+    }
 
     private static boolean overflowGeneralizes(Class<?> node) {
-        return node == ProtosNumericAddNode.class
-                || node == ProtosNumericSubtractNode.class
-                || node == ProtosNumericMultiplyNode.class;
+        return node == ProtosExperimentalNumberAddNode.class
+                || node == ProtosExperimentalNumberSubtractNode.class
+                || node == ProtosExperimentalNumberMultiplyNode.class;
     }
 
     private static void assertOverflowGeneralizationOnly(
@@ -474,9 +555,8 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
         Specialization specialization = method.getAnnotation(Specialization.class);
         String where = node.getSimpleName() + "." + method.getName();
         boolean arithmetic = overflowGeneralizes(node);
-        String replaced = OVERFLOW_GENERALIZATIONS.get(method.getName());
 
-        if (arithmetic && OVERFLOW_GENERALIZATIONS.containsValue(method.getName())) {
+        if (arithmetic && method.getName().equals("doLL")) {
             assertEquals(List.of(ArithmeticException.class),
                     Arrays.asList(specialization.rewriteOn()), where);
             assertEquals(0, specialization.replaces().length, where);
@@ -484,428 +564,173 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             return;
         }
         assertEquals(0, specialization.rewriteOn().length, where);
-        if (!arithmetic || replaced == null) {
+        if (!arithmetic || !method.getName().equals("doLLOvf")) {
             assertEquals(0, specialization.replaces().length, where);
             return;
         }
-        assertEquals(List.of(replaced), Arrays.asList(specialization.replaces()), where);
+        assertEquals(List.of("doLL"), Arrays.asList(specialization.replaces()), where);
         Method primitive = specializations.stream()
-                .filter(candidate -> candidate.getName().equals(replaced))
+                .filter(candidate -> candidate.getName().equals("doLL"))
                 .findFirst()
                 .orElseThrow();
-        // The generalization accepts exactly the replaced domain.
-        assertEquals(
-                Arrays.asList(primitive.getAnnotation(Specialization.class).guards()),
-                Arrays.asList(specialization.guards()), where);
-        assertEquals(
-                Arrays.asList(primitive.getParameterTypes()),
-                Arrays.asList(method.getParameterTypes()), where);
+        // The generalization accepts exactly the replaced operand domain; it
+        // may additionally bind its node to reach the caller's numeric factory.
+        List<Class<?>> replacedOperands = Arrays.asList(primitive.getParameterTypes());
+        List<Class<?>> operands = Arrays.asList(method.getParameterTypes())
+                .subList(0, replacedOperands.size());
+        assertEquals(replacedOperands, operands, where);
         assertSame(Object.class, method.getReturnType(), where);
     }
 
     /*
      * @Fallback (CLASS retention) and @OperationProxy (SOURCE retention) are
-     * invisible to reflection, so they are checked in the source itself.
+     * invisible to reflection, so they are checked in the source itself:
+     * every node owns exactly one in-node generic route (no MISS result), and
+     * the root registers every canonical operation under its own name and no
+     * retired TryPrimitiveNumeric* operation.
      */
     @Test
-    void sourcesDeclareNoFallbackAndRegisterEveryOperation() throws Exception {
+    void sourcesDeclareOneGenericRouteAndRegisterEveryOperation() throws Exception {
         // PRUIBA DE I115, en algún momento esto volverá a funcionar
         // Ignore source-preserved obsolete specializations: they are comments, not DSL code.
-        for (Class<?> node : NODES) {
-            String source = Files.readString(
-                    EXECUTION_SOURCES.resolve("bytecode/numeric").resolve(node.getSimpleName() + ".java"));
-            String activeSource = String.join("\n", source.lines()
-                    .filter(line -> !line.stripLeading().startsWith("//"))
-                    .toList());
-            assertFalse(activeSource.contains("@Fallback"), node.getSimpleName());
+        for (Class<?> node : NODES.values()) {
+            String activeSource = activeSource(
+                    EXECUTION_SOURCES.resolve("bytecode/numeric")
+                            .resolve(node.getSimpleName() + ".java"));
+            assertEquals(1, occurrences(activeSource, "@Fallback"), node.getSimpleName());
+            assertTrue(activeSource.contains("doGeneric("), node.getSimpleName());
+            assertFalse(activeSource.contains("MISS"), node.getSimpleName());
             String remaining = activeSource.replace("replaces = \"doLL\"", "");
             assertFalse(remaining.contains("replaces ="), node.getSimpleName());
             if (overflowGeneralizes(node)) {
-                assertEquals(1, occurrences(activeSource, "replaces = \"doLL\""), node.getSimpleName());
-                assertEquals(0, occurrences(activeSource, "replaces = \"doIntegers\""), node.getSimpleName());
+                assertEquals(1, occurrences(activeSource, "replaces = \"doLL\""),
+                        node.getSimpleName());
             } else {
                 assertFalse(activeSource.contains("rewriteOn"), node.getSimpleName());
                 assertEquals(activeSource, remaining, node.getSimpleName());
             }
             assertTrue(activeSource.contains("@OperationProxy.Proxyable("), node.getSimpleName());
         }
-        String root = Files.readString(
+        String root = activeSource(
                 EXECUTION_SOURCES.resolve("bytecode/activation/ProtosBytecodeRootNode.java"));
-        assertFalse(root.contains("TryPrimitiveNumericSendOne"));
-        for (int index = 0; index < NODES.size(); index++) {
-            String node = NODES.get(index).getSimpleName();
-            String operation = "TryPrimitiveNumeric"
-                    + node.substring("ProtosNumeric".length(), node.length() - "Node".length());
-            assertTrue(
-                    root.contains("@OperationProxy(value = " + node + ".class, name = \""
-                            + operation + "\")"),
-                    operation);
-            assertTrue(java.util.Set.of(
-                    "TryPrimitiveNumericAdd", "TryPrimitiveNumericSubtract",
-                    "TryPrimitiveNumericMultiply", "TryPrimitiveNumericDivide",
-                    "TryPrimitiveNumericLess", "TryPrimitiveNumericLessEqual",
-                    "TryPrimitiveNumericGreater", "TryPrimitiveNumericGreaterEqual")
-                    .contains(operation), operation);
+        assertFalse(root.contains("TryPrimitiveNumeric"));
+        for (Map.Entry<String, Class<?>> entry : NODES.entrySet()) {
+            String declaration = "@OperationProxy(value = " + entry.getValue().getSimpleName()
+                    + ".class, name = \"" + entry.getKey() + "\")";
+            assertEquals(1, occurrences(root, declaration), declaration);
         }
         System.out.println("PERF040_E1_SOURCE_STRUCTURE=PASS");
     }
 
     /**
-     * The generated cached operation keeps its numeric lanes reachable after a
-     * generic operand in both arrival orders, and after overflow.
+     * The numeric lanes stay reachable after a generic operand in both
+     * arrival orders, after overflow and after an exact non-integral
+     * quotient, each on one real operation site, without and with an
+     * attached debugger.
      */
     @Test
-    void numericLanesStayReachableInEveryArrivalOrder() throws Exception {
-        withCore(module -> {
-            Object generic = new ProtosObjectValue(ProtosObjectValue.rootObject());
-
-            // Generic -> Integer -> Integer
-            ProtosNumericAddNode add = ProtosNumericAddNode.create();
-            assertSame(ProtosPrimitiveNumericSendFastPathsBase.MISS,
-                    add.execute(generic, module, 1L, true, true, false, false));
-            assertEquals(3L, add.execute(1L, module, 2L, true, true, false, false));
-            assertEquals(7L, add.execute(3L, module, 4L, true, true, false, false));
-
-            // Integer -> Generic -> Integer, then overflow -> Integer
-            ProtosNumericAddNode other = ProtosNumericAddNode.create();
-            assertEquals(3L, other.execute(1L, module, 2L, true, true, false, false));
-            assertSame(ProtosPrimitiveNumericSendFastPathsBase.MISS,
-                    other.execute(1L, module, generic, true, true, false, false));
-            assertEquals(7L, other.execute(3L, module, 4L, true, true, false, false));
-            Object overflow =
-                    other.execute(Long.MAX_VALUE, module, 1L, true, true, false, false);
-            assertTrue(ProtosNumericValueSupport.isLargeInteger(overflow));
-            assertEquals(11L, other.execute(5L, module, 6L, true, true, false, false));
-            assertEquals(2.5d, other.execute(1L, module, 1.5d, true, true, false, false));
-            assertEquals(9L, other.execute(4L, module, 5L, true, true, false, false));
-
-            // I115-LONG-4: the primitive lane ignores obsolete carrier bits.
-            assertEquals(3L,
-                    other.execute(1L, module, 2L, false, false, false, false));
-            assertEquals(3L, other.execute(1L, module, 2L, true, true, false, false));
-
-            // Divide: a Fraction result misses from inside the admitted lane.
-            ProtosNumericDivideNode divide = ProtosNumericDivideNode.create();
-            assertSame(ProtosPrimitiveNumericSendFastPathsBase.MISS,
-                    divide.execute(generic, module, 2L, true, true, false, false));
-            assertEquals(2L, divide.execute(6L, module, 3L, true, true, false, false));
-            assertSame(ProtosPrimitiveNumericSendFastPathsBase.MISS,
-                    divide.execute(5L, module, 2L, true, true, false, false));
-            assertSame(ProtosPrimitiveNumericSendFastPathsBase.MISS,
-                    divide.execute(5L, module, 0L, true, true, false, false));
-            assertEquals(4L, divide.execute(8L, module, 2L, true, true, false, false));
-
-            // Ordering: generic before and after, NaN unordered, signed zeros equal.
-            ProtosNumericLessNode less = ProtosNumericLessNode.create();
-            assertSame(ProtosPrimitiveNumericSendFastPathsBase.MISS,
-                    less.execute(generic, module, 1L, true, true));
-            assertSame(ProtosBooleanValue.TRUE, less.execute(1L, module, 2L, true, true));
-            assertSame(ProtosPrimitiveNumericSendFastPathsBase.MISS,
-                    less.execute(1L, module, generic, true, true));
-            assertSame(ProtosBooleanValue.FALSE,
-                    less.execute(Double.NaN, module, 1L, true, true));
-            assertSame(ProtosBooleanValue.FALSE,
-                    less.execute(-0.0d, module, 0.0d, true, true));
-            assertSame(ProtosBooleanValue.TRUE, less.execute(1.5d, module, 2L, true, true));
-            ProtosNumericLessEqualNode lessEqual = ProtosNumericLessEqualNode.create();
-            assertSame(ProtosBooleanValue.TRUE,
-                    lessEqual.execute(-0.0d, module, 0L, true, true));
-            assertSame(ProtosBooleanValue.FALSE,
-                    lessEqual.execute(Double.NaN, module, Double.NaN, true, true));
-        });
+    void numericLanesStayReachableInEveryArrivalOrder() {
+        for (boolean debug : new boolean[] {false, true}) {
+            try (Context context = context(debug)) {
+                for (String sequence : ARRIVAL_ORDER_SEQUENCES) {
+                    assertTrue(eval(context, sequence), () -> mode(debug) + ":\n" + sequence);
+                }
+            }
+        }
         System.out.println("PERF040_E1_ARRIVAL_ORDER=PASS");
     }
 
     /**
-     * GraalPy-style doLL -> doLLOvf for '+', '-' and '*': long results before
-     * and after the first overflow, exact promotion on overflow, carrier and
-     * authentic Integer operands in every combination, generic operands
-     * around them, and PERF043 folds on both primitive paths. Only results are
-     * asserted: after the rewrite the generalization, not doLL, is active.
+     * GraalPy-style doLL -> doLLOvf for '+', '-' and '*', executed on real
+     * operation sites: long results before and after the first overflow,
+     * exact promotion on overflow, and the signed-64 edges that fit. Only
+     * results are asserted: after the rewrite the generalization, not doLL,
+     * is active.
      */
     @Test
     void integerArithmeticStaysPrimitiveAcrossOverflow() throws Exception {
         withCore(module -> {
-            Object generic = new ProtosObjectValue(ProtosObjectValue.rootObject());
-            ProtosNumericAddNode add = ProtosNumericAddNode.create();
-            ProtosNumericSubtractNode subtract = ProtosNumericSubtractNode.create();
-            ProtosNumericMultiplyNode multiply = ProtosNumericMultiplyNode.create();
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            ProtosClosureValue subtract = closure("(x, y) => x - y", module);
+            ProtosClosureValue multiply = closure("(x, y) => x * y", module);
 
             // Initial primitive path, no overflow.
-            assertEquals(5L, add.execute(2L, module, 3L, true, true, false, false));
-            assertEquals(-1L, subtract.execute(2L, module, 3L, true, true, false, false));
-            assertEquals(6L, multiply.execute(2L, module, 3L, true, true, false, false));
+            assertEquals(5L, normalized(call(add, module, 2L, 3L)));
+            assertEquals(-1L, normalized(call(subtract, module, 2L, 3L)));
+            assertEquals(6L, normalized(call(multiply, module, 2L, 3L)));
 
             // First overflow: exact, normalized promotion.
             assertTrue(ProtosNumericValueSupport.isLargeInteger(
-                    add.execute(Long.MAX_VALUE, module, 1L, true, true, false, false)));
+                    call(add, module, Long.MAX_VALUE, 1L)));
             assertTrue(ProtosNumericValueSupport.isLargeInteger(
-                    subtract.execute(Long.MIN_VALUE, module, 1L, true, true, false, false)));
+                    call(subtract, module, Long.MIN_VALUE, 1L)));
             assertTrue(ProtosNumericValueSupport.isLargeInteger(
-                    multiply.execute(Long.MAX_VALUE, module, 2L, true, true, false, false)));
+                    call(multiply, module, Long.MAX_VALUE, 2L)));
 
-            // The generalized site keeps returning Java longs for small results.
+            // The generalized site keeps returning signed-64 Integers for small results.
             for (long i = 0; i < 1000; i++) {
-                assertEquals(i + 1, add.execute(i, module, 1L, true, true, false, false));
-                assertEquals(i - 1, subtract.execute(i, module, 1L, true, true, false, false));
-                assertEquals(i * 3, multiply.execute(i, module, 3L, true, true, false, false));
+                assertEquals(i + 1, normalized(call(add, module, i, 1L)));
+                assertEquals(i - 1, normalized(call(subtract, module, i, 1L)));
+                assertEquals(i * 3, normalized(call(multiply, module, i, 3L)));
             }
             // Signed-64 edges that fit are not promoted.
             assertEquals(Long.MAX_VALUE,
-                    add.execute(Long.MAX_VALUE - 1, module, 1L, true, true, false, false));
+                    normalized(call(add, module, Long.MAX_VALUE - 1, 1L)));
             assertEquals(Long.MIN_VALUE,
-                    subtract.execute(Long.MIN_VALUE + 1, module, 1L, true, true, false, false));
+                    normalized(call(subtract, module, Long.MIN_VALUE + 1, 1L)));
             assertEquals(Long.MIN_VALUE,
-                    multiply.execute(Long.MIN_VALUE, module, 1L, true, true, false, false));
+                    normalized(call(multiply, module, Long.MIN_VALUE, 1L)));
 
-            // Authentic Integers and mixed carrier / Integer pairs.
-            ProtosNumericAddNode represented = ProtosNumericAddNode.create();
-            assertEquals(7L, represented.execute(
-                    integer(3), module, integer(4), false, false, false, false));
-            assertEquals(7L, represented.execute(3L, module, integer(4), true, true, false, false));
-            assertEquals(7L, represented.execute(integer(3), module, 4L, true, true, false, false));
-            assertEquals(7L,
-                    represented.execute(integer(3), module, 4L, false, true, false, false));
-            assertEquals(7L,
-                    represented.execute(integer(3), module, 4L, true, false, false, false));
-            assertSame(ProtosPrimitiveNumericSendFastPathsBase.MISS,
-                    represented.execute(generic, module, integer(4), false, false, false, false));
-            assertTrue(ProtosNumericValueSupport.isLargeInteger(represented.execute(
-                    integer(Long.MAX_VALUE), module, integer(1), false, false, false, false)));
-            assertEquals(9L, represented.execute(
-                    integer(4), module, integer(5), false, false, false, false));
-            assertEquals(9L, represented.execute(4L, module, 5L, true, true, false, false));
-            assertSame(ProtosPrimitiveNumericSendFastPathsBase.MISS,
-                    represented.execute(4L, module, generic, true, true, false, false));
-            assertEquals(2.5d, represented.execute(1L, module, 1.5d, true, true, false, false));
-            assertEquals(11L, represented.execute(
-                    integer(5), module, integer(6), false, false, false, false));
-
-            // PERF043 folds: applied only when operation and operands match.
-            var fold = new ProtosPrimitiveNumericSendFastPathsBase.FoldedIntegerArithmetic(
-                    ProtosStandardIntegerProtocol.CanonicalIntegerOperation.ADD, 1L, 2L, 3L);
-            ProtosNumericAddNode folded = ProtosNumericAddNode.create();
-            assertEquals(3L, folded.execute(1L, module, 2L, true, true, fold, 3L));
-            assertEquals(4L, folded.execute(2L, module, 2L, true, true, fold, 3L));
-            assertEquals(3L,
-                    folded.execute(integer(1), module, integer(2), false, false, fold, 3L));
-            assertEquals(-1L, ProtosNumericSubtractNode.create()
-                    .execute(1L, module, 2L, true, true, fold, 3L));
+            // Mixed Float operands after the overflow keep their exact lane.
+            assertEquals(2.5d, call(add, module, 1L, 1.5d));
+            assertEquals(11L, normalized(call(add, module, 5L, 6L)));
         });
         System.out.println("PERF040_E1_DOLL_DOLLOVF=PASS");
     }
 
-    /** Part A, 1-3 and 7: a fresh Prelude certifies on first use, exactly once. */
-    @Test
-    void certificationIsDeferredToFirstUseAndMemoized() throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        // Bootstrap ran Core sources but no specialized operation of this Prelude.
-        assertSame(null, certificateField(prelude));
-
-        ProtosNumericCoreAdmission first = prelude.numericCoreAdmission();
-        assertSame(first, certificateField(prelude));
-        assertSame(first, prelude.numericCoreAdmission());
-        assertTrue(first.admits(ProtosNumericCoreAdmission.INTEGER_ADD));
-
-        // A specialized operation reaches the same memoized certificate.
-        withCore(module -> {
-            ProtosPrelude own = module.preludeOrNullForRuntime();
-            assertSame(null, certificateField(own));
-            assertEquals(3L, ProtosNumericAddNode.create()
-                    .execute(1L, module, 2L, true, true, false, false));
-            ProtosNumericCoreAdmission used = certificateField(own);
-            assertTrue(used != null);
-            assertEquals(7L, ProtosNumericAddNode.create()
-                    .execute(3L, module, 4L, true, true, false, false));
-            assertSame(used, certificateField(own));
-        });
-        System.out.println("PERF040_E1_DEFERRED_CERTIFICATE=PASS");
-    }
-
-    /** Part A, 4 and 5: negative certificates are memoized; Preludes share nothing. */
-    @Test
-    void negativeCertificationIsStableAndPerPrelude() throws Exception {
-        ProtosPrelude canonical = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosPrelude synthetic = syntheticPrelude(canonical, Map.of());
-        assertSame(null, certificateField(synthetic));
-        ProtosNumericCoreAdmission negative = synthetic.numericCoreAdmission();
-        assertSame(negative, synthetic.numericCoreAdmission());
-        assertSame(negative, certificateField(synthetic));
-        for (int lane : allLanes()) {
-            assertFalse(negative.admits(lane));
-        }
-
-        ProtosPrelude other = new ProtosCoreBootstrap().bootstrap(CORE);
-        assertNotSame(canonical.numericCoreAdmission(), other.numericCoreAdmission());
-        System.out.println("PERF040_E1_NEGATIVE_CERTIFICATE=PASS");
-    }
-
-    /** Part A, 6: concurrent first use publishes one complete certificate. */
-    @Test
-    void concurrentFirstUsePublishesOneCertificate() throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        int threads = 16;
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
-        try {
-            List<Future<ProtosNumericCoreAdmission>> results = new ArrayList<>();
-            for (int index = 0; index < threads; index++) {
-                results.add(pool.submit(() -> {
-                    start.await();
-                    return prelude.numericCoreAdmission();
-                }));
-            }
-            start.countDown();
-            ProtosNumericCoreAdmission published = results.get(0).get();
-            for (Future<ProtosNumericCoreAdmission> result : results) {
-                assertSame(published, result.get());
-            }
-            for (int lane : allLanes()) {
-                assertTrue(published.admits(lane));
-            }
-            assertSame(published, certificateField(prelude));
-        } finally {
-            pool.shutdownNow();
-        }
-        System.out.println("PERF040_E1_CONCURRENT_CERTIFICATE=PASS");
-    }
-
     /**
-     * Part B structural reachability: owned large Integers take a numeric
-     * lane (never MISS) after generic operands, in every operation; foreign
-     * or delegating look-alikes stay on ordinary dispatch.
+     * Part B reachability: large Integers of the executing Context take an
+     * exact numeric result in every operation, both operand orders, and the
+     * small lanes stay reachable afterwards.
      */
     @Test
-    void largeIntegerLanesAreReachableAndOwned() throws Exception {
+    void largeIntegerLanesAreReachable() throws Exception {
         withCore(module -> {
-            ProtosPrelude prelude = module.preludeOrNullForRuntime();
-            Object big = ProtosNumericValueSupport.addIntegers(
-                    integer(Long.MAX_VALUE), integer(1L), prelude);
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            ProtosClosureValue subtract = closure("(x, y) => x - y", module);
+            ProtosClosureValue multiply = closure("(x, y) => x * y", module);
+            ProtosClosureValue divide = closure("(x, y) => x / y", module);
+            ProtosClosureValue less = closure("(x, y) => x < y", module);
+
+            Object big = call(add, module, Long.MAX_VALUE, 1L);
             assertTrue(ProtosNumericValueSupport.isLargeInteger(big));
-            Object generic = new ProtosObjectValue(ProtosObjectValue.rootObject());
-            Object miss = ProtosPrimitiveNumericSendFastPathsBase.MISS;
+            assertTrue(ProtosNumericValueSupport.isLargeInteger(call(add, module, big, 1L)));
+            assertTrue(ProtosNumericValueSupport.isLargeInteger(call(add, module, 1L, big)));
+            assertEquals(3L, normalized(call(add, module, 1L, 2L)));
+            Object negated = call(subtract, module, 0L, big);
+            assertEquals(0L, normalized(call(add, module, big, negated)));
+            assertEquals(9.223372036854775808E18d, call(add, module, big, 0.5d));
+            assertEquals(9.223372036854775808E18d, call(add, module, 0.5d, big));
 
-            ProtosNumericAddNode add = ProtosNumericAddNode.create();
-            assertSame(miss, add.execute(generic, module, 1L, true, true, false, false));
-            assertTrue(ProtosNumericValueSupport.isLargeInteger(
-                    add.execute(big, module, 1L, false, true, false, false)));
-            assertTrue(ProtosNumericValueSupport.isLargeInteger(
-                    add.execute(1L, module, big, true, false, false, false)));
-            assertEquals(3L, add.execute(1L, module, 2L, true, true, false, false));
-            assertSame(miss, add.execute(big, module, generic, false, true, false, false));
-            Object zero = add.execute(big, module,
-                    ProtosNumericValueSupport.subtractIntegers(integer(0L), big, prelude),
-                    false, false, false, false);
-            assertEquals(0L, ((Long) zero).longValue());
-            assertEquals(9.223372036854775808E18d,
-                    add.execute(big, module, 0.5d, false, true, false, false));
-            assertEquals(9.223372036854775808E18d,
-                    add.execute(0.5d, module, big, true, false, false, false));
+            assertEquals(Long.MAX_VALUE, normalized(call(subtract, module, big, 1L)));
+            assertEquals(0L, normalized(call(multiply, module, big, 0L)));
 
-            ProtosNumericSubtractNode subtract = ProtosNumericSubtractNode.create();
-            assertEquals(Long.MAX_VALUE, ((Long) subtract.execute(
-                    big, module, 1L, false, true, false, false)).longValue());
-            ProtosNumericMultiplyNode multiply = ProtosNumericMultiplyNode.create();
-            assertEquals(0L, ((Long) multiply.execute(
-                    big, module, 0L, false, true, false, false)).longValue());
+            assertEquals(2L, normalized(
+                    call(divide, module, call(multiply, module, big, 2L), big)));
+            assertTrue(ProtosNumericValueSupport.isFraction(call(divide, module, 1L, big)));
 
-            ProtosNumericDivideNode divide = ProtosNumericDivideNode.create();
-            assertSame(miss, divide.execute(generic, module, big, true, false, false, false));
-            assertEquals(2L, ((Long) divide.execute(
-                    multiply.execute(big, module, 2L, false, true, false, false),
-                    module, big, false, false, false, false)).longValue());
-            assertTrue(ProtosNumericValueSupport.isFraction(
-                    divide.execute(1L, module, big, true, false, false, false)));
-            // Zero divisor: ordinary dispatch owns the Error.
-            assertSame(miss, divide.execute(big, module, 0L, false, true, false, false));
-            assertSame(miss, divide.execute(big, module, integer(0L), false, false, false, false));
-
-            ProtosNumericLessNode less = ProtosNumericLessNode.create();
-            assertSame(miss, less.execute(generic, module, big, true, false));
-            assertSame(ProtosBooleanValue.TRUE, less.execute(1L, module, big, true, false));
-            assertSame(ProtosBooleanValue.FALSE, less.execute(big, module, 1L, false, true));
+            assertSame(ProtosBooleanValue.TRUE, call(less, module, 1L, big));
+            assertSame(ProtosBooleanValue.FALSE, call(less, module, big, 1L));
             assertSame(ProtosBooleanValue.FALSE,
-                    less.execute(big, module, 9.223372036854775808E18d, false, true));
+                    call(less, module, big, 9.223372036854775808E18d));
             assertSame(ProtosBooleanValue.TRUE,
-                    less.execute(9.223372036854775808E18d, module,
-                            add.execute(big, module, 1L, false, true, false, false),
-                            true, false));
-            assertSame(ProtosBooleanValue.FALSE,
-                    less.execute(big, module, Double.NaN, false, true));
+                    call(less, module, 9.223372036854775808E18d, call(add, module, big, 1L)));
+            assertSame(ProtosBooleanValue.FALSE, call(less, module, big, Double.NaN));
             assertSame(ProtosBooleanValue.TRUE,
-                    less.execute(big, module, Double.POSITIVE_INFINITY, false, true));
-            assertSame(miss, less.execute(big, module, generic, false, true));
-            assertSame(ProtosBooleanValue.TRUE, less.execute(1L, module, 2L, true, true));
-
-            // A large Integer of another Prelude, or a delegating look-alike, is not owned.
-            ProtosPrelude foreign = new ProtosCoreBootstrap().bootstrap(CORE);
-            Object foreignBig = ProtosNumericValueSupport.addIntegers(
-                    integer(Long.MAX_VALUE), integer(1L), foreign);
-            Object lookAlike = new ProtosObjectValue(prelude.bigIntegerPrototype());
-            for (Object outsider : List.of(foreignBig, lookAlike)) {
-                assertSame(miss, add.execute(outsider, module, 1L, false, true, false, false));
-                assertSame(miss, add.execute(1L, module, outsider, true, false, false, false));
-                assertSame(miss, less.execute(outsider, module, 1L, false, true));
-                assertFalse(ProtosPrimitiveNumericSendFastPathsBase.ownedLarge(outsider, prelude));
-            }
-            assertTrue(ProtosPrimitiveNumericSendFastPathsBase.ownedLarge(foreignBig, foreign));
+                    call(less, module, big, Double.POSITIVE_INFINITY));
+            assertSame(ProtosBooleanValue.TRUE, call(less, module, 1L, 2L));
         });
         System.out.println("PERF040_E2_LARGE_INTEGER_LANES=PASS");
-    }
-
-    /** Part B, 13: an alternative Core keeps BigInteger Integer lanes off. */
-    @Test
-    void alternativeCoreDoesNotAdmitLargeIntegerLanes() throws Exception {
-        ProtosPrelude canonical = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosObjectValue number = canonical.numberPrototype();
-        ProtosObjectValue integer = new ProtosObjectValue(number);
-        ProtosClosureValue standard = (ProtosClosureValue)
-                canonical.integerPrototype().readLocalSlot("+").orElseThrow();
-        integer.createLocalSlot(
-                "+", ProtosClosureValue.nativeClosure(standard.nativeBody().orElseThrow()));
-        ProtosObjectValue smallInteger = new ProtosObjectValue(integer);
-        ProtosObjectValue bigInteger = new ProtosObjectValue(integer);
-        integer.freeze();
-        smallInteger.freeze();
-        bigInteger.freeze();
-        ProtosPrelude alternative =
-                syntheticPrelude(
-                        canonical,
-                        Map.of(
-                                "Number", number,
-                                "Integer", integer,
-                                "SmallInteger", smallInteger,
-                                "BigInteger", bigInteger,
-                                "Float", canonical.floatPrototype()));
-        Object big = ProtosNumericValueSupport.addIntegers(
-                integer(Long.MAX_VALUE), integer(1L), alternative);
-
-        assertTrue(ProtosPrimitiveNumericSendFastPathsBase.ownedLarge(big, alternative));
-        assertFalse(
-                ProtosPrimitiveNumericSendFastPathsBase.admittedCanonicalNumericLane(
-                        big, false, 1L, true, alternative,
-                        ProtosNumericAddNode.INTEGER_LANE, ProtosNumericAddNode.FLOAT_LANE));
-        assertFalse(
-                ProtosPrimitiveNumericSendFastPathsBase.admittedCanonicalNumericLane(
-                        1L, true, big, false, alternative,
-                        ProtosNumericAddNode.INTEGER_LANE, ProtosNumericAddNode.FLOAT_LANE));
-        // The untouched standard Float '+' still admits Float + BigInteger.
-        assertTrue(
-                ProtosPrimitiveNumericSendFastPathsBase.admittedCanonicalNumericLane(
-                        1.5d, true, big, false, alternative,
-                        ProtosNumericAddNode.INTEGER_LANE, ProtosNumericAddNode.FLOAT_LANE));
-        System.out.println("PERF040_E2_ALTERNATIVE_CORE=PASS");
-    }
-
-    private static ProtosNumericCoreAdmission certificateField(ProtosPrelude prelude)
-            throws ReflectiveOperationException {
-        Field field = ProtosPrelude.class.getDeclaredField("numericCoreAdmission");
-        field.setAccessible(true);
-        return (ProtosNumericCoreAdmission) field.get(prelude);
-    }
-
-    private static Long integer(long value) {
-        return Long.valueOf(value);
     }
 
     /**
@@ -956,6 +781,12 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                 () -> "only " + expected + " expected in " + names);
     }
 
+    private static String activeSource(Path path) throws Exception {
+        return String.join("\n", Files.readString(path).lines()
+                .filter(line -> !line.stripLeading().startsWith("//"))
+                .toList());
+    }
+
     private static Object normalized(Object value) {
         return value instanceof Long integer ? integer.longValue() : value;
     }
@@ -966,34 +797,6 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             count++;
         }
         return count;
-    }
-
-    private static ProtosPrelude syntheticPrelude(
-            ProtosPrelude canonical, Map<String, ProtosObjectValue> numeric) {
-        ProtosObjectValue bindings = new ProtosObjectValue(canonical.contextPrototype());
-        bindings.createLocalSlot("Context", canonical.contextPrototype());
-        bindings.createLocalSlot("Error", canonical.errorPrototype());
-        numeric.forEach(bindings::createLocalSlot);
-        bindings.freeze();
-        return new ProtosPrelude(bindings, canonical.contextPrototype());
-    }
-
-    private static List<Integer> allLanes() {
-        List<Integer> lanes = new ArrayList<>();
-        for (int bit = 0; bit < 16; bit++) {
-            lanes.add(1 << bit);
-        }
-        return lanes;
-    }
-
-    private static List<int[]> lanePairs() {
-        return List.of(
-                new int[] {ProtosNumericAddNode.INTEGER_LANE, ProtosNumericAddNode.FLOAT_LANE},
-                new int[] {ProtosNumericDivideNode.INTEGER_LANE,
-                    ProtosNumericDivideNode.FLOAT_LANE},
-                new int[] {ProtosNumericLessNode.INTEGER_LANE, ProtosNumericLessNode.FLOAT_LANE},
-                new int[] {ProtosNumericGreaterEqualNode.INTEGER_LANE,
-                    ProtosNumericGreaterEqualNode.FLOAT_LANE});
     }
 
     private interface CoreTest {

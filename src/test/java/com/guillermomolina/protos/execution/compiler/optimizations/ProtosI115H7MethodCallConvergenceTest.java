@@ -30,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
+import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
@@ -37,6 +38,7 @@ import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.interop.InteropException;
 import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.object.DynamicObject;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -49,7 +51,10 @@ import org.junit.jupiter.api.Test;
 /**
  * I115-H7 EXPERIMENTAL: GraalPy-shaped physical convergence of the
  * {@code method-call} workload (Bytecode While, ReadGlobal, GetMethod,
- * CallBinaryMethod, NumberAdd, NumberInPlaceAdd, Lt, CopyArguments), and
+ * CallUnaryMethod, NumberAdd, RichCompareLt and the one parameter lowering
+ * LoadSuppliedArgument followed by a LOCAL or CELL store; I115 retired
+ * CopyArguments, Lt, NumberInPlaceAdd, the CallBinaryMethod direct tier,
+ * compact roots and the reduced H11 entries), and
  * I115-H7-R1 regression protection for the contracts those operations must
  * keep (caller protocol, rebinding, numeric exactness, strict conditions,
  * evaluation order and side effects).
@@ -86,53 +91,69 @@ final class ProtosI115H7MethodCallConvergenceTest {
             """;
 
     /**
-     * The exact run root of METHOD_CALL (quickening suffixes removed): both
-     * assignments {@code x = x + e} are NumberInPlaceAdd, the condition is
-     * one Lt consumed by the While exit branch. I115-H7-R3: the send is
-     * ReadGlobal (bound once as a Block stack value), GetMethod over its
-     * first reload (emitted as dup, being immediately after the bind), the
-     * second reload, the argument, CallBinaryMethod(callable, receiver,
-     * argument), and the Block's store.stackvalue cleanup that leaves the
-     * call result in place of the bound receiver.
+     * I115: the run root of METHOD_CALL in the shared Bytecode DSL lowering.
+     * i and sink are CELLs (captured by the inline loop bodies); the
+     * condition is RichCompareLt, materialized and validated by the
+     * canonical Boolean condition before the native branch; the send is
+     * ReadGlobal, GetMethod, then one CallUnaryMethod; both {@code x = x + e}
+     * are NumberAdd; a backward branch closes the loop. No fixed instruction
+     * budget is asserted.
      */
-    private static final List<String> RUN_DSL = List.of(
-            "c.EnterRoot",
-            "load.constant",
-            "store.local",
-            "load.constant",
-            "store.local",
-            "load.local",
-            "load.constant",
-            "c.Lt",
-            "branch.false",
-            "load.local",
-            "c.ReadGlobal",
-            "dup",
-            "c.GetMethod",
-            "load.stackvalue",
-            "load.local",
-            "c.CallBinaryMethod",
-            "store.stackvalue",
-            "c.NumberInPlaceAdd",
-            "store.local",
-            "load.local",
-            "load.constant",
-            "c.NumberInPlaceAdd",
-            "store.local",
-            "branch.backward",
-            "load.local",
-            "c.EpilogForReturn",
-            "return");
+    private static void assertRunArchitecture(List<String> names) {
+        assertTrue(names.get(0).equals("c.EnterRoot"), names.toString());
+        assertEquals(2, count(names, "c.CreateCell"), "i and sink are cells: " + names);
+        assertTrue(names.contains("c.LoadCell") && names.contains("c.StoreCell"),
+                names.toString());
+        assertEquals(1, count(names, "c.RichCompareLt"), names.toString());
+        assertEquals(1, count(names, "c.ReadGlobal"), names.toString());
+        assertEquals(1, count(names, "c.GetMethod"), names.toString());
+        assertEquals(1, count(names, "c.CallUnaryMethod"), names.toString());
+        assertEquals(2, count(names, "c.NumberAdd"), names.toString());
+        int compare = names.indexOf("c.RichCompareLt");
+        int materialize = indexAfter(names, "c.MaterializePrimitiveNumericCarrier", compare);
+        int condition = indexAfter(names, "c.ExperimentalCanonicalBooleanCondition", materialize);
+        int branch = indexAfter(names, "branch.false", condition);
+        assertTrue(compare >= 0 && materialize > compare && condition > materialize
+                        && branch > condition,
+                "comparison, materialization, validation, branch: " + names);
+        int select = names.indexOf("c.GetMethod");
+        int call = names.indexOf("c.CallUnaryMethod");
+        assertTrue(names.indexOf("c.ReadGlobal") < select && select < call,
+                "receiver read, method selection, then its call: " + names);
+        assertTrue(names.contains("branch.backward"), names.toString());
+        assertEquals("return", names.get(names.size() - 1), names.toString());
+        assertTrue(names.contains("c.EpilogForReturn"), names.toString());
+    }
 
-    /** The identity root: CopyArguments prologue and one direct local read. */
+    private static int indexAfter(List<String> names, String name, int from) {
+        if (from < 0) {
+            return -1;
+        }
+        for (int index = from + 1; index < names.size(); index++) {
+            if (names.get(index).equals(name)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * The identity root: the one parameter lowering (supplied position 0
+     * stored into the parameter's native local) and one direct local read.
+     */
     private static final List<String> IDENTITY_DSL = List.of(
             "c.EnterRoot",
-            "c.CopyArguments",
+            "c.LoadSuppliedArgument",
+            "store.local",
             "load.local",
             "c.EpilogForReturn",
             "return");
 
-    /** Machinery the H7 path replaces; never emitted by an admitted compact root. */
+    /**
+     * Retired machinery never emitted by the shared Bytecode DSL lowering.
+     * (MaterializePrimitiveNumericCarrier and
+     * ExperimentalCanonicalBooleanCondition are active current operations.)
+     */
     private static final List<String> REPLACED = List.of(
             "PrepareStructuredCall",
             "StructuredPrepareInlineChildCall",
@@ -150,13 +171,20 @@ final class ProtosI115H7MethodCallConvergenceTest {
             "RequiresStructuredDispatch",
             "EnterStraightLineSourceCall",
             "IsPrimitiveNumericSendMiss",
-            "MaterializePrimitiveNumericCarrier",
             "TryPrimitiveNumeric",
             "TryDirectSendOne",
             "PromoteFrameLexicalAuthority",
             "InstallFrameLexicalAuthority",
-            "ExperimentalCanonicalBooleanCondition",
-            "BindUnaryFrameParameter");
+            "BindUnaryFrameParameter",
+            // I115: the retired compact-root, reduced-ABI and H7 numeric lane.
+            "CopyArguments",
+            "BindClosureFrameParameter",
+            "BindRequiredFrameParameter",
+            "ReadRootFrameLocal",
+            "IsCompactLocalFrame",
+            "ExperimentalInteger",
+            "c.Lt",
+            "NumberInPlaceAdd");
 
     // ---- A. Result and the GraalPy-shaped census -------------------------------------
 
@@ -175,12 +203,12 @@ final class ProtosI115H7MethodCallConvergenceTest {
     }
 
     @Test
-    void runIsOneDirectCompactRoot() throws Exception {
+    void runUsesTheSharedBytecodeLowering() throws Exception {
         try (ProtosStandaloneHostedSession session = open("compact", METHOD_CALL)) {
             ProtosBytecodeRootNode run = root(session, "run");
             List<String> names = unquickened(names(run));
             System.out.println("I115_H7_RUN_INSTRUCTIONS=" + names);
-            assertEquals(RUN_DSL, names, "I115-H7 run DSL");
+            assertRunArchitecture(names);
             assertReplacedAbsent("run", names);
             assertDirectLoop(run);
             assertTrue(run.getBytecodeNode().getLocals().stream()
@@ -189,7 +217,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
             assertEquals(499500L,
                     session.prepareTopLevel("run").executable().execute().asLong());
             // The executed (possibly quickened) bytecode keeps the same operations.
-            assertEquals(RUN_DSL, unquickened(names(run)));
+            assertEquals(names, unquickened(names(run)));
+            assertRunArchitecture(unquickened(names(run)));
         }
     }
 
@@ -202,9 +231,11 @@ final class ProtosI115H7MethodCallConvergenceTest {
                     "identity is a root of the examined compilation");
             assertNotSame(run, identity);
             assertEquals(IDENTITY_DSL, unquickened(names(identity)));
-            assertTrue(identity.isExperimentalPrimitiveArgumentRoot());
+            // I115: one B5 header; the parameter is supplied position 0.
+            assertEquals(List.of(0), suppliedPositions(identity));
+            assertTrue(localNames(identity).contains("value"));
             assertTrue(identity.provablyNonSuspendingBody(),
-                    "the direct CallBinaryMethod tier admits identity");
+                    "identity is a proven non-suspending root of the shared lowering");
             assertEquals(499500L,
                     session.prepareTopLevel("run").executable().execute().asLong());
         }
@@ -256,12 +287,12 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 }
                 """)) {
             List<String> names = unquickened(names(root(session, "run")));
+            // I115: three ordinary unary sends, each GetMethod then CallUnaryMethod.
             assertEquals(3, count(names, "c.GetMethod"), "three ordinary sends: " + names);
-            assertEquals(3, count(names, "c.CallBinaryMethod"), names.toString());
-            // I115-H7-R3: each receiver is bound once and reloaded twice (dup, load).
-            assertEquals(3, count(names, "dup"), names.toString());
-            assertEquals(3, count(names, "load.stackvalue"), names.toString());
-            assertEquals(3, count(names, "store.stackvalue"), names.toString());
+            assertEquals(3, count(names, "c.CallUnaryMethod"), names.toString());
+            assertEquals(0, count(names, "c.CallBinaryMethod"), names.toString());
+            assertSelectionPrecedesEachCall(names);
+            assertReplacedAbsent("run", names);
             // receiver (1), then argument (2), then the call itself (3), once each.
             assertEquals(7123L,
                     session.prepareTopLevel("run").executable().execute().asLong());
@@ -311,36 +342,43 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 """)) {
             List<String> sum = unquickened(names(root(session, "plainSum")));
             assertEquals(1, count(sum, "c.NumberAdd"), "a + b is NumberAdd: " + sum);
-            assertEquals(0, count(sum, "c.NumberInPlaceAdd"), sum.toString());
             assertReplacedAbsent("plainSum", sum);
             assertNumber(session, "plainSum", 42L);
 
+            // I115: x = x + e is the same per-selector NumberAdd, stored natively.
             List<String> accumulate = unquickened(names(root(session, "accumulate")));
-            assertEquals(1, count(accumulate, "c.NumberInPlaceAdd"),
-                    "t = t + 5 is NumberInPlaceAdd: " + accumulate);
-            assertEquals(0, count(accumulate, "c.NumberAdd"), accumulate.toString());
+            assertEquals(1, count(accumulate, "c.NumberAdd"),
+                    "t = t + 5 is NumberAdd: " + accumulate);
+            // The sum is stored into t's native storage (a local or a cell);
+            // native locals also stage operands, so no store.local count is asserted.
+            int add = accumulate.indexOf("c.NumberAdd");
+            assertTrue(accumulate.subList(add + 1, accumulate.size()).stream()
+                            .anyMatch(name -> name.equals("store.local") || name.equals("c.StoreCell")),
+                    "the sum is stored: " + accumulate);
             assertReplacedAbsent("accumulate", accumulate);
             assertNumber(session, "accumulate", 5L);
 
             ProtosBytecodeRootNode loopRoot = root(session, "loopCompare");
             List<String> loop = unquickened(names(loopRoot));
-            assertEquals(1, count(loop, "c.Lt"), "k < 3 is Lt: " + loop);
-            assertTrue(loop.get(loop.indexOf("c.Lt") + 1).equals("branch.false"),
-                    "the While branch consumes Lt directly: " + loop);
-            assertEquals(0, count(loop, "c.NumberAdd") + count(loop, "c.NumberInPlaceAdd"));
+            assertEquals(1, count(loop, "c.RichCompareLt"), "k < 3 is RichCompareLt: " + loop);
+            int compare = loop.indexOf("c.RichCompareLt");
+            int condition = indexAfter(loop, "c.ExperimentalCanonicalBooleanCondition", compare);
+            assertTrue(condition > compare
+                            && indexAfter(loop, "branch.false", condition) > condition,
+                    "comparison, Boolean validation, then the native branch: " + loop);
+            assertEquals(0, count(loop, "c.NumberAdd"));
             assertReplacedAbsent("loopCompare", loop);
             assertDirectLoop(loopRoot);
             assertNumber(session, "loopCompare", 5L);
 
             List<String> send = unquickened(names(root(session, "sendOne")));
+            int read = send.indexOf("c.ReadGlobal");
             int get = send.indexOf("c.GetMethod");
-            int call = send.indexOf("c.CallBinaryMethod");
-            assertTrue(get > 0 && call > get, "GetMethod then CallBinaryMethod: " + send);
-            assertEquals(List.of("c.ReadGlobal", "dup", "c.GetMethod",
-                            "load.stackvalue", "load.constant", "c.CallBinaryMethod",
-                            "store.stackvalue"),
-                    send.subList(get - 2, call + 2),
-                    "receiver bound once, selection, receiver, argument, call");
+            int call = send.indexOf("c.CallUnaryMethod");
+            assertTrue(read >= 0 && get > read && call > get,
+                    "receiver read, GetMethod, then CallUnaryMethod: " + send);
+            assertEquals(1, count(send, "c.CallUnaryMethod"), send.toString());
+            assertEquals(0, count(send, "c.CallBinaryMethod"), send.toString());
             assertReplacedAbsent("sendOne", send);
             assertNumber(session, "sendOne", 8L);
 
@@ -348,7 +386,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
             ProtosBytecodeRootNode renamedRoot = root(session, "renamedLoop");
             List<String> renamed = unquickened(names(renamedRoot));
             for (String required : List.of("c.ReadGlobal", "c.GetMethod",
-                    "c.CallBinaryMethod", "c.NumberInPlaceAdd", "c.Lt")) {
+                    "c.CallUnaryMethod", "c.NumberAdd", "c.RichCompareLt")) {
                 assertTrue(renamed.contains(required), required + ": " + renamed);
             }
             assertReplacedAbsent("renamedLoop", renamed);
@@ -358,20 +396,21 @@ final class ProtosI115H7MethodCallConvergenceTest {
             ProtosBytecodeRootNode twice =
                     methodRoot(session, "renamedLoop", "accumulator", "twice");
             List<String> twiceNames = unquickened(names(twice));
-            assertTrue(twiceNames.contains("c.CopyArguments"), twiceNames.toString());
+            assertEquals(List.of(0), suppliedPositions(twice), twiceNames.toString());
             assertEquals(1, count(twiceNames, "c.NumberAdd"), twiceNames.toString());
+            assertReplacedAbsent("twice", twiceNames);
         }
     }
 
     // ---- I115-H7-R5 return representation ---------------------------------------------
 
     /**
-     * An admitted H7 root and its host entry must BOTH return the raw
-     * signed-64 Long. Checking Value.asLong alone would miss an accidental
-     * Long allocation at either boundary.
+     * A source root of the shared lowering and its host entry must BOTH
+     * return the signed-64 Integer as a Java Long. Checking Value.asLong
+     * alone would miss a wrong representation at either boundary.
      */
     @Test
-    void h7LongRemainsRawAcrossRootAndHostBoundary() throws Exception {
+    void longResultRemainsLongAcrossRootAndHostBoundary() throws Exception {
         try (ProtosStandaloneHostedSession session =
                 open("r5-raw-integer", METHOD_CALL)) {
             ProtosStandaloneHostedSession.PreparedTopLevel prepared =
@@ -380,8 +419,14 @@ final class ProtosI115H7MethodCallConvergenceTest {
             ProtosBytecodeRootNode run = assertInstanceOf(
                     ProtosBytecodeRootNode.class, host.target.getRootNode());
 
-            assertTrue(run.isExperimentalH7RawIntegerReturn(),
-                    "the compact H7 root must admit raw Long transport");
+            // I115: one shared return epilogue. sink is a CELL, so the
+            // returned value is read with LoadCell (or a local read).
+            List<String> runNames = unquickened(names(run));
+            assertEquals(List.of("c.EpilogForReturn", "return"),
+                    runNames.subList(runNames.size() - 2, runNames.size()), runNames.toString());
+            String returned = runNames.get(runNames.size() - 3);
+            assertTrue(returned.equals("c.LoadCell") || returned.equals("load.local"),
+                    runNames.toString());
 
             for (int call = 0; call < WARM; call++) {
                 assertEquals(499500L, prepared.executable().execute().asLong());
@@ -432,10 +477,13 @@ final class ProtosI115H7MethodCallConvergenceTest {
             ProtosStandaloneHostedSession.PreparedTopLevel wide =
                     session.prepareTopLevel("wide");
 
-            assertFalse(root(session, "plain").isExperimentalH7RawIntegerReturn(),
-                    "an ordinary literal root is not an H7 return root");
-            assertTrue(root(session, "wide").isExperimentalH7RawIntegerReturn(),
-                    "the H7 addition is admitted even when the result exceeds 32 bits");
+            // I115: both roots share one lowering; only wide adds.
+            List<String> plainNames = unquickened(names(root(session, "plain")));
+            List<String> wideNames = unquickened(names(root(session, "wide")));
+            assertEquals(0, count(plainNames, "c.NumberAdd"), plainNames.toString());
+            assertEquals(1, count(wideNames, "c.NumberAdd"), wideNames.toString());
+            assertReplacedAbsent("plain", plainNames);
+            assertReplacedAbsent("wide", wideNames);
 
             session.processContextForTesting().callForRuntime(() -> {
                 InteropLibrary interop = InteropLibrary.getUncached();
@@ -517,12 +565,25 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 }
                 k
             }
+
+            lessMixed: () => {
+                a: 2
+                b: 2.5
+                (a < b) && !(b < a)
+            }
+
+            lessDoubles: () => {
+                a: 16777216.0
+                b: 16777217.0
+                (a < b) && !(b < a)
+            }
             """;
 
     /*
-     * 1, 4, 7, 8, 10: long results of NumberAdd and NumberInPlaceAdd stay raw
-     * Longs through locals, EpilogForReturn and the host boundary, both
-     * before and after the operations specialize.
+     * 1, 4, 7, 8, 10: long results of NumberAdd stay Java Longs through
+     * native storage, EpilogForReturn and the host boundary, both before
+     * and after the operations specialize. Native locals also stage
+     * operands and continuation state, so no store.local count is asserted.
      */
     @Test
     void longResultsStayRawLongs() throws Exception {
@@ -530,12 +591,15 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 open("long-results", LONG_DOUBLE)) {
             List<String> stored = unquickened(names(root(session, "storedSum")));
             assertEquals(2, count(stored, "c.NumberAdd"),
-                    "NumberAdd -> StoreLocal -> LoadLocal -> NumberAdd: " + stored);
-            assertEquals(3, count(stored, "store.local"),
-                    "a, b and the intermediate sum are stored locals: " + stored);
+                    "the intermediate sum feeds the second NumberAdd: " + stored);
+            int first = stored.indexOf("c.NumberAdd");
+            assertTrue(stored.subList(first + 1, stored.size()).stream()
+                            .anyMatch(name -> name.equals("store.local") || name.equals("c.StoreCell")),
+                    "the intermediate sum is stored natively: " + stored);
             assertReplacedAbsent("storedSum", stored);
             List<String> inPlace = unquickened(names(root(session, "inPlace")));
-            assertEquals(1, count(inPlace, "c.NumberInPlaceAdd"), inPlace.toString());
+            assertEquals(1, count(inPlace, "c.NumberAdd"), inPlace.toString());
+            assertReplacedAbsent("inPlace", inPlace);
 
             for (int call = 0; call < WARM; call++) {
                 assertRawLong(session, "sumLong", 42L);
@@ -560,46 +624,90 @@ final class ProtosI115H7MethodCallConvergenceTest {
         assertEquals(16777217.0, ProtosExperimentalNumberAddFastPathsBase.doLD(16777216L, 1.0));
         assertEquals(16777217.0, ProtosExperimentalNumberAddFastPathsBase.doDL(1.0, 16777216L));
         assertEquals(0.1 + 0.2, ProtosExperimentalNumberAddFastPathsBase.doDD(0.1, 0.2));
-        assertTrue(ProtosExperimentalLessNode.doLD(2L, 2.5));
-        assertFalse(ProtosExperimentalLessNode.doDL(2.5, 2L));
-        assertTrue(ProtosExperimentalLessNode.doDD(16777216.0, 16777217.0));
+        // I115: RichCompareLt's double lane; mixed operands are checked by execution.
+        assertSame(com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE,
+                ProtosRichCompareLtNode.doDD(16777216.0, 16777217.0));
+        assertSame(com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE,
+                ProtosRichCompareLtNode.doDD(16777217.0, 16777216.0));
         try (ProtosStandaloneHostedSession session =
                 open("double-results", LONG_DOUBLE)) {
+            /*
+             * I115: `&&` is one ordinary unary send whose argument is the
+             * right-hand Closure; the second comparison lives in that
+             * Closure's own root. lessMixed's root therefore has exactly one
+             * method selection followed by one unary call, plus the Closure
+             * argument's materialization and cell capture.
+             */
+            List<String> mixed = unquickened(names(root(session, "lessMixed")));
+            assertEquals(1, count(mixed, "c.GetMethod"), mixed.toString());
+            assertEquals(1, count(mixed, "c.CallUnaryMethod"), mixed.toString());
+            assertSelectionPrecedesEachCall(mixed);
+            assertEquals(1, count(mixed, "c.MaterializeCurrentClosure"), mixed.toString());
+            assertEquals(1, count(mixed, "c.CaptureClosureCells"), mixed.toString());
+            assertReplacedAbsent("lessMixed", mixed);
             for (int call = 0; call < WARM; call++) {
                 assertDouble(session, "sumDouble", 0.1 + 0.2);
                 // 16777217 has no Java float representation.
                 assertDouble(session, "sumLongDouble", 16777217.0);
                 assertDouble(session, "sumDoubleLong", 16777217.0);
                 assertNumber(session, "lessLongDouble", 3L);
+                assertTrue(session.prepareTopLevel("lessMixed").executable().execute()
+                        .asBoolean(), "2 < 2.5 and not 2.5 < 2");
+                assertTrue(session.prepareTopLevel("lessDoubles").executable().execute()
+                        .asBoolean(), "doubles beyond float precision order exactly");
             }
         }
     }
 
     /*
-     * 2, 3: the compact subtraction and multiplication return a Java long
-     * on their primitive paths, also after the overflow specialization
-     * replaced them; an int never appears as a carrier.
+     * 2, 3: addition, subtraction and multiplication return a Java long on
+     * their primitive paths (the surviving NumberAdd/NumberSubtract/
+     * NumberMultiply doLL lanes), never an int; beyond signed-64 the guest
+     * result is the exact large Integer and no host ArithmeticException
+     * escapes into ordinary guest overflow.
      */
     @Test
-    void compactIntegerOperationsReturnLongs() {
-        assertEquals(42L, ProtosBytecodeRootNode.ExperimentalIntegerAdd.doLong(40L, 2L));
-        assertEquals(38L, ProtosBytecodeRootNode.ExperimentalIntegerSubtract.doLong(40L, 2L));
-        assertEquals(80L, ProtosBytecodeRootNode.ExperimentalIntegerMultiply.doLong(40L, 2L));
-        assertEquals(4294967294L, assertInstanceOf(Long.class,
-                ProtosBytecodeRootNode.ExperimentalIntegerAdd.doLongWithOverflow(
-                        2147483647L, 2147483647L, null, null)));
-        assertEquals(-4294967296L, assertInstanceOf(Long.class,
-                ProtosBytecodeRootNode.ExperimentalIntegerSubtract.doLongWithOverflow(
-                        -2147483648L, 2147483648L, null, null)));
-        assertEquals(4611686014132420609L, assertInstanceOf(Long.class,
-                ProtosBytecodeRootNode.ExperimentalIntegerMultiply.doLongWithOverflow(
-                        2147483647L, 2147483647L, null, null)));
-        assertEquals(Long.MIN_VALUE, assertInstanceOf(Long.class,
-                ProtosBytecodeRootNode.ExperimentalIntegerMultiply.doLongWithOverflow(
-                        Long.MIN_VALUE, 1L, null, null)));
+    void compactIntegerOperationsReturnLongs() throws Exception {
+        assertEquals(42L, ProtosExperimentalNumberAddFastPathsBase.doLL(40L, 2L));
+        assertEquals(38L, ProtosExperimentalNumberSubtractFastPathsBase.doLL(40L, 2L));
+        assertEquals(80L, ProtosExperimentalNumberMultiplyFastPathsBase.doLL(40L, 2L));
+        // The primitive lane rewrites on overflow; the generalization promotes.
         assertThrows(ArithmeticException.class,
-                () -> ProtosBytecodeRootNode.ExperimentalIntegerMultiply.doLong(
-                        Long.MIN_VALUE, -1L));
+                () -> ProtosExperimentalNumberMultiplyFastPathsBase.doLL(Long.MIN_VALUE, -1L));
+        try (ProtosStandaloneHostedSession session = open("integer-operations", """
+                addWide: () => {
+                    a: 2147483647
+                    a + 2147483647
+                }
+                subtractWide: () => {
+                    a: 0 - 2147483648
+                    a - 2147483648
+                }
+                multiplyWide: () => {
+                    a: 2147483647
+                    a * 2147483647
+                }
+                multiplyEdge: () => {
+                    a: 0 - 9223372036854775807 - 1
+                    a * 1
+                }
+                multiplyOverflow: () => {
+                    a: 0 - 9223372036854775807 - 1
+                    a * (0 - 1)
+                }
+                """)) {
+            for (String name : List.of(
+                    "addWide", "subtractWide", "multiplyWide", "multiplyEdge")) {
+                assertReplacedAbsent(name, unquickened(names(root(session, name))));
+            }
+            for (int call = 0; call < WARM; call++) {
+                assertRawLong(session, "addWide", 4294967294L);
+                assertRawLong(session, "subtractWide", -4294967296L);
+                assertRawLong(session, "multiplyWide", 4611686014132420609L);
+                assertRawLong(session, "multiplyEdge", Long.MIN_VALUE);
+                assertLarge(session, "multiplyOverflow", "9223372036854775808");
+            }
+        }
     }
 
     /* 5: a real signed-64 overflow of +, - and * is the exact large Integer. */
@@ -760,8 +868,20 @@ final class ProtosI115H7MethodCallConvergenceTest {
 
                 readVisits: () => { visits }
                 """)) {
+            /*
+             * I115: the condition and body are Closure callbacks here (the
+             * receiver is not a statically admitted comparison), invoked by
+             * two CallNilaryMethod sites; the condition result passes the
+             * unified canonical Boolean validation, which signals the
+             * standard Error for a non-Boolean result before any body runs.
+             */
             List<String> names = unquickened(names(root(session, "probeNotBoolean")));
-            assertEquals(1, count(names, "c.Lt"), names.toString());
+            assertEquals(2, count(names, "c.CallNilaryMethod"), names.toString());
+            assertTrue(count(names, "c.ExperimentalCanonicalBooleanCondition") >= 1,
+                    names.toString());
+            int condition = names.indexOf("c.ExperimentalCanonicalBooleanCondition");
+            assertTrue(names.indexOf("c.CallNilaryMethod") < condition,
+                    "the condition callback runs before its validation: " + names);
             assertReplacedAbsent("probeNotBoolean", names);
 
             assertNumber(session, "probeFalse", 0L);
@@ -796,9 +916,10 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 """)) {
             ProtosBytecodeRootNode root = root(session, "sideEffect");
             List<String> names = unquickened(names(root));
-            assertEquals(1, count(names, "c.Lt"), names.toString());
-            int prefix = names.indexOf("c.NumberInPlaceAdd");
-            int test = names.indexOf("c.Lt");
+            assertEquals(1, count(names, "c.RichCompareLt"), names.toString());
+            assertReplacedAbsent("sideEffect", names);
+            int prefix = names.indexOf("c.NumberAdd");
+            int test = names.indexOf("c.RichCompareLt");
             assertTrue(prefix >= 0 && prefix < test, "the prefix precedes the test: " + names);
             assertEquals(2, root.getRootNodes().getNodes().size(),
                     "module and sideEffect only: no callback roots");
@@ -860,14 +981,21 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 assertNumber(session, "polymorphic", 20L);
             }
             for (String name : List.of("monomorphic", "polymorphic")) {
-                List<String> names = unquickened(names(root(session, name)));
+                ProtosBytecodeRootNode root = root(session, name);
+                List<String> names = unquickened(names(root));
                 assertTrue(names.contains("c.GetMethod"), name + ": " + names);
+                assertSelectionPrecedesEachCall(names);
                 assertReplacedAbsent(name, names);
+                // The selection cache keeps one stable lowering across the PIC states.
+                assertSame(root, root(session, name), name);
+                assertEquals(names, unquickened(names(root)), name);
             }
+            // Past the PIC limit the current selection is still exact.
+            assertNumber(session, "polymorphic", 20L);
 
             /*
              * Generic tier: a selected non-Closure value is sent ordinarily by
-             * CallBinaryMethod, never as an internal error.
+             * the shared call operation, never as an internal error.
              */
             Value nonClosure = session.prepareTopLevel("useNonClosure").executable();
             try {
@@ -914,12 +1042,19 @@ final class ProtosI115H7MethodCallConvergenceTest {
     }
 
     /**
-     * A: a compact send in a Closure that inherits its prelude from an
-     * untransported caller. I115-H7-R3 (RECORDED DIVERGENCE): the H7
-     * GetMethod selection reads no caller prelude, so inner no longer
-     * registers NEEDS_CALLER_PRELUDE (formerly asserted); the result is
-     * unchanged and every root's needs stay converged. outer obtains inner with a zero-argument
-     * source send, which (unlike an admitted Send1) leaves outer unpublished.
+     * A: nested B5 Prelude selection and transport. inner
+     * ({@code target.identity(7)}) and outer ({@code target.nextCall()})
+     * are Closures that inherit their prelude, and each performs an ordinary
+     * method selection (GetMethod, then a call). I115: GetMethod selects with
+     * the caller's effective Prelude
+     * ({@code ProtosFunctionCallDispatchers.admittedCallerPrelude}); when a
+     * root's B5 header inherits an untransported Prelude, that selection
+     * registers NEEDS_CALLER_PRELUDE on the root, so both inner and outer
+     * register it and their callers then transport the Prelude. The selected
+     * Closure still executes with its own Prelude. run's need may reflect
+     * that nested transport and is only required to be stable. After the
+     * initial warm-up the result stays 7, no root's needs are invalidated
+     * again, and every need state is unchanged.
      */
     @Test
     void inheritedPreludeSendRegistersAndConverges() throws Exception {
@@ -945,8 +1080,9 @@ final class ProtosI115H7MethodCallConvergenceTest {
             ProtosBytecodeRootNode runRoot = root(session, "run");
             List<String> innerNames = unquickened(names(innerRoot));
             assertTrue(innerNames.contains("c.GetMethod")
-                            && innerNames.contains("c.CallBinaryMethod"),
-                    "inner uses the H7 send: " + innerNames);
+                            && innerNames.contains("c.CallUnaryMethod"),
+                    "inner uses the ordinary unary send: " + innerNames);
+            assertSelectionPrecedesEachCall(innerNames);
             assertReplacedAbsent("inner", innerNames);
             int need = ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE;
 
@@ -954,9 +1090,17 @@ final class ProtosI115H7MethodCallConvergenceTest {
             for (int call = 0; call < WARM; call++) {
                 assertEquals(7L, run.execute().asLong());
             }
-            assertFalse(innerRoot.hasCallerNeed(need),
-                    "inner's H7 selection reads no inherited prelude");
-            assertFalse(runRoot.hasCallerNeed(need), "run owns its prelude");
+            boolean innerNeed = innerRoot.hasCallerNeed(need);
+            boolean outerNeed = outerRoot.hasCallerNeed(need);
+            boolean runNeed = runRoot.hasCallerNeed(need);
+            System.out.println("I115 inherited-prelude NEEDS_CALLER_PRELUDE: inner=" + innerNeed
+                    + " outer=" + outerNeed + " run=" + runNeed);
+            assertTrue(innerNeed,
+                    "inner's GetMethod (target.identity) requests the inherited caller prelude");
+            assertTrue(outerNeed,
+                    "outer's GetMethod (target.nextCall) requests the inherited caller prelude");
+            // run's need may reflect nested inherited-Prelude transport; it is
+            // recorded here and only required to stay unchanged below.
 
             List<ProtosBytecodeRootNode> roots = List.of(innerRoot, outerRoot, runRoot);
             List<Assumption> settled = new ArrayList<>();
@@ -971,6 +1115,9 @@ final class ProtosI115H7MethodCallConvergenceTest {
                         "root " + index + ": no repeated invalidation");
                 assertTrue(settled.get(index).isValid());
             }
+            assertTrue(innerRoot.hasCallerNeed(need), "inner's need is stable");
+            assertTrue(outerRoot.hasCallerNeed(need), "outer's need is stable");
+            assertEquals(runNeed, runRoot.hasCallerNeed(need), "run's need state is unchanged");
         }
     }
 
@@ -1086,11 +1233,22 @@ final class ProtosI115H7MethodCallConvergenceTest {
             ProtosBytecodeRootNode captured =
                     methodRoot(session, "runCaptured", "holder", "captured");
 
-            assertTrue(identity.isExperimentalPrimitiveArgumentRoot());
-            assertTrue(captured.isExperimentalPrimitiveArgumentRoot());
-
-            assertFalse(identity.experimentalUnaryNeedsCapturedOwner());
-            assertTrue(captured.experimentalUnaryNeedsCapturedOwner());
+            /*
+             * I115: both are entered with the one B5 header (the Closure in
+             * slot 0, the argument at the supplied offset), and bind their
+             * parameter the same way; only captured reads the module global,
+             * at captured depth >= 1 from the Closure in its header.
+             */
+            List<String> identityNames = unquickened(names(identity));
+            List<String> capturedNames = unquickened(names(captured));
+            assertEquals(List.of(0), suppliedPositions(identity));
+            assertEquals(List.of(0), suppliedPositions(captured));
+            assertEquals(0, count(identityNames, "c.ReadGlobal"), identityNames.toString());
+            assertEquals(1, count(capturedNames, "c.ReadGlobal"), capturedNames.toString());
+            assertTrue(constantIntegers(captured, "ReadGlobal", "lexicalDepth").get(0) >= 1,
+                    capturedNames.toString());
+            assertReplacedAbsent("identity", identityNames);
+            assertReplacedAbsent("captured", capturedNames);
 
             assertNumber(session, "runIdentity", 1L);
             assertNumber(session, "runCaptured", 7L);
@@ -1105,24 +1263,41 @@ final class ProtosI115H7MethodCallConvergenceTest {
             ProtosClosureValue closure =
                     session.prepareTopLevel("run").closureForTesting();
             Object supplied = Long.valueOf(42L);
-            Object[] arguments =
-                    ProtosFrameArguments.experimentalCapturedUnaryCall(
-                            closure, supplied);
-
-            assertEquals(2, arguments.length);
-            assertSame(closure, arguments[0]);
-            assertSame(supplied,
-                    ProtosFrameArguments.experimentalSuppliedArgument0(arguments));
-            assertSame(closure,
-                    ProtosExperimentalReadGlobalNode.compactClosureOrNull(arguments));
 
             session.processContextForTesting().callForRuntime(() -> {
+                ProtosActivation caller =
+                        closure.prelude().orElseThrow().newModuleActivation();
+                // I115: the one B5 header; the global-read owner is the
+                // invoked Closure in slot 0, never a guest argument.
+                Object[] arguments =
+                        ProtosFrameArguments.compactDirectClosureCallOne(
+                                closure, caller, null, supplied);
+
+                assertEquals(ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET + 1,
+                        arguments.length);
+                assertSame(closure, arguments[0]);
+                assertSame(supplied,
+                        arguments[ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET]);
+                assertSame(supplied,
+                        ProtosFrameArguments.compactSuppliedArgumentOrNull(arguments, 0));
+                assertEquals(1, ProtosFrameArguments.suppliedArgumentCount(arguments));
+                assertTrue(ProtosFrameArguments.isUnmaterializedCompactCall(arguments));
+                assertSame(closure,
+                        ProtosExperimentalReadGlobalNode.compactClosureOrNull(arguments));
                 assertSame(
                         closure.capturedLexicalEnvironmentForRuntime(),
                         ProtosExperimentalReadGlobalNode.capturedModuleOrNull(
                                 arguments, 1));
+                assertEquals(7L, ((Number) ProtosExperimentalReadGlobalNode.readModuleBinding(
+                        arguments,
+                        com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
+                                "global",
+                                com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_16),
+                        1,
+                        false)).longValue());
                 return null;
             });
+            assertNumber(session, "run", 7L);
         }
     }
 
@@ -1145,21 +1320,14 @@ final class ProtosI115H7MethodCallConvergenceTest {
             """;
 
     /**
-     * I115: a signed-64 overflow in a CallBinaryMethod callee, without
-     * ReadGlobal (grow) and with it (growCaptured). ABI selection: with no
-     * need, grow's entry would be exactly {@code {supplied0}} even though
-     * its Closure has its own Prelude; growCaptured's {@code {closure,
-     * supplied0}}. Both arithmetic callees are admitted to the direct H7
-     * tier (no global non-suspension proof is required): the overflow is
-     * exact, grow's minimal entry registers NEEDS_CALLER_PRELUDE once and
-     * then transports the Prelude, and the need stays stable.
-     *
-     * <p>RECORDED I115 DIVERGENCE: the minimal entry omits the Closure, so
-     * the first recovery may use the caller's effective Prelude instead of
-     * the Closure's own; its prototype identity is reported, not required.
+     * I115: a signed-64 overflow in a unary-method callee, without
+     * ReadGlobal (grow) and with it (growCaptured), reached through
+     * GetMethod and CallUnaryMethod. The B5 header carries the invoked
+     * Closure, so the overflow is exact, uses the Closure's own Prelude and
+     * registers no caller need.
      */
     @Test
-    void h7MethodOverflowUsesTheInvocationPrelude() throws Exception {
+    void methodOverflowUsesTheClosurePrelude() throws Exception {
         try (ProtosStandaloneHostedSession session = open("h7-method-overflow", H7_OVERFLOW)) {
             for (String[] fixture : List.of(
                     new String[] {"runGrow", "grow"},
@@ -1177,50 +1345,39 @@ final class ProtosI115H7MethodCallConvergenceTest {
 
                 List<String> calleeNames = unquickened(names(template));
                 List<String> runNames = unquickened(names(caller));
-                assertTrue(calleeNames.contains("c.CopyArguments"), calleeNames.toString());
+                assertEquals(List.of(0), suppliedPositions(template), calleeNames.toString());
                 assertEquals(1, count(calleeNames, "c.NumberAdd"), calleeNames.toString());
                 assertEquals(1, count(runNames, "c.GetMethod"), runNames.toString());
-                assertEquals(1, count(runNames, "c.CallBinaryMethod"), runNames.toString());
+                assertEquals(1, count(runNames, "c.CallUnaryMethod"), runNames.toString());
+                assertSelectionPrecedesEachCall(runNames);
                 for (List<String> names : List.of(calleeNames, runNames)) {
                     assertTrue(names.stream().noneMatch(
                                     name -> name.contains("MaterializeCurrentClosure")),
                             names.toString());
                     assertReplacedAbsent(selector, names);
                 }
-                assertEquals(captured, template.experimentalUnaryNeedsCapturedOwner(), selector);
+                // Only growCaptured reads the module global.
+                assertEquals(captured ? 1 : 0, count(calleeNames, "c.ReadGlobal"), selector);
                 assertFalse(template.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
 
-                // I115: the reduced H11 entry is retired; the callee is entered
-                // with the dispatcher's B5 method header.
-                // First overflow: exact, through the admitted direct H7 entry.
+                /*
+                 * I115: the reduced H11 entries are retired; every callee is
+                 * entered with the dispatcher's B5 header, which carries the
+                 * invoked Closure, so the overflow uses the Closure's own
+                 * Prelude and registers no caller need.
+                 */
                 Object first = rawResult(session, run);
                 ProtosLargeIntegerValue large =
                         assertInstanceOf(ProtosLargeIntegerValue.class, first);
                 assertLarge(session, run, "9223372036854775808");
                 ProtosBytecodeRootNode callee = admittedCallee(session, closure);
-                assertEquals(captured, callee.experimentalUnaryNeedsCapturedOwner(), selector);
                 assertEquals(calleeNames, unquickened(names(callee)), "same lowering");
-                if (captured && ownPrelude != null) {
-                    // {closure, supplied0} retains the Closure: its own Prelude, no need.
+                if (ownPrelude != null) {
                     assertSame(((ProtosPrelude) ownPrelude).bigIntegerPrototype(),
-                            large.parent().orElseThrow());
-                    assertFalse(callee.hasCallerNeed(
-                            ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
-                } else {
-                    /*
-                     * {supplied0} carried no Prelude: the admitted callee registered
-                     * its need (an ordinary B5 send would have found the Closure's
-                     * own Prelude and registered nothing).
-                     */
-                    assertTrue(callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE),
-                            selector + " registered its caller Prelude need");
-                    if (ownPrelude != null
-                            && ((ProtosPrelude) ownPrelude).bigIntegerPrototype()
-                                    != large.parent().orElseThrow()) {
-                        System.out.println("I115_H7_RECORDED_DIVERGENCE[" + selector
-                                + "]=first recovery used the caller Prelude");
-                    }
+                            large.parent().orElseThrow(), selector);
                 }
+                assertFalse(callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE),
+                        selector);
 
                 Assumption stable = callee.callerNeedsStability();
                 for (int call = 0; call < WARM; call++) {
@@ -1237,18 +1394,22 @@ final class ProtosI115H7MethodCallConvergenceTest {
     }
 
     /**
-     * The direct H7 tier without needs: an admitted method (no arithmetic)
-     * is entered through {@code {supplied0}} and never requests the caller
-     * Prelude; a non-overflowing NumberAdd in the H7 caller returns a raw
-     * Long and requests nothing either.
+     * I115: a method without arithmetic binds its parameter from supplied
+     * argument 0 of the B5 header and never requests the caller Prelude; a
+     * non-overflowing NumberAdd in the caller returns a raw Long and
+     * requests nothing either.
      */
     @Test
-    void h7MethodWithoutOverflowRequestsNoPrelude() throws Exception {
+    void methodWithoutOverflowRequestsNoPrelude() throws Exception {
         try (ProtosStandaloneHostedSession session = open("h7-method-keep", H7_OVERFLOW)) {
             ProtosClosureValue closure = methodClosure(session, "runKeep", "holder", "same");
             assertEquals(42L, assertInstanceOf(Long.class, rawResult(session, "runKeep")));
             ProtosBytecodeRootNode callee = admittedCallee(session, closure);
-            assertFalse(callee.experimentalUnaryNeedsCapturedOwner());
+            List<String> calleeNames = unquickened(names(callee));
+            assertEquals(List.of(0), suppliedPositions(callee), calleeNames.toString());
+            assertEquals(0, count(calleeNames, "c.ReadGlobal"), calleeNames.toString());
+            assertEquals(0, count(calleeNames, "c.NumberAdd"), calleeNames.toString());
+            assertReplacedAbsent("same", calleeNames);
             ProtosBytecodeRootNode caller = root(session, "runKeep");
 
             Assumption calleeStable = callee.callerNeedsStability();
@@ -1266,14 +1427,13 @@ final class ProtosI115H7MethodCallConvergenceTest {
     }
 
     /**
-     * I115: an arithmetic H7 method (NumberAdd, whose generic route keeps an
-     * ordinary send) is admitted to the direct CallBinaryMethod tier and
-     * entered with {@code {supplied0}}; its long result comes back raw.
-     * The raw Long proves the direct entry: the ordinary send would have
-     * projected it to a guest Integer.
+     * I115: an arithmetic method (NumberAdd) is reached by the ordinary
+     * unary send (GetMethod, then CallUnaryMethod) with the B5 header; its
+     * parameter is supplied argument 0 and its long result comes back as a
+     * raw Long through the root and host boundary.
      */
     @Test
-    void h7ArithmeticMethodUsesTheDirectTier() throws Exception {
+    void arithmeticMethodReturnsRawLongThroughUnarySend() throws Exception {
         try (ProtosStandaloneHostedSession session = open("h7-method-plus-one", H7_OVERFLOW)) {
             ProtosClosureValue closure =
                     methodClosure(session, "runPlusOne", "holder", "plusOne");
@@ -1282,10 +1442,12 @@ final class ProtosI115H7MethodCallConvergenceTest {
             ProtosBytecodeRootNode caller = root(session, "runPlusOne");
             List<String> calleeNames = unquickened(names(template));
             List<String> runNames = unquickened(names(caller));
-            assertTrue(calleeNames.contains("c.CopyArguments"), calleeNames.toString());
+            assertEquals(List.of(0), suppliedPositions(template), calleeNames.toString());
+            assertEquals(0, count(calleeNames, "c.ReadGlobal"), calleeNames.toString());
             assertEquals(1, count(calleeNames, "c.NumberAdd"), calleeNames.toString());
             assertEquals(1, count(runNames, "c.GetMethod"), runNames.toString());
-            assertEquals(1, count(runNames, "c.CallBinaryMethod"), runNames.toString());
+            assertEquals(1, count(runNames, "c.CallUnaryMethod"), runNames.toString());
+            assertSelectionPrecedesEachCall(runNames);
             for (List<String> names : List.of(calleeNames, runNames)) {
                 assertTrue(names.stream().noneMatch(
                                 name -> name.contains("MaterializeCurrentClosure")),
@@ -1295,9 +1457,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
 
             assertEquals(42L, assertInstanceOf(Long.class, rawResult(session, "runPlusOne")));
             ProtosBytecodeRootNode callee = admittedCallee(session, closure);
-            assertTrue(callee.isExperimentalPrimitiveArgumentRoot());
-            assertFalse(callee.experimentalUnaryNeedsCapturedOwner());
-            assertEquals(calleeNames, unquickened(names(callee)), "the expected H7 root");
+            assertEquals(calleeNames, unquickened(names(callee)), "the template's lowering");
 
             Assumption stable = callee.callerNeedsStability();
             for (int call = 0; call < WARM; call++) {
@@ -1310,35 +1470,44 @@ final class ProtosI115H7MethodCallConvergenceTest {
             assertSame(callee, admittedCallee(session, closure));
             assertEquals(calleeNames, unquickened(names(callee)), "after quickening");
             assertEquals(runNames, unquickened(names(caller)), "after quickening");
-            // The call site quickened to the doDirect specialization (DirectCallNode PIC).
+            /*
+             * I115: the CallBinaryMethod direct tier is retired. The ordinary
+             * unary send is GetMethod followed by CallUnaryMethod; the direct
+             * target is evidenced by the stable admitted callee above and by
+             * the raw Long result, not by a quickened instruction name.
+             */
             List<String> quickened = names(caller);
-            assertTrue(quickened.stream().anyMatch(name ->
-                            name.startsWith("c.CallBinaryMethod$") && name.contains("Direct")),
-                    "CallBinaryMethod uses its direct specialization: " + quickened);
-            // As GraalPy callPFunction: no suspension test follows the direct call.
-            assertTrue(java.util.Arrays.stream(
-                                    ProtosExperimentalCallBinaryMethodNode.class.getDeclaredMethods())
-                            .noneMatch(method -> method.getName().equals("directOutcome")),
-                    "no post-call outcome check");
+            assertTrue(quickened.stream().anyMatch(name -> name.startsWith("c.CallUnaryMethod")),
+                    "the call site keeps CallUnaryMethod after quickening: " + quickened);
+            assertTrue(quickened.stream().noneMatch(name -> name.startsWith("c.CallBinaryMethod")),
+                    "no retired CallBinaryMethod: " + quickened);
         }
     }
 
     /**
-     * Admission stays limited to H7 roots: a method outside the subset (a
-     * non-local return, observable ReturnHome) is not admitted and keeps the
-     * ordinary send, with its correct result; plusOne in the same holder is
-     * admitted.
+     * I115: there is no H7 admission subset any more. A method with a
+     * non-local return (observable ReturnHome) and plusOne in the same
+     * holder are both dispatched through the shared function PIC to their
+     * single lowerings, with correct results.
      */
     @Test
-    void nonH7MethodKeepsTheOrdinarySend() throws Exception {
+    void nonLocalReturnMethodUsesTheSharedDispatch() throws Exception {
         try (ProtosStandaloneHostedSession session = open("h7-method-fallback", H7_OVERFLOW)) {
             assertNumber(session, "runEscape", 5L);
             assertNumber(session, "runPlusOne", 42L);
             ProtosClosureValue escape = methodClosure(session, "runEscape", "holder", "escape");
             ProtosClosureValue plusOne = methodClosure(session, "runPlusOne", "holder", "plusOne");
             // I115: the H7 admission tier is retired; every source method is
-            // dispatched by the shared function PIC. The results stay checked.
-            assertTrue(admittedCallee(session, plusOne).isExperimentalPrimitiveArgumentRoot());
+            // dispatched by the shared function PIC to its own single lowering.
+            ProtosBytecodeRootNode plusOneCallee = admittedCallee(session, plusOne);
+            assertEquals(
+                    unquickened(names(methodRoot(session, "runPlusOne", "holder", "plusOne"))),
+                    unquickened(names(plusOneCallee)));
+            ProtosBytecodeRootNode escapeRoot =
+                    methodRoot(session, "runEscape", "holder", "escape");
+            assertEquals(List.of(0), suppliedPositions(escapeRoot));
+            assertReplacedAbsent("escape", unquickened(names(escapeRoot)));
+            assertNotNull(escape);
             for (int call = 0; call < WARM; call++) {
                 assertNumber(session, "runEscape", 5L);
             }
@@ -1346,121 +1515,178 @@ final class ProtosI115H7MethodCallConvergenceTest {
     }
 
     /**
-     * Every H11 entry recognizes its layout explicitly, also when the guest
-     * argument is itself a Closure, and keeps that argument by identity; the
-     * Prelude is never read as the argument.
+     * B5 invariant for a guest argument that is itself a Closure: in both the
+     * direct-call and the immediate-method-call forms of the one header, the
+     * invoked Closure (the global-read owner and Prelude source) is slot 0,
+     * the guest argument is kept by identity at the supplied offset, and the
+     * header is never read as the argument nor the argument as the owner.
      */
     @Test
-    void h11EntriesAreUnambiguousForClosureArguments() throws Exception {
-        try (ProtosStandaloneHostedSession session = open("h11-closure-argument", H7_OVERFLOW)) {
+    void b5HeaderKeepsAClosureArgumentDistinctFromTheInvocation() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("b5-closure-argument", H7_OVERFLOW)) {
             ProtosClosureValue owner = methodClosure(session, "runGrow", "holder", "growCaptured");
             ProtosClosureValue argument = methodClosure(session, "runGrow", "holder", "grow");
-            ProtosPrelude prelude = (ProtosPrelude) session.processContextForTesting()
-                    .callForRuntime(session.prepareTopLevel("runGrow").closureForTesting()
-                            ::preludeOrNullForRuntime);
-            assertTrue(prelude != null);
+            session.processContextForTesting().callForRuntime(() -> {
+                ProtosPrelude prelude = owner.prelude().orElseThrow();
+                ProtosActivation caller = prelude.newModuleActivation();
+                ProtosObjectValue receiver = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                Object[] direct =
+                        ProtosFrameArguments.compactDirectClosureCallOne(
+                                owner, caller, null, argument);
+                Object[] method =
+                        ProtosFrameArguments.compactImmediateMethodCallOne(
+                                owner, receiver, receiver, caller,
+                                owner.invocationReturnHomeForRuntime(), argument);
 
-            Object[] minimal = ProtosFrameArguments.experimentalMinimalUnaryCall(argument);
-            Object[] minimalExtended =
-                    ProtosFrameArguments.experimentalMinimalUnaryCall(argument, prelude);
-            Object[] captured = ProtosFrameArguments.experimentalCapturedUnaryCall(owner, argument);
-            Object[] capturedExtended =
-                    ProtosFrameArguments.experimentalCapturedUnaryCall(owner, argument, prelude);
-
-            for (Object[] entry : List.of(minimal, minimalExtended, captured, capturedExtended)) {
-                assertTrue(ProtosFrameArguments.isExperimentalReducedCall(entry));
-                assertSame(argument, ProtosFrameArguments.experimentalSuppliedArgument0(entry));
-            }
-            assertEquals(1, minimal.length);
-            assertTrue(ProtosFrameArguments.isExperimentalMinimalUnaryWithPrelude(minimalExtended));
-            assertFalse(ProtosFrameArguments.isExperimentalMinimalUnaryWithPrelude(capturedExtended));
-
-            assertNull(ProtosFrameArguments.experimentalCapturedOwnerOrNull(minimal));
-            assertNull(ProtosFrameArguments.experimentalCapturedOwnerOrNull(minimalExtended));
-            assertSame(owner, ProtosFrameArguments.experimentalCapturedOwnerOrNull(captured));
-            assertSame(owner, ProtosFrameArguments.experimentalCapturedOwnerOrNull(capturedExtended));
-            assertNull(ProtosExperimentalReadGlobalNode.compactClosureOrNull(minimalExtended));
-            assertSame(owner, ProtosExperimentalReadGlobalNode.compactClosureOrNull(capturedExtended));
-
-            assertNull(ProtosFrameArguments.experimentalTransportedPreludeOrNull(minimal));
-            assertSame(prelude,
-                    ProtosFrameArguments.experimentalTransportedPreludeOrNull(minimalExtended));
-            assertSame(prelude,
-                    ProtosFrameArguments.experimentalTransportedPreludeOrNull(capturedExtended));
-            assertSame(session.processContextForTesting().callForRuntime(
-                            owner::preludeOrNullForRuntime),
-                    ProtosFrameArguments.experimentalTransportedPreludeOrNull(captured));
+                for (Object[] entry : List.of(direct, method)) {
+                    assertEquals(ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET + 1, entry.length);
+                    assertSame(owner, entry[0], "slot 0 is the invoked Closure");
+                    assertSame(argument,
+                            ProtosFrameArguments.compactSuppliedArgumentOrNull(entry, 0));
+                    assertEquals(1, ProtosFrameArguments.suppliedArgumentCount(entry));
+                    assertSame(owner, ProtosExperimentalReadGlobalNode.compactClosureOrNull(entry));
+                    assertSame(owner.capturedLexicalEnvironmentForRuntime(),
+                            ProtosExperimentalReadGlobalNode.capturedModuleOrNull(entry, 1));
+                    assertSame(prelude, ProtosFrameArguments.preludeOrNull(entry),
+                            "the Prelude is the invocation's, never the argument");
+                    assertNotSame(argument, ProtosFrameArguments.preludeOrNull(entry));
+                }
+                return null;
+            });
+            assertLarge(session, "runGrowCaptured", "9223372036854775808");
         }
     }
 
+    /**
+     * B5 invariant: the fixed five-slot header is followed by exactly the
+     * supplied positional values in order, by identity; a position the call
+     * did not supply reads canonical null (D203), never a header slot.
+     */
     @Test
-    void h11MinimalUnaryAbiSharesTheArgumentWithLegacyEntries() {
-        Object value = Long.valueOf(42L);
-        Object[] minimal =
-                ProtosFrameArguments.experimentalMinimalUnaryCall(value);
-        assertEquals(1, minimal.length);
-        assertSame(
-                value,
-                ProtosFrameArguments.experimentalSuppliedArgument0(minimal));
+    void b5HeaderSuppliesArgumentsAfterTheFixedHeader() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("b5-supplied", H7_OVERFLOW)) {
+            ProtosClosureValue closure = methodClosure(session, "runKeep", "holder", "same");
+            session.processContextForTesting().callForRuntime(() -> {
+                ProtosActivation caller = closure.prelude().orElseThrow().newModuleActivation();
+                Object first = Long.valueOf(42L);
+                Object second = new ProtosObjectValue(ProtosObjectValue.rootObject());
 
-        Object[] previous =
-                ProtosFrameArguments.experimentalStaticUnaryCall(value, null);
-        assertSame(
-                value,
-                ProtosFrameArguments.experimentalSuppliedArgument0(previous));
+                Object[] none = ProtosFrameArguments.compactDirectClosureCall(
+                        closure, caller, null, new Object[0]);
+                Object[] one = ProtosFrameArguments.compactDirectClosureCall(
+                        closure, caller, null, new Object[] {first});
+                Object[] two = ProtosFrameArguments.compactDirectClosureCall(
+                        closure, caller, null, new Object[] {first, second});
+
+                assertEquals(ProtosFrameArguments.HEADER_LENGTH, none.length);
+                assertEquals(ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET + 1, one.length);
+                assertEquals(ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET + 2, two.length);
+                assertEquals(0, ProtosFrameArguments.suppliedArgumentCount(none));
+                assertEquals(2, ProtosFrameArguments.suppliedArgumentCount(two));
+                assertSame(first, ProtosFrameArguments.compactSuppliedArgumentOrNull(one, 0));
+                assertSame(first, ProtosFrameArguments.compactSuppliedArgumentOrNull(two, 0));
+                assertSame(second, ProtosFrameArguments.compactSuppliedArgumentOrNull(two, 1));
+                assertSame(com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                        ProtosFrameArguments.compactSuppliedArgumentOrNull(none, 0),
+                        "an unsupplied position is canonical null");
+                assertSame(com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                        ProtosFrameArguments.compactSuppliedArgumentOrNull(one, 1));
+                for (Object[] entry : List.of(none, one, two)) {
+                    assertSame(closure, entry[0]);
+                }
+                return null;
+            });
+            assertNumber(session, "runKeep", 42L);
+        }
     }
 
     /**
-     * CopyArguments is one specialization storing supplied argument 0; the
-     * authoritative BindUnaryFrameParameter fallback is gone.
+     * I115 (replaces CopyArguments): LoadSuppliedArgument(0) is one
+     * specialization reading the supplied position from the frame
+     * arguments, with no fallback, and the lowering stores it directly into
+     * the parameter's native storage: a LOCAL local, or the cell of a
+     * captured (CELL) parameter. Argument identity is exact for generic
+     * and primitive values.
      */
     @Test
     void copyArgumentsStoresTheSingleArgumentWithoutFallback() throws Exception {
         List<String> specializations = new ArrayList<>();
         for (java.lang.reflect.Method method :
-                ProtosBytecodeRootNode.CopyArguments.class.getDeclaredMethods()) {
+                ProtosBytecodeRootNode.LoadSuppliedArgument.class.getDeclaredMethods()) {
             assertNull(method.getAnnotation(com.oracle.truffle.api.dsl.Fallback.class),
                     "no fallback: " + method.getName());
             if (method.getAnnotation(com.oracle.truffle.api.dsl.Specialization.class) != null) {
                 specializations.add(method.getName());
             }
         }
-        assertEquals(List.of("copy"), specializations);
-        try (ProtosStandaloneHostedSession session = open("copy-arguments", METHOD_CALL)) {
+        assertEquals(List.of("perform"), specializations);
+        try (ProtosStandaloneHostedSession session = open("copy-arguments", METHOD_CALL
+                + """
+
+                holder: {
+                    same: (value) => { value }
+                    keep: (value) => { () => value }
+                }
+                identityOfObject: () => {
+                    probe: { tag: 1 }
+                    holder.same(probe) === probe
+                }
+                capturedValue: () => { holder.keep(9)() }
+                """)) {
             ProtosBytecodeRootNode identity = methodRoot(session, "run", "receiver", "identity");
             assertEquals(IDENTITY_DSL, unquickened(names(identity)));
+            assertEquals(List.of(0), suppliedPositions(identity));
+            assertTrue(localNames(identity).contains("value"), "a LOCAL parameter");
+
+            ProtosBytecodeRootNode keep = methodRoot(session, "capturedValue", "holder", "keep");
+            List<String> keepNames = unquickened(names(keep));
+            assertEquals(List.of(0), suppliedPositions(keep), keepNames.toString());
+            assertTrue(keepNames.contains("c.CreateCell") && keepNames.contains("c.StoreCell"),
+                    "a captured parameter is stored into its cell: " + keepNames);
+            assertReplacedAbsent("keep", keepNames);
+
             for (int call = 0; call < WARM; call++) {
                 assertEquals(499500L,
                         session.prepareTopLevel("run").executable().execute().asLong());
+                assertTrue(session.prepareTopLevel("identityOfObject").executable().execute()
+                        .asBoolean(), "a generic argument keeps its identity");
+                assertNumber(session, "capturedValue", 9L);
             }
         }
     }
 
     /**
-     * identity is entered through the direct tier, and the caller transports
-     * nothing because identity requested nothing.
+     * I115: identity is reached by the ordinary unary send (GetMethod, then
+     * CallUnaryMethod) to one stable function target, and the caller
+     * transports nothing because identity requested nothing. The retired
+     * CallBinaryMethod direct quickening is no longer the evidence; the
+     * stable target identity is.
      */
     @Test
-    void identityIsCalledDirectlyWithoutCallerTransport() throws Exception {
+    void identityIsCalledThroughStableUnarySendWithoutCallerTransport() throws Exception {
         try (ProtosStandaloneHostedSession session = open("direct-identity", METHOD_CALL)) {
             ProtosBytecodeRootNode run = root(session, "run");
             ProtosBytecodeRootNode identity = methodRoot(session, "run", "receiver", "identity");
+            ProtosClosureValue identityClosure =
+                    methodClosure(session, "run", "receiver", "identity");
             Value executable = session.prepareTopLevel("run").executable();
+            assertEquals(499500L, executable.execute().asLong());
+            ProtosBytecodeRootNode target = admittedCallee(session, identityClosure);
+            List<String> identityNames = unquickened(names(identity));
+            assertEquals(identityNames, unquickened(names(target)), "the single lowering");
             for (int call = 0; call < WARM; call++) {
                 assertEquals(499500L, executable.execute().asLong());
             }
+            assertSame(target, admittedCallee(session, identityClosure), "stable target");
             assertFalse(identity.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
             assertFalse(identity.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
             assertFalse(run.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION),
                     "run never published its activation for the send");
-            List<String> executed = names(run);
-            // The forced quickening of doDirect (not doIndirect) is executed.
-            assertTrue(executed.stream()
-                            .filter(name -> name.startsWith("c.CallBinaryMethod$"))
-                            .map(name -> name.toLowerCase(java.util.Locale.ROOT))
-                            .anyMatch(name -> name.contains("direct")
-                                    && !name.contains("indirect")),
-                    "the site is quickened to the direct tier: " + executed);
+            List<String> executed = unquickened(names(run));
+            assertEquals(1, count(executed, "c.CallUnaryMethod"), executed.toString());
+            assertSelectionPrecedesEachCall(executed);
+            assertTrue(names(run).stream().noneMatch(name -> name.startsWith("c.CallBinaryMethod")),
+                    "no retired CallBinaryMethod: " + names(run));
         }
     }
 
@@ -1488,20 +1714,17 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 }
                 """)) {
             ProtosClosureValue anchor = session.prepareTopLevel("hot").closureForTesting();
-            ProtosFrameLexicalBindingAuthority.ExperimentalGlobalReadLocation location =
+            ProtosModuleBindingLocation location =
                     session.processContextForTesting().callForRuntime(() -> {
-                        ProtosLexicalEnvironment module =
-                                anchor.capturedLexicalEnvironmentForRuntime();
-                        ProtosFrameLexicalBindingAuthority authority = assertInstanceOf(
-                                ProtosFrameLexicalBindingAuthority.class,
-                                module.lexicalBindingAuthorityForRuntime());
-                        int ordinal = authority.storedLayout().offsetOf("target");
-                        assertNull(authority.experimentalGlobalReadLocationOrNull("first", ordinal),
-                                "a mismatched name is not installed");
-                        return authority.experimentalGlobalReadLocationOrNull("target", ordinal);
+                        assertNull(ProtosExperimentalReadGlobalNode.locationOrNull(
+                                        anchor, utf16("absentName"), 1),
+                                "a missing name does not resolve as a module slot");
+                        return ProtosExperimentalReadGlobalNode.locationOrNull(
+                                anchor, utf16("target"), 1);
                     });
-            assertTrue(location != null, "target has a physical location");
-            Object before = session.processContextForTesting().callForRuntime(location::read);
+            assertNotNull(location, "target has a module storage location");
+            Object before = session.processContextForTesting().callForRuntime(
+                    () -> location.readOrNull(DynamicObject.GetNode.getUncached()));
 
             Value hot = session.prepareTopLevel("hot").executable();
             for (int call = 0; call < WARM; call++) {
@@ -1511,10 +1734,12 @@ final class ProtosI115H7MethodCallConvergenceTest {
             for (int call = 0; call < WARM; call++) {
                 assertEquals(14950L, hot.execute().asLong(), "the rebound global is read");
             }
-            if (session.processContextForTesting().callForRuntime(location::isCurrent)) {
-                Object after = session.processContextForTesting().callForRuntime(location::read);
-                assertNotSame(before, after, "the location reads the frame, not a copy");
-            }
+            session.processContextForTesting().callForRuntime(() -> {
+                Object after = location.readOrNull(DynamicObject.GetNode.getUncached());
+                assertNotSame(before, after, "the location reads the storage, not a copy");
+                assertSame(moduleBinding(anchor, "target"), after);
+                return null;
+            });
         }
     }
 
@@ -1533,28 +1758,15 @@ final class ProtosI115H7MethodCallConvergenceTest {
             }
 
             session.processContextForTesting().callForRuntime(() -> {
-                ProtosLexicalEnvironment module =
-                        anchor.capturedLexicalEnvironmentForRuntime();
-                ProtosFrameLexicalBindingAuthority authority = assertInstanceOf(
-                        ProtosFrameLexicalBindingAuthority.class,
-                        module.lexicalBindingAuthorityForRuntime());
-                int ordinal = authority.storedLayout().offsetOf("receiver");
-                Object receiver = module.readLocalSlotForRuntime("receiver").orElseThrow();
-
-                com.oracle.truffle.api.strings.TruffleString name =
-                        com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
-                                "receiver",
-                                com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_16);
-
-                ProtosFrameLexicalBindingAuthority.ExperimentalGlobalReadLocation location =
+                Object receiver = moduleBinding(anchor, "receiver");
+                ProtosModuleBindingLocation location =
                         ProtosExperimentalReadGlobalNode.locationOrNull(
-                                anchor, name, ordinal, 1);
+                                anchor, utf16("receiver"), 1);
 
-                assertTrue(location != null, "the Object location is admitted");
-                assertTrue(location.isCurrent(), "the location belongs to the current root");
-                assertEquals(ordinal, location.ordinal());
-                assertSame(receiver, location.read(),
-                        "the physical location returns the original Protos object");
+                assertNotNull(location, "the Object location is resolved");
+                assertTrue(location.isPresent(DynamicObject.GetNode.getUncached()));
+                assertSame(receiver, location.readOrNull(DynamicObject.GetNode.getUncached()),
+                        "the location returns the original Protos object");
                 return null;
             });
 
@@ -1585,20 +1797,15 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 assertEquals(7L, hot.execute().asLong());
             }
 
+            ProtosModuleBindingLocation location =
+                    session.processContextForTesting().callForRuntime(() ->
+                            ProtosModuleBindingLocation.ofOrNull(
+                                    anchor.capturedLexicalEnvironmentForRuntime().context(),
+                                    "target"));
+            assertNotNull(location, "initial Object location is resolved");
             Object before = session.processContextForTesting().callForRuntime(() -> {
-                ProtosLexicalEnvironment module =
-                        anchor.capturedLexicalEnvironmentForRuntime();
-                ProtosFrameLexicalBindingAuthority authority = assertInstanceOf(
-                        ProtosFrameLexicalBindingAuthority.class,
-                        module.lexicalBindingAuthorityForRuntime());
-                int ordinal = authority.storedLayout().offsetOf("target");
-
-                ProtosFrameLexicalBindingAuthority.ExperimentalGlobalReadLocation location =
-                        authority.experimentalGlobalReadLocationOrNull("target", ordinal);
-
-                assertTrue(location != null, "initial Object location is admitted");
-                Object value = module.readLocalSlotForRuntime("target").orElseThrow();
-                assertSame(value, location.read());
+                Object value = moduleBinding(anchor, "target");
+                assertSame(value, location.readOrNull(DynamicObject.GetNode.getUncached()));
                 return value;
             });
 
@@ -1609,78 +1816,60 @@ final class ProtosI115H7MethodCallConvergenceTest {
             }
 
             session.processContextForTesting().callForRuntime(() -> {
-                ProtosLexicalEnvironment module =
-                        anchor.capturedLexicalEnvironmentForRuntime();
-                ProtosFrameLexicalBindingAuthority authority = assertInstanceOf(
-                        ProtosFrameLexicalBindingAuthority.class,
-                        module.lexicalBindingAuthorityForRuntime());
-                int ordinal = authority.storedLayout().offsetOf("target");
-
-                ProtosFrameLexicalBindingAuthority.ExperimentalGlobalReadLocation location =
-                        authority.experimentalGlobalReadLocationOrNull("target", ordinal);
-
-                assertTrue(location != null, "rebound Object location remains admitted");
-                Object after = module.readLocalSlotForRuntime("target").orElseThrow();
-
+                Object after = moduleBinding(anchor, "target");
                 assertNotSame(before, after, "the global binding was rebound");
-                assertSame(after, location.read(),
-                        "the location observes the current physical value");
+                assertSame(after, location.readOrNull(DynamicObject.GetNode.getUncached()),
+                        "the location observes the current stored value");
                 return null;
             });
         }
     }
 
-    /** The pinned generator mapping addresses the actual retained module frame. */
+    /**
+     * I115 (replaces the retired frame-layout validation): a module global
+     * lives in the module context's own storage, not in any frame slot. The
+     * location resolved for a captured read addresses exactly that context's
+     * binding: it reads the original binding, a missing name has no location,
+     * and the same address observes removal and recreation in that context.
+     */
     @Test
-    void globalLocationValidatesGeneratedFrameLayout() throws Exception {
-        try (ProtosStandaloneHostedSession session = open("r4-physical-layout", METHOD_CALL)) {
+    void globalLocationAddressesTheModuleStorage() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("r4-module-storage", METHOD_CALL)) {
             ProtosClosureValue anchor =
                     session.prepareTopLevel("run").closureForTesting();
 
             session.processContextForTesting().callForRuntime(() -> {
                 ProtosLexicalEnvironment module =
                         anchor.capturedLexicalEnvironmentForRuntime();
-                ProtosFrameLexicalBindingAuthority authority = assertInstanceOf(
-                        ProtosFrameLexicalBindingAuthority.class,
-                        module.lexicalBindingAuthorityForRuntime());
-                ProtosFrameLexicalLayout layout = authority.storedLayout();
-                int ordinal = layout.offsetOf("receiver");
-                int localOffset = layout.localOffsetAt(ordinal);
+                ProtosObjectValue moduleContext = module.context();
+                Object receiver = moduleContext.readLocalSlot("receiver").orElseThrow();
+                DynamicObject.GetNode get = DynamicObject.GetNode.getUncached();
 
-                com.oracle.truffle.api.frame.MaterializedFrame frame =
-                        authority.retainedMaterializedFrameForCapturedAccess();
+                ProtosModuleBindingLocation location =
+                        ProtosExperimentalReadGlobalNode.locationOrNull(
+                                anchor, utf16("receiver"), 1);
+                assertNotNull(location, "the module binding has a storage location");
+                assertSame(receiver, location.readOrNull(get),
+                        "the location holds the original binding");
+                assertNull(ProtosModuleBindingLocation.ofOrNull(moduleContext, "wrong-name"),
+                        "a missing name has no module location");
+                assertNull(ProtosExperimentalReadGlobalNode.locationOrNull(
+                                null, utf16("receiver"), 1),
+                        "no Closure, no captured module location");
 
-                // Pinned Truffle 25.4.4.1.1 generated USER_LOCALS_START_INDEX.
-                int physicalIndex = 2 + localOffset;
-
-                assertTrue(localOffset >= 0);
-                assertTrue(physicalIndex >= 2);
-                assertTrue(physicalIndex < frame.getFrameDescriptor().getNumberOfSlots());
-                assertTrue(frame.isObject(physicalIndex),
-                        "the module global has an Object carrier");
-
-                Object receiver = module.readLocalSlotForRuntime("receiver").orElseThrow();
-
-                assertSame(receiver, frame.getValue(physicalIndex),
-                        "the generated physical slot holds the original binding");
-
-                ProtosFrameLexicalBindingAuthority.ExperimentalGlobalReadLocation location =
-                        authority.experimentalGlobalReadLocationOrNull("receiver", ordinal);
-
-                assertTrue(location != null, "validated Object location is admitted");
-                assertSame(frame.getValue(physicalIndex), location.read());
-
-                assertNull(authority.experimentalGlobalReadLocationOrNull(
-                                "wrong-name", ordinal),
-                        "the name must match the selected ordinal");
-                assertNull(authority.experimentalGlobalReadLocationOrNull(
-                                "receiver", -1),
-                        "a negative ordinal is never admitted");
-                assertNull(authority.experimentalGlobalReadLocationOrNull(
-                                "receiver", layout.length()),
-                        "an out-of-range ordinal is never admitted");
+                // The same address follows the binding through removal and recreation.
+                assertSame(receiver, moduleContext.removeLocalSlot("receiver"));
+                assertFalse(location.isPresent(get));
+                assertNull(location.readOrNull(get));
+                ProtosObjectValue replacement = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                moduleContext.createLocalSlot("receiver", replacement);
+                assertTrue(location.isPresent(get));
+                assertSame(replacement, location.readOrNull(get));
+                moduleContext.assignLocalSlot("receiver", receiver);
+                assertSame(receiver, location.readOrNull(get));
                 return null;
             });
+            assertEquals(499500L, session.prepareTopLevel("run").executable().execute().asLong());
         }
     }
 
@@ -1716,27 +1905,19 @@ final class ProtosI115H7MethodCallConvergenceTest {
                         ProtosExperimentalReadGlobalNode.compactClosureOrNull(compact),
                         "the original compact Closure remains admissible");
 
-                ProtosLexicalEnvironment module =
-                        anchor.capturedLexicalEnvironmentForRuntime();
-                ProtosFrameLexicalBindingAuthority authority = assertInstanceOf(
-                        ProtosFrameLexicalBindingAuthority.class,
-                        module.lexicalBindingAuthorityForRuntime());
+                Object expected = moduleBinding(anchor, "receiver");
 
-                int ordinal = authority.storedLayout().offsetOf("receiver");
-
-                com.oracle.truffle.api.strings.TruffleString name =
-                        com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
-                                "receiver",
-                                com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_16);
-
-                Object expected =
-                        module.readLocalSlotForRuntime("receiver").orElseThrow();
-
+                assertFalse(ProtosFrameArguments.isUnmaterializedCompactCall(published));
                 assertSame(
                         expected,
-                        ProtosExperimentalReadGlobalNode.resolveInitial(
-                                published, ordinal, name, 1),
+                        ProtosExperimentalReadGlobalNode.readModuleBinding(
+                                published, utf16("receiver"), 1, false),
                         "the published header resolves through the generic path");
+                assertSame(
+                        expected,
+                        ProtosExperimentalReadGlobalNode.readModuleBinding(
+                                compact, utf16("receiver"), 1, false),
+                        "the compact header resolves the same module binding");
 
                 return null;
             });
@@ -1744,105 +1925,58 @@ final class ProtosI115H7MethodCallConvergenceTest {
     }
 
     /**
-     * An actual primitive frame slot is rejected by Object admission.
-     * Generic resolution projects the primitive carrier to a guest Integer.
+     * I115 (replaces the retired frame-slot representation transition): a
+     * module global holding an Integer, then an Object, then an Integer
+     * again is returned as the exact guest value through the cached read,
+     * the storage location and the generic published-header read alike.
      */
     @Test
-    void nonObjectGlobalUsesGenericFallback() throws Exception {
+    void numericGlobalReadsReturnGuestIntegers() throws Exception {
         try (ProtosStandaloneHostedSession session =
-                open("r4-primitive-fallback", """
-                        target: { f: 5 }
+                open("r4-numeric-global", """
+                        target: 41
                         reader: () => { target }
+                        toObject: () => {
+                            target = { f: 5 }
+                            0
+                        }
+                        toWide: () => {
+                            target = 4294967296
+                            0
+                        }
                         """)) {
             ProtosClosureValue anchor =
                     session.prepareTopLevel("reader").closureForTesting();
+            for (int call = 0; call < WARM; call++) {
+                assertNumber(session, "reader", 41L);
+            }
 
             session.processContextForTesting().callForRuntime(() -> {
-                ProtosLexicalEnvironment module =
-                        anchor.capturedLexicalEnvironmentForRuntime();
-
-                ProtosFrameLexicalBindingAuthority authority = assertInstanceOf(
-                        ProtosFrameLexicalBindingAuthority.class,
-                        module.lexicalBindingAuthorityForRuntime());
-
-                ProtosFrameLexicalLayout layout = authority.storedLayout();
-                int ordinal = layout.offsetOf("target");
-                int physicalIndex = 2 + layout.localOffsetAt(ordinal);
-
-                com.oracle.truffle.api.frame.MaterializedFrame frame =
-                        authority.retainedMaterializedFrameForCapturedAccess();
-
-                assertTrue(
-                        physicalIndex >= 2
-                                && physicalIndex < frame.getFrameDescriptor().getNumberOfSlots(),
-                        "the pinned generated index must be in bounds");
-                assertTrue(frame.isObject(physicalIndex),
-                        "the fixture starts with a real Object slot");
-
-                ProtosFrameLexicalBindingAuthority.ExperimentalGlobalReadLocation location =
-                        authority.experimentalGlobalReadLocationOrNull(
-                                "target", ordinal);
-
-                assertTrue(location != null, "the initial Object is admitted");
-
-                Object original = frame.getValue(physicalIndex);
+                ProtosModuleBindingLocation location =
+                        ProtosExperimentalReadGlobalNode.locationOrNull(
+                                anchor, utf16("target"), 1);
+                assertNotNull(location);
+                assertEquals(41L, ((Number) location.readOrNull(
+                        DynamicObject.GetNode.getUncached())).longValue());
 
                 ProtosActivation activation =
                         ProtosActivation.forClosureInvocation(
-                                anchor,
-                                List.of(),
-                                anchor.prelude().orElseThrow());
-
-                Object[] published =
-                        ProtosFrameArguments.publishedInvocation(activation);
-
-                com.oracle.truffle.api.strings.TruffleString name =
-                        com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
-                                "target",
-                                com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_16);
-
-                try {
-                    /*
-                     * Test-only physical representation transition.
-                     * This is the actual retained module frame, not a mock.
-                     */
-                    frame.setLong(physicalIndex, 41L);
-
-                    assertTrue(frame.isLong(physicalIndex));
-                    assertFalse(frame.isObject(physicalIndex));
-
-                    assertNull(
-                            authority.experimentalGlobalReadLocationOrNull(
-                                    "target", ordinal),
-                            "primitive storage must not install an Object location");
-
-                    Long generic = assertInstanceOf(
-                            Long.class,
-                            ProtosExperimentalReadGlobalNode.resolveInitial(
-                                    published, ordinal, name, 1));
-
-                    assertEquals(41L, generic.longValue(),
-                            "the generic route converts the long carrier");
-
-                    Long recovered = assertInstanceOf(
-                            Long.class,
-                            location.read());
-
-                    assertEquals(41L, recovered.longValue(),
-                            "the old Object location recovers after a type change");
-
-                    assertFalse(location.isCurrent(),
-                            "the changed-type location must be invalidated");
-                } finally {
-                    frame.setObject(physicalIndex, original);
-                }
-
-                assertTrue(frame.isObject(physicalIndex),
-                        "the original physical representation is restored");
-                assertSame(original, frame.getValue(physicalIndex));
-
+                                anchor, List.of(), anchor.prelude().orElseThrow());
+                Object[] published = ProtosFrameArguments.publishedInvocation(activation);
+                assertEquals(41L, ((Number) ProtosExperimentalReadGlobalNode.readModuleBinding(
+                        published, utf16("target"), 1, false)).longValue(),
+                        "the generic route returns the guest Integer");
                 return null;
             });
+
+            session.prepareTopLevel("toObject").executable().execute();
+            Value object = session.prepareTopLevel("reader").executable().execute();
+            assertFalse(object.isNumber(), "the rebound Object is read after quickening");
+
+            session.prepareTopLevel("toWide").executable().execute();
+            for (int call = 0; call < WARM; call++) {
+                assertNumber(session, "reader", 4294967296L);
+            }
         }
     }
 
@@ -1924,7 +2058,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 "exactly one module root; no callback roots for the loop: " + report);
         assertTrue(others.get(0).isSemanticActivationRoot(), "the module is a semantic root");
         assertEquals(3, roots.size(), "module, run and identity roots: " + report);
-        assertEquals(RUN_DSL, unquickened(names(run)));
+        assertRunArchitecture(unquickened(names(run)));
         assertEquals(IDENTITY_DSL, unquickened(names(identity)));
         return report.toString();
     }
@@ -1951,7 +2085,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
     }
 
     /*
-     * The Context-owned target CallBinaryMethod enters for closure (admitted);
+     * The Context-owned function target CallUnaryMethod enters for closure;
      * it exists once the method has been called in this Context.
      */
     private static ProtosBytecodeRootNode admittedCallee(
@@ -2022,7 +2156,11 @@ final class ProtosI115H7MethodCallConvergenceTest {
         assertEquals(expected, result.asLong(), name);
     }
 
-    /* The host-boundary result of an admitted H7 root: the raw Long. */
+    /*
+     * The host-boundary result of a source root: the raw signed-64 Long,
+     * through the one shared return epilogue (I115: no root-specific
+     * return mode exists).
+     */
     private static void assertRawLong(
             ProtosStandaloneHostedSession session, String name, long expected)
             throws Exception {
@@ -2030,7 +2168,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 session.prepareTopLevel(name).hostExecutableForTesting();
         ProtosBytecodeRootNode target = assertInstanceOf(
                 ProtosBytecodeRootNode.class, host.target.getRootNode());
-        assertTrue(target.isExperimentalH7RawIntegerReturn(), name);
+        assertTrue(unquickened(names(target)).contains("c.EpilogForReturn"), name);
         Object result = session.processContextForTesting().callForRuntime(() -> {
             try {
                 return InteropLibrary.getUncached().execute(host);
@@ -2059,6 +2197,63 @@ final class ProtosI115H7MethodCallConvergenceTest {
         assertFalse(result.fitsInLong(), name + " promotes beyond signed-64: " + result);
         assertTrue(result.toString().contains(expected),
                 name + " exact large Integer: " + result);
+    }
+
+    /* Every CallUnaryMethod send site is preceded by its own GetMethod selection. */
+    private static void assertSelectionPrecedesEachCall(List<String> names) {
+        int selections = 0;
+        for (String name : names) {
+            if (name.equals("c.GetMethod")) {
+                selections++;
+            } else if (name.equals("c.CallUnaryMethod")) {
+                assertTrue(selections > 0, "a call without a preceding selection: " + names);
+                selections--;
+            }
+        }
+    }
+
+    /* The constant positions of the root's LoadSuppliedArgument instructions, in order. */
+    private static List<Integer> suppliedPositions(ProtosBytecodeRootNode root) {
+        return constantIntegers(root, "LoadSuppliedArgument", "index");
+    }
+
+    /* The immediate integer constant {@code argument} of every {@code operation} instruction. */
+    private static List<Integer> constantIntegers(
+            ProtosBytecodeRootNode root, String operation, String argument) {
+        List<Integer> values = new ArrayList<>();
+        for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {
+            if (!ProtosInstructionNames.of(instruction).contains(operation)) {
+                continue;
+            }
+            for (Instruction.Argument candidate : instruction.getArguments()) {
+                if (candidate.getName().equals(argument)) {
+                    values.add(switch (candidate.getKind()) {
+                        case INTEGER -> candidate.asInteger();
+                        case CONSTANT -> (Integer) candidate.asConstant();
+                        default -> throw new AssertionError(argument + " is not a constant");
+                    });
+                }
+            }
+        }
+        return values;
+    }
+
+    /* The names of the root's native Bytecode DSL locals. */
+    private static List<Object> localNames(ProtosBytecodeRootNode root) {
+        return root.getBytecodeNode().getLocals().stream()
+                .map(local -> local.getName())
+                .toList();
+    }
+
+    private static com.oracle.truffle.api.strings.TruffleString utf16(String name) {
+        return com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
+                name, com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_16);
+    }
+
+    /* The current value of module binding {@code name} of {@code anchor}'s module. */
+    private static Object moduleBinding(ProtosClosureValue anchor, String name) {
+        return anchor.capturedLexicalEnvironmentForRuntime()
+                .readLocalSlotForRuntime(name).orElseThrow();
     }
 
     private static int count(List<String> names, String name) {

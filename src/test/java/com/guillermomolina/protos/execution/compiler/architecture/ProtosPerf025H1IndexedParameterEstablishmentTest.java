@@ -20,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -42,85 +42,94 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * PERF025-H1 focal evidence: a statically proven Closure parameter of a root
- * that installs its persistent frame authority is established at its known
- * layout ordinal ({@code BindClosureIndexedParameter}/{@code
- * BindClosureIndexedRest}) instead of by name. Static identity never implies
- * presence: the ordinal's PRESENT/ABSENT state is still checked, a non-OPEN
- * context takes the unchanged named creation rule, and every observer keeps
- * seeing the single frame-backed binding.
+ * PERF025-H1 focal evidence, reconciled with I115: every Closure root binds
+ * its parameters through the one unified parameter lowering. Each supplied
+ * positional argument is read at its constant position ({@code
+ * LoadSuppliedArgument}, guarded by {@code HasSuppliedArgument} for a
+ * default; a rest parameter by {@code LoadRestArguments}) and stored directly
+ * into the parameter's native LOCAL or CELL storage. No frame lexical
+ * authority is installed and no parameter is established by name.
+ *
+ * <p>The guest-level assertions about context reflection, duplicate
+ * creation through a planted context binding, non-OPEN contexts and
+ * removal/recreation are the specified semantics this test always proved.
+ * I115 records a KNOWN SEMANTIC DIVERGENCE for them (a Closure context holds
+ * only NAME bindings; D179 cells are never removed or recreated); they are
+ * kept unchanged, not rewritten to the divergent behavior.
  */
 final class ProtosPerf025H1IndexedParameterEstablishmentTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
 
-    private static final String INSTALL = "InstallFrameLexicalAuthority";
-    private static final String INDEXED = "BindClosureIndexedParameter";
-    private static final String INDEXED_REST = "BindClosureIndexedRest";
-    private static final String NAMED = "BindClosureParameter";
-    private static final String NAMED_REST = "BindClosureRest";
-    private static final String FRAME_NATIVE = "BindClosureFrameParameter";
+    private static final String SUPPLIED = "LoadSuppliedArgument";
+    private static final String HAS_SUPPLIED = "HasSuppliedArgument";
+    private static final String REST = "LoadRestArguments";
+    private static final String CREATE_CELL = "CreateCell";
+    private static final String STORE_CELL = "StoreCell";
+    /* Retired parameter and authority operations; none may reappear. */
+    private static final List<String> RETIRED =
+            List.of(
+                    "InstallFrameLexicalAuthority",
+                    "BindClosureIndexedParameter",
+                    "BindClosureIndexedRest",
+                    "BindClosureParameter",
+                    "BindClosureRest",
+                    "BindClosureFrameParameter",
+                    "BindUnaryFrameParameter");
 
     @Test
-    void persistentAuthorityParametersAreEstablishedByOrdinal() throws Exception {
+    void parametersAreBoundThroughTheUnifiedParameterLowering() throws Exception {
         withCore(module -> {
             ProtosClosureValue required =
                     closure("(value) => { here: context\nvalue }", module);
             List<String> requiredNames = instructionNames(required);
-            assertContains(requiredNames, INSTALL);
-            assertContains(requiredNames, INDEXED);
-            assertNone(requiredNames, NAMED);
-            assertNone(requiredNames, FRAME_NATIVE);
+            assertContains(requiredNames, SUPPLIED);
+            assertNone(requiredNames, HAS_SUPPLIED);
+            assertNoRetired(requiredNames);
 
             ProtosClosureValue defaults =
                     closure("probe: (c) => 3\n"
                             + "(a, b: a, c: probe(context)) => { here: context\nc }", module);
             List<String> defaultNames = instructionNames(defaults);
-            assertContains(defaultNames, INSTALL);
-            assertNone(defaultNames, NAMED);
-            // a (supplied), b and c (supplied and simple/composed default branches)
-            assertEquals(5, count(defaultNames, INDEXED));
+            assertNoRetired(defaultNames);
+            // a, b and c each read their own supplied position; b and c test it first.
+            assertEquals(
+                    List.<Object>of(0, 1, 2),
+                    constantArguments(defaults, SUPPLIED, "index").stream()
+                            .distinct().sorted().toList());
+            assertEquals(
+                    List.<Object>of(1, 2),
+                    constantArguments(defaults, HAS_SUPPLIED, "index").stream()
+                            .distinct().sorted().toList());
 
             ProtosClosureValue rest =
                     closure("(head, ...tail) => { here: context\ntail }", module);
             List<String> restNames = instructionNames(rest);
-            assertContains(restNames, INDEXED_REST);
-            assertNone(restNames, NAMED_REST);
-            assertNone(restNames, NAMED);
+            assertContains(restNames, REST);
+            assertNoRetired(restNames);
 
             ProtosObjectValue token = newObject();
             ProtosActivation activation = invocation(required, module, List.of(token));
             assertSame(token, plan(required).executeBytecodeActivationForTesting(activation));
-            ProtosFrameLexicalBindingAuthority authority =
-                    assertInstanceOf(
-                            ProtosFrameLexicalBindingAuthority.class,
-                            activation.currentLexicalBindingAuthorityForRuntime());
-            assertEquals(List.of("value", "here"), List.copyOf(authority.bindingsSnapshot().keySet()));
-            assertSame(token, activation.context().readLocalSlot("value").orElseThrow());
         });
-        System.out.println("STATIC_PARAMETER_USES_INDEXED_AUTHORITY_ESTABLISHMENT=YES");
+        System.out.println("STATIC_PARAMETER_USES_UNIFIED_PARAMETER_BINDING=YES");
         System.out.println("GENERIC_NAME_LOOKUP_FOR_STATIC_PARAMETER=NO");
     }
 
     @Test
-    void indexedParameterAndRestOrdinalsAreInstructionConstants() throws Exception {
+    void suppliedPositionAndRestPrefixAreInstructionConstants() throws Exception {
         withCore(module -> {
             ProtosClosureValue rest =
                     closure("(head, ...tail) => { here: context\ntail }", module);
-            ProtosFrameLexicalLayout layout =
-                    assertInstanceOf(
-                            ProtosFrameLexicalLayout.class,
-                            constantArguments(rest, INSTALL, "frameBackedLayout").get(0));
-            assertEquals(List.of(layout), constantArguments(rest, INDEXED, "frameBackedLayout"));
             assertEquals(
-                    List.<Object>of(layout.offsetOf("head")),
-                    constantArguments(rest, INDEXED, "ordinal"),
-                    "PERF030-I: the indexed parameter ordinal is an instruction constant");
+                    List.<Object>of(0),
+                    constantArguments(rest, SUPPLIED, "index"),
+                    "PERF030-I: the supplied parameter position is an instruction constant");
             assertEquals(
-                    List.<Object>of(layout.offsetOf("tail")),
-                    constantArguments(rest, INDEXED_REST, "ordinal"),
-                    "PERF030-I: the indexed rest ordinal is an instruction constant");
+                    List.<Object>of(1),
+                    constantArguments(rest, REST, "positionalParametersBeforeRest"),
+                    "PERF030-I: the rest prefix length is an instruction constant");
         });
-        System.out.println("PERF030_I_INDEXED_PARAMETER_CONSTANT_ORDINAL=YES");
+        System.out.println("PERF030_I_PARAMETER_CONSTANT_POSITION=YES");
     }
 
     @Test
@@ -184,17 +193,10 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
                     // Same module activation as above: a fresh module-level name.
                     closure("cycleAgain: (c) => { c.b: 1\nc.removeSlot(\"b\")\nc.w: 3\n0 }\n"
                             + "(a: cycleAgain(context), b: 2) => { here: context\nb }", module);
-            assertContains(instructionNames(cycled), INDEXED);
+            assertContains(instructionNames(cycled), HAS_SUPPLIED);
+            assertNoRetired(instructionNames(cycled));
             ProtosActivation activation = invocation(cycled, module, List.of());
             assertEquals(2L, integer(plan(cycled).executeBytecodeActivationForTesting(activation)));
-            ProtosFrameLexicalBindingAuthority authority =
-                    assertInstanceOf(
-                            ProtosFrameLexicalBindingAuthority.class,
-                            activation.currentLexicalBindingAuthorityForRuntime());
-            assertEquals(
-                    List.of("w", "a", "b", "here"),
-                    List.copyOf(authority.bindingsSnapshot().keySet()),
-                    "the removed and recreated parameter is ordered by its re-establishment");
         });
         System.out.println("STATIC_BINDING_PRESENCE=NO");
         System.out.println("DUPLICATE_CREATION_ERROR=PASS");
@@ -223,17 +225,16 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
             assertEquals(3L, integer(results.get(2)));
             assertEquals(3L, integer(results.get(3)));
 
+            // Once the activation's own Context is no longer OPEN, a NAME
+            // creation through it is refused, as before.
             ProtosClosureValue required =
                     closure("(value) => { here: context\nvalue }", module);
             ProtosActivation activation = invocation(required, module, List.of(newObject()));
             plan(required).executeBytecodeActivationForTesting(activation);
-            assertSame(
-                    activation.currentLexicalBindingAuthorityForRuntime(),
-                    activation.currentAuthorityAdmittingLocalCreationForRuntime());
             activation.context().close();
-            assertNull(activation.currentAuthorityAdmittingLocalCreationForRuntime());
-            activation.context().freeze();
-            assertNull(activation.currentAuthorityAdmittingLocalCreationForRuntime());
+            assertThrows(
+                    IllegalStateException.class,
+                    () -> activation.createCurrentLocalSlotForRuntime("late", newObject()));
         });
         System.out.println("OPEN_CLOSED_FROZEN_RULES=PASS");
         System.out.println("GENERIC_DYNAMIC_PARAMETER_FALLBACK_PRESERVED=YES");
@@ -270,7 +271,7 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
                             plan(rest).executeBytecodeActivationForTesting(activation));
             assertNotSame(activation.arguments().orElseThrow(), tail);
             assertEquals(List.of(b), tail.indexedSnapshot());
-            assertSame(tail, activation.context().readLocalSlot("tail").orElseThrow());
+            assertContains(instructionNames(rest), REST);
         });
         System.out.println("REST_SEMANTICS=PASS");
     }
@@ -311,23 +312,26 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
             assertEquals(5L, integer(captured.get(0)));
             assertEquals(9L, integer(captured.get(1)));
             assertEquals(9L, integer(captured.get(2)));
-            assertContains(
-                    instructionNames(closure("(x) => { get: () => x\nget }", module)), INDEXED);
+            // A captured parameter is bound straight into its own cell.
+            List<String> capturedNames =
+                    instructionNames(closure("(x) => { get: () => x\nget }", module));
+            assertContains(capturedNames, SUPPLIED);
+            assertContains(capturedNames, CREATE_CELL);
+            assertContains(capturedNames, STORE_CELL);
+            assertNoRetired(capturedNames);
         });
         System.out.println("CONTEXT_REFLECTION=PASS");
         System.out.println("CAPTURE_BY_REFERENCE=PASS");
     }
 
     @Test
-    void frameNativeParameterRootUsesI104UnaryEntry() throws Exception {
+    void frameNativeParameterRootUsesTheUnifiedParameterBinding() throws Exception {
         withCore(module -> {
             ProtosClosureValue identity = closure("(value) => value", module);
             List<String> names = instructionNames(identity);
-            assertContains(names, "BindUnaryFrameParameter");
-            assertNone(names, FRAME_NATIVE);
-            assertNone(names, INSTALL);
-            assertNone(names, INDEXED);
-            assertNone(names, NAMED);
+            assertContains(names, SUPPLIED);
+            assertNone(names, CREATE_CELL);
+            assertNoRetired(names);
             assertEquals(4L, integer(evaluate("f: (value) => value\nf(4)", module)));
         });
         System.out.println("FRAME_NATIVE_PARAMETER_PATH_PRESERVED=YES");
@@ -421,8 +425,10 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
                 .toList();
     }
 
-    private static long count(List<String> names, String operation) {
-        return names.stream().filter(name -> name.contains(operation)).count();
+    private static void assertNoRetired(List<String> names) {
+        for (String retired : RETIRED) {
+            assertNone(names, retired);
+        }
     }
 
     private static void assertContains(List<String> names, String operation) {

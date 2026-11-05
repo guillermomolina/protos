@@ -36,7 +36,6 @@ public final class ProtosInstructionNames {
 
     private static final Map<String, Map<Object, String>> PHASES = Map.ofEntries(
             Map.entry("IsResultKind", Map.of(
-                    ProtosResultKind.PRIMITIVE_NUMERIC_SEND_MISS, "IsPrimitiveNumericSendMiss",
                     ProtosResultKind.CAPTURED_OWNER_FRAME_SELECTED, "IsCapturedOwnerFrameSelected",
                     ProtosResultKind.BUFFERED_WRITER_STEP_REQUIRED, "IsBufferedByteWriterStepRequired",
                     ProtosResultKind.TEXT_READER_NEED_INPUT, "IsTextReaderNeedInput",

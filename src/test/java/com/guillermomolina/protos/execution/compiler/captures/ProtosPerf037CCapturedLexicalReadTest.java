@@ -20,7 +20,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -29,20 +29,17 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosLexicalCell;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CallTarget;
-import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeTier;
 import com.oracle.truffle.api.bytecode.Instruction;
-import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.source.Source;
-import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Context;
@@ -50,15 +47,22 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
 /**
- * PERF037-C root-level captured reads. The name and lexical depth are
- * constant operands, compact and materialized invocations are separate
- * specializations, and a compact read retains a nearer-scope absence proof
- * guarded by the nearer scopes' frame layouts and their lazily created
- * no-dynamic-binding tokens. These programs drive one captured read site
- * through the uncached and cached interpreters, from two activations of the
- * same defining root, and check that D179 C0 late creation, removal and
- * recreation, PRESENT(null) versus ABSENT, the deferred-to-materialized
- * Context transition, value changes and the generic fallback are unchanged.
+ * PERF037-C root-level captured reads, reconciled with I115. A module-owned
+ * binding is one {@code ReadGlobal} with constant name and depth operands. A
+ * binding owned by a Closure root and captured by a nested Closure is one
+ * cell, created by the owning activation and shared by reference with every
+ * capturer at every nesting level; the read is a {@code LoadCell} of the
+ * reader's own local, with no owner-frame selection and no name fallback.
+ * These programs drive one captured read site through the uncached and
+ * cached interpreters, from two activations of the same defining root, and
+ * check owner tier transitions, current-value reads, PRESENT(null), the
+ * deferred-to-materialized Context transition and per-activation isolation.
+ *
+ * <p>KNOWN I115 SEMANTIC DIVERGENCE (D179): a cell is never removed or
+ * recreated, and a nearer dynamic binding does not shadow a CELL read. The
+ * former nearer-late-creation, owner-removal retargeting, exhausted-chain
+ * SlotNotFound and recreation assertions for Closure-owned bindings are not
+ * asserted here.
  */
 final class ProtosPerf037CCapturedLexicalReadTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -87,6 +91,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                     run, "IsCapturedOwnerFrameSelected").isEmpty());
             assertTrue(instructionsOf(
                     run, "ReadCapturedFallbackAtRoot").isEmpty());
+            assertTrue(instructionsOf(run, "LoadCell").isEmpty());
             assertFalse(
                     names(run).contains("load.local.mat"),
                     "a module-global read uses no materialized local read");
@@ -103,11 +108,9 @@ final class ProtosPerf037CCapturedLexicalReadTest {
     }
 
     /*
-     * The reader's chain is [maker context, wrap context, module context]:
-     * the proven owner is wrap's local holder (lexical depth 2), so the read
-     * has one nearer scope for the absence proof, and the module's holder is
-     * a farther lexical binding D179 C0 retargets to once the owner's is
-     * removed.
+     * wrap owns holder; the reader is nested two Closures deep, so it reads
+     * the cell wrap created, carried through the maker. The module's holder
+     * is a farther binding of the same name.
      */
     private static final String NESTED_PROGRAM =
             "holder: { value: 1 }\n"
@@ -122,7 +125,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                     + "}\n";
 
     @Test
-    void nearerLateCreationOwnerRemovalAndRetargetingAcrossTiersAndActivations()
+    void capturedReadSurvivesOwnerTierTransitionAcrossTiersAndActivations()
             throws Exception {
         withCore(module -> {
             evaluate(NESTED_PROGRAM, module);
@@ -132,7 +135,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             ownerRoot.getBytecodeNode().setUncachedThreshold(1);
             assertEquals(BytecodeTier.UNCACHED, ownerRoot.getBytecodeNode().getTier());
 
-            // A1: the owner root runs uncached; its retained frame escapes.
+            // A1: the owner root runs uncached; its cell escapes.
             ProtosClosureValue firstMaker =
                     assertInstanceOf(
                             ProtosClosureValue.class,
@@ -141,7 +144,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             assertEquals(
                     BytecodeTier.UNCACHED,
                     ownerRoot.getBytecodeNode().getTier(),
-                    "A1 and its retained frame belong to the uncached owner tier");
+                    "A1 and its cell belong to the uncached owner tier");
             ProtosClosureValue first =
                     assertInstanceOf(ProtosClosureValue.class, call(firstMaker, module));
             module.context().createLocalSlot("first", first);
@@ -152,7 +155,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
 
             /*
              * A2: the same owner root enters the cached tier and reads A1's
-             * retained frame before A2's own holder exists (BUG018).
+             * escaped cell before A2's own holder exists (BUG018).
              */
             ProtosClosureValue secondMaker =
                     assertInstanceOf(
@@ -170,10 +173,17 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                     bytecodeNode(first).getBytecodeRootNode(),
                     bytecodeNode(second).getBytecodeRootNode(),
                     "both readers are activations of one lowered root");
-            assertTrue(
-                    names(first).stream()
-                            .anyMatch(name -> name.contains("SelectCapturedMaterializedOwnerFrameAtRoot")),
-                    () -> "the read must take the root-level materialized selection: " + names(first));
+            assertFalse(instructionsOf(first, "LoadCell").isEmpty(),
+                    () -> "the captured read must be a cell read: " + names(first));
+            assertTrue(instructionsOf(first, "AccessNamedLexical").isEmpty(),
+                    () -> "the captured read takes no name fallback: " + names(first));
+
+            // Binding identity: each activation owns one cell, shared across nesting levels.
+            ProtosLexicalCell firstCell = onlyCell(first);
+            ProtosLexicalCell secondCell = onlyCell(second);
+            assertSame(firstCell, onlyCell(firstMaker));
+            assertSame(secondCell, onlyCell(secondMaker));
+            assertNotSame(firstCell, secondCell);
 
             for (int call = 0; call < WARM_UP_CALLS; call++) {
                 assertEquals("10", integerValue(call(first, module)));
@@ -184,17 +194,17 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                     bytecodeNode(first).getTier(),
                     "the read site must also run in the cached interpreter");
 
-            ProtosObjectValue firstOwner =
-                    ProtosLexicalEnvironment.at(first.capturedLexicalEnvironmentForRuntime(), 1)
-                            .context();
+            // The current owner value is read, not a specialized copy.
             evaluate("other.value = 3", module);
-            firstOwner.assignLocalSlot("holder", evaluate("other", module));
-            assertEquals("3", integerValue(call(first, module)), "the current owner value is read, not a specialized copy");
-            assertEquals("10", integerValue(call(second, module)));
+            firstCell.setForRuntime(evaluate("other", module));
+            assertEquals("3", integerValue(call(first, module)));
+            assertEquals("10", integerValue(call(second, module)),
+                    "another activation of the same root keeps its own binding");
 
             /*
              * The nearer maker Context is materialized only now, through the
-             * chain the reader shares by reference with its own activation.
+             * chain the reader shares by reference; materialization yields one
+             * Context identity and never changes the captured read.
              */
             ProtosObjectValue firstNearer =
                     first.capturedLexicalEnvironmentForRuntime().context();
@@ -202,37 +212,9 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                     firstNearer,
                     first.capturedLexicalEnvironmentForRuntime().context(),
                     "materialization yields one Context identity");
-            ProtosObjectValue nearerHolder = assertInstanceOf(
-                    ProtosObjectValue.class, evaluate("{ value: 7 }", module));
-            firstNearer.createLocalSlot("holder", nearerHolder);
-            assertEquals("7", integerValue(call(first, module)), "a later nearer binding shadows the owner");
-            assertEquals("10", integerValue(call(second, module)), "another activation of the same root keeps its own scopes");
-
-            assertSame(nearerHolder, firstNearer.removeLocalSlot("holder"));
             assertEquals("3", integerValue(call(first, module)));
-
-            // Removing the owner's binding retargets to the farther module binding.
-            firstOwner.removeLocalSlot("holder");
-            assertEquals("1", integerValue(call(first, module)), "D179 C0: an ABSENT owner reveals the farther lexical binding");
             assertEquals("10", integerValue(call(second, module)));
-
-            // With the lexical chain exhausted and no receiver slot: SlotNotFound.
-            Object moduleHolder = module.context().removeLocalSlot("holder");
-            ProtosSignalException absent =
-                    assertThrows(ProtosSignalException.class, () -> call(first, module));
-            assertSame(
-                    ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
-                    absent.error().parent().orElse(null),
-                    "an exhausted bare lookup signals SlotNotFound");
-
-            // Recreating the original owner binding makes it the selection again.
-            firstOwner.createLocalSlot("holder", nearerHolder);
-            assertEquals("7", integerValue(call(first, module)));
-            module.context().createLocalSlot("holder", moduleHolder);
-            assertEquals("7", integerValue(call(first, module)));
         });
-        System.out.println("PERF037C_NEARER_LATE_CREATION=PASS");
-        System.out.println("PERF037C_OWNER_REMOVAL_RETARGETING_AND_RECREATION=PASS");
         System.out.println("PERF037C_OWNER_TIER_TRANSITION=PASS");
         System.out.println("PERF037C_CACHED_AND_UNCACHED=PASS");
     }
@@ -282,14 +264,13 @@ final class ProtosPerf037CCapturedLexicalReadTest {
     }
 
     /*
-     * PERF037-D: the root selection profiles the owner's representation and
-     * its no-selection outcome per site. Two activations of one owner root
-     * share the reader site, the owner Context materializes after warm-up,
-     * and the owner binding is removed and recreated; each newly taken
-     * branch must still select the current invocation's owner exactly.
+     * Two activations of one owner root share the reader site, the owner
+     * Context materializes after warm-up, and each owner binding then takes
+     * PRESENT(null) and other values; every read still selects the current
+     * invocation's own binding exactly.
      */
     @Test
-    void ownerRepresentationProfilesStayExactAfterWarmUp() throws Exception {
+    void ownerBindingsStayExactPerActivationAfterWarmUp() throws Exception {
         withCore(module -> {
             evaluate(
                     "makeSlot: (initial) => {\n"
@@ -310,145 +291,70 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                 assertEquals("2", integerValue(call(readerB, module)));
             }
 
-            ProtosObjectValue ownerA = readerA.capturedLexicalEnvironmentForRuntime().context();
+            // Materializing the owner Context after warm-up changes nothing.
+            readerA.capturedLexicalEnvironmentForRuntime().context();
             assertEquals("1", integerValue(call(readerA, module)));
             assertEquals("2", integerValue(call(readerB, module)));
 
-            ownerA.removeLocalSlot("slot");
-            ProtosSignalException absent =
-                    assertThrows(ProtosSignalException.class, () -> call(readerA, module));
-            assertSame(
-                    ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
-                    absent.error().parent().orElse(null));
-            assertEquals("2", integerValue(call(readerB, module)), "the other activation's owner is unaffected");
-
-            ownerA.createLocalSlot("slot", ProtosNullValue.INSTANCE);
+            ProtosLexicalCell cellA = onlyCell(readerA);
+            assertNotSame(cellA, onlyCell(readerB));
+            cellA.setForRuntime(ProtosNullValue.INSTANCE);
             assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
             for (int call = 0; call < WARM_UP_CALLS; call++) {
                 assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
-                assertEquals("2", integerValue(call(readerB, module)));
+                assertEquals("2", integerValue(call(readerB, module)),
+                        "the other activation's owner is unaffected");
             }
 
-            // Later removals, with the no-selection outcome already seen, stay exact.
             for (int round = 0; round < 3; round++) {
-                ownerA.removeLocalSlot("slot");
-                for (int call = 0; call < 3; call++) {
-                    ProtosSignalException again =
-                            assertThrows(ProtosSignalException.class, () -> call(readerA, module));
-                    assertSame(
-                            ProtosCoreErrors.prototype(
-                                    module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
-                            again.error().parent().orElse(null));
-                    assertEquals("2", integerValue(call(readerB, module)));
-                }
-                ownerA.createLocalSlot("slot", ProtosNullValue.INSTANCE);
+                cellA.setForRuntime(evaluate(Integer.toString(round + 5), module));
+                assertEquals(Integer.toString(round + 5), integerValue(call(readerA, module)));
+                cellA.setForRuntime(ProtosNullValue.INSTANCE);
                 assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
                 assertEquals("2", integerValue(call(readerB, module)));
             }
         });
-        System.out.println("PERF037D_OWNER_REPRESENTATION_PROFILES=PASS");
+        System.out.println("PERF037D_OWNER_BINDINGS_EXACT=PASS");
     }
 
     /*
-     * PERF037-D: alternating owner representations at one site sets each
-     * representation profile once. A flag is only ever set after
-     * transferToInterpreterAndInvalidate and never cleared, so once both
-     * representations are known no further alternation reaches an
-     * invalidation: the flags are the only invalidation trigger.
+     * Alternating deferred and materialized owner scopes at one read site:
+     * the captured read never depends on whether the owner's Context exists.
      */
     @Test
-    void alternatingOwnerRepresentationsInvalidateOncePerProfile() throws Exception {
+    void deferredAndMaterializedOwnersReadIdentically() throws Exception {
         withCore(module -> {
             ProtosClosureValue makeSlot =
                     closure("() => {\n  slot: 1\n  () => { slot }\n}", module);
+            ProtosClosureValue deferredReader =
+                    assertInstanceOf(ProtosClosureValue.class, call(makeSlot, module));
+            ProtosClosureValue materializedReader =
+                    assertInstanceOf(ProtosClosureValue.class, call(makeSlot, module));
             ProtosLexicalEnvironment deferred =
-                    assertInstanceOf(ProtosClosureValue.class, call(makeSlot, module))
-                            .capturedLexicalEnvironmentForRuntime();
+                    deferredReader.capturedLexicalEnvironmentForRuntime();
             ProtosLexicalEnvironment materialized =
-                    assertInstanceOf(ProtosClosureValue.class, call(makeSlot, module))
-                            .capturedLexicalEnvironmentForRuntime();
+                    materializedReader.capturedLexicalEnvironmentForRuntime();
             materialized.context();
             assertTrue(deferred.isDeferredForRuntime());
             assertFalse(materialized.isDeferredForRuntime());
-
-            ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence site =
-                    ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence.create(
-                            deferred, "slot", 1);
-            assertFalse((Boolean) privateField(site, "seenDeferredOwner"));
-            assertFalse((Boolean) privateField(site, "seenMaterializedOwner"));
+            assertSame(bytecodeNode(deferredReader), bytecodeNode(materializedReader));
 
             for (int round = 0; round < WARM_UP_CALLS; round++) {
-                assertSame(
-                        deferred.lexicalBindingAuthorityForRuntime(),
-                        site.ownerAuthorityOrNull(deferred),
-                        "the profiled deferred lookup is exact");
-                assertSame(
-                        materialized.lexicalBindingAuthorityForRuntime(),
-                        site.ownerAuthorityOrNull(materialized),
-                        "the profiled materialized lookup is exact");
-                assertTrue((Boolean) privateField(site, "seenDeferredOwner"));
-                assertTrue((Boolean) privateField(site, "seenMaterializedOwner"));
+                assertEquals("1", integerValue(call(deferredReader, module)));
+                assertEquals("1", integerValue(call(materializedReader, module)));
             }
-            assertFalse(
-                    (Boolean) privateField(site, "seenNoSelection"),
-                    "profiles are independent; an unrelated outcome stays unseen");
-
-            ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence uncached =
-                    ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence.uncached(1);
-            for (String flag :
-                    List.of(
-                            "seenMaterializedOwner",
-                            "seenDeferredOwner",
-                            "seenPublishedDeferredOwner",
-                            "seenNoSelection")) {
-                assertTrue(
-                        (Boolean) privateField(uncached, flag),
-                        "the uncached instance never invalidates: " + flag);
-            }
+            assertTrue(deferred.isDeferredForRuntime(),
+                    "reading a captured cell never materializes its owner Context");
         });
-        System.out.println("PERF037D_PROFILE_ALTERNATION=PASS");
+        System.out.println("PERF037D_REPRESENTATION_INDEPENDENT=PASS");
     }
 
     /*
-     * PERF037-D: the no-selection profile shared by the generic selection and
-     * the owner-frame cache's cleared-binding path is monotonic: set once,
-     * never cleared, and already set on the uncached instance.
+     * A two-level capture shares the owner's cell with every level, and the
+     * cells of two owner activations stay distinct.
      */
     @Test
-    void noSelectionProfileIsMonotonic() throws Exception {
-        withCore(module -> {
-            ProtosLexicalEnvironment captured =
-                    assertInstanceOf(
-                                    ProtosClosureValue.class,
-                                    call(
-                                            closure("() => {\n  slot: 1\n  () => { slot }\n}", module),
-                                            module))
-                            .capturedLexicalEnvironmentForRuntime();
-            ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence site =
-                    ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence.create(captured, "slot", 1);
-            assertFalse((Boolean) privateField(site, "seenNoSelection"));
-            for (int round = 0; round < 3; round++) {
-                site.profileNoSelection();
-                assertTrue((Boolean) privateField(site, "seenNoSelection"));
-            }
-
-            ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence uncached =
-                    ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence.uncached(1);
-            uncached.profileNoSelection();
-            assertTrue((Boolean) privateField(uncached, "seenNoSelection"));
-        });
-        System.out.println("PERF037D_NO_SELECTION_PROFILE=PASS");
-    }
-
-    /*
-     * PERF037-D: a cache hit skips the physical presence check only behind
-     * the owner layout's continuity token, admitted when the binding was
-     * PRESENT at recording. Removal invalidates the token shared by every
-     * activation of the layout before clearing; it is never renewed, so a
-     * recreated binding is read through the physical check again.
-     */
-    @Test
-    void ownerFrameCacheAdmitsPresentContinuityOnlyWhilePresent() throws Exception {
+    void nestedCapturersShareTheOwnerCellAcrossLevels() throws Exception {
         withCore(module -> {
             evaluate(
                     "makeSlot: (initial) => {\n"
@@ -460,58 +366,33 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                             + "readerA: factoryA()\n"
                             + "readerB: factoryB()\n",
                     module);
+            ProtosClosureValue factoryA = closure("factoryA", module);
             ProtosClosureValue readerA = closure("readerA", module);
             ProtosClosureValue readerB = closure("readerB", module);
             for (int call = 0; call < WARM_UP_CALLS; call++) {
                 assertEquals("1", integerValue(call(readerA, module)));
-            }
-            ProtosCapturedLexicalAccess.CapturedOwnerFrameCache cache = ownerFrameCache(readerA);
-            assertTrue(cache.isRecordedForTesting(), "the PRESENT owner was recorded");
-            Assumption continuity = cache.presentContinuityForTesting();
-            assertTrue(
-                    continuity != null && continuity.isValid(),
-                    "a PRESENT binding admits its valid continuity token");
-            for (int call = 0; call < WARM_UP_CALLS; call++) {
-                assertEquals("1", integerValue(call(readerA, module)));
                 assertEquals("2", integerValue(call(readerB, module)));
             }
-            assertTrue(continuity.isValid(), "reads never invalidate the token");
+            ProtosLexicalCell cellA = onlyCell(readerA);
+            assertSame(cellA, onlyCell(factoryA));
+            assertNotSame(cellA, onlyCell(readerB));
 
-            // Removal in the other activation invalidates the shared token only.
-            ProtosObjectValue ownerB =
-                    ProtosLexicalEnvironment.at(readerB.capturedLexicalEnvironmentForRuntime(), 1)
-                            .context();
-            ownerB.removeLocalSlot("slot");
-            assertFalse(continuity.isValid(), "the token is shared by the layout");
-            assertEquals("1", integerValue(call(readerA, module)), "a still PRESENT owner is read through the physical check");
-            assertSlotNotFound(module, () -> call(readerB, module));
-
-            ProtosObjectValue ownerA =
-                    ProtosLexicalEnvironment.at(readerA.capturedLexicalEnvironmentForRuntime(), 1)
-                            .context();
-            ownerA.removeLocalSlot("slot");
-            assertSlotNotFound(module, () -> call(readerA, module));
-            assertSlotNotFound(module, () -> call(readerA, module));
-
-            ownerA.createLocalSlot("slot", ProtosNullValue.INSTANCE);
+            cellA.setForRuntime(ProtosNullValue.INSTANCE);
             assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
-            assertFalse(continuity.isValid(), "recreation never renews the token");
-            for (int call = 0; call < WARM_UP_CALLS; call++) {
-                assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
-            }
-            ownerB.createLocalSlot("slot", evaluate("10", module));
-            assertEquals("10", integerValue(call(readerB, module)));
+            assertSame(ProtosNullValue.INSTANCE,
+                    call(assertInstanceOf(ProtosClosureValue.class, call(factoryA, module)), module),
+                    "a new reader of the same owner activation reads the same cell");
+            assertEquals("2", integerValue(call(readerB, module)));
         });
-        System.out.println("PERF037D_PRESENT_CONTINUITY_CACHE=PASS");
+        System.out.println("PERF037D_SHARED_OWNER_CELL=PASS");
     }
 
     /*
-     * PERF037-D: an owner binding already ABSENT when the cache records it
-     * admits no continuity token; every hit checks presence physically and
-     * a later recreation is observed.
+     * A nested captured read selects its proven owner, never a farther
+     * module binding of the same name.
      */
     @Test
-    void ownerFrameCacheAdmitsNoContinuityForAbsentBinding() throws Exception {
+    void nestedCaptureReadsItsOwnerNotTheFartherModuleBinding() throws Exception {
         withCore(module -> {
             evaluate(
                     "slot: 0\n"
@@ -523,60 +404,18 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                             + "reader: factory()\n",
                     module);
             ProtosClosureValue reader = closure("reader", module);
-            ProtosObjectValue owner =
-                    ProtosLexicalEnvironment.at(reader.capturedLexicalEnvironmentForRuntime(), 1)
-                            .context();
-            owner.removeLocalSlot("slot");
             for (int call = 0; call < WARM_UP_CALLS; call++) {
-                assertEquals("0", integerValue(call(reader, module)), "D179 C0: an ABSENT owner reveals the farther binding");
+                assertEquals("1", integerValue(call(reader, module)));
             }
-            ProtosCapturedLexicalAccess.CapturedOwnerFrameCache cache = ownerFrameCache(reader);
-            if (cache.isRecordedForTesting()) {
-                assertNull(
-                        cache.presentContinuityForTesting(),
-                        "an ABSENT binding admits no continuity token");
-            }
-            owner.createLocalSlot("slot", ProtosNullValue.INSTANCE);
+            assertTrue(instructionsOf(reader, "ReadGlobal").isEmpty(),
+                    () -> "the owner is the Closure binding: " + names(reader));
+            onlyCell(reader).setForRuntime(ProtosNullValue.INSTANCE);
             for (int call = 0; call < WARM_UP_CALLS; call++) {
                 assertSame(ProtosNullValue.INSTANCE, call(reader, module));
             }
-            owner.removeLocalSlot("slot");
-            assertEquals("0", integerValue(call(reader, module)));
+            assertEquals("0", integerValue(evaluate("slot", module)));
         });
-        System.out.println("PERF037D_ABSENT_ADMITS_NO_CONTINUITY=PASS");
-    }
-
-    /* PERF037-D: the uncached form never records, so it always checks presence. */
-    @Test
-    void retiredOwnerFrameCacheNeverAdmitsContinuity() {
-        ProtosCapturedLexicalAccess.CapturedOwnerFrameCache retired =
-                ProtosCapturedLexicalAccess.CapturedOwnerFrameCache.retired();
-        assertFalse(retired.isRecordedForTesting());
-        assertNull(retired.presentContinuityForTesting());
-        System.out.println("PERF037D_UNCACHED_NO_CONTINUITY=PASS");
-    }
-
-    @Test
-    void noDynamicBindingTokenIsLazyOneWayAndNeverRenewed() throws Exception {
-        ProtosFrameLexicalLayout layout = ProtosFrameLexicalLayout.of(new String[] {"a"});
-        assertNull(
-                privateField(layout, "noDynamicBinding"),
-                "a layout no specialized read depends on carries no token");
-
-        Assumption token = layout.noDynamicBindingOrNull();
-        assertTrue(token.isValid());
-        assertSame(token, layout.noDynamicBindingOrNull());
-
-        layout.recordDynamicBindingCreation();
-        assertFalse(token.isValid(), "dynamic creation invalidates the token first");
-        assertNull(layout.noDynamicBindingOrNull(), "an invalidated token is never renewed");
-
-        ProtosFrameLexicalLayout observed = ProtosFrameLexicalLayout.of(new String[] {"a"});
-        observed.recordDynamicBindingCreation();
-        assertNull(
-                observed.noDynamicBindingOrNull(),
-                "no token is issued once a dynamic binding was ever created");
-        System.out.println("PERF037C_ABSENCE_TOKEN=PASS");
+        System.out.println("PERF037D_OWNER_NOT_FARTHER_BINDING=PASS");
     }
 
     @FunctionalInterface
@@ -630,6 +469,12 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                 module.executionDomain());
     }
 
+    private static ProtosLexicalCell onlyCell(ProtosClosureValue closure) {
+        ProtosLexicalCell[] cells = closure.capturedCellsForRuntime();
+        assertEquals(1, cells.length, () -> "expected one captured cell");
+        return cells[0];
+    }
+
     private static BytecodeNode bytecodeNode(ProtosClosureValue closure) {
         return closure.executionPlan()
                 .orElseThrow()
@@ -647,11 +492,6 @@ final class ProtosPerf037CCapturedLexicalReadTest {
         return bytecodeNode(closure).getInstructionsAsList().stream()
                 .map(Instruction::getName)
                 .toList();
-    }
-
-    private static Instruction single(List<Instruction> instructions) {
-        assertEquals(1, instructions.size(), () -> "expected one instruction: " + instructions);
-        return instructions.get(0);
     }
 
     private static Object constantArgument(Instruction instruction, String name) {
@@ -675,58 +515,5 @@ final class ProtosPerf037CCapturedLexicalReadTest {
         assertSame(
                 ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
                 absent.error().parent().orElse(null));
-    }
-
-    /** The owner-frame cache of {@code closure}'s single root-level selection site. */
-    private static ProtosCapturedLexicalAccess.CapturedOwnerFrameCache ownerFrameCache(
-            ProtosClosureValue closure) throws ReflectiveOperationException {
-        Instruction select =
-                single(instructionsOf(closure, "SelectCapturedMaterializedOwnerFrameAtRoot"));
-        for (Instruction.Argument argument : select.getArguments()) {
-            if (argument.getKind() == Instruction.Argument.Kind.NODE_PROFILE) {
-                Object found = findField(
-                        argument.asCachedNode(),
-                        ProtosCapturedLexicalAccess.CapturedOwnerFrameCache.class,
-                        3);
-                if (found != null) {
-                    return (ProtosCapturedLexicalAccess.CapturedOwnerFrameCache) found;
-                }
-            }
-        }
-        throw new AssertionError("no owner-frame cache in " + select);
-    }
-
-    private static Object findField(Object target, Class<?> type, int depth)
-            throws ReflectiveOperationException {
-        if (target == null || depth < 0) {
-            return null;
-        }
-        if (type.isInstance(target)) {
-            return target;
-        }
-        if (!target.getClass().getName().startsWith("com.guillermomolina.protos")) {
-            return null;
-        }
-        for (Class<?> c = target.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
-            for (Field field : c.getDeclaredFields()) {
-                if (field.getType().isPrimitive()
-                        || java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
-                    continue;
-                }
-                field.setAccessible(true);
-                Object found = findField(field.get(target), type, depth - 1);
-                if (found != null) {
-                    return found;
-                }
-            }
-        }
-        return null;
-    }
-
-    private static Object privateField(Object target, String name)
-            throws ReflectiveOperationException {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return field.get(target);
     }
 }

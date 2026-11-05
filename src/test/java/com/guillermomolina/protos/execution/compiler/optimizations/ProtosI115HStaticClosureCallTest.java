@@ -214,19 +214,30 @@ final class ProtosI115HStaticClosureCallTest {
         });
     }
 
-    /** The uncached interpreter executes the same ordinary terminal call. */
+    /**
+     * I115: CallUnaryMethod is registered with {@code forceCached = true},
+     * so a root containing it runs the cached interpreter even when a high
+     * uncached threshold is requested. This verifies the forced-cached
+     * unary execution path: the same ordinary terminal call, the correct
+     * result, and a stable root across repeated calls. It does not test an
+     * uncached interpreter, which this operation deliberately never uses.
+     */
     @Test
-    void unaryCallExecutesInUncachedInterpreter() throws Exception {
+    void unaryCallExecutesInForcedCachedInterpreter() throws Exception {
         withCore(module -> {
             evaluate(RUN, "i115h-uncached-define.protos", module);
             ProtosBytecodeRootNode run = functionRoot("run", module);
             run.getBytecodeNode().setUncachedThreshold(Integer.MAX_VALUE);
-            assertEquals(BytecodeTier.UNCACHED, run.getBytecodeNode().getTier());
             assertOrdinaryCall(run);
 
-            assertInteger(1, evaluate("run()\n", "i115h-uncached.protos", module));
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(1, evaluate("run()\n", "i115h-uncached.protos", module));
+            }
 
-            assertEquals(BytecodeTier.UNCACHED, run.getBytecodeNode().getTier());
+            assertEquals(BytecodeTier.CACHED, run.getBytecodeNode().getTier(),
+                    "a forced-cached CallUnaryMethod root runs cached");
+            assertSame(run, functionRoot("run", module), "the root is stable");
+            assertOrdinaryCall(run);
         });
     }
 
@@ -449,13 +460,12 @@ final class ProtosI115HStaticClosureCallTest {
         try (ProtosStandaloneHostedSession session = openHosted("i115-fibonacci", FIBONACCI)) {
             ProtosBytecodeRootNode fibonacci = hostedRoot(session, "fibonacci");
             List<String> names = names(fibonacci);
-            assertEquals(2, names.stream()
-                            .filter(name -> name.contains("InvokeStaticClosureOneTail")).count(),
-                    names::toString);
-            assertTrue(names.stream().anyMatch(name -> name.contains("ExperimentalLongArgument0")),
-                    names::toString);
+            // I115: both recursive calls are the shared CallUnaryMethod over the
+            // module global, and n is bound by the one parameter lowering.
+            assertRecursiveUnaryLowering(names);
             for (String forbidden : List.of(MATERIALIZE, "BindUnaryFrameParameter",
-                    "PrepareClosureCall", "InstallFrameLexicalAuthority", "TryPrimitiveNumeric")) {
+                    "PrepareClosureCall", "InstallFrameLexicalAuthority", "TryPrimitiveNumeric",
+                    "InvokeStaticClosureOneTail", "ExperimentalLongArgument0")) {
                 assertTrue(names.stream().noneMatch(name -> name.contains(forbidden)),
                         forbidden + ": " + names);
             }
@@ -472,16 +482,17 @@ final class ProtosI115HStaticClosureCallTest {
                     "the call sites are reused, not re-lowered");
 
             /*
-             * The recursive callee boundary: the fibonacci root entered with
-             * the static unary ABI its own recursion uses returns the raw
-             * signed-64 Long. (run is not an H7 raw-return root; its epilogue
-             * materializes the guest Integer for the host, as before.)
+             * The recursive callee boundary: the fibonacci root entered
+             * directly with a B5 direct-call header (the real hosted Closure
+             * and caller, supplied 20) returns the signed-64 Long.
              */
-            RootCallTarget target = session.prepareTopLevel("fibonacci")
-                    .hostExecutableForTesting().target;
+            ProtosHostExecutableClosure host =
+                    session.prepareTopLevel("fibonacci").hostExecutableForTesting();
+            RootCallTarget target = host.target;
             assertSame(fibonacci, target.getRootNode());
             Object raw = session.processContextForTesting().callForRuntime(() ->
-                    target.call(ProtosFrameArguments.experimentalStaticUnaryCall(20L, null)));
+                    target.call(ProtosFrameArguments.compactDirectClosureCallOne(
+                            host.closure, host.caller, null, 20L)));
             assertEquals(6765L, assertInstanceOf(Long.class, raw,
                     "the recursive result stays a raw signed-64 Long").longValue());
         }
@@ -509,9 +520,9 @@ final class ProtosI115HStaticClosureCallTest {
     // ---- I115 on-demand Prelude transport (GraalPy caller flags) ----------
 
     /**
-     * A recursion that never overflows never requests the caller Prelude:
-     * its static calls keep slot 1 null (nothing is prepared) and its caller
-     * needs Assumption is never invalidated.
+     * A recursion that never overflows never requests the caller Prelude
+     * and its caller-needs Assumption is never invalidated; its calls are
+     * the shared CallUnaryMethod with B5 headers.
      */
     @Test
     void noOverflowNeverRequestsCallerPrelude() throws Exception {
@@ -526,64 +537,71 @@ final class ProtosI115HStaticClosureCallTest {
             assertTrue(stability.isValid(), "no need was registered");
             assertSame(stability, fibonacci.callerNeedsStability());
             List<String> names = unquickened(names(fibonacci));
-            assertEquals(2, names.stream()
-                            .filter("c.InvokeStaticClosureOneTail"::equals).count(),
-                    names::toString);
+            assertRecursiveUnaryLowering(names);
             assertTrue(names.stream().noneMatch(name -> name.contains(MATERIALIZE)),
                     names::toString);
         }
     }
 
     /**
-     * The first signed-64 overflow registers NEEDS_CALLER_PRELUDE once
-     * (invalidating the previous Assumption), still completes exactly, and
-     * later executions receive the Prelude explicitly with a stable
-     * Assumption. A result that fits keeps its raw long carrier.
+     * I115: the B5 header carries the invoked Closure, which owns its
+     * Prelude, so a signed-64 overflow mints the large Integer with that
+     * Closure's Prelude and needs nothing from its caller. (The retired
+     * minimal unary header omitted the Closure and had to request the
+     * caller's Prelude; that recovery is not rebuilt.) The caller-needs
+     * Assumption stays valid and unchanged across repeated overflows, and a
+     * result that fits keeps its raw long carrier.
      */
     @Test
-    void firstOverflowRegistersCallerPreludeOnce() throws Exception {
+    void overflowUsesTheClosurePreludeWithoutCallerNeed() throws Exception {
         try (ProtosStandaloneHostedSession session = openHosted("i115-need", FIBONACCI)) {
             ProtosBytecodeRootNode grow = hostedRoot(session, "grow");
             assertFalse(grow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
             Assumption before = grow.callerNeedsStability();
+            ProtosClosureValue growClosure = session.prepareTopLevel("grow").closureForTesting();
+            assertSame(growClosure,
+                    session.prepareTopLevel("grow").hostExecutableForTesting().closure,
+                    "the invocation is owned by the grow Closure itself");
 
-            // The first overflow already mints with grow's own Prelude.
             Object first = rawRunGrow(session);
             assertSame(prelude(session, "grow").bigIntegerPrototype(),
                     assertInstanceOf(ProtosLargeIntegerValue.class, first)
                             .parent().orElseThrow(),
-                    "the first overflow uses the invocation's Prelude");
+                    "the overflow uses the invoked Closure's Prelude");
             List<String> namesAfterFirst = unquickened(names(grow));
 
-            assertTrue(grow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
-            assertFalse(before.isValid(), "the first request invalidates the Assumption");
-            Assumption after = grow.callerNeedsStability();
-            assertTrue(after.isValid());
+            assertFalse(grow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE),
+                    "no caller Prelude is needed");
+            assertSame(before, grow.callerNeedsStability(), "no Assumption was replaced");
+            assertTrue(before.isValid());
+            Assumption after = before;
 
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 assertGrow(session);
             }
-            assertTrue(grow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
-            assertSame(after, grow.callerNeedsStability(), "no further need was registered");
+            assertFalse(grow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertSame(after, grow.callerNeedsStability(), "no need was registered");
             assertTrue(after.isValid());
             assertSame(grow, hostedRoot(session, "grow"), "the same root and call sites");
             assertEquals(namesAfterFirst, unquickened(names(grow)));
-            assertEquals(2, namesAfterFirst.stream()
-                            .filter("c.InvokeStaticClosureOneTail"::equals).count(),
-                    namesAfterFirst::toString);
+            assertRecursiveUnaryLowering(namesAfterFirst, "c.RichCompareGt");
 
-            // A result that fits still returns the raw long (grow(0) = 2^62).
-            RootCallTarget target = session.prepareTopLevel("grow")
-                    .hostExecutableForTesting().target;
+            // A result that fits still returns the raw long (grow(0) = 2^62),
+            // entered with a B5 direct-call header of the real Closure and caller.
+            ProtosHostExecutableClosure host =
+                    session.prepareTopLevel("grow").hostExecutableForTesting();
+            RootCallTarget target = host.target;
             Object raw = session.processContextForTesting().callForRuntime(() ->
-                    target.call(ProtosFrameArguments.experimentalStaticUnaryCall(0L, null)));
+                    target.call(ProtosFrameArguments.compactDirectClosureCallOne(
+                            host.closure, host.caller, null, 0L)));
             assertEquals(4611686018427387904L, assertInstanceOf(Long.class, raw).longValue());
         }
     }
 
     /**
      * Two independent Contexts: each overflow mints its large Integer with
-     * its own Prelude, and each target keeps its own caller needs.
+     * its own Context's Prelude, and neither target registers a caller need
+     * or disturbs the other's caller-needs Assumption.
      */
     @Test
     void overflowPreludeIsIsolatedPerContext() throws Exception {
@@ -592,13 +610,17 @@ final class ProtosI115HStaticClosureCallTest {
             ProtosBytecodeRootNode firstGrow = hostedRoot(first, "grow");
             ProtosBytecodeRootNode secondGrow = hostedRoot(second, "grow");
             assertNotSame(firstGrow, secondGrow, "each Context owns its target");
+            Assumption firstStable = firstGrow.callerNeedsStability();
+            Assumption secondStable = secondGrow.callerNeedsStability();
 
             Object firstLarge = rawRunGrow(first);
-            assertTrue(firstGrow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
-            assertFalse(secondGrow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE),
-                    "a need registered in one Context does not reach the other");
+            assertFalse(firstGrow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertSame(secondStable, secondGrow.callerNeedsStability(),
+                    "one Context's execution does not touch the other");
             Object secondLarge = rawRunGrow(second);
-            assertTrue(secondGrow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertFalse(secondGrow.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertSame(firstStable, firstGrow.callerNeedsStability());
+            assertSame(secondStable, secondGrow.callerNeedsStability());
 
             ProtosPrelude firstPrelude = prelude(first, "grow");
             ProtosPrelude secondPrelude = prelude(second, "grow");
@@ -692,6 +714,45 @@ final class ProtosI115HStaticClosureCallTest {
                 "c.InvokeExperimentalClosureOneTail",
                 "c.InvokeStaticClosureOneTail")) {
             assertTrue(!names.contains(retired), () -> retired + ": " + names);
+        }
+    }
+
+    /*
+     * A self-recursive unary function (fibonacci, grow): exactly two
+     * CallUnaryMethod sites over the module-global binding, its parameter
+     * bound by LoadSuppliedArgument stored into its native local, and none
+     * of the retired static-call operations.
+     */
+    private static void assertRecursiveUnaryLowering(List<String> names) {
+        assertRecursiveUnaryLowering(names, "c.RichCompareGe");
+    }
+
+    /*
+     * I115: n is captured by the inline ifTrue body, so it is a CELL:
+     * LoadSuppliedArgument(0) is stored straight into its cell. The
+     * condition is the per-selector comparison, materialized and validated
+     * by the unified Boolean control; '-' and '+' are NumberSubtract and
+     * NumberAdd.
+     */
+    private static void assertRecursiveUnaryLowering(List<String> names, String comparison) {
+        List<String> plain = unquickened(names);
+        assertEquals(2, plain.stream().filter(TERMINAL_CALL::equals).count(),
+                plain::toString);
+        assertEquals(2, plain.stream().filter("c.ReadGlobal"::equals).count(),
+                plain::toString);
+        int load = plain.indexOf("c.LoadSuppliedArgument");
+        assertTrue(load >= 0 && plain.get(load + 1).equals("c.StoreCell"), plain::toString);
+        int compare = plain.indexOf(comparison);
+        int materialize = plain.indexOf("c.MaterializePrimitiveNumericCarrier");
+        int condition = plain.indexOf("c.ExperimentalCanonicalBooleanCondition");
+        assertTrue(compare >= 0 && materialize > compare && condition > materialize,
+                () -> "comparison, materialization, Boolean validation: " + plain);
+        assertTrue(plain.contains("c.NumberSubtract") && plain.contains("c.NumberAdd"),
+                plain::toString);
+        for (String retired : List.of("InvokeStaticClosureOneTail", "ExperimentalLongArgument0",
+                "ExperimentalInteger", "CopyArguments")) {
+            assertTrue(plain.stream().noneMatch(name -> name.contains(retired)),
+                    () -> retired + ": " + plain);
         }
     }
 

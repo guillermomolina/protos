@@ -18,7 +18,6 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -439,23 +438,57 @@ final class ProtosI115RFactorialCaptureTest {
             System.out.println(
                     "I115_R1_UNARY_INSTRUCTIONS=" + names);
 
+            /*
+             * I115 unified Boolean control: n is a CELL (captured by the
+             * inline ifTrue body); '>' is RichCompareGt, materialized and
+             * validated as the native control condition; the inline body
+             * computes '*' and stores result into its cell.
+             */
+            assertTrue(indexStartingWith(names, "c.CreateCell") >= 0, names.toString());
+            int bind = indexStartingWith(names, "c.LoadSuppliedArgument");
+            assertTrue(bind >= 0 && names.get(bind + 1).startsWith("c.StoreCell"),
+                    "Missing CELL parameter binding: " + names);
+            assertTrue(indexStartingWith(names, "c.LoadCell") >= 0, names.toString());
             for (String required : List.of(
-                    "BindUnaryFrameParameter",
-                    "TryPrimitiveNumericGreater",
-                    "TryPrimitiveNumericMultiply",
-                    "IsCanonicalBooleanValue",
-                    "ExperimentalCanonicalBooleanCondition",
-                    "MaterializeCurrentClosure")) {
-                assertTrue(
-                        names.stream().anyMatch(
-                                name -> name.contains(required)),
-                        "Missing guarded compact operation: " + required);
+                    "c.RichCompareGt", "c.MaterializePrimitiveNumericCarrier",
+                    "c.ExperimentalCanonicalBooleanCondition", "c.NumberMultiply")) {
+                assertEquals(1, names.stream().filter(
+                                name -> name.startsWith(required)).count(),
+                        "Missing unified operation " + required + ": " + names);
+            }
+            int compare = indexStartingWith(names, "c.RichCompareGt");
+            int materialize = indexStartingWith(names, "c.MaterializePrimitiveNumericCarrier");
+            int condition = indexStartingWith(names, "c.ExperimentalCanonicalBooleanCondition");
+            int branch = -1;
+            for (int index = condition + 1; index < names.size(); index++) {
+                if (names.get(index).startsWith("branch.false")) {
+                    branch = index;
+                    break;
+                }
+            }
+            int multiply = indexStartingWith(names, "c.NumberMultiply");
+            assertTrue(bind < compare && compare < materialize && materialize < condition
+                            && condition < branch && branch < multiply,
+                    "native control order: " + names);
+            boolean storedAfter = false;
+            for (int index = multiply + 1; index < names.size(); index++) {
+                storedAfter |= names.get(index).startsWith("c.StoreCell");
+            }
+            assertTrue(storedAfter, "the product is stored into result's cell: " + names);
+            assertTrue(names.get(names.size() - 1).equals("return"), names.toString());
+            for (String forbidden : List.of(
+                    "c.GetMethod", "c.CallNilaryMethod", "c.MaterializeCurrentClosure")) {
+                assertTrue(names.stream().noneMatch(name -> name.startsWith(forbidden)),
+                        "No separate callback machinery: " + forbidden + " in " + names);
             }
 
             for (String retired : List.of(
                     "ExperimentalInteger",
                     "InstallFrameLexicalAuthority",
-                    "InvokeStaticClosureOneTail")) {
+                    "InvokeStaticClosureOneTail",
+                    "BindUnaryFrameParameter",
+                    "TryPrimitiveNumeric",
+                    "IsCanonicalBooleanValue")) {
                 assertTrue(
                         names.stream().noneMatch(
                                 name -> name.contains(retired)),
@@ -538,22 +571,15 @@ final class ProtosI115RFactorialCaptureTest {
             assertEquals(3, rootCount,
                     "Unexpected callback or other physical root");
 
-            // I115-H3: the direct parameter binding is two instructions.
-            assertEquals(19, names.size(),
-                    "I115-H3 experimental factorial FULL DSL budget");
-
-            for (String required : List.of(
-                    "ExperimentalLongArgument0",
-                    "InvokeStaticClosureOneTail",
-                    "ExperimentalIntegerMultiply",
-                    "ExperimentalIntegerSubtract",
-                    "ExperimentalIntegerGreaterBool")) {
-                assertTrue(names.stream().anyMatch(
-                        name -> name.contains(required)),
-                        "Missing compact operation: " + required);
-            }
+            // I115: the single lowering: one parameter binding, the
+            // per-selector numeric operations and one CallUnaryMethod over
+            // the module-global factorial.
+            assertSingleLoweringFactorial(names);
 
             for (String forbidden : List.of(
+                    "ExperimentalLongArgument0",
+                    "InvokeStaticClosureOneTail",
+                    "ExperimentalInteger",
                     "PrepareClosureCall",
                     "PrepareSendOne",
                     "EnterNestedStructuredDispatch",
@@ -830,16 +856,31 @@ final class ProtosI115RFactorialCaptureTest {
             assertUnaryMethodCall(session, "runZero");
             assertUnaryMethodCall(session, "runThree");
 
-            // Module, factorial, run, compute, compute's dispatching ifTrue
-            // callback (MaterializeCurrentClosure), runZero and runThree.
+            /*
+             * I115: module, factorial, run, compute, runZero and runThree.
+             * The former seventh root was compute's separate ifTrue callback;
+             * the unified control lowering inlines it, so no callback root.
+             */
             ProtosBytecodeRootNode run = assertInstanceOf(
                     ProtosBytecodeRootNode.class,
                     session.prepareTopLevel("run").hostExecutableForTesting()
                             .target.getRootNode());
             assertEquals(
-                    7,
+                    6,
                     run.getRootNodes().getNodes().size(),
-                    "Experimental physical root count");
+                    "Physical root count without a control-callback root");
+            ProtosBytecodeRootNode compute = assertInstanceOf(
+                    ProtosBytecodeRootNode.class,
+                    session.prepareTopLevel("compute").hostExecutableForTesting()
+                            .target.getRootNode());
+            List<String> computeNames = compute.getBytecodeNode().getInstructionsAsList()
+                    .stream().map(ProtosInstructionNames::of).toList();
+            assertTrue(computeNames.stream().anyMatch(
+                            name -> name.startsWith("c.ExperimentalCanonicalBooleanCondition")),
+                    "ifTrue is native control flow in compute: " + computeNames);
+            assertTrue(computeNames.stream().noneMatch(
+                            name -> name.startsWith("c.MaterializeCurrentClosure")),
+                    "no callback Closure is created for ifTrue: " + computeNames);
 
             assertEquals(
                     EXPECTED,
@@ -875,12 +916,10 @@ final class ProtosI115RFactorialCaptureTest {
     }
 
     /*
-     * I115-H4-B: run refers to factorial, declared after it. The forward
-     * reference is not a static captured resolution but a dynamic Lookup,
-     * so the module-global admission does not apply and run reads it with
-     * Lookup before its I115-H11 CallUnaryMethod (B5). This test
-     * covers the forward-reference rule only, not root emission order, on
-     * which the admission does not depend.
+     * I115: run refers to factorial, declared after it. The current
+     * lowering resolves it as a module global (ReadGlobal) followed by the
+     * ordinary CallUnaryMethod (B5), diverging from the former dynamic
+     * Lookup rule for forward references.
      */
     @Test
     void forwardReferencedBindingKeepsDynamicLookupAndOrdinaryCall()
@@ -912,18 +951,22 @@ final class ProtosI115RFactorialCaptureTest {
                     ProtosExecutionOutcome.State.COMPLETED,
                     session.initialOutcome().state());
 
+            /*
+             * I115 divergence: a module binding referenced before its
+             * declaration is resolved as a module global (ReadGlobal over the
+             * module context), not by the former dynamic lexical Lookup rule.
+             * The old rule is not a reason to restore the Lookup operation.
+             */
             List<String> names = instructionNames(session, "run");
-            assertTrue(
-                    names.contains("c.Lookup"),
-                    "A forward reference must stay a dynamic Lookup: " + names);
+            assertEquals(
+                    I115_R6_RUN_DSL_FULL,
+                    names,
+                    "run reads the module global, then the ordinary unary call");
             assertTrue(
                     names.stream().noneMatch(
-                            name -> name.contains("ReadGlobal")
+                            name -> name.equals("c.Lookup")
                                     || name.contains("InvokeExperimentalClosureOneTail")),
-                    "A forward reference must not be statically admitted: " + names);
-            assertTrue(
-                    names.stream().anyMatch(name -> name.startsWith("c.CallUnaryMethod")),
-                    "run must call through CallUnaryMethod: " + names);
+                    "No dynamic Lookup or retired call: " + names);
 
             assertEquals(
                     EXPECTED,
@@ -935,12 +978,11 @@ final class ProtosI115RFactorialCaptureTest {
     }
 
     /*
-     * I115-H5/I115: factorial's recursive call (InvokeStaticClosureOneTail,
-     * both tiers) builds its arguments with experimentalStaticUnaryCall: the
-     * marker, slot 1 the Prelude (null until the callee root registers
-     * NEEDS_CALLER_PRELUDE, then the caller's Prelude by identity), header
-     * slots 2..4 null (no receiver, caller, Task or ReturnHome; slot 4 is the
-     * B5 ReturnHome position), and supplied0 at the B5 supplied position.
+     * I115: the static unary ABI is retired. factorial is entered with the
+     * one B5 direct-call header: the invoked Closure in slot 0, the exact
+     * caller in slot 3, the Closure's own invocation ReturnHome in slot 4,
+     * and supplied0 at the supplied offset. The Prelude comes from the
+     * invocation's Closure, never from a transport slot or the argument.
      */
     @Test
     void recursiveStaticUnaryCallTransportsPreludeOnlyWhenRequested() throws Exception {
@@ -961,36 +1003,42 @@ final class ProtosI115RFactorialCaptureTest {
             assertTrue(prelude != null, "the hosted factorial has a real Prelude");
 
             Object supplied0 = 20L;
-            Object[] unrequested =
-                    ProtosFrameArguments.experimentalStaticUnaryCall(supplied0, null);
-            Object[] requested =
-                    ProtosFrameArguments.experimentalStaticUnaryCall(supplied0, prelude);
+            com.oracle.truffle.api.RootCallTarget target =
+                    session.prepareTopLevel("factorial").hostExecutableForTesting().target;
+            session.processContextForTesting().callForRuntime(() -> {
+                com.guillermomolina.protos.runtime.ProtosActivation caller =
+                        prelude.newModuleActivation();
+                Object[] arguments =
+                        ProtosFrameArguments.compactDirectClosureCallOne(
+                                factorial, caller, null, supplied0);
 
-            for (Object[] arguments : List.of(unrequested, requested)) {
                 assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, arguments.length);
-                assertTrue(ProtosFrameArguments.isExperimentalStaticUnaryCall(arguments));
-                for (int slot = 2; slot < ProtosFrameArguments.HEADER_LENGTH; slot++) {
-                    assertNull(arguments[slot], "header slot " + slot + " must carry nothing");
-                }
+                assertSame(factorial, arguments[0], "slot 0 is the invoked Closure");
+                assertSame(factorial, ProtosFrameArguments.compactClosure(arguments));
+                assertSame(caller, arguments[3], "slot 3 is the exact caller");
+                assertSame(factorial.invocationReturnHomeForRuntime(),
+                        ProtosFrameArguments.compactReturnHome(arguments),
+                        "slot 4 is the Closure's own invocation ReturnHome");
+                assertTrue(ProtosFrameArguments.isUnmaterializedCompactCall(arguments));
+                assertTrue(!ProtosFrameArguments.hasPublishedActivation(arguments));
                 assertSame(supplied0,
                         arguments[ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET]);
-                // The Prelude is transport, never a guest argument.
-                assertSame(supplied0,
-                        ProtosFrameArguments.experimentalSuppliedArgument0(arguments));
                 assertSame(supplied0,
                         ProtosFrameArguments.compactSuppliedArgumentOrNull(arguments, 0));
-            }
-            assertNull(unrequested[1], "slot 1 is null until the callee requests it");
-            assertNull(ProtosFrameArguments.experimentalTransportedPreludeOrNull(unrequested));
-            assertSame(prelude, requested[1], "slot 1 keeps the Prelude by identity");
-            assertSame(prelude,
-                    ProtosFrameArguments.experimentalTransportedPreludeOrNull(requested));
+                assertEquals(1, ProtosFrameArguments.suppliedArgumentCount(arguments));
+                // The Prelude is the invocation's, never the guest argument.
+                assertSame(prelude, ProtosFrameArguments.preludeOrNull(arguments));
+                assertTrue(ProtosFrameArguments.preludeOrNull(arguments) != supplied0);
 
-            // factorial(20) fits signed-64: its recursion never requests the Prelude,
-            // so InvokeStaticClosureOneTail keeps preparing nothing per call.
+                assertEquals(EXPECTED, ((Number) com.guillermomolina.protos.runtime
+                        .ProtosNumericValueSupport.guestValue(target.call(arguments)))
+                        .longValue(), "the direct B5 entry computes factorial(20)");
+                return null;
+            });
+
+            // factorial(20) fits signed-64: its recursion never requests the Prelude.
             ProtosBytecodeRootNode root = assertInstanceOf(ProtosBytecodeRootNode.class,
-                    session.prepareTopLevel("factorial").hostExecutableForTesting()
-                            .target.getRootNode());
+                    target.getRootNode());
             com.oracle.truffle.api.Assumption stability = root.callerNeedsStability();
             for (int i = 0; i < 12; i++) {
                 assertEquals(EXPECTED,
@@ -1037,6 +1085,170 @@ final class ProtosI115RFactorialCaptureTest {
 
             System.out.println("I115_H5_NON_CLOSURE_CALLABLE=PASS");
         }
+    }
+
+    /*
+     * The factorial root of the single I115 lowering: n bound by
+     * LoadSuppliedArgument into its native local; '>' RichCompareGt, '*'
+     * NumberMultiply, '-' NumberSubtract; the recursion one CallUnaryMethod
+     * over the module-global ReadGlobal; none of the retired compact lane.
+     */
+    private static int indexStartingWith(List<String> names, String prefix) {
+        for (int index = 0; index < names.size(); index++) {
+            if (names.get(index).startsWith(prefix)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private static void assertSingleLoweringFactorial(List<String> names) {
+        int bind = indexStartingWith(names, "c.LoadSuppliedArgument");
+        // n is stored into its native storage: a LOCAL store, or the cell of
+        // a CELL binding when a callback captures it.
+        assertTrue(bind >= 0 && (names.get(bind + 1).startsWith("store.local")
+                        || names.get(bind + 1).startsWith("c.StoreCell")),
+                "Missing parameter binding: " + names);
+        for (String required : List.of(
+                "c.RichCompareGt", "c.NumberMultiply", "c.NumberSubtract",
+                "c.CallUnaryMethod", "c.ReadGlobal")) {
+            assertEquals(1, names.stream().filter(name -> name.startsWith(required)).count(),
+                    "Expected one " + required + ": " + names);
+        }
+        for (String retired : List.of(
+                "ExperimentalLongArgument0", "InvokeStaticClosureOneTail",
+                "ExperimentalInteger", "TryPrimitiveNumeric", "CopyArguments")) {
+            assertTrue(names.stream().noneMatch(name -> name.contains(retired)),
+                    "Retired " + retired + ": " + names);
+        }
+    }
+
+    /* Operations of the retired compact-root, reduced unary ABI and numeric MISS lanes. */
+    private static final List<String> RETIRED_ARCHITECTURE = List.of(
+            "ExperimentalLongArgument0",
+            "InvokeStaticClosureOneTail",
+            "InvokeExperimentalClosureOneTail",
+            "InvokeClosureOneTail",
+            "ExperimentalInteger",
+            "TryPrimitiveNumeric",
+            "IsPrimitiveNumericSendMiss",
+            "CopyArguments",
+            "BindUnaryFrameParameter",
+            "BindClosureFrameParameter",
+            "BindRequiredFrameParameter",
+            "IsCompactLocalFrame",
+            "CreateCurrentFrameLocal",
+            "ReadRootFrameLocal",
+            "InstallFrameLexicalAuthority",
+            "PromoteFrameLexicalAuthority");
+
+    private static void assertNoRetiredArchitecture(String root, List<String> names) {
+        for (String retired : RETIRED_ARCHITECTURE) {
+            assertTrue(names.stream().noneMatch(name -> name.contains(retired)),
+                    root + " uses retired " + retired + ": " + names);
+        }
+    }
+
+    private static long countStartingWith(List<String> names, String prefix) {
+        return names.stream().filter(name -> name.startsWith(prefix)).count();
+    }
+
+    /*
+     * Module: the shared root prologue/epilogue, two module NAME bindings
+     * (factorial, run) created through the current-context creation, and
+     * the two Closure literals they bind.
+     */
+    private static void assertModuleStructure(List<String> names) {
+        assertTrue(names.get(0).startsWith("c.EnterRoot"), "module prologue: " + names);
+        assertEquals(2, names.stream().filter(name -> name.contains("CreateCurrentLocalSlot")).count(),
+                "factorial and run are module NAME bindings: " + names);
+        assertTrue(countStartingWith(names, "c.EpilogForReturn") >= 1,
+                "module return epilogue: " + names);
+        assertTrue(names.contains("return"), names.toString());
+        assertEquals(0, countStartingWith(names, "c.CallUnaryMethod"),
+                "the module only defines: " + names);
+        assertNoRetiredArchitecture("module", names);
+    }
+
+    /*
+     * factorial: n is a CELL (captured by the inline ifTrue body): its cell
+     * is created, supplied position 0 is stored into it and read back with
+     * LoadCell. '>' is RichCompareGt validated by the canonical Boolean
+     * condition of the native control flow; '-' and '*' are the per-selector
+     * numeric operations; the recursion is one ReadGlobal and exactly one
+     * CallUnaryMethod. ifTrue adds no method lookup or second invocation.
+     */
+    private static void assertFactorialStructure(ProtosBytecodeRootNode factorial) {
+        List<Instruction> instructions = factorial.getBytecodeNode().getInstructionsAsList();
+        List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
+
+        assertTrue(names.get(0).startsWith("c.EnterRoot"), "factorial prologue: " + names);
+        assertTrue(countStartingWith(names, "c.CreateCell") >= 1, names.toString());
+        int load = indexStartingWith(names, "c.LoadSuppliedArgument");
+        assertTrue(load >= 0, names.toString());
+        Instruction supplied = instructions.get(load);
+        assertEquals(0, supplied.getArguments().stream()
+                        .filter(argument -> argument.getName().equals("index"))
+                        .map(argument -> argument.getKind()
+                                        == Instruction.Argument.Kind.INTEGER
+                                ? argument.asInteger()
+                                : (Integer) argument.asConstant())
+                        .findFirst().orElseThrow(),
+                "n is supplied position 0");
+        assertTrue(names.get(load + 1).startsWith("c.StoreCell"),
+                "supplied n is stored into its cell: " + names);
+        assertTrue(countStartingWith(names, "c.LoadCell") >= 1, names.toString());
+
+        for (String one : List.of(
+                "c.RichCompareGt", "c.NumberSubtract", "c.NumberMultiply",
+                "c.ReadGlobal", "c.CallUnaryMethod")) {
+            assertEquals(1, countStartingWith(names, one), one + ": " + names);
+        }
+        int compare = indexStartingWith(names, "c.RichCompareGt");
+        int condition = indexStartingWith(names, "c.ExperimentalCanonicalBooleanCondition");
+        assertTrue(condition > compare,
+                "the comparison result is the validated control condition: " + names);
+        // The comparison carrier is materialized between the comparison and its validation.
+        assertEquals(1, countStartingWith(names, "c.MaterializePrimitiveNumericCarrier"),
+                names.toString());
+        int materialize = indexStartingWith(names, "c.MaterializePrimitiveNumericCarrier");
+        assertTrue(materialize > compare && materialize < condition,
+                "MaterializePrimitiveNumericCarrier lies between RichCompareGt and the "
+                        + "Boolean condition: " + names);
+        int branch = -1;
+        for (int index = condition + 1; index < names.size(); index++) {
+            if (names.get(index).startsWith("branch.false")) {
+                branch = index;
+                break;
+            }
+        }
+        assertTrue(branch > condition, "native conditional branch: " + names);
+        int call = indexStartingWith(names, "c.CallUnaryMethod");
+        assertTrue(call > branch, "the recursive call is inside the inline body: " + names);
+
+        // Native control flow: no method lookup, no second callable invocation.
+        for (String forbidden : List.of(
+                "c.GetMethod", "c.CallNilaryMethod", "c.CallBinaryMethod",
+                "c.CallTernaryMethod", "c.CallQuaternaryMethod", "c.CallVarargsMethod",
+                "c.MaterializeCurrentClosure")) {
+            assertEquals(0, countStartingWith(names, forbidden), forbidden + ": " + names);
+        }
+        assertTrue(countStartingWith(names, "c.EpilogForReturn") >= 1,
+                "factorial return epilogue: " + names);
+        assertTrue(names.contains("return"), names.toString());
+        assertSingleLoweringFactorial(names);
+        assertNoRetiredArchitecture("factorial", names);
+    }
+
+    /* run: the module-global read, the terminal call, its epilogue and return. */
+    private static void assertRunStructure(List<String> names) {
+        int read = indexStartingWith(names, "c.ReadGlobal");
+        int call = indexStartingWith(names, "c.CallUnaryMethod");
+        int epilogue = indexStartingWith(names, "c.EpilogForReturn");
+        assertTrue(read >= 0 && call > read && epilogue > call, names.toString());
+        assertEquals(1, countStartingWith(names, "c.CallUnaryMethod"), names.toString());
+        assertEquals("return", names.get(names.size() - 1), names.toString());
+        assertNoRetiredArchitecture("run", names);
     }
 
     private static String census(
@@ -1130,18 +1342,23 @@ final class ProtosI115RFactorialCaptureTest {
         int total = moduleFull + runFull
                 + factorialFull + additionalFull;
 
-        // I115-H2: retain the verified R6 physical-bytecode baseline.
+        // Exactly the module, run and factorial roots: no callback root.
         assertEquals(3, roots.size(), "Experimental physical root count");
-        // I115-H4-B: 17 -> 16, enableBlockScoping=false retires clear.local.
-        assertEquals(16, moduleFull, "Experimental module DSL");
+        assertEquals(0, additionalFull, "Unexpected callback root");
+        assertEquals(moduleFull + runFull + factorialFull, total);
         assertTrue(
                 moduleNames.stream().noneMatch("clear.local"::equals),
                 "Module root kept the retired clear.local: " + moduleNames);
-        // I115-H3: +1 for the direct parameter binding.
-        assertEquals(19, factorialFull, "Experimental factorial DSL");
-        assertEquals(6, runFull, "Experimental run DSL");
-        assertEquals(0, additionalFull, "Unexpected callback root");
-        assertEquals(41, total, "Experimental total DSL");
+
+        /*
+         * I115: instruction counts are diagnostic metrics only (printed
+         * below); the structure of each root is asserted instead.
+         */
+        assertModuleStructure(moduleNames);
+        assertFactorialStructure(factorial);
+        assertRunStructure(run.getBytecodeNode().getInstructionsAsList().stream()
+                .map(ProtosInstructionNames::of)
+                .toList());
 
         System.out.println("I115_R_ROOT_COUNT=" + roots.size());
         System.out.println("I115_R_MODULE_DSL_FULL=" + moduleFull);

@@ -33,77 +33,46 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
-import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
-import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.source.Source;
-import java.lang.reflect.Field;
-import java.util.Map;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * PERF025-D179-A: a statically Resolved current lexical read may speculate
- * that its established binding remains PRESENT until the first successful
- * D179 structural removal of that exact static binding.
+ * PERF025-D179-A, reconciled with I115: binding membership stays exact under
+ * D179 structural removal and recreation. The retired frame lexical layout
+ * and its per-definition presence-continuity tokens no longer exist; the
+ * same guarantees are proved through observable binding presence of NAME
+ * bindings (the storage a module root and a dynamic name use), read by a
+ * real suspended lookup in two activations of one root.
  *
- * <p>The speculation is definition/name scoped, not activation scoped:
- * invocations of the same lowered root share the token. Removal invalidates
- * it one-way before the physical local becomes ABSENT; recreation deliberately
- * does not renew it. Once invalidated, ReadFrameLocal returns to its exact
- * presence-aware D179 C0 path.
+ * <p>KNOWN I115 SEMANTIC DIVERGENCE (D179): a captured CELL binding is never
+ * removed or recreated, so removal/recreation is not asserted for cells.
  */
 final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
-    void removalInvalidatesOnlyExactNameAndRecreationNeverRenewsToken() {
+    void removalAffectsOnlyTheExactBindingAndRecreationIsObserved() {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                Fixture fixture = yieldingReadRoot(LANGUAGE_REF.get(null));
-
-                Assumption xContinuity =
-                        fixture.layout().presentContinuityAt(0);
-                Assumption yContinuity =
-                        fixture.layout().presentContinuityAt(1);
-
-                assertSame(
-                        xContinuity,
-                        fixture.layout().presentContinuityAt(0),
-                        "one lowered definition/name must expose one stable token");
-                assertSame(
-                        yContinuity,
-                        fixture.layout().presentContinuityAt(1),
-                        "one lowered definition/name must expose one stable token");
-                assertNotSame(
-                        xContinuity,
-                        yContinuity,
-                        "different names must not share membership invalidation");
-                assertTrue(xContinuity.isValid());
-                assertTrue(yContinuity.isValid());
+                ProtosBytecodeRootNode root = yieldingLookupRoot(LANGUAGE_REF.get(null), "x");
 
                 /*
-                 * Two activations of the same root deliberately share the
-                 * definition/name assumptions while retaining independent
-                 * semantic binding presence and values in their own frames.
+                 * Two activations of the same root keep independent binding
+                 * presence and values in their own execution contexts.
                  */
                 ProtosActivation firstModule = moduleActivation();
                 ProtosActivation secondModule = moduleActivation();
 
-                ContinuationResult firstContinuation =
-                        assertInstanceOf(
-                                ContinuationResult.class,
-                                fixture.root().getCallTarget().call(firstModule));
-                ContinuationResult secondContinuation =
-                        assertInstanceOf(
-                                ContinuationResult.class,
-                                fixture.root().getCallTarget().call(secondModule));
+                ContinuationResult firstContinuation = suspend(root, firstModule);
+                ContinuationResult secondContinuation = suspend(root, secondModule);
 
                 ProtosObjectValue firstContext = firstModule.context();
                 ProtosObjectValue secondContext = secondModule.context();
@@ -117,88 +86,53 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                 firstContext.createLocalSlot("y", ProtosNullValue.INSTANCE);
                 secondContext.createLocalSlot("x", secondX);
 
-                /*
-                 * Initial establishment and ordinary PRESENT -> PRESENT
-                 * assignment do not alter structural membership continuity.
-                 */
-                assertTrue(xContinuity.isValid());
-                assertTrue(yContinuity.isValid());
-
                 ProtosObjectValue secondAssignedX =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
                 secondContext.assignLocalSlot("x", secondAssignedX);
 
-                assertTrue(
-                        xContinuity.isValid(),
-                        "ordinary assignment must not invalidate membership");
-                assertTrue(yContinuity.isValid());
-
-                /*
-                 * Removing x from only one activation invalidates the shared
-                 * root/x speculation, but must not invalidate root/y.
-                 */
+                // Removing x from one activation affects neither y nor the other activation.
                 assertSame(firstX, firstContext.removeLocalSlot("x"));
-                assertFalse(
-                        xContinuity.isValid(),
-                        "first successful PRESENT -> ABSENT must invalidate x");
-                assertTrue(
-                        yContinuity.isValid(),
-                        "removing x must not invalidate unrelated y");
+                assertFalse(firstContext.hasLocalSlot("x"));
+                assertTrue(firstContext.hasLocalSlot("y"));
+                assertTrue(secondContext.hasLocalSlot("x"));
 
-                /*
-                 * D179 C0 permits recreation while OPEN. The static physical
-                 * ordinal is reused, but the one-way speculation stays dead.
-                 */
+                // D179 C0 permits recreation while OPEN.
                 ProtosObjectValue recreatedX =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
                 firstContext.createLocalSlot("x", recreatedX);
 
-                assertFalse(
-                        xContinuity.isValid(),
-                        "legal ABSENT -> PRESENT recreation must not renew x");
-                assertTrue(yContinuity.isValid());
-
-                /*
-                 * The second activation never lost x. The invalid token makes
-                 * its direct read use the exact presence-aware path, which
-                 * must still observe its own independent assigned value.
-                 */
+                // The second activation never lost x and reads its own assigned value.
                 assertSame(
                         secondAssignedX,
-                        secondContinuation.continueWith(
-                                ProtosNullValue.INSTANCE));
+                        secondContinuation.continueWith(ProtosNullValue.INSTANCE));
 
-                /*
-                 * The first activation did lose and recreate x. Its resumed
-                 * read must observe the recreated value, proving that the
-                 * invalid assumption does not freeze stale presence or value.
-                 */
+                // The first activation lost and recreated x: no stale presence or value.
                 assertSame(
                         recreatedX,
-                        firstContinuation.continueWith(
-                                ProtosNullValue.INSTANCE));
+                        firstContinuation.continueWith(ProtosNullValue.INSTANCE));
 
-                /*
-                 * PRESENT(null) remains PRESENT: semantic Protos null is a
-                 * genuine stored value, and removing it performs the normal
-                 * PRESENT -> ABSENT invalidation for y.
-                 */
+                // PRESENT(null) remains PRESENT until its own removal.
                 assertSame(
                         ProtosNullValue.INSTANCE,
                         firstContext.readLocalSlot("y").orElseThrow());
                 assertSame(
                         ProtosNullValue.INSTANCE,
                         firstContext.removeLocalSlot("y"));
-                assertFalse(yContinuity.isValid());
+                assertFalse(firstContext.hasLocalSlot("y"));
             } finally {
                 context.leave();
             }
         }
     }
 
+    /**
+     * A lowered module root keeps its exact binding behavior across a
+     * Bytecode reparse: a binding removed through the Context established
+     * before the reparse is ABSENT, and executing the reparsed root
+     * re-establishes it.
+     */
     @Test
-    void loweredRootReusesExactMembershipLayoutAcrossBytecodeReparse()
-            throws Exception {
+    void loweredRootKeepsExactMembershipAcrossBytecodeReparse() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -212,56 +146,69 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                                         "perf025-d179-reparse.protos")
                                 .build();
 
-                CanonicalToBytecodeLowerer lowerer =
-                        new CanonicalToBytecodeLowerer(language, source);
                 ProtosBytecodeRootNode root =
-                        lowerer.lowerRoot(canonicalize(characters));
+                        new CanonicalToBytecodeLowerer(language, source)
+                                .lowerRoot(canonicalize(characters));
 
-                ProtosFrameLexicalLayout before =
-                        onlyRetainedFrameLayout(lowerer);
-                Assumption xContinuity =
-                        before.presentContinuityAt(0);
-
-                /*
-                 * Execute before the reparse so the genuine execution Context
-                 * retains a ProtosFrameLexicalBindingAuthority carrying the
-                 * original parse's layout.
-                 */
                 ProtosActivation module = moduleActivation();
-                root.getCallTarget().call(module);
+                assertSame(ProtosNullValue.INSTANCE, root.getCallTarget().call(module));
+                assertTrue(module.context().hasLocalSlot("x"));
 
-                assertTrue(xContinuity.isValid());
-
-                /*
-                 * BytecodeRootNodes may replay the retained parser here to
-                 * materialize source/instrumentation metadata. The logical
-                 * root survives; PERF025-D179-A therefore requires its layout
-                 * and root/name token identity to survive as well.
-                 */
                 root.getRootNodes().ensureComplete();
 
-                ProtosFrameLexicalLayout after =
-                        onlyRetainedFrameLayout(lowerer);
-                assertSame(
-                        before,
-                        after,
-                        "Bytecode reparse must reuse the exact logical root layout");
-                assertSame(
-                        xContinuity,
-                        after.presentContinuityAt(0),
-                        "Bytecode reparse must never renew a membership token");
-
-                /*
-                 * This removal is performed through the authority created
-                 * before ensureComplete(). It must invalidate the very token
-                 * retained by the reparsed lowering state.
-                 */
                 assertSame(
                         ProtosNullValue.INSTANCE,
                         module.context().removeLocalSlot("x"));
-                assertFalse(
-                        after.presentContinuityAt(0).isValid(),
-                        "pre-reparse authority must invalidate post-reparse token identity");
+                assertFalse(module.context().hasLocalSlot("x"));
+
+                assertSame(ProtosNullValue.INSTANCE, root.getCallTarget().call(module),
+                        "the reparsed root re-establishes the removed binding");
+                assertTrue(module.context().hasLocalSlot("x"));
+
+                ProtosActivation fresh = moduleActivation();
+                assertSame(ProtosNullValue.INSTANCE, root.getCallTarget().call(fresh));
+                assertNotSame(module.context(), fresh.context());
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    /**
+     * Two independently lowered roots reading the same name never share
+     * binding state: removal under one never changes what the other reads.
+     */
+    @Test
+    void independentRootsNeverShareBindingPresence() {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosBytecodeRootNode first = yieldingLookupRoot(language, "x");
+                ProtosBytecodeRootNode second = yieldingLookupRoot(language, "x");
+                assertNotSame(first, second);
+
+                ProtosActivation firstModule = moduleActivation();
+                ProtosActivation secondModule = moduleActivation();
+                ContinuationResult firstContinuation = suspend(first, firstModule);
+                ContinuationResult secondContinuation = suspend(second, secondModule);
+
+                ProtosObjectValue firstX = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue secondX = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                firstModule.context().createLocalSlot("x", firstX);
+                secondModule.context().createLocalSlot("x", secondX);
+                firstModule.context().removeLocalSlot("x");
+
+                assertSame(secondX, secondContinuation.continueWith(ProtosNullValue.INSTANCE));
+                ProtosSignalException absent =
+                        assertThrows(
+                                ProtosSignalException.class,
+                                () -> firstContinuation.continueWith(ProtosNullValue.INSTANCE));
+                assertSame(
+                        slotNotFoundOf(firstModule),
+                        absent.error().parent().orElseThrow(),
+                        "an ABSENT binding is SlotNotFound");
             } finally {
                 context.leave();
             }
@@ -269,129 +216,74 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
     }
 
     @Test
-    void independentLayoutsNeverSharePresenceContinuityTokens() {
-        ProtosFrameLexicalLayout first =
-                ProtosFrameLexicalLayout.of(new String[] {"x"}, new int[] {0});
-        ProtosFrameLexicalLayout second =
-                ProtosFrameLexicalLayout.of(new String[] {"x"}, new int[] {0});
-
-        assertNotSame(
-                first.presentContinuityAt(0),
-                second.presentContinuityAt(0),
-                "distinct lowered layouts must own distinct speculation tokens");
-    }
-
-    @Test
-    void publishedRootFrameReadPreservesPresenceAndInvalidation() {
+    void suspendedLookupPreservesPresenceAcrossRemovalAndRecreation() {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                ProtosLanguage language = LANGUAGE_REF.get(null);
-                Fixture fixture = yieldingReadRoot(language, true);
-                Assumption xContinuity =
-                        fixture.layout().presentContinuityAt(0);
+                ProtosBytecodeRootNode root = yieldingLookupRoot(LANGUAGE_REF.get(null), "x");
 
-                /* A: PRESENT binding while the continuity is still valid. */
+                /* A: a PRESENT binding is read. */
                 ProtosActivation presentModule = moduleActivation();
-                ContinuationResult presentContinuation =
-                        suspend(fixture, presentModule);
+                ContinuationResult presentContinuation = suspend(root, presentModule);
                 ProtosObjectValue presentX =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
                 presentModule.context().createLocalSlot("x", presentX);
                 assertSame(
                         presentX,
-                        presentContinuation.continueWith(
-                                ProtosNullValue.INSTANCE));
-                assertTrue(
-                        xContinuity.isValid(),
-                        "a PRESENT read must not invalidate membership");
+                        presentContinuation.continueWith(ProtosNullValue.INSTANCE));
 
                 /*
                  * D: an activation whose x is never removed stays suspended
-                 * across the invalidation performed by another activation.
+                 * across a removal performed in another activation.
                  */
                 ProtosActivation independentModule = moduleActivation();
-                ContinuationResult independentContinuation =
-                        suspend(fixture, independentModule);
+                ContinuationResult independentContinuation = suspend(root, independentModule);
                 ProtosObjectValue independentX =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
                 independentModule.context().createLocalSlot("x", independentX);
 
-                /* B: removal invalidates and the read reports ABSENT. */
+                /* B: after removal the read reports ABSENT. */
                 ProtosActivation removedModule = moduleActivation();
-                ContinuationResult removedContinuation =
-                        suspend(fixture, removedModule);
+                ContinuationResult removedContinuation = suspend(root, removedModule);
                 ProtosObjectValue removedX =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
                 removedModule.context().createLocalSlot("x", removedX);
-                assertSame(
-                        removedX,
-                        removedModule.context().removeLocalSlot("x"));
-                assertFalse(
-                        xContinuity.isValid(),
-                        "PRESENT -> ABSENT must invalidate x");
-                ProtosSignalException rootFailure =
+                assertSame(removedX, removedModule.context().removeLocalSlot("x"));
+                ProtosSignalException failure =
                         assertThrows(
                                 ProtosSignalException.class,
-                                () -> removedContinuation.continueWith(
-                                        ProtosNullValue.INSTANCE));
-
-                /* The authoritative ReadFrameLocal path fails identically. */
-                Fixture authoritative = yieldingReadRoot(language, false);
-                ProtosActivation authoritativeModule = moduleActivation();
-                ContinuationResult authoritativeContinuation =
-                        suspend(authoritative, authoritativeModule);
-                authoritativeModule.context().createLocalSlot(
-                        "x",
-                        new ProtosObjectValue(ProtosObjectValue.rootObject()));
-                authoritativeModule.context().removeLocalSlot("x");
-                ProtosSignalException authoritativeFailure =
-                        assertThrows(
-                                ProtosSignalException.class,
-                                () -> authoritativeContinuation.continueWith(
-                                        ProtosNullValue.INSTANCE));
+                                () -> removedContinuation.continueWith(ProtosNullValue.INSTANCE));
                 assertSame(
                         slotNotFoundOf(removedModule),
-                        rootFailure.error().parent().orElseThrow(),
-                        "root read must raise its activation's SlotNotFound");
-                assertSame(
-                        slotNotFoundOf(authoritativeModule),
-                        authoritativeFailure.error().parent().orElseThrow(),
-                        "authoritative read must raise its activation's SlotNotFound");
+                        failure.error().parent().orElseThrow(),
+                        "the read must raise its activation's SlotNotFound");
 
                 /* C: recreation after removal is observed exactly. */
                 ProtosActivation recreatedModule = moduleActivation();
-                ContinuationResult recreatedContinuation =
-                        suspend(fixture, recreatedModule);
+                ContinuationResult recreatedContinuation = suspend(root, recreatedModule);
                 recreatedModule.context().createLocalSlot(
-                        "x",
-                        new ProtosObjectValue(ProtosObjectValue.rootObject()));
+                        "x", new ProtosObjectValue(ProtosObjectValue.rootObject()));
                 recreatedModule.context().removeLocalSlot("x");
                 ProtosObjectValue recreatedX =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
                 recreatedModule.context().createLocalSlot("x", recreatedX);
                 assertSame(
                         recreatedX,
-                        recreatedContinuation.continueWith(
-                                ProtosNullValue.INSTANCE));
+                        recreatedContinuation.continueWith(ProtosNullValue.INSTANCE));
 
                 /* D: the untouched activation still reads its own x. */
                 assertSame(
                         independentX,
-                        independentContinuation.continueWith(
-                                ProtosNullValue.INSTANCE));
+                        independentContinuation.continueWith(ProtosNullValue.INSTANCE));
 
                 /* E: PRESENT(null) is presence, not absence. */
                 ProtosActivation nullModule = moduleActivation();
-                ContinuationResult nullContinuation =
-                        suspend(fixture, nullModule);
-                nullModule.context().createLocalSlot(
-                        "x", ProtosNullValue.INSTANCE);
+                ContinuationResult nullContinuation = suspend(root, nullModule);
+                nullModule.context().createLocalSlot("x", ProtosNullValue.INSTANCE);
                 assertSame(
                         ProtosNullValue.INSTANCE,
-                        nullContinuation.continueWith(
-                                ProtosNullValue.INSTANCE));
+                        nullContinuation.continueWith(ProtosNullValue.INSTANCE));
             } finally {
                 context.leave();
             }
@@ -399,10 +291,10 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
     }
 
     private static ContinuationResult suspend(
-            Fixture fixture, ProtosActivation module) {
+            ProtosBytecodeRootNode root, ProtosActivation module) {
         return assertInstanceOf(
                 ContinuationResult.class,
-                fixture.root().getCallTarget().call(module));
+                root.getCallTarget().call(module));
     }
 
     private static ProtosObjectValue slotNotFoundOf(
@@ -412,15 +304,13 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                 ProtosCoreErrors.StandardError.SLOT_NOT_FOUND);
     }
 
-    private static Fixture yieldingReadRoot(ProtosLanguage language) {
-        return yieldingReadRoot(language, false);
-    }
-
-    private static Fixture yieldingReadRoot(
-            ProtosLanguage language, boolean rootRead) {
-        /* The layout derives its local offsets from the first parse's locals. */
-        ProtosFrameLexicalLayout[] layoutHolder = new ProtosFrameLexicalLayout[1];
-
+    /**
+     * Suspends once, so the test can perform D179 mutations through the
+     * genuine execution Context, then returns the dynamic NAME lookup of
+     * {@code name} in the activation of argument 0.
+     */
+    private static ProtosBytecodeRootNode yieldingLookupRoot(
+            ProtosLanguage language, String name) {
         BytecodeRootNodes<ProtosBytecodeRootNode> roots =
                 ProtosBytecodeRootNodeGen.create(
                         language,
@@ -428,54 +318,20 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                         builder -> {
                             builder.beginRoot();
 
-                            BytecodeLocal x =
-                                    builder.createLocal("x", null);
-                            BytecodeLocal y =
-                                    builder.createLocal("y", null);
-                            BytecodeLocal[] locals = {x, y};
-                            if (layoutHolder[0] == null) {
-                                layoutHolder[0] =
-                                        ProtosFrameLexicalLayout.of(
-                                                new String[] {"x", "y"},
-                                                ProtosFrameLexicalLayout.localOffsetsOf(locals));
-                            }
-                            ProtosFrameLexicalLayout layout = layoutHolder[0];
-
-                            builder.beginInstallFrameLexicalAuthority(locals, layout);
-                            builder.emitLoadArgument(0);
-                            builder.endInstallFrameLexicalAuthority();
-
-                            /*
-                             * Suspend after authority installation so the test
-                             * can perform D179 mutations through the escaped
-                             * genuine execution Context before the direct read.
-                             */
                             builder.beginYield();
-                            builder.emitLoadConstant(
-                                    ProtosNullValue.INSTANCE);
+                            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
                             builder.endYield();
 
                             builder.beginReturn();
-                            if (rootRead) {
-                                builder.emitReadRootFrameLocal(
-                                        x,
-                                        layout.localOffsetAt(0),
-                                        layout.presentContinuityAt(0),
-                                        "x");
-                            } else {
-                                builder.beginReadFrameLocal(
-                                        x,
-                                        layout.presentContinuityAt(0));
-                                builder.emitLoadArgument(0);
-                                builder.emitLoadConstant("x");
-                                builder.endReadFrameLocal();
-                            }
+                            builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.LOOKUP);
+                            builder.emitLoadArgument(0);
+                            builder.emitLoadConstant(name);
+                            builder.endAccessNamedLexical();
                             builder.endReturn();
 
                             builder.endRoot();
                         });
-
-        return new Fixture(roots.getNode(0), layoutHolder[0]);
+        return roots.getNode(0);
     }
 
     private static CanonicalSequence canonicalize(String characters) {
@@ -484,26 +340,6 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                         .canonicalize(
                                 new ProtosParser(characters)
                                         .parseProgram());
-    }
-
-    private static ProtosFrameLexicalLayout onlyRetainedFrameLayout(
-            CanonicalToBytecodeLowerer lowerer)
-            throws ReflectiveOperationException {
-        Field field =
-                CanonicalToBytecodeLowerer.class
-                        .getDeclaredField("frameLayoutsByScope");
-        field.setAccessible(true);
-
-        Map<?, ?> layouts =
-                (Map<?, ?>) field.get(lowerer);
-        if (layouts.size() != 1) {
-            throw new AssertionError(
-                    "expected exactly one retained frame layout, got "
-                            + layouts.size());
-        }
-
-        return (ProtosFrameLexicalLayout)
-                layouts.values().iterator().next();
     }
 
     private static ProtosActivation moduleActivation() {
@@ -530,8 +366,4 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                         contextPrototype)
                 .newModuleActivation();
     }
-
-    private record Fixture(
-            ProtosBytecodeRootNode root,
-            ProtosFrameLexicalLayout layout) {}
 }

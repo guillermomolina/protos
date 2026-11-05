@@ -42,16 +42,18 @@ import com.oracle.truffle.api.bytecode.BytecodeTier;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.source.Source;
+import com.oracle.truffle.api.strings.TruffleString;
 import java.util.List;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * PERF028-A focal evidence: a bare assignment statically {@code Resolved} in
- * the genuine scope that owns the executing frame compiles to {@code
- * ResolveCurrentFrameLocalWriteTarget}/{@code AssignCurrentFrameLocal}, whose
- * constant {@link com.oracle.truffle.api.bytecode.LocalAccessor} identifies the
- * binding, instead of the String-keyed {@code ResolveWritableLexicalTarget}/
+ * PERF028-A focal evidence, reconciled with I115: a bare assignment
+ * statically {@code Resolved} to the running module's NAME binding compiles
+ * to {@code SelectWriteGlobal} (the destination, selected before the RHS)
+ * followed by {@code WriteGlobal}; one resolved to the running Closure's own
+ * LOCAL binding compiles to a native local store. Neither uses the
+ * String-keyed {@code ResolveWritableLexicalTarget}/
  * {@code AssignResolvedLexicalTarget} pair. Static resolution proves identity,
  * not presence (D179 C0), so a cleared current local selects the exact generic
  * fallback before RHS evaluation, and the selected destination is retained
@@ -62,8 +64,10 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
 
-    private static final String RESOLVE_CURRENT = "ResolveCurrentFrameLocalWriteTarget";
-    private static final String ASSIGN_CURRENT = "AssignCurrentFrameLocal";
+    private static final String SELECT_GLOBAL = "SelectWriteGlobal";
+    private static final String WRITE_GLOBAL = "c.WriteGlobal";
+    private static final String STORE_LOCAL = "store.local";
+    private static final String LOAD_LOCAL = "load.local";
     private static final String RESOLVE_GENERIC = "ResolveWritableLexicalTarget";
     private static final String ASSIGN_GENERIC = "AssignResolvedLexicalTarget";
 
@@ -82,7 +86,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                                     "x: seed\n"
                                             + "r: (x = replacement)\n"
                                             + "context.slotValue(\"x\")");
-                    assertCurrentFrameLocalWritePath(root.getBytecodeNode());
+                    assertModuleWritePath(root.getBytecodeNode());
 
                     // Guest reflection and host reflection observe the one
                     // authoritative binding the accessor wrote.
@@ -105,7 +109,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                                             + "() => { x: 2\n"
                                             + "context.removeSlot(\"x\")\n"
                                             + "x = 4 }");
-                    assertCurrentFrameLocalWritePath(activationNode(plan));
+                    assertLocalWritePath(activationNode(plan));
 
                     ProtosActivation invocation = fixture.invocationOf(plan.closure);
                     assertEquals(4L, unwrapNumber(plan.plan.executeBytecodeActivationForTesting(invocation)));
@@ -152,7 +156,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                             lower(
                                     fixture.language,
                                     "x: 1\n" + "context.removeSlot(\"x\")\n" + "x = touch()");
-                    assertCurrentFrameLocalWritePath(root.getBytecodeNode());
+                    assertModuleWritePath(root.getBytecodeNode());
 
                     ProtosSignalException signal =
                             assertThrows(
@@ -178,7 +182,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                                             + "() => { x: 2\n"
                                             + "x = makeOuter()\n"
                                             + "x }");
-                    assertCurrentFrameLocalWritePath(activationNode(plan));
+                    assertLocalWritePath(activationNode(plan));
 
                     ProtosActivation invocation = fixture.invocationOf(plan.closure);
                     assertEquals(6L, unwrapNumber(plan.plan.executeBytecodeActivationForTesting(invocation)));
@@ -201,7 +205,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                                             + "drop: () => { ctx.removeSlot(\"x\")\n"
                                             + "2 }\n"
                                             + "x = drop()");
-                    assertCurrentFrameLocalWritePath(root.getBytecodeNode());
+                    assertModuleWritePath(root.getBytecodeNode());
 
                     ProtosSignalException signal =
                             assertThrows(
@@ -227,7 +231,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                                             + "3 }\n"
                                             + "x = swap()\n"
                                             + "x");
-                    assertCurrentFrameLocalWritePath(root.getBytecodeNode());
+                    assertModuleWritePath(root.getBytecodeNode());
 
                     assertEquals(3L, unwrapNumber(root.getCallTarget().call(fixture.module)));
                     assertEquals(3L, unwrapNumber(slot(fixture.module, "x")));
@@ -250,7 +254,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                                             + "4 }\n"
                                             + "x = recreate()\n"
                                             + "x }");
-                    assertCurrentFrameLocalWritePath(activationNode(plan));
+                    assertLocalWritePath(activationNode(plan));
 
                     ProtosActivation invocation = fixture.invocationOf(plan.closure);
                     Object result = plan.plan.executeBytecodeActivationForTesting(invocation);
@@ -277,7 +281,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                                             + "2 }\n"
                                             + "x = closer()\n"
                                             + "x");
-                    assertCurrentFrameLocalWritePath(root.getBytecodeNode());
+                    assertModuleWritePath(root.getBytecodeNode());
 
                     assertEquals(2L, unwrapNumber(root.getCallTarget().call(fixture.module)));
                     assertEquals(2L, unwrapNumber(slot(fixture.module, "x")));
@@ -297,7 +301,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                                             + "freezer: () => { ctx.freeze()\n"
                                             + "2 }\n"
                                             + "x = freezer()");
-                    assertCurrentFrameLocalWritePath(root.getBytecodeNode());
+                    assertModuleWritePath(root.getBytecodeNode());
 
                     ProtosSignalException signal =
                             assertThrows(
@@ -315,7 +319,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                 fixture -> {
                     ProtosBytecodeRootNode root =
                             lower(fixture.language, "x: 1\n" + "x = null\n" + "x = null");
-                    assertCurrentFrameLocalWritePath(root.getBytecodeNode());
+                    assertModuleWritePath(root.getBytecodeNode());
 
                     // The second write succeeds only if the first left x PRESENT.
                     assertSame(ProtosNullValue.INSTANCE, root.getCallTarget().call(fixture.module));
@@ -333,7 +337,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                             lower(
                                     fixture.language,
                                     "x: 1\n" + "boom: () => missingName\n" + "x = boom()");
-                    assertCurrentFrameLocalWritePath(root.getBytecodeNode());
+                    assertModuleWritePath(root.getBytecodeNode());
 
                     assertThrows(
                             ProtosSignalException.class,
@@ -349,7 +353,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                 fixture -> {
                     ClosureUnderTest plan =
                             closurePlan(fixture, "r: 0\n" + "f: (x, y: (x = 99)) => x\n" + "r = f(1)\n" + "f");
-                    assertCurrentFrameLocalWritePath(activationNode(plan));
+                    assertLocalWritePath(activationNode(plan));
 
                     assertEquals(99L, unwrapNumber(slot(fixture.module, "r")));
                 });
@@ -438,28 +442,24 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                             () -> "explicit member assignment lost its path: " + memberNames);
                     assertTrue(
                             memberNames.stream()
-                                    .noneMatch(
-                                            name ->
-                                                    isCurrentResolve(name)
-                                                            || isCurrentAssign(name)),
-                            () -> "explicit member assignment used the current-local path: " + memberNames);
+                                    .noneMatch(name -> name.contains(SELECT_GLOBAL)),
+                            () -> "explicit member assignment used the module write path: " + memberNames);
+                    assertNoRetired(memberNames);
                     assertEquals(2L, unwrapNumber(member.getCallTarget().call(fixture.module)));
 
-                    // Captured: the PERF013 path, never the current-local path.
+                    // Captured module binding: the captured-depth module write
+                    // (SelectWriteGlobal before WriteGlobal), never a local store.
                     ClosureUnderTest captured =
                             closurePlan(fixture, "y: 0\n" + "() => { y = 3 }");
                     List<String> capturedNames = instructionNames(activationNode(captured));
+                    assertModuleWritePath(activationNode(captured));
                     assertTrue(
-                            capturedNames.stream()
-                                    .anyMatch(name -> name.contains("ResolveCaptured")),
-                            () -> "captured write lost its PERF013 path: " + capturedNames);
-                    assertTrue(
-                            capturedNames.stream()
-                                    .noneMatch(
-                                            name ->
-                                                    isCurrentResolve(name)
-                                                            || isCurrentAssign(name)),
-                            () -> "captured write used the current-local path: " + capturedNames);
+                            capturedNames.stream().noneMatch(name -> name.contains(STORE_LOCAL)),
+                            () -> "captured module write used a local store: " + capturedNames);
+                    ProtosActivation capturedInvocation = fixture.invocationOf(captured.closure);
+                    assertEquals(3L, unwrapNumber(
+                            captured.plan.executeBytecodeActivationForTesting(capturedInvocation)));
+                    assertEquals(3L, unwrapNumber(slot(fixture.module, "y")));
                 });
         System.out.println("CANDIDATE_FALLBACK_PRESERVED=YES");
         System.out.println("DYNAMIC_FALLBACK_PRESERVED=YES");
@@ -468,9 +468,10 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
     }
 
     /**
-     * Mirrors the lowered shape: the frame-backed {@code x} is created, its
-     * destination selected and retained, then the RHS suspends; the resume
-     * value becomes the RHS written through the same constant accessor.
+     * Mirrors the lowered module shape: the module NAME binding {@code x} is
+     * created, its destination selected by {@code SelectWriteGlobal} (module
+     * depth 0) and retained in a native local, then the RHS suspends; the
+     * resume value is written by {@code WriteGlobal} through that destination.
      */
     private static ProtosBytecodeRootNode createSelectYieldAssignRoot(
             ProtosLanguage language, ProtosObjectValue initial) {
@@ -481,39 +482,30 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                         builder -> {
                             builder.beginRoot();
 
-                            BytecodeLocal x = builder.createLocal("x", null);
                             BytecodeLocal target = builder.createLocal("target", null);
-                            builder.beginInstallFrameLexicalAuthority(
-                                    new BytecodeLocal[] {x},
-                                    ProtosFrameLexicalLayout.of(
-                                            new String[] {"x"},
-                                            ProtosFrameLexicalLayout.localOffsetsOf(
-                                                    new BytecodeLocal[] {x})));
-                            builder.emitLoadArgument(0);
-                            builder.endInstallFrameLexicalAuthority();
 
+                            // The module NAME binding x.
                             builder.beginCreateCurrentLocalSlot();
                             builder.emitLoadArgument(0);
                             builder.emitLoadConstant("x");
                             builder.emitLoadConstant(initial);
                             builder.endCreateCurrentLocalSlot();
 
+                            // Destination selected before the RHS and retained.
                             builder.beginStoreLocal(target);
-                            builder.beginResolveCurrentFrameLocalWriteTarget(x);
-                            builder.emitLoadArgument(0);
-                            builder.emitLoadConstant("x");
-                            builder.endResolveCurrentFrameLocalWriteTarget();
+                            builder.emitSelectWriteGlobal(
+                                    TruffleString.fromJavaStringUncached(
+                                            "x", TruffleString.Encoding.UTF_16),
+                                    0);
                             builder.endStoreLocal();
 
                             builder.beginReturn();
-                            builder.beginAssignCurrentFrameLocal(x);
-                            builder.emitLoadArgument(0);
+                            builder.beginWriteGlobal();
                             builder.emitLoadLocal(target);
-                            builder.emitLoadConstant("x");
                             builder.beginYield();
                             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
                             builder.endYield();
-                            builder.endAssignCurrentFrameLocal();
+                            builder.endWriteGlobal();
                             builder.endReturn();
 
                             builder.endRoot();
@@ -521,47 +513,76 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
         return roots.getNode(0);
     }
 
-    /*
-     * PERF025 compact callee execution: a write whose current activation is
-     * the root's own emits the root-level form of the same accessor path.
+    /* Retired PERF028-A/PERF025 accessor operations; none may reappear. */
+    private static final List<String> RETIRED =
+            List.of(
+                    "ResolveCurrentFrameLocalWriteTarget",
+                    "AssignCurrentFrameLocal",
+                    "ResolveRootFrameLocalWriteTarget",
+                    "AssignRootFrameLocal",
+                    "InstallFrameLexicalAuthority");
+
+    /**
+     * A write statically resolved to the running module's own NAME binding:
+     * SelectWriteGlobal selects the destination, WriteGlobal later writes
+     * through it, with no String-keyed generic resolution.
      */
-    private static final String RESOLVE_ROOT = "ResolveRootFrameLocalWriteTarget";
-    private static final String ASSIGN_ROOT = "AssignRootFrameLocal";
-
-    private static boolean isCurrentResolve(String name) {
-        return name.contains(RESOLVE_CURRENT) || name.contains(RESOLVE_ROOT);
-    }
-
-    private static boolean isCurrentAssign(String name) {
-        return name.contains(ASSIGN_CURRENT) || name.contains(ASSIGN_ROOT);
-    }
-
-    private static void assertCurrentFrameLocalWritePath(BytecodeNode node) {
+    private static void assertModuleWritePath(BytecodeNode node) {
         List<String> names = instructionNames(node);
-        assertTrue(
-                names.stream().anyMatch(name -> isCurrentResolve(name)),
-                () -> "Resolved current write did not select the accessor resolve path: " + names);
-        assertTrue(
-                names.stream().anyMatch(name -> isCurrentAssign(name)),
-                () -> "Resolved current write did not select the accessor assign path: " + names);
+        int select = indexOf(names, SELECT_GLOBAL);
+        int write = indexOf(names, WRITE_GLOBAL);
+        assertTrue(select >= 0, () -> "module write did not select with SelectWriteGlobal: " + names);
+        assertTrue(write > select, () -> "module write did not write after selecting: " + names);
         assertTrue(
                 names.stream()
                         .noneMatch(name -> name.contains(RESOLVE_GENERIC) || name.contains(ASSIGN_GENERIC)),
-                () -> "Resolved current write still emitted the generic String-keyed path: " + names);
+                () -> "Resolved module write still emitted the generic String-keyed path: " + names);
+        assertNoRetired(names);
+    }
+
+    /**
+     * A write statically resolved to the running Closure's own LOCAL
+     * binding: a native store into that binding's local, with no module or
+     * String-keyed write.
+     */
+    private static void assertLocalWritePath(BytecodeNode node) {
+        List<String> names = instructionNames(node);
+        assertTrue(names.stream().anyMatch(name -> name.contains(STORE_LOCAL)),
+                () -> "Resolved local write is not a native store: " + names);
+        assertTrue(names.stream().anyMatch(name -> name.contains(LOAD_LOCAL)),
+                () -> "Resolved local binding is not read natively: " + names);
+        assertTrue(
+                names.stream()
+                        .noneMatch(name -> name.contains(RESOLVE_GENERIC) || name.contains(ASSIGN_GENERIC)),
+                () -> "Resolved local write still emitted the generic String-keyed path: " + names);
+        assertNoRetired(names);
     }
 
     private static void assertGenericLexicalWritePath(BytecodeNode node) {
         List<String> names = instructionNames(node);
-        assertTrue(
-                names.stream().anyMatch(name -> name.contains(RESOLVE_GENERIC)),
-                () -> "ineligible write lost the generic resolve path: " + names);
-        assertTrue(
-                names.stream().anyMatch(name -> name.contains(ASSIGN_GENERIC)),
-                () -> "ineligible write lost the generic assign path: " + names);
-        assertTrue(
-                names.stream()
-                        .noneMatch(name -> isCurrentResolve(name) || isCurrentAssign(name)),
-                () -> "ineligible write used the current-local accessor path: " + names);
+        int resolve = indexOf(names, RESOLVE_GENERIC);
+        assertTrue(resolve >= 0, () -> "ineligible write lost the generic resolve path: " + names);
+        assertTrue(indexOf(names, ASSIGN_GENERIC) > resolve,
+                () -> "ineligible write lost the generic assign path after resolution: " + names);
+        assertTrue(names.stream().noneMatch(name -> name.contains(SELECT_GLOBAL)),
+                () -> "ineligible write used the static module path: " + names);
+        assertNoRetired(names);
+    }
+
+    private static void assertNoRetired(List<String> names) {
+        for (String retired : RETIRED) {
+            assertTrue(names.stream().noneMatch(name -> name.contains(retired)),
+                    () -> "retired " + retired + " in " + names);
+        }
+    }
+
+    private static int indexOf(List<String> names, String operation) {
+        for (int index = 0; index < names.size(); index++) {
+            if (names.get(index).contains(operation)) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     private static List<String> instructionNames(BytecodeNode node) {

@@ -49,9 +49,15 @@ import org.junit.jupiter.api.Test;
 
 /**
  * I068 Slice 6 ("debugger/reflection projection"): focused evidence that the
- * existing semantic tooling surfaces observe the single frame-backed lexical
- * authority introduced by Slices 2-5, including dynamic overflow and semantic
- * presence, without exposing Bytecode-only temporaries.
+ * existing semantic tooling surfaces (Core reflection and the debugger scope)
+ * observe exactly the bindings of the execution context, with their semantic
+ * presence and live values, without exposing Bytecode-only temporaries.
+ *
+ * <p>I115: the former frame-backed lexical authority and its static layout no
+ * longer exist; module bindings are NAME bindings of the module context and
+ * Closure bindings live in native LOCAL/CELL storage. Assertions about a
+ * Closure's own bindings through its Context are the specified behavior and
+ * stay detectable against the KNOWN I115 SEMANTIC DIVERGENCE.
  */
 final class ProtosI068Slice6DebuggerReflectionProjectionTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
@@ -77,14 +83,9 @@ final class ProtosI068Slice6DebuggerReflectionProjectionTest {
                             assertInstanceOf(
                                     ProtosExecutionContextValue.class,
                                     module.context());
-                    ProtosFrameLexicalBindingAuthority authority =
-                            assertInstanceOf(
-                                    ProtosFrameLexicalBindingAuthority.class,
-                                    context.lexicalBindingAuthorityForRuntime());
-
-                    assertTrue(
-                            authority.hasFrameBackedBindingAt(
-                                    "frameBinding", 0));
+                    // The statically declared module binding is present.
+                    assertTrue(context.hasLocalSlot("frameBinding"));
+                    assertFalse(context.hasLocalSlot("dynamicOverflow"));
 
                     ProtosStringValue overflowValue =
                             new ProtosStringValue("overflow");
@@ -92,9 +93,9 @@ final class ProtosI068Slice6DebuggerReflectionProjectionTest {
                             "dynamicOverflow",
                             overflowValue);
 
-                    assertFalse(
-                            authority.hasFrameBackedBindingAt(
-                                    "dynamicOverflow", 0));
+                    // A dynamically created binding joins the same context.
+                    assertTrue(context.hasLocalSlot("dynamicOverflow"));
+                    assertTrue(context.hasLocalSlot("frameBinding"));
                     assertSame(
                             frameValue,
                             context.readLocalSlot("frameBinding")
@@ -179,18 +180,12 @@ final class ProtosI068Slice6DebuggerReflectionProjectionTest {
                             assertInstanceOf(
                                     ProtosExecutionContextValue.class,
                                     invocation.context());
-                    ProtosFrameLexicalBindingAuthority authority =
-                            assertInstanceOf(
-                                    ProtosFrameLexicalBindingAuthority.class,
-                                    context.lexicalBindingAuthorityForRuntime());
-
-                    assertTrue(
-                            authority.hasFrameBackedBindingAt(
-                                    "first", 0));
-                    assertFalse(
-                            authority.hasFrameBackedBindingAt(
-                                    "later", 1));
-
+                    /*
+                     * Specified semantics: the established parameter is a
+                     * present binding of the invocation's Context and the one
+                     * whose default failed is absent. (Detectable against the
+                     * I115 divergence: Closure LOCALs are not in its Context.)
+                     */
                     assertTrue(context.hasLocalSlot("first"));
                     assertFalse(context.hasLocalSlot("later"));
                     assertEquals(
@@ -227,15 +222,8 @@ final class ProtosI068Slice6DebuggerReflectionProjectionTest {
                             assertInstanceOf(
                                     ProtosExecutionContextValue.class,
                                     module.context());
-                    ProtosFrameLexicalBindingAuthority authority =
-                            assertInstanceOf(
-                                    ProtosFrameLexicalBindingAuthority.class,
-                                    context.lexicalBindingAuthorityForRuntime());
-
-                    assertFalse(
-                            authority.hasFrameBackedBindingAt(
-                                    "removed", 0));
                     assertFalse(context.hasLocalSlot("removed"));
+                    assertTrue(context.readLocalSlot("removed").isEmpty());
                     assertFalse(
                             reflectedSlotNames(context, module)
                                     .contains("removed"));
@@ -252,13 +240,11 @@ final class ProtosI068Slice6DebuggerReflectionProjectionTest {
                             replacement);
 
                     /*
-                     * Re-creation uses the same statically allocated ordinal:
-                     * semantic presence changed, physical binding identity did
-                     * not migrate to dynamic overflow or a second authority.
+                     * Re-creation in the same module context: the binding is
+                     * present again with the new value, visible to reflection
+                     * and to the debugger.
                      */
-                    assertTrue(
-                            authority.hasFrameBackedBindingAt(
-                                    "removed", 0));
+                    assertTrue(context.hasLocalSlot("removed"));
                     assertSame(
                             replacement,
                             context.readLocalSlot("removed")
@@ -296,14 +282,12 @@ final class ProtosI068Slice6DebuggerReflectionProjectionTest {
                             assertInstanceOf(
                                     ProtosExecutionContextValue.class,
                                     module.context());
-                    ProtosFrameLexicalBindingAuthority authority =
-                            assertInstanceOf(
-                                    ProtosFrameLexicalBindingAuthority.class,
-                                    outerContext
-                                            .lexicalBindingAuthorityForRuntime());
-                    assertTrue(
-                            authority.hasFrameBackedBindingAt(
-                                    "outer", 0));
+                    assertTrue(outerContext.hasLocalSlot("outer"));
+                    // Captured binding identity: the Closure captures the very
+                    // module context that holds the binding.
+                    assertSame(
+                            outerContext,
+                            closure.capturedLexicalEnvironmentForRuntime().context());
 
                     ProtosActivation invocation =
                             ProtosActivation.forClosureInvocation(

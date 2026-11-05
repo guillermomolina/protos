@@ -29,7 +29,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
@@ -41,174 +40,163 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * I075-D: the frame-backed lexical authority must address the declaring root's
- * <em>current</em> {@code BytecodeNode}, not the node that was current when
- * the authority was installed. With boxing elimination the cached node owns
- * local-kind metadata, so a write performed through a stale uncached node
- * leaves the physical frame PRESENT while the cached node still records the
- * local as unwritten, and the next current-node read fails.
+ * I075-D, reconciled with I115: a binding read must address the declaring
+ * root's <em>current</em> {@code BytecodeNode}. With boxing elimination the
+ * cached node owns local-kind metadata, so a value written after an
+ * uncached-to-cached transition must be read back exactly by the current
+ * node. The retired frame lexical authority is replaced by the native
+ * storage that now owns a Closure binding: a LOCAL binding's Bytecode DSL
+ * local and a CELL binding's cell held in such a local.
  *
- * <p>The scenario is built directly on the generated builder because it needs
- * a suspension between authority installation and binding creation, and a
- * deterministic uncached-to-cached transition at the resume boundary.
+ * <p>The scenarios are built directly on the generated builder because they
+ * need a suspension between storage allocation and binding establishment,
+ * and a deterministic uncached-to-cached transition at the resume boundary.
  */
 final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
 
+    /** LOCAL storage: a boxing-eliminated long written after the transition. */
     @Test
-    void bindingCreatedAfterUncachedToCachedTransitionIsReadByTheCurrentNode() {
-        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
-            context.initialize(ProtosLanguage.ID);
-            context.enter();
-            try {
-                ProtosBytecodeRootNode root = installThenTwiceYieldingRoot(LANGUAGE_REF.get(null));
-                ProtosActivation module = moduleActivation();
-                ProtosObjectValue executionContext = module.context();
+    void localWrittenAfterUncachedToCachedTransitionIsReadByTheCurrentNode() {
+        withEnteredContext(language -> {
+            ProtosBytecodeRootNode root = establishLocalAfterResumeRoot(language);
+            assertBindingSurvivesTransition(root, 42L, 42L);
+            // A second invocation runs entirely on the cached node.
+            assertBindingSurvivesTransition(root, 7L, 7L);
+        });
+    }
 
-                /*
-                 * Threshold 1: the first entry consumes the count and runs
-                 * uncached; the resume after the first Yield finds the count
-                 * exhausted and transitions the root to the cached node.
-                 */
-                root.getBytecodeNode().setUncachedThreshold(1);
-                assertEquals(BytecodeTier.UNCACHED, root.getBytecodeNode().getTier());
+    /** LOCAL storage: a reference value written after the transition. */
+    @Test
+    void localReferenceWrittenAfterTransitionIsReadByTheCurrentNode() {
+        withEnteredContext(language -> {
+            ProtosBytecodeRootNode root = establishLocalAfterResumeRoot(language);
+            ProtosObjectValue value = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            assertBindingSurvivesTransition(root, value, value);
+        });
+    }
 
-                ContinuationResult beforeTransition =
-                        assertInstanceOf(ContinuationResult.class, root.getCallTarget().call(module));
-                assertEquals(
-                        BytecodeTier.UNCACHED,
-                        root.getBytecodeNode().getTier(),
-                        "authority is installed while the root is still uncached");
-                assertFalse(
-                        executionContext.hasLocalSlot("x"),
-                        "the statically allocated local is still ABSENT at the transition");
+    /** CELL storage: the cell created before the transition receives the value after it. */
+    @Test
+    void cellWrittenAfterUncachedToCachedTransitionIsReadByTheCurrentNode() {
+        withEnteredContext(language -> {
+            ProtosBytecodeRootNode root = establishCellAfterResumeRoot(language);
+            assertBindingSurvivesTransition(root, 42L, 42L);
+            ProtosObjectValue value = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            assertBindingSurvivesTransition(root, value, value);
+        });
+    }
 
-                ContinuationResult afterTransition =
-                        assertInstanceOf(
-                                ContinuationResult.class,
-                                beforeTransition.continueWith(ProtosNullValue.INSTANCE));
-                assertEquals(
-                        BytecodeTier.CACHED,
-                        root.getBytecodeNode().getTier(),
-                        "the resume must have moved the root to the cached node");
-                assertFalse(executionContext.hasLocalSlot("x"));
+    /**
+     * PERF029, reconciled: a dynamic NAME read observes bindings that already
+     * exist in the execution context before the root runs, with their exact
+     * presence semantics: establishment order, PRESENT(null) distinct from
+     * ABSENT, duplicate creation rejected, removal then recreation
+     * re-establishing the binding last.
+     */
+    @Test
+    void nameReadObservesExistingContextBindingsWithExactPresenceSemantics() {
+        withEnteredContext(language -> {
+            ProtosBytecodeRootNode root = namedLookupRoot(language, "x");
+            ProtosActivation module = moduleActivation();
+            ProtosObjectValue executionContext = module.context();
 
-                // ABSENT -> PRESENT through the retained authority, after the transition.
-                ProtosObjectValue first = new ProtosObjectValue(ProtosObjectValue.rootObject());
-                executionContext.createLocalSlot("x", first);
-                assertSame(first, executionContext.readLocalSlot("x").orElseThrow());
+            ProtosObjectValue dynamic = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosObjectValue existing = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            executionContext.createLocalSlot("dynamic", dynamic);
+            executionContext.createLocalSlot("x", existing);
 
-                // PRESENT -> ABSENT -> PRESENT keeps the same static physical binding.
-                assertSame(first, executionContext.removeLocalSlot("x"));
-                assertFalse(executionContext.hasLocalSlot("x"));
-                ProtosObjectValue second = new ProtosObjectValue(ProtosObjectValue.rootObject());
-                executionContext.createLocalSlot("x", second);
+            assertSame(existing, root.getCallTarget().call(module));
 
-                // PRESENT -> PRESENT mutation while writable.
-                ProtosObjectValue third = new ProtosObjectValue(ProtosObjectValue.rootObject());
-                executionContext.assignLocalSlot("x", third);
-                assertSame(third, executionContext.readLocalSlot("x").orElseThrow());
+            assertEquals(
+                    List.of("dynamic", "x"),
+                    List.copyOf(executionContext.localSlotsSnapshot().keySet()),
+                    "reading preserves establishment order");
+            assertSame(dynamic, executionContext.readLocalSlot("dynamic").orElseThrow());
+            assertFalse(executionContext.hasLocalSlot("y"));
 
-                // The direct current-node ReadFrameLocal must observe the same value.
-                assertSame(third, afterTransition.continueWith(ProtosNullValue.INSTANCE));
-            } finally {
-                context.leave();
-            }
+            executionContext.createLocalSlot("y", ProtosNullValue.INSTANCE);
+            assertTrue(executionContext.hasLocalSlot("y"));
+            assertThrows(
+                    IllegalStateException.class,
+                    () -> executionContext.createLocalSlot("y", ProtosNullValue.INSTANCE));
+
+            assertSame(existing, executionContext.removeLocalSlot("x"));
+            assertFalse(executionContext.hasLocalSlot("x"));
+            executionContext.createLocalSlot("x", dynamic);
+            assertEquals(
+                    List.of("dynamic", "y", "x"),
+                    List.copyOf(executionContext.localSlotsSnapshot().keySet()));
+            assertSame(dynamic, root.getCallTarget().call(module));
+        });
+    }
+
+    /*
+     * Threshold 1: the first entry consumes the count and runs uncached; the
+     * resume after the first Yield finds it exhausted and transitions the
+     * root to the cached node. The binding is established from the resumed
+     * value, after the transition, and read on the final resume.
+     */
+    private static void assertBindingSurvivesTransition(
+            ProtosBytecodeRootNode root, Object written, Object expected) {
+        ProtosActivation module = moduleActivation();
+        boolean firstRun = root.getBytecodeNode().getTier() == BytecodeTier.UNCACHED;
+        if (firstRun) {
+            root.getBytecodeNode().setUncachedThreshold(1);
+        }
+
+        ContinuationResult beforeTransition =
+                assertInstanceOf(ContinuationResult.class, root.getCallTarget().call(module));
+        if (firstRun) {
+            assertEquals(
+                    BytecodeTier.UNCACHED,
+                    root.getBytecodeNode().getTier(),
+                    "storage is allocated while the root is still uncached");
+        }
+
+        ContinuationResult afterTransition =
+                assertInstanceOf(
+                        ContinuationResult.class,
+                        beforeTransition.continueWith(written));
+        assertEquals(
+                BytecodeTier.CACHED,
+                root.getBytecodeNode().getTier(),
+                "the resume must have moved the root to the cached node");
+
+        Object read = afterTransition.continueWith(ProtosNullValue.INSTANCE);
+        if (expected instanceof Long) {
+            assertEquals(expected, read);
+        } else {
+            assertSame(expected, read);
         }
     }
 
     /**
-     * PERF029: installing the persistent frame authority over a context that
-     * already holds bindings migrates them through the name-keyed {@link
-     * ProtosFrameLexicalBindingAuthority#putBinding}, whose frame ordinal is
-     * a runtime value and so must stay outside partial evaluation. The handoff
-     * itself must keep its exact semantics: a layout name becomes PRESENT in
-     * its frame local, a dynamic name keeps its value and order, and a layout
-     * name never established stays ABSENT until created.
+     * {@code x} is a LOCAL binding's native local. The root suspends, stores
+     * the resumed value into {@code x}, suspends again and returns {@code x}.
      */
-    @Test
-    void installationOverExistingBindingsMigratesThemThroughTheGenericPath() throws Exception {
-        assertTrue(
-                ProtosFrameLexicalBindingAuthority.class
-                        .getMethod("putBinding", String.class, Object.class)
-                        .isAnnotationPresent(TruffleBoundary.class),
-                "a runtime-name frame ordinal is never a partial-evaluation constant");
-
-        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
-            context.initialize(ProtosLanguage.ID);
-            context.enter();
-            try {
-                ProtosBytecodeRootNode root = installThenReadRoot(LANGUAGE_REF.get(null));
-                ProtosActivation module = moduleActivation();
-                ProtosObjectValue executionContext = module.context();
-
-                ProtosObjectValue dynamic = new ProtosObjectValue(ProtosObjectValue.rootObject());
-                ProtosObjectValue migrated = new ProtosObjectValue(ProtosObjectValue.rootObject());
-                executionContext.createLocalSlot("dynamic", dynamic);
-                executionContext.createLocalSlot("x", migrated);
-
-                // The root's own direct frame read observes the migrated binding.
-                assertSame(migrated, root.getCallTarget().call(module));
-
-                assertEquals(
-                        List.of("dynamic", "x"),
-                        List.copyOf(executionContext.localSlotsSnapshot().keySet()),
-                        "migration preserves establishment order");
-                assertSame(dynamic, executionContext.readLocalSlot("dynamic").orElseThrow());
-                assertFalse(executionContext.hasLocalSlot("y"), "layout allocation is not presence");
-
-                // PRESENT(null) is distinct from ABSENT; duplicate creation is rejected.
-                executionContext.createLocalSlot("y", ProtosNullValue.INSTANCE);
-                assertTrue(executionContext.hasLocalSlot("y"));
-                assertThrows(
-                        IllegalStateException.class,
-                        () -> executionContext.createLocalSlot("y", ProtosNullValue.INSTANCE));
-
-                // Removal then recreation re-establishes the binding last.
-                assertSame(migrated, executionContext.removeLocalSlot("x"));
-                assertFalse(executionContext.hasLocalSlot("x"));
-                executionContext.createLocalSlot("x", dynamic);
-                assertEquals(
-                        List.of("dynamic", "y", "x"),
-                        List.copyOf(executionContext.localSlotsSnapshot().keySet()));
-            } finally {
-                context.leave();
-            }
-        }
-    }
-
-    /**
-     * {@code x} and {@code y} are statically allocated frame-backed locals.
-     * The root installs the frame lexical authority and returns the direct
-     * {@code ReadFrameLocal} of {@code x}.
-     */
-    private static ProtosBytecodeRootNode installThenReadRoot(ProtosLanguage language) {
+    private static ProtosBytecodeRootNode establishLocalAfterResumeRoot(ProtosLanguage language) {
         BytecodeRootNodes<ProtosBytecodeRootNode> roots =
                 ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {
                             builder.beginRoot();
-
                             BytecodeLocal x = builder.createLocal("x", null);
-                            BytecodeLocal y = builder.createLocal("y", null);
-                            BytecodeLocal[] locals = {x, y};
-                            ProtosFrameLexicalLayout layout =
-                                    ProtosFrameLexicalLayout.of(
-                                            new String[] {"x", "y"},
-                                            ProtosFrameLexicalLayout.localOffsetsOf(locals));
-                            builder.beginInstallFrameLexicalAuthority(locals, layout);
-                            builder.emitLoadArgument(0);
-                            builder.endInstallFrameLexicalAuthority();
+
+                            builder.beginStoreLocal(x);
+                            builder.beginYield();
+                            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                            builder.endYield();
+                            builder.endStoreLocal();
+
+                            builder.beginYield();
+                            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                            builder.endYield();
 
                             builder.beginReturn();
-                            builder.beginReadFrameLocal(
-                                    x,
-                                    layout.presentContinuityAt(0));
-                            builder.emitLoadArgument(0);
-                            builder.emitLoadConstant("x");
-                            builder.endReadFrameLocal();
+                            builder.emitLoadLocal(x);
                             builder.endReturn();
 
                             builder.endRoot();
@@ -217,48 +205,78 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
     }
 
     /**
-     * {@code x} is a statically allocated frame-backed local. The root installs
-     * the frame lexical authority, suspends twice without ever writing {@code
-     * x}, and finally returns the direct {@code ReadFrameLocal} of {@code x}.
+     * {@code x} is a CELL binding: its local holds the cell created at entry,
+     * before any suspension. The root suspends, stores the resumed value into
+     * the cell, suspends again and returns the cell's value.
      */
-    private static ProtosBytecodeRootNode installThenTwiceYieldingRoot(ProtosLanguage language) {
+    private static ProtosBytecodeRootNode establishCellAfterResumeRoot(ProtosLanguage language) {
         BytecodeRootNodes<ProtosBytecodeRootNode> roots =
                 ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {
                             builder.beginRoot();
-
                             BytecodeLocal x = builder.createLocal("x", null);
-                            BytecodeLocal[] locals = {x};
-                            ProtosFrameLexicalLayout layout =
-                                    ProtosFrameLexicalLayout.of(
-                                            new String[] {"x"},
-                                            ProtosFrameLexicalLayout.localOffsetsOf(locals));
-                            builder.beginInstallFrameLexicalAuthority(locals, layout);
-                            builder.emitLoadArgument(0);
-                            builder.endInstallFrameLexicalAuthority();
 
+                            builder.beginStoreLocal(x);
+                            builder.emitCreateCell();
+                            builder.endStoreLocal();
+
+                            builder.beginStoreCell();
+                            builder.emitLoadLocal(x);
                             builder.beginYield();
                             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
                             builder.endYield();
+                            builder.endStoreCell();
 
                             builder.beginYield();
                             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
                             builder.endYield();
 
                             builder.beginReturn();
-                            builder.beginReadFrameLocal(
-                                    x,
-                                    layout.presentContinuityAt(0));
-                            builder.emitLoadArgument(0);
-                            builder.emitLoadConstant("x");
-                            builder.endReadFrameLocal();
+                            builder.beginLoadCell();
+                            builder.emitLoadLocal(x);
+                            builder.endLoadCell();
                             builder.endReturn();
 
                             builder.endRoot();
                         });
         return roots.getNode(0);
+    }
+
+    /** The dynamic NAME lookup of {@code name} in the activation of argument 0. */
+    private static ProtosBytecodeRootNode namedLookupRoot(ProtosLanguage language, String name) {
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
+                        language,
+                        BytecodeConfig.DEFAULT,
+                        builder -> {
+                            builder.beginRoot();
+                            builder.beginReturn();
+                            builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.LOOKUP);
+                            builder.emitLoadArgument(0);
+                            builder.emitLoadConstant(name);
+                            builder.endAccessNamedLexical();
+                            builder.endReturn();
+                            builder.endRoot();
+                        });
+        return roots.getNode(0);
+    }
+
+    private interface LanguageTest {
+        void run(ProtosLanguage language);
+    }
+
+    private static void withEnteredContext(LanguageTest test) {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                test.run(LANGUAGE_REF.get(null));
+            } finally {
+                context.leave();
+            }
+        }
     }
 
     private static ProtosActivation moduleActivation() {

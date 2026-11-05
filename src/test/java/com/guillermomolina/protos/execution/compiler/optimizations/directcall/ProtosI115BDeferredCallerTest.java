@@ -1806,8 +1806,15 @@ final class ProtosI115BDeferredCallerTest {
             ProtosBytecodeRootNode sender = functionRoot("sender", module);
             ProtosBytecodeRootNode callee = assertInstanceOf(ProtosBytecodeRootNode.class,
                     directTarget(identity).getRootNode());
-            assertTrue(callee.isExperimentalPrimitiveArgumentRoot(),
-                    "identity is an admitted compact H7 callee");
+            // I115: identity is an ordinary root of the single lowering.
+            List<String> calleeNames = callee.getBytecodeNode().getInstructionsAsList().stream()
+                    .map(ProtosInstructionNames::of)
+                    .toList();
+            assertTrue(calleeNames.stream().anyMatch(name -> name.startsWith("c.LoadSuppliedArgument")),
+                    calleeNames::toString);
+            assertTrue(calleeNames.stream().noneMatch(name -> name.contains("CopyArguments")
+                            || name.contains("ReadGlobal")),
+                    calleeNames::toString);
             sender.getBytecodeNode().setUncachedThreshold(0);
             callee.getBytecodeNode().setUncachedThreshold(0);
 
@@ -1819,12 +1826,41 @@ final class ProtosI115BDeferredCallerTest {
             assertFalse(sender.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION),
                     "the sender never published its own activation");
 
-            // No need registered: no caller reference is read or built.
-            assertFalse(callee.experimentalUnaryNeedsCapturedOwner());
-            Object[] header = ProtosFrameArguments.experimentalMinimalUnaryCall(SUPPLIED);
-            assertEquals(1, header.length);
-            assertSame(SUPPLIED, ProtosFrameArguments.experimentalSuppliedArgument0(header));
-            assertFalse(ProtosFrameArguments.hasActivation(header));
+            /*
+             * No need registered: entering the callee with a valid B5 header
+             * (the real Closure, an unpublished caller header in slot 3) neither
+             * publishes the callee nor resolves the deferred caller, and builds
+             * no caller frame reference.
+             */
+            Object[] callerArguments = ProtosFrameArguments.compactDirectClosureCallOne(
+                    closure("(value) => { value }\n", module), module, null, SUPPLIED);
+            Object[] header = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    identity, (Object) callerArguments, SUPPLIED);
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, header.length);
+            assertSame(identity, header[0]);
+            assertSame(callerArguments, header[3], "the deferred caller header by identity");
+            assertSame(SUPPLIED, header[ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET]);
+            assertSame(SUPPLIED, ProtosFrameArguments.compactSuppliedArgumentOrNull(header, 0));
+            // A valid invocation header is an activation carrier, yet unpublished.
+            assertTrue(ProtosFrameArguments.hasActivation(header));
+            assertFalse(ProtosFrameArguments.hasPublishedActivation(header));
+            assertFalse(ProtosFrameArguments.hasPublishedActivation(callerArguments));
+
+            assertSame(SUPPLIED, ProtosNumericValueSupport.guestValue(
+                    directTarget(identity).call(header)));
+            assertFalse(ProtosFrameArguments.hasPublishedActivation(header),
+                    "the callee requested no activation");
+            assertFalse(ProtosFrameArguments.hasPublishedActivation(callerArguments),
+                    "the deferred caller was never resolved");
+            assertSame(callerArguments, header[3], "slot 3 is never rewritten");
+            assertFalse(header[3] instanceof ProtosCallerFrameReference);
+            assertFalse(callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertFalse(callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
+
+            // A published activation is a different state, observed separately.
+            ProtosActivation published = ProtosFrameArguments.activation(callerArguments);
+            assertTrue(ProtosFrameArguments.hasPublishedActivation(callerArguments));
+            assertSame(published, callerArguments[0]);
         });
     }
 

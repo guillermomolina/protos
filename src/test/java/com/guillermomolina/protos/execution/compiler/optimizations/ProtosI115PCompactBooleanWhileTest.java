@@ -112,11 +112,9 @@ final class ProtosI115PCompactBooleanWhileTest {
 
         assertEquals(2, census.rootCount());
         assertStructuredWhile(census);
-        // I115-Q: a literal condition is loaded directly as a Java boolean,
-        // so it needs no Boolean conversion (see ProtosI115QCompactLiteralReturnTest).
-        assertFalse(census.names().stream()
-                        .anyMatch(name -> name.contains("ExperimentalCanonicalBooleanCondition")),
-                "A literal Boolean condition needs no conversion");
+        // I115: the unified control lowering validates every control
+        // condition, a literal one included, with the canonical Boolean condition.
+        assertBooleanConversion(census);
         assertFalse(census.names().stream()
                         .anyMatch(name -> name.contains("TryPrimitiveNumeric")),
                 "A literal Boolean condition must not become a numeric comparison");
@@ -425,22 +423,42 @@ final class ProtosI115PCompactBooleanWhileTest {
                     "(gate) => { body: 0\n(() => gate < 1).whileTrue() {\nbody = body + 1\n}\nbody }",
                     module);
             List<String> names = instructionNames(run);
-            // I115-H7: one Lt is the condition site and validates inside the node.
+            // I115: one RichCompareLt is the condition site.
             assertLtCondition(names);
-            ProtosBytecodeRootNode runRoot =
-                    run.executionPlan().orElseThrow().bytecodeActivationRootForTesting();
-            assertTrue(ProtosExperimentalLessNode.canonicalCondition(
-                    runRoot, module, ProtosBooleanValue.TRUE));
-            assertFalse(ProtosExperimentalLessNode.canonicalCondition(
-                    runRoot, module, ProtosBooleanValue.FALSE));
-            ProtosSignalException direct = assertThrows(
+
+            /*
+             * Canonical true and false conditions, and no truthiness, by real
+             * guest execution: the condition value is supplied directly and
+             * the body records every iteration through a native probe.
+             */
+            int[] iterations = new int[1];
+            ProtosClosureValue mark = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        iterations[0]++;
+                        return ProtosBooleanValue.FALSE;
+                    });
+            ProtosClosureValue gated = closure(
+                    "(condition, mark) => { (() => mark(condition)).whileTrue() { 0 }\n0 }",
+                    module);
+            ProtosClosureValue direct = closure(
+                    "(condition) => { body: 0\n(() => condition).whileTrue() {\n"
+                            + "body = body + 1\ncondition = false\n}\nbody }",
+                    module);
+            assertEquals("1", integerValue(
+                    enter(fastDirect(direct, module, ProtosBooleanValue.TRUE))),
+                    "canonical true runs the body");
+            assertEquals("0", integerValue(
+                    enter(fastDirect(direct, module, ProtosBooleanValue.FALSE))),
+                    "canonical false runs no body");
+            assertEquals("0", integerValue(enter(fastDirect(gated, module, 0L, mark))));
+            assertEquals(1, iterations[0], "the condition prefix ran once");
+            ProtosSignalException truthy = assertThrows(
                     ProtosSignalException.class,
-                    () -> ProtosExperimentalLessNode.canonicalCondition(
-                            runRoot, module, Long.valueOf(1)),
-                    "Lt accepts no truthiness");
+                    () -> enter(fastDirect(direct, module, Long.valueOf(1))),
+                    "whileTrue accepts no truthiness");
             assertSame(
                     ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.ERROR),
-                    direct.error().parent().orElse(null));
+                    truthy.error().parent().orElse(null));
 
             // Canonical false: zero iterations.
             assertEquals("0", integerValue(
@@ -457,15 +475,31 @@ final class ProtosI115PCompactBooleanWhileTest {
                     new ProtosObjectValue(ProtosObjectValue.rootObject());
             ProtosObjectValue gate =
                     new ProtosObjectValue(ProtosObjectValue.rootObject());
+            int[] comparisons = new int[1];
             gate.createLocalSlot("<", ProtosClosureValue.nativeClosure(
-                    (activation, supplied) -> notBoolean));
+                    (activation, supplied) -> {
+                        comparisons[0]++;
+                        return notBoolean;
+                    }));
+            ProtosClosureValue observed = closure(
+                    "(gate, mark) => { (() => gate < 1).whileTrue() {\nmark(0)\n}\n0 }",
+                    module);
+            iterations[0] = 0;
             ProtosSignalException signal = assertThrows(
                     ProtosSignalException.class,
-                    () -> enter(fastDirect(run, module, gate)));
+                    () -> enter(fastDirect(observed, module, gate, mark)));
             assertSame(
                     ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.ERROR),
                     signal.error().parent().orElse(null),
                     "a non-Boolean condition result is the standard Error");
+            assertEquals(1, comparisons[0], "the condition ran once");
+            assertEquals(0, iterations[0], "no body runs after an invalid condition");
+            ProtosSignalException again = assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(fastDirect(run, module, gate)));
+            assertSame(
+                    ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.ERROR),
+                    again.error().parent().orElse(null));
         });
         System.out.println("I115_P_NON_BOOLEAN_MISS_CONDITION=PASS");
     }
@@ -699,24 +733,44 @@ final class ProtosI115PCompactBooleanWhileTest {
     }
 
     /*
-     * I115-H7: exactly one Lt, immediately consumed by the While's
-     * conditional branch, with neither the pre-H7 comparison site nor the
-     * separate Boolean conversion.
+     * I115 unified control: one RichCompareLt site, then (possibly after
+     * continuation composition) MaterializePrimitiveNumericCarrier, then one
+     * canonical Boolean validation, then the While's branch.false. The
+     * comparison and the branch need not be adjacent. The retired numeric
+     * MISS operations stay absent.
      */
     private static void assertLtCondition(List<String> names) {
-        assertEquals(1, names.stream().filter(name -> name.startsWith("c.Lt")).count(),
-                "The condition comparison is exactly one Lt: " + names);
-        int lt = 0;
-        while (!names.get(lt).startsWith("c.Lt")) {
-            lt++;
+        assertEquals(1, names.stream().filter(name -> name.startsWith("c.RichCompareLt")).count(),
+                "The condition comparison is exactly one RichCompareLt: " + names);
+        assertEquals(1, names.stream().filter(
+                        name -> name.startsWith("c.ExperimentalCanonicalBooleanCondition")).count(),
+                "One canonical Boolean validation of the condition: " + names);
+        int compare = firstIndex(names, "c.RichCompareLt", 0);
+        int materialize = firstIndex(names, "c.MaterializePrimitiveNumericCarrier", compare + 1);
+        int condition = firstIndex(names, "c.ExperimentalCanonicalBooleanCondition", materialize + 1);
+        int branch = firstIndex(names, "branch.false", condition + 1);
+        assertTrue(compare >= 0 && materialize > compare && condition > materialize
+                        && branch > condition,
+                "comparison, materialization, validation, branch: " + names);
+        assertFalse(names.stream().anyMatch(name -> name.startsWith("c.Lt")),
+                "The retired Lt operation remains: " + names);
+        for (String retired : List.of("TryPrimitiveNumeric", "IsCanonicalBooleanValue",
+                "IsPrimitiveNumericSendMiss")) {
+            assertFalse(names.stream().anyMatch(name -> name.contains(retired)),
+                    retired + " remains: " + names);
         }
-        assertTrue(names.get(lt + 1).startsWith("branch.false"),
-                "The While branch consumes Lt's boolean directly: " + names);
-        assertFalse(names.stream().anyMatch(name -> name.contains("TryPrimitiveNumericLess")),
-                "The pre-H7 comparison site remains: " + names);
-        assertFalse(names.stream().anyMatch(
-                        name -> name.contains("ExperimentalCanonicalBooleanCondition")),
-                "Lt needs no separate Boolean conversion: " + names);
+    }
+
+    private static int firstIndex(List<String> names, String prefix, int from) {
+        if (from < 0) {
+            return -1;
+        }
+        for (int index = from; index < names.size(); index++) {
+            if (names.get(index).startsWith(prefix)) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     private static void assertGeneralLowering(
@@ -729,10 +783,30 @@ final class ProtosI115PCompactBooleanWhileTest {
                         .map(ProtosInstructionNames::of)
                         .toList();
 
-        for (String name : instructions) {
-            assertFalse(
-                    name.contains("Experimental"),
-                    "Rejected compact root contains " + name);
+        /*
+         * I115: one unified control-flow lowering. Current operations whose
+         * names contain "Experimental" (for example the canonical Boolean
+         * condition) are allowed; only retired control-flow and compact-root
+         * operations are forbidden.
+         */
+        for (String retired : List.of(
+                "PreparedBooleanCall",
+                "AdmitsInlineLiteralWhile",
+                "StructuredWhileCondition",
+                "TryCompactCanonicalBoolean",
+                "IsCanonicalBooleanValue",
+                "TryPrimitiveNumeric",
+                "ExperimentalInteger",
+                "IsCompactLocalFrame",
+                "InstallFrameLexicalAuthority",
+                "PromoteFrameLexicalAuthority",
+                "CreateCurrentFrameLocal",
+                "ReadRootFrameLocal")) {
+            for (String name : instructions) {
+                assertFalse(name.contains(retired), "Retired operation " + name);
+            }
         }
+        // The unified While: a native conditional branch and a backward edge.
+        assertStructuredWhileInstructions(run.getBytecodeNode().getInstructionsAsList());
     }
 }

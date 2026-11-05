@@ -315,13 +315,6 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
         if (constant instanceof Long integer) {
             return "ProtosInteger(" + integer.longValue() + ")";
         }
-        if (constant instanceof ProtosFrameLexicalLayout layout) {
-            List<String> namesAndOffsets = new ArrayList<>();
-            for (int index = 0; index < layout.length(); index++) {
-                namesAndOffsets.add(layout.nameAt(index) + ":" + layout.localOffsetAt(index));
-            }
-            return "FrameLayout(" + namesAndOffsets + ")";
-        }
         if (constant instanceof Double value) {
             return "Double(bits=" + Long.toHexString(Double.doubleToRawLongBits(value)) + ")";
         }
