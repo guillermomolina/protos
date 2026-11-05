@@ -902,8 +902,6 @@ public final class ProtosCoreBootstrap {
                         "construct",
                         "hasSlot",
                         "slotValue",
-                        "ifTrue",
-                        "ifFalse",
                         "and",
                         "or",
                         "hash",
@@ -911,7 +909,6 @@ public final class ProtosCoreBootstrap {
                         "parallel",
                         "parent",
                         "ensure",
-                        "whileTrue",
                         "whileFalse",
                         "untilTrue",
                         "untilFalse",
@@ -971,17 +968,11 @@ public final class ProtosCoreBootstrap {
         validateContextLocalRootExecutionProjection(object, "==");
         validateContextLocalRootExecutionProjection(object, "match");
         /*
-         * I092 lowers canonical-Boolean ifTrue natively after publication and
-         * I095 inlines the six standard Boolean selectors (ifTrue, ifFalse,
-         * ifTrueIfFalse, and, or, not); both rely on these frozen selections;
-         * never publish another behavior.
+         * I095 inlines the standard Boolean selectors and, or and not; it
+         * relies on these frozen selections; never publish another behavior.
+         * I115 lowers ifTrue, ifFalse and ifTrueIfFalse directly as Bytecode
+         * DSL control flow, so the root publishes no native slots for them.
          */
-        requireStandardBooleanSelection(object, "ifTrue",
-                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE);
-        requireStandardBooleanSelection(object, "ifFalse",
-                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_FALSE);
-        requireStandardBooleanSelection(object, "ifTrueIfFalse",
-                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE_IF_FALSE);
         requireStandardBooleanSelection(object, "and",
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.AND);
         requireStandardBooleanSelection(object, "or",

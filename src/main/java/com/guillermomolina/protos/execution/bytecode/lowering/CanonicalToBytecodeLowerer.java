@@ -418,13 +418,11 @@ final class CanonicalToBytecodeLowerer {
      * I107 (PLAT061-B) immutable emission plan of one root, prepared before
      * its builder section opens ({@code create()} for a group root, {@code
      * beginRoot()} for a nested one). It holds only canonical decisions:
-     * the root facts, the authorized terminal fold, the identity of the
-     * effective root and the proofs of the canonical body and of the
+     * the root facts, the identity of the effective root and the proofs of the canonical body and of the
      * effective root under this lowerer's publication snapshot. Every parse of the group consumes the same decisions.
      */
     record RootEmissionPlan(
             CanonicalCompilationFacts.RootFacts rootFacts,
-            CanonicalLiteral foldedTerminal,
             CanonicalCompilationFacts.EffectiveRoot effectiveRoot,
             CanonicalNonSuspensionAnalysis.Result canonicalBody,
             CanonicalNonSuspensionAnalysis.Result plannedEffectiveRoot) {}
@@ -471,13 +469,6 @@ final class CanonicalToBytecodeLowerer {
         CanonicalCompilationFacts.RootFacts rootFacts =
                 prepareRootFacts(sequence, activationDefinition, analysis);
         CanonicalLexicalScope scope = rootFacts.scope();
-        ControlSiteContext entry = ControlSiteContext.rootEntry(analysis, scope);
-        CanonicalLiteral foldedTerminal =
-                sequence.expressions().isEmpty()
-                        ? null
-                        : foldedConstantControlResult(
-                                sequence.expressions().get(sequence.expressions().size() - 1),
-                                entry);
         CanonicalNonSuspensionAnalysis.SendSelection selection =
                 (send, ownerAnalysis, ownerScope) ->
                         selectedControlSend(
@@ -487,22 +478,20 @@ final class CanonicalToBytecodeLowerer {
                         sequence, activationDefinition, analysis, scope);
         Object canonicalRoot = activationDefinition == null ? sequence : activationDefinition;
         CanonicalCompilationFacts.EffectiveRoot effectiveRoot =
-                compilationFacts.effectiveRoot(canonicalRoot, analysis, scope, foldedTerminal);
+                compilationFacts.effectiveRoot(canonicalRoot, analysis, scope);
         CanonicalNonSuspensionAnalysis.Result planned =
                 compilationFacts.newAnalysis(analysis, scope, activationDefinition, selection)
                         .proveEffectiveRoot(
                                 effectiveRoot,
                                 activationDefinition,
-                                effectiveBody(sequence, foldedTerminal),
+                                sequence.expressions(),
                                 activationDefinition != null
                                         && compilationFacts.mayObserveReturnHome(
                                                 activationDefinition),
-                                foldedTerminal == null
-                                        ? "planned effective root"
-                                        : "planned effective root after constant-control fold");
+                                "planned effective root");
         compilationFacts.publishNonSuspension(planned);
         return new RootEmissionPlan(
-                rootFacts, foldedTerminal, effectiveRoot, canonicalBody, planned);
+                rootFacts, effectiveRoot, canonicalBody, planned);
     }
 
     /**
@@ -568,7 +557,7 @@ final class CanonicalToBytecodeLowerer {
      * identically. Outside inline bodies nothing changes.
      *
      * <p>I101-A: a callee root omits the roots of the Boolean
-     * callbacks it inlines, folds or never selects, so its inline copy, which
+     * callbacks it inlines or never selects, so its inline copy, which
      * keeps the ordinary send, lowers such a callback here for the first
      * time.
      */
@@ -977,23 +966,11 @@ final class CanonicalToBytecodeLowerer {
                     defaultChildResult,
                     defaultResumeValue);
         }
-        /*
-         * I101-A: the emission plan of an admitted constant Boolean-control
-         * terminal is its proven effective result. The canonical sequence is
-         * not rewritten: every analysis keeps inspecting the original
-         * statement, which also owns the statement's source section. I107:
-         * the decision was taken by the pre-builder plan, a function of the
-         * canonical tree and the publication snapshot, so every
-         * reparse consumes the same one.
-         */
-        CanonicalLiteral foldedTerminal = rootPlan.foldedTerminal();
 
         boolean loweringRefinementAccepted = true;
         CanonicalExpression minimalTerminal =
                 sequence.expressions().size() == 1
-                        ? (foldedTerminal != null
-                                ? foldedTerminal
-                                : sequence.expressions().get(0))
+                        ? sequence.expressions().get(0)
                         : null;
 
         Object constant = null;
@@ -1011,7 +988,7 @@ final class CanonicalToBytecodeLowerer {
              * PLAT067-B: the constant return is the surviving executable
              * location of the source statement, so it carries that
              * statement's passive StatementTag + ExpressionTag (its exact
-             * span, not a folded callback literal's), as the ordinary
+             * span), as the ordinary
              * literal-carrier terminal does. No operation is added and
              * BytecodeConfig.DEFAULT materializes no tag instruction.
              */
@@ -1029,10 +1006,8 @@ final class CanonicalToBytecodeLowerer {
         } else {
             java.util.List<CanonicalExpression> expressions =
                     sequence.expressions();
-            CanonicalExpression lastStatement =
-                    expressions.get(expressions.size() - 1);
             CanonicalExpression last =
-                    foldedTerminal == null ? lastStatement : foldedTerminal;
+                    expressions.get(expressions.size() - 1);
 
             boolean scalarTerminal =
                     last instanceof CanonicalLookup lookup
@@ -1074,7 +1049,7 @@ final class CanonicalToBytecodeLowerer {
                 if (returnEnclosesStatement) {
                     builder.beginReturn();
                 }
-                beginStatement(builder, lastStatement);
+                beginStatement(builder, last);
                 ProtosClosureExecutionPlanCell terminalClosurePlan =
                         closureTerminal
                                 ? bytecodeClosurePlan(
@@ -1226,8 +1201,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endSourceSection();
         /*
          * I107: the root publishes the EFFECTIVE_ROOT proof consumed from the
-         * facts: the planner's proof of entry plus effective body (a folded
-         * terminal is its proven result, I101-A), possibly refined above by
+         * facts: the planner's proof of entry plus body, possibly refined above by
          * this lowerer's own transformations. Publication cannot authorize
          * anything already emitted: a root that nevertheless emitted a generic
          * prepared invocation invalidates the unconsumed proof first.
@@ -1551,22 +1525,6 @@ final class CanonicalToBytecodeLowerer {
      * the root's own body. Closures with any parameter keep the in-body
      * algorithm unchanged.
      */
-    /**
-     * I101-A: the statements the root actually evaluates; the original
-     * sequence, with a folded terminal replaced by its proven result.
-     */
-    private static java.util.List<CanonicalExpression> effectiveBody(
-            CanonicalSequence sequence, CanonicalLiteral foldedTerminal) {
-        java.util.List<CanonicalExpression> expressions = sequence.expressions();
-        if (foldedTerminal == null) {
-            return expressions;
-        }
-        java.util.List<CanonicalExpression> effective =
-                new java.util.ArrayList<>(expressions);
-        effective.set(effective.size() - 1, foldedTerminal);
-        return java.util.List.copyOf(effective);
-    }
-
     /**
      * I107: publishes a proof this lowerer's own transformation established
      * for the effective root it is emitting (a refinement of the planner's
@@ -5830,51 +5788,41 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I095-C/D: five callback-taking standard Boolean selectors share
-     * this table-driven open-coded lowering. The standard not selector
-     * uses a separate no-callback path. Each row declares, for each
-     * canonical receiver, the
-     * supplied position of the selected callback (-1: none), the result
-     * when no callback is selected and the policy applied to a selected
-     * callback's normal result. The rows restate the standard behaviors of
-     * ProtosStandardBooleanProtocol (also sequenced by PreparedBooleanCall);
+     * Boolean-control selection table. Each row declares, for each canonical
+     * receiver, the supplied position of the selected callback (-1: none)
+     * and the result when no callback is selected. The IF_TRUE, IF_FALSE and
+     * IF_TRUE_IF_FALSE rows drive I115 {@link #emitI115UnifiedControl}. The
+     * NOT, AND and OR rows restate the native standard behaviors of
+     * ProtosStandardBooleanProtocol (also sequenced by PreparedBooleanCall)
+     * and are the only rows admitted by {@link #normalBooleanControlRow};
      * frozen root publication validates that exactly those behaviors are
      * selected for canonical receivers.
      */
     private enum NormalBooleanControl {
-        NOT(0, -1, -1, Unselected.NEGATION, SelectedResult.EXACT),
-        IF_TRUE(1, 0, -1, Unselected.NULL, SelectedResult.EXACT),
-        IF_FALSE(1, -1, 0, Unselected.NULL, SelectedResult.EXACT),
-        IF_TRUE_IF_FALSE(2, 0, 1, Unselected.NULL, SelectedResult.EXACT),
-        AND(1, 0, -1, Unselected.RECEIVER, SelectedResult.CANONICAL_BOOLEAN),
-        OR(1, -1, 0, Unselected.RECEIVER, SelectedResult.CANONICAL_BOOLEAN);
+        NOT(0, -1, -1, Unselected.NEGATION),
+        IF_TRUE(1, 0, -1, Unselected.NULL),
+        IF_FALSE(1, -1, 0, Unselected.NULL),
+        IF_TRUE_IF_FALSE(2, 0, 1, Unselected.NULL),
+        AND(1, 0, -1, Unselected.RECEIVER),
+        OR(1, -1, 0, Unselected.RECEIVER);
 
         /** Result of a canonical receiver that selects no callback. */
         private enum Unselected { NULL, RECEIVER, NEGATION }
-
-        /**
-         * Exact callback result (ifTrue, ifFalse, ifTrueIfFalse) or the
-         * result required to be canonical true/false (and/or).
-         */
-        private enum SelectedResult { EXACT, CANONICAL_BOOLEAN }
 
         private final int arity;
         private final int selectedOnTrue;
         private final int selectedOnFalse;
         private final Unselected unselected;
-        private final SelectedResult selectedResult;
 
         NormalBooleanControl(
                 int arity,
                 int selectedOnTrue,
                 int selectedOnFalse,
-                Unselected unselected,
-                SelectedResult selectedResult) {
+                Unselected unselected) {
             this.arity = arity;
             this.selectedOnTrue = selectedOnTrue;
             this.selectedOnFalse = selectedOnFalse;
             this.unselected = unselected;
-            this.selectedResult = selectedResult;
         }
 
         static NormalBooleanControl of(String message) {
@@ -5940,8 +5888,7 @@ final class CanonicalToBytecodeLowerer {
      * no proof about that argument, which may be any expression: it is
      * still evaluated, but neither validated nor invoked. A selected
      * argument runs inline only when it is a literal Closure carrying the
-     * I095-B proof of the whole callback activation; each callback of
-     * ifTrueIfFalse is proven independently. A literal receiver is admitted
+     * I095-B proof of the whole callback activation. A literal receiver is admitted
      * when its own path is not the ordinary send. A dynamic receiver,
      * classified at run time, is admitted when some canonical path runs a
      * callback inline or no path invokes one (not); otherwise the existing
@@ -5952,21 +5899,19 @@ final class CanonicalToBytecodeLowerer {
      * lowerer's publication snapshot, so every reparse of a group makes the
      * same decision.
      */
-    private NormalBooleanControlSite normalBooleanControlSite(
-            CanonicalSend send) {
-        return normalBooleanControlSite(send, currentControlSiteContext());
-    }
-
     /**
      * I107: the selection row of an admissible site, or {@code null}; the
-     * shared precondition of admission ({@link #normalBooleanControlSite})
-     * and of the constant fold ({@link #foldedConstantControlResult}).
+     * precondition of admission ({@link #normalBooleanControlSite}). Only
+     * the native standard selectors not, and and or are admitted; the I115
+     * control selectors ({@link #i115ControlSelector}) are never classified
+     * here.
      */
     private NormalBooleanControl normalBooleanControlRow(
             CanonicalSend send, ControlSiteContext context) {
         NormalBooleanControl control =
                 NormalBooleanControl.of(send.message());
         if (control == null
+                || i115ControlSelector(send.message())
                 || !standardObjectPublished
                 || context.inlineCallbackFrameNative()
                 || context.activationLocalPresent()
@@ -6224,106 +6169,6 @@ final class CanonicalToBytecodeLowerer {
             case CanonicalLiteral ignored -> false;
             case CanonicalLookup ignored -> false;
         };
-    }
-
-    /**
-     * I101-A (PLAT058-D) complete fold of a constant Boolean-control site:
-     * the literal that is the site's exact normal result in every execution,
-     * or {@code null} when that is not proven.
-     *
-     * <p>The proof composes existing ones without weakening them. The site is
-     * admitted by {@link #normalBooleanControlSite} (standard
-     * root published in this lowerer's snapshot, standard selector and
-     * arity, no spread). Its receiver is a canonical Boolean literal and
-     * every argument is a literal Closure, so no operand evaluation exists to
-     * preserve and no Closure identity can be observed (an unselected or
-     * inline literal is never materialized, I095-C). The selected callback's
-     * path is INLINE, which carries the I095-B proof of its whole activation
-     * (no parameters, unobservable ReturnHome and lexical scope), and its row
-     * returns the callback's exact result (ifTrue, ifFalse, ifTrueIfFalse).
-     * Finally the callback body is one literal accepted by {@link
-     * #isNormalPureControlExpression}: evaluating it has no effect, cannot
-     * fail, suspend or observe any Context, and its value does not depend on
-     * the activation evaluating it. The site therefore evaluates exactly to
-     * that literal, which is emitted in place of the whole send.
-     *
-     * <p>I107: the fold composes. When the selected callback's only
-     * statement is itself a foldable site, the callback evaluates exactly to
-     * that site's literal with no effect; the callback is then as
-     * unobservable as a literal-bodied one (no parameters, no own bindings,
-     * unobservable ReturnHome, and none of its nested literals is ever
-     * materialized), so the outer site folds to the same literal at any
-     * nesting depth. The planner computes the fold before the builder opens,
-     * under the root-entry control context.
-     */
-    private CanonicalLiteral foldedConstantControlResult(
-            CanonicalExpression expression, ControlSiteContext context) {
-        if (!(expression instanceof CanonicalSend send)
-                || !(send.receiver() instanceof CanonicalLiteral receiver)
-                || !send.arguments().stream()
-                        .allMatch(CanonicalClosure.class::isInstance)) {
-            return null;
-        }
-        NormalBooleanControl control = normalBooleanControlRow(send, context);
-        if (control == null
-                || control.selectedResult != NormalBooleanControl.SelectedResult.EXACT
-                || (receiver.kind() != CanonicalLiteral.Kind.TRUE
-                        && receiver.kind() != CanonicalLiteral.Kind.FALSE)) {
-            return null;
-        }
-        boolean value = receiver.kind() == CanonicalLiteral.Kind.TRUE;
-        int selectedIndex = control.selectedIndex(value);
-        if (selectedIndex < 0) {
-            return null;
-        }
-        CanonicalClosure selected = (CanonicalClosure) send.arguments().get(selectedIndex);
-        java.util.List<CanonicalExpression> body =
-                selected.body().expressions();
-        if (body.size() != 1) {
-            return null;
-        }
-        if (body.get(0) instanceof CanonicalLiteral literal) {
-            NormalBooleanControlSite site = normalBooleanControlSite(send, context);
-            return site != null
-                            && site.path(value) == NormalBooleanControlPath.INLINE
-                            && isNormalPureControlExpression(literal)
-                    ? literal
-                    : null;
-        }
-        if (!selected.parameters().isEmpty()
-                || compilationFacts.mayObserveReturnHome(selected)
-                || !compilationFacts.isolatedClosureAnalysis(selected)
-                        .scopeOf(selected)
-                        .map(scope -> scope.declaredNames().isEmpty())
-                        .orElse(false)) {
-            return null;
-        }
-        return foldedConstantControlResult(body.get(0), context);
-    }
-
-    private boolean isNormalPureControlExpression(
-            CanonicalExpression expression) {
-        if (expression instanceof CanonicalLiteral literal) {
-            return switch (literal.kind()) {
-                case TRUE, FALSE, NULL -> true;
-                case NUMBER ->
-                        !(numberLiteralDescriptor(literal)
-                                instanceof BigInteger);
-                case STRING -> false;
-            };
-        }
-
-        if (expression instanceof CanonicalIdentity identity) {
-            return isNormalPureControlExpression(identity.left())
-                    && isNormalPureControlExpression(identity.right());
-        }
-
-        if (expression instanceof CanonicalNotIdentity identity) {
-            return isNormalPureControlExpression(identity.left())
-                    && isNormalPureControlExpression(identity.right());
-        }
-
-        return false;
     }
 
     /**

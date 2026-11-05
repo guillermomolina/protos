@@ -136,21 +136,18 @@ final class CanonicalCompilationFacts {
 
     /**
      * I107: identity of one effective emitted root: the canonical root
-     * ({@code definition}, or the module body) and the authorized lowerer
-     * transformation it carries ({@code foldedTerminal}, or {@code null}).
-     * Compared by Java identity; one instance per root, analysis and scope.
+     * ({@code definition}, or the module body) emitted under one analysis
+     * and scope. Compared by Java identity; one instance per root, analysis
+     * and scope.
      */
     static final class EffectiveRoot {
         private final Object canonicalRoot;
-        private final CanonicalLiteral foldedTerminal;
 
-        private EffectiveRoot(Object canonicalRoot, CanonicalLiteral foldedTerminal) {
+        private EffectiveRoot(Object canonicalRoot) {
             this.canonicalRoot = canonicalRoot;
-            this.foldedTerminal = foldedTerminal;
         }
 
         Object canonicalRoot() { return canonicalRoot; }
-        CanonicalLiteral foldedTerminal() { return foldedTerminal; }
     }
 
     /** Outcome of a contribution to the non-suspension facts. */
@@ -404,23 +401,21 @@ final class CanonicalCompilationFacts {
 
     /**
      * The identity of the effective root of {@code canonicalRoot} under
-     * {@code analysis} and {@code scope}: the same instance for the same
-     * transformation (so a reparse reuses its facts), a new one whenever the
-     * transformation differs.
+     * {@code analysis} and {@code scope}: the same instance for the same key,
+     * so repeated lookups and reparses reuse its facts.
      */
     EffectiveRoot effectiveRoot(
             Object canonicalRoot,
             CanonicalBindingAnalysis analysis,
-            CanonicalLexicalScope scope,
-            CanonicalLiteral foldedTerminal) {
+            CanonicalLexicalScope scope) {
         FactKey key = new FactKey(
                 CanonicalNonSuspensionAnalysis.Subject.EFFECTIVE_ROOT,
                 canonicalRoot, analysis, scope);
         EffectiveRoot existing = effectiveRoots.get(key);
-        if (existing != null && existing.foldedTerminal == foldedTerminal) {
+        if (existing != null) {
             return existing;
         }
-        EffectiveRoot created = new EffectiveRoot(canonicalRoot, foldedTerminal);
+        EffectiveRoot created = new EffectiveRoot(canonicalRoot);
         effectiveRoots.put(key, created);
         return created;
     }

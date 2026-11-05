@@ -41,13 +41,13 @@ import java.util.Map;
 
 public final class ProtosStandardObjectProtocol {
     /**
-     * D212: the four standard Closure loop protocols. The receiver is the
+     * D212: the standard native Closure loop protocols still served by this
+     * provider ({@code whileTrue} is I115 Bytecode DSL control flow). The receiver is the
      * condition for a pre-test loop and the body for a post-test loop; the
      * loop exits when a completed condition is exactly the canonical
      * {@code exitValue} Boolean.
      */
     enum StructuredLoopKind {
-        WHILE_TRUE(false, false),
         WHILE_FALSE(false, true),
         UNTIL_TRUE(true, true),
         UNTIL_FALSE(true, false);
@@ -83,10 +83,6 @@ public final class ProtosStandardObjectProtocol {
             ProtosStandardObjectProtocol::ensure;
     private static final ProtosClosureValue STANDARD_ENSURE =
             ProtosClosureValue.nativeClosure(STANDARD_ENSURE_BODY);
-    private static final ProtosNativeClosureBody STANDARD_WHILE_TRUE_BODY =
-            ProtosStandardObjectProtocol::whileTrue;
-    private static final ProtosClosureValue STANDARD_WHILE_TRUE =
-            ProtosClosureValue.nativeClosure(STANDARD_WHILE_TRUE_BODY);
     private static final ProtosNativeClosureBody STANDARD_WHILE_FALSE_BODY =
             ProtosStandardObjectProtocol::whileFalse;
     private static final ProtosClosureValue STANDARD_WHILE_FALSE =
@@ -237,7 +233,7 @@ public final class ProtosStandardObjectProtocol {
     }
 
     /**
-     * D210/D212: the loop kind of a canonical standard {@code Object} loop
+     * D212: the loop kind of a canonical standard {@code Object} loop
      * selection, or {@code null}. Requires both the exact standard behavior
      * and the standard Object as its method home, so an identically named
      * program slot or a copied standard behavior homed elsewhere is never
@@ -249,7 +245,6 @@ public final class ProtosStandardObjectProtocol {
         if (!home.isRootObject()) {
             return null;
         }
-        if (behavior == STANDARD_WHILE_TRUE) return StructuredLoopKind.WHILE_TRUE;
         if (behavior == STANDARD_WHILE_FALSE) return StructuredLoopKind.WHILE_FALSE;
         if (behavior == STANDARD_UNTIL_TRUE) return StructuredLoopKind.UNTIL_TRUE;
         if (behavior == STANDARD_UNTIL_FALSE) return StructuredLoopKind.UNTIL_FALSE;
@@ -260,7 +255,6 @@ public final class ProtosStandardObjectProtocol {
     static StructuredLoopKind structuredLoopKindForImplementation(
             ProtosClosureValue closure) {
         ProtosNativeClosureBody body = closure.nativeBody().orElse(null);
-        if (body == STANDARD_WHILE_TRUE_BODY) return StructuredLoopKind.WHILE_TRUE;
         if (body == STANDARD_WHILE_FALSE_BODY) return StructuredLoopKind.WHILE_FALSE;
         if (body == STANDARD_UNTIL_TRUE_BODY) return StructuredLoopKind.UNTIL_TRUE;
         if (body == STANDARD_UNTIL_FALSE_BODY) return StructuredLoopKind.UNTIL_FALSE;
@@ -367,11 +361,6 @@ public final class ProtosStandardObjectProtocol {
             object.createLocalSlot(
                     "ensure",
                     STANDARD_ENSURE);
-        }
-        if (!object.hasLocalSlot("whileTrue")) {
-            object.createLocalSlot(
-                    "whileTrue",
-                    STANDARD_WHILE_TRUE);
         }
         if (!object.hasLocalSlot("whileFalse")) {
             object.createLocalSlot(
@@ -651,10 +640,6 @@ public final class ProtosStandardObjectProtocol {
         throw invalid(activation);
     }
 
-    private static Object whileTrue(ProtosActivation activation, List<?> supplied) {
-        return loop(StructuredLoopKind.WHILE_TRUE, activation, supplied);
-    }
-
     private static Object whileFalse(ProtosActivation activation, List<?> supplied) {
         return loop(StructuredLoopKind.WHILE_FALSE, activation, supplied);
     }
@@ -668,7 +653,7 @@ public final class ProtosStandardObjectProtocol {
     }
 
     /**
-     * D210/D212 standard Closure loop. The receiver and the sole supplied
+     * D212 standard Closure loop. The receiver and the sole supplied
      * value are both validated as semantic Closures before either is
      * activated; the receiver is the condition for a pre-test kind and the
      * body for a post-test kind. The last body result is held only by this
