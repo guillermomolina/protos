@@ -345,11 +345,14 @@ final class ProtosI112TailContinuationTest {
             assertEquals(1, before.get());
             assertEquals(0, after.get());
 
-            assertInstanceOf(
-                    ProtosFrameLexicalBindingAuthority.class,
-                    module.currentLexicalBindingAuthorityForRuntime());
+            // I115: module bindings are NAME bindings of the module context
+            // itself; while suspended that context holds them directly.
+            ProtosObjectValue moduleContext = module.context();
+            assertSame(moduleContext, module.materializedContextOrNullForRuntime());
+            assertTrue(moduleContext.hasLocalSlot("seed"));
+            assertTrue(moduleContext.hasLocalSlot("reader"));
 
-            assertInstanceOf(
+            ProtosClosureValue seed = assertInstanceOf(
                     ProtosClosureValue.class,
                     module.context().readLocalSlot("seed").orElseThrow());
 
@@ -372,9 +375,11 @@ final class ProtosI112TailContinuationTest {
             assertEquals(1, before.get());
             assertEquals(1, after.get());
 
-            assertInstanceOf(
-                    ProtosFrameLexicalBindingAuthority.class,
-                    module.currentLexicalBindingAuthorityForRuntime());
+            // The same module context keeps the same bindings after resumption.
+            assertSame(moduleContext, module.context());
+            assertSame(seed, moduleContext.readLocalSlot("seed").orElseThrow());
+            assertSame(reader, moduleContext.readLocalSlot("reader").orElseThrow());
+            assertSame(moduleContext, reader.capturedLexicalEnvironmentForRuntime().context());
         }
     }
 

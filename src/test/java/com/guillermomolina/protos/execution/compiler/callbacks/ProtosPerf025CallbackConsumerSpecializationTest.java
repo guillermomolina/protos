@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
+import com.guillermomolina.protos.runtime.ProtosLexicalCell;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.bytecode.TagTreeNode;
@@ -60,8 +60,9 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Runtime state is read at a breakpoint from the raw Bytecode frame, never
  * through a debugger scope, which would itself be an observer: the live
- * carrier reports whether the activation was materialized and whether the
- * frame bindings were transferred to a durable authority.
+ * carrier reports whether the activation was materialized, LOCAL bindings
+ * are read from their Bytecode DSL locals and CELL bindings through the
+ * cells those locals hold (I115).
  */
 final class ProtosPerf025CallbackConsumerSpecializationTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -85,12 +86,12 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         Stop stop = run.single();
         stop.assertLazy();
         assertInteger(4, stop.binding("result"));
-        // I113: the inline captured-binding fallback is LoadInlineClosureArgument's
-        // String specialization (former ReadInlineCapturedFallback); laziness is
-        // asserted above, and the materializing name-keyed read must be absent.
-        stop.assertInstruction("LoadInlineClosureArgument");
+        // I115: the captured limit is read through its cell, never by name,
+        // and the sum is the per-selector NumberAdd operation.
+        stop.assertInstruction("LoadCell");
         stop.assertNoInstruction("AccessNamedLexical");
-        stop.assertInstruction("PrepareInlineSendOne");
+        stop.assertInstruction("NumberAdd");
+        stop.assertNoRetired();
         System.out.println("PERF025_S3_CAPTURED_READ_WITHOUT_ACTIVATION=YES");
         System.out.println("PERF025_S3_CANONICAL_INTEGER_SEND_WITHOUT_ACTIVATION=YES");
     }
@@ -116,8 +117,14 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         assertEquals(3, run.stops.size());
         for (Stop stop : run.stops) {
             stop.assertLazy();
-            stop.assertInstruction("ResolveInlineCaptured");
-            stop.assertInstruction("AssignInlineCaptured");
+            // I115: the captured accumulator is read and written through its cell.
+            stop.assertInstruction("LoadCell");
+            stop.assertInstruction("StoreCell");
+            stop.assertNoInstruction("AccessNamedLexical");
+            stop.assertNoRetired();
+        }
+        for (int index = 0; index < run.stops.size(); index++) {
+            assertInteger(index + 1, run.stops.get(index).binding("element"));
         }
         assertDistinctCarriers(run.stops);
         System.out.println("PERF025_S3_CAPTURED_WRITE_WITHOUT_ACTIVATION=YES");
@@ -147,9 +154,14 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         run.assertCompleted();
         assertInteger(30, run.value());
         assertEquals(2, run.stops.size());
-        for (Stop stop : run.stops) {
+        for (int index = 0; index < run.stops.size(); index++) {
+            Stop stop = run.stops.get(index);
             assertTrue(stop.materialized(), "the dynamic lookup observes the activation");
-            assertTrue(stop.durable(), "bindings must be durable once materialized");
+            // Materialization keeps the frame bindings exact.
+            assertInteger(index + 1, stop.binding("element"));
+            // The destination is the captured cell, selected and written directly.
+            stop.assertInstruction("StoreCell");
+            stop.assertNoRetired();
         }
         System.out.println("PERF028_A_DESTINATION_SELECTED_BEFORE_RHS=YES");
         System.out.println("PERF028_A_NO_RETARGET_AFTER_RHS=YES");
@@ -204,7 +216,10 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         Stop stop = run.single();
         stop.assertLazy();
         assertInteger(2, stop.binding("result"));
-        stop.assertInstruction("InvokeInlineClosureOne");
+        // I115: the callee is the captured next, loaded from its cell.
+        stop.assertInstruction("LoadCell");
+        stop.assertNoInstruction("AccessNamedLexical");
+        stop.assertNoRetired();
         System.out.println("PERF025_S3_DIRECT_SOURCE_CLOSURE_CALL_WITHOUT_ACTIVATION=YES");
     }
 
@@ -227,8 +242,9 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         run.assertCompleted();
         Stop stop = run.single();
         assertTrue(stop.materialized(), "the generic invocation path takes the activation");
-        assertTrue(stop.durable());
         assertInteger(40, stop.binding("result"));
+        assertInteger(4, stop.binding("element"));
+        stop.assertNoRetired();
         System.out.println("PERF025_S3_NONCANONICAL_CALL_FALLBACK_PRESERVED=YES");
     }
 
@@ -251,7 +267,10 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         Stop stop = run.single();
         stop.assertLazy();
         assertSame(ProtosBooleanValue.TRUE, stop.binding("same"));
-        stop.assertInstruction("LoadInlineCallbackReceiver");
+        // I115: the captured me is read through its cell; this needs no activation.
+        stop.assertInstruction("LoadCell");
+        stop.assertNoInstruction("CurrentActivation");
+        stop.assertNoRetired();
         System.out.println("PERF025_S3_THIS_WITHOUT_ACTIVATION=YES");
     }
 
@@ -275,11 +294,10 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         run.assertCompleted();
         Stop stop = run.single();
         assertTrue(stop.materialized(), "context observes the callback activation");
-        assertFalse(
-                stop.instructions().stream()
-                        .anyMatch(name -> name.contains("LoadInlineCallbackReceiver")),
-                () -> "a context-observing callback is not carrier-native: "
-                        + stop.instructions());
+        // The context intrinsic is what obtains the exact activation.
+        stop.assertInstruction("CurrentActivation");
+        assertSame(ProtosBooleanValue.TRUE, stop.binding("same"));
+        stop.assertNoRetired();
         System.out.println("PERF025_S3_CONTEXT_MATERIALIZES=YES");
     }
 
@@ -302,7 +320,11 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         Stop stop = run.single();
         stop.assertLazy();
         assertInteger(7, stop.binding("read"));
-        stop.assertInstruction("ReadInlineMember");
+        // I115: the root-level member read (ReadMemberAtRoot or its
+        // GetAttribute form) of the captured box.
+        stop.assertAnyInstruction("ReadMemberAtRoot", "ExperimentalGetAttribute");
+        stop.assertInstruction("LoadCell");
+        stop.assertNoRetired();
         System.out.println("PERF025_S3_MEMBER_READ_WITHOUT_ACTIVATION=YES");
     }
 
@@ -344,8 +366,11 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         stop.assertLazy();
         assertInteger(4, stop.binding("first"));
         assertInteger(5, stop.binding("second"));
-        stop.assertInstruction("ObserveInlineMultipleCreatePrefix");
-        stop.assertInstruction("CreateInlineCurrentFrameLocal");
+        // I115: one prefix observation, then one native store per name.
+        stop.assertInstruction("ObserveMultipleCreatePrefix");
+        stop.assertInstruction("ObservedMultipleCreateValue");
+        stop.assertNoInstruction("CreateCurrentLocalSlot");
+        stop.assertNoRetired();
         System.out.println("PERF025_S3_MULTIPLE_CREATE_WITHOUT_ACTIVATION=YES");
     }
 
@@ -414,15 +439,46 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
      * callback is an ordinary invocation through the shared dispatcher; its
      * identity is its B5 frame arguments.
      */
+    /* Retired PLAT044 B-prime inline-callback and frame-authority operations. */
+    private static final List<String> RETIRED =
+            List.of(
+                    "LoadInlineClosureArgument",
+                    "PrepareInlineSendOne",
+                    "ResolveInlineCaptured",
+                    "AssignInlineCaptured",
+                    "InvokeInlineClosureOne",
+                    "LoadInlineCallbackReceiver",
+                    "ReadInlineMember",
+                    "ObserveInlineMultipleCreatePrefix",
+                    "CreateInlineCurrentFrameLocal",
+                    "InstallFrameLexicalAuthority",
+                    "TryPrimitiveNumeric");
+
     private record Stop(
             Object call,
             boolean materialized,
-            boolean durable,
             Map<String, Object> bindings,
             List<String> instructions) {
         void assertLazy() {
             assertFalse(materialized, "callback activation must stay unmaterialized");
-            assertFalse(durable, "no durable authority may exist without an observer");
+        }
+
+        /*
+         * Only meaningful together with a positive assertion on the current
+         * lowering at the same stop: it guards against a mixed lowering.
+         */
+        void assertNoRetired() {
+            for (String retired : RETIRED) {
+                assertNoInstruction(retired);
+            }
+        }
+
+        void assertAnyInstruction(String... operations) {
+            assertTrue(
+                    instructions.stream().anyMatch(name ->
+                            java.util.Arrays.stream(operations).anyMatch(name::contains)),
+                    () -> "missing any of " + java.util.Arrays.toString(operations)
+                            + " in " + instructions);
         }
 
         Object binding(String name) {
@@ -549,28 +605,41 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         int bytecodeIndex = node.getEnterBytecodeIndex();
         Object[] names = bytecode.getLocalNames(bytecodeIndex);
         Object[] call = frame.getArguments();
+        /*
+         * I115: a LOCAL binding is the value of its Bytecode DSL local; a CELL
+         * binding's local holds its ProtosLexicalCell, whose value is the
+         * binding (Java null: not yet established, so absent). A free cell
+         * the invocation carries is copied into a prefixed root local and is
+         * the captured binding of that name. Nothing is materialized or
+         * published to read them.
+         */
         Map<String, Object> bindings = new HashMap<>();
+        Map<String, Object> freeCells = new HashMap<>();
+        String freeCellPrefix = CanonicalToBytecodeLowerer.FREE_CELL_LOCAL_PREFIX;
         for (int offset = 0; offset < names.length; offset++) {
-            if (names[offset] != null) {
-                bindings.put(
-                        String.valueOf(names[offset]),
-                        bytecode.getLocalValue(bytecodeIndex, frame, offset));
+            if (names[offset] == null) {
+                continue;
+            }
+            String name = String.valueOf(names[offset]);
+            Object value = bytecode.getLocalValue(bytecodeIndex, frame, offset);
+            if (value instanceof ProtosLexicalCell cell) {
+                value = cell.valueOrNullForRuntime();
+                if (value == null) {
+                    continue;
+                }
+            }
+            if (name.startsWith(freeCellPrefix)) {
+                freeCells.put(name.substring(freeCellPrefix.length()), value);
+            } else {
+                bindings.put(name, value);
             }
         }
+        freeCells.forEach(bindings::putIfAbsent);
         assertTrue(ProtosFrameArguments.hasActivation(call),
                 () -> "the breakpoint is not inside a callback invocation");
         boolean materialized = ProtosFrameArguments.hasPublishedActivation(call);
-        if (materialized) {
-            // Bindings established on the materialized activation's authority.
-            ProtosLexicalBindingAuthority authority =
-                    ProtosFrameArguments.activation(call).currentLexicalBindingAuthorityForRuntime();
-            if (authority != null) {
-                bindings.replaceAll((name, value) -> authority.readBinding(name).orElse(value));
-            }
-        }
         List<String> instructions =
                 bytecode.getInstructionsAsList().stream().map(ProtosInstructionNames::of).toList();
-        // I115: no carrier transfers bindings to a durable authority.
-        return new Stop(call, materialized, false, bindings, instructions);
+        return new Stop(call, materialized, bindings, instructions);
     }
 }

@@ -62,10 +62,16 @@ final class ProtosI115UnaryPICConvergenceTest {
     void freshLocalClosureUsesUnaryCallAndReturnsValue() throws Exception {
         withCore(module -> {
             evaluate(FOCAL, "i115-pic-focal-define.protos", module);
+            ProtosBytecodeRootNode root = runRoot(module);
+            RootCallTarget target = root.getCallTarget();
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 assertInteger(1, evaluate("run()\n", "i115-pic-focal.protos", module));
             }
-            assertTrue(runRoot(module).isExperimentalCalleeContextRoot());
+            // I115: the shared lowering; the local Closure is a native LOCAL.
+            assertSharedUnaryCallRoot(runRoot(module), 1);
+            assertTrue(localNames(root).contains("identity"), () -> localNames(root).toString());
+            assertSame(root, runRoot(module), "one stable root");
+            assertSame(target, runRoot(module).getCallTarget(), "the target is reused");
         });
     }
 
@@ -192,8 +198,15 @@ final class ProtosI115UnaryPICConvergenceTest {
         });
     }
 
+    /*
+     * I115 intentionally dispatches source Closures by their function
+     * representation and execution plan rather than a mutable local call
+     * slot. This is an approved temporary divergence from D013. The
+     * historical override behavior must eventually be revisited on top of
+     * the new infrastructure, without restoring the old dispatcher.
+     */
     @Test
-    void megamorphicUnaryCallRetainsGenericBehavior() throws Exception {
+    void megamorphicUnaryCallDispatchesSourceFunctions() throws Exception {
         withCore(module -> {
             evaluate("""
                     make: () => { (value) => { value } }
@@ -206,19 +219,45 @@ final class ProtosI115UnaryPICConvergenceTest {
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 assertInteger(i, evaluate("callOne(make(), " + i + ")\n", "i115-pic-mega-saturate.protos", module));
             }
-            assertInteger(105, evaluate("callOne(overridden, 5)\n", "i115-pic-mega-after-override.protos", module));
+            // I115 (D013 divergence): the local call slot does not divert the
+            // source Closure from the shared function dispatcher.
+            ProtosClosureValue overridden = closure("overridden\n", module);
+            assertTrue(overridden.hasLocalCallSlotForRuntime(), "the override is installed");
+            assertInteger(5, evaluate("callOne(overridden, 5)\n", "i115-pic-mega-after-override.protos", module));
+            assertSame(
+                    closure("make()\n", module).preparedExecutionPlanOrNullForRuntime(),
+                    overridden.preparedExecutionPlanOrNullForRuntime(),
+                    "the override keeps the source function's execution plan");
             assertInteger(5, evaluate("callOne(make(), 5)\n", "i115-pic-mega-after.protos", module));
         });
     }
 
+    /*
+     * I115 intentionally dispatches source Closures by their function
+     * representation and execution plan rather than a mutable local call
+     * slot. This is an approved temporary divergence from D013. The
+     * historical override behavior must eventually be revisited on top of
+     * the new infrastructure, without restoring the old dispatcher.
+     *
+     * The argument is still evaluated before dispatch (arm runs exactly once
+     * per call and installs the override), but the installed override does
+     * not redirect the source-function call.
+     */
     @Test
-    void unaryCallObservesOverrideAfterArgumentEvaluation() throws Exception {
+    void unaryCallEvaluatesArgumentBeforeSourceFunctionDispatch() throws Exception {
         withCore(module -> {
+            int[] armed = new int[1];
+            module.context().createLocalSlot("armProbe", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        armed[0]++;
+                        return com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE;
+                    }));
             evaluate("""
                     make: () => { (value) => { value } }
                     late: make()
                     plain: () => { 7 }
                     arm: () => {
+                        armProbe()
                         late.call: (value) => { 100 + value }
                         7
                     }
@@ -229,8 +268,13 @@ final class ProtosI115UnaryPICConvergenceTest {
                 assertInteger(7, evaluate("callWith(late, plain)\n", "i115-pic-argument-warm.protos", module));
             }
             for (int round = 0; round < 2; round++) {
-                assertInteger(107, evaluate("callWith(late, arm)\n", "i115-pic-argument-arm.protos", module));
+                int before = armed[0];
+                assertInteger(7, evaluate("callWith(late, arm)\n", "i115-pic-argument-arm.protos", module));
+                assertEquals(before + 1, armed[0], "the argument expression ran exactly once");
+                assertTrue(closure("late\n", module).hasLocalCallSlotForRuntime(),
+                        "argument evaluation installed the override");
                 evaluate("late.removeSlot(\"call\")\n", "i115-pic-argument-remove.protos", module);
+                assertFalse(closure("late\n", module).hasLocalCallSlotForRuntime());
                 assertInteger(7, evaluate("callWith(late, plain)\n", "i115-pic-argument-plain.protos", module));
             }
         });
@@ -268,8 +312,15 @@ final class ProtosI115UnaryPICConvergenceTest {
         });
     }
 
+    /*
+     * I115 intentionally dispatches source Closures by their function
+     * representation and execution plan rather than a mutable local call
+     * slot. This is an approved temporary divergence from D013. The
+     * historical override behavior must eventually be revisited on top of
+     * the new infrastructure, without restoring the old dispatcher.
+     */
     @Test
-    void projectionAndReturnHomeFallbackRemainValid() throws Exception {
+    void projectionAndReturnHomeRemainValidWithSourceFunctionDispatch() throws Exception {
         withCore(module -> {
             evaluate("""
                     earlyTerminal: (v) => {
@@ -310,14 +361,18 @@ final class ProtosI115UnaryPICConvergenceTest {
                 assertInteger(7, evaluate("callOne(projected, 7)\n", "i115-pic-projected.protos", module));
             }
 
-            // Only now: generic fallback through a local call override.
-            assertInteger(107, evaluate("callOne(overridden, 7)\n", "i115-pic-generic.protos", module));
+            // I115 (D013 divergence): a local call override does not divert a
+            // source Closure; the shared function dispatcher runs its body.
+            assertInteger(7, evaluate("callOne(overridden, 7)\n", "i115-pic-generic.protos", module));
 
-            // None of these roots takes the raw experimental run epilogue.
-            assertFalse(rootOf("earlyTerminal\n", module).isExperimentalCalleeContextRoot());
-            assertFalse(rootOf("earlyInner\n", module).isExperimentalCalleeContextRoot());
-            assertFalse(rootOf("nonTerminal\n", module).isExperimentalCalleeContextRoot());
-            assertFalse(rootOf("callOne\n", module).isExperimentalCalleeContextRoot());
+            // I115: every root shares the one lowering: one CallUnaryMethod per
+            // unary call site and no separate callee-context path.
+            assertSharedUnaryCallRoot(rootOf("earlyTerminal\n", module), 1);
+            assertSharedUnaryCallRoot(rootOf("earlyInner\n", module), 1);
+            assertSharedUnaryCallRoot(rootOf("nonTerminal\n", module), 1);
+            assertSharedUnaryCallRoot(rootOf("callOne\n", module), 1);
+            assertTrue(localNames(rootOf("earlyTerminal\n", module)).contains("f"));
+            assertTrue(localNames(rootOf("nonTerminal\n", module)).contains("identity"));
         });
     }
 
@@ -440,6 +495,44 @@ final class ProtosI115UnaryPICConvergenceTest {
         });
     }
 
+    /* Retired experimental callee-context / compact-root operations. */
+    private static final List<String> RETIRED = List.of(
+            "c.InvokeClosureOneTail",
+            "c.InvokeExperimentalClosureOneTail",
+            "c.InvokeStaticClosureOneTail",
+            "c.ExperimentalLongArgument0",
+            "c.CopyArguments",
+            "c.CreateCurrentFrameLocal",
+            "c.ReadRootFrameLocal",
+            "c.InstallFrameLexicalAuthority");
+
+    /*
+     * I115 (replaces the retired callee-context classification): a root of
+     * the single Bytecode DSL lowering with exactly {@code calls} unary call
+     * sites, each the shared CallUnaryMethod, and none of the retired
+     * experimental callee-context operations.
+     */
+    private static void assertSharedUnaryCallRoot(ProtosBytecodeRootNode root, int calls) {
+        List<String> names = root.getBytecodeNode().getInstructionsAsList().stream()
+                .map(Instruction::getName)
+                .toList();
+        assertEquals(calls,
+                names.stream().filter(name -> isInstruction(name, "c.CallUnaryMethod")).count(),
+                names.toString());
+        assertTrue(names.stream().anyMatch(name -> isInstruction(name, "c.EnterRoot")),
+                names.toString());
+        for (String retired : RETIRED) {
+            assertTrue(names.stream().noneMatch(name -> isInstruction(name, retired)),
+                    () -> retired + ": " + names);
+        }
+    }
+
+    private static List<Object> localNames(ProtosBytecodeRootNode root) {
+        return root.getBytecodeNode().getLocals().stream()
+                .map(local -> local.getName())
+                .toList();
+    }
+
     private static boolean isInstruction(String name, String operation) {
         return name.equals(operation) || name.startsWith(operation + "$");
     }
@@ -489,7 +582,15 @@ final class ProtosI115UnaryPICConvergenceTest {
             assertNotSame(template, projected);
             assertSame(context.languageForRuntime(), projected.language().orElseThrow());
             assertNotSame(foreignTarget, projected.bytecodeActivationTargetForComposition());
-            assertFalse(rootOf("callOne\n", module).isExperimentalCalleeContextRoot());
+            ProtosBytecodeRootNode callOne = rootOf("callOne\n", module);
+            assertSharedUnaryCallRoot(callOne, 1);
+            ProtosBytecodeRootNode projectedRoot = projected.bytecodeActivationRootForTesting();
+            assertNotSame(foreignTarget.getRootNode(), projectedRoot,
+                    "the projection owns its own root in the entered Context");
+            assertTrue(projectedRoot.getBytecodeNode().getInstructionsAsList().stream()
+                            .map(Instruction::getName)
+                            .anyMatch(name -> isInstruction(name, "c.NumberAdd")),
+                    "the projected body is the same single lowering");
         });
 
         // The originating Context still runs its own template.

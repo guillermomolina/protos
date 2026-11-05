@@ -29,7 +29,8 @@ import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
-import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosLexicalCell;
+import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
@@ -39,7 +40,6 @@ import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
-import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.source.Source;
 import java.lang.reflect.Field;
 import java.util.List;
@@ -47,16 +47,23 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * BUG013-B regression evidence: a frame-backed lexical authority must retain
- * an escape-safe materialized frame immediately when the generated root
- * installs it, before deferred execution-context observation can occur.
+ * BUG013-B regression evidence, reconciled with I115: establishing a
+ * binding's native storage never forces the deferred guest Context into
+ * existence, a later observation materializes exactly one Context identity
+ * that every observer shares, and an escaped capture keeps the owner
+ * binding's single storage alive after the owner frame has returned. The
+ * retired frame lexical authority and its retained materialized frame are
+ * replaced by the storage that owns a captured binding now: one shared cell.
+ *
+ * <p>KNOWN I115 SEMANTIC DIVERGENCE: a Closure activation's Context holds
+ * only NAME bindings, so LOCAL/CELL bindings are not asserted through it.
  */
 final class ProtosBug013FrameLexicalAuthorityMaterializationTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
-    void authorityRetainsMaterializedFrameBeforeDeferredContextObservation()
+    void cellStorageIsEstablishedBeforeAndWithoutDeferredContextObservation()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -70,59 +77,41 @@ final class ProtosBug013FrameLexicalAuthorityMaterializationTest {
                         privateField(activation, "context"),
                         "the compact activation must begin with its guest Context deferred");
 
-                ProtosBytecodeRootNode root = installingRoot(language);
-                assertSame(
-                        ProtosNullValue.INSTANCE,
-                        root.getCallTarget().call(activation));
+                ProtosObjectValue value =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosBytecodeRootNode root = establishingRoot(language);
+                ProtosLexicalCell cell =
+                        assertInstanceOf(
+                                ProtosLexicalCell.class,
+                                root.getCallTarget().call(activation, value));
+                assertSame(value, cell.valueOrNullForRuntime());
 
                 assertNull(
                         privateField(activation, "context"),
-                        "installing the lexical authority must not force Context observation");
+                        "establishing native binding storage must not force Context observation");
 
-                ProtosFrameLexicalBindingAuthority authority =
-                        assertInstanceOf(
-                                ProtosFrameLexicalBindingAuthority.class,
-                                privateField(activation, "deferredContextAuthority"));
+                // A capture before observation shares the still-deferred scope.
+                ProtosLexicalEnvironment captured =
+                        activation.lexicalEnvironmentForClosureCapture();
+                assertTrue(captured.isDeferredForRuntime());
+                assertSame(captured, activation.lexicalEnvironmentForClosureCapture());
 
-                MaterializedFrame retainedFrame =
-                        assertInstanceOf(
-                                MaterializedFrame.class,
-                                privateField(authority, "frame"));
-                assertSame(
-                        retainedFrame,
-                        authority.retainedMaterializedFrameForCapturedAccess());
-
-                ProtosObjectValue value =
-                        new ProtosObjectValue(ProtosObjectValue.rootObject());
-                var before = new java.util.ArrayList<String>();
-                authority.appendBindingNamesTo(before);
-                assertEquals(List.of(), before,
-                        "a reserved frame local is not yet a binding");
-
-                authority.putBinding("x", value);
-                assertTrue(authority.containsBinding("x"));
-
-                var present = new java.util.ArrayList<String>();
-                authority.appendBindingNamesTo(present);
-                assertEquals(List.of("x"), present);
-                assertNull(privateField(activation, "context"),
-                        "enumerating names must not materialize Context");
-                assertSame(value, authority.readBinding("x").orElseThrow());
-
+                // Observation materializes one Context identity for every observer.
                 ProtosExecutionContextValue observedContext =
                         assertInstanceOf(
                                 ProtosExecutionContextValue.class,
                                 activation.context());
-                assertSame(
-                        authority,
-                        observedContext.lexicalBindingAuthorityForRuntime());
-                assertSame(
-                        value,
-                        observedContext.readLocalSlot("x").orElseThrow());
+                assertSame(observedContext, activation.context());
+                assertSame(observedContext, captured.context());
+                assertSame(observedContext, activation.materializedContextOrNullForRuntime());
 
-                var observedNames = new java.util.ArrayList<String>();
-                observedContext.appendLocalBindingNamesTo(observedNames);
-                assertEquals(List.of("x"), observedNames);
+                // A NAME binding created through the activation is the Context's binding.
+                ProtosObjectValue named =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                activation.createCurrentLocalSlotForRuntime("y", named);
+                assertSame(named, observedContext.readLocalSlot("y").orElseThrow());
+                assertSame(named, captured.readLocalSlotForRuntime("y").orElseThrow());
+                assertSame(value, cell.valueOrNullForRuntime(), "the cell is unaffected");
             } finally {
                 context.leave();
             }
@@ -130,15 +119,13 @@ final class ProtosBug013FrameLexicalAuthorityMaterializationTest {
     }
 
     /**
-     * I115 lazy-context experiment: when a root that started frame-native is
-     * promoted on demand (here, before an escaping capture), the installed
-     * authority retains the same escape-safe materialized frame BUG013-B
-     * requires of the entry installation, and the escaped Closure reads the
-     * owner binding after the owner frame has returned. A second promotion of
-     * the same activation installs nothing new.
+     * I115 lazy capture: a captured binding lives in one cell created by the
+     * owner activation; creating escaping Closures neither materializes the
+     * owner's Context nor copies the binding, and the escaped Closure reads
+     * the owner binding after the owner frame has returned.
      */
     @Test
-    void lazyPromotionRetainsMaterializedFrameForEscapedCapture() throws Exception {
+    void lazyCaptureSharesOneCellWithTheEscapedClosure() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -174,28 +161,28 @@ final class ProtosBug013FrameLexicalAuthorityMaterializationTest {
                         owner.executionPlan().orElseThrow()
                                 .executeBytecodeActivationForTesting(activation));
 
-                ProtosFrameLexicalBindingAuthority authority =
-                        assertInstanceOf(
-                                ProtosFrameLexicalBindingAuthority.class,
-                                activation.currentLexicalBindingAuthorityForRuntime());
-                MaterializedFrame retainedFrame =
-                        assertInstanceOf(
-                                MaterializedFrame.class,
-                                privateField(authority, "frame"));
-                assertSame(
-                        retainedFrame,
-                        authority.retainedMaterializedFrameForCapturedAccess());
-                assertSame(argument, authority.readBinding("x").orElseThrow());
+                assertNull(
+                        privateField(activation, "context"),
+                        "creating the escaping Closures must not materialize the owner Context");
+                ProtosLexicalCell[] cells = escaped.capturedCellsForRuntime();
+                assertEquals(1, cells.length);
+                assertSame(argument, cells[0].valueOrNullForRuntime());
                 assertSame(
                         argument,
                         ProtosClosureInvoker.invoke(escaped, List.of()));
+                assertSame(argument, cells[0].valueOrNullForRuntime());
             } finally {
                 context.leave();
             }
         }
     }
 
-    private static ProtosBytecodeRootNode installingRoot(ProtosLanguage language) {
+    /**
+     * {@code x} is a CELL binding: the root creates its cell in its native
+     * local, establishes it from argument 1 and returns the cell. It never
+     * observes the current activation.
+     */
+    private static ProtosBytecodeRootNode establishingRoot(ProtosLanguage language) {
         BytecodeRootNodes<ProtosBytecodeRootNode> roots =
                 ProtosBytecodeRootNodeGen.create(
                         language,
@@ -204,17 +191,17 @@ final class ProtosBug013FrameLexicalAuthorityMaterializationTest {
                             builder.beginRoot();
 
                             BytecodeLocal x = builder.createLocal("x", null);
-                            builder.beginInstallFrameLexicalAuthority(
-                                    new BytecodeLocal[] {x},
-                                    ProtosFrameLexicalLayout.of(
-                                            new String[] {"x"},
-                                            ProtosFrameLexicalLayout.localOffsetsOf(
-                                                    new BytecodeLocal[] {x})));
-                            builder.emitLoadArgument(0);
-                            builder.endInstallFrameLexicalAuthority();
+                            builder.beginStoreLocal(x);
+                            builder.emitCreateCell();
+                            builder.endStoreLocal();
+
+                            builder.beginStoreCell();
+                            builder.emitLoadLocal(x);
+                            builder.emitLoadArgument(1);
+                            builder.endStoreCell();
 
                             builder.beginReturn();
-                            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                            builder.emitLoadLocal(x);
                             builder.endReturn();
 
                             builder.endRoot();

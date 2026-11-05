@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.50-SNAPSHOT
+
+- **I115-V69 — historical replay.**
+  - Migrate 26 test/helper files to the unified Bytecode DSL lowering: native parameter locals/cells, shared return epilogue, module binding reads and current instruction topology. Retain guest semantic assertions separately from retired implementation-layout assertions.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** The migrated parameter tests explicitly retain the known D179 divergence: reflected Closure contexts expose NAME bindings while LOCAL/CELL removal and recreation remain incomplete. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved without repairs.
+  - Tests added or modified (not executed): `ProtosInstructionNames.java`, `ProtosPerf025H1IndexedParameterEstablishmentTest.java`, `ProtosPerf025CallbackConsumerSpecializationTest.java`, `ProtosBug013FrameLexicalAuthorityMaterializationTest.java`, `ProtosI068Slice5CapturedMaterializedLexicalLoweringTest.java`, `ProtosPerf025FrameMaterializationSliceTest.java`, `ProtosPerf037CCapturedLexicalReadTest.java`, `ProtosPerf025CompactCalleeExecutionTest.java`, `ProtosBug018FrameLexicalAuthorityReadAfterOwnerTierTransitionTest.java`, `ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest.java`, `ProtosPerf012FrameLexicalLayoutTest.java`, `ProtosPerf025D179LexicalMembershipStabilityReadTest.java`, `ProtosPerf028AResolvedCurrentLexicalWriteTest.java`, `ProtosPrimitiveSlotWriteRegressionTest.java`, `ProtosI101BLocalBindingBuilderOracleTest.java`, `ProtosI101CIndependentBuilderReferenceTest.java`, `ProtosI101ProfileSpecializedLoweringTest.java`, `ProtosI112TailContinuationTest.java`, `ProtosI115H7MethodCallConvergenceTest.java`, `ProtosI115HStaticClosureCallTest.java`, `ProtosI115PCompactBooleanWhileTest.java`, `ProtosI115RFactorialCaptureTest.java`, `ProtosPerf040E1NumericOperationReconciliationTest.java`, `ProtosI115BDeferredCallerTest.java`, `ProtosI115UnaryPICConvergenceTest.java`, `ProtosI068Slice6DebuggerReflectionProjectionTest.java`. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 0 added, 26 modified, 0 deleted (rename detection disabled for exact path accounting). All 26 original paths retain their exact Git blobs/modes or deletion state; reconstructed parent blobs/modes also match the original parent. Only root `pom.xml` and `CHANGELOG.md` receive replay metadata edits.
+  - Original implementation: `47b78f3c6be248c68c42a7661cd52302944c3c86`.
+
 ## 0.4.49-SNAPSHOT
 
 - **I115 — retire compact-root lowering; use a single GraalPy-shaped Bytecode DSL path (historical).**

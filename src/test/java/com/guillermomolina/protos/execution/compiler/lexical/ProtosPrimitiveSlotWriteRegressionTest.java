@@ -120,14 +120,25 @@ final class ProtosPrimitiveSlotWriteRegressionTest {
                                 + " in " + instructions);
             }
 
+            /*
+             * I115: every source root shares one return epilogue. The typed
+             * read is the root's returned value: it is followed only by the
+             * shared EpilogForReturn and return, with no return-mode
+             * specific carrier projection.
+             */
+            int read = instructions.indexOf("c.ExperimentalGetAttribute");
+            assertEquals(
+                    List.of("c.EpilogForReturn", "return"),
+                    instructions.subList(read + 1, instructions.size()),
+                    "the attribute read is returned directly: " + instructions);
             assertTrue(
-                    root.isExperimentalH7RawIntegerReturn(),
-                    "H8 must reuse R5 raw Integer return transport");
+                    instructions.stream().noneMatch(name -> name.contains("MaterializeReturnCarrier")),
+                    () -> "no return carrier projection: " + instructions);
 
             for (int iteration = 0; iteration < 48; iteration++) {
-                assertEquals(
-                        2L,
-                        prepared.executable().execute().asLong());
+                org.graalvm.polyglot.Value result = prepared.executable().execute();
+                assertTrue(result.fitsInLong(), () -> "host observes an Integer: " + result);
+                assertEquals(2L, result.asLong());
             }
 
             ProtosClosureValue closure =
@@ -255,6 +266,52 @@ final class ProtosPrimitiveSlotWriteRegressionTest {
                     run()
                     """).asInt();
             assertEquals(2, result);
+        }
+    }
+
+    /**
+     * Slot writes and repeated reads keep exact signed-64 values: no int
+     * truncation, both signed-64 bounds, and a value beyond 32 bits.
+     */
+    @Test
+    void slotWriteThenReadPreservesSigned64Values() {
+        String core =
+                Path.of("protos", "lib", "core").toAbsolutePath().toString();
+        {
+            String program = """
+                    repeat: (count, operation) => {
+                        (count > 0).ifTrue() {
+                            operation()
+                            repeat(count - 1, operation)
+                        }
+                    }
+                    holder: { value: 1 }
+                    put: (v) => {
+                        holder.value = v
+                        holder.value
+                    }
+                    repeat(24, () => { put(2) })
+                    put(%s)
+                    """;
+            for (String literal : List.of(
+                    "4294967296",
+                    "0 - 4294967297",
+                    "9223372036854775807",
+                    "0 - 9223372036854775807 - 1")) {
+                long expected = literal.startsWith("0 - 9223")
+                        ? Long.MIN_VALUE
+                        : literal.startsWith("0 - ")
+                                ? -Long.parseLong(literal.substring(4))
+                                : Long.parseLong(literal);
+                try (Context context = Context.newBuilder(ProtosLanguage.ID)
+                        .option("protos.CoreRoot", core)
+                        .build()) {
+                    org.graalvm.polyglot.Value result =
+                            context.eval(ProtosLanguage.ID, program.formatted(literal));
+                    assertTrue(result.fitsInLong(), literal);
+                    assertEquals(expected, result.asLong(), literal);
+                }
+            }
         }
     }
 }

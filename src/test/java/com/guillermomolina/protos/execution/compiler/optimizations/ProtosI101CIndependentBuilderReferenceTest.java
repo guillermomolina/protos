@@ -354,6 +354,20 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                 assertNoOperation(actual, "PrepareClosureCallOne");
                 assertNoOperation(actual, "IsDirectSendMiss");
 
+                // I115: the parameter is bound by the one parameter lowering
+                // into its native local and read back natively.
+                int bind = indexOfOperation(actual, "LoadSuppliedArgument");
+                assertTrue(bind >= 0, actual::toString);
+                assertTrue(actual.get(bind + 1).startsWith("store.local"), actual::toString);
+                assertTrue(indexOfOperation(actual, "CallUnaryMethod") > bind, actual::toString);
+                for (String retired : List.of(
+                        "BindClosureFrameParameter",
+                        "LoadFrameClosureArgument",
+                        "ReadRootFrameLocal",
+                        "InstallFrameLexicalAuthority")) {
+                    assertNoOperation(actual, retired);
+                }
+
                 module.getRootNodes().ensureComplete();
 
                 assertSame(
@@ -428,23 +442,11 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                                             "identity", null);
                             builder.beginBlock();
 
-                            BytecodeLocal[] locals = {identity};
-
-                            ProtosFrameLexicalLayout layout =
-                                    ProtosFrameLexicalLayout.of(
-                                            new String[] {"identity"},
-                                            ProtosFrameLexicalLayout
-                                                    .localOffsetsOf(locals));
-
-                            builder.beginBindClosureFrameParameter(
-                                    locals, layout, 0);
-                            builder.emitLoadConstant("identity");
-
-                            builder.beginLoadFrameClosureArgument();
-                            builder.emitLoadConstant(0);
-                            builder.endLoadFrameClosureArgument();
-
-                            builder.endBindClosureFrameParameter();
+                            // I115: the one parameter lowering stores the
+                            // supplied position directly into the LOCAL.
+                            builder.beginStoreLocal(identity);
+                            builder.emitLoadSuppliedArgument(0);
+                            builder.endStoreLocal();
 
                             // I112 / PLAT062-T: the final call is the
                             // root's terminal invocation. Receiver and
@@ -466,14 +468,10 @@ final class ProtosI101CIndependentBuilderReferenceTest {
 
                             builder.beginCallUnaryMethod(true);
 
-                            // The receiver binding is read directly; the
-                            // operation projects a carrier before any
-                            // generic selection.
-                            builder.emitReadRootFrameLocal(
-                                    identity,
-                                    layout.localOffsetAt(0),
-                                    layout.presentContinuityAt(0),
-                                    "identity");
+                            // The receiver binding is read from its native
+                            // local; the operation projects a carrier
+                            // before any generic selection.
+                            builder.emitLoadLocal(identity);
 
                             // I091: the scalar argument is a Long
                             // carrier until the selected path requires

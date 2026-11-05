@@ -76,17 +76,16 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue identity = closure("(value) => { value }", module);
             List<String> names = instructionNames(identity);
             assertNone(names, "CurrentActivation");
-            assertNone(names, "InstallFrameLexicalAuthority");
-            assertNone(names, "BindClosureParameter");
-            assertContains(names, "BindUnaryFrameParameter");
-            assertNone(names, "BindClosureFrameParameter");
-            // I115-H1: the compact root reads the bound parameter as an ordinary local.
-            assertContains(names, "load.local");
-            assertNone(names, "ReadRootFrameLocal");
+            // I115: the unified parameter binding reads the supplied position
+            // and keeps the LOCAL binding in its native local.
+            assertContains(names, "LoadSuppliedArgument");
+            assertNone(names, "CreateCell");
+            assertTrue(localNames(identity).contains("value"));
+            assertNoRetired(names);
             assertEquals(
-                    0,
-                    constantOrdinalOf(identity, "BindUnaryFrameParameter"),
-                    "PERF029: the LocalRangeAccessor index is an instruction constant");
+                    List.of(0),
+                    constantIntegersOf(identity, "LoadSuppliedArgument", "index"),
+                    "PERF029: the supplied parameter position is an instruction constant");
 
             Long one = integer(1);
             Object[] method =
@@ -156,31 +155,55 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     @Test
     void i104UnaryAdmissionExcludesComplexBodiesAndHoldsWithDebugger() throws Exception {
         withCore(module -> {
-            for (String source : List.of(
-                    "(value: 1) => { value }",
-                    "(...value) => { value }",
-                    "(a, b) => { a }",
-                    "(value) => { context\nvalue }",
-                    "(value) => { () => value }")) {
-                ProtosClosureValue closure = closure(source, module);
-                assertNone(
-                        instructionNames(closure),
-                        "BindUnaryFrameParameter");
-            }
+            /*
+             * I115: there is no special unary entry any more. Every parameter
+             * form goes through the one parameter lowering, and each body
+             * keeps the storage its bindings need: a default tests its
+             * position, a rest reads the suffix, a context observation takes
+             * the activation, a capture creates a cell.
+             */
+            ProtosClosureValue defaulted = closure("(value: 1) => { value }", module);
+            assertEquals(List.of(0), constantIntegersOf(defaulted, "HasSuppliedArgument", "index"));
+            assertEquals(List.of(0), constantIntegersOf(defaulted, "LoadSuppliedArgument", "index"));
+            assertNone(instructionNames(defaulted), "CreateCell");
+            assertNoRetired(instructionNames(defaulted));
+
+            ProtosClosureValue restOnly = closure("(...value) => { value }", module);
+            assertEquals(
+                    List.of(0),
+                    constantIntegersOf(restOnly, "LoadRestArguments", "positionalParametersBeforeRest"));
+            assertNone(instructionNames(restOnly), "LoadSuppliedArgument");
+            assertNoRetired(instructionNames(restOnly));
+
+            ProtosClosureValue pair = closure("(a, b) => { a }", module);
+            assertEquals(List.of(0, 1), constantIntegersOf(pair, "LoadSuppliedArgument", "index"));
+            assertNone(instructionNames(pair), "CurrentActivation");
+            assertNoRetired(instructionNames(pair));
+
+            ProtosClosureValue observing = closure("(value) => { context\nvalue }", module);
+            assertContains(instructionNames(observing), "CurrentActivation");
+            assertContains(instructionNames(observing), "LoadSuppliedArgument");
+            assertNone(instructionNames(observing), "CreateCell");
+            assertNoRetired(instructionNames(observing));
+
+            ProtosClosureValue capturing = closure("(value) => { () => value }", module);
+            assertContains(instructionNames(capturing), "CreateCell");
+            assertContains(instructionNames(capturing), "StoreCell");
+            assertContains(instructionNames(capturing), "CaptureClosureCells");
+            assertNone(instructionNames(capturing), "CurrentActivation");
+            assertNoRetired(instructionNames(capturing));
 
             /*
-             * I115-H1-FIX: a unary body using '+' gets no static numeric
-             * entry. Its parameter is an ordinary unary binding, and the
-             * send keeps the shared guarded numeric site with its ordinary
-             * dispatch fallback.
+             * I115: '+' is the per-selector NumberAdd operation, whose
+             * generic route lives inside the node: no MISS test and no
+             * separate GetMethod selection is emitted for it.
              */
             ProtosClosureValue plus = closure("(value) => { value + 1 }", module);
             List<String> plusNames = instructionNames(plus);
-            assertContains(plusNames, "TryPrimitiveNumericAdd");
-            // I115: the ordinary send fallback selects through GetMethod.
-            assertContains(plusNames, "GetMethod");
-            assertNone(plusNames, "ExperimentalInteger");
-            assertNone(plusNames, "InvokeStaticClosureOneTail");
+            assertEquals(1, countOf(plusNames, "NumberAdd"));
+            assertNone(plusNames, "GetMethod");
+            assertNone(plusNames, "IsResultKind");
+            assertNoRetired(plusNames);
             assertEquals("42", integerValue(enter(fastDirect(plus, module, integer(41)))));
         });
 
@@ -190,20 +213,19 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     closure("(value) => { value }", module);
             List<String> instructions = instructionNames(identity);
 
-            assertContains(instructions, "BindUnaryFrameParameter");
-            assertNone(instructions, "BindClosureFrameParameter");
+            assertEquals(List.of(0), constantIntegersOf(identity, "LoadSuppliedArgument", "index"));
+            assertNone(instructions, "CurrentActivation");
+            assertNoRetired(instructions);
 
             Long value = integer(17);
             assertSame(value, enter(fastDirect(identity, module, value)));
 
-            // The debugger keeps the same shared numeric site and no other ABI.
+            // The debugger keeps the same numeric operation and no other ABI.
             ProtosClosureValue plus = closure("(value) => { value + 1 }", module);
             List<String> plusNames = instructionNames(plus);
-            assertContains(plusNames, "TryPrimitiveNumericAdd");
-            // I115: the ordinary send fallback selects through GetMethod.
-            assertContains(plusNames, "GetMethod");
-            assertNone(plusNames, "ExperimentalInteger");
-            assertNone(plusNames, "InvokeStaticClosureOneTail");
+            assertEquals(1, countOf(plusNames, "NumberAdd"));
+            assertNone(plusNames, "GetMethod");
+            assertNoRetired(plusNames);
             assertEquals("18", integerValue(enter(fastDirect(plus, module, value))));
         });
     }
@@ -225,11 +247,16 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 int count = caseIndex + 2;
 
                 List<String> instructions = instructionNames(closure);
-                assertContains(instructions, "BindRequiredFrameParameter");
-                assertNone(instructions, "BindClosureFrameParameter");
-                assertNone(instructions, "LoadFrameClosureArgument");
+                assertEquals(
+                        count,
+                        countOf(instructions, "LoadSuppliedArgument"),
+                        () -> "one supplied-position read per required parameter: " + instructions);
+                assertEquals(
+                        java.util.stream.IntStream.range(0, count).boxed().toList(),
+                        constantIntegersOf(closure, "LoadSuppliedArgument", "index"));
                 assertNone(instructions, "CurrentActivation");
-                assertNone(instructions, "InstallFrameLexicalAuthority");
+                assertNone(instructions, "CreateCell");
+                assertNoRetired(instructions);
 
                 Object[] values = new Object[count];
                 for (int index = 0; index < count; index++) {
@@ -286,16 +313,35 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 assertSame(closure, excess.targetArguments()[0]);
             }
 
-            for (String excluded : List.of(
-                    "(a, b: 1) => { b }",
-                    "(a, ...rest) => { a }",
-                    "(a, b) => { context\nb }",
-                    "(a, b) => { () => a }")) {
-                ProtosClosureValue closure = closure(excluded, module);
-                assertNone(
-                        instructionNames(closure),
-                        "BindRequiredFrameParameter");
-            }
+            /*
+             * I115: the forms the former required-prefix entry excluded go
+             * through the same parameter lowering; each keeps exactly the
+             * storage its bindings need.
+             */
+            ProtosClosureValue defaulted = closure("(a, b: 1) => { b }", module);
+            assertEquals(List.of(1), constantIntegersOf(defaulted, "HasSuppliedArgument", "index"));
+            assertEquals(List.of(0, 1),
+                    constantIntegersOf(defaulted, "LoadSuppliedArgument", "index").stream()
+                            .distinct().sorted().toList());
+            assertNoRetired(instructionNames(defaulted));
+
+            ProtosClosureValue withRest = closure("(a, ...rest) => { a }", module);
+            assertEquals(List.of(0), constantIntegersOf(withRest, "LoadSuppliedArgument", "index"));
+            assertEquals(
+                    List.of(1),
+                    constantIntegersOf(withRest, "LoadRestArguments", "positionalParametersBeforeRest"));
+            assertNoRetired(instructionNames(withRest));
+
+            ProtosClosureValue observing = closure("(a, b) => { context\nb }", module);
+            assertContains(instructionNames(observing), "CurrentActivation");
+            assertNone(instructionNames(observing), "CreateCell");
+            assertNoRetired(instructionNames(observing));
+
+            ProtosClosureValue capturing = closure("(a, b) => { () => a }", module);
+            assertEquals(1, countOf(instructionNames(capturing), "CreateCell"),
+                    "only the captured a is a CELL binding");
+            assertContains(instructionNames(capturing), "CaptureClosureCells");
+            assertNoRetired(instructionNames(capturing));
         });
 
         System.out.println("I104_B_REQUIRED_PREFIX=PASS");
@@ -318,7 +364,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     closure("(a, b, c: a) => { c }", module);
             assertContains(
                     instructionNames(defaults),
-                    "BindRequiredFrameParameter");
+                    "HasSuppliedArgument");
 
             assertSame(
                     a,
@@ -348,7 +394,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     closure("(args, b, c: args) => { c }", module);
             assertContains(
                     instructionNames(ordinaryArgs),
-                    "BindRequiredFrameParameter");
+                    "LoadSuppliedArgument");
             assertSame(
                     a,
                     enter(fastDirect(ordinaryArgs, module, a, b)));
@@ -357,12 +403,11 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     closure("(a, b, ...tail) => { tail }", module);
             assertContains(
                     instructionNames(rest),
-                    "BindRequiredFrameParameter");
-            // I113: in an ordinary root the shared BindInlineClosureFrameParameter
-            // instruction is the frame-backed rest binding (former BindClosureFrameRest).
+                    "LoadSuppliedArgument");
+            // I115: the rest parameter is bound from the unified LoadRestArguments.
             assertContains(
                     instructionNames(rest),
-                    "BindInlineClosureFrameParameter");
+                    "LoadRestArguments");
 
             ProtosArrayValue empty1 =
                     assertInstanceOf(
@@ -388,7 +433,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     closure("(a, b, c: a, ...tail) => { tail }", module);
             assertContains(
                     instructionNames(combined),
-                    "BindRequiredFrameParameter");
+                    "LoadRestArguments");
 
             ProtosArrayValue combinedEmpty =
                     assertInstanceOf(
@@ -404,24 +449,25 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     List.of(d),
                     combinedExtras.indexedSnapshot());
 
-            // Defaults can observe Context; these cases retain the
-            // original persistent-authority path, not the compact copy.
+            // A default can observe the Context: it obtains the activation.
             ProtosClosureValue observed =
                     closure(
                             "(a, b, c: context.hasSlot(\"a\")) => { c }",
                             module);
-            assertNone(
-                    instructionNames(observed),
-                    "BindRequiredFrameParameter");
+            assertContains(instructionNames(observed), "CurrentActivation");
+            assertEquals(List.of(2), constantIntegersOf(observed, "HasSuppliedArgument", "index"));
+            assertNoRetired(instructionNames(observed));
+            // Specified semantics (see report: I115 Context divergence).
             assertSame(
                     ProtosBooleanValue.TRUE,
                     enter(fastDirect(observed, module, a, b)));
 
+            // A default capturing an earlier parameter makes it a CELL binding.
             ProtosClosureValue captured =
                     closure("(a, b, c: () => a) => { c }", module);
-            assertNone(
-                    instructionNames(captured),
-                    "BindRequiredFrameParameter");
+            assertEquals(1, countOf(instructionNames(captured), "CreateCell"));
+            assertContains(instructionNames(captured), "CaptureClosureCells");
+            assertNoRetired(instructionNames(captured));
 
             // A Context mutation must not bypass D179 presence rules.
             ProtosClosureValue removed =
@@ -431,9 +477,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                     + "a: b\n"
                                     + "a }",
                             module);
-            assertNone(
-                    instructionNames(removed),
-                    "BindRequiredFrameParameter");
+            assertContains(instructionNames(removed), "CurrentActivation");
+            assertContains(instructionNames(removed), "LoadRestArguments");
+            assertNoRetired(instructionNames(removed));
+            // Specified semantics (see report: D179 divergence).
             assertSame(
                     b,
                     enter(fastDirect(removed, module, a, b)));
@@ -488,7 +535,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     instructions,
                     "NORMAL must emit only the proven local Builder");
             assertNone(instructions, "CurrentActivation");
-            assertNone(instructions, "InstallFrameLexicalAuthority");
+            assertNone(instructions, RETIRED_ARCHITECTURE);
 
             for (int iteration = 0; iteration < 3; iteration++) {
                 DirectEntry prepared =
@@ -549,7 +596,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     instructions,
                     "NORMAL emits the minimal two-binding Builder");
             assertNone(instructions, "CurrentActivation");
-            assertNone(instructions, "InstallFrameLexicalAuthority");
+            assertNone(instructions, RETIRED_ARCHITECTURE);
 
             for (int i = 0; i < 3; i++) {
                 DirectEntry prepared =
@@ -564,7 +611,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     closure("() => { first: 7\nfirst: 9\nfirst }", module);
             assertNone(
                     instructionNames(duplicate),
-                    "IsCompactLocalFrame");
+                    RETIRED_ARCHITECTURE);
             assertThrows(
                     ProtosSignalException.class,
                     () -> enter(fastDirect(duplicate, module)));
@@ -585,9 +632,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                             "() => { left: 1\nalias: left\nright: 2\n"
                                     + "alias = right\nleft + alias }",
                             module);
-            assertContains(instructionNames(scalar), "TryPrimitiveNumericAdd");
+            assertContains(instructionNames(scalar), "NumberAdd");
             assertNone(instructionNames(scalar), "ExperimentalInteger");
-            assertNone(instructionNames(scalar), "IsCompactLocalFrame");
+            assertNone(instructionNames(scalar), RETIRED_ARCHITECTURE);
 
             Object[] direct =
                     ProtosFrameArguments.compactDirectClosureCall(
@@ -638,9 +685,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         withCore(module -> {
             ProtosClosureValue observedClosure = closure(
                     "() => { value: 1\ncontext\nvalue }", module);
-            assertContains(
+            assertNone(
                     instructionNames(observedClosure),
-                    "InstallFrameLexicalAuthority");
+                    RETIRED_ARCHITECTURE);
 
             Object[] arguments =
                     ProtosFrameArguments.compactDirectClosureCall(
@@ -687,13 +734,13 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 ProtosClosureValue scalar = closure(body.characters(), module);
                 List<String> instructions = instructionNames(scalar);
                 assertNone(instructions, "CurrentActivation");
-                assertNone(instructions, "InstallFrameLexicalAuthority");
+                assertNone(instructions, RETIRED_ARCHITECTURE);
                 // NORMAL has no materialization or dispatch branches.
                 // Alias RHS loads remain explicit for Graal to optimize.
-                assertNone(instructions, "IsCompactLocalFrame");
-                assertNone(instructions, "CreateCurrentFrameLocal");
-                assertNone(instructions, "ReadRootFrameLocal");
-                assertNone(instructions, "MaterializeReturnCarrier");
+                assertNone(instructions, RETIRED_ARCHITECTURE);
+                assertNone(instructions, RETIRED_ARCHITECTURE);
+                assertNone(instructions, RETIRED_ARCHITECTURE);
+                assertNone(instructions, RETIRED_ARCHITECTURE);
                 assertEquals(
                         body.created().size(),
                         countOf(instructions, "store.local"));
@@ -829,7 +876,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     closure(
                             "() => { first: 7\nsecond: first\nsecond: first\nsecond }",
                             module);
-            assertNone(instructionNames(duplicate), "IsCompactLocalFrame");
+            assertNone(instructionNames(duplicate), RETIRED_ARCHITECTURE);
             assertThrows(
                     ProtosSignalException.class,
                     () -> enter(fastDirect(duplicate, module)));
@@ -837,14 +884,14 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             evaluate("perf034eOuter: 5", module);
             ProtosClosureValue outer =
                     closure("() => { first: perf034eOuter\nfirst }", module);
-            assertNone(instructionNames(outer), "IsCompactLocalFrame");
+            assertNone(instructionNames(outer), RETIRED_ARCHITECTURE);
             assertEquals("5", integerValue(enter(fastDirect(outer, module))));
 
             ProtosClosureValue captured =
                     closure(
                             "() => { first: 7\nreader: () => first\nsecond: first\nsecond }",
                             module);
-            assertNone(instructionNames(captured), "IsCompactLocalFrame");
+            assertNone(instructionNames(captured), RETIRED_ARCHITECTURE);
             assertEquals("7", integerValue(enter(fastDirect(captured, module))));
         });
     }
@@ -879,11 +926,12 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 assertSame(candidate, prepared.targetArguments()[0],
                         "the numeric HIT materializes no activation");
                 List<String> names = instructionNames(candidate);
-                assertEquals(1, countOf(names, "c.TryPrimitiveNumericAdd"));
-                assertContains(names, "GetMethod");
+                assertEquals(1, countOf(names, "NumberAdd"));
+                // I115: NumberAdd owns its generic route; no MISS-side GetMethod.
+                assertNone(names, "GetMethod");
                 assertNone(names, "ExperimentalInteger");
-                assertNone(names, "IsCompactLocalFrame");
-                assertNone(names, "InstallFrameLexicalAuthority");
+                assertNone(names, RETIRED_ARCHITECTURE);
+                assertNone(names, RETIRED_ARCHITECTURE);
             }
         });
     }
@@ -905,7 +953,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue sum =
                     closure("() => { left: 1\nright: 2\nleft + right }", module);
             // I115-H1-FIX: the compact lane adds at the shared numeric site.
-            assertContains(instructionNames(sum), "TryPrimitiveNumericAdd");
+            assertContains(instructionNames(sum), "NumberAdd");
 
             Object[] arguments =
                     ProtosFrameArguments.compactDirectClosureCall(
@@ -1012,7 +1060,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 assertEquals(sends, calls.size(),
                         "Only surviving dynamic sends retain CallTag");
                 assertEquals(sends,
-                        countOf(instructionNames(candidate), "c.TryPrimitiveNumericAdd"));
+                        countOf(instructionNames(candidate), "NumberAdd"));
                 assertNone(instructionNames(candidate), "ExperimentalInteger");
             }
 
@@ -1041,7 +1089,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertFalse(
                     hasFoldedIntegerArithmetic(divided),
                     "Proven arithmetic must not retain a runtime descriptor");
-            assertNone(instructionNames(divided), "TryPrimitiveNumeric");
+            assertEquals(0, numericOperationCount(instructionNames(divided)));
             assertEquals("2", integerValue(enter(fastDirect(divided, module))));
 
             /*
@@ -1063,7 +1111,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 String source = (String) example[0];
                 ProtosClosureValue candidate = closure(source, module);
                 List<String> names = instructionNames(candidate);
-                assertEquals(example[2], countOf(names, "c.TryPrimitiveNumeric"), source);
+                assertEquals(example[2], numericOperationCount(names), source);
                 assertNone(names, "ExperimentalInteger");
                 assertEquals(
                         example[1],
@@ -1079,8 +1127,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 assertFalse(hasFoldedIntegerArithmetic(candidate),
                         "Non-exact or non-long arithmetic must fail closed: "
                                 + example);
-                assertContains(
-                        instructionNames(candidate), "TryPrimitiveNumeric");
+                assertTrue(
+                        numericOperationCount(instructionNames(candidate)) > 0,
+                        () -> "the exact numeric operation stays at run time: " + example);
             }
 
             /*
@@ -1089,9 +1138,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
              * keeps exact Integer semantics, promoting beyond signed-64.
              */
             String[][] overflowing = {
-                    {"() => { 9223372036854775807 + 1 }", "TryPrimitiveNumericAdd",
+                    {"() => { 9223372036854775807 + 1 }", "NumberAdd",
                             "9223372036854775808"},
-                    {"() => { 9223372036854775807 * 2 }", "TryPrimitiveNumericMultiply",
+                    {"() => { 9223372036854775807 * 2 }", "NumberMultiply",
                             "18446744073709551614"}
             };
             for (String[] example : overflowing) {
@@ -1206,9 +1255,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                             + "seen = seen + result\nseen }",
                     module);
             List<String> names = instructionNames(run);
-            assertContains(names, "TryPrimitiveNumericAdd");
-            assertContains(names, "PromoteFrameLexicalAuthority");
-            assertNone(names, "InstallFrameLexicalAuthority");
+            assertContains(names, "NumberAdd");
+            assertNone(names, RETIRED_ARCHITECTURE);
+            assertNone(names, RETIRED_ARCHITECTURE);
 
             ProtosObjectValue gate =
                     new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -1272,8 +1321,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     "(gate) => { first: 1\nmid: gate + 2\nlater: first + mid\nlater }",
                     module);
             List<String> names = instructionNames(run);
-            assertContains(names, "PromoteFrameLexicalAuthority");
-            assertContains(names, "CreateCurrentFrameLocal");
+            assertNone(names, RETIRED_ARCHITECTURE);
+            assertNone(names, RETIRED_ARCHITECTURE);
+            assertContains(names, "store.local");
 
             // E: the HIT path stays compact; 1 + (3 + 2).
             DirectEntry hit =
@@ -1336,7 +1386,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                             + "later: first + second\nlater }",
                     module);
             List<String> names = instructionNames(run);
-            assertNone(names, "PromoteFrameLexicalAuthority");
+            assertNone(names, RETIRED_ARCHITECTURE);
             assertNone(names, "Experimental");
             // 1 + (3 + 2).
             assertEquals("6", integerValue(enter(fastDirect(run, module, integer(3)))));
@@ -1356,7 +1406,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     "(gate) => { (gate < 1).ifTrue() {\nmade: 1\n}\n0 }", module);
             List<String> names = instructionNames(run);
             assertNone(names, "IsCanonicalBooleanValue");
-            assertNone(names, "PromoteFrameLexicalAuthority");
+            assertNone(names, RETIRED_ARCHITECTURE);
             assertNone(names, "ExperimentalCanonicalBooleanCondition");
             assertEquals("0", integerValue(enter(fastDirect(run, module, integer(0)))));
             assertEquals("0", integerValue(enter(fastDirect(run, module, integer(5)))));
@@ -1389,8 +1439,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
                 // I115-H1-FIX: both are compact roots whose sum is the shared
                 // numeric site, admitted against this Context's own Prelude.
-                assertContains(instructionNames(direct), "TryPrimitiveNumericAdd");
-                assertContains(instructionNames(locals), "TryPrimitiveNumericAdd");
+                assertContains(instructionNames(direct), "NumberAdd");
+                assertContains(instructionNames(locals), "NumberAdd");
 
                 assertEquals(
                         "3",
@@ -1421,7 +1471,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             // I115-M: every parameterless body here is a compact root.
             // I115-H1-FIX: each '+' is one shared numeric site, evaluated
             // at run time, whose operands are each evaluated once.
-            assertEquals(1, countOf(instructionNames(nonTerminal), "c.TryPrimitiveNumericAdd"));
+            assertEquals(1, countOf(instructionNames(nonTerminal), "NumberAdd"));
             assertNone(instructionNames(nonTerminal), "ExperimentalInteger");
             assertEquals(
                     "7",
@@ -1430,7 +1480,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue nested =
                     closure("() => { (1 + 2) + 3 }", module);
 
-            assertEquals(2, countOf(instructionNames(nested), "c.TryPrimitiveNumericAdd"));
+            assertEquals(2, countOf(instructionNames(nested), "NumberAdd"));
             assertNone(instructionNames(nested), "ExperimentalInteger");
             assertEquals("6", integerValue(enter(fastDirect(nested, module))));
 
@@ -1440,7 +1490,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertEquals(
                     "10",
                     integerValue(enter(fastDirect(tree, module))));
-            assertEquals(3, countOf(instructionNames(tree), "c.TryPrimitiveNumericAdd"));
+            assertEquals(3, countOf(instructionNames(tree), "NumberAdd"));
             assertNone(instructionNames(tree), "ExperimentalInteger");
 
             ProtosClosureValue nestedOverflow =
@@ -1452,7 +1502,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertEquals(
                     "9223372036854775808",
                     integerValue(enter(fastDirect(nestedOverflow, module))));
-            assertEquals(2, countOf(instructionNames(nestedOverflow), "c.TryPrimitiveNumericAdd"));
+            assertEquals(2, countOf(instructionNames(nestedOverflow), "NumberAdd"));
 
             ProtosClosureValue dynamic =
                     closure("(value) => { value + 2 }", module);
@@ -1533,10 +1583,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 .flatMap(instruction -> instruction.getArguments().stream())
                 .filter(argument -> argument.getKind().name().equals("CONSTANT"))
                 .map(Instruction.Argument::asConstant)
-                .filter(value ->
-                        value instanceof
-                                ProtosPrimitiveNumericSendFastPathsBase
-                                        .FoldedIntegerArithmetic)
+                // I115: the PERF043 runtime fold descriptor type was retired
+                // with its fast-path base; no constant of that kind may remain.
+                .filter(value -> value != null
+                        && value.getClass().getSimpleName().equals("FoldedIntegerArithmetic"))
                 .count();
     }
 
@@ -1568,7 +1618,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 ProtosClosureValue scalar = closure(body.characters(), module);
                 List<String> instructions = instructionNames(scalar);
                 assertNone(instructions, "CurrentActivation");
-                assertNone(instructions, "InstallFrameLexicalAuthority");
+                assertNone(instructions, RETIRED_ARCHITECTURE);
                 // I115-M: a parameterless assignment body is a compact root:
                 // each creation and assignment is one store.local, with no
                 // compact-frame test and no authoritative write pair.
@@ -1576,9 +1626,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         body.creates() + body.assigns(),
                         countOf(instructions, "store.local"),
                         () -> body.characters() + ": " + instructions);
-                assertNone(instructions, "IsCompactLocalFrame");
-                assertNone(instructions, "ResolveRootFrameLocalWriteTarget");
-                assertNone(instructions, "AssignRootFrameLocal");
+                assertNone(instructions, RETIRED_ARCHITECTURE);
+                assertNone(instructions, RETIRED_ARCHITECTURE);
+                assertNone(instructions, RETIRED_ARCHITECTURE);
                 assertContains(instructions, "load.local");
 
                 for (int iteration = 0; iteration < 3; iteration++) {
@@ -1614,7 +1664,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         withCore(module -> {
             for (ScalarAssignBody body : PERF036A_ASSIGN_BODIES) {
                 ProtosClosureValue scalar = closure(body.characters(), module);
-                assertNone(instructionNames(scalar), "IsCompactLocalFrame");
+                assertNone(instructionNames(scalar), RETIRED_ARCHITECTURE);
                 List<ProtosObjectValue> contexts = new java.util.ArrayList<>();
                 for (int invocation = 0; invocation < 2; invocation++) {
                     Object[] arguments =
@@ -1657,7 +1707,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         withCore(module -> {
             ProtosClosureValue scalar =
                     closure("() => { first: 7\nfirst = 9\nfirst }", module);
-            assertNone(instructionNames(scalar), "IsCompactLocalFrame");
+            assertNone(instructionNames(scalar), RETIRED_ARCHITECTURE);
             for (boolean freeze : List.of(true, false)) {
                 Object[] arguments =
                         ProtosFrameArguments.compactDirectClosureCall(
@@ -1713,19 +1763,19 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             evaluate("perf036aOuter: 5", module);
             ProtosClosureValue outer =
                     closure("() => { first: 1\nperf036aOuter = 6\nfirst }", module);
-            assertNone(instructionNames(outer), "IsCompactLocalFrame");
+            assertNone(instructionNames(outer), RETIRED_ARCHITECTURE);
             assertEquals("1", integerValue(enter(fastDirect(outer, module))));
             assertEquals("6", integerValue(evaluate("perf036aOuter", module)), "an outer binding is assigned through the lexical chain");
 
             ProtosClosureValue explicitTarget =
                     closure("() => { first: 7\ncontext.first = 9\nfirst }", module);
-            assertNone(instructionNames(explicitTarget), "IsCompactLocalFrame");
+            assertNone(instructionNames(explicitTarget), RETIRED_ARCHITECTURE);
             assertContains(instructionNames(explicitTarget), "AssignLocalSlot");
             assertEquals("9", integerValue(enter(fastDirect(explicitTarget, module))), "an explicit-target assignment keeps the general lowering");
 
             ProtosClosureValue beforeCreation =
                     closure("() => { first = 3\nfirst: 4\nfirst }", module);
-            assertNone(instructionNames(beforeCreation), "IsCompactLocalFrame");
+            assertNone(instructionNames(beforeCreation), RETIRED_ARCHITECTURE);
             assertThrows(
                     ProtosSignalException.class,
                     () -> enter(fastDirect(beforeCreation, module)),
@@ -1733,14 +1783,14 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
             ProtosClosureValue send =
                     closure("() => { first: 4\nfirst = first + 1\nfirst }", module);
-            assertNone(instructionNames(send), "IsCompactLocalFrame");
+            assertNone(instructionNames(send), RETIRED_ARCHITECTURE);
             assertEquals("5", integerValue(enter(fastDirect(send, module))));
 
             ProtosClosureValue captured =
                     closure(
                             "() => { first: 1\nsetter: (v) => { first = v }\nsetter(8)\nfirst }",
                             module);
-            assertNone(instructionNames(captured), "IsCompactLocalFrame");
+            assertNone(instructionNames(captured), RETIRED_ARCHITECTURE);
             assertEquals("8", integerValue(enter(fastDirect(captured, module))), "a captured assignment writes the binding by reference");
 
             ProtosClosureValue recreated =
@@ -1748,14 +1798,14 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                             "() => { first: 1\ncontext.removeSlot(\"first\")\n"
                                     + "first: 6\nfirst = 9\nfirst }",
                             module);
-            assertNone(instructionNames(recreated), "IsCompactLocalFrame");
+            assertNone(instructionNames(recreated), RETIRED_ARCHITECTURE);
             assertEquals("9", integerValue(enter(fastDirect(recreated, module))));
 
             ProtosClosureValue removed =
                     closure(
                             "() => { first: 1\ncontext.removeSlot(\"first\")\nfirst = 3 }",
                             module);
-            assertNone(instructionNames(removed), "IsCompactLocalFrame");
+            assertNone(instructionNames(removed), RETIRED_ARCHITECTURE);
             assertThrows(
                     ProtosSignalException.class,
                     () -> enter(fastDirect(removed, module)),
@@ -1774,23 +1824,24 @@ final class ProtosPerf025CompactCalleeExecutionTest {
              * unary operation and keeps every other binding in ordinary
              * locals: no frame-local creation or assignment machinery.
              */
-            assertContains(names, "BindUnaryFrameParameter");
+            assertContains(names, "LoadSuppliedArgument");
+            assertNone(names, RETIRED_ARCHITECTURE);
             assertContains(names, "store.local");
             assertContains(names, "load.local");
-            assertNone(names, "CreateCurrentFrameLocal");
-            assertNone(names, "ResolveRootFrameLocalWriteTarget");
-            assertNone(names, "AssignRootFrameLocal");
+            assertNone(names, RETIRED_ARCHITECTURE);
+            assertNone(names, RETIRED_ARCHITECTURE);
+            assertNone(names, RETIRED_ARCHITECTURE);
             Long a = integer(4);
             DirectEntry prepared = fastDirect(locals, module, a);
             assertSame(a, enter(prepared));
             assertSame(locals, prepared.targetArguments()[0], "no activation was materialized");
 
             ProtosClosureValue single = closure("(a) => { b: a\nb }", module);
-            assertNone(instructionNames(single), "BindClosureFrameParameter");
-            assertNone(instructionNames(single), "CreateCurrentFrameLocal");
+            assertNone(instructionNames(single), RETIRED_ARCHITECTURE);
+            assertNone(instructionNames(single), RETIRED_ARCHITECTURE);
             assertEquals(
-                    0,
-                    constantOrdinalOf(single, "BindUnaryFrameParameter"),
+                    List.of(0),
+                    constantIntegersOf(single, "LoadSuppliedArgument", "index"),
                     "PERF029: the parameter index is an instruction constant");
             assertSame(a, enter(fastDirect(single, module, a)));
 
@@ -1811,26 +1862,29 @@ final class ProtosPerf025CompactCalleeExecutionTest {
              * parameter keeps the Closure, its single indexed creation and
              * the persistent authority.
              */
+            /*
+             * I115: the captured parameter base is a CELL binding (created at
+             * entry and handed to the Closure); the Closure-valued identity is
+             * a LOCAL binding stored in its own native local. Neither takes a
+             * name-keyed creation, and no frame lexical authority exists.
+             */
             ProtosClosureValue run =
                     closure("(base) => {\nidentity: (value) => { base\nvalue }\n"
                             + "identity(1)\n}", module);
             List<String> names = instructionNames(run);
             assertNone(names, "InvokeStaticClosureOneTail");
-            assertContains(names, "InstallFrameLexicalAuthority");
-            assertContains(names, "CreateCurrentIndexedLocalSlot");
+            assertNone(names, RETIRED_ARCHITECTURE);
+            assertNone(names, "CreateCurrentIndexedLocalSlot");
             assertNone(names, "CreateCurrentLocalSlot");
-            assertNone(names, "CreateCurrentFrameLocal");
-            ProtosFrameLexicalLayout layout =
-                    assertInstanceOf(
-                            ProtosFrameLexicalLayout.class,
-                            constantArgumentOf(run, "InstallFrameLexicalAuthority", "frameBackedLayout"));
-            assertSame(
-                    layout,
-                    constantArgumentOf(run, "CreateCurrentIndexedLocalSlot", "frameBackedLayout"),
-                    "the indexed creation carries the installed persistent layout");
-            assertEquals(
-                    layout.offsetOf("identity"),
-                    constantOrdinalOf(run, "CreateCurrentIndexedLocalSlot"));
+            assertNone(names, RETIRED_ARCHITECTURE);
+            assertContains(names, "CreateCell");
+            assertContains(names, "StoreCell");
+            assertContains(names, "CaptureClosureCells");
+            assertContains(names, "store.local");
+            assertTrue(localNames(run).contains("identity"),
+                    () -> "identity owns a native local: " + localNames(run));
+            assertTrue(localNames(run).contains("base"),
+                    () -> "base owns the native local holding its cell: " + localNames(run));
             assertEquals("1", integerValue(enter(fastDirect(run, module))));
 
             DirectEntry duplicate =
@@ -1838,55 +1892,38 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                             closure("() => {\nf: (value) => { value }\nf: 2\n}", module),
                             module);
             assertThrows(ProtosSignalException.class, () -> enter(duplicate));
-
-            ProtosFrameLexicalLayout foreign =
-                    ProtosFrameLexicalLayout.of(
-                            new String[] {"perf030Fallback"}, new int[] {0});
-            Long value = integer(3);
-            assertSame(
-                    value,
-                    ProtosBytecodeRootNode.CreateCurrentIndexedLocalSlot.createIndexedCurrentLocalSlot(
-                            foreign, module, 0, "perf030Fallback", value));
-            assertSame(value, evaluate("perf030Fallback", module), "named fallback created the slot");
-            assertThrows(
-                    ProtosSignalException.class,
-                    () -> ProtosBytecodeRootNode.CreateCurrentIndexedLocalSlot.createIndexedCurrentLocalSlot(
-                            foreign, module, 0, "perf030Fallback", value),
-                    "the named fallback keeps the duplicate-creation Error");
         });
-        System.out.println("PERSISTENT_AUTHORITY_INDEXED_CREATION=PASS");
+        System.out.println("NATIVE_LOCAL_AND_CELL_CREATION=PASS");
     }
 
     @Test
     void frameNativeRestAndMultipleCreationUseConstantOrdinals() throws Exception {
         withCore(module -> {
             ProtosClosureValue rest = closure("(head, ...tail) => { tail }", module);
-            assertNone(instructionNames(rest), "InstallFrameLexicalAuthority");
-            ProtosFrameLexicalLayout restLayout = layoutOf(rest, "BindInlineClosureFrameParameter");
+            assertNone(instructionNames(rest), RETIRED_ARCHITECTURE);
             assertEquals(
-                    List.of(restLayout.offsetOf("tail")),
-                    constantOrdinalsOf(rest, "BindInlineClosureFrameParameter"),
-                    "PERF030-I: the rest index is an instruction constant");
+                    List.of(1),
+                    constantIntegersOf(rest, "LoadRestArguments", "positionalParametersBeforeRest"),
+                    "PERF030-I: the rest prefix length is an instruction constant");
 
             ProtosClosureValue multiple =
                     closure("(source) => { (b, c, d): source\n[b, c, d] }", module);
             List<String> names = instructionNames(multiple);
-            assertNone(names, "InstallFrameLexicalAuthority");
+            assertNone(names, RETIRED_ARCHITECTURE);
             // I113: the generic multiple creation is CreateCurrentLocalSlot's String[] form;
             // absence of the operation excludes scalar and multiple generic creation alike.
             assertNone(names, "CreateCurrentLocalSlot");
-            ProtosFrameLexicalLayout layout = layoutOf(multiple, "CreateCurrentFrameLocal");
             assertEquals(
-                    List.of(layout.offsetOf("b"), layout.offsetOf("c"), layout.offsetOf("d")),
-                    constantOrdinalsOf(multiple, "CreateCurrentFrameLocal"),
-                    "PERF030-I: one scalar creation per name, in source order, "
-                            + "each owning its constant ordinal");
+                    3,
+                    countOf(names, "ObservedMultipleCreateValue"),
+                    "PERF030-I: one native store per name, in source order");
             int observation = firstIndexOf(names, "ObserveMultipleCreatePrefix");
             assertTrue(
-                    observation >= 0 && observation < firstIndexOf(names, "CreateCurrentFrameLocal"),
+                    observation >= 0
+                            && observation < firstIndexOf(names, "ObservedMultipleCreateValue"),
                     () -> "the complete prefix is observed before the first creation: " + names);
             int lastCreation = names.size() - 1
-                    - firstIndexOf(names.reversed(), "CreateCurrentFrameLocal");
+                    - firstIndexOf(names.reversed(), "ObservedMultipleCreateValue");
             assertTrue(
                     names.subList(observation, lastCreation + 1).stream()
                             .noneMatch(name -> name.contains("CurrentActivation")),
@@ -2195,48 +2232,34 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 .toList();
     }
 
-    /**
-     * The {@code ordinal} of the single {@code operation} instruction, which
-     * must be encoded as an immediate constant operand rather than a stack
-     * value, so it is a partial-evaluation constant.
-     */
-    private static int constantOrdinalOf(ProtosClosureValue closure, String operation) {
-        List<Integer> ordinals = constantOrdinalsOf(closure, operation);
-        assertEquals(1, ordinals.size(), () -> "expected one " + operation);
-        return ordinals.get(0);
-    }
-
-    /** The immediate constant {@code ordinal} of every {@code operation} instruction, in order. */
-    private static List<Integer> constantOrdinalsOf(ProtosClosureValue closure, String operation) {
+    /** The immediate integer constant {@code argument} of every {@code operation} instruction. */
+    private static List<Integer> constantIntegersOf(
+            ProtosClosureValue closure, String operation, String argument) {
         return instructionsOf(closure, operation).stream()
                 .map(instruction -> {
-                    Instruction.Argument ordinal =
+                    Instruction.Argument constant =
                             instruction.getArguments().stream()
-                                    .filter(argument -> argument.getName().equals("ordinal"))
+                                    .filter(candidate -> candidate.getName().equals(argument))
                                     .findFirst()
-                                    .orElseThrow(() -> new AssertionError("no constant ordinal operand"));
-                    return switch (ordinal.getKind()) {
-                        case CONSTANT -> (Integer) ordinal.asConstant();
-                        case INTEGER -> ordinal.asInteger();
-                        default -> throw new AssertionError("ordinal is not a constant: " + ordinal);
+                                    .orElseThrow(() -> new AssertionError(
+                                            "no constant " + argument + " operand"));
+                    return switch (constant.getKind()) {
+                        case CONSTANT -> (Integer) constant.asConstant();
+                        case INTEGER -> constant.asInteger();
+                        default -> throw new AssertionError(argument + " is not a constant");
                     };
                 })
                 .toList();
     }
 
-    /** The one {@code frameBackedLayout} constant shared by every {@code operation} instruction. */
-    private static ProtosFrameLexicalLayout layoutOf(ProtosClosureValue closure, String operation) {
-        List<Object> layouts =
-                instructionsOf(closure, operation).stream()
-                        .map(instruction -> instruction.getArguments().stream()
-                                .filter(argument -> argument.getName().equals("frameBackedLayout"))
-                                .findFirst()
-                                .orElseThrow(() -> new AssertionError("no constant layout operand"))
-                                .asConstant())
-                        .distinct()
-                        .toList();
-        assertEquals(1, layouts.size(), () -> "expected one layout for " + operation);
-        return assertInstanceOf(ProtosFrameLexicalLayout.class, layouts.get(0));
+    /* The surviving per-selector numeric operations of the shared numeric site. */
+    private static final List<String> NUMERIC_OPERATIONS =
+            List.of("NumberAdd", "NumberSubtract", "NumberMultiply", "NumberDivide");
+
+    private static int numericOperationCount(List<String> names) {
+        return (int) names.stream()
+                .filter(name -> NUMERIC_OPERATIONS.stream().anyMatch(name::contains))
+                .count();
     }
 
     private static List<Instruction> instructionsOf(ProtosClosureValue closure, String operation) {
@@ -2257,26 +2280,6 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             }
         }
         return -1;
-    }
-
-    /** The object constant operand {@code argument} of the single {@code operation} instruction. */
-    private static Object constantArgumentOf(
-            ProtosClosureValue closure, String operation, String argument) {
-        List<Instruction> matching =
-                closure.executionPlan()
-                        .orElseThrow()
-                        .bytecodeActivationRootForTesting()
-                        .getBytecodeNode()
-                        .getInstructionsAsList()
-                        .stream()
-                        .filter(instruction -> ProtosInstructionNames.of(instruction).contains(operation))
-                        .toList();
-        assertEquals(1, matching.size(), () -> "expected one " + operation);
-        return matching.get(0).getArguments().stream()
-                .filter(candidate -> candidate.getName().equals(argument))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("no constant " + argument + " operand"))
-                .asConstant();
     }
 
     private static int countOf(List<String> names, String operation) {
@@ -2316,7 +2319,47 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 () -> "expected " + operation + " in: " + names);
     }
 
+    /*
+     * Operations of the retired compact-root lowering, frame lexical
+     * authority, special parameter entries and MISS-based numeric sends.
+     * Passed to assertNone, this sentinel checks the whole set; it guards the
+     * single Bytecode DSL lowering against a mixed lowering and is always
+     * used beside positive assertions on the current operations.
+     */
+    private static final String RETIRED_ARCHITECTURE = "<retired I115 architecture>";
+
+    private static final List<String> RETIRED =
+            List.of(
+                    "IsCompactLocalFrame",
+                    "CreateCurrentFrameLocal",
+                    "CreateCurrentIndexedLocalSlot",
+                    "InstallFrameLexicalAuthority",
+                    "EnsureLiveFrameLexicalAuthority",
+                    "PromoteFrameLexicalAuthority",
+                    "ReadRootFrameLocal",
+                    "ResolveRootFrameLocalWriteTarget",
+                    "AssignRootFrameLocal",
+                    "MaterializeReturnCarrier",
+                    "BindUnaryFrameParameter",
+                    "BindRequiredFrameParameter",
+                    "BindClosureFrameParameter",
+                    "BindInlineClosureFrameParameter",
+                    "BindClosureIndexedParameter",
+                    "LoadFrameClosureArgument",
+                    "TryPrimitiveNumeric",
+                    "IsPrimitiveNumericSendMiss");
+
+    private static void assertNoRetired(List<String> names) {
+        for (String retired : RETIRED) {
+            assertNone(names, retired);
+        }
+    }
+
     private static void assertNone(List<String> names, String operation) {
+        if (RETIRED_ARCHITECTURE.equals(operation)) {
+            assertNoRetired(names);
+            return;
+        }
         assertTrue(
                 names.stream().noneMatch(name -> name.contains(operation)),
                 () -> "unexpected " + operation + " in: " + names);
@@ -2417,9 +2460,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     ProtosClosureValue.class,
                     module.context().readLocalSlot("run").orElseThrow());
             List<String> instructions = instructionNames(run);
-            assertNone(instructions, "IsCompactLocalFrame");
-            assertNone(instructions, "CreateCurrentFrameLocal");
-            assertNone(instructions, "InstallFrameLexicalAuthority");
+            assertNone(instructions, RETIRED_ARCHITECTURE);
+            assertNone(instructions, RETIRED_ARCHITECTURE);
+            assertNone(instructions, RETIRED_ARCHITECTURE);
         }
         System.out.println("PLAT067_SCALAR_BODY_DEBUGGER_SCOPES=PASS");
     }

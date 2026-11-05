@@ -155,37 +155,21 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 ProtosBytecodeRootNode production =
                         activationRoot(module);
 
-                List<String> previous =
-                        completeSignature(handwrittenUnaryIdentityRoot(false));
                 List<String> expected =
-                        completeSignature(handwrittenUnaryIdentityRoot(true));
+                        completeSignature(handwrittenUnaryIdentityRoot());
                 List<String> actual =
                         completeSignature(production);
 
-                System.out.println("I104_A_PREVIOUS_INSTRUCTIONS=" + previous);
-                System.out.println("I104_A_FUSED_INSTRUCTIONS=" + actual);
-                System.out.println("I104_A_PREVIOUS_COUNT=" + previous.size());
-                System.out.println("I104_A_FUSED_COUNT=" + actual.size());
+                System.out.println("I104_A_INSTRUCTIONS=" + actual);
+                System.out.println("I104_A_COUNT=" + actual.size());
 
                 assertEquals(
                         expected,
                         actual,
                         "the production root must equal the independent Builder");
-                assertTrue(
-                        expected.size() < previous.size(),
-                        "the new entry must physically reduce instructions");
-                // I115: the unary entry is GraalPy-shaped CopyArguments.
-                assertTrue(
-                        actual.stream().anyMatch(
-                                item -> item.contains("CopyArguments")),
-                        actual::toString);
-                assertTrue(
-                        actual.stream().noneMatch(
-                                item -> item.contains("BindUnaryFrameParameter")),
-                        actual::toString);
-                assertTrue(
-                        actual.stream().noneMatch(
-                                item -> item.contains("BindClosureFrameParameter")));
+                // I115: the one parameter lowering, not a special unary entry.
+                assertSingleParameterLowering(expected, 1);
+                assertSingleParameterLowering(actual, 1);
                 assertEquals(2, groupRoots(module).size());
                 assertSame(production, groupRoots(module).get(1));
 
@@ -204,7 +188,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 ProtosBytecodeRootNode production =
                         activationRoot(compile(UNARY, "i104-debug"));
                 assertEquals(
-                        completeSignature(handwrittenUnaryIdentityRoot(true)),
+                        completeSignature(handwrittenUnaryIdentityRoot()),
                         completeSignature(production),
                         "with a debugger the production root must equal the independent Builder");
             });
@@ -1353,24 +1337,31 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     }
 
     /**
-     * I104-A standalone physical oracle. The original and fused variants
-     * intentionally differ only in the parameter-binding operations.
-     * All other obligations, including source tags and numeric-carrier
-     * materialization, are represented identically. D203/I105: no
-     * excess-argument check follows the binding.
+     * I104-A standalone physical oracle for {@code (value) => { value }},
+     * rewritten for the single I115 lowering: the parameter is bound by
+     * {@code LoadSuppliedArgument(0)} stored into its own native local, and
+     * the terminal statement returns it with {@code LoadLocal} inside its
+     * tagged Block. D203/I105: no excess-argument check follows the binding.
      */
-    private static ProtosBytecodeRootNode handwrittenUnaryIdentityRoot(
-            boolean fused) {
-        String characters = UNARY;
-        Source source = Source.newBuilder(
-                        ProtosLanguage.ID,
-                        characters,
-                        "i104-unary-oracle.protos")
-                .build();
+    private static ProtosBytecodeRootNode handwrittenUnaryIdentityRoot() {
+        return handwrittenParameterReadRoot(
+                UNARY, "i104-unary-oracle.protos", new String[] {"value"}, 0,
+                UNARY.lastIndexOf("value"), "value".length());
+    }
 
+    /**
+     * The one parameter contract of every required positional parameter:
+     * {@code LoadSuppliedArgument(index)} then {@code StoreLocal} into that
+     * parameter's own local, in declaration order; the terminal read of
+     * parameter {@code read} is a {@code LoadLocal} returned inside the
+     * statement's tagged Block. Independent of the production lowerer.
+     */
+    private static ProtosBytecodeRootNode handwrittenParameterReadRoot(
+            String characters, String sourceName, String[] names, int read,
+            int readStart, int readLength) {
+        Source source = Source.newBuilder(ProtosLanguage.ID, characters, sourceName).build();
         int bodyStart = characters.indexOf('{');
         int bodyLength = characters.lastIndexOf('}') + 1 - bodyStart;
-        int readStart = characters.lastIndexOf("value");
 
         BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
                 ProtosBytecodeRootNodeGen.create(
@@ -1381,85 +1372,79 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             builder.beginSourceSection(bodyStart, bodyLength);
                             builder.beginRoot();
 
-                            BytecodeLocal local =
-                                    builder.createLocal("value", null);
+                            BytecodeLocal[] locals = new BytecodeLocal[names.length];
+                            for (int index = 0; index < names.length; index++) {
+                                locals[index] = builder.createLocal(names[index], null);
+                            }
                             builder.beginBlock();
-                            BytecodeLocal[] locals = {local};
-                            ProtosFrameLexicalLayout layout =
-                                    ProtosFrameLexicalLayout.of(
-                                            new String[] {"value"},
-                                            ProtosFrameLexicalLayout.localOffsetsOf(
-                                                    locals));
 
-                            if (fused) {
-                                builder.emitCopyArguments(
-                                        locals, layout, 0, "value");
-                            } else {
-                                builder.beginBindClosureFrameParameter(
-                                        locals, layout, 0);
-                                builder.emitLoadConstant("value");
-                                builder.beginLoadFrameClosureArgument();
-                                builder.emitLoadConstant(0);
-                                builder.endLoadFrameClosureArgument();
-                                builder.endBindClosureFrameParameter();
+                            for (int index = 0; index < names.length; index++) {
+                                builder.beginStoreLocal(locals[index]);
+                                builder.emitLoadSuppliedArgument(index);
+                                builder.endStoreLocal();
                             }
 
-                            if (fused) {
-                                // I115-H7: after CopyArguments the body reads the
-                                // parameter with a plain LoadLocal; the statement's
-                                // own Return sits inside its tagged Block.
-                                builder.beginSourceSection(
-                                        readStart, "value".length());
-                                builder.beginTag(
-                                        StandardTags.StatementTag.class,
-                                        StandardTags.ExpressionTag.class);
-                                builder.beginBlock();
-                                builder.beginReturn();
-                                builder.emitLoadLocal(local);
-                                builder.endReturn();
-                                builder.endBlock();
-                                builder.endTag(
-                                        StandardTags.StatementTag.class,
-                                        StandardTags.ExpressionTag.class);
-                                builder.endSourceSection();
-
-                                builder.endBlock();
-                                builder.endRoot();
-                                builder.endSourceSection();
-                                builder.endSource();
-                                return;
-                            }
-
-                            // I112: the Return is the root's last operation and
-                            // the return epilogue owns the carrier projection.
-                            builder.beginReturn();
-                            builder.beginSourceSection(
-                                    readStart, "value".length());
+                            builder.beginSourceSection(readStart, readLength);
                             builder.beginTag(
                                     StandardTags.StatementTag.class,
                                     StandardTags.ExpressionTag.class);
                             builder.beginBlock();
-
-                            builder.emitReadRootFrameLocal(
-                                    local,
-                                    layout.localOffsetAt(0),
-                                    layout.presentContinuityAt(0),
-                                    "value");
-
+                            builder.beginReturn();
+                            builder.emitLoadLocal(locals[read]);
+                            builder.endReturn();
                             builder.endBlock();
                             builder.endTag(
                                     StandardTags.StatementTag.class,
                                     StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
-                            builder.endReturn();
 
                             builder.endBlock();
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
                         });
-
         return nodes.getNode(0);
+    }
+
+    /* Retired parameter and frame-authority operations; none may reappear. */
+    private static final List<String> RETIRED_PARAMETER_OPERATIONS =
+            List.of(
+                    "CopyArguments",
+                    "BindClosureFrameParameter",
+                    "BindRequiredFrameParameter",
+                    "BindUnaryFrameParameter",
+                    "LoadFrameClosureArgument",
+                    "ReadRootFrameLocal",
+                    "InstallFrameLexicalAuthority");
+
+    /**
+     * The positive structure of the one parameter lowering: exactly one
+     * {@code LoadSuppliedArgument} per parameter, at positions 0..n-1 in
+     * order, each immediately stored into a native local, followed by a
+     * native read; and no retired parameter operation.
+     */
+    private static void assertSingleParameterLowering(List<String> signature, int parameters) {
+        List<Integer> loads = new ArrayList<>();
+        for (int index = 0; index < signature.size(); index++) {
+            if (signature.get(index).startsWith("c.LoadSuppliedArgument")) {
+                loads.add(index);
+                String entry = signature.get(index);
+                int position = loads.size() - 1;
+                assertTrue(entry.contains("index:INTEGER=" + position)
+                                || entry.contains("index:CONSTANT=Integer(" + position + ")"),
+                        () -> "supplied position out of order: " + signature);
+                assertTrue(signature.get(index + 1).startsWith("store.local"),
+                        () -> "supplied value not stored into its local: " + signature);
+            }
+        }
+        assertEquals(parameters, loads.size(), signature::toString);
+        assertTrue(signature.stream().skip(loads.get(loads.size() - 1))
+                        .anyMatch(entry -> entry.startsWith("load.local")),
+                signature::toString);
+        for (String retired : RETIRED_PARAMETER_OPERATIONS) {
+            assertTrue(signature.stream().noneMatch(entry -> entry.contains(retired)),
+                    () -> retired + " in " + signature);
+        }
     }
 
 
@@ -1480,27 +1465,21 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 var roots = groupRoots(module);
                 var target = actual.getCallTarget();
 
-                List<String> baseline =
-                        completeSignature(handwrittenI104BRoot(false));
                 List<String> handwritten =
-                        completeSignature(handwrittenI104BRoot(true));
+                        completeSignature(handwrittenI104BRoot());
                 List<String> compiled = completeSignature(actual);
 
                 System.out.println(
-                        "I104_B_BASELINE_INSTRUCTION_COUNT="
-                                + baseline.size());
+                        "I104_B_INSTRUCTION_COUNT=" + compiled.size());
                 System.out.println(
-                        "I104_B_COMPACT_INSTRUCTION_COUNT="
-                                + compiled.size());
-                System.out.println(
-                        "I104_B_COMPACT_SIGNATURE=" + compiled);
+                        "I104_B_SIGNATURE=" + compiled);
 
                 assertEquals(
                         handwritten, compiled,
                         "the required-prefix root must match independent Builder");
-                assertTrue(
-                        baseline.size() > compiled.size(),
-                        "the compact path must remove physical instructions");
+                // I115: three required parameters, one contract each.
+                assertSingleParameterLowering(handwritten, 3);
+                assertSingleParameterLowering(compiled, 3);
                 assertEquals(2, roots.size());
                 assertSame(module, roots.get(0));
                 assertSame(actual, roots.get(1));
@@ -1541,101 +1520,25 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 var root = activationRoot(
                         compile(source, "i104-b-debug"));
                 List<String> signature = completeSignature(root);
-                assertTrue(
-                        signature.stream().anyMatch(
-                                entry -> entry.contains("BindRequiredFrameParameter")),
-                        signature::toString);
-                assertTrue(
-                        signature.stream().noneMatch(
-                                entry -> entry.contains("BindClosureFrameParameter")),
-                        signature::toString);
+                assertEquals(
+                        completeSignature(handwrittenI104BRoot()),
+                        signature,
+                        "with a debugger the production root must equal the independent Builder");
+                assertSingleParameterLowering(signature, 3);
                 System.out.println("I104_B_DEBUGGER_SAME_ENTRY=PASS");
             });
         }
     }
 
-    private static ProtosBytecodeRootNode handwrittenI104BRoot(
-            boolean compact) {
+    /**
+     * I104-B oracle for {@code (a, b, c) => { b }}: the same one parameter
+     * contract as every other required positional parameter.
+     */
+    private static ProtosBytecodeRootNode handwrittenI104BRoot() {
         String characters = "(a, b, c) => { b }";
-        Source source = Source.newBuilder(
-                ProtosLanguage.ID,
-                characters,
-                compact ? "i104-b-builder.protos" : "i104-b-baseline.protos")
-                .build();
-
-        int bodyStart = characters.indexOf('{');
-        int bodyLength = characters.lastIndexOf('}') + 1 - bodyStart;
-        int lookupStart = characters.lastIndexOf('b');
-
-        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
-                ProtosBytecodeRootNodeGen.create(
-                        LANGUAGE_REF.get(null),
-                        BytecodeConfig.DEFAULT,
-                        builder -> {
-                            builder.beginSource(source);
-                            builder.beginSourceSection(bodyStart, bodyLength);
-                            builder.beginRoot();
-
-                            BytecodeLocal[] locals = {
-                                builder.createLocal("a", null),
-                                builder.createLocal("b", null),
-                                builder.createLocal("c", null)
-                            };
-                            builder.beginBlock();
-                            String[] names = {"a", "b", "c"};
-                            ProtosFrameLexicalLayout layout =
-                                    ProtosFrameLexicalLayout.of(
-                                            names,
-                                            ProtosFrameLexicalLayout.localOffsetsOf(
-                                                    locals));
-
-                            if (compact) {
-                                for (int index = 0; index < names.length; index++) {
-                                    builder.beginBindRequiredFrameParameter(
-                                            locals, layout, index);
-                                    builder.emitLoadConstant(names[index]);
-                                    builder.endBindRequiredFrameParameter();
-                                }
-                            } else {
-                                for (int index = 0; index < names.length; index++) {
-                                    builder.beginBindClosureFrameParameter(
-                                            locals, layout, index);
-                                    builder.emitLoadConstant(names[index]);
-                                    builder.beginLoadFrameClosureArgument();
-                                    builder.emitLoadConstant(index);
-                                    builder.endLoadFrameClosureArgument();
-                                    builder.endBindClosureFrameParameter();
-                                }
-                            }
-
-                            // I112: the Return is the root's last operation and
-                            // the return epilogue owns the carrier projection.
-                            builder.beginReturn();
-                            builder.beginSourceSection(lookupStart, 1);
-                            builder.beginTag(
-                                    StandardTags.StatementTag.class,
-                                    StandardTags.ExpressionTag.class);
-                            builder.beginBlock();
-
-                            builder.emitReadRootFrameLocal(
-                                    locals[1],
-                                    layout.localOffsetAt(1),
-                                    layout.presentContinuityAt(1),
-                                    "b");
-
-                            builder.endBlock();
-                            builder.endTag(
-                                    StandardTags.StatementTag.class,
-                                    StandardTags.ExpressionTag.class);
-                            builder.endSourceSection();
-                            builder.endReturn();
-
-                            builder.endBlock();
-                            builder.endRoot();
-                            builder.endSourceSection();
-                            builder.endSource();
-                        });
-        return nodes.getNode(0);
+        return handwrittenParameterReadRoot(
+                characters, "i104-b-builder.protos", new String[] {"a", "b", "c"}, 1,
+                characters.lastIndexOf('b'), 1);
     }
 
     /**
