@@ -17,10 +17,12 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
@@ -36,48 +38,94 @@ import com.oracle.truffle.api.object.DynamicObject;
 import com.oracle.truffle.api.strings.TruffleString;
 
 /**
- * I115-R6 EXPERIMENTAL, proxied as the {@code ReadGlobal} operation: a bare
- * read from a Closure root statically resolved to a module (ROOT)
- * declaration. I115: module declarations are NAME bindings of the module
- * context, so this is one name operation over the captured module scope at
- * the constant {@code lexicalDepth}, then the scopes outside it (the
- * prelude). It never reads a frame.
+ * I115-R6, proxied as the {@code ReadGlobal} operation: a bare read
+ * statically resolved to a module (ROOT) declaration. I115: module
+ * declarations are NAME bindings of the module context, so this is one name
+ * operation over that context, found from the running root's frame
+ * arguments at the constant physical {@code lexicalDepth}:
+ * <ul>
+ *   <li>{@code 0}: the running root is the module root itself, entered with
+ *       its published module activation in argument 0; the module context is
+ *       that activation's own context;</li>
+ *   <li>{@code n >= 1}: the running root is a Closure root; the module
+ *       context is the scope {@code n - 1} of the invoked Closure's captured
+ *       environment.</li>
+ * </ul>
+ * It never materializes an activation to locate the binding and never
+ * consults the dynamic lexical lookup.
  *
- * <p>{@link #readCached} is guarded by the identity of the invoked compact
- * Closure (at most three entries). A Closure's captured environment, and so
- * its module context and that context's single store, never change, which
- * justifies reusing the {@link ProtosModuleBindingLocation} resolved once at
- * specialization: the hot read is one inlined {@code DynamicObject} get of the
- * current value, with no chain walk, boundary call or allocation. A binding
- * absent at that location (removed) takes the unspecialized NAME read over
- * the same storage; published activations and PIC misses use {@link
+ * <p>{@link #readOwnCached} (depth 0) is guarded by the identity of the
+ * module context, and {@link #readCapturedCached} (depth {@code >= 1}) by
+ * the identity of the invoked Closure, read from argument 0 of a still-compact
+ * B5 header (at most three entries each). Neither identity's module context
+ * or store ever changes, which justifies reusing the {@link
+ * ProtosModuleBindingLocation} resolved once at specialization: the hot read
+ * is one inlined {@code DynamicObject} get of the current value. A binding
+ * absent at that location takes the unspecialized NAME read over the same
+ * storage; published Closure activations and PIC misses use {@link
  * #readGeneric}.
  *
- * <p>RECORDED DIVERGENCE (owner-authorized): only the statically resolved
- * module scope and the scopes outside it are consulted; no nearer-scope or
- * receiver-slot selection is performed.
+ * <p>{@code candidate} is true when the site was classified {@code
+ * Candidate}: the module statically declares the name but establishment is
+ * not guaranteed at this program point. An absent binding then signals the
+ * unqualified-lookup Error and is never redirected to an outer binding of the
+ * same name (the recorded I115 divergence of {@code CanonicalBindingResolution}).
+ *
+ * <p>RECORDED DIVERGENCE (owner-authorized): for an established site only the
+ * statically resolved module scope and the scopes outside it are consulted;
+ * no nearer-scope or receiver-slot selection is performed.
  */
 @GenerateUncached
 @GenerateInline(false)
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
 @ConstantOperand(type = TruffleString.class, name = "name")
 @ConstantOperand(type = int.class, name = "lexicalDepth")
+@ConstantOperand(type = boolean.class, name = "candidate")
 abstract class ProtosExperimentalReadGlobalNode extends Node {
 
-    abstract Object execute(VirtualFrame frame, TruffleString name, int lexicalDepth);
+    abstract Object execute(
+            VirtualFrame frame, TruffleString name, int lexicalDepth, boolean candidate);
 
     @Specialization(
             excludeForUncached = true,
             guards = {
+                "lexicalDepth == 0",
+                "context != null",
+                "context == cachedContext",
+                "location != null"
+            },
+            limit = "3")
+    static Object readOwnCached(
+            VirtualFrame frame,
+            TruffleString name,
+            int lexicalDepth,
+            boolean candidate,
+            @Bind("ownModuleContextOrNull(frame.getArguments())") ProtosObjectValue context,
+            @Cached("context") ProtosObjectValue cachedContext,
+            @Cached("ownLocationOrNull(cachedContext, name)")
+                    ProtosModuleBindingLocation location,
+            @Cached DynamicObject.GetNode getNode) {
+        Object value = location.readOrNull(getNode);
+        if (value == null) {
+            return readModuleBinding(frame.getArguments(), name, lexicalDepth, candidate);
+        }
+        return value;
+    }
+
+    @Specialization(
+            excludeForUncached = true,
+            guards = {
+                "lexicalDepth >= 1",
                 "closure != null",
                 "closure == cachedClosure",
                 "location != null"
             },
             limit = "3")
-    static Object readCached(
+    static Object readCapturedCached(
             VirtualFrame frame,
             TruffleString name,
             int lexicalDepth,
+            boolean candidate,
             @Bind("compactClosureOrNull(frame.getArguments())") ProtosClosureValue closure,
             @Cached("closure") ProtosClosureValue cachedClosure,
             @Cached("locationOrNull(cachedClosure, name, lexicalDepth)")
@@ -85,26 +133,44 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
             @Cached DynamicObject.GetNode getNode) {
         Object value = location.readOrNull(getNode);
         if (value == null) {
-            return readModuleBinding(frame.getArguments(), name, lexicalDepth);
+            return readModuleBinding(frame.getArguments(), name, lexicalDepth, candidate);
         }
         return value;
     }
 
-    @Specialization(replaces = "readCached")
-    static Object readGeneric(VirtualFrame frame, TruffleString name, int lexicalDepth) {
-        return readModuleBinding(frame.getArguments(), name, lexicalDepth);
+    @Specialization(replaces = {"readOwnCached", "readCapturedCached"})
+    static Object readGeneric(
+            VirtualFrame frame, TruffleString name, int lexicalDepth, boolean candidate) {
+        return readModuleBinding(frame.getArguments(), name, lexicalDepth, candidate);
     }
 
     /*
-     * I115-H7-R4: B5's first field identifies the invoked Closure while the
-     * call is compact; a published activation is deliberately not admitted.
+     * Depth 0: the context of the module activation published in argument 0,
+     * or null when that context does not exist yet (no binding can be present
+     * then). Never materializes the activation or its context.
+     */
+    static ProtosObjectValue ownModuleContextOrNull(Object[] arguments) {
+        return arguments.length > 0 && arguments[0] instanceof ProtosActivation activation
+                ? activation.materializedContextOrNullForRuntime()
+                : null;
+    }
+
+    /*
+     * Depth >= 1: the invoked Closure of a still-compact B5 call (argument 0);
+     * a published activation is deliberately not admitted by the PIC.
      */
     static ProtosClosureValue compactClosureOrNull(Object[] arguments) {
-        if (arguments.length < ProtosFrameArguments.HEADER_LENGTH) {
-            // I115-H11 captured unary entry, plain or Prelude-extended.
-            return ProtosFrameArguments.experimentalCapturedOwnerOrNull(arguments);
-        }
-        return arguments[0] instanceof ProtosClosureValue closure ? closure : null;
+        return arguments.length >= ProtosFrameArguments.HEADER_LENGTH
+                        && arguments[0] instanceof ProtosClosureValue closure
+                ? closure
+                : null;
+    }
+
+    /* Specialization time only: the module binding's location in its own module context. */
+    @TruffleBoundary
+    static ProtosModuleBindingLocation ownLocationOrNull(
+            ProtosObjectValue context, TruffleString name) {
+        return ProtosModuleBindingLocation.ofOrNull(context, name.toJavaStringUncached());
     }
 
     /* Specialization time only: the module binding's location for this Closure. */
@@ -124,33 +190,63 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
 
     @TruffleBoundary
     static Object readModuleBinding(
-            Object[] arguments, TruffleString name, int lexicalDepth) {
+            Object[] arguments, TruffleString name, int lexicalDepth, boolean candidate) {
         String javaName = name.toJavaStringUncached();
+        if (lexicalDepth == 0) {
+            ProtosActivation module = ownModuleActivation(arguments);
+            java.util.Optional<Object> present = module.readCurrentLocalSlotForRuntime(javaName);
+            if (present.isPresent()) {
+                return present.get();
+            }
+            if (!candidate) {
+                java.util.Optional<Object> outside = readOutsideModuleOrEmpty(
+                        module.capturedLexicalEnvironmentForRuntime(), javaName);
+                if (outside.isPresent()) {
+                    return outside.get();
+                }
+            }
+            // The unqualified-lookup Error of a module root's own NAME read.
+            throw new ProtosSignalException(ProtosCoreErrors.newUnqualifiedLookupError(module));
+        }
         ProtosLexicalEnvironment module = capturedModuleOrNull(arguments, lexicalDepth);
-        if (module == null) {
-            return readOutsideModuleGlobal(arguments, null, javaName);
+        if (module != null) {
+            java.util.Optional<Object> present = module.readLocalSlotForRuntime(javaName);
+            if (present.isPresent()) {
+                return present.get();
+            }
         }
-        java.util.Optional<Object> present = module.readLocalSlotForRuntime(javaName);
-        if (present.isPresent()) {
-            return present.get();
+        if (candidate) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newUnqualifiedLookupError(
+                            ProtosFrameArguments.activation(arguments)));
         }
-        return readOutsideModuleGlobal(arguments, module.outer(), javaName);
+        java.util.Optional<Object> outside = readOutsideModuleOrEmpty(
+                module == null ? null : module.outer(), javaName);
+        if (outside.isPresent()) {
+            return outside.get();
+        }
+        throw new ProtosSignalException(
+                ProtosCoreErrors.newSlotNotFound(ProtosFrameArguments.activation(arguments)));
     }
 
     /*
-     * The captured chain of the invocation, from its B5 header: a
-     * still-compact call's Closure, or the published activation's.
+     * Depth 0: the module root's own activation. A module root is entered
+     * with its module activation already published in argument 0, so this
+     * returns it unchanged; it is the same accessor every operation of the
+     * root uses for its current activation.
+     */
+    static ProtosActivation ownModuleActivation(Object[] arguments) {
+        return ProtosFrameArguments.activation(arguments);
+    }
+
+    /*
+     * Depth >= 1: the captured module scope of the invocation, from its B5
+     * header: a still-compact call's Closure, or the published activation's.
      */
     static ProtosLexicalEnvironment capturedModuleOrNull(
             Object[] arguments, int lexicalDepth) {
         ProtosLexicalEnvironment captured;
-        ProtosClosureValue owner = arguments.length < ProtosFrameArguments.HEADER_LENGTH
-                ? ProtosFrameArguments.experimentalCapturedOwnerOrNull(arguments)
-                : null;
-        if (owner != null) {
-            // I115-H11: the compact unary entry retains its lexical owner.
-            captured = owner.capturedLexicalEnvironmentForRuntime();
-        } else if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
+        if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
             captured = ProtosFrameArguments.compactCapturedLexicalEnvironment(arguments);
         } else {
             captured = ProtosFrameArguments.publishedActivation(arguments)
@@ -160,20 +256,16 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
     }
 
     /* ABSENT in the module: only the scopes outside it (the prelude). */
-    private static Object readOutsideModuleGlobal(
-            Object[] arguments,
-            ProtosLexicalEnvironment outside,
-            String name) {
+    private static java.util.Optional<Object> readOutsideModuleOrEmpty(
+            ProtosLexicalEnvironment outside, String name) {
         for (ProtosLexicalEnvironment scope = outside;
                 scope != null;
                 scope = scope.outer()) {
             java.util.Optional<Object> present = scope.readLocalSlotForRuntime(name);
             if (present.isPresent()) {
-                return present.get();
+                return present;
             }
         }
-        throw new ProtosSignalException(
-                ProtosCoreErrors.newSlotNotFound(
-                        ProtosFrameArguments.activation(arguments)));
+        return java.util.Optional.empty();
     }
 }

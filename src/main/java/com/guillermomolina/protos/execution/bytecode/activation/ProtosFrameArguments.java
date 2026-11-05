@@ -123,34 +123,6 @@ final class ProtosFrameArguments {
     /** Private kind marker; never a guest value, so never a method receiver. */
     private static final Object DIRECT_CLOSURE_CALL = new Object();
 
-    /*
-     * I115-H (EXPERIMENTAL, PLAT066-C): a second, reduced layout used only by
-     * the retired static unary tier, distinct from B5+:
-     *
-     *   [0] EXPERIMENTAL_STATIC_UNARY_CALL (private marker, never a guest value)
-     *   [1] the transported Prelude: null while the callee root has not
-     *       registered NEEDS_CALLER_PRELUDE; once it has, the caller's
-     *       effective Prelude (I115, GraalPy caller flags)
-     *   [2..3] null (unconsumed header slots)
-     *   [4] null (I115-H5: no ReturnHome is carried)
-     *   [5] supplied0
-     *
-     * I115-H3: supplied0 sits at the B5 supplied position, so the direct
-     * parameter binding of an admitted recursive Integer root reads the same
-     * physical slot whether it is entered by this layout or by B5.
-     *
-     * It carries no Closure, receiver, methodHome, Task, caller, ReturnHome
-     * or Context. Only the consumers the lowering admits for a static callee
-     * root recognize it (the argument reads LoadArgument, HasArgument and
-     * ExperimentalLongArgument0, and the return epilogue); activation,
-     * caller, Task and Closure accessors do not
-     * support it. A recorded divergence, not an equivalent ABI.
-     */
-    private static final Object EXPERIMENTAL_STATIC_UNARY_CALL = new Object();
-    private static final int EXPERIMENTAL_STATIC_UNARY_LENGTH = SUPPLIED_ARGUMENT_OFFSET + 1;
-    private static final int EXPERIMENTAL_STATIC_SUPPLIED_INDEX = SUPPLIED_ARGUMENT_OFFSET;
-    private static final int EXPERIMENTAL_STATIC_PRELUDE_INDEX = 1;
-
     private static final java.util.function.Function<Object[], ProtosActivation>
             COMPACT_CAPTURE_OWNER = ProtosFrameArguments::activation;
 
@@ -574,150 +546,6 @@ final class ProtosFrameArguments {
             ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
             supplied0
         };
-    }
-
-    /**
-     * I115-H (EXPERIMENTAL): the reduced static unary layout. I115-H3: a
-     * direct construction with known positions; no caller, Task, Closure or
-     * Context is validated, published or created.
-     */
-    /**
-     * I115-H11 EXPERIMENTAL: single-element unary entry for a callee
-     * that does not require a lexical invocation owner.
-     */
-    static Object[] experimentalMinimalUnaryCall(Object supplied0) {
-        return new Object[] {supplied0};
-    }
-
-    /*
-     * I115 EXPERIMENTAL: private identity marker of the Prelude-extended
-     * minimal unary entry. Never a guest value nor a Prelude, so the
-     * three-element layouts are told apart by identity, not by the guest
-     * type of supplied0.
-     */
-    private static final Object EXPERIMENTAL_MINIMAL_UNARY_WITH_PRELUDE = new Object();
-
-    /**
-     * I115 EXPERIMENTAL: the minimal unary entry of a callee root that has
-     * registered NEEDS_CALLER_PRELUDE: {@code
-     * {EXPERIMENTAL_MINIMAL_UNARY_WITH_PRELUDE, supplied0, prelude}}, the
-     * Prelude being the Closure's own or else the caller's. The Prelude is
-     * internal transport, never a guest argument. A Closure is never kept in
-     * a minimal entry, own Prelude or not (recorded I115 divergence).
-     */
-    static Object[] experimentalMinimalUnaryCall(Object supplied0, ProtosPrelude prelude) {
-        return new Object[] {EXPERIMENTAL_MINIMAL_UNARY_WITH_PRELUDE, supplied0, prelude};
-    }
-
-    /**
-     * I115-H11 EXPERIMENTAL: compact unary entry retaining the selected
-     * Closure solely as the lexical owner used by ReadGlobal.
-     * No receiver, method home, caller, Task or ReturnHome is transported.
-     */
-    static Object[] experimentalCapturedUnaryCall(
-            ProtosClosureValue closure, Object supplied0) {
-        return new Object[] {closure, supplied0};
-    }
-
-    /**
-     * I115 EXPERIMENTAL: the captured unary entry of a callee root that has
-     * registered NEEDS_CALLER_PRELUDE: {@code {closure, supplied0, prelude}}.
-     */
-    static Object[] experimentalCapturedUnaryCall(
-            ProtosClosureValue closure, Object supplied0, ProtosPrelude prelude) {
-        return new Object[] {closure, supplied0, prelude};
-    }
-
-    /*
-     * I115: the reduced experimental layouts, none of which has a B5 caller
-     * link, recognized explicitly:
-     *   {supplied0}                                     minimal
-     *   {closure, supplied0}                            captured
-     *   {closure, supplied0, prelude}                   captured, extended
-     *   {MINIMAL_WITH_PRELUDE, supplied0, prelude}      minimal, extended
-     *   static unary (six slots, its own marker)
-     */
-    static boolean isExperimentalReducedCall(Object[] arguments) {
-        return switch (arguments.length) {
-            case 1 -> true;
-            case 2 -> arguments[0] instanceof ProtosClosureValue;
-            case 3 -> (arguments[0] == EXPERIMENTAL_MINIMAL_UNARY_WITH_PRELUDE
-                            || arguments[0] instanceof ProtosClosureValue)
-                    && arguments[2] instanceof ProtosPrelude;
-            default -> isExperimentalStaticUnaryCall(arguments);
-        };
-    }
-
-    /* I115: the Prelude-extended minimal entry, by its marker identity. */
-    static boolean isExperimentalMinimalUnaryWithPrelude(Object[] arguments) {
-        return arguments.length == 3
-                && arguments[0] == EXPERIMENTAL_MINIMAL_UNARY_WITH_PRELUDE;
-    }
-
-    /*
-     * I115-H11: the Closure a captured unary entry (plain or extended)
-     * retains, or null for the minimal entries.
-     */
-    static ProtosClosureValue experimentalCapturedOwnerOrNull(Object[] arguments) {
-        if ((arguments.length == 2 || arguments.length == 3)
-                && arguments[0] instanceof ProtosClosureValue closure) {
-            return closure;
-        }
-        return null;
-    }
-
-    static Object[] experimentalStaticUnaryCall(Object supplied0, ProtosPrelude prelude) {
-        return new Object[] {
-            EXPERIMENTAL_STATIC_UNARY_CALL,
-            prelude,
-            null,
-            null,
-            null,
-            supplied0
-        };
-    }
-
-    /**
-     * I115-H3 (EXPERIMENTAL): supplied argument 0 of a reduced unary layout,
-     * the static unary layout or B5. Every two- and three-element entry
-     * (captured, captured extended, minimal extended) keeps it at index 1.
-     */
-    static Object experimentalSuppliedArgument0(Object[] arguments) {
-        if (arguments.length == 1) {
-            return arguments[0];
-        }
-        if (arguments.length == 2 || arguments.length == 3) {
-            return arguments[1];
-        }
-        return arguments[SUPPLIED_ARGUMENT_OFFSET];
-    }
-
-    /**
-     * I115 (EXPERIMENTAL): the Prelude a reduced experimental layout
-     * explicitly carries, or null, in the resolution order: an explicitly
-     * transported Prelude (static slot 1, the trailing Prelude of an
-     * extended entry), else the own Prelude of the Closure a captured entry
-     * retains for ReadGlobal. The plain minimal entry carries none, even
-     * when the selected Closure has its own Prelude. Only reads; B5 headers
-     * use the admitted accessors.
-     */
-    static ProtosPrelude experimentalTransportedPreludeOrNull(Object[] arguments) {
-        if (isExperimentalStaticUnaryCall(arguments)) {
-            return (ProtosPrelude) arguments[EXPERIMENTAL_STATIC_PRELUDE_INDEX];
-        }
-        if (arguments.length == 3) {
-            return (ProtosPrelude) arguments[2];
-        }
-        if (arguments.length == 2 && arguments[0] instanceof ProtosClosureValue closure) {
-            return closure.preludeOrNullForRuntime();
-        }
-        return null;
-    }
-
-    /** I115-H (EXPERIMENTAL): whether {@code arguments} use the static unary layout. */
-    static boolean isExperimentalStaticUnaryCall(Object[] arguments) {
-        return arguments.length == EXPERIMENTAL_STATIC_UNARY_LENGTH
-                && arguments[0] == EXPERIMENTAL_STATIC_UNARY_CALL;
     }
 
     /**
@@ -1308,8 +1136,7 @@ final class ProtosFrameArguments {
      * root's own frame arguments), with the same precedence (published
      * activation, the Closure's own prelude, the caller's prelude) but
      * without re-validating the header the root was entered with. Any other
-     * shape (for example the reduced static unary layout) takes the general
-     * {@link #preludeOrNull}.
+     * shape takes the general {@link #preludeOrNull}.
      */
     static ProtosPrelude admittedPreludeOrNull(Object[] arguments) {
         if (arguments.length >= HEADER_LENGTH) {
@@ -1468,12 +1295,6 @@ final class ProtosFrameArguments {
      * unchanged; only the supplied suffix length is consulted.
      */
     static Object compactSuppliedArgumentOrNull(Object[] arguments, int index) {
-        // I115-H: the static unary layout supplies exactly one value.
-        if (isExperimentalStaticUnaryCall(arguments)) {
-            return index == 0
-                    ? arguments[EXPERIMENTAL_STATIC_SUPPLIED_INDEX]
-                    : ProtosNullValue.INSTANCE;
-        }
         return arguments.length > SUPPLIED_ARGUMENT_OFFSET + index
                 ? arguments[SUPPLIED_ARGUMENT_OFFSET + index]
                 : ProtosNullValue.INSTANCE;
@@ -1481,13 +1302,9 @@ final class ProtosFrameArguments {
 
     /**
      * I115: the number of supplied positional arguments of a B5 call, in
-     * either state (publication never changes the supplied suffix), or of
-     * the static unary layout, which supplies exactly one.
+     * either state (publication never changes the supplied suffix).
      */
     static int suppliedArgumentCount(Object[] arguments) {
-        if (isExperimentalStaticUnaryCall(arguments)) {
-            return 1;
-        }
         return arguments.length - SUPPLIED_ARGUMENT_OFFSET;
     }
 
@@ -1524,8 +1341,8 @@ final class ProtosFrameArguments {
     /** The callee Closure of a compact source call that is still unmaterialized. */
     /**
      * I115: the captured cells of the invoked Closure, read once at root
-     * entry from argument 0: the invoked Closure of a compact call (including
-     * the I115-H11 captured unary entry), or the published activation, which
+     * entry from argument 0: the invoked Closure of a compact call, or the
+     * published activation, which
      * refers to the same array. Called only by
      * roots whose scope declares free cells; each such root copies the cells
      * into its own Bytecode locals, so no later access reads this header.
@@ -1677,13 +1494,9 @@ final class ProtosFrameArguments {
      * result. Only a fused direct source call or send writes the private
      * marker into the home slot; argument 0 publication keeps it. The length
      * test admits the frame arguments of non-Closure roots, whose entry
-     * contracts are not B5. I115-H: the static unary caller always accepts
-     * it; its own return epilogue projects for its caller.
+     * contracts are not B5.
      */
     static boolean acceptsPrimitiveResult(Object[] arguments) {
-        if (isExperimentalStaticUnaryCall(arguments)) {
-            return true;
-        }
         return arguments.length > RETURN_HOME_INDEX
                 && arguments[RETURN_HOME_INDEX]
                         == ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime();

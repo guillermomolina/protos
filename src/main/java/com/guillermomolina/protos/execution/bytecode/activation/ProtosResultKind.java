@@ -26,14 +26,6 @@ package com.guillermomolina.protos.execution;
  */
 public enum ProtosResultKind {
 
-    /** The primitive numeric send fast path missed. */
-    PRIMITIVE_NUMERIC_SEND_MISS {
-        @Override
-        boolean matches(Object value) {
-            return value == ProtosPrimitiveNumericSendFastPathsBase.MISS;
-        }
-    },
-
     /** A materialized captured owner frame was selected. */
     CAPTURED_OWNER_FRAME_SELECTED {
         @Override

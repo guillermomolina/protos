@@ -62,16 +62,7 @@ abstract class ProtosExperimentalNumberSubtractFastPathsBase extends Node {
         return result;
     }
 
-    /*
-     * PRUIBA DE I115, en algún momento esto volverá a funcionar
-     * Retired caller-frame arithmetic provenance; not executed:
-     * static ProtosPrelude callerPrelude(ProtosBytecodeRootNode root, VirtualFrame frame) {
-     *     return ProtosBytecodeRootNode.experimentalEffectivePrelude(root, frame.getArguments());
-     * }
-     */
-
-
-    /** Generic result is handled here, not in a TryPrimitiveNumeric MISS branch. */
+    /** The generic result: exact Integer arithmetic, else the ordinary '-' send. */
     static Object genericSubtract(ProtosBytecodeRootNode root, VirtualFrame frame,
             Node node, Object left, Object right) {
         Object receiver = ProtosNumericValueSupport.guestValue(left);
