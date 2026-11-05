@@ -661,7 +661,7 @@ final class ProtosStructuredDispatchLowerer {
         builder.endStoreLocal();
 
         /*
-         * D210/D212: the last normal body result of the standard loop. It
+         * D212: the last normal body result of the standard loop. It
          * starts as canonical null (zero pre-test iterations) and is
          * overwritten only by a body invocation that completes normally; an
          * abnormal condition/body exit propagates without reaching the
@@ -681,7 +681,7 @@ final class ProtosStructuredDispatchLowerer {
          * A post-test loop runs body-then-condition inside the While
          * condition with an empty While body, so each iteration activates
          * the body before its condition and a body that exits abnormally
-         * never reaches the condition. A pre-test loop keeps the D210
+         * never reaches the condition. A pre-test loop keeps the
          * condition-then-body shape.
          */
         builder.beginIfThenElse();

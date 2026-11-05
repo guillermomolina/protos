@@ -24,7 +24,6 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
-import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
@@ -32,7 +31,7 @@ import java.util.List;
 
 /**
  * Prepared state of the structured control-flow invocations (match/case,
- * standard Object and import calls, ensure, while, Error.handle and the Boolean callbacks)
+ * standard Object and import calls, ensure, while, Error.handle and the and/or callbacks)
  * driven by {@link ProtosStructuredDispatchLowerer} roots and inline literal regions.
  */
 final class ProtosStructuredControlCalls {
@@ -205,8 +204,8 @@ final class ProtosStructuredControlCalls {
     }
 
     /**
-     * Validated standard Closure loop (D210 {@code whileTrue}; D212
-     * {@code whileFalse}, {@code untilTrue}, {@code untilFalse}). The
+     * Validated standard Closure loop (D212 {@code whileFalse},
+     * {@code untilTrue}, {@code untilFalse}). The
      * immutable {@link ProtosStandardObjectProtocol.StructuredLoopKind} fixes
      * the phase order and exit polarity; {@code condition} and {@code body}
      * are already mapped from the original receiver/argument by phase.
@@ -359,9 +358,6 @@ final class ProtosStructuredControlCalls {
 
         boolean hasCallback() {
             return switch (kind) {
-                case IF_TRUE -> receiver == ProtosBooleanValue.TRUE;
-                case IF_FALSE -> receiver == ProtosBooleanValue.FALSE;
-                case IF_TRUE_IF_FALSE -> true;
                 case AND -> receiver == ProtosBooleanValue.TRUE;
                 case OR -> receiver == ProtosBooleanValue.FALSE;
             };
@@ -373,23 +369,9 @@ final class ProtosStructuredControlCalls {
                         "short-circuited Boolean operation has no selected callback");
             }
             return ProtosCallRequest.call(
-                    supplied.get(selectedIndex()),
+                    supplied.get(0),
                     List.of(),
                     activation);
-        }
-
-        /**
-         * Supplied position of the selected callback; meaningful only when
-         * {@link #hasCallback} holds. Shared by {@link #prepareCallback} and
-         * {@link #admitsInlineLiteralCallback} so inline admission can never
-         * disagree with ordinary selection.
-         */
-        private int selectedIndex() {
-            return switch (kind) {
-                case IF_TRUE, IF_FALSE, AND, OR -> 0;
-                case IF_TRUE_IF_FALSE ->
-                        receiver == ProtosBooleanValue.TRUE ? 0 : 1;
-            };
         }
 
         Object immediateResult() {
@@ -398,23 +380,15 @@ final class ProtosStructuredControlCalls {
                         "selected Boolean callback has no immediate result");
             }
             return switch (kind) {
-                case IF_TRUE, IF_FALSE -> ProtosNullValue.INSTANCE;
                 case AND -> ProtosBooleanValue.FALSE;
                 case OR -> ProtosBooleanValue.TRUE;
-                case IF_TRUE_IF_FALSE ->
-                        throw new IllegalStateException(
-                                "ifTrueIfFalse always selects one callback");
             };
         }
 
         Object finishCallback(Object result) {
-            return switch (kind) {
-                case AND, OR ->
-                        ProtosStandardBooleanProtocol.requireBooleanResult(
-                                result,
-                                activation);
-                case IF_TRUE, IF_FALSE, IF_TRUE_IF_FALSE -> result;
-            };
+            return ProtosStandardBooleanProtocol.requireBooleanResult(
+                    result,
+                    activation);
         }
     }
 }
