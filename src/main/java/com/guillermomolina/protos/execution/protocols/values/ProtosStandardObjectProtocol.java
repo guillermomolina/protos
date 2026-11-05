@@ -75,6 +75,10 @@ public final class ProtosStandardObjectProtocol {
             ProtosStandardObjectProtocol::call;
     private static final ProtosClosureValue STANDARD_CALL =
             ProtosClosureValue.nativeClosure(STANDARD_CALL_BODY);
+    private static final ProtosNativeClosureBody STANDARD_CONSTRUCT_BODY =
+            ProtosStandardObjectProtocol::construct;
+    private static final ProtosClosureValue STANDARD_CONSTRUCT =
+            ProtosClosureValue.nativeClosure(STANDARD_CONSTRUCT_BODY);
     private static final ProtosNativeClosureBody STANDARD_ENSURE_BODY =
             ProtosStandardObjectProtocol::ensure;
     private static final ProtosClosureValue STANDARD_ENSURE =
@@ -187,6 +191,39 @@ public final class ProtosStandardObjectProtocol {
         return closure.nativeBody().orElse(null) == STANDARD_CALL_BODY;
     }
 
+    /**
+     * D239-C1: whether {@code closure} carries the actual standard
+     * {@code Object.construct} executable body. Copied or extracted standard
+     * construct behaviors keep this identity wherever they are installed, so
+     * transparent P,K forwarding never depends on selector spelling or on the
+     * method home.
+     */
+    static boolean isStandardConstructImplementation(
+            ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) == STANDARD_CONSTRUCT_BODY;
+    }
+
+    static boolean isStandardConstructImplementation(
+            ProtosNativeClosureBody body) {
+        return body == STANDARD_CONSTRUCT_BODY;
+    }
+
+    static boolean isCanonicalStandardConstructSelection(
+            Object behavior,
+            ProtosObjectValue home) {
+        return behavior == STANDARD_CONSTRUCT
+                && home.isRootObject();
+    }
+
+    /**
+     * D239-C1: the ordinary receiver domain admitted by the non-Closure
+     * branch of standard {@code Object.call} and by standard
+     * {@code Object.construct}.
+     */
+    static boolean isOrdinaryConstructionReceiver(Object receiver) {
+        return receiver instanceof ProtosObjectValue && ordinaryReceiver(receiver);
+    }
+
     static boolean isCanonicalStandardEnsureSelection(
             Object behavior,
             ProtosObjectValue home) {
@@ -249,6 +286,11 @@ public final class ProtosStandardObjectProtocol {
             object.createLocalSlot(
                     "call",
                     STANDARD_CALL);
+        }
+        if (!object.hasLocalSlot("construct")) {
+            object.createLocalSlot(
+                    "construct",
+                    STANDARD_CONSTRUCT);
         }
         if (!object.hasLocalSlot("hasSlot")) {
             object.createLocalSlot(
@@ -353,6 +395,13 @@ public final class ProtosStandardObjectProtocol {
         }
     }
 
+    /**
+     * D013 / D239-C1 standard {@code Object.call}: a Closure receiver executes
+     * under the D013 rules; any other ordinary receiver forwards the exact
+     * evaluated packet to an ordinary {@code construct} send on the original
+     * receiver and returns that send's exact normal result. No child is
+     * allocated here.
+     */
     private static Object call(
             ProtosActivation activation,
             List<?> supplied) {
@@ -363,6 +412,27 @@ public final class ProtosStandardObjectProtocol {
                     supplied,
                     activation);
         }
+        if (!isOrdinaryConstructionReceiver(receiver)) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(activation));
+        }
+        return ProtosInvocation.invokeMessage(
+                receiver,
+                "construct",
+                supplied,
+                activation);
+    }
+
+    /**
+     * D239-C1 standard {@code Object.construct}: allocate a fresh child whose
+     * immediate parent is the invocation receiver, send {@code init} to it
+     * with the forwarded packet, ignore init's normal result and return the
+     * child. Errors and control transfers from init propagate unchanged.
+     */
+    private static Object construct(
+            ProtosActivation activation,
+            List<?> supplied) {
+        Object receiver = activation.receiver();
         if (!(receiver instanceof ProtosObjectValue prototype) || !ordinaryReceiver(receiver)) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(activation));

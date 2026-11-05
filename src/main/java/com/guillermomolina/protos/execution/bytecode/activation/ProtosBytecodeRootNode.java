@@ -22,6 +22,7 @@ import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.Prepare
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedErrorHandlerCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardImportCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardObjectCall;
+import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardObjectConstruct;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedArrayMatchCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedIdentityMapAtIfAbsentCall;
 import com.guillermomolina.protos.execution.ProtosStructuredMapQueryCalls.PreparedMapMatchCall;
@@ -2886,9 +2887,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     // ---- Map construction ----------------------------------------------------------
 
     /**
-     * Prepares the Map construction factory call on {@code value} (the
-     * factory), or with {@code finish} validates its result {@code value}.
-     * The guest factory call runs between the two instructions.
+     * Prepares the Map construction factory invocation on {@code value} (the
+     * factory): D239-C1 canonical Object.call then canonical Map.construct
+     * are verified and the selected construct is prepared once with zero
+     * arguments. With {@code finish} it validates its result {@code value}.
+     * The guest factory invocation runs between the two instructions.
      */
     @Operation
     @ConstantOperand(type = boolean.class, name = "finish")
@@ -2903,7 +2906,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             ProtosSlotLookupResult selected =
                     ProtosStandardMapProtocol
-                            .selectFactoryCallForMapConstruction(
+                            .selectFactoryConstructForMapConstruction(
                                     value,
                                     activation);
 
@@ -7327,6 +7330,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         @Specialization
+        public static PreparedClosureCall standardObjectConstruct(
+                ProtosStructuredPhase phase,
+                PreparedStandardObjectConstruct prepared) {
+            return prepared.child();
+        }
+
+        @Specialization
         public static PreparedClosureCall standardImport(
                 ProtosStructuredPhase phase,
                 PreparedStandardImportCall prepared) {
@@ -7535,6 +7545,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization
         public static Object standardObject(PreparedStandardObjectCall prepared, Object result) {
+            return prepared.finish(result);
+        }
+
+        @Specialization
+        public static Object standardObjectConstruct(
+                PreparedStandardObjectConstruct prepared, Object result) {
             return prepared.finish(result);
         }
 

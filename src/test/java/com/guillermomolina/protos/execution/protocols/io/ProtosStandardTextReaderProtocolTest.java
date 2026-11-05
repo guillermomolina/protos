@@ -41,7 +41,7 @@ final class ProtosStandardTextReaderProtocolTest {
 
         assertSame(ProtosObjectValue.rootObject(), factory.parent().orElseThrow());
         assertTrue(factory.isFrozen());
-        assertEquals(Set.of("call", "owning"), factory.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("construct", "owning"), factory.localSlotsSnapshot().keySet());
 
         ProtosProcessRuntime process =
                 new ProtosProcessRuntime(prelude.actorRefPrototypeForRuntime());

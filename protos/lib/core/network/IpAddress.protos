@@ -20,7 +20,7 @@
 // anchor below, which survives removal of the public IpAddress binding.
 IpAddress: {
     // D203: the standard factory arity of exactly two is checked explicitly.
-    call: (...args) => {
+    construct: (...args) => {
         (args.size() == 2).ifFalse(() => {
             Error().signal()
         })

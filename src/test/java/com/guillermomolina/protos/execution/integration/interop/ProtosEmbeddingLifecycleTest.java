@@ -49,7 +49,7 @@ final class ProtosEmbeddingLifecycleTest {
 
     /** A Set behavior from Core: an ordinary Map whose {@code size} answers 3. */
     private static final String SPAWN =
-            "worker: Actor.spawn(\"std:collections/Set\", \"call\", 1, 2, 3)\n";
+            "worker: Actor.spawn(\"std:collections/Set\", \"construct\", 1, 2, 3)\n";
 
     private static Context.Builder builder() {
         return Context.newBuilder(ProtosLanguage.ID).option("protos.CoreRoot", CORE);

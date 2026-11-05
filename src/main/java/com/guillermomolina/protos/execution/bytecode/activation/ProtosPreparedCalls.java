@@ -23,6 +23,7 @@ import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.Prepare
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedErrorHandlerCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardImportCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardObjectCall;
+import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardObjectConstruct;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedWhileCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedArrayEachCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedArrayMatchCall;
@@ -237,6 +238,7 @@ final class ProtosPreparedCalls {
         default boolean requiresStructuredDispatch() { return false; }
 
         default boolean isStructuredObjectCall() { return false; }
+        default boolean isStructuredObjectConstruct() { return false; }
         default boolean isStructuredCaseOf() { return false; }
         default boolean isStructuredMapMatch() { return false; }
         default boolean isStructuredImportCall() { return false; }
@@ -304,6 +306,11 @@ final class ProtosPreparedCalls {
         default PreparedStandardObjectCall prepareStructuredObjectCall() {
             throw new IllegalStateException(
                     "prepared Closure call has no PLAT032 Object.call capability");
+        }
+
+        default PreparedStandardObjectConstruct prepareStructuredObjectConstruct() {
+            throw new IllegalStateException(
+                    "prepared Closure call has no D239-C1 Object.construct capability");
         }
 
         default PreparedStandardImportCall prepareStructuredImportCall() {
@@ -704,8 +711,9 @@ final class ProtosPreparedCalls {
         private final StructuredCallCapabilities structured;
 
         /*
-         * I143: optional only for the actual standard Object.call body.
-         * Absent for every positional or unrelated native invocation.
+         * I143 / D239-C1: optional only for the actual standard Object.call
+         * and Object.construct bodies. Absent for every positional or
+         * unrelated native invocation.
          */
         private PreparedArgumentVector namedObjectCallArguments;
 
@@ -735,11 +743,11 @@ final class ProtosPreparedCalls {
          */
         void installNamedObjectCallArguments(
                 PreparedArgumentVector original) {
-            if (!isStructuredObjectCall()
+            if (!(isStructuredObjectCall() || isStructuredObjectConstruct())
                     || !original.hasNamedArguments()
                     || namedObjectCallArguments != null) {
                 throw new IllegalStateException(
-                        "invalid named standard Object.call packet");
+                        "invalid named standard Object.call or Object.construct packet");
             }
 
             PreparedArgumentVector copy = new PreparedArgumentVector();
@@ -772,6 +780,16 @@ final class ProtosPreparedCalls {
 
         @Override
         public boolean isStructuredObjectCall() { return structured != null && structured.objectCall; }
+
+        /**
+         * D239-C1: the actual standard Object.construct body, recognized by
+         * executable identity like Object.caseOf, so a copied or extracted
+         * standard construct keeps its structured allocation/init bridge.
+         */
+        @Override
+        public boolean isStructuredObjectConstruct() {
+            return ProtosStandardObjectProtocol.isStandardConstructImplementation(nativeBody);
+        }
 
         @Override
         public boolean isStructuredCaseOf() {
@@ -973,6 +991,7 @@ final class ProtosPreparedCalls {
                 return true;
             }
             return isStructuredCaseOf()
+                    || isStructuredObjectConstruct()
                     || isStructuredMapMatch()
                     || isStructuredArrayMatch()
                     || isStructuredIdentityMapAtIfAbsent()
@@ -1012,32 +1031,98 @@ final class ProtosPreparedCalls {
 
             Object receiver = activation.receiver();
             if (receiver instanceof ProtosClosureValue targetClosure) {
-                return PreparedStandardObjectCall.closure(
+                return PreparedStandardObjectCall.selected(
                         namedObjectCallArguments == null
                                 ? ProtosSendPreparation.prepareDirectClosureCall(
                                         targetClosure, supplied, activation)
-                                : ProtosNamedCallPreparation.prepareSelectedDirectSource(
-                                        targetClosure,
-                                        activation,
-                                        namedObjectCallArguments));
+                                : prepareNamedDirectClosure(targetClosure));
             }
-            if (receiver instanceof ProtosObjectValue prototype
-                    && !ProtosNumericValueSupport.isCurrentNumber(receiver)) {
-                ProtosObjectValue instance = new ProtosObjectValue(prototype);
-                return PreparedStandardObjectCall.construction(
+            /*
+             * D239-C1: the ordinary non-Closure branch sends construct to the
+             * original receiver with the exact evaluated packet. No child is
+             * allocated here; the selected construct's exact normal result
+             * is the result of this call.
+             */
+            if (ProtosStandardObjectProtocol.isOrdinaryConstructionReceiver(receiver)) {
+                return PreparedStandardObjectCall.selected(
                         namedObjectCallArguments == null
                                 ? ProtosSendPreparation.prepareSend(
-                                        instance, "init", activation, supplied)
+                                        receiver, "construct", activation, supplied)
                                 : ProtosSendPreparation.prepareNamedSend(
-                                        instance,
-                                        "init",
+                                        receiver,
+                                        "construct",
                                         activation,
-                                        namedObjectCallArguments),
-                        instance);
+                                        namedObjectCallArguments));
             }
             throw ProtosCoreErrors.signal(
                     activation,
                     ProtosCoreErrors.newError(activation));
+        }
+
+        /**
+         * D013 Closure branch with a name-bearing packet. A copied or
+         * extracted actual standard Object.call or Object.construct Closure
+         * keeps its transparent forwarding (D239-C1); every other target binds
+         * the names against its own source formals.
+         */
+        private PreparedClosureCall prepareNamedDirectClosure(
+                ProtosClosureValue targetClosure) {
+            boolean standardCall =
+                    ProtosStandardObjectProtocol.isStandardCallImplementation(targetClosure);
+            if (!standardCall
+                    && !ProtosStandardObjectProtocol.isStandardConstructImplementation(
+                            targetClosure)) {
+                return ProtosNamedCallPreparation.prepareSelectedDirectSource(
+                        targetClosure,
+                        activation,
+                        namedObjectCallArguments);
+            }
+            PreparedClosureCall direct =
+                    ProtosSendPreparation.prepareDirectClosureCall(
+                            targetClosure,
+                            namedObjectCallArguments.positionalSnapshot(),
+                            activation);
+            if (!(direct instanceof NativeCall nativeCall)
+                    || !(standardCall
+                            ? nativeCall.isStructuredObjectCall()
+                            : nativeCall.isStructuredObjectConstruct())) {
+                throw new IllegalStateException(
+                        "standard Object.call or Object.construct lost structured preparation");
+            }
+            nativeCall.installNamedObjectCallArguments(namedObjectCallArguments);
+            return nativeCall;
+        }
+
+        /**
+         * D239-C1 standard Object.construct: allocate the fresh child of the
+         * receiver, then prepare the ordinary init send on it with the
+         * forwarded packet. The structured finish answers the child and
+         * ignores init's normal result.
+         */
+        @Override
+        public PreparedStandardObjectConstruct prepareStructuredObjectConstruct() {
+            if (!isStructuredObjectConstruct()) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no D239-C1 Object.construct capability");
+            }
+            Object receiver = activation.receiver();
+            if (!(receiver instanceof ProtosObjectValue prototype)
+                    || !ProtosStandardObjectProtocol.isOrdinaryConstructionReceiver(receiver)) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+            ProtosObjectValue instance = new ProtosObjectValue(prototype);
+            return new PreparedStandardObjectConstruct(
+                    namedObjectCallArguments == null
+                            ? ProtosSendPreparation.prepareSend(
+                                    instance, "init", activation, supplied)
+                            : ProtosSendPreparation.prepareNamedSend(
+                                    instance,
+                                    "init",
+                                    activation,
+                                    namedObjectCallArguments),
+                    instance);
         }
 
         @Override

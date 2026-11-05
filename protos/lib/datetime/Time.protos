@@ -35,7 +35,7 @@
 /// `nanosecond`. Every argument must be an Integer within its field range;
 /// otherwise an Error is signalled. No field is clamped, wrapped, or
 /// normalized, and `second == 60` is rejected.
-call: (hour, minute, second, nanosecond) => {
+construct: (hour, minute, second, nanosecond) => {
     Time: import("std:datetime/Time")
 
     // Hashes are folded modulo a fixed prime so the accumulator stays bounded.

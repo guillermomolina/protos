@@ -104,6 +104,49 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
         System.out.println("PERF006_B2D3B_STANDARD_CALL_HAS_NO_TRUFFLE_ROOT=PASS");
     }
 
+    /**
+     * D239-C1: the standard Object.construct is a distinct ordinary native
+     * root slot. It never replaces the canonical Object.call selection, so
+     * the Closure intrinsic keeps selecting call, never construct.
+     */
+    @Test
+    void standardConstructIsDistinctOrdinaryRootSlot() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Object call =
+                        ProtosObjectValue.rootObject()
+                                .readLocalSlot("call")
+                                .orElseThrow();
+                ProtosClosureValue construct =
+                        assertInstanceOf(
+                                ProtosClosureValue.class,
+                                ProtosObjectValue.rootObject()
+                                        .readLocalSlot("construct")
+                                        .orElseThrow());
+
+                assertTrue(construct != call);
+                assertTrue(construct.nativeBody().isPresent());
+                assertTrue(
+                        ProtosStandardObjectProtocol
+                                .isCanonicalStandardConstructSelection(
+                                        construct,
+                                        ProtosObjectValue.rootObject()));
+                assertTrue(
+                        ProtosStandardObjectProtocol
+                                .isStandardConstructImplementation(construct));
+                assertTrue(
+                        !ProtosStandardObjectProtocol
+                                .isCanonicalStandardCallSelection(
+                                        construct,
+                                        ProtosObjectValue.rootObject()));
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
     @Test
     void standardCallExecutesSourceBackedClosureWithCapturedReceiver()
             throws Exception {

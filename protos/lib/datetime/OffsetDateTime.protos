@@ -44,7 +44,7 @@
 /// recognized by `std:datetime/LocalDateTime`, and `offset`, a value
 /// recognized by `std:datetime/Offset`. The components are stored as given.
 /// Any other argument signals an Error.
-call: (dateTime, offset) => {
+construct: (dateTime, offset) => {
     OffsetDateTime: import("std:datetime/OffsetDateTime")
 
     // Hashes are folded modulo a fixed prime so the accumulator stays bounded.

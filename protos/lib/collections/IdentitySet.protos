@@ -16,7 +16,7 @@
 //! IdentitySets represented as IdentityMaps keyed by their members (`===` identity).
 
 /// Answers a fresh IdentitySet containing `elements`.
-call: (...elements) => {
+construct: (...elements) => {
     result: IdentityMap()
     for(element in elements) {
         result[element] = true

@@ -979,14 +979,18 @@ The key is an expression. A bare identifier in key position is evaluated
 normally; it is not converted implicitly to a String.
 
 Map construction first resolves the ordinary identifier `Map` in the enclosing
-activation and then performs ordinary `call` lookup on that value. Construction
-is eligible only when that lookup selects the canonical standard Map factory
-behavior, either directly on the standard Map object or through ordinary
-inheritance/delegation from it. A nearer arbitrary `call` override, including a
-locally copied equivalent-looking factory Closure, is not eligible and signals
-`Error` before that custom behavior or any source entry executes.
+activation and then performs ordinary `call` lookup followed by ordinary
+`construct` lookup on that value (D239-C1). Construction is eligible only when
+the `call` lookup selects the canonical standard `Object.call` from the
+standard root `Object` and the `construct` lookup selects the canonical standard
+Map factory `construct` behavior, either directly on the standard Map object or
+through ordinary inheritance/delegation from it. A nearer arbitrary `call` or
+`construct` override, including a locally copied equivalent-looking factory
+Closure, is not eligible and signals `Error` before that custom behavior or any
+source entry executes (`semantics/VALUES_AND_COLLECTIONS.md`).
 
-The eligible factory behavior is invoked exactly once with zero arguments. Its
+The eligible factory `construct` behavior is invoked exactly once with zero
+arguments on the factory receiver. Its
 result is the fresh standard normal Map defined by the standard Map factory, with
 the actual factory invocation receiver as its delegation parent. Empty `%{}`
 still performs lookup, eligibility checking, and this one factory invocation.
@@ -3545,7 +3549,7 @@ Point(10, 20)
 factory(...args)
 ```
 
-Whether the resulting object supports invocation is determined by the ordinary runtime call protocol.
+Whether the resulting object supports invocation is determined by the ordinary runtime call protocol (`semantics/CALLABLES.md`). That protocol always selects the ordinary member `call`; for a non-Closure receiver the standard `Object.call` then sends the ordinary message `construct` (D239-C1). There is no postfix `construct` syntax, no special identifier and no separate canonical AST node for construction: `Point(10, 20)` remains an ordinary `call-suffix` invocation.
 
 Object-literal construction remains separately expressed as:
 

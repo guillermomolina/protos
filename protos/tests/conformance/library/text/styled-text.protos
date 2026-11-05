@@ -170,7 +170,7 @@ tests: [
         null
     }),
     Test("module exposes only construction, concat, and recognition", () => {
-        Assertions.require(StyledText.hasSlot("call"))
+        Assertions.require(StyledText.hasSlot("construct"))
         Assertions.require(StyledText.hasSlot("concat"))
         Assertions.require(StyledText.hasSlot("recognizes"))
         Assertions.require(StyledText.hasSlot("_styledTextFacility") === false)

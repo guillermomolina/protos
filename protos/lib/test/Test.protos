@@ -16,7 +16,7 @@
 //! Canonical named test descriptors.
 
 /// Constructs one fresh frozen named test value.
-call: (name, body) => {
+construct: (name, body) => {
     String.recognizes(name).ifFalse(() => {
         fail()
     })

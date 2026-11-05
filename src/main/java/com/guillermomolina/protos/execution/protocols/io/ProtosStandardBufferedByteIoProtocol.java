@@ -77,7 +77,7 @@ public final class ProtosStandardBufferedByteIoProtocol {
         }
 
         factory.createLocalSlot(
-                "call",
+                "construct",
                 ProtosClosureValue.nativeClosure(
                         (activation, args) ->
                                 construct(

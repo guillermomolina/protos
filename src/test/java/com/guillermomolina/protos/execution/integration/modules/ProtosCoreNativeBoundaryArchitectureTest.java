@@ -72,7 +72,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/protocols/io/ProtosStandardProcessProtocol.java", 1),
                     Map.entry("execution/protocols/io/ProtosStandardBytesProtocol.java", 7),
                     Map.entry("execution/protocols/io/ProtosStandardByteIoProtocol.java", 12),
-                    Map.entry("execution/protocols/values/ProtosStandardObjectProtocol.java", 16),
+                    Map.entry("execution/protocols/values/ProtosStandardObjectProtocol.java", 17),
                     Map.entry("execution/protocols/actors/ProtosStandardActorProtocol.java", 9),
                     Map.entry("execution/protocols/values/ProtosStandardIdentityMapProtocol.java", 8),
                     Map.entry("execution/protocols/values/ProtosStandardStringProtocol.java", 5),
@@ -188,7 +188,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(39, actualCore.size());
-        assertEquals(145, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(146, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -209,6 +209,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 ProtosObjectValue.rootObject(),
                 Set.of(
                         "call",
+                        "construct",
                         "hasSlot",
                         "slotValue",
                         "slotNames",
@@ -263,7 +264,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "Integer",
                 prelude.integerPrototype(),
                 Set.of(
-                        "call",
+                        "construct",
                         "+",
                         "-",
                         "*",
@@ -301,13 +302,13 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "Float",
                 prelude.floatPrototype(),
-                Set.of("call", "+", "-", "*", "/", "recognizes"));
+                Set.of("construct", "+", "-", "*", "/", "recognizes"));
         assertSourceBacked(prelude.floatPrototype(), "negated");
 
         // D198 (I090): Complex negation and arithmetic are source-backed; only the exact
         // recognizer and the non-dispatching factory are native.
         assertNativeSelectors(
-                "Complex", prelude.complexPrototype(), Set.of("recognizes", "call"));
+                "Complex", prelude.complexPrototype(), Set.of("recognizes", "construct"));
         for (String selector : Set.of("negated", "+", "-", "*", "/")) {
             assertSourceBacked(prelude.complexPrototype(), selector);
         }
@@ -333,7 +334,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "Array",
                 prelude.arrayPrototype(),
                 Set.of(
-                        "call",
+                        "construct",
                         "at",
                         "atPut",
                         "size",
@@ -351,11 +352,11 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "Map",
                 prelude.mapPrototype(),
-                Set.of("call", "at", "atIfAbsent", "atPut", "containsKey", "remove", "size", "each", "match"));
+                Set.of("construct", "at", "atIfAbsent", "atPut", "containsKey", "remove", "size", "each", "match"));
         assertNativeSelectors(
                 "IdentityMap",
                 prelude.identityMapPrototype(),
-                Set.of("call", "at", "atIfAbsent", "atPut", "containsKey", "remove", "size", "each"));
+                Set.of("construct", "at", "atIfAbsent", "atPut", "containsKey", "remove", "size", "each"));
         // I094-A1: Path behavior is source-backed; only the private kernel is native.
         assertNativeSelectors("Path", prelude.pathPrototype(), Set.of());
         assertEquals(
@@ -373,10 +374,10 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "standard IpAddress prototype must delegate directly to Object");
         assertNativeSelectors("IpAddress", ipAddressPrototype, Set.of("recognizes"));
         assertEquals(
-                Set.of("call", "==", "hash", "recognizes"),
+                Set.of("construct", "==", "hash", "recognizes"),
                 ipAddressPrototype.localSlotsSnapshot().keySet(),
                 "unexpected standard IpAddress prototype surface");
-        assertSourceBacked(ipAddressPrototype, "call");
+        assertSourceBacked(ipAddressPrototype, "construct");
         assertSourceBacked(ipAddressPrototype, "==");
         assertSourceBacked(ipAddressPrototype, "hash");
         ProtosObjectValue ipEndpointPrototype = prelude.ipEndpointPrototypeForRuntime();
@@ -386,10 +387,10 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "standard IpEndpoint prototype must delegate directly to Object");
         assertNativeSelectors("IpEndpoint", ipEndpointPrototype, Set.of("recognizes"));
         assertEquals(
-                Set.of("call", "==", "hash", "recognizes"),
+                Set.of("construct", "==", "hash", "recognizes"),
                 ipEndpointPrototype.localSlotsSnapshot().keySet(),
                 "unexpected standard IpEndpoint prototype surface");
-        assertSourceBacked(ipEndpointPrototype, "call");
+        assertSourceBacked(ipEndpointPrototype, "construct");
         assertSourceBacked(ipEndpointPrototype, "==");
         assertSourceBacked(ipEndpointPrototype, "hash");
         assertNativeSelectors(
@@ -429,19 +430,19 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "TextReader",
                 ordinaryBinding(prelude, "TextReader"),
-                Set.of("call", "owning"));
+                Set.of("construct", "owning"));
         assertNativeSelectors(
                 "TextWriter",
                 ordinaryBinding(prelude, "TextWriter"),
-                Set.of("call", "owning"));
+                Set.of("construct", "owning"));
         assertNativeSelectors(
                 "BufferedReader",
                 ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(prelude),
-                Set.of("call", "owning"));
+                Set.of("construct", "owning"));
         assertNativeSelectors(
                 "BufferedWriter",
                 ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude),
-                Set.of("call", "owning"));
+                Set.of("construct", "owning"));
         assertNativeSelectors(
                 "import",
                 ordinaryBinding(prelude, "import"),
@@ -516,7 +517,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "Bytes",
                 bytesPrototype,
-                Set.of("call", "size", "at", "atPut", "each", "add", "removeAt"));
+                Set.of("construct", "size", "at", "atPut", "each", "add", "removeAt"));
 
         ProtosObjectValue actorRefPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());

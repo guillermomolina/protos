@@ -17,7 +17,7 @@
 //! key equality).
 
 /// Answers a fresh Set containing `elements`.
-call: (...elements) => {
+construct: (...elements) => {
     result: Map()
     for(element in elements) {
         result[element] = true

@@ -36,7 +36,8 @@ class ProtosPolymorphicInvocationTest {
     /**
      * Deliberately Java-side: executable Protos conformance covers freshness,
      * init execution, and inherited behavior, while this assertion preserves the
-     * exact represented immediate-parent materialization performed by Object.call.
+     * exact represented immediate-parent materialization performed by the
+     * standard Object.construct reached through Object.call (D239-C1).
      * Source parent() reflection is not used as a test oracle here.
      */
     @Test
@@ -59,6 +60,34 @@ class ProtosPolymorphicInvocationTest {
         ProtosObjectValue instance =
                 assertInstanceOf(ProtosObjectValue.class, result);
         assertSame(thing, instance.parent().orElseThrow());
+    }
+
+    /**
+     * D239-C1: Object.call reaches the inherited construct, so the exact
+     * represented identity answered by a custom construct is the call result;
+     * no default child is materialized and no init runs.
+     */
+    @Test
+    void objectCallAnswersExactCustomConstructIdentity() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue cached = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        activation.context().createLocalSlot("cached", cached);
+
+        Object result =
+                ProtosTestExecutionSupport.evaluate(
+                        """
+                        Thing: {
+                            init: () => {
+                                Error().signal()
+                            }
+                            construct: () => cached
+                        }
+                        Thing()
+                        """,
+                        activation);
+
+        assertSame(cached, result);
     }
 
     /**

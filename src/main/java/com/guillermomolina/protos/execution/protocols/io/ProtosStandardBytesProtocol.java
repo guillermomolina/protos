@@ -65,7 +65,7 @@ public final class ProtosStandardBytesProtocol {
     public static void install(ProtosObjectValue bytesFactory) {
         Objects.requireNonNull(bytesFactory, "bytesFactory");
         for (String selector :
-                List.of("call", "size", "at", "atPut", "each", "add", "removeAt")) {
+                List.of("construct", "size", "at", "atPut", "each", "add", "removeAt")) {
             if (bytesFactory.hasLocalSlot(selector)) {
                 throw new IllegalStateException(
                         "standard Bytes factory already defines local " + selector);
@@ -73,7 +73,7 @@ public final class ProtosStandardBytesProtocol {
         }
 
         bytesFactory.createLocalSlot(
-                "call",
+                "construct",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> {
                             Object receiver = activation.receiver();

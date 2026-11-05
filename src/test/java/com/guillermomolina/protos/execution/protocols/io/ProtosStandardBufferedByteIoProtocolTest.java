@@ -75,11 +75,11 @@ class ProtosStandardBufferedByteIoProtocolTest {
         for (ProtosObjectValue factory : List.of(reader, writer)) {
             assertSame(ProtosObjectValue.rootObject(), factory.parent().orElseThrow());
             assertTrue(factory.isFrozen());
-            assertEquals(Set.of("call", "owning"), factory.localSlotsSnapshot().keySet());
+            assertEquals(Set.of("construct", "owning"), factory.localSlotsSnapshot().keySet());
             ProtosClosureValue call =
                     assertInstanceOf(
                             ProtosClosureValue.class,
-                            factory.readLocalSlot("call").orElseThrow());
+                            factory.readLocalSlot("construct").orElseThrow());
             ProtosClosureValue owning =
                     assertInstanceOf(
                             ProtosClosureValue.class,
@@ -99,7 +99,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
                 ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(prelude);
         assertSame(ProtosObjectValue.rootObject(), factory.parent().orElseThrow());
         assertTrue(factory.isFrozen());
-        assertEquals(Set.of("call", "owning"), factory.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("construct", "owning"), factory.localSlotsSnapshot().keySet());
 
         ProtosObjectValue source = source(activation);
         ProtosObjectValue first =

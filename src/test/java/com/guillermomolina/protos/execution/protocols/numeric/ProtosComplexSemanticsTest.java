@@ -103,7 +103,7 @@ final class ProtosComplexSemanticsTest {
         assertNotSame(complex, other.complexPrototype());
         // The trusted recognizer and factory, source-backed negation and arithmetic; no ordering.
         assertEquals(
-                java.util.Set.of("recognizes", "call", "negated", "+", "-", "*", "/"),
+                java.util.Set.of("recognizes", "construct", "negated", "+", "-", "*", "/"),
                 complex.localSlotsSnapshot().keySet());
         ProtosClosureValue recognizes = assertInstanceOf(
                 ProtosClosureValue.class, complex.readLocalSlot("recognizes").orElseThrow());

@@ -48,7 +48,7 @@ public final class ProtosStandardTextReaderProtocol {
                     "source-created Core TextReader factory must begin open and without local slots");
         }
 
-        factory.createLocalSlot("call", factoryClosure(false));
+        factory.createLocalSlot("construct", factoryClosure(false));
         factory.createLocalSlot("owning", factoryClosure(true));
         return factory.freeze();
     }

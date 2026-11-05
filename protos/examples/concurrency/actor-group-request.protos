@@ -11,8 +11,8 @@
 
 // Group routing selects one eligible member. Both workers expose the same
 // observable `size` result, so this example does not assume which member ran it.
-first: Actor.spawn("std:collections/Set", "call", "Ada", "Grace")
-second: Actor.spawn("std:collections/Set", "call", "Linus", "Ken")
+first: Actor.spawn("std:collections/Set", "construct", "Ada", "Grace")
+second: Actor.spawn("std:collections/Set", "construct", "Linus", "Ken")
 workers: Actor.group(first, second)
 
 print(workers.request("size").value())

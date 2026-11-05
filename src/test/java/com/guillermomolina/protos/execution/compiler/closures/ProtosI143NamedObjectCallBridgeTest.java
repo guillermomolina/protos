@@ -27,6 +27,7 @@ import com.guillermomolina.protos.execution.ProtosPreparedCalls.OrdinarySourceCa
 import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedArgumentVector;
 import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardObjectCall;
+import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardObjectConstruct;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -40,7 +41,10 @@ import java.lang.reflect.Field;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** I143 / D237: actual standard Object.call forwarding of evaluated P,K. */
+/**
+ * I143 / D237 / D239-C1: actual standard Object.call forwarding of evaluated
+ * P,K, through standard Object.construct to the selected init.
+ */
 class ProtosI143NamedObjectCallBridgeTest {
 
     @Test
@@ -140,6 +144,7 @@ class ProtosI143NamedObjectCallBridgeTest {
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
 
         prototype.createLocalSlot("call", standardCallCopy());
+        prototype.createLocalSlot("construct", standardConstructCopy());
         prototype.createLocalSlot(
                 "init",
                 closure("(x: false, y: false) => y", caller));
@@ -160,15 +165,26 @@ class ProtosI143NamedObjectCallBridgeTest {
             PreparedStandardObjectCall standard =
                     prepared.prepareStructuredObjectCall();
 
+            PreparedClosureCall constructCall = standard.child();
+            assertTrue(constructCall.isStructuredObjectConstruct());
+            assertSame(prototype, constructCall.activation().receiver());
             assertSame(
                     prototype,
-                    standard.child().activation()
+                    constructCall.activation().methodHome().orElseThrow());
+
+            PreparedStandardObjectConstruct construct =
+                    constructCall.prepareStructuredObjectConstruct();
+            assertSame(
+                    prototype,
+                    construct.child().activation()
                             .methodHome().orElseThrow());
 
-            Object initResult = enterSource(standard.child());
+            Object initResult = enterSource(construct.child());
             assertSame(argument, initResult);
 
-            return prepared.finish(standard.finish(initResult));
+            return prepared.finish(
+                    standard.finish(
+                            constructCall.finish(construct.finish(initResult))));
         });
 
         ProtosObjectValue instance = assertInstanceOf(
@@ -185,6 +201,7 @@ class ProtosI143NamedObjectCallBridgeTest {
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
 
         prototype.createLocalSlot("factory", standardCallCopy());
+        prototype.createLocalSlot("construct", standardConstructCopy());
         prototype.createLocalSlot(
                 "init",
                 closure("(value) => value", caller));
@@ -214,6 +231,7 @@ class ProtosI143NamedObjectCallBridgeTest {
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
 
         prototype.createLocalSlot("call", standardCallCopy());
+        prototype.createLocalSlot("construct", standardConstructCopy());
         prototype.createLocalSlot(
                 "init", closure("(expected) => expected", caller));
 
@@ -228,7 +246,9 @@ class ProtosI143NamedObjectCallBridgeTest {
                                     ProtosBytecodeRootNode.PrepareClosureCallVector
                                             .perform(
                                                     false, prototype, caller, supplied);
-                            prepared.prepareStructuredObjectCall();
+                            prepared.prepareStructuredObjectCall()
+                                    .child()
+                                    .prepareStructuredObjectConstruct();
                             return null;
                         }));
 
@@ -263,7 +283,16 @@ class ProtosI143NamedObjectCallBridgeTest {
         PreparedStandardObjectCall standard =
                 prepared.prepareStructuredObjectCall();
 
-        Object result = enterSource(standard.child());
+        PreparedClosureCall child = standard.child();
+        Object result;
+        if (child.isStructuredObjectConstruct()) {
+            PreparedStandardObjectConstruct construct =
+                    child.prepareStructuredObjectConstruct();
+            Object initResult = enterSource(construct.child());
+            result = child.finish(construct.finish(initResult));
+        } else {
+            result = enterSource(child);
+        }
         return prepared.finish(standard.finish(result));
     }
 
@@ -280,6 +309,16 @@ class ProtosI143NamedObjectCallBridgeTest {
             throws Exception {
         Field field = ProtosStandardObjectProtocol.class
                 .getDeclaredField("STANDARD_CALL_BODY");
+        field.setAccessible(true);
+
+        return ProtosClosureValue.nativeClosure(
+                (ProtosNativeClosureBody) field.get(null));
+    }
+
+    private static ProtosClosureValue standardConstructCopy()
+            throws Exception {
+        Field field = ProtosStandardObjectProtocol.class
+                .getDeclaredField("STANDARD_CONSTRUCT_BODY");
         field.setAccessible(true);
 
         return ProtosClosureValue.nativeClosure(

@@ -105,7 +105,7 @@ public final class ProtosStandardComplexProtocol {
                 ProtosBooleanValue.of(ProtosComplexNumericSupport.isComplex(supplied.get(0))));
         // D198: the arguments become the components exactly; only an exact Integer zero
         // imaginary part collapses to the real part. No conversion or callback occurs.
-        installNative(prototype, "call", 2, (supplied, prelude) ->
+        installNative(prototype, "construct", 2, (supplied, prelude) ->
                 ProtosNumericValueSupport.isCurrentRealNumber(supplied.get(0))
                                 && ProtosNumericValueSupport.isCurrentRealNumber(supplied.get(1))
                         ? ProtosComplexNumericSupport.normalize(

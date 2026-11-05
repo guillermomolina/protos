@@ -170,8 +170,10 @@ method or non-Closure selected `call` retains its ordinary lookup/invocation
 failure rather than becoming a named-argument error.
 
 Standard `Object.call` transparently forwards named and positional arguments
-to the Closure receiver or to the ordinary selected constructor `init` (also
-when the standard behavior was inherited, copied or extracted). A custom
+to the Closure receiver or to the selected `construct` method, and standard
+`Object.construct` forwards them in turn to the selected `init` (also when the
+standard behaviors were inherited, copied or extracted; see
+[Construction: `init`, `construct`, and `call`](#construction-init-construct-and-call)). A custom
 `call` Closure only accepts names from **its own** declared signature; it does
 not implicitly forward them to another callable. Native or projected
 behaviors accept named calls only when they explicitly publish a compatible
@@ -626,6 +628,78 @@ The nested Closure can continue lookup after `middle`, while the original
 receiver remains `leaf`.
 
 This works without introducing a special nested-method value kind.
+
+## Construction: `init`, `construct`, and `call`
+
+Three ordinary messages share the work of making new values. Each one answers a
+different question:
+
+```text
+init       — initialize a fresh instance
+construct  — choose or produce the construction result
+call       — respond to invocation
+```
+
+`Point(0, 0)` is an ordinary invocation. It looks up `call` on `Point`, exactly
+as for any other value. `Point` usually does not define `call`, so it inherits
+the standard `Object.call`. For a non-Closure receiver, that standard `call`
+sends `construct` to `Point` with the same arguments. `Point` usually does not
+define `construct` either, so the inherited standard `Object.construct` creates
+a fresh object whose parent is `Point`, sends it `init(0, 0)`, and answers that
+new object.
+
+So most prototypes define only `init`:
+
+```protos
+Point: {
+    init: (x, y) => {
+        this.x: x
+        this.y: y
+    }
+}
+
+p: Point(3, 4)
+p.parent() === Point    // true
+```
+
+The result of `init` is ignored: construction always answers the fresh object
+unless a `construct` method decides otherwise.
+
+Define `construct` when the prototype must decide *what* to answer: another
+prototype, an existing object, or a value of a different kind. `init` cannot do
+this, because by the time it runs the fresh object already exists. The standard
+`Range` uses `construct` to pick a direction from its bounds:
+
+```protos
+Range(1, 4).parent() === Range          // true
+Range(4, 1).parent() === InvertedRange  // true
+```
+
+A custom `construct` is an ordinary method. Its result is the result of the
+whole invocation, and no `init` runs unless it asks for one, typically through
+`super.construct(...)`:
+
+```protos
+Labelled: {
+    init: (name) => {
+        this.name: name
+    }
+    construct: (name) => {
+        instance: super.construct(name)
+        instance.registered: true
+        instance
+    }
+}
+```
+
+`call` is the universal invocation protocol, not a constructor declaration. An
+object that defines its own `call` is simply invocable in its own way; its
+`call` runs instead of the standard one, and `construct` is not consulted.
+Closures keep running their own body when called. Object literals such as
+`Point { x: 1 }` never send `call`, `construct` or `init`.
+
+The normative rules are in `spec/semantics/CALLABLES.md` (Polymorphic
+Invocation and Object Construction).
 
 ## Normal return is the final expression
 

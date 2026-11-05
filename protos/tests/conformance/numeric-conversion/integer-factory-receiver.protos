@@ -18,13 +18,19 @@ Test: import("std:test/Test")
 
 tests: [
     Test("copied integer factory receiver error", () => {
+        copiedConstruct: Integer.slotValue("construct")
+        ordinary: {
+            construct: copiedConstruct
+        }
         Assertions.signals(Error, () => {
-            copiedCall: Integer.slotValue("call")
-            ordinary: {
-                call: copiedCall
-            }
             ordinary(1)
         })
+    }),
+    Test("integer factory is an own construct reached through inherited call", () => {
+        Assertions.require(Integer.hasSlot("construct"))
+        Assertions.require(Integer.hasSlot("call") === false)
+        Assertions.require(Integer.construct(7) == 7)
+        Assertions.require(Integer(7) == 7)
     }),
     Test("inherited integer factory receiver error", () => {
         Assertions.signals(Error, () => {

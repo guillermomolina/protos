@@ -28,7 +28,7 @@
 /// - `events()`: a fresh frozen Array of the retained events in emission order.
 ///   Each call answers a new Array; later emissions do not change an Array
 ///   already answered.
-call: () => {
+construct: () => {
     LogEvent: import("std:logging/LogEvent")
 
     retained: []

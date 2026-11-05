@@ -39,7 +39,7 @@
 /// Answers a fresh frozen offset of exactly `seconds` seconds. `seconds` must
 /// be an Integer from `-64800` through `64800`; any other argument signals an
 /// Error. The value is never clamped or wrapped.
-call: (seconds) => {
+construct: (seconds) => {
     Offset: import("std:datetime/Offset")
 
     // Hashes are folded modulo a fixed prime so the accumulator stays bounded.

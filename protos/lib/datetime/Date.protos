@@ -37,7 +37,7 @@
 /// argument must be an Integer and `year` must lie in `-9999` through `9999`.
 /// An invalid or out-of-range field signals an Error; no field is clamped,
 /// wrapped, or normalized.
-call: (year, month, day) => {
+construct: (year, month, day) => {
     Date: import("std:datetime/Date")
 
     // Hashes are folded modulo a fixed prime so the accumulator stays bounded.

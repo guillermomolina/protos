@@ -52,7 +52,7 @@
 /// Answers a fresh frozen period of `years`, `months`, and `days`. Every
 /// argument must be an Integer and may be positive, zero, or negative; any
 /// other argument signals an Error. The components are stored as given.
-call: (years, months, days) => {
+construct: (years, months, days) => {
     Period: import("std:datetime/Period")
 
     (Integer.recognizes(years) && Integer.recognizes(months) && Integer.recognizes(days)).ifFalse(() => {

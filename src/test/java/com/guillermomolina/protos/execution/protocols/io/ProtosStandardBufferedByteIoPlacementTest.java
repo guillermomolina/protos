@@ -121,7 +121,7 @@ final class ProtosStandardBufferedByteIoPlacementTest {
                         ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude))) {
             assertTrue(factory.isFrozen());
             assertSame(ProtosObjectValue.rootObject(), factory.parent().orElseThrow());
-            assertEquals(Set.of("call", "owning"), factory.localSlotsSnapshot().keySet());
+            assertEquals(Set.of("construct", "owning"), factory.localSlotsSnapshot().keySet());
             assertTrue(prelude.isStandardModuleMemberForRuntime(factory));
         }
         for (String name : new String[] {"BufferedReader", "BufferedWriter"}) {

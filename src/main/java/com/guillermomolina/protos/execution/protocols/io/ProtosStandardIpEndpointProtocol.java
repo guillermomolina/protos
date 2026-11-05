@@ -31,7 +31,7 @@ import java.util.Objects;
 /**
  * D048 recognition bridge for the ordinary frozen IpEndpoint prototype/data shape.
  *
- * <p>Construction ({@code call}), structural equality ({@code ==}) and {@code hash} are
+ * <p>Construction ({@code construct}), structural equality ({@code ==}) and {@code hash} are
  * source closures of {@code lib/core/network/IpEndpoint.protos}. Only {@code recognizes} is native: it
  * inspects the candidate's internal shape, including its address, directly and never
  * dispatches guest behavior.

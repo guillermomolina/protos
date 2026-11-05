@@ -41,7 +41,7 @@
 /// Answers a fresh frozen duration of exactly `nanoseconds` nanoseconds.
 /// `nanoseconds` must be an Integer and may be positive, zero, or negative;
 /// any other argument signals an Error.
-call: (nanoseconds) => {
+construct: (nanoseconds) => {
     Duration: import("std:datetime/Duration")
 
     Integer.recognizes(nanoseconds).ifFalse(() => {

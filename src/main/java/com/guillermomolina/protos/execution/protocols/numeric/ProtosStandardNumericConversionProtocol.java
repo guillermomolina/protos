@@ -56,12 +56,17 @@ public final class ProtosStandardNumericConversionProtocol {
     private static void installFactory(
             ProtosObjectValue prototype,
             FactoryKind factoryKind) {
-        if (prototype.hasLocalSlot("call")) {
+        if (prototype.hasLocalSlot("construct")) {
             throw new IllegalStateException(
-                    "Core numeric prototype already defines a local call slot");
+                    "Core numeric prototype already defines a local construct slot");
         }
+        /*
+         * D239-C1: Integer(x) and Float(x) reach this construct through the
+         * inherited standard Object.call. Its result may be an existing
+         * numeric value; no init is run on it.
+         */
         prototype.createLocalSlot(
-                "call",
+                "construct",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> {
                             if (activation.receiver() != prototype || supplied.size() != 1) {

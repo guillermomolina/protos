@@ -109,7 +109,7 @@ bootstrap binding, and initialization values.
 For example, the shipped tutorial uses:
 
 ```protos
-worker: Actor.spawn("std:collections/Set", "call", 1, 2, 3)
+worker: Actor.spawn("std:collections/Set", "construct", 1, 2, 3)
 ```
 
 The important boundary is what **does not** happen:
@@ -805,8 +805,8 @@ For example, the shipped tutorial says explicitly not to rely on which eligible
 Actor receives the request:
 
 ```protos
-first: Actor.spawn("std:collections/Set", "call", "Ada", "Grace")
-second: Actor.spawn("std:collections/Set", "call", "Linus", "Ken")
+first: Actor.spawn("std:collections/Set", "construct", "Ada", "Grace")
+second: Actor.spawn("std:collections/Set", "construct", "Linus", "Ken")
 workers: Actor.group(first, second)
 
 print(workers.request("size").value())

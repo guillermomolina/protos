@@ -733,7 +733,8 @@ final class ProtosClosureCallPreparation {
     /**
      * Shared with ordinary named sends and super sends: the actual
      * selected implementation decides whether names bind to source
-     * formals or pass transparently through standard Object.call.
+     * formals or pass transparently through standard Object.call or
+     * standard Object.construct (D239-C1).
      *
      * <p>Method-home identity is not an admission condition for
      * standard forwarding: its executable native-body identity is.
@@ -753,8 +754,15 @@ final class ProtosClosureCallPreparation {
                     ProtosCoreErrors.newError(caller));
         }
 
-        if (ProtosStandardObjectProtocol
-                .isStandardCallImplementation(behavior)) {
+        /*
+         * D239-C1: the actual standard Object.call and Object.construct
+         * implementations both forward the exact evaluated P,K packet to the
+         * next selected method (construct, respectively init).
+         */
+        boolean standardCall =
+                ProtosStandardObjectProtocol.isStandardCallImplementation(behavior);
+        if (standardCall
+                || ProtosStandardObjectProtocol.isStandardConstructImplementation(behavior)) {
             PreparedClosureCall prepared =
                     ProtosSendPreparation.prepareImmediateMethodCall(
                             behavior,
@@ -764,9 +772,11 @@ final class ProtosClosureCallPreparation {
                             caller);
 
             if (!(prepared instanceof NativeCall nativeCall)
-                    || !nativeCall.isStructuredObjectCall()) {
+                    || !(standardCall
+                            ? nativeCall.isStructuredObjectCall()
+                            : nativeCall.isStructuredObjectConstruct())) {
                 throw new IllegalStateException(
-                        "standard Object.call lost structured preparation");
+                        "standard Object.call or Object.construct lost structured preparation");
             }
 
             nativeCall.installNamedObjectCallArguments(supplied);

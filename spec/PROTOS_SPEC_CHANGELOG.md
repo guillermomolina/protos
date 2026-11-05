@@ -23,6 +23,33 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.493] - 2026-11-05
+
+### D239-C1 / I145-A — Ordinary `Object.construct` protocol
+- `semantics/CALLABLES.md`: standard `Object.call` sends the ordinary
+  `construct` message for non-Closure ordinary receivers and answers its exact
+  result; new standard `Object.construct` (fresh child, `init`, result ignored);
+  custom `construct` result semantics, two-stage transparent `(P,K)`
+  forwarding by the actual standard implementations, lookup/error precedence,
+  changed meaning of pre-existing `construct` slots, and standard factories
+  specialized through `construct`.
+- `semantics/OBJECT_MODEL.md`: default construction is the inherited ordinary
+  `construct` message; one additional observable root-local slot, no
+  privileged prototype category.
+- `semantics/EXECUTION_AND_CONTROL.md`: ordering of the nested `construct` and
+  `init` selections, no argument re-evaluation, `super.construct` as an
+  ordinary super send.
+- `semantics/VALUES_AND_COLLECTIONS.md`: Array, Map, IdentityMap, Bytes and
+  numeric conversion factories own `construct`; `%{...}` eligibility requires
+  canonical `Object.call` and canonical `Map.construct`; Range and
+  InvertedRange own `construct` instead of `call` (six own slots unchanged).
+- `PROTOS_GRAMMAR.md`, `PROTOS_LANGUAGE_SPEC.md`: explanatory alignment of
+  polymorphic invocation and `%{...}`; no syntax change.
+- `io/TEXT_IO.md`, `io/BYTE_IO.md`: borrowing wrapper and Bytes factories
+  reached through `construct`; lifecycle and ownership unchanged.
+- `runtime/ABSTRACT_RUNTIME.md` (informative): `objectCall` / `objectConstruct`
+  two-stage sketch.
+
 ## [0.1.492] - 2026-11-03
 
 ### D237 / I143 — Contextual named arguments and MIX-C R3 association

@@ -93,7 +93,7 @@ final class ProtosStandardTextWriterProtocolTest {
 
         assertSame(ProtosObjectValue.rootObject(), factory.parent().orElseThrow());
         assertTrue(factory.isFrozen());
-        assertEquals(Set.of("call", "owning"), factory.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("construct", "owning"), factory.localSlotsSnapshot().keySet());
 
         ScriptedTarget target = new ScriptedTarget(activation, true, true);
         ProtosObjectValue first =

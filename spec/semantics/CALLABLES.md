@@ -496,24 +496,29 @@ Error handler rules. Parameter names in a public source Closure therefore form
 part of its name-aware invocation API; renaming one may break named callers
 without changing positional behavior.
 
-The **actual executable standard `Object.call` implementation** is the sole
-standard transparent forwarding behavior: it forwards the complete `(P,K)`
-packet without binding labels against its native wrapper. When invoked on a
-Closure receiver, it activates that exact Closure with `(P,K)` and the existing
+The **actual executable standard `Object.call` and `Object.construct`
+implementations** (D239-C1) are the only standard transparent forwarding
+behaviors: each forwards the complete `(P,K)` packet without binding labels
+against its native wrapper. When standard `Object.call` is invoked on a Closure
+receiver, it activates that exact Closure with `(P,K)` and the existing
 captured/bound `this`, `methodHome`, lexical and return-home relationships. For
-ordinary constructible object receivers, it creates the usual fresh child and
-sends the selected ordinary `init` behavior the same `(P,K)`; the `init`
-lookup, failures, return-value handling and control transfers are unchanged.
-This is true when that actual standard behavior was copied, inherited,
-composed, aliased or extracted; `methodHome` need not be `Object`. A different
-custom `call`, even one with positional rest, does not acquire this forwarding
-power. A successful `init` result is still ignored in favor of the new child.
+ordinary constructible object receivers, it sends the ordinary message
+`construct` to the original receiver with the same `(P,K)`. Standard
+`Object.construct` creates the fresh child and sends the selected ordinary
+`init` behavior the same `(P,K)`; the `init` lookup, failures, return-value
+handling and control transfers are unchanged. A custom source `construct`
+selected by that send binds `(P,K)` against its own declared formals exactly as
+any selected source method. Forwarding holds when an actual standard behavior
+was copied, inherited, composed, aliased or extracted; `methodHome` need not be
+`Object`. A different custom `call` or `construct`, even one with positional
+rest, does not acquire this forwarding power. A successful `init` result is
+still ignored in favor of the new child.
 
 Native/standard/projected Closure behaviors accept names only when they
 explicitly publish a compatible Protos-semantic parameter signature. Java or
 foreign parameter names, selectors and documentation are not inferred as
-signatures, and the standard `Object.call` bridge does not extend this rule to
-other native methods. Absent such a signature, named invocation signals a
+signatures, and the standard `Object.call` and `Object.construct` bridges do
+not extend this rule to other native methods. Absent such a signature, named invocation signals a
 fresh generic Protos `Error` **before entering** the native/foreign behavior.
 Foreign projected `call`, `std:interop.invoke` and `instantiate`, Polyglot/host
 positional execution and synchronous callback ingress remain positional; no
@@ -727,7 +732,8 @@ call), invoking target `receiver` performs these steps:
 4. Directly activate that selected Closure in method role with `this === receiver`,
    the preserved `methodHome`, and `(P,K)` as its supplied arguments. Validate
    names against its actual declared signature before defaults/body, except for
-   the exact standard `Object.call` forwarding implementation defined below.
+   the exact standard `Object.call` and `Object.construct` forwarding
+   implementations defined below.
    Activation, arity/default/rest binding, returns, Errors, and explicit
    suspension then follow the ordinary Closure rules in this document.
 
@@ -815,10 +821,10 @@ callability.
 
 The standard `Object` object owns an ordinary local `call` slot whose value is a
 standard Closure. This one inherited behavior supplies both standard Closure
-execution and default object construction without introducing a separate
+execution and the entry to object construction without introducing a separate
 `Closure` prototype, hidden callable property, or second dispatch mechanism.
 Conceptually, after `Object.call` has been selected and directly activated with
-invocation receiver `this`:
+invocation receiver `this` (D013, D239-C1):
 
 ```text
 Object.call(P,K):
@@ -828,18 +834,26 @@ Object.call(P,K):
         and return-home semantics
         return that activation's result
 
-    instance = createObject(parent = this)
-    send(instance, "init", P,K)
-    return instance
+    return send(this, "construct", P,K)
 ```
+
+The non-Closure branch applies only to the ordinary receiver domain that is
+eligible for default construction (see below); it does not widen that domain.
+`send(this, "construct", P,K)` is an ordinary message send: ordinary member
+lookup of `construct` starting at the original receiver, preservation of that
+receiver as `this` and of the owning object as `methodHome`, the ordinary
+missing-slot Error when no `construct` is found, and an `Error` when the
+selected value is not a `Closure`. The exact normal result of the selected
+`construct` is the result of `Object.call`; Errors, non-local return,
+cancellation, suspension and other control transfers propagate unchanged.
 
 The packet `(P,K)` is forwarded, not validated against the standard native
 `Object.call` wrapper's formal names. This transparency belongs to the actual
 selected executable standard implementation even when copied, aliased,
 composed, inherited or extracted; a matching `methodHome` is not required and
 a different source-defined `call` method is not a transparent forwarding bridge.
-For a constructed instance, selected `init` lookup precedes validation of its
-own parameter names. A failure of that lookup wins over an invalid name.
+Selection of `construct` precedes validation of the selected `construct`'s own
+parameter names; a failure of that lookup wins over an invalid name.
 
 The Closure branch is the terminal executable operation already defined above;
 it does not perform another `this(args...)` lookup. A Closure that inherits
@@ -847,9 +861,9 @@ it does not perform another `this(args...)` lookup. A Closure that inherits
 by §11 retains its preserved receiver and `methodHome` when that body executes.
 A Closure may nevertheless define or acquire a nearer ordinary `call` slot; in
 that case ordinary lookup selects the nearer behavior instead, exactly as for any
-other object.
+other object. Closure invocation never consults `construct`.
 
-For non-Closure receivers, inherited `Object.call` performs default construction.
+For non-Closure receivers, inherited `Object.call` reaches construction.
 Because `call` uses ordinary delegation, every object that does not define a
 nearer `call` inherits this behavior through the unique delegation chain ending
 at `Object`. There is no privileged "prototype" flag controlling this
@@ -860,7 +874,40 @@ object with no nearer `call` is therefore constructible by inherited
 
 A raw foreign reference does not receive this default construction: its `call`
 member exists only through the explicit projection defined in
-`VALUES_AND_COLLECTIONS.md` (Foreign Values).
+`VALUES_AND_COLLECTIONS.md` (Foreign Values). Represented values outside the
+ordinary object receiver domain (for example semantic Numbers) are likewise not
+constructible by the standard `Object.call` non-Closure branch; it signals an
+`Error` before sending `construct`.
+
+### Standard `Object.construct`: default allocation and initialization
+
+The standard `Object` object also owns an ordinary local `construct` slot whose
+value is a standard Closure (D239-C1). Like `call`, it is inherited and
+overridable through ordinary delegation, and it is an observable root-local slot
+under ordinary reflection. Conceptually, with invocation receiver `this`:
+
+```text
+Object.construct(P,K):
+    instance = createObject(parent = this)
+    send(instance, "init", P,K)
+    return instance
+```
+
+`createObject` creates a fresh ordinary object whose immutable delegation parent
+is exactly the invocation receiver (`OBJECT_MODEL.md`). The `init` send is an
+ordinary message send on the fresh child. Its normal result is ignored; after
+successful initialization `Object.construct` returns the fresh child. An Error
+or other control transfer from `init` propagates normally and construction has
+no successful result. Standard `Object.construct` admits the same ordinary
+receiver domain as the non-Closure branch of `Object.call` and signals an
+`Error` for any other receiver.
+
+The `(P,K)` packet is forwarded transparently to `init` by the actual executable
+standard `Object.construct` implementation, wherever it is installed: copied,
+aliased, composed, inherited or extracted standard construct behavior keeps this
+forwarding, and `methodHome` need not be `Object`. Selected `init` lookup
+precedes validation of its own parameter names; a failure of that lookup wins
+over an invalid name.
 
 Thus:
 
@@ -868,11 +915,11 @@ Thus:
 Point(10, 20)
 ```
 
-creates a fresh object whose immutable delegation parent is `Point`, sends
-`init(10, 20)` to that fresh object, and returns that fresh object. `init` is an
-ordinary overridable message. Its return value is ignored; an Error or other
-control transfer from initialization propagates normally and the construction
-expression has no successful instance result.
+performs ordinary `call` lookup on `Point`, selects the inherited standard
+`Object.call`, sends `construct(10, 20)` to `Point`, selects the inherited
+standard `Object.construct`, creates a fresh object whose immutable delegation
+parent is `Point`, sends `init(10, 20)` to that fresh object, and returns that
+fresh object. `init` and `construct` are ordinary overridable messages.
 
 `Object` provides a default `init` behavior that accepts zero arguments and,
 on normal completion, returns its receiver (`this`). A non-empty argument vector
@@ -881,33 +928,71 @@ Error. This return rule belongs only to the standard `Object.init`; an overridin
 `init` has ordinary Closure return semantics and is not required to return
 `this`. Therefore `Thing()` works for an object that does not override `init`,
 while `Thing(1, 2)` requires compatible initialization behavior. As specified
-above, `Object.call` ignores the normal result of `init` during default
-construction and returns the fresh instance.
+above, `Object.construct` ignores the normal result of `init` and returns the
+fresh instance.
+
+### Custom `construct`
+
+A `construct` slot selected by the standard `Object.call` non-Closure branch is
+an ordinary Closure-valued method. When a nearer custom `construct` is
+selected:
+
+- no default child is allocated before it executes;
+- no `init` is run implicitly before or after it;
+- its exact normal result, of any kind (a new object with another parent, an
+  existing object by identity, a scalar, `null`, or any other value), is the
+  result of the original invocation, and is never replaced or conditionally
+  initialized according to its kind or parent; and
+- it may obtain default allocation and initialization explicitly through an
+  ordinary `super.construct(...)` send or by sending `construct` to another
+  receiver.
+
+`call` precedence is unchanged. A selected custom `call` executes without any
+implicit `construct` lookup; a local non-Closure `call` fails at step 3 without
+falling back to an inherited `call` or to `construct`. When standard
+`Object.call` reaches a non-Closure `construct` shadow, the `construct` send
+signals an `Error` without falling back to an inherited `construct`. Because
+`construct` is selected only after the standard `call` has been selected,
+argument expressions that install, replace or remove `call` or `construct`
+are observed by the corresponding later lookup.
+
+Introducing standard `Object.construct` intentionally changes the meaning of a
+pre-existing user slot named `construct` on an object that inherits standard
+`Object.call`: parenthesized invocation of that object (or of its delegating
+descendants) now selects it. Callability inspection remains defined solely by
+`call` (§Callability inspection); a `construct` slot never makes an object
+callable or non-callable.
 
 Alternative constructors such as `Point.fromPolar(radius, angle)` are ordinary
 named messages and may internally use the same parenthesized invocation
-protocol.
+protocol. Arbitrary user-defined `call` methods remain ordinary executable
+behavior; they are not reclassified as constructors.
 
 ### Standard factory specialization
 
-Standard objects described elsewhere as specializing ordinary polymorphic
-invocation do so by the same mechanism: they own a nearer ordinary local `call`
-slot whose value is their standard factory/conversion Closure, thereby shadowing
-`Object.call`. This includes `Array`, `Map`, `IdentityMap`, and the standard
-numeric conversion prototypes. Delegation inherits those factory behaviors
+Standard objects described elsewhere as specializing construction do so by the
+same mechanism: they own a nearer ordinary local `construct` slot whose value is
+their standard factory/conversion Closure, thereby shadowing
+`Object.construct`, while ordinary parenthesized invocation still selects the
+inherited standard `Object.call`. This includes `Array`, `Map`, `IdentityMap`,
+the standard numeric conversion prototypes, and the directed `Range` and
+`InvertedRange` prototypes. Delegation inherits those factory behaviors
 normally, with the actual invocation receiver remaining `this`; a nearer user or
-standard `call` shadows them normally. Standard receiver-domain and result rules
-for each factory remain owned by the corresponding domain specification.
+standard `call` or `construct` shadows them normally. Standard receiver-domain
+and result rules for each factory remain owned by the corresponding domain
+specification.
 
 A standard/native factory with no explicitly declared Protos-semantic named
 signature does not acquire keyword parameters from its selector or Java body.
-Only the standard executable `Object.call` forwards names automatically.
+Only the standard executable `Object.call` and `Object.construct` forward names
+automatically.
 
 Arity, defaults, rest, spread, Errors, non-local return, and explicit suspension
-for user-defined or standard `call` Closures are not a second invocation system:
-they are exactly the Closure rules above. Lookup and callability checks create no
-hidden suspension; suspension is observable only if execution of the selected
-Closure explicitly reaches an operation that is already a suspension point.
+for user-defined or standard `call` and `construct` Closures are not a second
+invocation system: they are exactly the Closure rules above. Lookup and
+callability checks create no hidden suspension; suspension is observable only if
+execution of the selected Closure explicitly reaches an operation that is
+already a suspension point.
 
 ### Object literals and trailing closures remain distinct
 
@@ -921,7 +1006,7 @@ Point {
 ```
 
 directly creates an object whose parent is `Point` and evaluates the object body
-as slot definitions. It does not implicitly send `init` or `call`.
+as slot definitions. It does not implicitly send `init`, `construct` or `call`.
 
 Core v0.1 does not define a combined object-construction form in which
 `Point(args) { ... }` means "construct and then evaluate this object body". When

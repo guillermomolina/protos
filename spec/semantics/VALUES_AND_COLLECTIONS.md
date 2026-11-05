@@ -516,21 +516,29 @@ post-construction indexed assignment and does not dispatch `atPut` while
 establishing those initial associations.
 
 Construction first resolves the ordinary identifier `Map` in the enclosing
-activation. It then performs ordinary `call` lookup on the resulting object.
+activation. It then performs, on the resulting factory receiver, ordinary
+`call` lookup followed by ordinary `construct` lookup (D239-C1).
 
-That selected behavior is eligible for `%{...}` construction only when it is
-the canonical standard Map factory behavior selected from the canonical
-standard Map home, either directly or through ordinary inheritance/delegation.
-An object that delegates to the canonical Map and inherits that factory behavior
-is therefore eligible. A nearer arbitrary `call` override is not eligible.
-Copying or locally defining equivalent-looking factory behavior does not make
-that nearer behavior canonical.
+The receiver is eligible for `%{...}` construction only when both:
 
-Ineligible construction signals `Error` before executing the selected custom
-`call` behavior and before evaluating any source entry.
+1. the selected `call` is the actual canonical standard `Object.call` selected
+   from the standard root `Object`; and
+2. the selected `construct` is the canonical standard Map factory `construct`
+   behavior selected from the canonical standard Map home, either directly or
+   through ordinary inheritance/delegation.
 
-For an eligible receiver, the canonical standard Map factory is invoked exactly
-once with zero arguments. It produces a fresh open standard normal Map whose
+An object that delegates to the canonical Map and inherits both behaviors is
+therefore eligible. A nearer arbitrary `call` or `construct` override is not
+eligible. Copying or locally defining equivalent-looking `call` or factory
+behavior does not make that nearer behavior canonical.
+
+Ineligible construction signals `Error` before executing any selected custom
+`call` or `construct` behavior, before any noncanonical factory behavior, and
+before evaluating any source entry.
+
+For an eligible receiver, the canonical standard Map factory `construct` is
+invoked exactly once with zero arguments on the original factory receiver,
+exactly as the selected standard `Object.call` would send it. It produces a fresh open standard normal Map whose
 delegation parent is the actual factory invocation receiver. Consequently an
 ordinary prototype that delegates to the canonical Map and inherits its standard
 factory behavior composes with `%{...}` construction while retaining itself as
@@ -616,8 +624,11 @@ matching semantics.
 
 The standard prelude `Array` object delegates directly to `Object`.
 
-The standard prelude `Array` object specializes the ordinary polymorphic
-invocation protocol as an Array factory.
+The standard prelude `Array` object specializes ordinary construction as an
+Array factory: it owns an ordinary local `construct` slot (D239-C1) holding the
+standard Array factory behavior, and inherits `call` from `Object`, so an
+invocation reaches that factory through the standard `Object.call` →
+`construct` bridge (`CALLABLES.md`).
 
 A call:
 
@@ -673,9 +684,9 @@ receiver.
 
 The standard Array factory does not send `init` to the created Array and does
 not use `Object`'s default child-plus-`init` construction path. This is an
-ordinary specialization of the existing polymorphic invocation protocol, not a
-second construction syntax or callable category. A prototype that wants
-different construction behavior may specialize its ordinary invocation
+ordinary specialization of the standard `construct` message, not a second
+construction syntax or callable category. A prototype that wants different
+construction behavior may specialize its ordinary `construct` (or `call`)
 behavior in the same way any other object may.
 
 Argument expressions and call spread are evaluated before invocation under the
@@ -693,8 +704,8 @@ ordinary call:
 ```
 
 Consequently the standard factory semantics in this section apply only when
-ordinary lookup selects the standard `Array` factory, or an object inheriting
-that ordinary factory behavior. Shadowing `Array` affects bracket construction
+ordinary invocation reaches the standard `Array` factory `construct`, on the
+standard `Array` or an object inheriting that ordinary factory behavior. Shadowing `Array` affects bracket construction
 exactly as it affects an explicit `Array(...)` call; a non-invokable selected
 value fails by the ordinary invocation rules.
 
@@ -704,8 +715,9 @@ call binding: `[item: value]` denotes `Array(item: value)`, with `item` a
 literal argument label rather than a slot creation. The canonical standard
 Array factory has no published named-formal signature and rejects a supplied
 named argument with a fresh generic `Error` before allocating its result.
-Shadowing `Array` still selects the shadow's ordinary `call` behavior, which
-may accept named arguments when it publishes a Protos semantic signature.
+Shadowing `Array` still selects the shadow's ordinary `call` (and, through
+standard `Object.call`, its `construct`) behavior, which may accept named
+arguments when it publishes a Protos semantic signature.
 There is no independent bracket-specific named-argument binding rule.
 
 A standard `Array` is an identity-bearing object with receiver-owned indexed
@@ -1475,21 +1487,25 @@ prototype before invoking it, as before.
 
 ### Construction
 
-Each prototype's own messages are exactly six: `init`, `call`, `each`,
+Each prototype's own messages are exactly six: `init`, `construct`, `each`,
 `eachStep`, `invert`, and `reverse`. Each prototype owns an ordinary
-source-defined `call` method (D236-B1). By the ordinary lookup and invocation
-rules (`CALLABLES.md`), invoking either prototype selects its own `call`, which
-takes precedence over the inherited `Object.call`; the general call protocol
-is owned by `CALLABLES.md` and is not changed by this section.
+source-defined `construct` method (D236-B1, D239-C1); its `call` member is
+inherited from `Object`. By the ordinary lookup and invocation rules
+(`CALLABLES.md`), invoking either prototype selects the inherited standard
+`Object.call`, which sends `construct` to the invoked prototype and therefore
+selects its own `construct` in preference to the inherited
+`Object.construct`; the general call and construct protocol is owned by
+`CALLABLES.md` and is not changed by this section.
 
-The own `call` specializes only invocations whose receiver is the canonical
-prototype that owns the method. When the receiver is any other object (for
-example a derived object that inherits the method), `call` delegates to
-`Object.call` through `super.call`, preserving the original receiver and the
-complete supplied argument vector; construction of such a receiver is ordinary
-`Object.call` construction with that receiver's own `init`.
+The own `construct` specializes only invocations whose receiver is the
+canonical prototype that owns the method. When the receiver is any other object
+(for example a derived object that inherits the method), `construct` delegates
+to `Object.construct` through `super.construct`, preserving the original
+receiver and the complete supplied argument vector; construction of such a
+receiver is ordinary `Object.construct` construction with that receiver's own
+`init`.
 
-For the canonical receiver, `call` requires exactly two arguments; zero, one,
+For the canonical receiver, `construct` requires exactly two arguments; zero, one,
 or three or more arguments signal `Error`. Both arguments, `start` and `stop`,
 must satisfy `Integer.recognizes`; Floats, Fractions, Complex values, `null`,
 and objects that merely delegate to an Integer are rejected with `Error` and
@@ -1502,21 +1518,22 @@ order of the bounds:
 - `InvertedRange(start, stop)` answers an `InvertedRange` instance when
   `start >= stop`, and a `Range` instance when `start < stop`.
 
-When the direction already matches the invoked prototype, `call` constructs
-through the inherited `Object.call` by `super.call(start, stop)`; for the
-opposite direction it invokes the other canonical prototype with the same
-bounds. Equal bounds keep the invoked prototype and denote an empty range.
+When the direction already matches the invoked prototype, `construct`
+constructs through the inherited `Object.construct` by
+`super.construct(start, stop)`; for the opposite direction it invokes the other
+canonical prototype with the same bounds through ordinary parenthesized
+invocation. Equal bounds keep the invoked prototype and denote an empty range.
 Bounds are never swapped or converted.
 
 A `Range` instance denotes the ascending half-open interval `[start, stop)`;
 an `InvertedRange` instance denotes the descending interval from `start`
 inclusive down to `stop` exclusive.
 
-The names `Range` and `InvertedRange` referenced inside the canonical `call`
-methods resolve lexically to the canonical frozen Core prototypes, never to
+The names `Range` and `InvertedRange` referenced inside the canonical
+`construct` methods resolve lexically to the canonical frozen Core prototypes, never to
 the mutable members of `std:collections/Range` or to any nearer binding at the
 call site. Arguments are evaluated exactly once, left to right, by ordinary
-invocation before `call` runs, including when construction is subsequently
+invocation before `construct` runs, including when construction is subsequently
 rejected; their errors and control transfers propagate ordinarily.
 
 `init` remains strict and does not redirect construction. It requires exactly
@@ -1526,7 +1543,10 @@ before any slot is modified otherwise; initializing a prototype itself or an
 unrelated receiver is therefore rejected. It requires both bounds to satisfy
 `Integer.recognizes`, and requires `start <= stop` (`Range`) or
 `start >= stop` (`InvertedRange`), signalling `Error` otherwise. As for every
-`Object.call` construction, the normal result of `init` is ignored.
+`Object.construct` construction, the normal result of `init` is ignored. `init`
+cannot redirect construction to the other prototype because its receiver is
+the already allocated child; direction selection therefore belongs to
+`construct`.
 
 A successfully constructed instance is fresh on every invocation and has
 ordinary object identity; its immediate parent is the selected prototype
@@ -1974,8 +1994,11 @@ canonical normalization of its value, never by its radix or spelled width.
 ### Explicit standard numeric conversion
 
 The standard prototype objects `Integer` and `Float` specialize ordinary
-polymorphic invocation as one-argument numeric conversion factories. Argument
-evaluation and invocation otherwise follow `CALLABLES.md`. Each standard numeric
+construction as one-argument numeric conversion factories: each owns an
+ordinary local `construct` slot (D239-C1) and inherits `call` from `Object`.
+Argument evaluation and invocation otherwise follow `CALLABLES.md`. A
+conversion that answers an existing numeric value answers it as the exact
+`construct` result; no `init` is run on it. Each standard numeric
 conversion requires exactly one positional argument and requires that argument
 to be a semantic `Number`; wrong arity or a non-Number argument signals an
 `Error`. A Complex argument also signals an `Error` for both conversions, even
@@ -3203,7 +3226,8 @@ copy or reconstruction.
 #### Standard empty Bytes construction
 
 Where the standardized `Bytes` factory object is available, its ordinary
-polymorphic invocation behavior accepts exactly zero positional arguments:
+local `construct` behavior (D239-C1), reached by ordinary invocation through the
+inherited standard `Object.call`, accepts exactly zero positional arguments:
 
 ```js
 Bytes()
@@ -3516,8 +3540,12 @@ a valid standard Map-size receiver.
 
 
 
-The standard prelude objects `Map` and `IdentityMap` specialize the ordinary
-polymorphic invocation protocol as empty-map factories.
+The standard prelude objects `Map` and `IdentityMap` specialize ordinary
+construction as empty-map factories: each owns an ordinary local `construct`
+slot (D239-C1) holding its standard factory behavior and inherits `call` from
+`Object`, so `Map()` and `IdentityMap()` reach the factory through the standard
+`Object.call` → `construct` bridge (`CALLABLES.md`). Their specialized keyed
+state and result contracts are unchanged.
 
 The standard calls:
 

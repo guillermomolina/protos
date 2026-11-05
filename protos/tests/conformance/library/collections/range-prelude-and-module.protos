@@ -15,7 +15,9 @@
 
 // D235-B1-F: Range and InvertedRange are frozen Core Prelude prototypes, and
 // std:collections/Range is a compatibility module exporting the same objects.
-// D236-B1: each prototype owns an ordinary call that normalizes direction.
+// D236-B1 / D239-C1: each prototype owns an ordinary construct that
+// normalizes direction; Range(a, b) reaches it through the inherited
+// standard Object.call.
 
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
@@ -31,7 +33,7 @@ tests: Array(
         names: Range.slotNames()
         Assertions.require((names.size() == 6) &&
             Range.hasSlot("init") &&
-            Range.hasSlot("call") &&
+            Range.hasSlot("construct") &&
             Range.hasSlot("each") &&
             Range.hasSlot("eachStep") &&
             Range.hasSlot("invert") &&
@@ -39,13 +41,15 @@ tests: Array(
         invertedNames: InvertedRange.slotNames()
         Assertions.require((invertedNames.size() == 6) &&
             InvertedRange.hasSlot("init") &&
-            InvertedRange.hasSlot("call") &&
+            InvertedRange.hasSlot("construct") &&
             InvertedRange.hasSlot("each") &&
             InvertedRange.hasSlot("eachStep") &&
             InvertedRange.hasSlot("invert") &&
             InvertedRange.hasSlot("reverse"))
-        Assertions.require(Range.hasSlot("call") === true)
-        Assertions.require(InvertedRange.hasSlot("call") === true)
+        Assertions.require(Range.hasSlot("construct") === true)
+        Assertions.require(InvertedRange.hasSlot("construct") === true)
+        Assertions.require(Range.hasSlot("call") === false)
+        Assertions.require(InvertedRange.hasSlot("call") === false)
     }),
     Test("range canonical prototypes are frozen", () => {
         Assertions.signals(Error, () => { Range.extra: 1 })
@@ -54,11 +58,13 @@ tests: Array(
         Assertions.signals(Error, () => { InvertedRange.extra: 1 })
         Assertions.signals(Error, () => { InvertedRange.eachStep = null })
         Assertions.signals(Error, () => { InvertedRange.removeSlot("reverse") })
-        Assertions.signals(Error, () => { Range.call = null })
-        Assertions.signals(Error, () => { Range.removeSlot("call") })
-        Assertions.signals(Error, () => { InvertedRange.call = null })
-        Assertions.signals(Error, () => { InvertedRange.removeSlot("call") })
-        Assertions.require(Range.hasSlot("call") && InvertedRange.hasSlot("call"))
+        Assertions.signals(Error, () => { Range.construct = null })
+        Assertions.signals(Error, () => { Range.removeSlot("construct") })
+        Assertions.signals(Error, () => { InvertedRange.construct = null })
+        Assertions.signals(Error, () => { InvertedRange.removeSlot("construct") })
+        Assertions.signals(Error, () => { Range.call: null })
+        Assertions.require(Range.hasSlot("construct") && InvertedRange.hasSlot("construct"))
+        Assertions.require(Range.hasSlot("call") === false)
 
         Assertions.require(Range.hasSlot("extra") === false)
         Assertions.require(InvertedRange.hasSlot("extra") === false)
@@ -134,9 +140,9 @@ tests: Array(
 
         Assertions.require(Ranges.InvertedRange === InvertedRange)
     }),
-    Test("range extracted call closures keep normalization", () => {
-        rangeCall: Range.call
-        invertedCall: InvertedRange.call
+    Test("range extracted construct closures keep normalization", () => {
+        rangeCall: Range.construct
+        invertedCall: InvertedRange.construct
 
         up: rangeCall(0, 3)
         down: rangeCall(3, 0)
@@ -153,7 +159,17 @@ tests: Array(
         Assertions.signals(Error, () => { rangeCall(0) })
         Assertions.signals(Error, () => { invertedCall(0, 1.0) })
     }),
-    Test("range inherited call delegates to Object.call for noncanonical receivers", () => {
+    Test("range inherited call reaches the same canonical construction", () => {
+        inheritedCall: Range.call
+        up: inheritedCall(0, 3)
+        down: inheritedCall(3, 0)
+        Assertions.require((up.parent() === Range) && (up.start == 0) && (up.stop == 3))
+        Assertions.require((down.parent() === InvertedRange) && (down.start == 3))
+        invertedInheritedCall: InvertedRange.call
+        Assertions.require(invertedInheritedCall(0, 3).parent() === Range)
+        Assertions.signals(Error, () => { inheritedCall(0) })
+    }),
+    Test("range inherited construct delegates to Object.construct for noncanonical receivers", () => {
         DerivedRange: (Range) {
             init: (...args) => {
                 this.mark: "derived-range"

@@ -82,6 +82,10 @@ final class ProtosStructuredDispatchLowerer {
                 builder.createLocal("structuredObjectCall", null);
         BytecodeLocal structuredObjectCallChild =
                 builder.createLocal("structuredObjectCallChild", null);
+        BytecodeLocal structuredObjectConstruct =
+                builder.createLocal("structuredObjectConstruct", null);
+        BytecodeLocal structuredObjectConstructInit =
+                builder.createLocal("structuredObjectConstructInit", null);
         BytecodeLocal structuredImportCall =
                 builder.createLocal("structuredImportCall", null);
         BytecodeLocal structuredImportCallChild =
@@ -469,6 +473,58 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginStoreLocal(result);
         builder.beginStructuredFinishWithChildResult();
         builder.emitLoadLocal(structuredObjectCall);
+        builder.emitLoadLocal(childResult);
+        builder.endStructuredFinishWithChildResult();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        /*
+         * D239-C1 standard Object.construct: preparation allocates the fresh
+         * child and prepares its ordinary init send; init runs as a scoped
+         * (suspendable) child invocation; finish answers the child and
+         * ignores init's normal result.
+         */
+        builder.beginBlock();
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.OBJECT_CONSTRUCT);
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredObjectConstruct);
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.OBJECT_CONSTRUCT);
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredCall();
+        builder.endStoreLocal();
+
+        builder.beginStoreLocal(structuredObjectConstructInit);
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
+        builder.emitLoadLocal(structuredObjectConstruct);
+        builder.endStructuredPrepareChildCall();
+        builder.endStoreLocal();
+
+        emitScopedPreparedInvocation(
+                builder,
+                childResult,
+                structuredObjectConstructInit,
+                childResult,
+                resumeValue);
+
+        builder.beginStoreLocal(result);
+        builder.beginStructuredFinishWithChildResult();
+        builder.emitLoadLocal(structuredObjectConstruct);
         builder.emitLoadLocal(childResult);
         builder.endStructuredFinishWithChildResult();
         builder.endStoreLocal();
@@ -1435,6 +1491,10 @@ final class ProtosStructuredDispatchLowerer {
                 resumeValue);
         builder.endBlock();
 
+        builder.endIfThenElse();
+        builder.endBlock();
+
+        /* Closes the D239-C1 OBJECT_CONSTRUCT level. */
         builder.endIfThenElse();
         builder.endBlock();
 

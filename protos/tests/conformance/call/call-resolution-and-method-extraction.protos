@@ -45,6 +45,80 @@ tests: [
                 (b() == 42)
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("custom call takes precedence over construct", () => {
+        trace: { constructs: 0 }
+        callable: {
+            call: (x) => x * 2
+            construct: (x) => {
+                trace.constructs = trace.constructs + 1
+                x
+            }
+        }
+        Assertions.require(callable(4) == 8)
+        Assertions.require(trace.constructs == 0)
+    }),
+    Test("a local non-Closure call shadow is rejected without fallback", () => {
+        trace: { constructs: 0 }
+        shadowed: {
+            call: 3
+            construct: () => {
+                trace.constructs = trace.constructs + 1
+                null
+            }
+        }
+        Assertions.signals(Error, () => { shadowed() })
+        Assertions.require(trace.constructs == 0)
+    }),
+    Test("inherited construct receives the original receiver", () => {
+        Base: {
+            construct: () => this
+        }
+        Derived: Base {}
+        Assertions.require(Base() === Base)
+        Assertions.require(Derived() === Derived)
+    }),
+    Test("explicit and extracted construct invocation", () => {
+        Thing: {
+            init: (x) => {
+                this.value: x
+            }
+        }
+        direct: Thing.construct(5)
+        Assertions.require(direct.parent() === Thing)
+        Assertions.require(direct.value == 5)
+        extracted: Thing.construct
+        fromExtracted: extracted(6)
+        Assertions.require(fromExtracted.value == 6)
+    }),
+    Test("copied standard construct allocates under its new receiver", () => {
+        Thing: {
+            init: (x) => {
+                this.value: x
+            }
+        }
+        Thing.make: Object.construct
+        made: Thing.make(8)
+        Assertions.require(made.parent() === Thing)
+        Assertions.require(made.value == 8)
+    }),
+    Test("super construct keeps the derived receiver and selects by home", () => {
+        Base: {
+            construct: (...args) => {
+                instance: super.construct(...args)
+                instance.viaBase: true
+                instance
+            }
+        }
+        Derived: Base {
+            init: (x) => {
+                this.value: x
+            }
+        }
+        made: Derived(11)
+        Assertions.require(made.parent() === Derived)
+        Assertions.require(made.value == 11)
+        Assertions.require(made.viaBase === true)
     })
 ]
 tests.freeze()

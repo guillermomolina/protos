@@ -1,0 +1,294 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// I145-A / D239-C1: standard Object.call sends the ordinary construct message
+// for a non-Closure receiver; standard Object.construct allocates a fresh child
+// and sends init. A custom construct is an ordinary method whose exact result
+// is the result of the original call.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+// The escaping Closure captures this invocation's return home; init invokes
+// it as an ordinary nested block, so ^ crosses call -> construct -> init.
+constructNonLocalReturn: (trace) => {
+    Thing: {
+        init: (action) => {
+            trace.inits = trace.inits + 1
+            action()
+            trace.afterAction = true
+        }
+    }
+    Thing(() => { ^"escaped" })
+    trace.afterCall = true
+    "normal"
+}
+
+// The same escape from a custom construct: ^ targets this invocation's home.
+customConstructNonLocalReturn: (trace) => {
+    Factory: {
+        init: () => {
+            trace.inits = trace.inits + 1
+        }
+        construct: (action) => {
+            trace.constructs = trace.constructs + 1
+            action()
+            trace.afterAction = true
+        }
+    }
+    Factory(() => { ^"escaped" })
+    trace.afterCall = true
+    "normal"
+}
+
+tests: [
+    Test("custom construct may answer an object with another parent", () => {
+        Other: {}
+        Factory: {
+            construct: () => Other()
+        }
+        made: Factory()
+        Assertions.require(made.parent() === Other)
+        Assertions.require(made.parent() !== Factory)
+    }),
+    Test("custom construct may answer a cached object by exact identity", () => {
+        cached: {}
+        Factory: {
+            construct: () => cached
+        }
+        Assertions.require(Factory() === cached)
+        Assertions.require(Factory() === cached)
+    }),
+    Test("custom construct may answer a scalar or null", () => {
+        Scalar: {
+            construct: (n) => n + 1
+        }
+        Nothing: {
+            construct: () => null
+        }
+        Assertions.require(Scalar(41) == 42)
+        Assertions.require(Nothing() === null)
+    }),
+    Test("a custom construct runs no hidden init before or after", () => {
+        trace: { inits: 0 }
+        Factory: {
+            init: () => {
+                trace.inits = trace.inits + 1
+            }
+            construct: () => "made"
+        }
+        Assertions.require(Factory() == "made")
+        Assertions.require(trace.inits == 0)
+    }),
+    Test("a custom construct may delegate to super.construct", () => {
+        trace: { inits: 0 }
+        Point: {
+            init: (x, y) => {
+                trace.inits = trace.inits + 1
+                this.x: x
+                this.y: y
+            }
+            construct: (x, y) => {
+                instance: super.construct(x, y)
+                instance.sum: x + y
+                instance
+            }
+        }
+        p: Point(2, 3)
+        Assertions.require(p.parent() === Point)
+        Assertions.require(p.sum == 5)
+        Assertions.require(trace.inits == 1)
+    }),
+    Test("an installed construct slot changes the inherited call result", () => {
+        Thing: {}
+        before: Thing()
+        Assertions.require(before.parent() === Thing)
+        Thing.construct: () => "replaced"
+        Assertions.require(Thing() == "replaced")
+        Thing.removeSlot("construct")
+        Assertions.require(Thing().parent() === Thing)
+    }),
+    Test("a non-Closure construct shadow signals without fallback", () => {
+        trace: { inits: 0 }
+        Thing: {
+            init: () => {
+                trace.inits = trace.inits + 1
+            }
+            construct: 7
+        }
+        Assertions.signals(Error, () => { Thing() })
+        Assertions.require(trace.inits == 0)
+    }),
+    Test("construct is selected after argument evaluation", () => {
+        Thing: {
+            construct: (x) => "old"
+        }
+        replace: () => {
+            Thing.construct = (x) => x
+            "new"
+        }
+        Assertions.require(Thing(replace()) == "new")
+    }),
+    Test("call installed during argument evaluation keeps D013 precedence", () => {
+        trace: { constructs: 0 }
+        Thing: {
+            construct: (x) => {
+                trace.constructs = trace.constructs + 1
+                x
+            }
+        }
+        install: () => {
+            Thing.call: (x) => x * 10
+            2
+        }
+        Assertions.require(Thing(install()) == 20)
+        Assertions.require(trace.constructs == 0)
+    }),
+    Test("direct and extracted Object.construct", () => {
+        Thing: {
+            init: (x) => {
+                this.value: x
+            }
+        }
+        direct: Thing.construct(1)
+        Assertions.require(direct.parent() === Thing)
+        Assertions.require(direct.value == 1)
+        extracted: Thing.construct
+        again: extracted(2)
+        Assertions.require(again.parent() === Thing)
+        Assertions.require(again.value == 2)
+        Assertions.require(Object.construct().parent() === Object)
+    }),
+    Test("custom construct binds named, reordered, mixed and spread arguments", () => {
+        Factory: {
+            construct: (a, b: 20, c: 30) => a * 100 + b * 10 + c
+        }
+        Assertions.require(Factory(1) == 330)
+        Assertions.require(Factory(c: 3, a: 1, b: 2) == 123)
+        Assertions.require(Factory(1, c: 3) == 303)
+        Assertions.require(Factory(...[1, 2], c: 3) == 123)
+        Assertions.signals(Error, () => { Factory(missing: 1) })
+    }),
+    Test("copied and aliased standard call and construct forward the packet", () => {
+        Thing: {
+            init: (value: 0) => {
+                this.value: value
+            }
+        }
+        Thing.make: Object.call
+        Thing.build: Object.construct
+        made: Thing.make(value: 4)
+        built: Thing.build(value: 5)
+        Assertions.require(made.parent() === Thing)
+        Assertions.require(made.value == 4)
+        Assertions.require(built.parent() === Thing)
+        Assertions.require(built.value == 5)
+        aliased: Thing.alias("build", "produce")
+        produced: aliased.produce(value: 6)
+        Assertions.require(produced.value == 6)
+    }),
+    Test("errors from init propagate once through construction", () => {
+        trace: { inits: 0 }
+        Failing: {
+            init: () => {
+                trace.inits = trace.inits + 1
+                Error().signal()
+            }
+        }
+        Assertions.signals(Error, () => { Failing() })
+        Assertions.require(trace.inits == 1)
+    }),
+    Test("non-local return crosses standard construction without duplicate effects", () => {
+        trace: {
+            inits: 0
+            afterAction: false
+            afterCall: false
+        }
+        Assertions.require(constructNonLocalReturn(trace) == "escaped")
+        Assertions.require(trace.inits == 1)
+        Assertions.require(trace.afterAction == false)
+        Assertions.require(trace.afterCall == false)
+    }),
+    Test("non-local return crosses a custom construct without duplicate effects", () => {
+        trace: {
+            inits: 0
+            constructs: 0
+            afterAction: false
+            afterCall: false
+        }
+        Assertions.require(customConstructNonLocalReturn(trace) == "escaped")
+        Assertions.require(trace.constructs == 1)
+        Assertions.require(trace.inits == 0)
+        Assertions.require(trace.afterAction == false)
+        Assertions.require(trace.afterCall == false)
+    }),
+    Test("Task suspension inside init and custom construct resumes once", () => {
+        trace: {
+            inits: 0
+            constructs: 0
+        }
+        Holder: {
+            init: (future) => {
+                trace.inits = trace.inits + 1
+                this.value: future.value()
+            }
+        }
+        Custom: {
+            construct: (future) => {
+                trace.constructs = trace.constructs + 1
+                future.value() + 1
+            }
+        }
+        result: (() => {
+            held: Holder((() => 5).future())
+            [held, Custom((() => 9).future())]
+        }).future().value()
+        Assertions.require(result[0].parent() === Holder)
+        Assertions.require(result[0].value == 5)
+        Assertions.require(result[1] == 10)
+        Assertions.require(trace.inits == 1)
+        Assertions.require(trace.constructs == 1)
+    }),
+    Test("ensure cleanup runs once around a failing construction", () => {
+        trace: {
+            cleanups: 0
+            constructs: 0
+        }
+        Failing: {
+            construct: () => {
+                trace.constructs = trace.constructs + 1
+                Error().signal()
+            }
+        }
+        Assertions.signals(Error, () => {
+            (() => { Failing() }).ensure(() => {
+                trace.cleanups = trace.cleanups + 1
+            })
+        })
+        Assertions.require(trace.constructs == 1)
+        Assertions.require(trace.cleanups == 1)
+    }),
+    Test("closures and executable objects keep their call behavior", () => {
+        double: (x) => x * 2
+        Assertions.require(double(4) == 8)
+        executable: {
+            construct: () => "constructed"
+            call: () => "executed"
+        }
+        Assertions.require(executable() == "executed")
+        Assertions.require(executable.construct() == "constructed")
+    })
+]
+tests.freeze()

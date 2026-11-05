@@ -611,6 +611,46 @@ They do **not** mean "allocate an Array of length 3".
 Core has no special numeric-length Array constructor, holes, comprehensions,
 repetition/fill form, or generic collection-literal conversion.
 
+## Factories choose their result with `construct`
+
+`Array(...)`, `Map()` and `IdentityMap()` look like ordinary object construction,
+and they are: each invocation selects the inherited `Object.call`, which sends
+the ordinary `construct` message to the factory. These standard prototypes own a
+representation-specific `construct` that creates a new value with the Array or
+Map state it needs, instead of the default fresh child plus `init`. Derived
+prototypes inherit that `construct`, so the new value's parent is the derived
+prototype:
+
+```protos
+Labelled: Array {
+    label: "tagged"
+}
+
+values: Labelled(1, 2)
+values.parent() === Labelled  // true
+values.size()                 // 2
+```
+
+`Range` and `InvertedRange` use the same mechanism to choose a direction. The
+two prototypes describe different traversals, so a construction request with
+descending bounds should produce an `InvertedRange` even when it was addressed
+to `Range`:
+
+```protos
+Range(1, 4).parent() === Range          // true
+Range(4, 1).parent() === InvertedRange  // true
+InvertedRange(1, 4).parent() === Range  // true
+```
+
+That decision lives in `construct`, not in `init`. By the time `init` runs, the
+fresh object already has its parent, so `init` can only validate and fill in the
+object it was given; it cannot turn a `Range` child into an `InvertedRange`.
+`construct` runs before any object exists and may answer whichever object is
+right — here, an instance of the other prototype.
+
+See [Construction: `init`, `construct`, and `call`](03-closures-methods-and-receivers.md#construction-init-construct-and-call)
+for the general rule.
+
 ## Arrays are shallow containers
 
 Array construction keeps the exact supplied objects:

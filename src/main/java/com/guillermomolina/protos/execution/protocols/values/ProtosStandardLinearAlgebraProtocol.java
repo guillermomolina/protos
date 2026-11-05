@@ -72,7 +72,7 @@ public final class ProtosStandardLinearAlgebraProtocol {
     }
 
     private static void installVector(ProtosObjectValue vectorPrototype) {
-        define(vectorPrototype, "call", (activation, supplied) -> {
+        define(vectorPrototype, "construct", (activation, supplied) -> {
             ProtosObjectValue prototype = requireConstructionReceiver(activation, vectorPrototype);
             try {
                 return new ProtosVectorValue(prototype, supplied);
@@ -159,7 +159,7 @@ public final class ProtosStandardLinearAlgebraProtocol {
 
     private static void installMatrix(
             ProtosObjectValue matrixPrototype, ProtosObjectValue vectorPrototype) {
-        define(matrixPrototype, "call", (activation, supplied) -> {
+        define(matrixPrototype, "construct", (activation, supplied) -> {
             ProtosObjectValue prototype = requireConstructionReceiver(activation, matrixPrototype);
             if (supplied.size() < 2) {
                 throw invalid(activation);

@@ -88,9 +88,9 @@ final class ProtosSealedFamilyFacilityTest {
                         ProtosTestExecutionSupport.evaluate(
                                 "import(\"std:text/StyledText\")", activation));
 
-        assertEquals(Set.of("call", "recognizes"), style.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("construct", "recognizes"), style.localSlotsSnapshot().keySet());
         assertEquals(
-                Set.of("call", "concat", "recognizes"), styledText.localSlotsSnapshot().keySet());
+                Set.of("construct", "concat", "recognizes"), styledText.localSlotsSnapshot().keySet());
     }
 
     @Test

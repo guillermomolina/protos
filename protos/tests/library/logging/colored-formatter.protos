@@ -131,7 +131,7 @@ tests: [
         null
     }),
     Test("the module publishes only its constructor", () => {
-        Assertions.require(ColoredFormatter.hasSlot("call"))
+        Assertions.require(ColoredFormatter.hasSlot("construct"))
         for(name in ["format", "palette", "ColorMode", "TextFormatter", "ANSI", "Style", "StyledText"]) {
             Assertions.require(ColoredFormatter.hasSlot(name) == false)
         }

@@ -553,6 +553,8 @@ An open object permits local slot creation, modification, and removal subject to
 
 `Object` is the standard root prototype for ordinary objects and provides the ordinary reflective messages `removeSlot(name)`, `close()`, and `freeze()`. These are normal message sends backed by runtime primitives; they are not special grammar forms.
 
+Default object construction reached by parenthesized invocation is an ordinary inherited message, not an object-model category: the standard root owns an ordinary local `construct` slot (D239-C1) whose standard behavior creates a fresh object whose immutable delegation parent is exactly its receiver and then sends `init` to it. Invocation, the `call` → `construct` → `init` ordering and custom `construct` results are owned by `CALLABLES.md` (Polymorphic Invocation and Object Construction). Introducing `Object.construct` adds one observable root-local slot under the ordinary reflection rules below; it introduces no privileged prototype category, constructor flag, or additional per-object state, and delegation parents, slot creation, object state and reflection are otherwise unchanged.
+
 ### Return contracts of standard structural Object messages
 
 The standard structural messages inherited from `Object` have the following

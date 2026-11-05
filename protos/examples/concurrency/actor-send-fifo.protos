@@ -10,7 +10,7 @@
  */
 
 // Same-sender messages to one concrete Actor preserve FIFO at acceptance.
-worker: Actor.spawn("std:collections/Set", "call")
+worker: Actor.spawn("std:collections/Set", "construct")
 worker.send("atPut", "ready", true)
 print(worker.request("size").value())
 worker.stop()

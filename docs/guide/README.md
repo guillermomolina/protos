@@ -73,6 +73,13 @@ Together they show name-aware invocation, stable positional ordinals, and
 ordinary constructor `init` forwarding without inventing a keyword-argument
 object or changing the `call` protocol.
 
+The
+[construction section of chapter 03](03-closures-methods-and-receivers.md#construction-init-construct-and-call)
+explains how `init`, `construct`, and `call` divide the work of making new
+values: `Point(0, 0)` still uses the inherited `call`, which reaches an ordinary
+`construct` message, while factories such as `Range` choose their result in
+their own `construct`.
+
 ## Source style reference
 
 [`SOURCE_STYLE.md`](SOURCE_STYLE.md) records the non-normative project convention

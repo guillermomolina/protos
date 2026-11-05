@@ -72,8 +72,8 @@ public final class ProtosStandardIdentityMapProtocol {
                   .orElse(false);
  }
  public static void install(ProtosObjectValue p){
-  for(String s:List.of("call","at","atPut","containsKey","atIfAbsent","remove","size","each"))if(p.hasLocalSlot(s))throw new IllegalStateException("Core IdentityMap already defines "+s);
-  p.createLocalSlot("call",ProtosClosureValue.nativeClosure((a,x)->{arity(a,x,0);if(!(a.receiver() instanceof ProtosObjectValue r)||!delegatesTo(r,p))throw err(a);return new ProtosIdentityMapValue(r);}));
+  for(String s:List.of("construct","at","atPut","containsKey","atIfAbsent","remove","size","each"))if(p.hasLocalSlot(s))throw new IllegalStateException("Core IdentityMap already defines "+s);
+  p.createLocalSlot("construct",ProtosClosureValue.nativeClosure((a,x)->{arity(a,x,0);if(!(a.receiver() instanceof ProtosObjectValue r)||!delegatesTo(r,p))throw err(a);return new ProtosIdentityMapValue(r);}));
   p.createLocalSlot("at",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,1);var e=find(m,x.get(0));if(e==null)throw err(a);return e.value();}));
   p.createLocalSlot("containsKey",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,1);return find(m,x.get(0))==null?ProtosBooleanValue.FALSE:ProtosBooleanValue.TRUE;}));
   p.createLocalSlot("atIfAbsent", STANDARD_AT_IF_ABSENT);

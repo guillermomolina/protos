@@ -78,11 +78,11 @@ final class ProtosStandardLinearAlgebraProtocolTest {
             assertTrue(prelude.isStandardModuleMemberForRuntime(prototype));
         }
         assertEquals(
-                Set.of("call", "size", "at", "atPut", "add", "scale", "dot", "copy"),
+                Set.of("construct", "size", "at", "atPut", "add", "scale", "dot", "copy"),
                 vector.localSlotsSnapshot().keySet());
         assertEquals(
                 Set.of(
-                        "call", "rows", "columns", "at", "atPut", "add", "scale", "matvec",
+                        "construct", "rows", "columns", "at", "atPut", "add", "scale", "matvec",
                         "matmul", "transpose", "copy"),
                 matrix.localSlotsSnapshot().keySet());
         for (ProtosObjectValue prototype : List.of(vector, matrix)) {

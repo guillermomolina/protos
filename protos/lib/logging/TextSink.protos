@@ -32,7 +32,7 @@
 /// created. An Error from formatting or from the failed write Future is
 /// signalled by `emit`; a `std:logging/Logger` contains it, while a direct
 /// caller of `emit` observes it.
-call: (formatter, writer) => {
+construct: (formatter, writer) => {
     if((formatter === null) || (writer === null)) {
         Error().signal()
     }

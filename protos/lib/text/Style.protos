@@ -33,7 +33,7 @@
 /// `"yellow"`, `"blue"`, `"magenta"`, `"cyan"`, or `"white"`. Any other
 /// argument signals an Error; no argument is converted, case-folded, or
 /// defaulted.
-call: ((facility) => (foreground) => {
+construct: ((facility) => (foreground) => {
     Style: import("std:text/Style")
 
     String.recognizes(foreground).ifFalse(() => {

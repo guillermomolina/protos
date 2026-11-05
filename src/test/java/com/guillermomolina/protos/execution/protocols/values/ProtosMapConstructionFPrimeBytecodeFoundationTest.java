@@ -55,9 +55,9 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
                 new ProtosObjectValue(prelude.mapPrototype());
 
         copied.createLocalSlot(
-                "call",
+                "construct",
                 prelude.mapPrototype()
-                        .readLocalSlot("call")
+                        .readLocalSlot("construct")
                         .orElseThrow());
 
         assertThrows(
@@ -65,6 +65,20 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
                 () ->
                         ProtosBytecodeRootNode.MapConstructionFactoryCall
                                 .perform(false, activation, copied));
+
+        /*
+         * D239-C1: a customized call selection on the factory receiver is
+         * rejected before construct is consulted.
+         */
+        ProtosObjectValue customCall =
+                new ProtosObjectValue(prelude.mapPrototype());
+        customCall.createLocalSlot("call", ProtosBooleanValue.TRUE);
+
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        ProtosBytecodeRootNode.MapConstructionFactoryCall
+                                .perform(false, activation, customCall));
     }
 
     @Test

@@ -2,9 +2,11 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -51,7 +53,7 @@ class ProtosMapConstructionFPrimeProtocolTest {
     }
 
     @Test
-    void copiedCanonicalCallRemainsOrdinarilyInvokableButIsNotConstructionAuthority()
+    void copiedCanonicalConstructRemainsOrdinarilyInvokableButIsNotConstructionAuthority()
             throws Exception {
         ProtosPrelude prelude = prelude();
         ProtosActivation activation = prelude.newModuleActivation();
@@ -60,9 +62,9 @@ class ProtosMapConstructionFPrimeProtocolTest {
                 new ProtosObjectValue(prelude.mapPrototype());
 
         derivedMap.createLocalSlot(
-                "call",
+                "construct",
                 prelude.mapPrototype()
-                        .readLocalSlot("call")
+                        .readLocalSlot("construct")
                         .orElseThrow());
 
         assertInstanceOf(
@@ -77,6 +79,68 @@ class ProtosMapConstructionFPrimeProtocolTest {
                 () ->
                         ProtosStandardMapProtocol.constructForMapConstruction(
                                 derivedMap,
+                                activation));
+    }
+
+    @Test
+    void canonicalMapNoLongerOwnsLocalCallAndInheritsStandardObjectCall()
+            throws Exception {
+        ProtosPrelude prelude = prelude();
+
+        assertFalse(prelude.mapPrototype().hasLocalSlot("call"));
+        assertTrue(prelude.mapPrototype().hasLocalSlot("construct"));
+    }
+
+    @Test
+    void customizedCallSelectionIsRejectedBeforeConstruct() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        ProtosObjectValue shadowedCall =
+                new ProtosObjectValue(prelude.mapPrototype());
+        shadowedCall.createLocalSlot("call", ProtosBooleanValue.TRUE);
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        ProtosStandardMapProtocol.constructForMapConstruction(
+                                shadowedCall,
+                                activation));
+
+        ProtosObjectValue copiedObjectCall =
+                new ProtosObjectValue(prelude.mapPrototype());
+        copiedObjectCall.createLocalSlot(
+                "call",
+                ProtosObjectValue.rootObject()
+                        .readLocalSlot("call")
+                        .orElseThrow());
+        assertInstanceOf(
+                ProtosMapValue.class,
+                ProtosInvocation.invoke(
+                        copiedObjectCall,
+                        List.of(),
+                        activation));
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        ProtosStandardMapProtocol.constructForMapConstruction(
+                                copiedObjectCall,
+                                activation));
+    }
+
+    @Test
+    void shadowedConstructSelectionIsRejected() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        ProtosObjectValue shadowedConstruct =
+                new ProtosObjectValue(prelude.mapPrototype());
+        shadowedConstruct.createLocalSlot("construct", ProtosBooleanValue.TRUE);
+
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        ProtosStandardMapProtocol.constructForMapConstruction(
+                                shadowedConstruct,
                                 activation));
     }
 

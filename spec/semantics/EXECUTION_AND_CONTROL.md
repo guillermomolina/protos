@@ -386,6 +386,27 @@ formed, the actual selected callable determines name association, defaults,
 and body execution under `CALLABLES.md`; no speculative selection or
 re-evaluation of arguments is permitted.
 
+When parenthesized invocation selects the standard `Object.call` for a
+non-Closure receiver, two nested ordinary sends follow the completed packet
+(D239-C1, `CALLABLES.md`, Polymorphic Invocation and Object Construction):
+
+1. after `call` has been selected, ordinary lookup of `construct` starts at the
+   original receiver, preserving it as `this` and the owning object as
+   `methodHome`;
+2. when that selection is the standard `Object.construct`, the fresh child is
+   created and ordinary lookup of `init` starts at that child, preserving it as
+   `this` and the owning object as `methodHome`.
+
+Each lookup occurs only after the previous stage has been selected, so mutation
+performed by argument expressions is observed by each later lookup. The
+already evaluated packet is forwarded unchanged to each stage; no source
+argument expression is evaluated again. A selected custom `construct` or
+`init` is an ordinary method activation, so `super.construct(...)` and
+`super.init(...)` inside it are ordinary super sends under the rules below;
+`super.construct` preserves the current receiver and starts lookup after the
+current `methodHome`, and its argument expressions are evaluated once as for any
+super send.
+
 ### Normal result of slot creation and assignment expressions
 
 The following four slot-write forms are expressions:

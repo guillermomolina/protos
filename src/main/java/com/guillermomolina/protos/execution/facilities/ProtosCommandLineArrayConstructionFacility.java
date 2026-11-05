@@ -53,8 +53,12 @@ public final class ProtosCommandLineArrayConstructionFacility {
     /** Creates the frozen, stateless builder factory. */
     public static ProtosObjectValue createFactory() {
         ProtosObjectValue factory = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        /*
+         * D239-C1: arrayBuilderFactory() reaches this construct through the
+         * inherited standard Object.call.
+         */
         factory.createLocalSlot(
-                "call",
+                "construct",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> newBuilder(activation, supplied)));
         return factory.freeze();

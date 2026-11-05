@@ -74,6 +74,55 @@ tests: [
         }
         Assertions.require(tool009LegacyCase() === true)
     }),
+    Test("map construction syntax rejects a customized call before entries", () => {
+        trace: { entries: 0 }
+        mark: (value) => {
+            trace.entries = trace.entries + 1
+            value
+        }
+        CustomCall: Map {
+            call: () => Map()
+        }
+        run: () => {
+            Map: CustomCall
+            %{ "key": mark(1) }
+        }
+        Assertions.signals(Error, () => { run() })
+        Assertions.require(trace.entries == 0)
+    }),
+    Test("map construction syntax rejects a customized construct before entries", () => {
+        trace: { entries: 0 }
+        mark: (value) => {
+            trace.entries = trace.entries + 1
+            value
+        }
+        CustomConstruct: Map {
+            construct: () => Map()
+        }
+        run: () => {
+            Map: CustomConstruct
+            %{ "key": mark(1) }
+        }
+        Assertions.signals(Error, () => { run() })
+        Assertions.require(trace.entries == 0)
+        Assertions.require(CustomConstruct().parent() === Map)
+    }),
+    Test("map construction syntax rejects a copied canonical construct", () => {
+        Copied: Map {}
+        Copied.construct: Map.slotValue("construct")
+        run: () => {
+            Map: Copied
+            %{}
+        }
+        Assertions.signals(Error, () => { run() })
+        Assertions.require(Copied().parent() === Copied)
+    }),
+    Test("map factory is an own construct reached through inherited call", () => {
+        Assertions.require(Map.hasSlot("construct"))
+        Assertions.require(Map.hasSlot("call") === false)
+        Assertions.require(Map.construct().size() == 0)
+        Assertions.require(%{} !== %{})
+    }),
     Test("map construction syntax duplicate error", () => {
         Assertions.signals(Error, () => {
             %{

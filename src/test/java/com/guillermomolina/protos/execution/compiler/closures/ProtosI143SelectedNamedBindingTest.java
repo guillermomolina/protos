@@ -42,7 +42,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * I143: actual selected implementation classification.
+ * I143 / D239-C1: actual selected implementation classification.
  *
  * <p>Does not execute or bypass D013 selection. Its input is the
  * implementation that the future named dispatch must select first.
@@ -156,6 +156,46 @@ class ProtosI143SelectedNamedBindingTest {
                 "notAWrapperParameter",
                 forwarded.named().get(0).name());
         assertEquals(11, forwarded.named().get(0).value());
+    }
+
+    @Test
+    void copiedStandardConstructImplementationForwardsUnvalidatedPacket()
+            throws Exception {
+        Field bodyField = ProtosStandardObjectProtocol.class
+                .getDeclaredField("STANDARD_CONSTRUCT_BODY");
+        bodyField.setAccessible(true);
+
+        // D239-C1: the executable body, not the selector or methodHome,
+        // admits transparent forwarding to the selected init.
+        ProtosClosureValue copy = ProtosClosureValue.nativeClosure(
+                (ProtosNativeClosureBody) bodyField.get(null));
+
+        PreparedArgumentVector arguments = new PreparedArgumentVector();
+        arguments.appendNamed("initParameter", 5);
+        arguments.append(4);
+
+        StandardForward forwarded = assertInstanceOf(
+                StandardForward.class, classify(copy, arguments));
+
+        assertEquals(List.of(4), forwarded.positional());
+        assertEquals(1, forwarded.named().size());
+        assertEquals("initParameter", forwarded.named().get(0).name());
+        assertEquals(5, forwarded.named().get(0).value());
+    }
+
+    @Test
+    void sourceConstructBindsItsOwnFormals() {
+        ProtosClosureValue selected = sourceClosure(
+                "(start: 0, stop: 0) => stop");
+
+        PreparedArgumentVector arguments = new PreparedArgumentVector();
+        arguments.appendNamed("stop", 3);
+
+        SourceBinding result = assertInstanceOf(
+                SourceBinding.class, classify(selected, arguments));
+
+        assertFalse(result.association().isPresent(0));
+        assertEquals(3, result.association().valueAt(1));
     }
 
     @Test

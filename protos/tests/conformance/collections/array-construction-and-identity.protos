@@ -18,13 +18,24 @@ Test: import("std:test/Test")
 
 tests: [
     Test("array copied factory receiver error", () => {
+        copiedConstruct: Array.slotValue("construct")
+        ordinary: {
+            construct: copiedConstruct
+        }
         Assertions.signals(Error, () => {
-            copiedCall: Array.slotValue("call")
-            ordinary: {
-                call: copiedCall
-            }
             ordinary(1)
         })
+        Assertions.signals(Error, () => {
+            ordinary.construct(1)
+        })
+    }),
+    Test("array factory is an own construct reached through inherited call", () => {
+        Assertions.require(Array.hasSlot("construct"))
+        Assertions.require(Array.hasSlot("call") === false)
+        direct: Array.construct(4, 5)
+        Assertions.require(direct.size() == 2)
+        Assertions.require(direct.parent() === Array)
+        Assertions.require([1, 2].size() == 2)
     }),
     Test("array factory fresh single and shallow", () => {
         tool009LegacyCase: () => {

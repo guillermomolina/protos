@@ -46,6 +46,32 @@ tests: [
         }
         Assertions.require(tool009LegacyCase())
     }),
+    Test("inherited construct preserves fresh identity, parent and one init", () => {
+        trace: { inits: 0 }
+        Thing: {
+            init: (x) => {
+                trace.inits = trace.inits + 1
+                this.value: x
+            }
+        }
+        first: Thing(1)
+        second: Thing(2)
+        Assertions.require(Thing.hasSlot("construct") === false)
+        Assertions.require(Object.hasSlot("construct"))
+        Assertions.require(first !== second)
+        Assertions.require(first.parent() === Thing)
+        Assertions.require(second.parent() === Thing)
+        Assertions.require(first.value == 1)
+        Assertions.require(trace.inits == 2)
+    }),
+    Test("the normal result of init is ignored by construction", () => {
+        Thing: {
+            init: () => 42
+        }
+        instance: Thing()
+        Assertions.require(instance !== 42)
+        Assertions.require(instance.parent() === Thing)
+    }),
     Test("object init wrong arity error", () => {
         Assertions.signals(Error, () => {
             value: {}

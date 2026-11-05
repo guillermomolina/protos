@@ -286,8 +286,8 @@ final class ProtosNamedArgumentAssociation {
      * methodHome, determines whether standard forwarding is permitted.
      *
      * <p>All native behaviors other than the actual standard Object.call
-     * implementation remain positional-only until an explicit semantic
-     * named signature is introduced.
+     * and Object.construct implementations (D239-C1) remain positional-only
+     * until an explicit semantic named signature is introduced.
      */
     static SelectedBinding classifySelectedImplementation(
             ProtosClosureValue selected,
@@ -303,7 +303,9 @@ final class ProtosNamedArgumentAssociation {
         }
 
         if (ProtosStandardObjectProtocol
-                .isStandardCallImplementation(selected)) {
+                        .isStandardCallImplementation(selected)
+                || ProtosStandardObjectProtocol
+                        .isStandardConstructImplementation(selected)) {
             return new StandardForward(positional, named);
         }
 

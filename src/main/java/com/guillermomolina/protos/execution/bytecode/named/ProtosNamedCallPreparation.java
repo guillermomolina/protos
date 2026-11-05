@@ -35,9 +35,11 @@ import java.util.Objects;
  * select a Closure by name or infer formals from the source receiver.
  *
  * <p>Only source implementations with successfully associated names
- * enter this path. Actual standard Object.call forwarding is a separate
+ * enter this path. Actual standard Object.call and Object.construct
+ * forwarding (D239-C1: call -> construct -> init) is a separate
  * selected-implementation protocol; it is not silently converted to
- * ordinary named method binding.
+ * ordinary named method binding. A custom source construct reached through
+ * standard Object.call binds here against its own formals.
  *
  * <p>Positional-only PLAT060-B5 calls do not use this class.
  */
@@ -50,7 +52,7 @@ final class ProtosNamedCallPreparation {
      *
      * <p>Null from the pure classifier means a collision, unknown label,
      * unsupported native signature, or a forwarding implementation that
-     * belongs to the separate standard Object.call bridge.
+     * belongs to the separate standard Object.call/Object.construct bridge.
      */
     private static SourceBinding requireSourceBinding(
             ProtosClosureValue selected,

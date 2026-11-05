@@ -680,6 +680,25 @@ function invoke(receiver, arguments):
 
 The implementation may specialize these cases directly rather than literally allocating or sending an intermediate `call` message, provided observable semantics are unchanged.
 
+The informative sketch of the standard `Object.call` non-Closure branch and of the standard `Object.construct` behavior (D239-C1) is two ordinary message stages; the normative owner is `../semantics/CALLABLES.md`:
+
+```text
+function objectCall(invocationReceiver, P, K):
+    # Closure receivers were handled above by direct activation.
+    requireOrdinaryConstructionReceiver(invocationReceiver)
+    # Stage 1: ordinary send; selection happens now, after call selection.
+    return send(invocationReceiver, "construct", P, K)
+
+function objectConstruct(invocationReceiver, P, K):
+    requireOrdinaryConstructionReceiver(invocationReceiver)
+    instance = allocateObject(parent = invocationReceiver)
+    # Stage 2: ordinary send on the fresh child; its normal result is ignored.
+    send(instance, "init", P, K)
+    return instance
+```
+
+When stage 1 selects a custom `construct`, that Closure's exact normal result is returned by `objectCall`; `objectConstruct` does not run, no child is allocated by `objectCall`, and no `init` is sent implicitly. Only the standard `objectConstruct` performs default allocation and `init`. The packet `(P, K)` is the already evaluated invocation packet; neither stage re-evaluates argument expressions. An implementation may fuse or specialize these stages, provided each `construct` and `init` selection still observes the current slot state at the point the stage is reached and every result, Error and control transfer is unchanged.
+
 # 15. Closure Creation
 
 When evaluating:

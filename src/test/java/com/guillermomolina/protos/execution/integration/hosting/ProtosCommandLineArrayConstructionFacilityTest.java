@@ -49,7 +49,7 @@ final class ProtosCommandLineArrayConstructionFacilityTest {
         ProtosObjectValue factory = factory(prelude);
 
         assertTrue(factory.isFrozen());
-        assertEquals(Set.of("call"), factory.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("construct"), factory.localSlotsSnapshot().keySet());
         assertTrue(prelude.isStandardModuleMemberForRuntime(factory));
         assertSame(factory, factory(prelude));
 
@@ -59,6 +59,30 @@ final class ProtosCommandLineArrayConstructionFacilityTest {
         assertFalse(
                 otherContext.hasLocalSlot(
                         ProtosCommandLineArrayConstructionFacility.BOOTSTRAP_SLOT));
+    }
+
+    @Test
+    void directConstructCreatesBuildersAndRejectsArguments() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue factory = factory(prelude);
+
+        Object first = ProtosInvocation.invokeMessage(factory, "construct", List.of(), activation);
+        Object second = ProtosInvocation.invokeMessage(factory, "construct", List.of(), activation);
+        assertNotSame(first, second);
+        assertInstanceOf(
+                ProtosArrayValue.class,
+                ProtosInvocation.invokeMessage(first, "finish", List.of(), activation));
+
+        ProtosObjectValue extra = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        assertThrows(
+                ProtosSignalException.class,
+                () -> ProtosInvocation.invokeMessage(
+                        factory, "construct", List.of(extra), activation));
+        assertThrows(
+                ProtosSignalException.class,
+                () -> ProtosInvocation.invokeMessage(
+                        factory, "call", List.of(extra), activation));
     }
 
     @Test

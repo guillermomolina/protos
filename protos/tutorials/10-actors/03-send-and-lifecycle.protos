@@ -9,7 +9,7 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-worker: Actor.spawn("std:collections/Set", "call")
+worker: Actor.spawn("std:collections/Set", "construct")
 finished: worker.termination()
 
 // send does not return the handler result. The following request is issued by the

@@ -357,7 +357,7 @@ The primary normative contract formerly contained here has moved to `semantics/C
 
 ## Polymorphic Invocation and Object Construction
 
-The primary normative contract formerly contained here has moved to `semantics/CALLABLES.md`. This heading remains as a compatibility/navigation anchor and is not an independent normative owner.
+The primary normative contract formerly contained here has moved to `semantics/CALLABLES.md`. This heading remains as a compatibility/navigation anchor and is not an independent normative owner. In summary only: `receiver(args)` always selects the ordinary member `call`; the standard `Object.call` executes a Closure receiver or, for any other ordinary receiver, sends the ordinary message `construct`; the standard `Object.construct` creates a fresh child and sends `init` (D239-C1).
 
 ## Contextual Meaning of `...`
 

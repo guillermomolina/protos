@@ -53,6 +53,13 @@ Date(2026, 10, 8) === release             // false: distinct objects
 `recognizes(value)` to test membership. Equal values have equal `hash`, so they
 work as Map keys.
 
+Each module defines its factory in Protos source as an ordinary `construct`
+method. `Date(2026, 10, 8)` is still an ordinary invocation: it selects the
+inherited `call`, which sends `construct` to the module, and that method
+validates the fields and answers the frozen value. The public `Date(...)`,
+`Time(...)`, `Instant(...)` and other factory forms are unchanged. See
+[Construction: `init`, `construct`, and `call`](../03-closures-methods-and-receivers.md#construction-init-construct-and-call).
+
 ## Durations and instants
 
 `Duration` is elapsed time; `Instant` is a timeline position. Both hold one

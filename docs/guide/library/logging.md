@@ -62,6 +62,13 @@ queue.
 - `with(fields)`, a derived logger whose context fields are merged into every
   event. Call-site fields override context fields.
 
+`Logger(...)`, `LogEvent(...)`, `MemorySink()`, `TextSink(...)` and
+`ColoredFormatter(...)` are ordinary invocations of their modules: each reaches
+a module-level `construct` method through the inherited `call` (see
+[Construction: `init`, `construct`, and `call`](../03-closures-methods-and-receivers.md#construction-init-construct-and-call)).
+Time sources, callbacks and sink methods such as `emit` are different: they are
+ordinary executable behavior invoked through `call`, not factories.
+
 ```protos
 requestLog: log.with(%{ "requestId": "r-7" })
 requestLog.warn("slow response", %{ "ms": 1250 })

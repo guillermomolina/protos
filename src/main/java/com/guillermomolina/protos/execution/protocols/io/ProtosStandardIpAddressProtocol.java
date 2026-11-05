@@ -31,7 +31,7 @@ import java.util.Set;
 /**
  * D048 recognition bridge for the ordinary frozen IpAddress prototype/data shape.
  *
- * <p>Construction ({@code call}), structural equality ({@code ==}) and {@code hash} are
+ * <p>Construction ({@code construct}), structural equality ({@code ==}) and {@code hash} are
  * source closures of {@code lib/core/network/IpAddress.protos}. Only {@code recognizes} is native: it
  * inspects the candidate's internal shape directly and never dispatches guest behavior.
  */
@@ -54,7 +54,7 @@ public final class ProtosStandardIpAddressProtocol {
     }
 
     /*
-     * The open source prototype owns exactly the source-backed call, hash and
+     * The open source prototype owns exactly the source-backed construct, hash and
      * equality closures. Equality is written under {@code equalsName} because a
      * source slot target cannot spell an operator; the same Closure is moved to
      * {@code ==}, as Core Integer does for {@code %}.
@@ -63,13 +63,13 @@ public final class ProtosStandardIpAddressProtocol {
             ProtosObjectValue prototype, String family, String equalsName) {
         if (!prototype.isOpen()
                 || !prototype.localSlotsSnapshot().keySet().equals(
-                        Set.of("call", equalsName, "hash"))) {
+                        Set.of("construct", equalsName, "hash"))) {
             throw new IllegalStateException(
                     "standard " + family
-                            + " prototype must be an open source object with exactly call, "
+                            + " prototype must be an open source object with exactly construct, "
                             + equalsName + " and hash");
         }
-        for (String selector : java.util.List.of("call", equalsName, "hash")) {
+        for (String selector : java.util.List.of("construct", equalsName, "hash")) {
             Object value = prototype.readLocalSlot(selector).orElseThrow();
             if (!(value instanceof ProtosClosureValue closure)
                     || closure.definition() == null

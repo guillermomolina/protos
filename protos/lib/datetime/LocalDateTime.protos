@@ -37,7 +37,7 @@
 /// by `std:datetime/Date`, and `time`, a value recognized by
 /// `std:datetime/Time`. The components are stored as given. Any other argument
 /// signals an Error.
-call: (date, time) => {
+construct: (date, time) => {
     LocalDateTime: import("std:datetime/LocalDateTime")
 
     // Hashes are folded modulo a fixed prime so the accumulator stays bounded.

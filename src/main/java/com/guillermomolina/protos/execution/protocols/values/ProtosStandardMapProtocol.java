@@ -23,8 +23,8 @@ import com.guillermomolina.protos.runtime.*;  import java.util.*;
 public final class ProtosStandardMapProtocol {
  enum StructuredReadLookupKind { AT, CONTAINS_KEY, AT_IF_ABSENT }
 
- private static final ProtosNativeClosureBody STANDARD_CALL_BODY =
-         ProtosStandardMapProtocol::call;
+ private static final ProtosNativeClosureBody STANDARD_CONSTRUCT_BODY =
+         ProtosStandardMapProtocol::construct;
 
  private static final ProtosNativeClosureBody STANDARD_AT_BODY =
          ProtosStandardMapProtocol::at;
@@ -221,8 +221,8 @@ public final class ProtosStandardMapProtocol {
           && isCanonicalMapHome(home, caller);
  }
  public static void install(ProtosObjectValue p){
-  for(String s:List.of("call","at","atPut","containsKey","atIfAbsent","remove","size","each","match"))if(p.hasLocalSlot(s))throw new IllegalStateException("Core Map already defines "+s);
-  p.createLocalSlot("call",ProtosClosureValue.nativeClosure(STANDARD_CALL_BODY));
+  for(String s:List.of("construct","at","atPut","containsKey","atIfAbsent","remove","size","each","match"))if(p.hasLocalSlot(s))throw new IllegalStateException("Core Map already defines "+s);
+  p.createLocalSlot("construct",ProtosClosureValue.nativeClosure(STANDARD_CONSTRUCT_BODY));
   p.createLocalSlot("at", STANDARD_AT);
   p.createLocalSlot("containsKey", STANDARD_CONTAINS_KEY);
   p.createLocalSlot("atIfAbsent", STANDARD_AT_IF_ABSENT);
@@ -232,23 +232,40 @@ public final class ProtosStandardMapProtocol {
   p.createLocalSlot("each", STANDARD_EACH);
   p.createLocalSlot("match", STANDARD_MATCH);
  }
- static ProtosSlotLookupResult selectFactoryCallForMapConstruction(
+ /**
+  * D239-C1 %{...} eligibility. The factory receiver must select exactly the
+  * actual standard Object.call, and must then select exactly the canonical
+  * Map.construct whose home is the canonical Map factory. Both checks run
+  * before any source entry is evaluated; a customized or incompatible call
+  * or construct selection is rejected without fallback. The answered
+  * construct selection is invoked once, with zero arguments, on the original
+  * factory receiver, which is exactly what standard Object.call would send.
+  */
+ static ProtosSlotLookupResult selectFactoryConstructForMapConstruction(
          Object factory,
          ProtosActivation caller) {
   ProtosPrelude prelude = caller.prelude().orElseThrow();
-  ProtosSlotLookupResult selected;
+  ProtosSlotLookupResult selectedCall;
+  ProtosSlotLookupResult selectedConstruct;
   try {
-   selected = ProtosValueLookup.lookup(factory, "call", prelude)
+   selectedCall = ProtosValueLookup.lookup(factory, "call", prelude)
+           .orElseThrow(() -> err(caller));
+   if (!(selectedCall.value() instanceof ProtosClosureValue call)
+           || !ProtosStandardObjectProtocol.isStandardCallImplementation(call)
+           || !selectedCall.home().isRootObject()) {
+    throw err(caller);
+   }
+   selectedConstruct = ProtosValueLookup.lookup(factory, "construct", prelude)
            .orElseThrow(() -> err(caller));
   } catch (UnsupportedOperationException unsupportedRepresentation) {
    throw err(caller);
   }
-  if (!(selected.value() instanceof ProtosClosureValue behavior)
-          || behavior.nativeBody().orElse(null) != STANDARD_CALL_BODY
-          || !isCanonicalMapHome(selected.home(), caller)) {
+  if (!(selectedConstruct.value() instanceof ProtosClosureValue behavior)
+          || behavior.nativeBody().orElse(null) != STANDARD_CONSTRUCT_BODY
+          || !isCanonicalMapHome(selectedConstruct.home(), caller)) {
    throw err(caller);
   }
-  return selected;
+  return selectedConstruct;
  }
 
  static ProtosMapValue requireMapConstructionResult(
@@ -264,7 +281,7 @@ public final class ProtosStandardMapProtocol {
          Object factory,
          ProtosActivation caller) {
   ProtosSlotLookupResult selected =
-          selectFactoryCallForMapConstruction(factory, caller);
+          selectFactoryConstructForMapConstruction(factory, caller);
   ProtosClosureValue behavior =
           (ProtosClosureValue) selected.value();
   Object result =
@@ -295,7 +312,7 @@ public final class ProtosStandardMapProtocol {
   map.append(key, recordedHash, value);
  }
 
- private static Object call(ProtosActivation a, List<?> x) {
+ private static Object construct(ProtosActivation a, List<?> x) {
   arity(a, x, 0);
   ProtosPrelude prelude = a.prelude().orElse(null);
   Object canonical =

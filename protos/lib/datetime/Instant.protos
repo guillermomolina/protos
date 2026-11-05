@@ -42,7 +42,7 @@
 /// Answers a fresh frozen instant `nanoseconds` uniform nanoseconds from
 /// `1970-01-01T00:00:00Z`. `nanoseconds` must be an Integer and may be
 /// positive, zero, or negative; any other argument signals an Error.
-call: (nanoseconds) => {
+construct: (nanoseconds) => {
     Instant: import("std:datetime/Instant")
 
     Integer.recognizes(nanoseconds).ifFalse(() => {

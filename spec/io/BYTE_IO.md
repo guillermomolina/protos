@@ -31,7 +31,11 @@ including zero-argument empty construction, exact octet validation,
 replacement-only `atPut`, dynamic resizing through `add` / `removeAt`,
 ascending-snapshot `each`, callback callability, return values, and
 open/closed/frozen behavior, are governed normatively by
-`../semantics/VALUES_AND_COLLECTIONS.md`.
+`../semantics/VALUES_AND_COLLECTIONS.md`. The standard `Bytes` factory is an
+ordinary local `construct` slot on the standard `Bytes` factory object; `Bytes()`
+reaches it through the inherited standard `Object.call` → `construct` bridge
+(D239-C1, `../semantics/CALLABLES.md`) without changing that exact indexed
+byte-state contract.
 
 `Bytes` remains mutable and dynamically resizable through the explicit
 length-changing operations `add` and `removeAt`. No other operation acquires

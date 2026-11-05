@@ -771,6 +771,7 @@ public final class ProtosCoreBootstrap {
         Set<String> expected =
                 Set.of(
                         "call",
+                        "construct",
                         "hasSlot",
                         "slotValue",
                         "ifTrue",
@@ -866,6 +867,11 @@ public final class ProtosCoreBootstrap {
                 object.readLocalSlot("call").orElse(null), object)) {
             throw new IllegalStateException(
                     "standard Object root must publish the standard call behavior");
+        }
+        if (!ProtosStandardObjectProtocol.isCanonicalStandardConstructSelection(
+                object.readLocalSlot("construct").orElse(null), object)) {
+            throw new IllegalStateException(
+                    "standard Object root must publish the standard construct behavior");
         }
         for (Object value : object.localSlotsSnapshot().values()) {
             if (!(value instanceof ProtosClosureValue closure) || !closure.isFrozen()) {

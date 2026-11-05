@@ -10,8 +10,8 @@
  */
 
 // A GroupRef request is routed to one eligible member. Do not rely on which one.
-first: Actor.spawn("std:collections/Set", "call", "Ada", "Grace")
-second: Actor.spawn("std:collections/Set", "call", "Linus", "Ken")
+first: Actor.spawn("std:collections/Set", "construct", "Ada", "Grace")
+second: Actor.spawn("std:collections/Set", "construct", "Linus", "Ken")
 workers: Actor.group(first, second)
 
 print(workers.request("size").value())

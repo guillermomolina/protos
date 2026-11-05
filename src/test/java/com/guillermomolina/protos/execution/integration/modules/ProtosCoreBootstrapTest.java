@@ -128,7 +128,8 @@ class ProtosCoreBootstrapTest {
         assertTrue(prelude.ipAddressPrototypeForRuntime().isFrozen());
         assertTrue(prelude.ipEndpointPrototypeForRuntime().isFrozen());
         // D235-B1-F: the Prelude range prototypes are frozen, source-backed and are also the
-        // shared std:collections/Range standard members. D236-B1: each owns a source call.
+        // shared std:collections/Range standard members. D236-B1 / D239-C1: each owns a source
+        // construct and inherits Object.call.
         for (String name : java.util.List.of("Range", "InvertedRange")) {
             ProtosObjectValue range =
                     assertInstanceOf(
@@ -136,7 +137,7 @@ class ProtosCoreBootstrapTest {
             assertTrue(range.isFrozen(), name);
             assertSame(ProtosObjectValue.rootObject(), range.parent().orElseThrow());
             assertEquals(
-                    Set.of("init", "call", "each", "eachStep", "invert", "reverse"),
+                    Set.of("init", "construct", "each", "eachStep", "invert", "reverse"),
                     range.localSlotsSnapshot().keySet());
             assertTrue(prelude.isStandardModuleMemberForRuntime(range), name);
             ProtosClosureValue each =
@@ -144,11 +145,13 @@ class ProtosCoreBootstrapTest {
                             ProtosClosureValue.class, range.readLocalSlot("each").orElseThrow());
             assertTrue(each.isFrozen(), name);
             assertTrue(each.nativeBody().isEmpty(), name);
-            ProtosClosureValue call =
+            ProtosClosureValue construct =
                     assertInstanceOf(
-                            ProtosClosureValue.class, range.readLocalSlot("call").orElseThrow());
-            assertTrue(call.isFrozen(), name);
-            assertTrue(call.nativeBody().isEmpty(), name);
+                            ProtosClosureValue.class,
+                            range.readLocalSlot("construct").orElseThrow());
+            assertTrue(construct.isFrozen(), name);
+            assertTrue(construct.nativeBody().isEmpty(), name);
+            assertFalse(range.hasLocalSlot("call"), name);
         }
         assertFalse(bindings.hasLocalSlot("_coreRootObject"));
         assertEquals(

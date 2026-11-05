@@ -16,7 +16,9 @@
 // I143 / D237-MIX-C: contextual named argument conformance.
 // All observable behavior lives inside named suite-native Test bodies.
 // Positional ordinals remain stable; the actual selected implementation
-// owns name association; standard Object.call forwards to its selected child.
+// owns name association; standard Object.call forwards to its selected child
+// (D239-C1: the selected construct, then standard Object.construct forwards
+// to the selected init).
 
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
@@ -141,6 +143,80 @@ tests: [
         }
         Assertions.require(flag === true)
         Assertions.require(trace.count == 1)
+    }),
+    Test("Object.call forwards names to a custom construct's own formals", () => {
+        Factory: {
+            construct: (left: 1, right: 2) => left * 10 + right
+        }
+        Assertions.require(Factory(right: 5) == 15)
+        Assertions.require(Factory(right: 3, left: 4) == 43)
+        Assertions.require(Factory(7, right: 8) == 78)
+        Assertions.signals(Error, () => { Factory(wrong: 1) })
+        Assertions.signals(Error, () => { Factory(9, left: 1) })
+    }),
+    Test("Object.call then Object.construct forward names to custom init", () => {
+        Point: {
+            init: (x: 0, y: 0, ...rest) => {
+                this.x: x
+                this.y: y
+                this.rest: rest
+            }
+        }
+        p: Point(y: 2, x: 1)
+        Assertions.require(p.parent() === Point)
+        Assertions.require(p.x == 1)
+        Assertions.require(p.y == 2)
+        q: Point(...[5, 6, 7])
+        Assertions.require(q.x == 5)
+        Assertions.require(q.rest.size() == 1)
+        Assertions.signals(Error, () => { Point(z: 1) })
+        Assertions.signals(Error, () => { Point(3, x: 4) })
+        Assertions.signals(Error, () => { Point(rest: [1]) })
+    }),
+    Test("forwarded defaults run in declaration order after supplied values", () => {
+        trace: { value: 0 }
+        mark: (n) => {
+            trace.value = trace.value * 10 + n
+            n
+        }
+        Thing: {
+            init: (a: mark(1), b: mark(2), c: mark(3)) => {
+                this.order: trace.value
+            }
+        }
+        Assertions.require(Thing(c: mark(9)).order == 912)
+    }),
+    Test("named arguments are evaluated once across both forwarding stages", () => {
+        trace: { count: 0 }
+        once: () => {
+            trace.count = trace.count + 1
+            trace.count
+        }
+        Thing: {
+            init: (value) => {
+                this.value: value
+            }
+        }
+        made: Thing(value: once())
+        Assertions.require(made.value == 1)
+        Assertions.require(trace.count == 1)
+    }),
+    Test("copied and extracted standard construct forward labels to init", () => {
+        Thing: {
+            init: (value) => {
+                this.value: value
+            }
+        }
+        Thing.build: Object.construct
+        Assertions.require(Thing.build(value: 3).value == 3)
+        Assertions.require(Thing.construct(value: 4).value == 4)
+        extracted: Thing.construct
+        Assertions.require(extracted(value: 5).value == 5)
+        Assertions.signals(Error, () => { Thing.build(other: 1) })
+        aliased: Thing.alias("build", "produce")
+        produced: aliased.produce(value: 6)
+        Assertions.require(produced.value == 6)
+        Assertions.require(produced.parent() === aliased)
     }),
     Test("a named callback preserves the captured non-local return home", () => {
         outer: () => {

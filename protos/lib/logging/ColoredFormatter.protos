@@ -38,7 +38,7 @@
 /// removing the generated sequences yields exactly that String. Every Error
 /// of `TextFormatter.format`, including for an unrecognized event or an
 /// unwritable timestamp, is signalled unchanged.
-call: (mode, autoEnabled) => {
+construct: (mode, autoEnabled) => {
     ColorMode: import("std:text/ColorMode")
     TextFormatter: import("std:logging/TextFormatter")
     Style: import("std:text/Style")

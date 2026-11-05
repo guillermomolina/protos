@@ -137,30 +137,24 @@ final class ProtosStructuredControlCalls {
         }
     }
 
+    /**
+     * PLAT032 / D239-C1 standard Object.call: exactly one ordinary child
+     * invocation, either the D013 Closure execution or the ordinary
+     * {@code construct} send on the original receiver. Its finish answers the
+     * child's exact normal result, so a customized construct may answer any
+     * value, including {@code null}, a scalar or an existing identity.
+     */
     static final class PreparedStandardObjectCall {
         private final PreparedClosureCall child;
-        private final ProtosObjectValue constructedInstance;
 
         private PreparedStandardObjectCall(
-                PreparedClosureCall child,
-                ProtosObjectValue constructedInstance) {
-            this.child = java.util.Objects.requireNonNull(child, "child");
-            this.constructedInstance = constructedInstance;
-        }
-
-        static PreparedStandardObjectCall closure(
                 PreparedClosureCall child) {
-            return new PreparedStandardObjectCall(child, null);
+            this.child = java.util.Objects.requireNonNull(child, "child");
         }
 
-        static PreparedStandardObjectCall construction(
-                PreparedClosureCall child,
-                ProtosObjectValue constructedInstance) {
-            return new PreparedStandardObjectCall(
-                    child,
-                    java.util.Objects.requireNonNull(
-                            constructedInstance,
-                            "constructedInstance"));
+        static PreparedStandardObjectCall selected(
+                PreparedClosureCall child) {
+            return new PreparedStandardObjectCall(child);
         }
 
         PreparedClosureCall child() {
@@ -168,9 +162,33 @@ final class ProtosStructuredControlCalls {
         }
 
         Object finish(Object childResult) {
-            return constructedInstance == null
-                    ? childResult
-                    : constructedInstance;
+            return childResult;
+        }
+    }
+
+    /**
+     * D239-C1 standard Object.construct: the fresh child allocated with the
+     * receiver as its immediate parent and the prepared ordinary {@code init}
+     * send on it. Its finish ignores init's normal result and answers the
+     * child; errors and control transfers from init never reach finish.
+     */
+    static final class PreparedStandardObjectConstruct {
+        private final PreparedClosureCall init;
+        private final ProtosObjectValue instance;
+
+        PreparedStandardObjectConstruct(
+                PreparedClosureCall init,
+                ProtosObjectValue instance) {
+            this.init = java.util.Objects.requireNonNull(init, "init");
+            this.instance = java.util.Objects.requireNonNull(instance, "instance");
+        }
+
+        PreparedClosureCall child() {
+            return init;
+        }
+
+        Object finish(Object ignoredInitResult) {
+            return instance;
         }
     }
 

@@ -163,6 +163,7 @@ encoding/utf16.protos	suite-native	-
 encoding/utf8.protos	suite-native	-
 call/closure-call-and-return.protos	suite-native	-
 call/object-call-and-init.protos	suite-native	-
+call/object-construct-and-factories.protos	suite-native	-
 call/call-resolution-and-method-extraction.protos	suite-native	-
 call/argument-vector-and-spread.protos	suite-native	-
 call/polymorphic-call-rejection.protos	suite-native	-

@@ -15,14 +15,14 @@
  * the specific language governing rights and limitations under the License.
  */
 
-first: Actor.spawn("std:collections/Set", "call", 1, 2, 3, 4)
-second: Actor.spawn("std:collections/Set", "call", 1, 2, 3, 4)
-third: Actor.spawn("std:collections/Set", "call", 1, 2, 3, 4)
-fourth: Actor.spawn("std:collections/Set", "call", 1, 2, 3, 4)
-fifth: Actor.spawn("std:collections/Set", "call", 1, 2, 3, 4)
-sixth: Actor.spawn("std:collections/Set", "call", 1, 2, 3, 4)
-seventh: Actor.spawn("std:collections/Set", "call", 1, 2, 3, 4)
-eighth: Actor.spawn("std:collections/Set", "call", 1, 2, 3, 4)
+first: Actor.spawn("std:collections/Set", "construct", 1, 2, 3, 4)
+second: Actor.spawn("std:collections/Set", "construct", 1, 2, 3, 4)
+third: Actor.spawn("std:collections/Set", "construct", 1, 2, 3, 4)
+fourth: Actor.spawn("std:collections/Set", "construct", 1, 2, 3, 4)
+fifth: Actor.spawn("std:collections/Set", "construct", 1, 2, 3, 4)
+sixth: Actor.spawn("std:collections/Set", "construct", 1, 2, 3, 4)
+seventh: Actor.spawn("std:collections/Set", "construct", 1, 2, 3, 4)
+eighth: Actor.spawn("std:collections/Set", "construct", 1, 2, 3, 4)
 
 Future.all(
     first.request("size"),

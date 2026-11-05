@@ -98,12 +98,16 @@ public final class ProtosStandardArrayProtocol {
                                     supplied.get(0) instanceof ProtosArrayValue);
                         }));
 
-        if (arrayPrototype.hasLocalSlot("call")) {
-            throw new IllegalStateException("Core Array already defines a local call slot");
+        if (arrayPrototype.hasLocalSlot("construct")) {
+            throw new IllegalStateException("Core Array already defines a local construct slot");
         }
 
+        /*
+         * D239-C1: Array(...) reaches this specialized construct through the
+         * inherited standard Object.call; Array.call is no longer local.
+         */
         arrayPrototype.createLocalSlot(
-                "call",
+                "construct",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> {
                             Object receiver = activation.receiver();

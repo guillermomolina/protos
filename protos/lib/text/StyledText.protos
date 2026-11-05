@@ -33,7 +33,7 @@
 /// With one argument the text is plain; with two, `style` must be a style
 /// recognized by `std:text/Style`. Any other argument signals an Error; no
 /// argument is converted, and `null` is not a style.
-call: ((facility) => (text, ...rest) => {
+construct: ((facility) => (text, ...rest) => {
     StyledText: import("std:text/StyledText")
     Style: import("std:text/Style")
 

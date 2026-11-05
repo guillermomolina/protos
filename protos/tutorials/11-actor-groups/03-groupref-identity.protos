@@ -10,8 +10,8 @@
  */
 
 // Two acquisitions over the same members create different Group and GroupRef identities.
-first: Actor.spawn("std:collections/Set", "call", "Ada")
-second: Actor.spawn("std:collections/Set", "call", "Grace")
+first: Actor.spawn("std:collections/Set", "construct", "Ada")
+second: Actor.spawn("std:collections/Set", "construct", "Grace")
 
 left: Actor.group(first, second)
 right: Actor.group(first, second)

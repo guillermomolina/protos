@@ -10,7 +10,7 @@
  */
 
 // Actor.spawn identifies destination-loadable module code plus a bootstrap binding.
-// std:collections/Set.call returns an ordinary Map, which becomes this Actor's behavior.
-worker: Actor.spawn("std:collections/Set", "call", 1, 2, 3)
+// std:collections/Set.construct returns an ordinary Map, which becomes this Actor's behavior.
+worker: Actor.spawn("std:collections/Set", "construct", 1, 2, 3)
 print(worker.request("size").value())
 worker.stop()

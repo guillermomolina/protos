@@ -51,11 +51,12 @@ Range: {
         this.freeze()
     }
 
-    /// Constructs a range in the direction selected by its Integer bounds.
-    /// Noncanonical receivers retain ordinary Object.call construction.
-    call: (...args) => {
+    /// Constructs a range in the direction selected by its Integer bounds
+    /// (D239-C1: Range(a, b) reaches this method through the inherited
+    /// Object.call). Noncanonical receivers retain ordinary Object.construct.
+    construct: (...args) => {
         if(this !== Range) {
-            super.call(...args)
+            super.construct(...args)
         } else {
             (args.size() == 2).ifFalse(() => {
                 Error().signal()
@@ -74,7 +75,7 @@ Range: {
             if(start > stop) {
                 InvertedRange(start, stop)
             } else {
-                super.call(start, stop)
+                super.construct(start, stop)
             }
         }
     }
@@ -146,11 +147,12 @@ InvertedRange: {
         this.freeze()
     }
 
-    /// Constructs a range in the direction selected by its Integer bounds.
-    /// Noncanonical receivers retain ordinary Object.call construction.
-    call: (...args) => {
+    /// Constructs a range in the direction selected by its Integer bounds
+    /// (D239-C1: Range(a, b) reaches this method through the inherited
+    /// Object.call). Noncanonical receivers retain ordinary Object.construct.
+    construct: (...args) => {
         if(this !== InvertedRange) {
-            super.call(...args)
+            super.construct(...args)
         } else {
             (args.size() == 2).ifFalse(() => {
                 Error().signal()
@@ -169,7 +171,7 @@ InvertedRange: {
             if(start < stop) {
                 Range(start, stop)
             } else {
-                super.call(start, stop)
+                super.construct(start, stop)
             }
         }
     }

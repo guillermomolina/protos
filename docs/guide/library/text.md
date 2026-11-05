@@ -27,6 +27,12 @@ support.
 Styles have semantic equality; styled texts are opaque values compared by
 identity, and no public operation reads their runs back.
 
+`Style(...)` and `StyledText(...)` are ordinary invocations that reach each
+module's source-defined `construct` method through the inherited `call` (see
+[Construction: `init`, `construct`, and `call`](../03-closures-methods-and-receivers.md#construction-init-construct-and-call)).
+The factory bodies are unchanged: each is still a Closure bound to its private
+module facility, and the public invocation forms are the same.
+
 ```protos
 Style: import("std:text/Style")
 StyledText: import("std:text/StyledText")

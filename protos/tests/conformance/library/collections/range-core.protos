@@ -429,6 +429,34 @@ tests: Array(
         Assertions.require(reverseResult === null)
         Assertions.require(stepResult === null)
         Assertions.require(observed == 12332113)
+    }),
+    Test("range direct canonical construct selects the direction", () => {
+        up: Range.construct(1, 4)
+        down: Range.construct(4, 1)
+        Assertions.require((up.parent() === Range) && (up.start == 1) && (up.stop == 4))
+        Assertions.require((down.parent() === InvertedRange) && (down.start == 4) && (down.stop == 1))
+        invertedUp: InvertedRange.construct(1, 4)
+        Assertions.require(invertedUp.parent() === Range)
+        Assertions.require(Range.construct(2, 2).parent() === Range)
+        Assertions.require(InvertedRange.construct(2, 2).parent() === InvertedRange)
+        Assertions.require(Range.construct(0, 3) !== Range.construct(0, 3))
+        Assertions.signals(Error, () => { Range.construct(1) })
+        Assertions.signals(Error, () => { Range.construct(1, 2.0) })
+    }),
+    Test("range derived super.construct keeps the derived receiver", () => {
+        Labelled: (Range) {
+            construct: (...args) => {
+                instance: super.construct(...args)
+                [instance, this]
+            }
+            init: (...args) => {
+                this.count: args.size()
+            }
+        }
+        pair: Labelled(0, 5)
+        Assertions.require(pair[1] === Labelled)
+        Assertions.require(pair[0].parent() === Labelled)
+        Assertions.require(pair[0].count == 2)
     })
 )
 tests.freeze()

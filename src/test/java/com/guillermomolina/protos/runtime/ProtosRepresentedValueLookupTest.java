@@ -54,13 +54,13 @@ class ProtosRepresentedValueLookupTest {
     void numericRepresentationsUseTheirNormativePrototypeParents()
             throws IOException {
         ProtosPrelude prelude = corePrelude();
-        Object integerCall = prelude.integerPrototype().readLocalSlot("call").orElseThrow();
-        Object floatCall = prelude.floatPrototype().readLocalSlot("call").orElseThrow();
+        Object integerCall = prelude.integerPrototype().readLocalSlot("construct").orElseThrow();
+        Object floatCall = prelude.floatPrototype().readLocalSlot("construct").orElseThrow();
 
         ProtosSlotLookupResult integerSelected =
                 ProtosValueLookup.lookup(
                                 new ProtosIntegerValue(42),
-                                "call",
+                                "construct",
                                 prelude)
                         .orElseThrow();
         assertSame(
@@ -69,7 +69,7 @@ class ProtosRepresentedValueLookupTest {
         assertSame(integerCall, integerSelected.value());
         // The concrete family inherits the factory; its canonical owner stays Integer.
         assertSame(prelude.integerPrototype(), integerSelected.home());
-        assertFalse(prelude.smallIntegerPrototype().hasLocalSlot("call"));
+        assertFalse(prelude.smallIntegerPrototype().hasLocalSlot("construct"));
 
         Object large =
                 com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(com.guillermomolina.protos.runtime.numeric.ProtosNumberLiteral.parse("18446744073709551616"), prelude);
@@ -77,15 +77,15 @@ class ProtosRepresentedValueLookupTest {
                 prelude.bigIntegerPrototype(),
                 ProtosValueLookup.delegationParent(large, prelude).orElseThrow());
         ProtosSlotLookupResult largeSelected =
-                ProtosValueLookup.lookup(large, "call", prelude).orElseThrow();
+                ProtosValueLookup.lookup(large, "construct", prelude).orElseThrow();
         assertSame(integerCall, largeSelected.value());
         assertSame(prelude.integerPrototype(), largeSelected.home());
-        assertFalse(prelude.bigIntegerPrototype().hasLocalSlot("call"));
+        assertFalse(prelude.bigIntegerPrototype().hasLocalSlot("construct"));
 
         ProtosSlotLookupResult floatSelected =
                 ProtosValueLookup.lookup(
                                 new ProtosFloatValue(2.5d),
-                                "call",
+                                "construct",
                                 prelude)
                         .orElseThrow();
         assertSame(floatCall, floatSelected.value());
