@@ -1842,17 +1842,28 @@ final class CanonicalToBytecodeLowerer {
                                 null)
                         : null;
 
-        for (CanonicalExpression expression : expressions) {
+        for (int index = 0; index < expressions.size(); index++) {
+            CanonicalExpression expression = expressions.get(index);
             beginStatement(builder, expression);
 
             if (requiresComposedInvocation(expression)) {
-                emitBodyExpressionToLocal(
-                        builder,
-                        expression,
-                        result,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
+                if (index < expressions.size() - 1) {
+                    emitDiscardedStatementToLocal(
+                            builder,
+                            expression,
+                            result,
+                            preparedCall,
+                            childResult,
+                            resumeValue);
+                } else {
+                    emitBodyExpressionToLocal(
+                            builder,
+                            expression,
+                            result,
+                            preparedCall,
+                            childResult,
+                            resumeValue);
+                }
             } else if (expression instanceof CanonicalLookup lookup
                     && isScalarLocalRead(lookup)) {
                 emitScalarLocalReadToResult(builder, lookup, result);
@@ -2628,7 +2639,7 @@ final class CanonicalToBytecodeLowerer {
                 }
                 beginStatement(builder, expression);
                 if (requiresComposedInvocation(expression)) {
-                    emitBodyExpressionToLocal(
+                    emitDiscardedStatementToLocal(
                             builder,
                             expression,
                             stagedResult,
@@ -4728,17 +4739,23 @@ final class CanonicalToBytecodeLowerer {
                 && i115AdmitsInlineClosure(receiver)) {
             builder.beginTag(StandardTags.CallTag.class);
             builder.beginBlock();
-            emitI115ClosureInvocation(
-                    builder, receiver, null, true, result,
-                    scratch, childResult, resumeValue, primitiveCarrierResult);
+            emitI115InlineClosureBody(
+                    builder, (CanonicalClosure) receiver, result,
+                    scratch, childResult, resumeValue);
             builder.endBlock();
             builder.endTag(StandardTags.CallTag.class);
             return;
         }
-        if (shape == InvocationShape.SEND && i115ControlSelector(selector)) {
-            emitI115UnifiedControl(
-                    builder,
-                    new CanonicalSend(receiver, selector, arguments, receiver.span()),
+        I115Control control =
+                shape == InvocationShape.SEND ? I115Control.of(selector, arguments) : null;
+        if (control != null) {
+            CanonicalSend discarded = discardedControlStatement;
+            discardedControlStatement = null;
+            boolean valueUsed = discarded == null
+                    || discarded.receiver() != receiver
+                    || discarded.arguments() != arguments;
+            emitI115Control(
+                    builder, control, receiver, arguments, valueUsed,
                     result, scratch, childResult, resumeValue,
                     stager, primitiveCarrierResult);
             return;
@@ -4784,32 +4801,109 @@ final class CanonicalToBytecodeLowerer {
 
 
     /**
-     * I115: ifTrue is Bytecode DSL control flow, not a method send.
+     * I115: the standard control selectors are Bytecode DSL control flow,
+     * not method sends. One compile-time row per selector fixes its arity,
+     * its phase, the polarity of the primitive decision and, for loops, the
+     * operand positions of the condition and of the body (0 is the receiver,
+     * 1 the sole argument). The roles are never inferred from Closure
+     * identity, parameters or results.
      *
-     * The receiver and callback-producing expression are evaluated
-     * exactly once. No GetMethod(ifTrue), PrepareSend(ifTrue) or
-     * Boolean method activation is emitted.
-     *
-     * The selected callback uses the shared call dispatcher and
-     * its existing continuation transport.
+     * <p>A conditional's decision is {@code receiver == polarity}: ifFalse
+     * selects its callback on canonical false without a {@code not()} send.
+     * A loop's decision is "continue": whileTrue and untilFalse continue on
+     * true, whileFalse and untilTrue on false.
      */
+    private enum I115Control {
+        IF_TRUE("ifTrue", 1, Phase.CONDITIONAL, true, -1, -1),
+        IF_FALSE("ifFalse", 1, Phase.CONDITIONAL, false, -1, -1),
+        IF_TRUE_IF_FALSE("ifTrueIfFalse", 2, Phase.CONDITIONAL, true, -1, -1),
+        WHILE_TRUE("whileTrue", 1, Phase.PRE_TEST, true, 0, 1),
+        WHILE_FALSE("whileFalse", 1, Phase.PRE_TEST, false, 0, 1),
+        UNTIL_TRUE("untilTrue", 1, Phase.POST_TEST, false, 1, 0),
+        UNTIL_FALSE("untilFalse", 1, Phase.POST_TEST, true, 1, 0);
+
+        private enum Phase { CONDITIONAL, PRE_TEST, POST_TEST }
+
+        private final String selector;
+        private final int arity;
+        private final Phase phase;
+        private final boolean polarity;
+        private final int conditionPosition;
+        private final int bodyPosition;
+
+        I115Control(
+                String selector,
+                int arity,
+                Phase phase,
+                boolean polarity,
+                int conditionPosition,
+                int bodyPosition) {
+            this.selector = selector;
+            this.arity = arity;
+            this.phase = phase;
+            this.polarity = polarity;
+            this.conditionPosition = conditionPosition;
+            this.bodyPosition = bodyPosition;
+        }
+
+        /** The row of a structurally recognized control send, or {@code null}. */
+        static I115Control of(
+                String selector, java.util.List<CanonicalExpression> arguments) {
+            if (selector == null || hasSpreadArgument(arguments)) {
+                return null;
+            }
+            for (I115Control control : values()) {
+                if (control.selector.equals(selector)
+                        && control.arity == arguments.size()) {
+                    return control;
+                }
+            }
+            return null;
+        }
+
+        boolean loop() {
+            return phase != Phase.CONDITIONAL;
+        }
+
+        /** Whether operand {@code position} is a callback the control invokes. */
+        boolean callbackPosition(int position) {
+            return loop() || position > 0;
+        }
+    }
+
     /**
-     * I115: THE sole bytecode emission for ifTrue, independent of the
-     * general or compact root planner. Root planners may prove different
-     * expression representations, but neither owns a separate ifTrue op.
-     *
-     * Compact admission already proves a literal callback with a body that
-     * can be emitted in the containing root; the ordinary path uses the
-     * existing I095 whole-activation proof, invoking a non-inlineable
-     * Closure directly rather than sending ifTrue as a method.
-     *
-     * There is exactly one beginIfThen[Else] below for the selector.
+     * I115: the control send whose value its enclosing sequence discards, or
+     * {@code null}. Set only around the emission of that statement and
+     * consumed (by operand identity) on entry of {@link #emitI115Control},
+     * so a nested control expression never inherits it.
      */
-    /*
-     * I115: emit a callback in the caller only after I095 has proved its
-     * activation unobservable and its direct-parent captures admissible.
-     * Preserve nested invocation handling and source statement tags by
-     * reusing the ordinary body expression lowerer.
+    private CanonicalSend discardedControlStatement;
+
+    /** Emits one statement whose value is discarded, marking a control send as such. */
+    private void emitDiscardedStatementToLocal(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression,
+            BytecodeLocal target,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        CanonicalSend saved = discardedControlStatement;
+        discardedControlStatement =
+                expression instanceof CanonicalSend send ? send : null;
+        try {
+            emitBodyExpressionToLocal(
+                    builder, expression, target, scratch, childResult, resumeValue);
+        } finally {
+            discardedControlStatement = saved;
+        }
+    }
+
+    /**
+     * I115: an immediately invoked Closure literal (a control callback or an
+     * ordinary Call0) whose activation I095 proved unobservable is emitted
+     * in the caller, with its own bindings in plain locals of this root.
+     * Nested invocations and statement tags reuse the ordinary body
+     * expression lowerer.
      */
     private void emitI115InlineClosureBody(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -4859,11 +4953,18 @@ final class CanonicalToBytecodeLowerer {
                 builder.endStoreLocal();
                 return;
             }
-            for (CanonicalExpression expression : expressions) {
+            for (int index = 0; index < expressions.size(); index++) {
+                CanonicalExpression expression = expressions.get(index);
                 beginStatement(builder, expression);
-                emitBodyExpressionToLocal(
-                        builder, expression, result,
-                        scratch, childResult, resumeValue);
+                if (index < expressions.size() - 1) {
+                    emitDiscardedStatementToLocal(
+                            builder, expression, result,
+                            scratch, childResult, resumeValue);
+                } else {
+                    emitBodyExpressionToLocal(
+                            builder, expression, result,
+                            scratch, childResult, resumeValue);
+                }
                 endStatement(builder);
             }
         } finally {
@@ -4873,20 +4974,6 @@ final class CanonicalToBytecodeLowerer {
             currentInlineClosureCallBody = savedInlineBody;
             currentNormalDirectParentCaptureReads = savedDirectParent;
         }
-    }
-
-    /**
-     * I115: the ONE lowering for ifTrue, ifFalse, ifTrueIfFalse and whileTrue.
-     * No method lookup, prepared Boolean method, or root-specific If/While.
-     * Each callback literal is inlined only under the per-site lexical proof
-     * of {@link #i115AdmitsInlineClosure}. The control-flow bytecode is
-     * emitted only here, for every source root.
-     */
-    private static boolean i115ControlSelector(String selector) {
-        return switch (selector) {
-            case "ifTrue", "ifFalse", "ifTrueIfFalse", "whileTrue" -> true;
-            default -> false;
-        };
     }
 
     /**
@@ -4902,137 +4989,238 @@ final class CanonicalToBytecodeLowerer {
                         closure, currentControlSiteContext());
     }
 
-    private void emitI115UnifiedControl(
+    /**
+     * I115: the single lowering of the seven control selectors. The receiver
+     * and the arguments are evaluated once, left to right, before any
+     * decision; an admitted callback literal has no evaluation effect and is
+     * not materialized. A canonical Boolean literal receiver of a
+     * conditional is emitted as the constant decision; any other condition
+     * goes through {@code CanonicalControlCondition}. A selected callback
+     * runs through {@link #emitI115ControlCallback}: inline under the I095
+     * proof, otherwise as an ordinary nilary Closure call; the control
+     * selector itself is never sent.
+     */
+    private void emitI115Control(
             ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalSend send,
+            I115Control control,
+            CanonicalExpression receiver,
+            java.util.List<CanonicalExpression> arguments,
+            boolean valueUsed,
             BytecodeLocal result,
             BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             OperandStager stager,
             boolean primitiveCarrierResult) {
-        boolean loop = "whileTrue".equals(send.message());
-        int arity = "ifTrueIfFalse".equals(send.message()) ? 2 : 1;
-        if (send.arguments().size() != arity || hasSpreadArgument(send.arguments())) {
-            throw new AssertionError("I115 control requires " + arity
-                    + " positional callback(s), without spread: " + send.message());
-        }
-        if (result == null || scratch == null
-                || childResult == null || resumeValue == null) {
-            throw new AssertionError("I115 control requires composed scratch");
-        }
-
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
-        // Evaluate receiver and all arguments once, left-to-right, before
-        // choosing a branch. An admitted callback literal is not materialized:
-        // its body is emitted inline at its selected position.
-        java.util.List<CanonicalExpression> operands = new java.util.ArrayList<>();
-        operands.add(send.receiver());
-        operands.addAll(send.arguments());
-        java.util.List<BytecodeLocal> values = new java.util.ArrayList<>(operands.size());
+        java.util.List<CanonicalExpression> operands = new java.util.ArrayList<>(arguments.size() + 1);
+        operands.add(receiver);
+        operands.addAll(arguments);
+        java.util.List<BytecodeLocal> staged = new java.util.ArrayList<>(operands.size());
         java.util.List<Boolean> inline = new java.util.ArrayList<>(operands.size());
-        for (int index = 0; index < operands.size(); index++) {
-            CanonicalExpression operand = operands.get(index);
-            boolean callback = loop || index > 0;
+        for (int position = 0; position < operands.size(); position++) {
+            CanonicalExpression operand = operands.get(position);
+            boolean callback = control.callbackPosition(position);
             boolean admitted = callback && i115AdmitsInlineClosure(operand);
             inline.add(admitted);
-            if (admitted) {
-                values.add(null);
+            if (admitted || (!callback && canonicalBooleanLiteral(operand) != null)) {
+                staged.add(null);
             } else {
                 BytecodeLocal local = builder.createLocal("i115ControlOperand", null);
                 stageOperand(builder, operand, local,
                         scratch, childResult, resumeValue, stager);
-                values.add(local);
+                staged.add(local);
             }
         }
-
-        if (loop) {
-            builder.beginStoreLocal(result);
-            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
-            builder.endStoreLocal();
-            builder.beginWhile();
-            // The condition is invoked through the shared Closure mechanism.
-            // A While condition must be a value, so the statement-shaped
-            // invocation is wrapped in a Block.
-            builder.beginBlock();
-            BytecodeLocal condition = builder.createLocal("i115WhileCondition", null);
-            emitI115ClosureInvocation(builder, send.receiver(), values.get(0),
-                    inline.get(0), condition, scratch, childResult,
-                    resumeValue, primitiveCarrierResult);
-            builder.beginExperimentalCanonicalBooleanCondition();
-            builder.emitLoadLocal(condition);
-            builder.endExperimentalCanonicalBooleanCondition();
-            builder.endBlock();
-            builder.beginBlock();
-            emitI115ClosureInvocation(builder, send.arguments().get(0),
-                    values.get(1), inline.get(1), result,
-                    scratch, childResult, resumeValue, primitiveCarrierResult);
-            builder.endBlock();
-            builder.endWhile();
+        I115ControlOperands staging = new I115ControlOperands(
+                operands, staged, inline, scratch, childResult, resumeValue);
+        if (control.loop()) {
+            emitI115Loop(builder, control, staging, valueUsed, result, primitiveCarrierResult);
         } else {
-            NormalBooleanControl control = NormalBooleanControl.of(send.message());
-            builder.beginIfThenElse();
-            builder.beginExperimentalCanonicalBooleanCondition();
-            builder.emitLoadLocal(values.get(0));
-            builder.endExperimentalCanonicalBooleanCondition();
-            emitI115UnifiedBranch(builder, send, control, true, values, inline,
-                    result, scratch, childResult, resumeValue, primitiveCarrierResult);
-            emitI115UnifiedBranch(builder, send, control, false, values, inline,
-                    result, scratch, childResult, resumeValue, primitiveCarrierResult);
-            builder.endIfThenElse();
+            emitI115Conditional(builder, control, staging, valueUsed, result, primitiveCarrierResult);
         }
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
 
-    private void emitI115UnifiedBranch(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalSend send,
-            NormalBooleanControl control,
-            boolean receiver,
-            java.util.List<BytecodeLocal> values,
+    /** I115: the evaluated operands of one control site and the shared invocation scratch. */
+    private record I115ControlOperands(
+            java.util.List<CanonicalExpression> operands,
+            java.util.List<BytecodeLocal> staged,
             java.util.List<Boolean> inline,
-            BytecodeLocal result,
             BytecodeLocal scratch,
             BytecodeLocal childResult,
-            BytecodeLocal resumeValue,
+            BytecodeLocal resumeValue) {}
+
+    /**
+     * ifTrue, ifFalse, ifTrueIfFalse. A consumed value is a {@code
+     * Conditional} whose selected branch yields the callback's exact result
+     * and whose unselected one-callback branch yields canonical null. A
+     * discarded value is an {@code IfThen} (one callback) or {@code
+     * IfThenElse} (two), with no artificial null and no else branch.
+     */
+    private void emitI115Conditional(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            I115Control control,
+            I115ControlOperands staging,
+            boolean valueUsed,
+            BytecodeLocal result,
+            boolean primitiveCarrierResult) {
+        boolean twoCallbacks = control.arity == 2;
+        if (valueUsed) {
+            builder.beginStoreLocal(result);
+            builder.beginConditional();
+            emitI115ConditionalDecision(builder, control, staging);
+            emitI115ControlCallbackValue(builder, staging, 1, result, primitiveCarrierResult);
+            if (twoCallbacks) {
+                emitI115ControlCallbackValue(builder, staging, 2, result, primitiveCarrierResult);
+            } else {
+                builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+            }
+            builder.endConditional();
+            builder.endStoreLocal();
+        } else if (twoCallbacks) {
+            builder.beginIfThenElse();
+            emitI115ConditionalDecision(builder, control, staging);
+            emitI115ControlCallbackStatement(builder, staging, 1, result, primitiveCarrierResult);
+            emitI115ControlCallbackStatement(builder, staging, 2, result, primitiveCarrierResult);
+            builder.endIfThenElse();
+        } else {
+            builder.beginIfThen();
+            emitI115ConditionalDecision(builder, control, staging);
+            emitI115ControlCallbackStatement(builder, staging, 1, result, primitiveCarrierResult);
+            builder.endIfThen();
+        }
+    }
+
+    private void emitI115ConditionalDecision(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            I115Control control,
+            I115ControlOperands staging) {
+        BytecodeLocal receiver = staging.staged().get(0);
+        if (receiver == null) {
+            boolean literal = canonicalBooleanLiteral(staging.operands().get(0));
+            builder.emitLoadConstant(literal == control.polarity);
+        } else {
+            emitI115ValidatedDecision(builder, control.polarity, receiver);
+        }
+    }
+
+    /**
+     * whileTrue, whileFalse (pre-test) and untilTrue, untilFalse
+     * (post-test) as one Bytecode DSL {@code While}. Pre-test: the While
+     * condition invokes the condition callback and validates it; the While
+     * body invokes the body callback. Post-test: the While condition is a
+     * block running the body, then the condition, so the body precedes
+     * every condition including the first; the While body is empty.
+     *
+     * <p>A consumed loop value is held in {@code result} alone: canonical
+     * null before the loop, overwritten only when a body invocation
+     * completes normally (an Error, non-local return or cancellation
+     * propagates before the store; a suspension resumes in place), and
+     * returned unchanged after the loop. A discarded loop does not
+     * initialize it.
+     */
+    private void emitI115Loop(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            I115Control control,
+            I115ControlOperands staging,
+            boolean valueUsed,
+            BytecodeLocal result,
+            boolean primitiveCarrierResult) {
+        if (valueUsed) {
+            builder.beginStoreLocal(result);
+            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+            builder.endStoreLocal();
+        }
+        BytecodeLocal condition = builder.createLocal("i115LoopCondition", null);
+        boolean postTest = control.phase == I115Control.Phase.POST_TEST;
+        builder.beginWhile();
+        builder.beginBlock();
+        if (postTest) {
+            emitI115ControlCallback(builder, staging, control.bodyPosition,
+                    result, primitiveCarrierResult);
+        }
+        emitI115ControlCallback(builder, staging, control.conditionPosition,
+                condition, false);
+        emitI115ValidatedDecision(builder, control.polarity, condition);
+        builder.endBlock();
+        builder.beginBlock();
+        if (!postTest) {
+            emitI115ControlCallback(builder, staging, control.bodyPosition,
+                    result, primitiveCarrierResult);
+        }
+        builder.endBlock();
+        builder.endWhile();
+    }
+
+    /** The primitive decision {@code value == polarity} of a strictly canonical Boolean. */
+    private static void emitI115ValidatedDecision(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            boolean polarity,
+            BytecodeLocal value) {
+        builder.beginCanonicalControlCondition(polarity);
+        builder.emitLoadLocal(value);
+        builder.endCanonicalControlCondition();
+    }
+
+    private void emitI115ControlCallbackValue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            I115ControlOperands staging,
+            int position,
+            BytecodeLocal result,
             boolean primitiveCarrierResult) {
         builder.beginBlock();
-        int index = control.selectedIndex(receiver);
-        if (index < 0) {
-            if (result != null) {
-                builder.beginStoreLocal(result);
-                builder.emitLoadConstant(control.unselectedResult(receiver));
-                builder.endStoreLocal();
-            }
-        } else {
-            emitI115ClosureInvocation(builder, send.arguments().get(index),
-                    values.get(index + 1), inline.get(index + 1), result,
-                    scratch, childResult, resumeValue, primitiveCarrierResult);
-        }
+        emitI115ControlCallback(builder, staging, position, result, primitiveCarrierResult);
+        builder.emitLoadLocal(result);
         builder.endBlock();
     }
 
-    private void emitI115ClosureInvocation(
+    private void emitI115ControlCallbackStatement(
             ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalExpression callback,
-            BytecodeLocal callable,
-            boolean inline,
+            I115ControlOperands staging,
+            int position,
             BytecodeLocal result,
-            BytecodeLocal scratch,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
-        if (inline) {
+        builder.beginBlock();
+        emitI115ControlCallback(builder, staging, position, result, primitiveCarrierResult);
+        builder.endBlock();
+    }
+
+    /**
+     * I115: the one execution of a selected control callback, storing its
+     * exact normal result in {@code target}. An admitted literal runs inline
+     * (no Closure, activation or ReturnHome is created); any other callback
+     * is an ordinary nilary Closure call through the shared dispatcher and
+     * its continuation composition.
+     */
+    private void emitI115ControlCallback(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            I115ControlOperands staging,
+            int position,
+            BytecodeLocal target,
+            boolean primitiveCarrierResult) {
+        if (staging.inline().get(position)) {
             emitI115InlineClosureBody(
-                    builder, (CanonicalClosure) callback, result,
-                    scratch, childResult, resumeValue);
+                    builder, (CanonicalClosure) staging.operands().get(position), target,
+                    staging.scratch(), staging.childResult(), staging.resumeValue());
         } else {
-            // A callback that is not inlined runs as an ordinary Closure call.
-            emitDispatchedCall(builder, callable, java.util.List.of(), null,
-                    childResult, result, resumeValue, primitiveCarrierResult);
+            emitDispatchedCall(builder, staging.staged().get(position), java.util.List.of(), null,
+                    staging.childResult(), target, staging.resumeValue(), primitiveCarrierResult);
         }
+    }
+
+    /** The value of a canonical {@code true}/{@code false} literal, or {@code null}. */
+    private static Boolean canonicalBooleanLiteral(CanonicalExpression expression) {
+        if (expression instanceof CanonicalLiteral literal) {
+            return switch (literal.kind()) {
+                case TRUE -> Boolean.TRUE;
+                case FALSE -> Boolean.FALSE;
+                default -> null;
+            };
+        }
+        return null;
     }
 
     private void stageOperand(
@@ -5788,26 +5976,21 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * Boolean-control selection table. Each row declares, for each canonical
-     * receiver, the supplied position of the selected callback (-1: none)
-     * and the result when no callback is selected. The IF_TRUE, IF_FALSE and
-     * IF_TRUE_IF_FALSE rows drive I115 {@link #emitI115UnifiedControl}. The
-     * NOT, AND and OR rows restate the native standard behaviors of
-     * ProtosStandardBooleanProtocol (also sequenced by PreparedBooleanCall)
-     * and are the only rows admitted by {@link #normalBooleanControlRow};
-     * frozen root publication validates that exactly those behaviors are
-     * selected for canonical receivers.
+     * Boolean-control selection table of the native standard selectors not,
+     * and and or. Each row declares, for each canonical receiver, the
+     * supplied position of the selected callback (-1: none) and the result
+     * when no callback is selected. The rows restate the standard behaviors
+     * of ProtosStandardBooleanProtocol (also sequenced by
+     * PreparedBooleanCall); frozen root publication validates that exactly
+     * those behaviors are selected for canonical receivers.
      */
     private enum NormalBooleanControl {
         NOT(0, -1, -1, Unselected.NEGATION),
-        IF_TRUE(1, 0, -1, Unselected.NULL),
-        IF_FALSE(1, -1, 0, Unselected.NULL),
-        IF_TRUE_IF_FALSE(2, 0, 1, Unselected.NULL),
         AND(1, 0, -1, Unselected.RECEIVER),
         OR(1, -1, 0, Unselected.RECEIVER);
 
         /** Result of a canonical receiver that selects no callback. */
-        private enum Unselected { NULL, RECEIVER, NEGATION }
+        private enum Unselected { RECEIVER, NEGATION }
 
         private final int arity;
         private final int selectedOnTrue;
@@ -5828,9 +6011,6 @@ final class CanonicalToBytecodeLowerer {
         static NormalBooleanControl of(String message) {
             return switch (message) {
                 case "not" -> NOT;
-                case "ifTrue" -> IF_TRUE;
-                case "ifFalse" -> IF_FALSE;
-                case "ifTrueIfFalse" -> IF_TRUE_IF_FALSE;
                 case "and" -> AND;
                 case "or" -> OR;
                 default -> null;
@@ -5844,7 +6024,6 @@ final class CanonicalToBytecodeLowerer {
 
         Object unselectedResult(boolean receiver) {
             return switch (unselected) {
-                case NULL -> ProtosNullValue.INSTANCE;
                 case RECEIVER -> canonicalBoolean(receiver);
                 case NEGATION -> canonicalBoolean(!receiver);
             };
@@ -5902,16 +6081,14 @@ final class CanonicalToBytecodeLowerer {
     /**
      * I107: the selection row of an admissible site, or {@code null}; the
      * precondition of admission ({@link #normalBooleanControlSite}). Only
-     * the native standard selectors not, and and or are admitted; the I115
-     * control selectors ({@link #i115ControlSelector}) are never classified
-     * here.
+     * the native standard selectors not, and and or have rows; the I115
+     * control selectors ({@link I115Control}) are never classified here.
      */
     private NormalBooleanControl normalBooleanControlRow(
             CanonicalSend send, ControlSiteContext context) {
         NormalBooleanControl control =
                 NormalBooleanControl.of(send.message());
         if (control == null
-                || i115ControlSelector(send.message())
                 || !standardObjectPublished
                 || context.inlineCallbackFrameNative()
                 || context.activationLocalPresent()

@@ -909,9 +909,6 @@ public final class ProtosCoreBootstrap {
                         "parallel",
                         "parent",
                         "ensure",
-                        "whileFalse",
-                        "untilTrue",
-                        "untilFalse",
                         "caseOf",
                         "init",
                         "==",
@@ -970,8 +967,9 @@ public final class ProtosCoreBootstrap {
         /*
          * I095 inlines the standard Boolean selectors and, or and not; it
          * relies on these frozen selections; never publish another behavior.
-         * I115 lowers ifTrue, ifFalse and ifTrueIfFalse directly as Bytecode
-         * DSL control flow, so the root publishes no native slots for them.
+         * I115 lowers ifTrue, ifFalse, ifTrueIfFalse, whileTrue, whileFalse,
+         * untilTrue and untilFalse directly as Bytecode DSL control flow, so
+         * the root publishes no native slots for them.
          */
         requireStandardBooleanSelection(object, "and",
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.AND);

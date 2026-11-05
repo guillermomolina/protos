@@ -31,7 +31,7 @@ import java.util.List;
 
 /**
  * Prepared state of the structured control-flow invocations (match/case,
- * standard Object and import calls, ensure, while, Error.handle and the and/or callbacks)
+ * standard Object and import calls, ensure, Error.handle and the and/or callbacks)
  * driven by {@link ProtosStructuredDispatchLowerer} roots and inline literal regions.
  */
 final class ProtosStructuredControlCalls {
@@ -232,83 +232,6 @@ final class ProtosStructuredControlCalls {
 
         ProtosCallRequest body() { return body; }
         ProtosCallRequest cleanup() { return cleanup; }
-    }
-
-    /**
-     * Validated standard Closure loop (D212 {@code whileFalse},
-     * {@code untilTrue}, {@code untilFalse}). The
-     * immutable {@link ProtosStandardObjectProtocol.StructuredLoopKind} fixes
-     * the phase order and exit polarity; {@code condition} and {@code body}
-     * are already mapped from the original receiver/argument by phase.
-     * {@link #result} yields the normal loop result once a condition
-     * completed normally with the kind's canonical exit Boolean.
-     */
-    static final class PreparedWhileCall {
-        private final ProtosStandardObjectProtocol.StructuredLoopKind kind;
-        private final ProtosClosureValue condition;
-        private final ProtosClosureValue body;
-        private final ProtosActivation activation;
-
-        PreparedWhileCall(
-                ProtosStandardObjectProtocol.StructuredLoopKind kind,
-                ProtosClosureValue condition,
-                ProtosClosureValue body,
-                ProtosActivation activation) {
-            this.kind = java.util.Objects.requireNonNull(kind, "kind");
-            this.condition = java.util.Objects.requireNonNull(condition, "condition");
-            this.body = java.util.Objects.requireNonNull(body, "body");
-            this.activation = java.util.Objects.requireNonNull(activation, "activation");
-        }
-
-        /**
-         * Whether the body activates before each condition (post-test). The
-         * lowering selects the loop shape from this; the phase is never
-         * inferred from Closure identity or a previous condition result.
-         */
-        boolean postTest() {
-            return kind.postTest();
-        }
-
-        /**
-         * Normal loop result. {@code lastBodyResult} is the exact result of the
-         * last normally completed body activation, or canonical {@code null}
-         * when none ran; it is returned unchanged (no copy, conversion, or
-         * Future await/adoption).
-         */
-        Object result(Object lastBodyResult) {
-            return lastBodyResult;
-        }
-
-        /**
-         * Value kept in the loop's body-result local after a normal body
-         * activation: the exact body result, unchanged.
-         */
-        Object retainedBodyResult(Object bodyResult) {
-            return bodyResult;
-        }
-
-        ProtosCallRequest prepareCondition() {
-            return ProtosCallRequest.call(condition, List.of(), activation);
-        }
-
-        ProtosCallRequest prepareBody() {
-            return ProtosCallRequest.call(body, List.of(), activation);
-        }
-
-        /**
-         * Whether the loop continues after a normally completed condition:
-         * false exactly for the kind's canonical exit Boolean, true for the
-         * other canonical Boolean, and a fresh standard Error for any other
-         * value (no {@code not()}, truthiness or Future await/adoption).
-         */
-        boolean conditionResult(Object result) {
-            if (result == ProtosBooleanValue.TRUE || result == ProtosBooleanValue.FALSE) {
-                return result != kind.exitValue();
-            }
-            throw ProtosCoreErrors.signal(
-                    activation,
-                    ProtosCoreErrors.newError(activation));
-        }
     }
 
     static final class PreparedErrorHandlerCall {

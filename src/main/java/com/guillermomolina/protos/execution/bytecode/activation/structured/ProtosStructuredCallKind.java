@@ -103,18 +103,6 @@ public enum ProtosStructuredCallKind {
         }
     },
 
-    WHILE {
-        @Override
-        boolean admits(StructuredNativeInvocation prepared) {
-            return prepared.isStructuredWhile();
-        }
-
-        @Override
-        Object prepare(StructuredNativeInvocation prepared) {
-            return prepared.prepareStructuredWhile();
-        }
-    },
-
     LOCAL_EACH {
         @Override
         boolean admits(StructuredNativeInvocation prepared) {

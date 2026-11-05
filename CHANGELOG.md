@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.52-SNAPSHOT
+
+- **I115-V71 — historical replay.**
+  - Unify conditional and loop lowering through structured Bytecode DSL operations and CanonicalControlCondition. Encode selector arity, polarity and operand roles in compile-time rows; validate canonical Boolean conditions without truthiness or automatic Future adoption.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** These internal control paths bypass ordinary selector sends; custom selection and suspendible callback equivalence remain unaccepted. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved without repairs.
+  - Tests added or modified (not executed): `ProtosI115StructuredControlSmokeTest.java`. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 1 added, 8 modified, 0 deleted (rename detection disabled for exact path accounting). All 9 original paths retain their exact Git blobs/modes or deletion state; reconstructed parent blobs/modes also match the original parent. Only root `pom.xml` and `CHANGELOG.md` receive replay metadata edits.
+  - Original implementation: `2e6ab63f097caa479e679842e670282ff869da79`.
+
 ## 0.4.51-SNAPSHOT
 
 - **I115-V70 — historical replay.**
