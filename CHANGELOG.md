@@ -7,6 +7,14 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.445-SNAPSHOT
+
+- `BUG025` (#940): add real GraalVM 25.5 DAP regression and closure evidence for the valid `^index` non-local return in `std:collections/Array` (test-only; no runtime, adapter or specification change).
+  - Extend the I026-F real-DAP harness with configurable exception filters (`[]`, `all`, `uncaught`) and an A–E classification matrix (valid non-local return, unhandled Error, same-Task handled Error, cross-Task `InvalidReturn`, failed Future observed through `Error.handle`), recording each stop's reason, `exceptionInfo`, break mode and top source frame with machine-readable `BUG025_*` lines. Guest outcomes, zero stops without filters, the unhandled-Error positive control under `all` and `uncaught`, and the absence of any valid-return stop are strict; the handled-Error classification under `all`/`uncaught` stays observational pending `PLAT071` (#1054).
+  - Add `ProtosBug025RealDapClosureTest`, running the unchanged `protos/examples/concurrency/parallel-execution.protos` through the real `protos debug` CLI and a fresh DAP session per filter, connecting from the published `PROTOS_DEBUG_READY` record, collecting guest stdout from DAP `output` events, and asserting exit `0`, the exact program output, empty guest stderr and no exception stop at the valid `^index`.
+  - Add the same example as a plain CLI regression in `ProtosCli008C1GuestStackCliTest`.
+  - Real-DAP test client: add a validated `DebugEndpoint` connect overload, keep partial DAP messages intact across short poll windows, and observe an adapter-initiated transport close at a message boundary without losing already-received events.
+
 ## 0.3.444-SNAPSHOT
 
 - `PLAT070` (#1049): migrate internal non-local-return and Task-cancellation transfers from the PLAT021 private Bytecode exception bridge to Truffle 25.5 `@GenerateBytecode(unwindExceptions = ...)` direct unwind.

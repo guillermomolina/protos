@@ -80,6 +80,7 @@ final class ProtosDapTestSupport {
         private final BufferedOutputStream output;
         private final Deque<String> deferred = new ArrayDeque<>();
         private int nextSequence = 1;
+        private boolean endOfStream;
 
         private DapClient(Socket socket) throws IOException {
             this.socket = socket;
@@ -93,7 +94,18 @@ final class ProtosDapTestSupport {
          */
         static DapClient connect(ProtosGraalDapReadinessAdapter readiness, Duration timeout)
                 throws IOException {
-            ProtosPolyglotRuntimeHost.DebugEndpoint endpoint = readiness.requireEndpoint();
+            return connect(readiness.requireEndpoint(), timeout);
+        }
+
+        /**
+         * Connects to an endpoint published by a real DAP host, for example the endpoint carried
+         * by the CLI's {@code PROTOS_DEBUG_READY} record. The validated {@link
+         * ProtosPolyglotRuntimeHost.DebugEndpoint} value is required; there is deliberately no
+         * overload taking a raw port number.
+         */
+        static DapClient connect(
+                ProtosPolyglotRuntimeHost.DebugEndpoint endpoint, Duration timeout)
+                throws IOException {
             InetAddress address = InetAddress.getByName(endpoint.host());
             if (!address.isLoopbackAddress()) {
                 throw new IOException("DAP endpoint escaped loopback: " + endpoint);
@@ -173,24 +185,58 @@ final class ProtosDapTestSupport {
             if (existing != null) {
                 return existing;
             }
+            long deadline = System.nanoTime() + window.toNanos();
+            while (true) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0 || !awaitMessageStart(Duration.ofNanos(remaining))) {
+                    return null;
+                }
+                // A message has started: read it whole under the normal socket timeout so a
+                // poll window can never truncate a DAP frame and desynchronize the stream.
+                String message = read();
+                if ("event".equals(optionalStringField(message, "type"))
+                        && eventName.equals(optionalStringField(message, "event"))) {
+                    return message;
+                }
+                deferred.addLast(message);
+            }
+        }
+
+        /**
+         * Waits at most {@code window} for the first byte of the next DAP message without
+         * consuming it. Returns {@code false} when nothing arrived in the window or the adapter
+         * closed the transport.
+         */
+        private boolean awaitMessageStart(Duration window) throws IOException {
+            if (endOfStream) {
+                return false;
+            }
             int previousTimeout = socket.getSoTimeout();
             socket.setSoTimeout((int) Math.max(1, window.toMillis()));
+            input.mark(1);
             try {
-                long deadline = System.nanoTime() + window.toNanos();
-                while (System.nanoTime() < deadline) {
-                    String message = read();
-                    if ("event".equals(optionalStringField(message, "type"))
-                            && eventName.equals(optionalStringField(message, "event"))) {
-                        return message;
-                    }
-                    deferred.addLast(message);
+                int first = input.read();
+                if (first < 0) {
+                    // The adapter closed the transport at a message boundary. Already received
+                    // messages stay deferred; callers decide whether the close was legitimate.
+                    endOfStream = true;
+                    return false;
                 }
-                return null;
+                input.reset();
+                return true;
             } catch (SocketTimeoutException quiet) {
-                return null;
+                return false;
             } finally {
                 socket.setSoTimeout(previousTimeout);
             }
+        }
+
+        /**
+         * Whether {@link #pollEvent} observed the adapter closing the transport at a message
+         * boundary. Messages received before the close remain available from {@link #pollEvent}.
+         */
+        boolean isEndOfStream() {
+            return endOfStream;
         }
 
         void bestEffortDisconnect() {

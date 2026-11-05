@@ -153,6 +153,36 @@ final class ProtosCli008C1GuestStackCliTest {
         System.out.println("PLAT070_FIND_INDEX_CLI_OUTPUT=1");
     }
 
+    /**
+     * BUG025 original complete program: the unchanged parallel-execution example runs through
+     * the normal CLI file entry, without DAP, with its exact output and no guest Error.
+     */
+    @Test
+    void parallelExecutionExampleRunsToCompletionWithoutError() {
+        Path example =
+                Path.of("protos", "examples", "concurrency", "parallel-execution.protos")
+                        .toAbsolutePath()
+                        .normalize();
+
+        Result result = run(InputStream.nullInputStream(), example.toString());
+
+        assertEquals(0, result.code(), result.err());
+        assertEquals(
+                """
+                42
+                [9, 1, 16, 1, 25, 81, 4, 36]
+                [4, 2, 6]
+                2
+                null
+                31
+                null
+                [1, 1, 2, 3, 4, 5, 6, 9]
+                """,
+                result.out());
+        assertTrue(result.err().isBlank(), result.err());
+        System.out.println("BUG025_PARALLEL_EXAMPLE_CLI_EXIT=0");
+    }
+
     private static void assertFrameLines(
             List<String> frames, String source, List<Integer> expectedLines) {
         assertEquals(expectedLines.size(), frames.size(), () -> String.join("\n", frames));

@@ -330,7 +330,8 @@ final class ProtosI026FDapBehaviorTest {
      *    Task is the adapter's guarantee, not an assumption of this test, and a Task failure is
      *    not treated as equivalent to an "uncaught" exception event.
      *
-     * The "all" filter is deliberately not exercised.
+     * The BUG025 classification matrix below additionally records every case under no filter,
+     * "all" and "uncaught" without inventing an expected classification.
      */
     /**
      * The BUG025 findIndex program without print: this bare debugger harness binds no Process
@@ -361,11 +362,12 @@ final class ProtosI026FDapBehaviorTest {
     @Test
     void realDapObservedNoUncaughtStopForAValidNonLocalReturn() throws Exception {
         withExceptionFilteredSession(
+                ExceptionFilter.UNCAUGHT,
                 (client, context, executor, files, out) -> {
                     ExceptionRun value =
                             runUnderExceptionFilter(
-                                    client, context, executor, files, FIND_INDEX_VALUE_PROGRAM,
-                                    true);
+                                    ExceptionFilter.UNCAUGHT, client, context, executor, files,
+                                    FIND_INDEX_VALUE_PROGRAM, true);
                     assertEquals(
                             ProtosExecutionOutcome.State.COMPLETED,
                             value.outcome().state(),
@@ -383,18 +385,19 @@ final class ProtosI026FDapBehaviorTest {
     @Test
     void realDapTaskFailuresKeepTheirExactOutcomeWhateverTheAdapterReports() throws Exception {
         withExceptionFilteredSession(
+                ExceptionFilter.UNCAUGHT,
                 (client, context, executor, files, out) -> {
                     ExceptionRun unhandled =
                             runUnderExceptionFilter(
-                                    client, context, executor, files, UNHANDLED_ERROR_PROGRAM,
-                                    false);
+                                    ExceptionFilter.UNCAUGHT, client, context, executor, files,
+                                    UNHANDLED_ERROR_PROGRAM, false);
                     assertEquals(ProtosExecutionOutcome.State.FAILED, unhandled.outcome().state());
                     System.out.println(
                             "PLAT070_DAP_UNHANDLED_ERROR_OBSERVED_STOPS=" + unhandled.stops());
 
                     ExceptionRun invalidReturn =
                             runUnderExceptionFilter(
-                                    client, context, executor, files,
+                                    ExceptionFilter.UNCAUGHT, client, context, executor, files,
                                     INVALID_RETURN_TASK_PROGRAM, false);
                     assertEquals(
                             ProtosExecutionOutcome.State.COMPLETED,
@@ -412,6 +415,242 @@ final class ProtosI026FDapBehaviorTest {
                 });
     }
 
+    /*
+     * BUG025 real-DAP exception-classification matrix. Each filter gets its own real GraalVM DAP
+     * session; every case runs as actual guest code in that session. Final guest semantics are
+     * asserted strictly. DAP stops are recorded as observed, except for the established
+     * positive control (B under "uncaught") and the established valid-NLR observation (A under
+     * "uncaught"). A stop is never inferred from the program's final state.
+     */
+    private static final String HANDLED_ERROR_SAME_TASK_PROGRAM =
+            """
+            Error.handle(
+                () => { Error().signal() },
+                (caught) => { 42 }
+            )
+            """;
+    private static final String FAILED_FUTURE_HANDLED_PROGRAM =
+            """
+            m: () => {
+                child: (() => {
+                    Error().signal()
+                }).future()
+                Error.handle(() => { child.value() }, (caught) => { caught })
+            }
+            m()
+            """;
+
+    @Test
+    void bug025RealDapClassificationMatrixWithoutExceptionFilters() throws Exception {
+        runClassificationMatrix(ExceptionFilter.NONE);
+    }
+
+    @Test
+    void bug025RealDapClassificationMatrixUnderAllFilter() throws Exception {
+        runClassificationMatrix(ExceptionFilter.ALL);
+    }
+
+    @Test
+    void bug025RealDapClassificationMatrixUnderUncaughtFilter() throws Exception {
+        runClassificationMatrix(ExceptionFilter.UNCAUGHT);
+    }
+
+    private static void runClassificationMatrix(ExceptionFilter filter) throws Exception {
+        withExceptionFilteredSession(
+                filter,
+                (client, context, executor, files, out) -> {
+                    // A: valid non-local return.
+                    ExceptionRun a =
+                            runUnderExceptionFilter(
+                                    filter, client, context, executor, files,
+                                    FIND_INDEX_VALUE_PROGRAM,
+                                    filter == ExceptionFilter.UNCAUGHT);
+                    report("A", a);
+                    assertNoStopsWithoutFilters("A", a);
+                    assertCompletedInteger(a, "1");
+                    if (filter == ExceptionFilter.UNCAUGHT) {
+                        assertTrue(a.stops().isEmpty(), () -> "unexpected stops " + a.stops());
+                    }
+
+                    // B: direct unhandled Error (strict positive control under "uncaught").
+                    ExceptionRun b =
+                            runUnderExceptionFilter(
+                                    filter, client, context, executor, files,
+                                    UNHANDLED_ERROR_PROGRAM, false);
+                    report("B", b);
+                    assertNoStopsWithoutFilters("B", b);
+                    assertEquals(
+                            ProtosExecutionOutcome.State.FAILED,
+                            b.outcome().state(),
+                            () -> describe(b.outcome(), b.prelude()));
+                    assertEquals("Error", errorCategory(b.outcome().error(), b.prelude()));
+                    if (filter == ExceptionFilter.UNCAUGHT || filter == ExceptionFilter.ALL) {
+                        assertTrue(
+                                b.stops().stream().anyMatch(DapStop::isException),
+                                () -> "unhandled Error must produce an exception stop under "
+                                        + filter.label + "; stops=" + b.stops());
+                    }
+
+                    // C: direct handled Error in the same Task. Any "uncaught" stop is a
+                    // classification discrepancy recorded here, not an execution failure.
+                    ExceptionRun c =
+                            runUnderExceptionFilter(
+                                    filter, client, context, executor, files,
+                                    HANDLED_ERROR_SAME_TASK_PROGRAM, false);
+                    report("C", c);
+                    assertNoStopsWithoutFilters("C", c);
+                    assertCompletedInteger(c, "42");
+                    if (filter == ExceptionFilter.UNCAUGHT
+                            && c.stops().stream().anyMatch(DapStop::isException)) {
+                        System.out.println("BUG025_DISCREPANCY=C:uncaught-stop-for-handled-Error");
+                    }
+
+                    // D: cross-Task InvalidReturn. Consumer handling is not proof that the
+                    // producer's original exception was caught; stops are recorded separately.
+                    ExceptionRun d =
+                            runUnderExceptionFilter(
+                                    filter, client, context, executor, files,
+                                    INVALID_RETURN_TASK_PROGRAM, false);
+                    report("D", d);
+                    assertNoStopsWithoutFilters("D", d);
+                    assertEquals(
+                            ProtosExecutionOutcome.State.COMPLETED,
+                            d.outcome().state(),
+                            () -> describe(d.outcome(), d.prelude()));
+                    assertSame(
+                            d.prelude().invalidReturnPrototype(),
+                            ((ProtosObjectValue) d.outcome().value()).parent().orElseThrow(),
+                            "the producer Task fails with the standard InvalidReturn");
+
+                    // E: ordinary failed Future observed through Error.handle.
+                    ExceptionRun e =
+                            runUnderExceptionFilter(
+                                    filter, client, context, executor, files,
+                                    FAILED_FUTURE_HANDLED_PROGRAM, false);
+                    report("E", e);
+                    assertNoStopsWithoutFilters("E", e);
+                    assertEquals(
+                            ProtosExecutionOutcome.State.COMPLETED,
+                            e.outcome().state(),
+                            () -> describe(e.outcome(), e.prelude()));
+                    assertSame(
+                            e.prelude().errorPrototype(),
+                            ((ProtosObjectValue) e.outcome().value()).parent().orElseThrow(),
+                            "the handler receives the ordinary Error signalled by the child");
+                });
+    }
+
+    /** With no exception filters configured, no case may produce any stopped event. */
+    private static void assertNoStopsWithoutFilters(String caseName, ExceptionRun run) {
+        if (run.filter() == ExceptionFilter.NONE) {
+            assertTrue(
+                    run.stops().isEmpty(),
+                    () -> "case " + caseName + " stopped with no exception filters; "
+                            + describe(run.outcome(), run.prelude())
+                            + " stops=" + run.stops());
+        }
+    }
+
+    private static void assertCompletedInteger(ExceptionRun run, String expected) {
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                run.outcome().state(),
+                () -> describe(run.outcome(), run.prelude()));
+        assertEquals(
+                expected,
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
+                        run.outcome().value()));
+    }
+
+    /** Emits the machine-readable BUG025 lines for one (case, filter) cell. */
+    private static void report(String caseName, ExceptionRun run) {
+        ProtosExecutionOutcome outcome = run.outcome();
+        Object categorized =
+                outcome.state() == ProtosExecutionOutcome.State.FAILED
+                        ? outcome.error()
+                        : outcome.value();
+        String completedAfterContinue =
+                run.stops().isEmpty()
+                        ? "n/a"
+                        : Boolean.toString(
+                                outcome.state() == ProtosExecutionOutcome.State.COMPLETED);
+        System.out.println("BUG025_CASE=" + caseName);
+        System.out.println("BUG025_FILTER=" + run.filter().label);
+        System.out.println(
+                "BUG025_OUTCOME="
+                        + outcome.state()
+                        + " category="
+                        + errorCategory(categorized, run.prelude())
+                        + " completedAfterContinue="
+                        + completedAfterContinue);
+        System.out.println("BUG025_STOP_COUNT=" + run.stops().size());
+        System.out.println("BUG025_STOPS=" + run.stops());
+    }
+
+    /** The guest Error category of {@code value}, or {@code none} when it is not an Error. */
+    private static String errorCategory(
+            Object value, com.guillermomolina.protos.runtime.ProtosPrelude prelude) {
+        if (!(value instanceof ProtosObjectValue object)) {
+            return "none";
+        }
+        Object parent = object.parent().orElse(null);
+        if (parent == prelude.invalidReturnPrototype()) {
+            return "InvalidReturn";
+        }
+        if (parent == prelude.errorPrototype()) {
+            return "Error";
+        }
+        return "other";
+    }
+
+    /** The exception-breakpoint filter configuration of one real DAP session. */
+    private enum ExceptionFilter {
+        NONE("none", "[]"),
+        ALL("all", "[\"all\"]"),
+        UNCAUGHT("uncaught", "[\"uncaught\"]");
+
+        final String label;
+        final String filtersJson;
+
+        ExceptionFilter(String label, String filtersJson) {
+            this.label = label;
+            this.filtersJson = filtersJson;
+        }
+    }
+
+    /**
+     * One real DAP {@code stopped} event, as reported by the adapter, with the complete {@code
+     * exceptionInfo} response and the top semantic frame of {@code stackTrace}.
+     */
+    private record DapStop(
+            ExceptionFilter filter,
+            String reason,
+            String description,
+            int threadId,
+            String exceptionId,
+            String breakMode,
+            String topFrame,
+            boolean late,
+            String exceptionInfo) {
+        boolean isException() {
+            return "exception".equals(reason);
+        }
+
+        @Override
+        public String toString() {
+            return "{filter=" + filter.label
+                    + ",reason=" + reason
+                    + ",description=" + description
+                    + ",threadId=" + threadId
+                    + ",exceptionId=" + exceptionId
+                    + ",breakMode=" + breakMode
+                    + ",top=" + topFrame
+                    + ",late=" + late
+                    + ",exceptionInfo=" + exceptionInfo
+                    + "}";
+        }
+    }
+
     @FunctionalInterface
     private interface SessionBody {
         void run(
@@ -423,7 +662,8 @@ final class ProtosI026FDapBehaviorTest {
                 throws Exception;
     }
 
-    private static void withExceptionFilteredSession(SessionBody body) throws Exception {
+    private static void withExceptionFilteredSession(ExceptionFilter filter, SessionBody body)
+            throws Exception {
         ProtosGraalDapReadinessAdapter readiness = ProtosDapTestSupport.newReadiness();
         ExecutorService guestExecutor = Executors.newSingleThreadExecutor();
         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
@@ -457,7 +697,9 @@ final class ProtosI026FDapBehaviorTest {
                     newDapClientConnectionThread(dapClientConnectionThreadsBefore);
 
             int exceptionBreakpoints =
-                    client.request("setExceptionBreakpoints", "{\"filters\":[\"uncaught\"]}");
+                    client.request(
+                            "setExceptionBreakpoints",
+                            "{\"filters\":" + filter.filtersJson + "}");
             assertSuccessfulResponse(
                     client.awaitResponse(exceptionBreakpoints, TIMEOUT),
                     exceptionBreakpoints,
@@ -504,16 +746,20 @@ final class ProtosI026FDapBehaviorTest {
     }
 
     private record ExceptionRun(
+            ExceptionFilter filter,
             ProtosExecutionOutcome outcome,
             com.guillermomolina.protos.runtime.ProtosPrelude prelude,
-            List<String> stops) {}
+            List<DapStop> stops) {}
 
     /**
-     * Runs {@code program} once under the configured "uncaught" filter. Every real {@code
-     * stopped} event is recorded together with the adapter's {@code exceptionInfo} answer and
-     * then continued. With {@code noStopAllowed} the program must finish without any stop.
+     * Runs {@code program} once in a session configured with {@code filter}. Every real {@code
+     * stopped} event, whatever its reason, is recorded with the adapter's complete {@code
+     * exceptionInfo} answer and top {@code stackTrace} frame and then continued, including
+     * stops that arrive after the root Task finished (for example on a child Task thread). With
+     * {@code noStopAllowed} the program must finish without any stop.
      */
     private static ExceptionRun runUnderExceptionFilter(
+            ExceptionFilter filter,
             DapClient client,
             ProtosPolyglotExecutionContext context,
             ExecutorService guestExecutor,
@@ -546,38 +792,78 @@ final class ProtosI026FDapBehaviorTest {
                                 context.callEntered(
                                         () -> ProtosRootTaskExecution.execute(target, activation)));
 
-        List<String> stops = new ArrayList<>();
+        List<DapStop> stops = new ArrayList<>();
         long deadline = System.nanoTime() + TIMEOUT.toNanos();
         while (!guest.isDone() && System.nanoTime() < deadline) {
             String stopped = client.pollEvent("stopped", Duration.ofMillis(200));
-            if (stopped == null) {
-                continue;
+            if (stopped != null) {
+                stops.add(recordAndContinue(filter, client, stopped, false));
             }
-            int threadId = integerField(stopped, "threadId");
-            int info = client.request("exceptionInfo", "{\"threadId\":" + threadId + "}");
-            String evidence = stopped + " exceptionInfo=" + client.awaitResponse(info, TIMEOUT);
-            if (noStopAllowed) {
-                int frames = client.request("stackTrace", "{\"threadId\":" + threadId + "}");
-                evidence += " stackTrace=" + client.awaitResponse(frames, TIMEOUT);
-            }
-            stops.add(evidence);
-            int continueRequest = client.request("continue", "{\"threadId\":" + threadId + "}");
-            assertSuccessfulResponse(
-                    client.awaitResponse(continueRequest, TIMEOUT), continueRequest, "continue");
         }
         ProtosExecutionOutcome outcome = guest.get(TIMEOUT.toSeconds(), TimeUnit.SECONDS);
-        String late = client.pollEvent("stopped", Duration.ofMillis(300));
-        if (late != null) {
-            stops.add(late);
+        // Drain stops that arrive after the root Task finished; each is recorded and resumed,
+        // never discarded.
+        String late;
+        while ((late = client.pollEvent("stopped", Duration.ofMillis(300))) != null) {
+            stops.add(recordAndContinue(filter, client, late, true));
         }
         if (noStopAllowed && !stops.isEmpty()) {
             throw new AssertionError(
-                    "valid program suspended under the uncaught filter; "
+                    "valid program suspended under the " + filter.label + " filter; "
                             + describe(outcome, prelude)
                             + " stops="
                             + stops);
         }
-        return new ExceptionRun(outcome, prelude, stops);
+        return new ExceptionRun(filter, outcome, prelude, stops);
+    }
+
+    /**
+     * Records one real {@code stopped} event (reason, description, thread, complete {@code
+     * exceptionInfo} response, top semantic frame) and resumes the stopped thread.
+     */
+    private static DapStop recordAndContinue(
+            ExceptionFilter filter, DapClient client, String stopped, boolean late)
+            throws IOException {
+        String body = objectField(stopped, "body");
+        int threadId = integerField(body, "threadId");
+        String reason = optionalStringField(body, "reason");
+        String description = optionalStringField(body, "description");
+
+        int info = client.request("exceptionInfo", "{\"threadId\":" + threadId + "}");
+        String exceptionInfo = client.awaitResponse(info, TIMEOUT);
+        String exceptionId = optionalStringField(exceptionInfo, "exceptionId");
+        String breakMode = optionalStringField(exceptionInfo, "breakMode");
+
+        int frames = client.request("stackTrace", "{\"threadId\":" + threadId + "}");
+        String topFrame = topSemanticFrame(client.awaitResponse(frames, TIMEOUT));
+
+        int continueRequest = client.request("continue", "{\"threadId\":" + threadId + "}");
+        assertSuccessfulResponse(
+                client.awaitResponse(continueRequest, TIMEOUT), continueRequest, "continue");
+        return new DapStop(
+                filter, reason, description, threadId, exceptionId, breakMode, topFrame, late,
+                exceptionInfo);
+    }
+
+    /**
+     * The source location {@code name:line:column} of the first {@code stackTrace} frame that
+     * carries a source, or a marker describing why none is available. Never asserts: the shape
+     * of the adapter's answer is evidence, not a precondition.
+     */
+    private static String topSemanticFrame(String stackTraceResponse) {
+        if (!stackTraceResponse.contains("\"stackFrames\"")) {
+            return "unavailable(" + optionalStringField(stackTraceResponse, "message") + ")";
+        }
+        for (String frame : objectsInArray(arrayField(stackTraceResponse, "stackFrames"))) {
+            if (!frame.contains("\"source\"")) {
+                continue;
+            }
+            String source = objectField(frame, "source");
+            String name = optionalStringField(source, "name");
+            return name + ":" + optionalIntegerField(frame, "line") + ":"
+                    + optionalIntegerField(frame, "column");
+        }
+        return "no-source-frame";
     }
 
     /** Test evidence: the outcome state, the failing Error's identity and its guest trace. */
