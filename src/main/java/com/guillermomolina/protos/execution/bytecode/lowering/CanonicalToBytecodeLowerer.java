@@ -51,6 +51,7 @@ import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
+import com.oracle.truffle.api.bytecode.StackValue;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.strings.TruffleString;
@@ -1168,10 +1169,10 @@ final class CanonicalToBytecodeLowerer {
                 /*
                  * PERF038-I: the final immediate Send1 is the root's
                  * terminal invocation, exactly as a terminal Call1. No
-                 * sequenceResult, prepared-call or miss local and no
-                 * direct send: GetMethod and CallUnaryMethod own selection,
-                 * its fallback and the terminal execution. A retained
-                 * numeric carrier is projected by the return epilogue.
+                 * sequenceResult, prepared-call or miss local.
+                 * GetMethod selects the raw callable when cached, and
+                 * CallBinaryMethod transports the receiver separately.
+                 * The terminal result remains a raw numeric carrier.
                  */
                 if (expressions.size() > 1) {
                     emitDiscardedPrefix(
@@ -2846,10 +2847,10 @@ final class CanonicalToBytecodeLowerer {
 
     /**
      * I115: a terminal call or send whose operands are direct terminal
-     * values: the same arity-selected {@code Call*Method} (terminal form) of
-     * the shared dispatcher; a send first selects through {@code GetMethod}
-     * on the receiver, evaluated once. A suspended callee returns the
-     * terminal transport.
+     * values: an arity-selected terminal call through the shared
+     * dispatcher. Immediate SEND1 evaluates the receiver once and
+     * transports it separately through CallBinaryMethod. During I115,
+     * terminal continuation transport is deliberately absent.
      */
     private void emitCall(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -2862,6 +2863,16 @@ final class CanonicalToBytecodeLowerer {
                 : ((CanonicalSend) expression).span();
 
         builder.beginSourceSection(span.startOffset(), span.length());
+
+        if (expression instanceof CanonicalSend send) {
+            emitI115DirectUnaryOperation(
+                    builder, InvocationShape.SEND,
+                    send.receiver(), send.message(), send.arguments().get(0),
+                    true, true);
+            builder.endSourceSection();
+            return;
+        }
+
         builder.beginTag(StandardTags.CallTag.class);
 
         // GraalPy RootNodeCompiler.emitCall: emit unary operands directly.
@@ -3135,28 +3146,53 @@ final class CanonicalToBytecodeLowerer {
             CanonicalExpression receiver,
             String selector,
             CanonicalExpression argument,
-            boolean primitiveCarrierResult) {
+            boolean primitiveCarrierResult,
+            boolean terminal) {
         if (!primitiveCarrierResult) {
             builder.beginMaterializePrimitiveNumericCarrier();
         }
 
         builder.beginTag(StandardTags.CallTag.class);
-        builder.beginCallUnaryMethod(false);
 
         if (shape == InvocationShape.CALL) {
+            builder.beginCallUnaryMethod(terminal);
             emitI115DirectUnaryOperand(builder, receiver, false);
+            emitI115DirectUnaryOperand(builder, argument, true);
+            builder.endCallUnaryMethod();
         } else if (shape == InvocationShape.SEND) {
+            builder.beginBlock();
+
+            builder.beginBindStackValue();
+            if (terminal) {
+                emitTerminalCallOperand(builder, receiver);
+            } else {
+                emitI115DirectUnaryOperand(builder, receiver, false);
+            }
+            StackValue receiverValue = builder.endBindStackValue();
+
+            builder.beginCallBinaryMethod(terminal, true);
+
             builder.beginGetMethod(
                     TruffleString.fromJavaStringUncached(
-                            selector, TruffleString.Encoding.UTF_16));
-            emitI115DirectUnaryOperand(builder, receiver, false);
+                            selector, TruffleString.Encoding.UTF_16),
+                    true);
+            builder.emitLoadStackValue(receiverValue);
             builder.endGetMethod();
+
+            builder.emitLoadStackValue(receiverValue);
+            if (terminal) {
+                emitTerminalCallOneArgument(builder, argument);
+            } else {
+                emitI115DirectUnaryOperand(builder, argument, true);
+            }
+
+            builder.endCallBinaryMethod();
+            builder.endBlock();
         } else {
-            throw new AssertionError("Not an ordinary direct unary invocation");
+            throw new AssertionError(
+                    "Not an ordinary direct unary invocation");
         }
 
-        emitI115DirectUnaryOperand(builder, argument, true);
-        builder.endCallUnaryMethod();
         builder.endTag(StandardTags.CallTag.class);
 
         if (!primitiveCarrierResult) {
@@ -3181,13 +3217,13 @@ final class CanonicalToBytecodeLowerer {
             emitI115DirectUnaryOperation(
                     builder, InvocationShape.CALL,
                     call.receiver(), null, call.arguments().get(0),
-                    primitiveCarrierResult);
+                    primitiveCarrierResult, false);
         } else {
             CanonicalSend send = (CanonicalSend) expression;
             emitI115DirectUnaryOperation(
                     builder, InvocationShape.SEND,
                     send.receiver(), send.message(), send.arguments().get(0),
-                    primitiveCarrierResult);
+                    primitiveCarrierResult, false);
         }
 
         builder.endSourceSection();
@@ -5345,7 +5381,7 @@ final class CanonicalToBytecodeLowerer {
             }
             emitI115DirectUnaryOperation(
                     builder, shape, receiver, selector,
-                    arguments.get(0), primitiveCarrierResult);
+                    arguments.get(0), primitiveCarrierResult, false);
             if (result == null) {
                 builder.endDiscardValue();
             } else {
@@ -6087,7 +6123,9 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal callable) {
         builder.beginStoreLocal(callable);
         builder.beginGetMethod(
-                TruffleString.fromJavaStringUncached(selector, TruffleString.Encoding.UTF_16));
+                TruffleString.fromJavaStringUncached(
+                        selector, TruffleString.Encoding.UTF_16),
+                false);
         builder.emitLoadLocal(receiver);
         builder.endGetMethod();
         builder.endStoreLocal();
@@ -6140,7 +6178,7 @@ final class CanonicalToBytecodeLowerer {
         switch (arity) {
             case 0 -> builder.beginCallNilaryMethod(terminal);
             case 1 -> builder.beginCallUnaryMethod(terminal);
-            case 2 -> builder.beginCallBinaryMethod(terminal);
+            case 2 -> builder.beginCallBinaryMethod(terminal, false);
             case 3 -> builder.beginCallTernaryMethod(terminal);
             case 4 -> builder.beginCallQuaternaryMethod(terminal);
             default -> builder.beginCallVarargsMethod(terminal);

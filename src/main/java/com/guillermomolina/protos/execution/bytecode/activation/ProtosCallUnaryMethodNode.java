@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
@@ -63,20 +64,17 @@ abstract class ProtosCallUnaryMethodNode extends Node {
      * use the already-prepared, same-language target without resolving
      * an entered Context. Other source calls use the existing dispatcher.
      */
-    // PRUIBA DE I115, en algún momento esto volverá a funcionar
-    // Direct PIC keyed by Closure identity, matching GraalPy's outer call PIC.
-    // The cached execution plan remains the source of the direct target.
+    // The direct-call PIC is keyed by Closure identity. Its cached code
+    // stability assumption invalidates the installed target when code changes.
     @ForceQuickening
     @Specialization(
             guards = {
                     "isSourceFunction(callable)",
                     "isSingleContext()",
                     "callable == cachedCallable",
-                    "cachedPlan != null",
-                    "callable.preparedExecutionPlanOrNullForRuntime() == cachedPlan",
-                    "!callable.requiresContextLocalExecutionProjectionForRuntime()",
                     "cachedTarget != null"
             },
+            assumptions = "cachedCodeStable",
             excludeForUncached = true,
             limit = "4")
     static Object callPFunction(
@@ -88,8 +86,8 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached(value = "callable", weak = true)
                     ProtosClosureValue cachedCallable,
-            @Cached("cachedCallable.preparedExecutionPlanOrNullForRuntime()")
-                    ProtosClosureExecutionPlan cachedPlan,
+            @Cached("cachedCallable.codeStableAssumptionForRuntime()")
+                    Assumption cachedCodeStable,
             @Cached("singleContextTargetOrNull(cachedCallable, root)")
                     RootCallTarget cachedTarget,
             @Cached("createDirectCallNodeOrNull(cachedTarget)")
@@ -105,27 +103,6 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                 callable, arguments,
                 ProtosFunctionCallDispatchers.callerReference(frame), root);
     }
-
-    // PRUIBA DE I115, en algún momento esto volverá a funcionar
-    // @Specialization(
-    //         guards = "isSourceFunction(callable)",
-    //         replaces = "callPFunction")
-    // static Object callFunction(
-    //         VirtualFrame frame,
-    //         boolean terminal,
-    //         ProtosClosureValue callable,
-    //         Object a0,
-    //         @Bind("$node") Node inliningTarget,
-    //         @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-    //         @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
-    //     return call.execute(
-    //             frame, inliningTarget, terminal, callable,
-    //             ProtosFrameArguments.dispatchedCall1(
-    //                     null, ProtosFrameArguments.functionCallMarker(),
-    //                     null, null, null, a0),
-    //             ProtosFunctionCallDispatchers.callerReference(frame), root,
-    //             ProtosFunctionCallDispatchers.currentContext(inliningTarget));
-    // }
 
     /*
      * GraalPy-style megamorphic transition for source functions.
