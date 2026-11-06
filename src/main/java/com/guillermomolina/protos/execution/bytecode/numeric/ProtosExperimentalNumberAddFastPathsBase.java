@@ -93,8 +93,7 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
     /**
      * The single generic route of both operations: two semantic Integers
      * (any representation, long carriers included) are added exactly
-     * without promotion loss; any other pair receives the ordinary send of
-     * {@code +} (so a non-numeric receiver keeps its own {@code +}).
+     * without promotion loss; any other pair signals a guest Error.
      */
     static Object genericAdd(ProtosBytecodeRootNode root, VirtualFrame frame,
             Node node, Object left, Object right) {
@@ -104,13 +103,9 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
                 && ProtosNumericValueSupport.isCurrentInteger(argument)) {
             return ProtosNumberFactory.add(node, receiver, argument);
         }
-        return ProtosFunctionCallDispatchers.sendOne(
-                root,
-                ProtosFunctionCallDispatchers.callerReference(frame),
-                false,
-                receiver,
-                "+",
-                argument);
+        // KNOWN I115 TEMPORARY SEMANTIC DIVERGENCE: no ordinary '+' send;
+        // see ProtosI115DirectNumericFallback.
+        throw ProtosI115DirectNumericFallback.unsupported(root, frame);
     }
 
 

@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.OperationProxy;
@@ -28,7 +29,11 @@ import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
-/** I115: exact Protos / with one composable generic path. */
+/**
+ * I115: exact synchronous Protos '/'. It never returns a continuation.
+ * KNOWN I115 TEMPORARY SEMANTIC DIVERGENCE: see
+ * {@link ProtosI115DirectNumericFallback}.
+ */
 @GenerateUncached
 @GenerateInline(false)
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
@@ -37,13 +42,14 @@ abstract class ProtosNumberDivideNode extends Node {
 
     @Specialization
     static Object doLL(VirtualFrame frame, long left, long right,
+            @Bind Node node,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
         if (right != 0L && (left != Long.MIN_VALUE || right != -1L)
                 && left % right == 0L) {
             return left / right;
         }
-        // No truncation. Fraction, MIN/-1, and zero retain guest semantics.
-        return doCold(root, frame, left, right);
+        // No truncation: Fraction, MIN/-1 and zero take the exact factory path.
+        return divideIntegers(root, frame, node, left, right);
     }
 
     @Specialization
@@ -64,16 +70,43 @@ abstract class ProtosNumberDivideNode extends Node {
     @Fallback
     @InliningCutoff
     static Object doGeneric(VirtualFrame frame, Object left, Object right,
+            @Bind Node node,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
-        return doCold(root, frame, left, right);
+        Object receiver = ProtosNumericValueSupport.guestValue(left);
+        Object argument = ProtosNumericValueSupport.guestValue(right);
+        if (ProtosNumericValueSupport.isCurrentInteger(receiver)
+                && ProtosNumericValueSupport.isCurrentInteger(argument)) {
+            return divideIntegers(root, frame, node, receiver, argument);
+        }
+        if (isFloatOperand(receiver) && isFloatOperand(argument)
+                && (ProtosNumericValueSupport.isCurrentFloat(receiver)
+                        || ProtosNumericValueSupport.isCurrentFloat(argument))) {
+            return floatValue(receiver) / floatValue(argument);
+        }
+        // KNOWN I115 TEMPORARY SEMANTIC DIVERGENCE: Fraction operands and
+        // Float/large-Integer mixtures are not divided by this intrinsic.
+        throw ProtosI115DirectNumericFallback.unsupported(root, frame);
     }
 
     @InliningCutoff
-    static Object doCold(ProtosBytecodeRootNode root, VirtualFrame frame,
-            Object left, Object right) {
-        return ProtosFunctionCallDispatchers.sendOneComposable(
-                root, ProtosFunctionCallDispatchers.callerReference(frame),
-                left, "/", right);
+    static Object divideIntegers(ProtosBytecodeRootNode root, VirtualFrame frame,
+            Node node, Object left, Object right) {
+        try {
+            return ProtosNumberFactory.divide(node, left, right);
+        } catch (ArithmeticException zeroDivisor) {
+            throw ProtosI115DirectNumericFallback.unsupported(root, frame);
+        }
+    }
+
+    private static boolean isFloatOperand(Object value) {
+        return ProtosNumericValueSupport.isCurrentFloat(value)
+                || ProtosNumericValueSupport.isIntegerInLongRange(value);
+    }
+
+    private static double floatValue(Object value) {
+        return ProtosNumericValueSupport.isCurrentFloat(value)
+                ? ProtosNumericValueSupport.currentFloatValue(value)
+                : (double) ProtosNumericValueSupport.exactLong(value);
     }
 
     static ProtosBytecodeRootNode rootOf(Node node) {

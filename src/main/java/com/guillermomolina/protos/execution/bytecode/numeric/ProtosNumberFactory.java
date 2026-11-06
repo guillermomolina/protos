@@ -69,4 +69,14 @@ final class ProtosNumberFactory {
     static Object multiply(Node node, Object left, Object right) {
         return ProtosNumericValueSupport.multiplyIntegers(left, right, prelude(node));
     }
+
+    /**
+     * I115: the exact D197-C quotient of two semantic Integers (Integer or
+     * Fraction). Throws {@link ArithmeticException} for a zero divisor; the
+     * caller signals the guest Error.
+     */
+    @TruffleBoundary
+    static Object divide(Node node, Object left, Object right) {
+        return ProtosNumericValueSupport.divideIntegersExactly(left, right, prelude(node));
+    }
 }
