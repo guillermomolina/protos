@@ -1190,20 +1190,24 @@ final class CanonicalToBytecodeLowerer {
                 beginStatement(builder, last);
 
                 boolean carrierTerminal =
-                        sharedScratch != null
-                                && ((last instanceof CanonicalSend terminalSend
-                                                && primitiveResultSend(terminalSend))
-                                        || (last instanceof CanonicalCall terminalCall
-                                                && primitiveResultCall(terminalCall)));
+                        (last instanceof CanonicalSend terminalSend
+                                        && primitiveResultSend(terminalSend))
+                                || (last instanceof CanonicalCall terminalCall
+                                        && primitiveResultCall(terminalCall));
                 if (carrierTerminal) {
                     // I091: the final numeric result may return as a carrier.
+                    // A synchronous numeric send with direct operands needs
+                    // no continuation scratch.
                     emitPrimitiveNumericOperandToLocal(
                             builder,
                             last,
                             result,
-                            sharedScratch.preparedCall(),
-                            sharedScratch.childResult(),
-                            sharedScratch.resumeValue());
+                            sharedScratch == null
+                                    ? null : sharedScratch.preparedCall(),
+                            sharedScratch == null
+                                    ? null : sharedScratch.childResult(),
+                            sharedScratch == null
+                                    ? null : sharedScratch.resumeValue());
                 } else if (requiresComposedInvocation(last)) {
                     emitBodyExpressionToLocal(
                             builder,
@@ -1861,13 +1865,9 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> expressions,
             BytecodeLocal result) {
-        // PERF036-A: an admitted scalar assignment needs no invocation staging.
         boolean hasComposedInvocation =
                 expressions.stream()
-                        .anyMatch(expression ->
-                                requiresComposedInvocation(expression)
-                                        && !(expression instanceof CanonicalAssign assign
-                                                && isScalarLocalAssign(assign)));
+                        .anyMatch(CanonicalToBytecodeLowerer::requiresContinuationScratch);
         BytecodeLocal preparedCall =
                 hasComposedInvocation
                         ? builder.createLocal(
@@ -2436,126 +2436,60 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * Emits the target-less creation of {@code create} from {@code value}
-     * into its classified storage, yielding the created value: {@code
-     * StoreCell} for a CELL binding, {@code StoreLocal} for a LOCAL binding,
-     * and the {@code CreateCurrentLocalSlot} name operation for a module
-     * (NAME) or object-body (MEMBER) binding. The value is evaluated once,
-     * by the caller, before this operation.
-     *
-     * <p>KNOWN I115 SEMANTIC DIVERGENCE (D179 C0, PERF025, PERF030): a
-     * LOCAL/CELL creation does not detect a duplicate creation and is not
-     * observed through the activation's context.
+     * Emits the target-less creation of {@code create} from the evaluated
+     * {@code value} for a module (NAME) or object-body (MEMBER) binding,
+     * through the {@code CreateCurrentLocalSlot} name operation. LOCAL and
+     * CELL creations never reach it: they are lexical binding writes. The
+     * created value is delivered to {@code result}, or discarded when {@code
+     * result} is {@code null}.
      */
     private void emitCreateCurrentBinding(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create,
-            BytecodeLocal value) {
-        CanonicalBindingIdentity identity =
-                currentRootAnalysis == null
-                        ? null
-                        : currentRootAnalysis.identityOf(create).orElse(null);
-        if (identity != null && emitStoreBinding(builder, identity, value)) {
-            return;
-        }
+            BytecodeLocal value,
+            BytecodeLocal result) {
+        beginMutationResult(builder, result);
         builder.beginCreateCurrentLocalSlot();
         emitCurrentActivation(builder);
         builder.emitLoadConstant(create.name());
         builder.emitLoadLocal(value);
         builder.endCreateCurrentLocalSlot();
-    }
-
-    /**
-     * I115: when {@code identity} has LOCAL or CELL storage, emits its store
-     * of the guest value in {@code value} followed by that value, and returns
-     * {@code true}; returns {@code false} for NAME and MEMBER storage.
-     */
-    private boolean emitStoreBinding(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalBindingIdentity identity,
-            BytecodeLocal value) {
-        BytecodeLocal cell = cellLocalOrNull(identity);
-        if (cell != null) {
-            builder.beginBlock();
-            builder.beginStoreCell();
-            builder.emitLoadLocal(cell);
-            builder.emitLoadLocal(value);
-            builder.endStoreCell();
-            builder.emitLoadLocal(value);
-            builder.endBlock();
-            return true;
-        }
-        BytecodeLocal local = ownLocalOrNull(identity);
-        if (local != null) {
-            builder.beginBlock();
-            builder.beginStoreLocal(local);
-            builder.emitLoadLocal(value);
-            builder.endStoreLocal();
-            builder.emitLoadLocal(local);
-            builder.endBlock();
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * PERF034-C/E: one admitted scalar creation. A scalar root contains no
-     * Closure literal, so its bindings are always LOCAL: {@code emitValue}'s
-     * operand is stored into the builtin local, which then yields the
-     * binding's value. {@code emitValue} must be effect-free (a constant or
-     * an already-evaluated local).
-     */
-    private void emitScalarCreate(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalCreate create,
-            BytecodeLocal result,
-            Runnable emitValue) {
-        BytecodeLocal local = currentRootFrameLocals.get(create.name());
-        if (local == null) {
-            throw new AssertionError(
-                    "I115 missing scalar creation local: " + create.name());
-        }
-
-        builder.beginStoreLocal(local);
-        emitValue.run();
-        builder.endStoreLocal();
-
-        builder.beginStoreLocal(result);
-        builder.emitLoadLocal(local);
-        builder.endStoreLocal();
+        endMutationResult(builder, result);
     }
 
     /**
      * Emits a multiple creation from {@code source}. When the names are
      * LOCAL/CELL bindings of the root being lowered, the complete fixed
      * prefix is observed once, before any binding is created, and each value
-     * is then stored, in source order, into its own classified storage; a
-     * failing observation creates nothing. The whole expression yields
-     * {@code source}. NAME and MEMBER bindings keep the {@code
+     * is then stored, in source order, directly into its own classified
+     * storage; a failing observation creates nothing. The whole expression
+     * yields {@code source} into {@code result}, unless that is {@code null}
+     * (no consumer). NAME and MEMBER bindings keep the {@code
      * CreateCurrentLocalSlot} name operation over all names.
      */
     private void emitMultipleCreateCurrentBindings(
             ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<String> names,
             java.util.List<CanonicalBindingIdentity> identities,
-            BytecodeLocal source) {
-        boolean direct =
-                identities != null
-                        && !identities.isEmpty()
-                        && identities.stream().allMatch(identity ->
-                                CanonicalBindingAnalysis.storageOf(identity)
-                                                == CanonicalLexicalScope.Storage.LOCAL
-                                        || CanonicalBindingAnalysis.storageOf(identity)
-                                                == CanonicalLexicalScope.Storage.CELL);
+            BytecodeLocal source,
+            BytecodeLocal result) {
+        java.util.List<BindingStorage> storages = new java.util.ArrayList<>();
+        if (identities != null) {
+            for (CanonicalBindingIdentity identity : identities) {
+                storages.add(bindingStorageOrNull(identity));
+            }
+        }
+        boolean direct = !storages.isEmpty() && !storages.contains(null);
         if (!direct) {
+            beginMutationResult(builder, result);
             builder.beginCreateCurrentLocalSlot();
             emitCurrentActivation(builder);
             builder.emitLoadConstant(multipleCreateNamesConstant(names));
             builder.emitLoadLocal(source);
             builder.endCreateCurrentLocalSlot();
+            endMutationResult(builder, result);
             return;
         }
-        builder.beginBlock();
         BytecodeLocal observed = builder.createLocal("multipleCreateObserved", null);
         builder.beginStoreLocal(observed);
         builder.beginObserveMultipleCreatePrefix();
@@ -2564,20 +2498,24 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadLocal(source);
         builder.endObserveMultipleCreatePrefix();
         builder.endStoreLocal();
-        BytecodeLocal element = builder.createLocal("multipleCreateElement", null);
-        for (int index = 0; index < identities.size(); index++) {
-            builder.beginStoreLocal(element);
-            builder.beginObservedMultipleCreateValue();
-            builder.emitLoadLocal(observed);
-            builder.emitLoadConstant(index);
-            builder.endObservedMultipleCreateValue();
-            builder.endStoreLocal();
-            builder.beginDiscardValue();
-            emitStoreBinding(builder, identities.get(index), element);
-            builder.endDiscardValue();
+        for (int index = 0; index < storages.size(); index++) {
+            int elementIndex = index;
+            emitBindingWrite(
+                    builder,
+                    storages.get(index),
+                    BindingValue.synchronous(() -> {
+                        builder.beginObservedMultipleCreateValue();
+                        builder.emitLoadLocal(observed);
+                        builder.emitLoadConstant(elementIndex);
+                        builder.endObservedMultipleCreateValue();
+                    }),
+                    null);
         }
-        builder.emitLoadLocal(source);
-        builder.endBlock();
+        if (result != null) {
+            builder.beginStoreLocal(result);
+            builder.emitLoadLocal(source);
+            builder.endStoreLocal();
+        }
     }
 
     /**
@@ -2620,11 +2558,7 @@ final class CanonicalToBytecodeLowerer {
             java.util.List<CanonicalExpression> expressions) {
         boolean needed =
                 expressions.stream()
-                        .anyMatch(expression ->
-                                requiresComposedInvocation(expression)
-                                        && !(expression instanceof CanonicalAssign assign
-                                                && isScalarLocalAssign(assign))
-                                        && !admitsCompactClosureCreate(expression));
+                        .anyMatch(CanonicalToBytecodeLowerer::requiresContinuationScratch);
         if (!needed) {
             return null;
         }
@@ -2673,8 +2607,6 @@ final class CanonicalToBytecodeLowerer {
                 beginStatement(builder, expression);
                 emitDiscardedScalarLocalRead(builder, lookup);
                 endStatement(builder);
-            } else if (admitsCompactClosureCreate(expression)) {
-                emitCompactClosureCreate(builder, (CanonicalCreate) expression);
             } else if (expression instanceof CanonicalClosure closure) {
                 /*
                  * Register the nested root before opening DiscardValue.
@@ -2717,60 +2649,6 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I112: a statement {@code name: <Closure literal>} creating a LOCAL or
-     * CELL binding of the genuine root being lowered. Its value cannot
-     * suspend or observe the binding, so the creation consumes the Closure
-     * value directly, without a value local or staged sequence result. The
-     * rule is structural; every other creation keeps {@link #emitBodyCreate}.
-     */
-    private boolean admitsCompactClosureCreate(CanonicalExpression expression) {
-        if (!(expression instanceof CanonicalCreate create)
-                || create.target().isPresent()
-                || !(create.value() instanceof CanonicalClosure)
-                || currentActivationLocal != null
-                || !currentNormalCallbackScalarLocals.isEmpty()
-                || currentRootScalarLocals.contains(create.name())
-                || currentRootAnalysis == null) {
-            return false;
-        }
-        CanonicalBindingIdentity identity =
-                currentRootAnalysis.identityOf(create).orElse(null);
-        return identity != null
-                && identity.owner() == currentRootTopScope
-                && currentRootFrameLocals.containsKey(create.name());
-    }
-
-    /**
-     * I112: one admitted {@link #admitsCompactClosureCreate} statement. The
-     * nested root and its plan cell are registered before any consuming
-     * operation opens; the Closure is created at the statement and its
-     * identity is stored directly in the binding's classified storage
-     * (GraalPy {@code store.local} or {@code store.cell}). The statement
-     * value is discarded by the enclosing sequence.
-     */
-    private void emitCompactClosureCreate(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalCreate create) {
-        CanonicalClosure closure = (CanonicalClosure) create.value();
-        beginStatement(builder, create);
-        ProtosClosureExecutionPlanCell plan = bytecodeClosurePlan(builder, closure);
-        CanonicalBindingIdentity identity =
-                currentRootAnalysis.identityOf(create).orElseThrow();
-        BytecodeLocal cell = cellLocalOrNull(identity);
-        if (cell != null) {
-            builder.beginStoreCell();
-            builder.emitLoadLocal(cell);
-            emitClosureCapture(builder, closure, plan);
-            builder.endStoreCell();
-        } else {
-            builder.beginStoreLocal(ownLocalOrNull(identity));
-            emitClosureCapture(builder, closure, plan);
-            builder.endStoreLocal();
-        }
-        endStatement(builder);
-    }
-
-    /**
      * I115: whether {@code last}, the final expression of the genuine root
      * being lowered, is a target-less creation whose value is a Closure
      * literal. Its value cannot suspend, so the root returns the created
@@ -2804,9 +2682,9 @@ final class CanonicalToBytecodeLowerer {
                 currentRootAnalysis == null
                         ? null
                         : currentRootAnalysis.identityOf(create).orElse(null);
-        BytecodeLocal cell = identity == null ? null : cellLocalOrNull(identity);
-        BytecodeLocal local =
-                identity == null || cell != null ? null : ownLocalOrNull(identity);
+        BindingStorage storage = identity == null ? null : bindingStorageOrNull(identity);
+        BytecodeLocal cell = storage == null ? null : storage.cell();
+        BytecodeLocal local = storage == null ? null : storage.local();
         builder.beginReturn();
         if (cell != null) {
             builder.beginBlock();
@@ -3051,6 +2929,64 @@ final class CanonicalToBytecodeLowerer {
             return true;
         }
         return false;
+    }
+
+    /**
+     * I115: whether emitting {@code expression} can need the continuation
+     * scratch locals ({@code preparedClosureCall}, {@code childResult},
+     * {@code resumeValue}) of a suspendable invocation, or must otherwise be
+     * treated as able to suspend. Unlike {@link #requiresComposedInvocation},
+     * which selects how an expression is emitted, this static emission
+     * decision answers only whether a real resumption can occur anywhere in
+     * its subtree.
+     *
+     * <p>The switch is exhaustive over the sealed canonical expression
+     * family. A node is scratch-free only when it is itself synchronous and
+     * every executable subexpression (targets, values, receivers, operands)
+     * is scratch-free; a numeric selector alone never proves it. Every node
+     * whose synchronous execution is not proven here (calls, dispatched
+     * sends, super sends, derived inequalities, indexed assignments,
+     * compositions, objects, map constructions, returns, sequences and
+     * spreads) keeps the scratch.
+     */
+    private static boolean requiresContinuationScratch(CanonicalExpression expression) {
+        return switch (expression) {
+            case CanonicalLiteral ignored -> false;
+            case CanonicalLookup ignored -> false;
+            case CanonicalIntrinsic ignored -> false;
+            // Materialization only; the body runs in the Closure's own root.
+            case CanonicalClosure ignored -> false;
+            case CanonicalSend send ->
+                    !primitiveNumericSendCandidate(send)
+                            || requiresContinuationScratch(send.receiver())
+                            || requiresContinuationScratch(send.arguments().get(0));
+            case CanonicalCreate create ->
+                    create.target().map(CanonicalToBytecodeLowerer::requiresContinuationScratch)
+                                    .orElse(false)
+                            || requiresContinuationScratch(create.value());
+            case CanonicalAssign assign ->
+                    assign.target().map(CanonicalToBytecodeLowerer::requiresContinuationScratch)
+                                    .orElse(false)
+                            || requiresContinuationScratch(assign.value());
+            case CanonicalMultipleCreate create -> requiresContinuationScratch(create.value());
+            case CanonicalMember member -> requiresContinuationScratch(member.receiver());
+            case CanonicalIdentity identity ->
+                    requiresContinuationScratch(identity.left())
+                            || requiresContinuationScratch(identity.right());
+            case CanonicalNotIdentity identity ->
+                    requiresContinuationScratch(identity.left())
+                            || requiresContinuationScratch(identity.right());
+            case CanonicalCall ignored -> true;
+            case CanonicalSuperSend ignored -> true;
+            case CanonicalDerivedInequality ignored -> true;
+            case CanonicalIndexedAssign ignored -> true;
+            case CanonicalCompose ignored -> true;
+            case CanonicalObject ignored -> true;
+            case CanonicalMapConstruction ignored -> true;
+            case CanonicalReturn ignored -> true;
+            case CanonicalSequence ignored -> true;
+            case CanonicalSpread ignored -> true;
+        };
     }
 
     private static boolean hasSpreadArgument(
@@ -3983,6 +3919,20 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
+    /**
+     * I115: one creation. A target-less creation of a binding with LOCAL or
+     * CELL physical storage (an admitted scalar binding, an inline callback
+     * binding, an ordinary lexical binding or a cell promoted to LOCAL by
+     * {@link I115InlineStoragePlan}) is a single direct store of its RHS
+     * (GraalPy {@code StoreVisitor}). A NAME/MEMBER or explicitly targeted
+     * creation keeps its destination selection and evaluation order. With
+     * {@code result == null} the creation has no consumer: no value is
+     * produced, materialized, stored or reloaded beyond the mutation itself.
+     *
+     * <p>KNOWN I115 SEMANTIC DIVERGENCE (D179 C0, PERF025, PERF030): a
+     * LOCAL/CELL creation does not detect a duplicate creation and is not
+     * observed through the activation's context.
+     */
     private void emitBodyCreate(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create,
@@ -4001,76 +3951,53 @@ final class CanonicalToBytecodeLowerer {
                 throw new AssertionError(
                         "I095-B6a unproven callback creation: " + create.name());
             }
-            builder.beginStoreLocal(own);
-            emitExpression(builder, create.value());
-            builder.endStoreLocal();
-
-            builder.beginStoreLocal(result);
-            builder.emitLoadLocal(own);
-            builder.endStoreLocal();
+            emitBindingWrite(
+                    builder, BindingStorage.ofLocal(own),
+                    expressionBindingValue(
+                            builder, create.value(), false,
+                            preparedCall, childResult, resumeValue),
+                    result);
             return;
         }
-        boolean scalarCreate =
-                create.target().isEmpty()
-                        && currentActivationLocal == null
-                        && currentRootScalarLocals.contains(create.name());
-        if (scalarCreate
-                && create.value() instanceof CanonicalLiteral literal) {
-            // PERF034-E: a literal is its own operand; no createValue local.
-            emitScalarCreate(
-                    builder,
-                    create,
-                    result,
-                    () -> emitLiteral(builder, literal));
-            return;
-        }
-        BytecodeLocal value = builder.createLocal("createValue", null);
         if (create.target().isEmpty()) {
-            /*
-             * I091: a LOCAL creation may retain a primitive carrier from the
-             * guarded numeric chain; its own value is a guest value. A cell
-             * holds guest values only.
-             */
+            if (currentActivationLocal == null
+                    && currentRootScalarLocals.contains(create.name())) {
+                // PERF034-C/E: an admitted scalar root contains no Closure
+                // literal, so its bindings are always plain LOCALs.
+                BytecodeLocal local = currentRootFrameLocals.get(create.name());
+                if (local == null) {
+                    throw new AssertionError(
+                            "I115 missing scalar creation local: " + create.name());
+                }
+                emitBindingWrite(
+                        builder, BindingStorage.ofLocal(local),
+                        expressionBindingValue(
+                                builder, create.value(), false,
+                                preparedCall, childResult, resumeValue),
+                        result);
+                return;
+            }
             CanonicalBindingIdentity identity =
                     currentRootAnalysis == null
                             ? null
                             : currentRootAnalysis.identityOf(create).orElse(null);
-            boolean carrierCreate =
-                    !scalarCreate
-                            && currentActivationLocal == null
-                            && identity != null
-                            && physicalStorageOf(identity)
-                                    == CanonicalLexicalScope.Storage.LOCAL
-                            && primitiveNumericCarrierValue(create.value());
-            if (carrierCreate) {
-                emitPrimitiveNumericOperandToLocal(
-                        builder, create.value(), value, preparedCall, childResult, resumeValue);
-                builder.beginStoreLocal(result);
-                builder.beginMaterializePrimitiveNumericCarrier();
-                emitCreateCurrentBinding(builder, create, value);
-                builder.emitLoadConstant(true);
-                builder.endMaterializePrimitiveNumericCarrier();
-                builder.endStoreLocal();
+            // I091: a LOCAL creation outside an inline activation region may
+            // retain a primitive carrier; a cell holds guest values only.
+            if (identity != null
+                    && emitStoreLexicalBinding(
+                            builder, identity, create.value(),
+                            currentActivationLocal == null, result,
+                            preparedCall, childResult, resumeValue)) {
                 return;
             }
+            BytecodeLocal value = builder.createLocal("createValue", null);
             emitBodyExpressionToLocal(
                     builder, create.value(), value, preparedCall, childResult, resumeValue);
-
-            if (scalarCreate) {
-                emitScalarCreate(
-                        builder,
-                        create,
-                        result,
-                        () -> builder.emitLoadLocal(value));
-                return;
-            }
-
-            builder.beginStoreLocal(result);
-            emitCreateCurrentBinding(builder, create, value);
-            builder.endStoreLocal();
+            emitCreateCurrentBinding(builder, create, value, result);
             return;
         }
 
+        BytecodeLocal value = builder.createLocal("createValue", null);
         BytecodeLocal rawTarget = builder.createLocal("createRawTarget", null);
         BytecodeLocal mutationTarget = builder.createLocal("createMutationTarget", null);
         emitBodyExpressionToLocal(
@@ -4088,14 +4015,14 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
         emitBodyExpressionToLocal(
                 builder, create.value(), value, preparedCall, childResult, resumeValue);
-        builder.beginStoreLocal(result);
+        beginMutationResult(builder, result);
         builder.beginMutateLocalSlot(ProtosSlotMutation.CREATE);
         emitCurrentActivation(builder);
         builder.emitLoadLocal(mutationTarget);
         builder.emitLoadConstant(create.name());
         builder.emitLoadLocal(value);
         builder.endMutateLocalSlot();
-        builder.endStoreLocal();
+        endMutationResult(builder, result);
     }
 
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
@@ -4125,15 +4052,14 @@ final class CanonicalToBytecodeLowerer {
                 childResult,
                 resumeValue);
 
-        builder.beginStoreLocal(result);
         emitMultipleCreateCurrentBindings(
                 builder,
                 create.names(),
                 currentRootAnalysis == null
                         ? null
                         : currentRootAnalysis.identitiesOf(create).orElse(null),
-                source);
-        builder.endStoreLocal();
+                source,
+                result);
     }
 
     private void emitBodyAssign(
@@ -4156,25 +4082,20 @@ final class CanonicalToBytecodeLowerer {
                 throw new AssertionError(
                         "I095-B6a unproven callback assignment: " + assign.name());
             }
-            boolean discarded = consumeDiscardedAssign(assign);
-            builder.beginStoreLocal(own);
-            emitExpression(builder, assign.value());
-            builder.endStoreLocal();
-            if (!discarded) {
-                builder.beginStoreLocal(result);
-                builder.emitLoadLocal(own);
-                builder.endStoreLocal();
-            }
+            emitBindingWrite(
+                    builder, BindingStorage.ofLocal(own),
+                    expressionBindingValue(
+                            builder, assign.value(), false,
+                            preparedCall, childResult, resumeValue),
+                    result);
             return;
         }
-        boolean discarded = consumeDiscardedAssign(assign);
         if (isScalarLocalAssign(assign)) {
-            emitScalarAssign(
-                    builder, assign, discarded ? null : result);
+            emitScalarAssign(builder, assign, result);
             return;
         }
         emitResolvedBodyAssign(
-                builder, assign, result, discarded, preparedCall, childResult, resumeValue);
+                builder, assign, result, preparedCall, childResult, resumeValue);
     }
 
     /**
@@ -4245,7 +4166,6 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
             BytecodeLocal result,
-            boolean discarded,
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
@@ -4253,23 +4173,11 @@ final class CanonicalToBytecodeLowerer {
         if (emitUninitializedLocalAssign(builder, assign, identity, result)) {
             return;
         }
-        if (identity != null) {
-            BytecodeLocal cell = cellLocalOrNull(identity);
-            BytecodeLocal local = cell == null ? ownLocalOrNull(identity) : null;
-            if (cell != null || local != null) {
-                // I115: the store consumes the RHS producer directly; only a
-                // suspendable RHS keeps the state its resumption needs.
-                boolean carrier = local != null && primitiveNumericCarrierValue(assign.value());
-                Runnable rhs = carrier
-                        ? () -> emitPrimitiveNumericOperandValue(
-                                builder, assign.value(), preparedCall, childResult, resumeValue)
-                        : () -> emitExpressionValue(
-                                builder, assign.value(), preparedCall, childResult, resumeValue,
-                                false);
-                emitStoreAssignedValue(
-                        builder, cell, local, rhs, discarded ? null : result, carrier);
-                return;
-            }
+        if (identity != null
+                && emitStoreLexicalBinding(
+                        builder, identity, assign.value(), true, result,
+                        preparedCall, childResult, resumeValue)) {
+            return;
         }
         BytecodeLocal value = builder.createLocal("assignValue", null);
         if (identity != null) {
@@ -4319,9 +4227,9 @@ final class CanonicalToBytecodeLowerer {
                         currentRootAnalysis.resolutionOf(assign).orElse(null), identity)) {
             return false;
         }
-        builder.beginStoreLocal(result);
+        beginMutationResult(builder, result);
         builder.emitUninitializedBinding();
-        builder.endStoreLocal();
+        endMutationResult(builder, result);
         return true;
     }
 
@@ -4333,54 +4241,184 @@ final class CanonicalToBytecodeLowerer {
         return staticIdentityOrNull(currentRootAnalysis.resolutionOf(assign).orElse(null));
     }
 
-    /*
-     * I115: stores the RHS, produced directly by {@code rhs}, into exactly
-     * one LOCAL or CELL storage. A discarded assignment ({@code result}
-     * null) writes nothing else. A consumed one yields the guest value of
-     * the RHS: a LOCAL is read back once (materialized when it holds a
-     * carrier); a CELL value passes through {@code result}, the consumer's
-     * own storage, so the cell is not read again. The builder offers no
-     * stack-value binding, so no further temporary is introduced.
+    /**
+     * I115: the physical storage of a lexical binding write: exactly one of
+     * {@code cell} (a CELL binding's cell reference) and {@code local} (a
+     * LOCAL binding's frame local) is non-null.
      */
-    private static void emitStoreAssignedValue(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal cell,
-            BytecodeLocal local,
-            Runnable rhs,
-            BytecodeLocal result,
-            boolean carrier) {
+    private record BindingStorage(BytecodeLocal cell, BytecodeLocal local) {
+        static BindingStorage ofLocal(BytecodeLocal local) {
+            return new BindingStorage(null, Objects.requireNonNull(local, "local"));
+        }
+    }
+
+    /**
+     * I115: the single selection of the physical storage of {@code identity}
+     * (through {@link #physicalStorageOf}, so a cell promoted by {@link
+     * I115InlineStoragePlan} is a LOCAL), or {@code null} for NAME and MEMBER
+     * storage.
+     */
+    private BindingStorage bindingStorageOrNull(CanonicalBindingIdentity identity) {
+        BytecodeLocal cell = cellLocalOrNull(identity);
         if (cell != null) {
-            if (result == null) {
+            return new BindingStorage(cell, null);
+        }
+        BytecodeLocal local = ownLocalOrNull(identity);
+        return local == null ? null : BindingStorage.ofLocal(local);
+    }
+
+    /**
+     * I115: the RHS of a binding write. {@code direct} emits exactly one
+     * value onto the operand stack and is used only when no resumption can
+     * occur; {@code staged} evaluates the RHS to completion into a given
+     * local, owning the continuation protocol when the RHS may suspend
+     * ({@code suspendable}). {@code carrier}: the value may be a primitive
+     * {@code long}/{@code double} carrier (LOCAL storage only).
+     */
+    private record BindingValue(
+            Runnable direct,
+            java.util.function.Consumer<BytecodeLocal> staged,
+            boolean suspendable,
+            boolean carrier) {
+        /** An already evaluated, effect-free value producer. */
+        static BindingValue synchronous(Runnable direct) {
+            return new BindingValue(direct, null, false, false);
+        }
+    }
+
+    /**
+     * I115: the RHS {@code value} of a creation or assignment. A Closure
+     * literal's nested root and plan are registered now, before any
+     * consuming store opens; only its materialization is deferred to the
+     * producer. Whether the RHS may suspend is decided statically by {@link
+     * #requiresContinuationScratch}.
+     */
+    private BindingValue expressionBindingValue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression value,
+            boolean carrier,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        if (value instanceof CanonicalClosure closure) {
+            ProtosClosureExecutionPlanCell plan = bytecodeClosurePlan(builder, closure);
+            return BindingValue.synchronous(() -> emitClosureCapture(builder, closure, plan));
+        }
+        if (requiresContinuationScratch(value)) {
+            java.util.function.Consumer<BytecodeLocal> staged = carrier
+                    ? target -> emitPrimitiveNumericOperandToLocal(
+                            builder, value, target, preparedCall, childResult, resumeValue)
+                    : target -> emitBodyExpressionToLocal(
+                            builder, value, target, preparedCall, childResult, resumeValue);
+            return new BindingValue(null, staged, true, carrier);
+        }
+        Runnable direct = carrier
+                ? () -> emitPrimitiveNumericOperandValue(
+                        builder, value, preparedCall, childResult, resumeValue)
+                : () -> emitExpressionValue(
+                        builder, value, preparedCall, childResult, resumeValue, false);
+        return new BindingValue(direct, null, false, carrier);
+    }
+
+    /**
+     * I115 (GraalPy {@code StoreVisitor}): the direct write of a classified
+     * lexical binding by a creation or an assignment of RHS {@code value}.
+     * Returns {@code false}, emitting nothing, for NAME and MEMBER storage.
+     * A LOCAL binding may keep a carrier when {@code carrierPermitted}; a
+     * CELL always receives a guest value.
+     */
+    private boolean emitStoreLexicalBinding(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalBindingIdentity identity,
+            CanonicalExpression value,
+            boolean carrierPermitted,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BindingStorage storage = bindingStorageOrNull(identity);
+        if (storage == null) {
+            return false;
+        }
+        boolean carrier =
+                carrierPermitted
+                        && storage.local() != null
+                        && primitiveNumericCarrierValue(value);
+        emitBindingWrite(
+                builder, storage,
+                expressionBindingValue(
+                        builder, value, carrier, preparedCall, childResult, resumeValue),
+                result);
+        return true;
+    }
+
+    /**
+     * I115: the single implementation of a lexical binding write.
+     * {@code result == null} means the value has no consumer, so nothing
+     * beyond the RHS and the store is emitted.
+     *
+     * <p>LOCAL: a synchronous RHS is the direct operand of {@code
+     * StoreLocal}; a suspendable one completes straight into the binding's
+     * own local, with no intermediate temporary (the local is invisible to
+     * any capture). A consumed value is read back once, materialized only
+     * when it may be a carrier.
+     *
+     * <p>CELL: a synchronous RHS with no consumer is the direct operand of
+     * {@code StoreCell}. Otherwise the RHS completes first, into the
+     * consumer's {@code result} or, when discarded, into the one local its
+     * continuation needs, and only then is {@code StoreCell} opened, so no
+     * cell reference is pending on the operand stack across a suspension.
+     */
+    private static void emitBindingWrite(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BindingStorage storage,
+            BindingValue value,
+            BytecodeLocal result) {
+        BytecodeLocal cell = storage.cell();
+        if (cell != null) {
+            if (!value.suspendable() && result == null) {
                 builder.beginStoreCell();
                 builder.emitLoadLocal(cell);
-                rhs.run();
+                value.direct().run();
                 builder.endStoreCell();
                 return;
             }
-            builder.beginStoreLocal(result);
-            rhs.run();
-            builder.endStoreLocal();
+            BytecodeLocal completed =
+                    result != null ? result : builder.createLocal("cellStoreValue", null);
+            emitBindingValueToLocal(builder, value, completed);
             builder.beginStoreCell();
             builder.emitLoadLocal(cell);
-            builder.emitLoadLocal(result);
+            builder.emitLoadLocal(completed);
             builder.endStoreCell();
             return;
         }
-        builder.beginStoreLocal(local);
-        rhs.run();
-        builder.endStoreLocal();
+        BytecodeLocal local = storage.local();
+        emitBindingValueToLocal(builder, value, local);
         if (result == null) {
             return;
         }
         builder.beginStoreLocal(result);
-        if (carrier) {
+        if (value.carrier()) {
             builder.beginMaterializePrimitiveNumericCarrier();
         }
         builder.emitLoadLocal(local);
-        if (carrier) {
+        if (value.carrier()) {
             builder.emitLoadConstant(true);
             builder.endMaterializePrimitiveNumericCarrier();
         }
+        builder.endStoreLocal();
+    }
+
+    private static void emitBindingValueToLocal(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BindingValue value,
+            BytecodeLocal target) {
+        if (value.suspendable()) {
+            value.staged().accept(target);
+            return;
+        }
+        builder.beginStoreLocal(target);
+        value.direct().run();
         builder.endStoreLocal();
     }
 
@@ -4423,12 +4461,12 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal destination,
             BytecodeLocal value,
             BytecodeLocal result) {
-        builder.beginStoreLocal(result);
+        beginMutationResult(builder, result);
         builder.beginWriteGlobal();
         builder.emitLoadLocal(destination);
         builder.emitLoadLocal(value);
         builder.endWriteGlobal();
-        builder.endStoreLocal();
+        endMutationResult(builder, result);
     }
 
     /* The NAME destination is selected before the RHS evaluates. */
@@ -4450,7 +4488,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal mutationTarget,
             BytecodeLocal value,
             BytecodeLocal result) {
-        builder.beginStoreLocal(result);
+        beginMutationResult(builder, result);
         builder.beginMutateLocalSlot(
                 assign.target().isPresent()
                         ? ProtosSlotMutation.ASSIGN
@@ -4460,7 +4498,32 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadConstant(assign.name());
         builder.emitLoadLocal(value);
         builder.endMutateLocalSlot();
-        builder.endStoreLocal();
+        endMutationResult(builder, result);
+    }
+
+    /**
+     * I115: opens the consumer of a mutation operation's value: {@code
+     * result} when the value is consumed, or {@code DiscardValue} when the
+     * mutation has no consumer ({@code result == null}).
+     */
+    private static void beginMutationResult(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result) {
+        if (result == null) {
+            builder.beginDiscardValue();
+        } else {
+            builder.beginStoreLocal(result);
+        }
+    }
+
+    private static void endMutationResult(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result) {
+        if (result == null) {
+            builder.endDiscardValue();
+        } else {
+            builder.endStoreLocal();
+        }
     }
 
     private void emitBodyIndexedAssign(
@@ -4501,10 +4564,16 @@ final class CanonicalToBytecodeLowerer {
                 builder, "atPut", receiver, java.util.List.of(index, value),
                 dispatchResult, childResult, resumeValue);
 
-        /* Indexed assignment returns the exact RHS, never the atPut result. */
-        builder.beginStoreLocal(result);
-        builder.emitLoadLocal(value);
-        builder.endStoreLocal();
+        /*
+         * Indexed assignment returns the exact RHS, never the atPut result.
+         * dispatchResult is the continuation's own destination and stays
+         * even when the statement value is discarded.
+         */
+        if (result != null) {
+            builder.beginStoreLocal(result);
+            builder.emitLoadLocal(value);
+            builder.endStoreLocal();
+        }
     }
 
     private void emitDefaultCreate(
@@ -4514,13 +4583,27 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (create.target().isEmpty()) {
+            CanonicalBindingIdentity identity =
+                    currentRootAnalysis == null
+                            ? null
+                            : currentRootAnalysis.identityOf(create).orElse(null);
+            BindingStorage storage =
+                    identity == null ? null : bindingStorageOrNull(identity);
+            if (storage != null) {
+                emitBindingWrite(
+                        builder, storage,
+                        defaultBindingValue(
+                                builder, create.value(), preparedCall, childResult, resumeValue),
+                        result);
+                return;
+            }
+        }
         BytecodeLocal value = builder.createLocal("defaultCreateValue", null);
         if (create.target().isEmpty()) {
             emitDefaultExpressionToLocal(
                     builder, create.value(), value, preparedCall, childResult, resumeValue);
-            builder.beginStoreLocal(result);
-            emitCreateCurrentBinding(builder, create, value);
-            builder.endStoreLocal();
+            emitCreateCurrentBinding(builder, create, value, result);
             return;
         }
 
@@ -4551,6 +4634,26 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
+    /**
+     * I115: a parameter default RHS as a binding value. It keeps the
+     * default-expression lowering, which completes into a local, so it is
+     * staged: it completes straight into the LOCAL binding, or into the
+     * consumer's result or the cell-store local before {@code StoreCell}.
+     */
+    private BindingValue defaultBindingValue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression value,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        return new BindingValue(
+                null,
+                target -> emitDefaultExpressionToLocal(
+                        builder, value, target, preparedCall, childResult, resumeValue),
+                true,
+                false);
+    }
+
     private void emitDefaultMultipleCreate(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalMultipleCreate create,
@@ -4569,15 +4672,14 @@ final class CanonicalToBytecodeLowerer {
                 childResult,
                 resumeValue);
 
-        builder.beginStoreLocal(result);
         emitMultipleCreateCurrentBindings(
                 builder,
                 create.names(),
                 currentRootAnalysis == null
                         ? null
                         : currentRootAnalysis.identitiesOf(create).orElse(null),
-                source);
-        builder.endStoreLocal();
+                source,
+                result);
     }
 
     /*
@@ -4592,21 +4694,21 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        BytecodeLocal value = builder.createLocal("defaultAssignValue", null);
         CanonicalBindingIdentity identity = assignmentIdentityOrNull(assign);
         if (emitUninitializedLocalAssign(builder, assign, identity, result)) {
             return;
         }
+        BindingStorage storage = identity == null ? null : bindingStorageOrNull(identity);
+        if (storage != null) {
+            emitBindingWrite(
+                    builder, storage,
+                    defaultBindingValue(
+                            builder, assign.value(), preparedCall, childResult, resumeValue),
+                    result);
+            return;
+        }
+        BytecodeLocal value = builder.createLocal("defaultAssignValue", null);
         if (identity != null) {
-            BytecodeLocal cell = cellLocalOrNull(identity);
-            BytecodeLocal local = cell == null ? ownLocalOrNull(identity) : null;
-            if (cell != null || local != null) {
-                emitDefaultExpressionToLocal(
-                        builder, assign.value(), value, preparedCall, childResult, resumeValue);
-                emitStoreAssignedValue(
-                        builder, cell, local, () -> builder.emitLoadLocal(value), result, false);
-                return;
-            }
             CanonicalBindingResolution resolution =
                     currentRootAnalysis.resolutionOf(assign).orElse(null);
             if (isStaticModuleBinding(resolution, identity)) {
@@ -4952,15 +5054,9 @@ final class CanonicalToBytecodeLowerer {
     private CanonicalSend discardedControlStatement;
 
     /**
-     * I115: the bare assignment whose value its enclosing sequence discards,
-     * or {@code null}; consumed by identity like
-     * {@link #discardedControlStatement}.
-     */
-    private CanonicalAssign discardedAssignStatement;
-
-    /**
-     * Emits one statement whose value is discarded, marking a control send
-     * or a bare assignment as such so neither stores its result.
+     * Emits one composed invocation whose value is discarded into the
+     * continuation destination {@code target}, marking a control send as
+     * discarded so it does not store its result.
      */
     private void emitDiscardedStatementToLocal(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -4970,31 +5066,22 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         CanonicalSend saved = discardedControlStatement;
-        CanonicalAssign savedAssign = discardedAssignStatement;
         discardedControlStatement =
                 expression instanceof CanonicalSend send ? send : null;
-        discardedAssignStatement =
-                expression instanceof CanonicalAssign assign ? assign : null;
         try {
             emitBodyExpressionToLocal(
                     builder, expression, target, scratch, childResult, resumeValue);
         } finally {
             discardedControlStatement = saved;
-            discardedAssignStatement = savedAssign;
         }
-    }
-
-    /** I115: whether the assignment being emitted is a discarded statement. */
-    private boolean consumeDiscardedAssign(CanonicalAssign assign) {
-        boolean discarded = discardedAssignStatement == assign;
-        discardedAssignStatement = null;
-        return discarded;
     }
 
     /**
      * I115: the storage a discarded composed invocation still needs to
      * complete (its continuation protocol writes a result). Created lazily,
      * only when such an invocation occurs, and never the consumer's result.
+     * Mutations (creations and assignments) never use it: their emitters
+     * accept a {@code null} result.
      */
     private static final class DiscardSink {
         private BytecodeLocal local;
@@ -5046,8 +5133,10 @@ final class CanonicalToBytecodeLowerer {
     /**
      * I115: executes {@code expression} for its effects only. A simple or
      * direct numeric expression is discarded with {@code DiscardValue}; a
-     * composed one keeps its invocation (and therefore every observable
-     * effect) and writes at most the lazily created discard sink.
+     * creation or assignment is emitted with a {@code null} result, so it
+     * performs only its mutation; any other composed expression keeps its
+     * invocation (and therefore every observable effect) and writes at most
+     * the lazily created discard sink.
      */
     private void emitExpressionStatement(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -5073,6 +5162,25 @@ final class CanonicalToBytecodeLowerer {
             builder.beginDiscardValue();
             emitClosureCapture(builder, closure, plan);
             builder.endDiscardValue();
+            return;
+        }
+        // I115: a discarded mutation has no consumer; its emitter receives a
+        // null result and writes only the binding or slot it mutates.
+        if (expression instanceof CanonicalCreate create) {
+            emitBodyCreate(builder, create, null, scratch, childResult, resumeValue);
+            return;
+        }
+        if (expression instanceof CanonicalMultipleCreate create) {
+            emitBodyMultipleCreate(builder, create, null, scratch, childResult, resumeValue);
+            return;
+        }
+        if (expression instanceof CanonicalAssign assign) {
+            emitBodyAssign(builder, assign, null, scratch, childResult, resumeValue);
+            return;
+        }
+        if (expression instanceof CanonicalIndexedAssign indexedAssign) {
+            emitBodyIndexedAssign(
+                    builder, indexedAssign, null, scratch, childResult, resumeValue);
             return;
         }
         if (!requiresComposedInvocation(expression)) {

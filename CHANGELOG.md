@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.54-SNAPSHOT
+
+- **I115-V73 — historical replay.**
+  - Unify lexical binding creation/write emission by storage class and avoid preserving unused results. Keep NAME/MEMBER creation on the named-slot path; write LOCAL/CELL bindings directly. Compute continuation-scratch needs from the expression subtree.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** Synchronous classification and omitted continuation scratch are historical implementation choices, not proof of suspension or cancellation correctness. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved without repairs.
+  - No test files are added or modified by this historical commit. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 0 added, 1 modified, 0 deleted (rename detection disabled for exact path accounting). All 1 original paths retain their exact Git blobs/modes or deletion state; reconstructed parent blobs/modes also match the original parent. Only root `pom.xml` and `CHANGELOG.md` receive replay metadata edits.
+  - Original implementation: `56d823d13891919f0d961adc94e9ceaf664a8d5a`.
+
 ## 0.4.53-SNAPSHOT
 
 - **I115-V72 — historical replay.**
