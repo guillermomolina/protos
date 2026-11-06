@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.55-SNAPSHOT
+
+- **I115-V74 — historical replay.**
+  - Introduce direct GetAttribute, SetAttribute and CreateAttribute Bytecode DSL operations. Keep physical attribute writes void and preserve consumed expression results in the lowerer; separate explicit attributes from lexical write targets.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** The original SetAttribute fast path explicitly bypasses frozen-state admission and retains internal numeric carriers pending semantic reconciliation. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved without repairs.
+  - No test files are added or modified by this historical commit. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 0 added, 5 modified, 0 deleted (rename detection disabled for exact path accounting). All 5 original paths retain their exact Git blobs/modes or deletion state; reconstructed parent blobs/modes also match the original parent. Only root `pom.xml` and `CHANGELOG.md` receive replay metadata edits.
+  - Original implementation: `29d9802de950f9e58831f9db6e155259998c0503`.
+
 ## 0.4.54-SNAPSHOT
 
 - **I115-V73 — historical replay.**

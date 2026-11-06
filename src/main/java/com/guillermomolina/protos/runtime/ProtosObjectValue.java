@@ -674,15 +674,18 @@ public class ProtosObjectValue implements TruffleObject {
     }
 
     /**
-     * I115-H8 EXPERIMENTAL: direct write of a previously selected,
+     * I115: direct write of a previously selected,
      * stable local SlotCell.
      *
      * The caller's Truffle assumption protects the selected location
      * against remove/recreate. Value-lookup dependencies are invalidated,
      * while frozen-state admission and guest numeric normalization are
-     * intentionally bypassed to reproduce the GraalPy physical path.
+     * intentionally bypassed.
+     * KNOWN I115 SEMANTIC DIVERGENCE: the fast physical attribute
+     * write bypasses historical frozen-state checks and preserves
+     * internal numeric carriers pending semantic reconciliation.
      */
-    final void experimentalAssignSelectedLocation(
+    final void assignSelectedAttributeLocation(
             String name,
             ProtosMapBackedLexicalBindingAuthority.SlotCell location,
             Object value) {
@@ -690,7 +693,7 @@ public class ProtosObjectValue implements TruffleObject {
         location.replace(value);
     }
 
-    final void experimentalAssignSelectedLocation(
+    final void assignSelectedAttributeLocation(
             String name,
             ProtosMapBackedLexicalBindingAuthority.SlotCell location,
             Object value,

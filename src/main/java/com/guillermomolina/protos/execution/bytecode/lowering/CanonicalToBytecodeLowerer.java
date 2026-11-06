@@ -2124,30 +2124,6 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * Opens a member read and emits its activation (or carrier) operand. A
-     * root-level read (PERF037-B) takes no activation operand: it reaches
-     * the root's frame arguments itself, only when it must.
-     */
-    private void beginMemberRead(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            String name) {
-        if (currentActivationLocal == null) {
-            builder.beginReadMemberAtRoot(name);
-        } else {
-            builder.beginReadMember(name);
-            emitCurrentActivation(builder);
-        }
-    }
-
-    private void endMemberRead(ProtosBytecodeRootNodeGen.Builder builder) {
-        if (currentActivationLocal == null) {
-            builder.endReadMemberAtRoot();
-        } else {
-            builder.endReadMember();
-        }
-    }
-
-    /**
      * I115: binds every parameter of {@code definition}, left to right,
      * directly into its classified storage. Each supplied value is read from
      * the B5 call ABI, whose supplied positions keep their offsets after
@@ -3114,6 +3090,41 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
+
+    /**
+     * I115: directly emit a synchronous member receiver when its
+     * expression is supported by ordinary value lowering.
+     *
+     * No continuation-local is necessary for these receivers.
+     * Expressions requiring composition retain their existing staged
+     * continuation path.
+     */
+    private static boolean isDirectAttributeReadReceiver(
+            CanonicalExpression receiver) {
+        if (isDirectTerminalValue(receiver)) {
+            return true;
+        }
+        return receiver instanceof CanonicalSend send
+                && primitiveNumericSendCandidate(send)
+                && !requiresContinuationScratch(send)
+                && !containsClosure(send);
+    }
+
+    private void emitDirectAttributeReadReceiver(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression receiver,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        if (receiver instanceof CanonicalSend send) {
+            emitDirectNumericSendValue(
+                    builder, send, preparedCall, childResult, resumeValue,
+                    false);
+        } else {
+            emitExpression(builder, receiver);
+        }
+    }
+
     private void emitBodyExpressionToLocal(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression,
@@ -3224,13 +3235,27 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalMember member) {
-            BytecodeLocal receiverValue = builder.createLocal("memberReceiver", null);
+            if (isDirectAttributeReadReceiver(member.receiver())) {
+                builder.beginStoreLocal(target);
+                builder.beginGetAttribute(member.name());
+                emitDirectAttributeReadReceiver(
+                        builder, member.receiver(),
+                        preparedCall, childResult, resumeValue);
+                builder.endGetAttribute();
+                builder.endStoreLocal();
+                return;
+            }
+
+            BytecodeLocal receiverValue =
+                    builder.createLocal("memberReceiver", null);
             emitBodyExpressionToLocal(
-                    builder, member.receiver(), receiverValue, preparedCall, childResult, resumeValue);
+                    builder, member.receiver(), receiverValue,
+                    preparedCall, childResult, resumeValue);
+
             builder.beginStoreLocal(target);
-            beginMemberRead(builder, member.name());
+            builder.beginGetAttribute(member.name());
             builder.emitLoadLocal(receiverValue);
-            endMemberRead(builder);
+            builder.endGetAttribute();
             builder.endStoreLocal();
             return;
         }
@@ -3379,13 +3404,27 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalMember member) {
-            BytecodeLocal receiverValue = builder.createLocal("defaultMemberReceiver", null);
+            if (isDirectAttributeReadReceiver(member.receiver())) {
+                builder.beginStoreLocal(target);
+                builder.beginGetAttribute(member.name());
+                emitDirectAttributeReadReceiver(
+                        builder, member.receiver(),
+                        preparedCall, childResult, resumeValue);
+                builder.endGetAttribute();
+                builder.endStoreLocal();
+                return;
+            }
+
+            BytecodeLocal receiverValue =
+                    builder.createLocal("defaultMemberReceiver", null);
             emitDefaultExpressionToLocal(
-                    builder, member.receiver(), receiverValue, preparedCall, childResult, resumeValue);
+                    builder, member.receiver(), receiverValue,
+                    preparedCall, childResult, resumeValue);
+
             builder.beginStoreLocal(target);
-            beginMemberRead(builder, member.name());
+            builder.beginGetAttribute(member.name());
             builder.emitLoadLocal(receiverValue);
-            endMemberRead(builder);
+            builder.endGetAttribute();
             builder.endStoreLocal();
             return;
         }
@@ -3933,6 +3972,174 @@ final class CanonicalToBytecodeLowerer {
      * LOCAL/CELL creation does not detect a duplicate creation and is not
      * observed through the activation's context.
      */
+
+    /**
+     * I115: a directly emitible physical attribute operand.
+     *
+     * Nested Closure roots must not be registered inside an already
+     * opened attribute operation. Unsupported direct shapes are staged
+     * using the existing body/default continuation lowering.
+     */
+    private static boolean directAttributeOperand(
+            CanonicalExpression expression) {
+        if (expression instanceof CanonicalLiteral
+                || expression instanceof CanonicalLookup
+                || expression instanceof CanonicalIntrinsic
+                || expression instanceof CanonicalClosure) {
+            return true;
+        }
+        if (expression instanceof CanonicalMember member) {
+            CanonicalExpression receiver = member.receiver();
+            return !(receiver instanceof CanonicalClosure)
+                    && directAttributeMemberReceiver(receiver);
+        }
+        if (expression instanceof CanonicalSend send) {
+            return primitiveNumericSendCandidate(send)
+                    && !requiresContinuationScratch(send);
+        }
+        return false;
+    }
+
+    private static boolean directAttributeMemberReceiver(
+            CanonicalExpression expression) {
+        if (expression instanceof CanonicalLiteral
+                || expression instanceof CanonicalLookup
+                || expression instanceof CanonicalIntrinsic) {
+            return true;
+        }
+        if (expression instanceof CanonicalMember member) {
+            return directAttributeMemberReceiver(member.receiver());
+        }
+        return false;
+    }
+
+    /**
+     * Build an operand producer before opening SetAttribute/CreateAttribute.
+     * Closure plans are registered here, outside the physical operation.
+     */
+    private BindingValue attributeOperandValue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression,
+            boolean defaultExpression,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+
+        if (expression instanceof CanonicalClosure closure) {
+            ProtosClosureExecutionPlanCell plan =
+                    bytecodeClosurePlan(builder, closure);
+            return BindingValue.synchronous(
+                    () -> emitClosureCapture(builder, closure, plan));
+        }
+
+        if (directAttributeOperand(expression)
+                && !requiresContinuationScratch(expression)) {
+            return BindingValue.synchronous(() -> {
+                if (expression instanceof CanonicalSend) {
+                    emitExpressionValue(
+                            builder, expression, preparedCall,
+                            childResult, resumeValue, false);
+                } else {
+                    emitExpression(builder, expression);
+                }
+            });
+        }
+
+        return new BindingValue(
+                null,
+                target -> {
+                    if (defaultExpression) {
+                        emitDefaultExpressionToLocal(
+                                builder, expression, target,
+                                preparedCall, childResult, resumeValue);
+                    } else {
+                        emitBodyExpressionToLocal(
+                                builder, expression, target,
+                                preparedCall, childResult, resumeValue);
+                    }
+                },
+                true,
+                false);
+    }
+
+    /**
+     * I115 / GraalPy StoreVisitor: explicit physical attribute write.
+     *
+     * KNOWN I115 SEMANTIC DIVERGENCE: explicit attribute writes evaluate
+     * RHS before receiver during GraalPy lowering convergence.
+     *
+     * SetAttribute/CreateAttribute return void. A consumed assignment
+     * returns the exact RHS through its result local, never through
+     * another attribute read.
+     *
+     * A discarded synchronous write emits both operands directly.
+     * Suspendable operands complete before the physical operation opens.
+     */
+    private void emitAttributeWrite(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            String name,
+            CanonicalExpression receiver,
+            CanonicalExpression rhs,
+            boolean creation,
+            boolean defaultExpression,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+
+        BindingValue rhsValue = attributeOperandValue(
+                builder, rhs, defaultExpression,
+                preparedCall, childResult, resumeValue);
+
+        BindingValue receiverValue = attributeOperandValue(
+                builder, receiver, defaultExpression,
+                preparedCall, childResult, resumeValue);
+
+        boolean stageRhs =
+                result != null
+                        || rhsValue.suspendable()
+                        || receiverValue.suspendable();
+
+        BytecodeLocal rhsLocal = null;
+        BytecodeLocal receiverLocal = null;
+
+        if (stageRhs) {
+            rhsLocal = result != null
+                    ? result
+                    : builder.createLocal("attributeRhs", null);
+            emitBindingValueToLocal(builder, rhsValue, rhsLocal);
+        }
+
+        if (receiverValue.suspendable()) {
+            receiverLocal = builder.createLocal("attributeReceiver", null);
+            emitBindingValueToLocal(builder, receiverValue, receiverLocal);
+        }
+
+        if (creation) {
+            builder.beginCreateAttribute(name);
+        } else {
+            builder.beginSetAttribute(name);
+        }
+
+        if (stageRhs) {
+            builder.emitLoadLocal(rhsLocal);
+        } else {
+            rhsValue.direct().run();
+        }
+
+        if (receiverLocal != null) {
+            builder.emitLoadLocal(receiverLocal);
+        } else {
+            receiverValue.direct().run();
+        }
+
+        if (creation) {
+            builder.endCreateAttribute();
+        } else {
+            builder.endSetAttribute();
+        }
+    }
+
     private void emitBodyCreate(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create,
@@ -3940,6 +4147,13 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (create.target().isPresent()) {
+            emitAttributeWrite(
+                    builder, create.name(), create.target().orElseThrow(),
+                    create.value(), true, false, result,
+                    preparedCall, childResult, resumeValue);
+            return;
+        }
         if (!currentNormalCallbackScalarLocals.isEmpty()) {
             BytecodeLocal own = currentNormalCallbackScalarLocals.get(create.name());
             CanonicalBindingIdentity identity =
@@ -3997,32 +4211,6 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
 
-        BytecodeLocal value = builder.createLocal("createValue", null);
-        BytecodeLocal rawTarget = builder.createLocal("createRawTarget", null);
-        BytecodeLocal mutationTarget = builder.createLocal("createMutationTarget", null);
-        emitBodyExpressionToLocal(
-                builder,
-                create.target().orElseThrow(),
-                rawTarget,
-                preparedCall,
-                childResult,
-                resumeValue);
-        builder.beginStoreLocal(mutationTarget);
-        builder.beginRequireObjectMutationTarget();
-        emitCurrentActivation(builder);
-        builder.emitLoadLocal(rawTarget);
-        builder.endRequireObjectMutationTarget();
-        builder.endStoreLocal();
-        emitBodyExpressionToLocal(
-                builder, create.value(), value, preparedCall, childResult, resumeValue);
-        beginMutationResult(builder, result);
-        builder.beginMutateLocalSlot(ProtosSlotMutation.CREATE);
-        emitCurrentActivation(builder);
-        builder.emitLoadLocal(mutationTarget);
-        builder.emitLoadConstant(create.name());
-        builder.emitLoadLocal(value);
-        builder.endMutateLocalSlot();
-        endMutationResult(builder, result);
     }
 
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
@@ -4069,6 +4257,13 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (assign.target().isPresent()) {
+            emitAttributeWrite(
+                    builder, assign.name(), assign.target().orElseThrow(),
+                    assign.value(), false, false, result,
+                    preparedCall, childResult, resumeValue);
+            return;
+        }
         if (!currentNormalCallbackScalarLocals.isEmpty()
                 && currentNormalCallbackScalarLocals.containsKey(assign.name())) {
             BytecodeLocal own = currentNormalCallbackScalarLocals.get(assign.name());
@@ -4194,19 +4389,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         BytecodeLocal mutationTarget = builder.createLocal("assignMutationTarget", null);
-        if (assign.target().isPresent()) {
-            BytecodeLocal rawTarget = builder.createLocal("assignRawTarget", null);
-            emitBodyExpressionToLocal(
-                    builder,
-                    assign.target().orElseThrow(),
-                    rawTarget,
-                    preparedCall,
-                    childResult,
-                    resumeValue);
-            emitRequireMutationTarget(builder, mutationTarget, rawTarget);
-        } else {
-            emitResolveNamedWriteTarget(builder, assign, mutationTarget);
-        }
+        emitResolveNamedWriteTarget(builder, assign, mutationTarget);
         emitBodyExpressionToLocal(
                 builder, assign.value(), value, preparedCall, childResult, resumeValue);
         emitNamedOrMemberAssign(builder, assign, mutationTarget, value, result);
@@ -4422,17 +4605,6 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
-    private void emitRequireMutationTarget(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal mutationTarget,
-            BytecodeLocal rawTarget) {
-        builder.beginStoreLocal(mutationTarget);
-        builder.beginRequireObjectMutationTarget();
-        emitCurrentActivation(builder);
-        builder.emitLoadLocal(rawTarget);
-        builder.endRequireObjectMutationTarget();
-        builder.endStoreLocal();
-    }
 
     /**
      * I115: the fixed destination of a bare assignment statically resolved
@@ -4489,10 +4661,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal value,
             BytecodeLocal result) {
         beginMutationResult(builder, result);
-        builder.beginMutateLocalSlot(
-                assign.target().isPresent()
-                        ? ProtosSlotMutation.ASSIGN
-                        : ProtosSlotMutation.ASSIGN_RESOLVED);
+        builder.beginMutateLocalSlot(ProtosSlotMutation.ASSIGN_RESOLVED);
         emitCurrentActivation(builder);
         builder.emitLoadLocal(mutationTarget);
         builder.emitLoadConstant(assign.name());
@@ -4583,6 +4752,13 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (create.target().isPresent()) {
+            emitAttributeWrite(
+                    builder, create.name(), create.target().orElseThrow(),
+                    create.value(), true, true, result,
+                    preparedCall, childResult, resumeValue);
+            return;
+        }
         if (create.target().isEmpty()) {
             CanonicalBindingIdentity identity =
                     currentRootAnalysis == null
@@ -4607,31 +4783,6 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
 
-        BytecodeLocal rawTarget = builder.createLocal("defaultCreateRawTarget", null);
-        BytecodeLocal mutationTarget = builder.createLocal("defaultCreateMutationTarget", null);
-        emitDefaultExpressionToLocal(
-                builder,
-                create.target().orElseThrow(),
-                rawTarget,
-                preparedCall,
-                childResult,
-                resumeValue);
-        builder.beginStoreLocal(mutationTarget);
-        builder.beginRequireObjectMutationTarget();
-        emitCurrentActivation(builder);
-        builder.emitLoadLocal(rawTarget);
-        builder.endRequireObjectMutationTarget();
-        builder.endStoreLocal();
-        emitDefaultExpressionToLocal(
-                builder, create.value(), value, preparedCall, childResult, resumeValue);
-        builder.beginStoreLocal(result);
-        builder.beginMutateLocalSlot(ProtosSlotMutation.CREATE);
-        emitCurrentActivation(builder);
-        builder.emitLoadLocal(mutationTarget);
-        builder.emitLoadConstant(create.name());
-        builder.emitLoadLocal(value);
-        builder.endMutateLocalSlot();
-        builder.endStoreLocal();
     }
 
     /**
@@ -4694,6 +4845,13 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (assign.target().isPresent()) {
+            emitAttributeWrite(
+                    builder, assign.name(), assign.target().orElseThrow(),
+                    assign.value(), false, true, result,
+                    preparedCall, childResult, resumeValue);
+            return;
+        }
         CanonicalBindingIdentity identity = assignmentIdentityOrNull(assign);
         if (emitUninitializedLocalAssign(builder, assign, identity, result)) {
             return;
@@ -4722,19 +4880,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         BytecodeLocal mutationTarget = builder.createLocal("defaultAssignMutationTarget", null);
-        if (assign.target().isPresent()) {
-            BytecodeLocal rawTarget = builder.createLocal("defaultAssignRawTarget", null);
-            emitDefaultExpressionToLocal(
-                    builder,
-                    assign.target().orElseThrow(),
-                    rawTarget,
-                    preparedCall,
-                    childResult,
-                    resumeValue);
-            emitRequireMutationTarget(builder, mutationTarget, rawTarget);
-        } else {
-            emitResolveNamedWriteTarget(builder, assign, mutationTarget);
-        }
+        emitResolveNamedWriteTarget(builder, assign, mutationTarget);
         emitDefaultExpressionToLocal(
                 builder, assign.value(), value, preparedCall, childResult, resumeValue);
         emitNamedOrMemberAssign(builder, assign, mutationTarget, value, result);
@@ -6079,9 +6225,31 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalMember member) {
-            beginMemberRead(builder, member.name());
+            if (member.receiver() instanceof CanonicalClosure closure) {
+                ProtosClosureExecutionPlanCell plan =
+                        bytecodeClosurePlan(builder, closure);
+                builder.beginGetAttribute(member.name());
+                emitClosureCapture(builder, closure, plan);
+                builder.endGetAttribute();
+                return;
+            }
+
+            if (containsClosure(member.receiver())) {
+                BytecodeLocal completedReceiver =
+                        builder.createLocal("memberClosureReceiver", null);
+                builder.beginStoreLocal(completedReceiver);
+                emitExpression(builder, member.receiver());
+                builder.endStoreLocal();
+
+                builder.beginGetAttribute(member.name());
+                builder.emitLoadLocal(completedReceiver);
+                builder.endGetAttribute();
+                return;
+            }
+
+            builder.beginGetAttribute(member.name());
             emitExpression(builder, member.receiver());
-            endMemberRead(builder);
+            builder.endGetAttribute();
             return;
         }
         if (expression instanceof CanonicalIdentity identity) {
