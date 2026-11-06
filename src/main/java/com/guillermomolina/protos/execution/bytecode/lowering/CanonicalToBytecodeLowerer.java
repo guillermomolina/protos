@@ -927,8 +927,24 @@ final class CanonicalToBytecodeLowerer {
         java.util.Map<CanonicalBindingIdentity, BytecodeLocal> cellLocals =
                 new java.util.LinkedHashMap<>();
         if (scopeForThisRoot.kind() == CanonicalLexicalScope.Kind.CLOSURE) {
+            /*
+             * I115: allocate positional parameter locals first, in
+             * declaration order. LocalRangeAccessor requires a contiguous
+             * allocation range. Other declared locals follow that range.
+             */
+            if (activationDefinition != null) {
+                for (CanonicalParameter parameter : activationDefinition.parameters()) {
+                    String name = parameter.name();
+                    if (scopeForThisRoot.declaredNames().contains(name)
+                            && !frameLocals.containsKey(name)) {
+                        frameLocals.put(name, builder.createLocal(name, null));
+                    }
+                }
+            }
             for (String name : scopeForThisRoot.declaredNames()) {
-                frameLocals.put(name, builder.createLocal(name, null));
+                if (!frameLocals.containsKey(name)) {
+                    frameLocals.put(name, builder.createLocal(name, null));
+                }
             }
             /*
              * I115: the physical storage plan is fixed before the prologue,
@@ -1867,7 +1883,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal result) {
         boolean hasComposedInvocation =
                 expressions.stream()
-                        .anyMatch(CanonicalToBytecodeLowerer::requiresContinuationScratch);
+                        .anyMatch(this::requiresContinuationScratch);
         BytecodeLocal preparedCall =
                 hasComposedInvocation
                         ? builder.createLocal(
@@ -2058,10 +2074,10 @@ final class CanonicalToBytecodeLowerer {
                         + expression.getClass().getSimpleName());
     }
 
-    private static boolean hasComposedDefault(CanonicalClosure definition) {
+    private boolean hasComposedDefault(CanonicalClosure definition) {
         return definition.parameters().stream()
                 .flatMap(parameter -> parameter.defaultValue().stream())
-                .anyMatch(CanonicalToBytecodeLowerer::requiresComposedInvocation);
+                .anyMatch(this::requiresContinuationScratch);
     }
 
     /**
@@ -2145,6 +2161,55 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal defaultPreparedCall,
             BytecodeLocal defaultChildResult,
             BytecodeLocal defaultResumeValue) {
+        /*
+         * I115 experimental grouped-copy admission: only an entire
+         * positional parameter list owned by this Closure root, with
+         * physical LOCAL storage and no default or rest binding, can use
+         * the contiguous local range.
+         */
+        boolean groupedCopy =
+                !definition.parameters().isEmpty()
+                        && currentActivationLocal == null
+                        && currentRootAnalysis != null;
+
+        java.util.Set<String> parameterNames = new java.util.HashSet<>();
+
+        if (groupedCopy) {
+            for (CanonicalParameter parameter : definition.parameters()) {
+                if (parameter.rest()
+                        || parameter.defaultValue().isPresent()
+                        || !parameterNames.add(parameter.name())) {
+                    groupedCopy = false;
+                    break;
+                }
+
+                CanonicalBindingIdentity identity =
+                        currentRootAnalysis.identityOf(parameter).orElse(null);
+
+                if (identity == null
+                        || identity.owner() != currentRootTopScope
+                        || physicalStorageOf(identity)
+                                != CanonicalLexicalScope.Storage.LOCAL
+                        || !currentRootFrameLocals.containsKey(identity.name())) {
+                    groupedCopy = false;
+                    break;
+                }
+            }
+        }
+
+        if (groupedCopy) {
+            BytecodeLocal[] parameterLocals =
+                    new BytecodeLocal[definition.parameters().size()];
+
+            for (int index = 0; index < parameterLocals.length; index++) {
+                parameterLocals[index] =
+                        parameterLocal(definition.parameters().get(index));
+            }
+
+            builder.emitCopySuppliedArguments(parameterLocals);
+            return;
+        }
+
         int positionalIndex = 0;
         for (CanonicalParameter parameter : definition.parameters()) {
             if (parameter.rest()) {
@@ -2169,7 +2234,16 @@ final class CanonicalToBytecodeLowerer {
                 builder.endBlock();
 
                 builder.beginBlock();
-                if (defaultExpression instanceof CanonicalCall defaultCall) {
+                if (i115DirectUnaryCall(defaultExpression)
+                        || (defaultExpression instanceof CanonicalSend numericDefault
+                                && isDirectNumericOperand(numericDefault))) {
+                    beginStoreParameter(builder, parameter);
+                    emitExpressionValue(
+                            builder, defaultExpression,
+                            defaultPreparedCall, defaultChildResult,
+                            defaultResumeValue, false);
+                    endStoreParameter(builder, parameter);
+                } else if (defaultExpression instanceof CanonicalCall defaultCall) {
                     emitComposedDefaultCall(
                             builder,
                             defaultCall,
@@ -2534,7 +2608,7 @@ final class CanonicalToBytecodeLowerer {
             java.util.List<CanonicalExpression> expressions) {
         boolean needed =
                 expressions.stream()
-                        .anyMatch(CanonicalToBytecodeLowerer::requiresContinuationScratch);
+                        .anyMatch(this::requiresContinuationScratch);
         if (!needed) {
             return null;
         }
@@ -2907,6 +2981,223 @@ final class CanonicalToBytecodeLowerer {
         return false;
     }
 
+
+    /*
+     * I115 EXPERIMENTAL DIRECT-UNARY EMISSION.
+     *
+     * This is an emission category, not a proof of non-suspension.
+     * The direct path deliberately does not compose a continuation
+     * returned by the callee. This temporarily diverges from the
+     * historical Protos invocation semantics. No compatibility
+     * dispatcher or continuation-result test is installed here.
+     */
+
+    private boolean i115DirectLookup(CanonicalLookup lookup) {
+        if (currentNormalCallbackScalarLocals.containsKey(lookup.name())) {
+            CanonicalBindingResolution resolution =
+                    currentNormalCallbackScalarAnalysis == null
+                            ? null
+                            : currentNormalCallbackScalarAnalysis.resolutionOf(lookup)
+                                    .orElse(null);
+            return resolution instanceof CanonicalBindingResolution.Resolved resolved
+                    && resolved.identity().owner() == currentNormalCallbackScalarScope;
+        }
+
+        if (currentRootAnalysis == null) {
+            return false;
+        }
+
+        CanonicalBindingResolution resolution =
+                currentRootAnalysis.resolutionOf(lookup).orElse(null);
+        CanonicalBindingIdentity identity = staticIdentityOrNull(resolution);
+        if (identity == null) {
+            return false;
+        }
+
+        CanonicalLexicalScope.Storage storage = physicalStorageOf(identity);
+        if (storage == CanonicalLexicalScope.Storage.LOCAL) {
+            return identity.owner() == currentRootTopScope
+                    && currentRootFrameLocals.containsKey(identity.name());
+        }
+        if (storage == CanonicalLexicalScope.Storage.CELL) {
+            return currentRootCellLocals.containsKey(identity);
+        }
+        return isStaticModuleBinding(resolution, identity);
+    }
+
+    private boolean i115DirectUnaryOperand(CanonicalExpression expression) {
+        if (expression instanceof CanonicalLiteral literal) {
+            return primitiveNumberLiteralOrNull(literal) != null;
+        }
+        if (expression instanceof CanonicalLookup lookup) {
+            return i115DirectLookup(lookup);
+        }
+        if (expression instanceof CanonicalMember member) {
+            return i115DirectUnaryOperand(member.receiver());
+        }
+        if (expression instanceof CanonicalSend send) {
+            return primitiveNumericSendCandidate(send)
+                    && i115DirectUnaryOperand(send.receiver())
+                    && i115DirectUnaryOperand(send.arguments().get(0));
+        }
+        return false;
+    }
+
+    private static boolean i115StructuredSelector(String selector) {
+        return switch (selector) {
+            case "ensure", "caseOf", "import", "match", "each",
+                    "eachStep", "atPut", "atIfAbsent", "remove",
+                    "open", "listenTcp", "spawn" -> true;
+            default -> false;
+        };
+    }
+
+    private boolean i115AdmitsDirectUnaryInvocation(
+            InvocationShape shape,
+            CanonicalExpression receiver,
+            String selector,
+            java.util.List<CanonicalExpression> arguments) {
+        if (arguments.size() != 1 || hasSpreadArgument(arguments)
+                || !i115DirectUnaryOperand(arguments.get(0))) {
+            return false;
+        }
+
+        if (shape == InvocationShape.CALL) {
+            return (receiver instanceof CanonicalLookup
+                            || receiver instanceof CanonicalMember)
+                    && i115DirectUnaryOperand(receiver);
+        }
+
+        if (shape == InvocationShape.SEND) {
+            return selector != null
+                    && !primitiveNumericSelector(selector)
+                    && !i115StructuredSelector(selector)
+                    && I115Control.of(selector, arguments) == null
+                    && i115DirectUnaryOperand(receiver);
+        }
+        return false;
+    }
+
+    private boolean i115DirectUnaryCall(CanonicalExpression expression) {
+        if (expression instanceof CanonicalCall call) {
+            return i115AdmitsDirectUnaryInvocation(
+                    InvocationShape.CALL, call.receiver(),
+                    null, call.arguments());
+        }
+        if (expression instanceof CanonicalSend send) {
+            return i115AdmitsDirectUnaryInvocation(
+                    InvocationShape.SEND, send.receiver(),
+                    send.message(), send.arguments());
+        }
+        return false;
+    }
+
+    private void emitI115DirectUnaryOperand(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression,
+            boolean carrier) {
+        if (expression instanceof CanonicalLiteral literal) {
+            if (carrier) {
+                builder.emitLoadConstant(primitiveNumberLiteralOrNull(literal));
+            } else {
+                emitLiteral(builder, literal);
+            }
+            return;
+        }
+        if (expression instanceof CanonicalLookup lookup) {
+            emitLookup(builder, lookup, carrier);
+            return;
+        }
+        if (expression instanceof CanonicalMember member) {
+            builder.beginGetAttribute(member.name());
+            emitI115DirectUnaryOperand(builder, member.receiver(), false);
+            builder.endGetAttribute();
+            return;
+        }
+        if (expression instanceof CanonicalSend send
+                && primitiveNumericSendCandidate(send)) {
+            builder.beginSourceSection(
+                    send.span().startOffset(), send.span().length());
+            if (!carrier) {
+                builder.beginMaterializePrimitiveNumericCarrier();
+            }
+            emitDirectNumericOperation(builder, send, null, null, null);
+            if (!carrier) {
+                builder.emitLoadConstant(true);
+                builder.endMaterializePrimitiveNumericCarrier();
+            }
+            builder.endSourceSection();
+            return;
+        }
+        throw new AssertionError(
+                "Unadmitted I115 direct unary operand: "
+                        + expression.getClass().getSimpleName());
+    }
+
+    private void emitI115DirectUnaryOperation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            InvocationShape shape,
+            CanonicalExpression receiver,
+            String selector,
+            CanonicalExpression argument,
+            boolean primitiveCarrierResult) {
+        if (!primitiveCarrierResult) {
+            builder.beginMaterializePrimitiveNumericCarrier();
+        }
+
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginCallUnaryMethod(false);
+
+        if (shape == InvocationShape.CALL) {
+            emitI115DirectUnaryOperand(builder, receiver, false);
+        } else if (shape == InvocationShape.SEND) {
+            builder.beginGetMethod(
+                    TruffleString.fromJavaStringUncached(
+                            selector, TruffleString.Encoding.UTF_16));
+            emitI115DirectUnaryOperand(builder, receiver, false);
+            builder.endGetMethod();
+        } else {
+            throw new AssertionError("Not an ordinary direct unary invocation");
+        }
+
+        emitI115DirectUnaryOperand(builder, argument, true);
+        builder.endCallUnaryMethod();
+        builder.endTag(StandardTags.CallTag.class);
+
+        if (!primitiveCarrierResult) {
+            builder.emitLoadConstant(true);
+            builder.endMaterializePrimitiveNumericCarrier();
+        }
+    }
+
+    private void emitI115DirectUnaryValue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression,
+            boolean primitiveCarrierResult) {
+        if (!i115DirectUnaryCall(expression)) {
+            throw new AssertionError("Unadmitted direct unary call");
+        }
+
+        builder.beginSourceSection(
+                expression.span().startOffset(),
+                expression.span().length());
+
+        if (expression instanceof CanonicalCall call) {
+            emitI115DirectUnaryOperation(
+                    builder, InvocationShape.CALL,
+                    call.receiver(), null, call.arguments().get(0),
+                    primitiveCarrierResult);
+        } else {
+            CanonicalSend send = (CanonicalSend) expression;
+            emitI115DirectUnaryOperation(
+                    builder, InvocationShape.SEND,
+                    send.receiver(), send.message(), send.arguments().get(0),
+                    primitiveCarrierResult);
+        }
+
+        builder.endSourceSection();
+    }
+
     /**
      * I115: whether emitting {@code expression} can need the continuation
      * scratch locals ({@code preparedClosureCall}, {@code childResult},
@@ -2925,7 +3216,7 @@ final class CanonicalToBytecodeLowerer {
      * compositions, objects, map constructions, returns, sequences and
      * spreads) keeps the scratch.
      */
-    private static boolean requiresContinuationScratch(CanonicalExpression expression) {
+    private boolean requiresContinuationScratch(CanonicalExpression expression) {
         return switch (expression) {
             case CanonicalLiteral ignored -> false;
             case CanonicalLookup ignored -> false;
@@ -2933,15 +3224,16 @@ final class CanonicalToBytecodeLowerer {
             // Materialization only; the body runs in the Closure's own root.
             case CanonicalClosure ignored -> false;
             case CanonicalSend send ->
-                    !primitiveNumericSendCandidate(send)
-                            || requiresContinuationScratch(send.receiver())
-                            || requiresContinuationScratch(send.arguments().get(0));
+                    !i115DirectUnaryCall(send)
+                            && (!primitiveNumericSendCandidate(send)
+                                    || requiresContinuationScratch(send.receiver())
+                                    || requiresContinuationScratch(send.arguments().get(0)));
             case CanonicalCreate create ->
-                    create.target().map(CanonicalToBytecodeLowerer::requiresContinuationScratch)
+                    create.target().map(this::requiresContinuationScratch)
                                     .orElse(false)
                             || requiresContinuationScratch(create.value());
             case CanonicalAssign assign ->
-                    assign.target().map(CanonicalToBytecodeLowerer::requiresContinuationScratch)
+                    assign.target().map(this::requiresContinuationScratch)
                                     .orElse(false)
                             || requiresContinuationScratch(assign.value());
             case CanonicalMultipleCreate create -> requiresContinuationScratch(create.value());
@@ -2952,7 +3244,7 @@ final class CanonicalToBytecodeLowerer {
             case CanonicalNotIdentity identity ->
                     requiresContinuationScratch(identity.left())
                             || requiresContinuationScratch(identity.right());
-            case CanonicalCall ignored -> true;
+            case CanonicalCall call -> !i115DirectUnaryCall(call);
             case CanonicalSuperSend ignored -> true;
             case CanonicalDerivedInequality ignored -> true;
             case CanonicalIndexedAssign ignored -> true;
@@ -3099,7 +3391,7 @@ final class CanonicalToBytecodeLowerer {
      * Expressions requiring composition retain their existing staged
      * continuation path.
      */
-    private static boolean isDirectAttributeReadReceiver(
+    private boolean isDirectAttributeReadReceiver(
             CanonicalExpression receiver) {
         if (isDirectTerminalValue(receiver)) {
             return true;
@@ -3132,6 +3424,12 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (i115DirectUnaryCall(expression)) {
+            builder.beginStoreLocal(target);
+            emitI115DirectUnaryValue(builder, expression, false);
+            builder.endStoreLocal();
+            return;
+        }
         if (expression instanceof CanonicalCall call) {
             builder.beginSourceSection(
                     call.span().startOffset(),
@@ -3327,6 +3625,16 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (i115DirectUnaryCall(expression)
+                || (expression instanceof CanonicalSend send
+                        && isDirectNumericOperand(send))) {
+            builder.beginStoreLocal(target);
+            emitExpressionValue(
+                    builder, expression, preparedCall,
+                    childResult, resumeValue, false);
+            builder.endStoreLocal();
+            return;
+        }
         if (expression instanceof CanonicalCall call) {
             emitComposedDefaultCall(
                     builder,
@@ -3980,7 +4288,7 @@ final class CanonicalToBytecodeLowerer {
      * opened attribute operation. Unsupported direct shapes are staged
      * using the existing body/default continuation lowering.
      */
-    private static boolean directAttributeOperand(
+    private boolean directAttributeOperand(
             CanonicalExpression expression) {
         if (expression instanceof CanonicalLiteral
                 || expression instanceof CanonicalLookup
@@ -5051,6 +5359,23 @@ final class CanonicalToBytecodeLowerer {
             OperandStager stager,
             SpreadStager spreadStager,
             boolean primitiveCarrierResult) {
+        if (i115AdmitsDirectUnaryInvocation(shape, receiver, selector, arguments)) {
+            if (result == null) {
+                builder.beginDiscardValue();
+            } else {
+                builder.beginStoreLocal(result);
+            }
+            emitI115DirectUnaryOperation(
+                    builder, shape, receiver, selector,
+                    arguments.get(0), primitiveCarrierResult);
+            if (result == null) {
+                builder.endDiscardValue();
+            } else {
+                builder.endStoreLocal();
+            }
+            return;
+        }
+
         if (result == null || scratch == null || childResult == null || resumeValue == null) {
             throw new AssertionError("Bytecode invocation result/scratch locals were not allocated");
         }
@@ -5253,6 +5578,10 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
+        if (i115DirectUnaryCall(expression)) {
+            emitI115DirectUnaryValue(builder, expression, primitiveCarrierResult);
+            return;
+        }
         if (expression instanceof CanonicalSend send
                 && primitiveNumericSendCandidate(send)) {
             builder.beginSourceSection(send.span().startOffset(), send.span().length());
@@ -5291,6 +5620,12 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (i115DirectUnaryCall(expression)) {
+            builder.beginDiscardValue();
+            emitI115DirectUnaryValue(builder, expression, false);
+            builder.endDiscardValue();
+            return;
+        }
         if (expression instanceof CanonicalSend send
                 && primitiveNumericSendCandidate(send)) {
             builder.beginDiscardValue();
@@ -6490,12 +6825,8 @@ final class CanonicalToBytecodeLowerer {
 
     /* I115: whether an operand is emitted straight onto the operand stack. */
     private boolean isDirectNumericOperand(CanonicalExpression expression) {
-        if (expression instanceof CanonicalLiteral literal) {
-            return primitiveNumberLiteralOrNull(literal) != null;
-        }
-        return expression instanceof CanonicalLookup
-                || (expression instanceof CanonicalSend send
-                        && primitiveNumericSendCandidate(send));
+        return i115DirectUnaryOperand(expression)
+                || i115DirectUnaryCall(expression);
     }
 
     /**
@@ -6512,6 +6843,15 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (i115DirectUnaryCall(expression)) {
+            emitI115DirectUnaryValue(builder, expression, true);
+            return;
+        }
+        if (expression instanceof CanonicalMember member
+                && i115DirectUnaryOperand(member)) {
+            emitI115DirectUnaryOperand(builder, member, true);
+            return;
+        }
         if (expression instanceof CanonicalLiteral literal) {
             Object carrier = primitiveNumberLiteralOrNull(literal);
             if (carrier != null) {
@@ -6557,6 +6897,12 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (i115DirectUnaryCall(expression)) {
+            builder.beginStoreLocal(target);
+            emitI115DirectUnaryValue(builder, expression, true);
+            builder.endStoreLocal();
+            return;
+        }
         if (expression instanceof CanonicalSend nested && primitiveResultSend(nested)) {
             builder.beginSourceSection(
                     nested.span().startOffset(), nested.span().length());
