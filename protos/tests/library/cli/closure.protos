@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("closure isolation concurrency", () => {
         tool009LegacyCase: () => {
-            CommandLine: import("std:cli/CommandLine")
+            CommandLine: import("std:cli/command_line")
 
             tag: CommandLine.option(
                 key: "tag",
@@ -155,7 +155,7 @@ tests: [
     }),
     Test("closure large spec", () => {
         tool009LegacyCase: () => {
-            CommandLine: import("std:cli/CommandLine")
+            CommandLine: import("std:cli/command_line")
 
             opt0: CommandLine.option(
                 key: "key0",

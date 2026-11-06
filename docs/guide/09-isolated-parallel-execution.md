@@ -77,7 +77,7 @@ closure.parallel(arguments...)
 ```
 
 Parallel Array algorithms are Standard Library functions of
-`std:collections/Array` built on `closure.parallel(...)`; they are described
+`std:collections/array` built on `closure.parallel(...)`; they are described
 later in this chapter.
 
 The implementation can use threads, carriers, pools, work stealing, or other
@@ -321,11 +321,11 @@ deterministic operation semantics.
 
 Core v0.1 keeps only the minimal isolated-execution mechanism
 (`closure.parallel(...)` plus ordinary Futures). Parallel collection algorithms
-are Standard Library policy built on it. The `std:collections/Array` module
+are Standard Library policy built on it. The `std:collections/array` module
 provides:
 
 ```protos
-Arrays: import("std:collections/Array")
+Arrays: import("std:collections/array")
 
 Arrays.parallelMap(array, worker, arguments...)
 Arrays.parallelFilter(array, predicate, arguments...)
@@ -591,7 +591,7 @@ authoritative.
 9. Parallel results and failures return through ordinary Futures and structured
    ownership rules.
 10. Cancellation is cooperative and does not roll back committed effects.
-11. `std:collections/Array` parallel functions return Futures and produce deterministic logical
+11. `std:collections/array` parallel functions return Futures and produce deterministic logical
     outcomes independent of physical worker completion order.
 12. `parallelMap` and `parallelFilter` preserve source index/order.
 13. `parallelFindIndex` selects the lowest logical matching index, not the
@@ -617,7 +617,7 @@ For exact behavior, consult:
   for P isolation, Closure projection, transferability, deterministic
   failure/result rules, the absence of writable partitioning, cancellation, and
   scheduling independence;
-- [`../../protos/lib/collections/Array.protos`](../../protos/lib/collections/Array.protos)
+- [`../../protos/lib/collections/array/module.protos`](../../protos/lib/collections/array/module.protos)
   for the Standard Library parallel Array function contracts;
 - [`../../spec/concurrency/FUTURES_AND_TASKS.md`](../../spec/concurrency/FUTURES_AND_TASKS.md)
   for the Future result, observation, cancellation, and structured

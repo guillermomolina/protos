@@ -39,7 +39,7 @@ final class ProtosForeignModuleKey {
     static ProtosModuleKey encode(String scheme, String canonicalTarget) {
         Objects.requireNonNull(scheme, "scheme");
         Objects.requireNonNull(canonicalTarget, "canonicalTarget");
-        return new ProtosModuleKey(PREFIX + encodeUtf8(scheme) + ":" + encodeUtf8(canonicalTarget));
+        return ProtosModuleKey.foreign(PREFIX + encodeUtf8(scheme) + ":" + encodeUtf8(canonicalTarget));
     }
 
     static Address decode(ProtosModuleKey key) throws IOException {
@@ -55,7 +55,7 @@ final class ProtosForeignModuleKey {
     }
 
     static boolean owns(ProtosModuleKey key) {
-        return key != null && key.canonicalId().startsWith(PREFIX);
+        return key != null && key.isForeign() && key.canonicalId().startsWith(PREFIX);
     }
 
     private static String encodeUtf8(String value) {

@@ -13,10 +13,10 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-HostError: import("std:http/Host").HostError
-HostLifecycle: import("std:http/internal/HostLifecycle")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+HostError: import("std:http/host").HostError
+HostLifecycle: import("std:http/internal/host_lifecycle")
 
 // HTTP.md §§15.3, 15.7, 15.10: the production host lifecycle over in-memory
 // Workers and listener of this Actor. A synchronous Worker creation failure and

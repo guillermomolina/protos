@@ -3016,7 +3016,7 @@ No dispatch by argument type is implied. These mechanisms support dynamic arity,
 ### Parallel Array runtime integration
 
 The runtime provides no parallel Array algorithm. Parallel Array algorithms are
-Standard Library functions of `std:collections/Array` that the runtime executes
+Standard Library functions of `std:collections/array` that the runtime executes
 as ordinary Protos code over `Closure.parallel(...)` and Futures; their Core
 placement boundary is owned by `../concurrency/PARALLEL_EXECUTION.md` §71.6.
 This runtime-semantics document defines no algorithm, ordering, failure,

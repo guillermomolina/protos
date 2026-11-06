@@ -47,7 +47,7 @@ final class ProtosCommandLineResultModelTest {
 
         Object imported =
                 ProtosTestExecutionSupport.evaluate(
-                        "import(\"std:cli/CommandLine\")",
+                        "import(\"std:cli/command_line\")",
                         prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 

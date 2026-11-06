@@ -13,14 +13,14 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-http: import("std:http/Host")
-HostConfig: import("std:http/internal/HostConfig")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+http: import("std:http/host")
+HostConfig: import("std:http/internal/host_config")
 
 // The suite has no Network: every construction below is rejected before any
 // listener custody, Worker or I/O could exist (HTTP.md §15.2).
-handlerModule: "std:http/Server"
+handlerModule: "std:http/server"
 
 construct: (listener) => {
     Assertions.signals(InvalidIOArgument, () => {
@@ -65,7 +65,7 @@ tests: [
         Assertions.require(names[0] == "owning")
         Assertions.require(names[1] == "owningWithFactory")
         Assertions.require(!http.Host.hasSlot("borrowing"))
-        server: import("std:http/Server").Server
+        server: import("std:http/server").Server
         Assertions.require(!server.hasSlot("serve"))
     }),
     Test("an invalid workers value signals InvalidIOArgument before the listener is examined", () => {

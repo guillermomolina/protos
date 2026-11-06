@@ -4,15 +4,15 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: Array(
     Test("lib001 surfaces compose", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
-            Set: import("std:collections/Set")
-            IdentitySet: import("std:collections/IdentitySet")
+            Arrays: import("std:collections/array")
+            Set: import("std:collections/set")
+            IdentitySet: import("std:collections/identity_set")
 
             mixed: Array(3, 1, 2, 2.0)
             sorted: Arrays.sort(mixed, (left, right) => {
@@ -42,7 +42,7 @@ tests: Array(
         Assertions.require(tool009LegacyCase())
     }),
     Test("lib023 array copy/edit public surface", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(3, 1, 2)
 
         appended: Arrays.append(source, 4)
@@ -61,28 +61,43 @@ tests: Array(
         Assertions.require((reversed.size() == 3) && (reversed[0] == 2))
         Assertions.require(((sorted[0] == 1) && (sorted[1] == 2)) && (sorted[2] == 3))
         Assertions.require(((source[0] == 3) && (source[1] == 1)) && (source[2] == 2))
-        Assertions.require(import("std:collections/Array") === Arrays)
+        Assertions.require(import("std:collections/array") === Arrays)
     }),
-    Test("obsolete lowercase identity set import error", () => {
+    Test("d242 lowercase module routes resolve", () => {
+        Assertions.require(import("std:collections/identity_set") !== null)
+        Assertions.require(import("std:collections/set") !== null)
+        null
+    }),
+    Test("obsolete uppercase identity set import error", () => {
         Assertions.signals(Error, () => {
-            import("std:collections/identity_set")
+            import("std:collections/IdentitySet")
         })
     }),
-    Test("obsolete lowercase set import error", () => {
+    Test("obsolete uppercase set import error", () => {
         Assertions.signals(Error, () => {
-            import("std:collections/set")
+            import("std:collections/Set")
+        })
+    }),
+    Test("obsolete file-backed array route import error", () => {
+        Assertions.signals(Error, () => {
+            import("std:collections/Array")
+        })
+    }),
+    Test("module initializer is not a direct source alias", () => {
+        Assertions.signals(Error, () => {
+            import("std:collections/set/module")
         })
     }),
     Test("standard library import cache", () => {
         tool009LegacyCase: () => {
-            first: import("std:collections/Set")
-            second: import("std:collections/Set")
+            first: import("std:collections/set")
+            second: import("std:collections/set")
             first === second
         }
         Assertions.require(tool009LegacyCase())
     }),
     Test("i136 range module public surface", () => {
-        Ranges: import("std:collections/Range")
+        Ranges: import("std:collections/range")
 
         Assertions.require(Ranges.hasSlot("Range"))
         Assertions.require(Ranges.hasSlot("InvertedRange"))
@@ -101,7 +116,7 @@ tests: Array(
         Assertions.require(Range(0, 2).parent() === Range)
         Assertions.require(InvertedRange(2, 0).parent() === InvertedRange)
 
-        again: import("std:collections/Range")
+        again: import("std:collections/range")
         Assertions.require(again === Ranges)
         Assertions.require(again.Range === Range)
         Assertions.require(again.InvertedRange === InvertedRange)

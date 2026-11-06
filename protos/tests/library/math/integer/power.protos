@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("power", () => {
         tool009LegacyCase: () => {
-            IntegerMath: import("std:math/Integer")
+            IntegerMath: import("std:math/integer")
 
             Assertions.require(IntegerMath.pow(0, 0) == 1)
             Assertions.require(IntegerMath.pow(0, 5) == 0)
@@ -44,7 +44,7 @@ tests: [
     }),
     Test("power domain rejection", () => {
         tool009LegacyCase: () => {
-            IntegerMath: import("std:math/Integer")
+            IntegerMath: import("std:math/integer")
 
             delegatedIntegerLookalike: (2) {}
 
@@ -70,7 +70,7 @@ tests: [
     }),
     Test("power arity rejection", () => {
         tool009LegacyCase: () => {
-            IntegerMath: import("std:math/Integer")
+            IntegerMath: import("std:math/integer")
 
             Assertions.signals(Error, () => { IntegerMath.pow() })
             Assertions.signals(Error, () => { IntegerMath.pow(2) })

@@ -29,11 +29,11 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Private linear Array construction for {@code std:cli/CommandLine} (AUD006-A3).
+ * Private linear Array construction for {@code std:cli/command_line} (AUD006-A3).
  *
  * <p>Following the D101 pattern, command-line policy stays in Protos; this facility owns only the
  * irreducible accumulation mechanics. The frozen, stateless factory is provisioned as a standard
- * initial member of the exact {@code std:cli/CommandLine} module, which captures it lexically and
+ * initial member of the exact {@code std:cli/command_line} module, which captures it lexically and
  * removes the bootstrap slot during initialization, so it never belongs to the published module
  * surface.
  *
@@ -45,7 +45,7 @@ import java.util.Objects;
  */
 public final class ProtosCommandLineArrayConstructionFacility {
     public static final ProtosModuleKey MODULE_KEY =
-            new ProtosModuleKey("std:cli/CommandLine");
+            ProtosModuleKey.module("std:cli/command_line");
     public static final String BOOTSTRAP_SLOT = "_commandLineArrayBuilderFactory";
 
     private ProtosCommandLineArrayConstructionFacility() {}

@@ -81,7 +81,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             assertEquals(ProtosTask.State.SUSPENDED, task.state());
 
             ProtosActorModuleState.ModuleRecord during =
-                    state.lookup(new ProtosModuleKey("m")).orElseThrow();
+                    state.lookup(ProtosModuleKey.source("m")).orElseThrow();
             assertEquals(
                     ProtosActorModuleState.InitializationState.INITIALIZING,
                     during.state());
@@ -102,7 +102,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             assertSame(during.instance(), module);
             assertEquals(
                     ProtosActorModuleState.InitializationState.READY,
-                    state.lookup(new ProtosModuleKey("m")).orElseThrow().state());
+                    state.lookup(ProtosModuleKey.source("m")).orElseThrow().state());
             assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(module.readLocalSlot("count").orElseThrow()));
             assertEquals(String.valueOf("7"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(module.readLocalSlot("value").orElseThrow()));
             assertEquals(1, resolver.loads("m"));
@@ -169,10 +169,10 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             assertEquals(1, resolver.loads("b"));
             assertEquals(
                     ProtosActorModuleState.InitializationState.READY,
-                    state.lookup(new ProtosModuleKey("a")).orElseThrow().state());
+                    state.lookup(ProtosModuleKey.source("a")).orElseThrow().state());
             assertEquals(
                     ProtosActorModuleState.InitializationState.READY,
-                    state.lookup(new ProtosModuleKey("b")).orElseThrow().state());
+                    state.lookup(ProtosModuleKey.source("b")).orElseThrow().state());
         }
 
         System.out.println("PERF006_B6A5_INITIALIZING_CYCLE_EXACT_INSTANCE=PASS");
@@ -199,7 +199,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.FAILED, failed.state());
             assertTrue(failed.failure().isPresent());
-            assertTrue(state.lookup(new ProtosModuleKey("retry")).isEmpty());
+            assertTrue(state.lookup(ProtosModuleKey.source("retry")).isEmpty());
             assertEquals(1, resolver.loads("retry"));
 
             ProtosActivation retryActivation = activation(prelude, domain, state);
@@ -220,7 +220,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             assertEquals(2, resolver.loads("retry"));
             assertEquals(
                     ProtosActorModuleState.InitializationState.READY,
-                    state.lookup(new ProtosModuleKey("retry")).orElseThrow().state());
+                    state.lookup(ProtosModuleKey.source("retry")).orElseThrow().state());
         }
 
         System.out.println("PERF006_B6A5_TERMINAL_FAILURE_EXACT_RECORD_EVICTION=PASS");
@@ -264,7 +264,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.SUSPENDED, cancelled.state());
             ProtosActorModuleState.ModuleRecord active =
-                    state.lookup(new ProtosModuleKey("cancel")).orElseThrow();
+                    state.lookup(ProtosModuleKey.source("cancel")).orElseThrow();
             ProtosObjectValue firstInstance = active.instance();
             ProtosFutureValue firstFuture = injectedFuture.get();
             assertTrue(firstFuture != null, "first module attempt must own an injected Future");
@@ -278,7 +278,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
                 assertTrue(domain.dispatchOne());
                 assertTrue(++cancellationDispatches <= 3);
             }
-            assertTrue(state.lookup(new ProtosModuleKey("cancel")).isEmpty());
+            assertTrue(state.lookup(ProtosModuleKey.source("cancel")).isEmpty());
             assertEquals(1, resolver.loads("cancel"));
 
             ProtosActivation retryActivation = activation(prelude, domain, state);
@@ -308,7 +308,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             assertEquals(String.valueOf("11"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(recovered.readLocalSlot("value").orElseThrow()));
             assertEquals(
                     ProtosActorModuleState.InitializationState.READY,
-                    state.lookup(new ProtosModuleKey("cancel")).orElseThrow().state());
+                    state.lookup(ProtosModuleKey.source("cancel")).orElseThrow().state());
         }
 
         System.out.println("PERF006_B6A5_CANCELLATION_EXACT_RECORD_EVICTION=PASS");
@@ -443,7 +443,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             if (!sources.containsKey(exactSpecifier)) {
                 throw new java.io.IOException("not found");
             }
-            return new ProtosModuleKey(exactSpecifier);
+            return ProtosModuleKey.source(exactSpecifier);
         }
 
         @Override

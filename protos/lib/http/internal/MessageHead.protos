@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal HTTP/1.1 wire helpers for the future std:http/Server driver (D215,
+//! Internal HTTP/1.1 wire helpers for the future std:http/server driver (D215,
 //! LIB025-A). This module is an unpublished implementation artifact, not an
 //! approved Standard Library API. It performs no I/O and owns no authority.
 //! Directional server rules live here; the generic byte, token, field-line,
 //! Host, and URI syntax is shared through MessageSyntax.
 
-MessageSyntax: import("std:http/internal/MessageSyntax")
+MessageSyntax: import("./MessageSyntax.protos")
 
 /// Answers a stateful parser whose feed(bytes, offset, length) consumes one
 /// slice of a request head and answers {state, consumed, head, failure}. The

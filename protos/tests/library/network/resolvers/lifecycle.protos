@@ -18,9 +18,9 @@
 // after close, cut-over of pending lookups) is covered by
 // ProtosResolverLookupFlowTest.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Resolvers: import("std:network/Resolvers")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Resolvers: import("std:network/resolvers")
 Resolver: Resolvers.Resolver
 ResolutionError: Resolvers.ResolutionError
 

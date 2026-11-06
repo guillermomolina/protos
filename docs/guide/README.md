@@ -139,21 +139,21 @@ language-teaching progression under DOC001.
 
 - [Standard Library overview](library/README.md) — importing `std:` modules
   and Native/JVM behavior.
-- [Regular expressions](library/regex.md) — `std:regex/Regex`.
+- [Regular expressions](library/regex.md) — `std:regex/regex`.
 - [Dates, times, and durations](library/datetime.md) — `std:datetime/*`.
 - [Structured logging](library/logging.md) — `std:logging/*`.
 - [Text styling and encodings](library/text.md) — `std:text/*`.
-- [Semantic versions](library/semver.md) — `std:semver/SemVer`.
-- [HTTP/1.1](library/http.md) — `std:http/Server`, `std:http/Host`,
-  `std:http/Client`, `std:http/Router`, and `std:http/UrlClient`, with their
+- [Semantic versions](library/semver.md) — `std:semver/sem_ver`.
+- [HTTP/1.1](library/http.md) — `std:http/server`, `std:http/host`,
+  `std:http/client`, `std:http/router`, and `std:http/url_client`, with their
   Network authority and lifetime rules.
 - [Explicit networking and name resolution](library/networking.md) —
-  `network`, `std:network/Resolvers`, `IpAddress`, and `IpEndpoint`.
-- [TLS client](library/tls.md) — `std:tls/Client`, explicit trust, and
+  `network`, `std:network/resolvers`, `IpAddress`, and `IpEndpoint`.
+- [TLS client](library/tls.md) — `std:tls/client`, explicit trust, and
   reference identity.
-- [Vectors and matrices](library/linear-algebra.md) — `std:math/LinearAlgebra`.
+- [Vectors and matrices](library/linear-algebra.md) — `std:math/linear_algebra`.
 - [Explicit foreign operations](library/interop.md) — `std:interop`.
-- [Numeric functions](library/README.md) — `std:math/Math` and `std:math/Integer`;
+- [Numeric functions](library/README.md) — `std:math/math` and `std:math/integer`;
   see also [numeric values](05-values-identity-equality-and-collections.md).
 - [Runtime metadata](library/runtime.md) — `std:runtime` and its four
   portable String fields.

@@ -158,7 +158,7 @@ final class ProtosStandardPolyglotEmbeddingTest {
     @Test
     void standaloneEntriesAreDistinctAndImportableModulesAreCached() {
         try (Context context = builder().build()) {
-            Source same = Source.create(ProtosLanguage.ID, "m: import(\"std:test/Assertions\")\n0");
+            Source same = Source.create(ProtosLanguage.ID, "m: import(\"std:test/assertions\")\n0");
             context.eval(same);
             ProtosObjectValue firstContext = selected(context);
             Object firstModule = firstContext.readLocalSlot("m").orElseThrow();
@@ -175,7 +175,7 @@ final class ProtosStandardPolyglotEmbeddingTest {
                             .processForTesting()
                             .rootActorForRuntime()
                             .moduleState()
-                            .lookup(new ProtosModuleKey("std:test/Assertions"))
+                            .lookup(ProtosModuleKey.module("std:test/assertions"))
                             .isPresent());
         }
     }

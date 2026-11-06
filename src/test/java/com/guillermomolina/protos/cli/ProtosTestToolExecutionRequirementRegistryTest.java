@@ -296,7 +296,7 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
                         TOOL_ROOT.resolveSibling("shared"),
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        return new Fixture(prelude, prelude.newModuleActivation());
+        return new Fixture(prelude, com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 
     private record Fixture(ProtosPrelude prelude, ProtosActivation activation) {}

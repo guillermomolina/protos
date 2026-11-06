@@ -77,7 +77,7 @@ final class ProtosTestToolFloatBitsParserTest {
                                 STANDARD_LIBRARY));
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         Path fixture = Path.of("protos", "tests", "tooling", file);
         return com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(

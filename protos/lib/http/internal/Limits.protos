@@ -13,8 +13,8 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal HTTP limit capture (HTTP.md §10) shared by std:http/Server
-//! admission and std:http/Host construction (§15.2), so that both validate
+//! Internal HTTP limit capture (HTTP.md §10) shared by std:http/server
+//! admission and std:http/host construction (§15.2), so that both validate
 //! one limits object by the same rule. This module is an unpublished
 //! implementation artifact, not an approved Standard Library API.
 

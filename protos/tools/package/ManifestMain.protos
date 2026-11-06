@@ -14,7 +14,7 @@
 // the specific language governing rights and limitations under the License.
 
 projectFilesystem: filesystem
-ManifestCommand: import("self:ManifestCommand")
+ManifestCommand: import("./ManifestCommand.protos")
 writer: TextWriter(process.stdout(), process.stdoutEncoding())
 errorWriter: TextWriter(process.stderr(), process.stderrEncoding())
 ManifestCommand.run(projectFilesystem, writer, errorWriter)

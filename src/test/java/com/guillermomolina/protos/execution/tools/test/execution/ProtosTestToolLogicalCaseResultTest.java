@@ -63,7 +63,7 @@ final class ProtosTestToolLogicalCaseResultTest {
                         Files.readString(
                                 FIXTURE,
                                 StandardCharsets.UTF_8),
-                        prelude.newModuleActivation());
+                        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
 
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,

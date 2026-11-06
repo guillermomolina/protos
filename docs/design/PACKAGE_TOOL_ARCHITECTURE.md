@@ -201,15 +201,15 @@ language mechanisms and explicit capabilities.
 This section records reusable mechanism boundaries without turning every reusable
 component into a public library or a separate roadmap item.
 
-### TOML front-end — Standard Library `std:toml/TOML`
+### TOML front-end — Standard Library `std:toml/toml`
 
 D087, as amended by the project owner on 2026-10-06 after AUD017, selects exactly
-one TOML implementation: the Standard Library module `std:toml/TOML`. I079
+one TOML implementation: the Standard Library module `std:toml/toml`. I079
 retired the former private bundled-tool TOML 1.0 engine and its Package Tool
 adapters.
 
 ```text
-std:toml/TOML  (one parser; TOML 1.1 by default, TOML 1.0 on request)
+std:toml/toml  (one parser; TOML 1.1 by default, TOML 1.0 on request)
         |
         +--> Package Tool ManifestSchemaV1      parseDialect(text, "1.0")
         +--> Test Tool D077 requirements/catalog parseDialect(text, "1.0")
@@ -235,7 +235,7 @@ runtime, never on project package resolution. Bundled-tool resolution delegates
 ### Semantic Versioning core
 
 LIB012-0 / GitHub #481 ratified Candidate A′ on 2026-09-13: the public reusable
-Semantic Versioning kernel is `std:semver/SemVer`, strict SemVer 2.0.0 Version
+Semantic Versioning kernel is `std:semver/sem_ver`, strict SemVer 2.0.0 Version
 semantics only. Range/Requirement syntax and Package Tool resolution policy stay
 outside the initial library contract.
 
@@ -246,12 +246,12 @@ The package `ReleaseVersion` contract intentionally narrows SemVer 2.0.0 to:
 MAJOR.MINOR.PATCH[-PRERELEASE]
 ```
 
-and rejects build metadata. Since LIB012-C, `std:semver/SemVer` owns the general
+and rejects build metadata. Since LIB012-C, `std:semver/sem_ver` owns the general
 SemVer parser and precedence mechanism, and Package Tool keeps only a thin
 `ReleaseVersion` policy layer (`protos/tools/package/ReleaseVersion.protos`) that
 rejects build metadata and projects the generic value onto the Package record
 shape consumed by lock rendering and the ExecutionPlanV2 host boundary. The
-Package Tool imports `std:semver/SemVer` from the toolchain-installed Standard
+Package Tool imports `std:semver/sem_ver` from the toolchain-installed Standard
 Library, never through project package resolution.
 
 Likewise, these remain Package Tool policy unless an independent use case proves

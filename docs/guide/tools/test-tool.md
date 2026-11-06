@@ -348,13 +348,13 @@ exit status; they only reduce which Cases run.
 
 Many current corpora, including the Standard Library suites under
 `protos/tests/library/`, are *suite-native*: each source declares its own Cases
-with `std:test/Test` and `std:test/Assertions`, and the Test Tool discovers them
+with `std:test/test` and `std:test/assertions`, and the Test Tool discovers them
 from the source's `tests` Array:
 
 ```protos
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-SemVer: import("std:semver/SemVer")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+SemVer: import("std:semver/sem_ver")
 
 tests: [
     Test("build metadata is ignored by precedence", () => {

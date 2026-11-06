@@ -337,6 +337,8 @@ object[index]: value     // syntax error
 ```
 
 Indexed mutation is expressed only through the indexing protocol (see Indexed Access Syntax): `object[index] = value` sends `atPut(index, value)`. The create-versus-modify distinction of `:` versus `=` belongs to the slot model and does not apply to indexing.
+
+Module publication (D242, `MODULES.md`) is this ordinary slot creation and nothing more: `this.Name: value` in a MODULE initializer creates a local slot of the public module object under exactly the rules above, including duplicate-slot and closed/frozen-object failures. There is no special export operation, export flag, or export metadata on a slot or object, and a published value keeps its identity and delegation parent.
 ## 20. Object Composition
 
 The core supports only one delegation parent. Horizontal reuse is performed through **object composition**.

@@ -205,7 +205,7 @@ final class ProtosTerminationCleanupCloseTest {
 
     private static final String PROGRAM =
             """
-            IpAddress: import("std:network/IpAddresses").IpAddress
+            IpAddress: import("std:network/ip_addresses").IpAddress
             listener: null
             holder: null
             open: () => {

@@ -126,7 +126,7 @@ activation);
 
     private static Fixture fixture() {
         ProtosPrelude prelude = SharedPrelude.INSTANCE;
-        return new Fixture(prelude, prelude.newModuleActivation());
+        return new Fixture(prelude, com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 
     private static void installFilesystem(

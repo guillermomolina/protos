@@ -32,18 +32,18 @@ socket-local deadline/timeout APIs are outside this revision.
 
 `Network` owns explicit TCP acquisition, numeric endpoints, and network
 authority. The optional Standard Library HTTP/1.1 single-request server
-`std:http/Server` is owned by `HTTP.md`. It is built only on the existing
+`std:http/server` is owned by `HTTP.md`. It is built only on the existing
 `ByteReadable` / `ByteWritable` (and `Closable`) capabilities, which a
 `TcpConnection` provides; it adds no `Network` operation and does not change TCP
 authority, permissions, or transferability. The optional continuous host
-`std:http/Host` is likewise owned by `HTTP.md` §15: it consumes a caller-supplied
+`std:http/host` is likewise owned by `HTTP.md` §15: it consumes a caller-supplied
 `TcpListener` and the `TcpAcceptor` delegation of §11, acquires no `Network`, and
 adds no `Network` operation. The optional single-exchange client
-`std:http/Client` is owned by `HTTP.md` §16: it accepts an already-supplied
+`std:http/client` is owned by `HTTP.md` §16: it accepts an already-supplied
 duplex, the application acquires any connection explicitly, for example with
 `connectTcp`, and the Client performs no acquisition, resolution, or other
 implicit network use; it adds no `Network` operation or implicit authority.
-The optional client TLS facility `std:tls/Client` is owned by `TLS.md`: it
+The optional client TLS facility `std:tls/client` is owned by `TLS.md`: it
 upgrades an already-supplied duplex, takes its reference identity as data
 (including a recognized `IpAddress`, §2), and adds no `Network` operation,
 acquisition or implicit authority.
@@ -211,12 +211,12 @@ mutable state, and are the exact objects referred to as canonical in sections 2
 and 3. They are published as:
 
 ```text
-std:network/IpAddresses.IpAddress   // the canonical IpAddress
-std:network/IpEndpoints.IpEndpoint  // the canonical IpEndpoint
+std:network/ip_addresses.IpAddress   // the canonical IpAddress
+std:network/ip_endpoints.IpEndpoint  // the canonical IpEndpoint
 ```
 
-The `std:network/IpAddresses` module instance contains the local slot
-`IpAddress`, and the `std:network/IpEndpoints` module instance contains the
+The `std:network/ip_addresses` module instance contains the local slot
+`IpAddress`, and the `std:network/ip_endpoints` module instance contains the
 local slot `IpEndpoint`, from the creation of that module's `moduleContext`,
 before its body executes (see the cache-before-execution steps in
 `spec/semantics/MODULES.md`). The slot value is the canonical family itself, not
@@ -703,7 +703,7 @@ introduce hostname-based TCP connection acquisition (§14.10).
 
 ### 14.1 Module placement
 
-The optional Standard Library module `std:network/Resolvers` exports exactly
+The optional Standard Library module `std:network/resolvers` exports exactly
 two members:
 
 ```text
@@ -780,7 +780,7 @@ cases; reserved hyphen patterns other than a valid A-label; empty labels
 (including an empty name, a lone root dot, or consecutive dots); labels with a
 leading or trailing hyphen; overlong labels and names; and numeric IPv4/IPv6
 address text passed as a String (an admitted name that
-`std:network/IpAddresses.parse` accepts as numeric address text). Numeric addresses are already represented by
+`std:network/ip_addresses.parse` accepts as numeric address text). Numeric addresses are already represented by
 `IpAddress`, so numeric-looking text is never resolved implicitly.
 
 An admitted name is normalized to one lowercase absolute DNS name. The
@@ -907,4 +907,4 @@ remains the independent responsibility of the `Network` policy domain.
 The semantics do not expose or require a particular resolver library,
 operating-system API, thread pool size, or cache. A Process that never receives
 a Resolver grant must not initialize name-service machinery, and importing
-`std:network/Resolvers` alone never initializes it.
+`std:network/resolvers` alone never initializes it.

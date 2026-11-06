@@ -128,7 +128,7 @@ class ProtosCoreBootstrapTest {
         assertTrue(prelude.ipAddressPrototypeForRuntime().isFrozen());
         assertTrue(prelude.ipEndpointPrototypeForRuntime().isFrozen());
         // D235-B1-F: the Prelude range prototypes are frozen, source-backed and are also the
-        // shared std:collections/Range standard members. D236-B1 / D239-C1: each owns a source
+        // shared std:collections/range standard members. D236-B1 / D239-C1: each owns a source
         // construct and inherits Object.call.
         for (String name : java.util.List.of("Range", "InvertedRange")) {
             ProtosObjectValue range =

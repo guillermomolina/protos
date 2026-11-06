@@ -85,14 +85,14 @@ requires an explicitly provisioned bootstrap-local
 `network` capability and the support module `hello-handler.protos` installed as
 `app:hello`; `ProtosHttpLearningMaterialIntegrationTest` runs it in a Java
 Polyglot embedding with socket access. `04-router-dispatch.protos`
-(`std:http/Router`) is a standalone-CLI lesson: the compiled Router is an
+(`std:http/router`) is a standalone-CLI lesson: the compiled Router is an
 ordinary handler that needs no duplex and no authority. The
 [HTTP guide](../../docs/guide/library/http.md) explains all five HTTP modules.
 
 After the HTTP progression, the next advanced workflow reaches real hosts and
 is not a tutorial: the manual cookbook examples
 [`http-url-client.protos`](../examples/io/http-url-client.protos) (one HTTPS
-request through `std:http/UrlClient`),
+request through `std:http/url_client`),
 [`hostname-resolution.protos`](../examples/io/hostname-resolution.protos) and
 [`tls-client-over-tcp.protos`](../examples/io/tls-client-over-tcp.protos) need a
 Java host that grants `network` and `resolver`. Read the
@@ -101,6 +101,6 @@ Java host that grants `network` and `resolver`. Read the
 
 The linear-algebra progression is entirely standalone-CLI:
 `01-vector-operations.protos`, `02-matrix-operations.protos` and
-`03-complex-and-shapes.protos` use `std:math/LinearAlgebra` and need no host
+`03-complex-and-shapes.protos` use `std:math/linear_algebra` and need no host
 capability. The [linear-algebra guide](../../docs/guide/library/linear-algebra.md)
 is the reference.

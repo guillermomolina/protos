@@ -6,7 +6,7 @@
 // the upstream MIT license retained at ../upstream/v2.2.0/LICENSE.
 
 Harness: import("./Harness.protos")
-Test: import("std:test/Test")
+Test: import("std:test/test")
 
 tests: [
     Test("valid/array/array", () => {

@@ -8,7 +8,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.oracle.truffle.api.source.Source;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -28,42 +27,8 @@ import java.util.function.Consumer;
  * inert plan value for the later F2E4 defensive-detach boundary.
  */
 final class ProtosExternalPackagePlanningPreflight {
-    private static final String BUILD_V2_SOURCE =
-            "Plan: import(\"self:ExecutionPlan\")\n"
-                    + "Version: import(\"self:ReleaseVersion\")\n"
-                    + "fail: () => { Error().signal() }\n"
-                    + "verified: Array()\n"
-                    + "verifiedExternalInputs.each((input) => {\n"
-                    + "    ref: null\n"
-                    + "    (input.kind == \"registry\").ifTrue(() => {\n"
-                    + "        ref = {\n"
-                    + "            kind: \"registry\"\n"
-                    + "            packageId: input.packageId\n"
-                    + "            version: Version.parse(input.exact)\n"
-                    + "        }\n"
-                    + "    })\n"
-                    + "    (input.kind == \"git\").ifTrue(() => {\n"
-                    + "        ref = {\n"
-                    + "            kind: \"git\"\n"
-                    + "            packageId: input.packageId\n"
-                    + "            revision: input.exact\n"
-                    + "        }\n"
-                    + "    })\n"
-                    + "    (ref === null).ifTrue(() => { fail() })\n"
-                    + "    verified = Array(\n"
-                    + "        ...verified,\n"
-                    + "        {\n"
-                    + "            ref: ref\n"
-                    + "            content: {\n"
-                    + "                method: input.contentMethod\n"
-                    + "                algorithm: input.contentAlgorithm\n"
-                    + "                hex: input.contentHex\n"
-                    + "            }\n"
-                    + "            filesystem: input.filesystem\n"
-                    + "        }\n"
-                    + "    )\n"
-                    + "})\n"
-                    + "Plan.buildV2FromVerifiedCaptures(projectTreeFilesystem, verified)\n";
+    /** D242: exact bundled Package Tool SOURCE entry {@code ExternalPlanning.protos}. */
+    private static final String ENTRY = "ExternalPlanning";
 
     record VerifiedExternalPackage(
             String kind,
@@ -232,7 +197,7 @@ final class ProtosExternalPackagePlanningPreflight {
             ProtosProcessRuntime process = bootstrap.process();
 
             try {
-                ProtosPolyglotProcessContext processContext =
+                // The hosted Process context executes the explicit SOURCE entry below.
                         runtimeHost.hostProcess(
                                 process,
                                 InputStream.nullInputStream(),
@@ -243,15 +208,12 @@ final class ProtosExternalPackagePlanningPreflight {
                 bindProjectFilesystem(toolPrelude, bootstrap, backend);
                 bindBorrowedExternalInputs(toolPrelude, bootstrap, borrowed);
 
-                Source source =
-                        Source.newBuilder(
-                                        ProtosLanguage.ID,
-                                        BUILD_V2_SOURCE,
-                                        "<external-package-planning-preflight>")
-                                .mimeType(ProtosLanguage.MIME_TYPE)
-                                .build();
                 ProtosExecutionOutcome outcome =
-                        processContext.execute(source, bootstrap.activation());
+                        ProtosCanonicalInitialModuleExecution.execute(
+                                toolPrelude,
+                                toolResolver,
+                                toolResolver.entryModule(ENTRY),
+                                bootstrap.activation());
                 if (outcome.state() != ProtosExecutionOutcome.State.COMPLETED) {
                     throw new IOException(
                             "external Package Tool planning preflight did not complete normally");

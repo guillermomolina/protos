@@ -83,7 +83,7 @@ public record ProtosProjectBinding(
             if (!source.source().startsWith(packageRoot.directory())) {
                 throw new IllegalArgumentException("ProjectBinding source escaped its package root");
             }
-            String identity = source.packageId() + "\u0000" + source.logicalModule();
+            String identity = source.kind() + "\u0000" + source.packageId() + "\u0000" + source.logicalModule();
             if (!sourceIdentities.add(identity)) {
                 throw new IllegalArgumentException("duplicate ProjectBinding source identity");
             }
@@ -98,8 +98,11 @@ public record ProtosProjectBinding(
         }
     }
 
-    public record Source(String packageId, String logicalModule, Path source) {
+    public record Source(Kind kind, String packageId, String logicalModule, Path source) {
+        public enum Kind { MODULE, SOURCE }
+
         public Source {
+            Objects.requireNonNull(kind, "kind");
             packageId = requireText(packageId, "packageId");
             logicalModule = requireText(logicalModule, "logicalModule");
             source = requireCanonicalAbsolute(source, "source");

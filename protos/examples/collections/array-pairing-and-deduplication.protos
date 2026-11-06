@@ -11,7 +11,7 @@
 
 // Pair ordered item names with available stock counts; unpaired tails are
 // intentionally ignored, and the source Arrays are unchanged.
-Arrays: import("std:collections/Array")
+Arrays: import("std:collections/array")
 
 items: Array("red", "blue", "red", "gold")
 counts: Array(5, 2, 9)

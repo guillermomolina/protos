@@ -38,7 +38,7 @@ final class ProtosTestToolResourceCatalogOptionTest {
     void absenceSelectsNoCatalogSource() throws Exception {
         ProtosExecutionOutcome outcome =
                 execute(
-                        "Options: import(\"self:Options\")\n"
+                        "Options: import(\"./Options.protos\")\n"
                                 + "Options.resourceCatalogPath(Array(\"test\"))\n");
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
@@ -49,7 +49,7 @@ final class ProtosTestToolResourceCatalogOptionTest {
     void oneOccurrenceReturnsTheExactPathToken() throws Exception {
         ProtosExecutionOutcome outcome =
                 execute(
-                        "Options: import(\"self:Options\")\n"
+                        "Options: import(\"./Options.protos\")\n"
                                 + "Options.resourceCatalogPath("
                                 + "Array(\"test\", \"--resource-catalog\", \"../env/catalog.toml\"))\n");
 
@@ -63,7 +63,7 @@ final class ProtosTestToolResourceCatalogOptionTest {
     void selectedPathTokenIsLiteralEvenWhenItLooksLikeAnOption() throws Exception {
         ProtosExecutionOutcome outcome =
                 execute(
-                        "Options: import(\"self:Options\")\n"
+                        "Options: import(\"./Options.protos\")\n"
                                 + "Options.resourceCatalogPath("
                                 + "Array(\"test\", \"--resource-catalog\", \"--resource-catalog\"))\n");
 
@@ -84,7 +84,7 @@ final class ProtosTestToolResourceCatalogOptionTest {
         for (String expression : expressions) {
             ProtosExecutionOutcome outcome =
                     execute(
-                            "Options: import(\"self:Options\")\n"
+                            "Options: import(\"./Options.protos\")\n"
                                     + "Options.resourceCatalogPath("
                                     + expression
                                     + ")\n");
@@ -99,7 +99,7 @@ final class ProtosTestToolResourceCatalogOptionTest {
     void resourceCatalogSelectionAndD069JobsRemainOrthogonal() throws Exception {
         ProtosExecutionOutcome outcome =
                 execute(
-                        "Options: import(\"self:Options\")\n"
+                        "Options: import(\"./Options.protos\")\n"
                                 + "arguments: Array("
                                 + "\"test\", "
                                 + "\"--jobs\", \"3\", "
@@ -125,7 +125,7 @@ final class ProtosTestToolResourceCatalogOptionTest {
             throws Exception {
         ProtosExecutionOutcome outcome =
                 execute(
-                        "Options: import(\"self:Options\")\n"
+                        "Options: import(\"./Options.protos\")\n"
                                 + "arguments: Array("
                                 + "\"test\", "
                                 + "\"--resource-catalog\", \"--jobs\")\n"
@@ -150,7 +150,7 @@ final class ProtosTestToolResourceCatalogOptionTest {
             throws Exception {
         ProtosExecutionOutcome outcome =
                 execute(
-                        "Options: import(\"self:Options\")\n"
+                        "Options: import(\"./Options.protos\")\n"
                                 + "arguments: Array("
                                 + "\"test\", "
                                 + "\"--resource-catalog\", \"--resource-catalog\")\n"
@@ -180,6 +180,6 @@ final class ProtosTestToolResourceCatalogOptionTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         return com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
 source,
-prelude.newModuleActivation());
+com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 }

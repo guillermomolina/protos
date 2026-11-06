@@ -14,12 +14,12 @@
 // the specific language governing rights and limitations under the License.
 
 //! Internal HTTP/1.1 request-head preparation and response-head parsing of
-//! std:http/Client (D218-B, HTTP.md §16.4-§16.6). This module is an
+//! std:http/client (D218-B, HTTP.md §16.4-§16.6). This module is an
 //! unpublished implementation artifact, not an approved Standard Library API.
 //! It performs no I/O and owns no authority. Its two operations are
 //! directional and independent of the server's request parser.
 
-MessageSyntax: import("std:http/internal/MessageSyntax")
+MessageSyntax: import("./MessageSyntax.protos")
 
 requestSlots: ["method", "target", "headers", "body"]
 

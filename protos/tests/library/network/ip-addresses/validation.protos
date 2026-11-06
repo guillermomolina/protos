@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("ipv4 invalid", () => {
         tool009LegacyCase: () => {
-            IpAddresses: import("std:network/IpAddresses")
+            IpAddresses: import("std:network/ip_addresses")
 
             // Shape/cardinality.
             Assertions.signals(Error, () => { IpAddresses.parse("") })
@@ -61,7 +61,7 @@ tests: [
     }),
     Test("ipv6 invalid", () => {
         tool009LegacyCase: () => {
-            IpAddresses: import("std:network/IpAddresses")
+            IpAddresses: import("std:network/ip_addresses")
 
             Assertions.signals(Error, () => { IpAddresses.parse(":::") })
             Assertions.signals(Error, () => { IpAddresses.parse("1::2::3") })
@@ -94,7 +94,7 @@ tests: [
     }),
     Test("arity rejection", () => {
         tool009LegacyCase: () => {
-            IpAddresses: import("std:network/IpAddresses")
+            IpAddresses: import("std:network/ip_addresses")
 
             Assertions.signals(Error, () => { IpAddresses.v4(1, 2, 3) })
             Assertions.signals(Error, () => { IpAddresses.v6(1, 2, 3, 4, 5, 6, 7) })
@@ -105,7 +105,7 @@ tests: [
     }),
     Test("domain rejection", () => {
         tool009LegacyCase: () => {
-            IpAddresses: import("std:network/IpAddresses")
+            IpAddresses: import("std:network/ip_addresses")
 
             Assertions.signals(Error, () => { IpAddresses.v4(-1, 0, 0, 0) })
             Assertions.signals(Error, () => { IpAddresses.v4(0, 256, 0, 0) })
@@ -137,7 +137,7 @@ tests: [
         Assertions.require(tool009LegacyCase())
     }),
     Test("octet construction rejects lookalike and out of range components", () => {
-        IpAddresses: import("std:network/IpAddresses")
+        IpAddresses: import("std:network/ip_addresses")
 
         Assertions.signals(Error, () => {
             IpAddresses.v4(0, 0, 0, 256)

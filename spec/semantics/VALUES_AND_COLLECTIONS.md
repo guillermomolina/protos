@@ -901,13 +901,13 @@ iteration snapshots.
 The standard Array prototype defines no parallel algorithm selectors
 (`parallelMap`, `parallelFilter`, `parallelFindIndex`, `parallelReduce`,
 `parallelSort`, `parallelEach`, or similar). Parallel Array algorithms are
-Standard Library facilities of `std:collections/Array` built on the isolated
+Standard Library facilities of `std:collections/array` built on the isolated
 parallel substrate; their Core placement boundary is owned by
 `../concurrency/PARALLEL_EXECUTION.md` §71.6 and §71.6E.
 
 ## Standard Library Array copy/edit operations (D213 / LIB023-A)
 
-The Standard Library module `std:collections/Array` owns the following
+The Standard Library module `std:collections/array` owns the following
 ordinary functions. They are Standard Library facilities composed from the
 standard Array construction, spread, size, and indexed-access semantics above;
 they are not Core Array selectors.
@@ -984,7 +984,7 @@ introduce no syntax, no Core selector, and no new public module.
 
 ## Standard Library Array queries and prefix/suffix operations (D213 / LIB023-B)
 
-The existing `std:collections/Array` module additionally publishes the
+The existing `std:collections/array` module additionally publishes the
 following ordinary functions. They do not add Core Array selectors, change the
 fixed-size/dense Core Array model, or modify existing parallel algorithms.
 
@@ -1046,7 +1046,7 @@ binding and are ignored.
 
 ## Standard Library Array bulk transformations (D213 / LIB023-C)
 
-The Standard Library module `std:collections/Array` also publishes four
+The Standard Library module `std:collections/array` also publishes four
 ordinary functions, not Core Array selectors:
 
 ```text
@@ -1089,7 +1089,7 @@ mutated by the library operations themselves.
   decisions are retained, not recomputed while filling the buckets.
 - `distinct(array)` retains the first occurrence of each equivalence class
   in encounter order, preserving the selected original element references.
-  Membership uses the existing ordinary `std:collections/Set` semantics
+  Membership uses the existing ordinary `std:collections/set` semantics
   (normal `Map` hashing and customizable `==`), not semantic identity `===`,
   adjacent-only deduplication or a new equality strategy. Existing Set/Map
   hash-coherence requirements, user-defined hash/equality effects and errors,
@@ -1461,22 +1461,22 @@ unchanged: a nearer `Range: custom` creation shadows the prelude binding, while
 a bare `Range = custom` whose only destination is the frozen prelude binding
 signals an assignment error.
 
-The importable Standard Library module `std:collections/Range` remains a
+The importable Standard Library module `std:collections/range` remains a
 source-backed compatibility module. Its module instance contains exactly two
 public slots, `Range` and `InvertedRange`, from the creation of its
 `moduleContext`, before its body executes (as for the canonical families of
-`std:network/IpAddresses`, `../io/NETWORK.md`). Their initial values are the
+`std:network/ip_addresses`, `../io/NETWORK.md`). Their initial values are the
 same canonical objects published by the prelude, not copies or wrappers:
 
 ```protos
-Ranges: import("std:collections/Range")
+Ranges: import("std:collections/range")
 
 Range === Ranges.Range                  // true
 InvertedRange === Ranges.InvertedRange  // true
 ```
 
 Module instances remain Actor-local under the ordinary module rules: distinct
-Actors obtain distinct `std:collections/Range` instances whose initial members
+Actors obtain distinct `std:collections/range` instances whose initial members
 are identical. The module's own slots are ordinary mutable module slots;
 rebinding `Ranges.Range` changes only that Actor-local slot and never the
 canonical prototype or the prelude binding. The module itself is not invocable
@@ -1531,7 +1531,7 @@ inclusive down to `stop` exclusive.
 
 The names `Range` and `InvertedRange` referenced inside the canonical
 `construct` methods resolve lexically to the canonical frozen Core prototypes, never to
-the mutable members of `std:collections/Range` or to any nearer binding at the
+the mutable members of `std:collections/range` or to any nearer binding at the
 call site. Arguments are evaluated exactly once, left to right, by ordinary
 invocation before `construct` runs, including when construction is subsequently
 rejected; their errors and control transfers propagate ordinarily.
@@ -1627,7 +1627,7 @@ Core still defines no `Vector` or `Matrix` prototype (**Numeric Model**).
 
 ### Module and architecture
 
-The explicit Standard Library module `std:math/LinearAlgebra` exports the
+The explicit Standard Library module `std:math/linear_algebra` exports the
 members `Vector` and `Matrix`. They are available only through an explicit
 import of that module; no Prelude or ambient binding exists.
 
@@ -1856,7 +1856,7 @@ Complex values are produced by the standard `Complex(real, imaginary)` factory
 and the standard component selectors (**Standard Complex construction and
 components**), by standard Complex arithmetic (**Standard Complex
 arithmetic**), and by the Standard Library function `sqrt` (**Standard Library
-`std:math/Math`**). This revision defines no imaginary literal and no Complex
+`std:math/math`**). This revision defines no imaginary literal and no Complex
 ordering. The standard `Integer(...)` and `Float(...)` conversions do not admit a
 Complex argument. The recognition, identity, equality, hashing, and transfer
 rules of this specification apply to every Complex value, including one with a
@@ -1868,7 +1868,7 @@ are exactly the numeric rules of this section, never collection or linear-algebr
 rules, and no standard operation implicitly converts a Complex value to or from a
 collection. Core defines no `Real`, `Vector`, or `Matrix` prototype and no
 algebraic protocol hierarchy for Complex. D214 introduces Vector and Matrix only through
-the Standard Library module `std:math/LinearAlgebra` (**Standard Library Vector
+the Standard Library module `std:math/linear_algebra` (**Standard Library Vector
 and Matrix (D214-S1)**), not as Core prototypes.
 
 Core v0.1 defines no standard width-specific numeric semantic family, prototype, or
@@ -2511,13 +2511,13 @@ priority order with the real dividend contributing no imaginary terms:
 For example, `1.0 / C(+0.0, +0.0)` is `C(+Infinity, NaN)`, and
 `+0.0 / C(1.0, 1.0)` is `C(+0.0, -0.0)`.
 
-### Standard Library `std:math/Math`
+### Standard Library `std:math/math`
 
-The Standard Library module `std:math/Math` publishes the ordinary function
+The Standard Library module `std:math/math` publishes the ordinary function
 `sqrt(value)` as a local slot of its module instance, reachable only through an
-explicit import such as `Math: import("std:math/Math")`. `sqrt` is not a
+explicit import such as `Math: import("std:math/math")`. `sqrt` is not a
 reserved word, a grammar form, a Prelude binding, or a `Number` selector, and
-this revision defines no other standard member of `std:math/Math`.
+this revision defines no other standard member of `std:math/math`.
 
 `sqrt` is invoked through the ordinary call rules and requires exactly one
 argument that is a semantic Number; wrong arity or any other argument signals an

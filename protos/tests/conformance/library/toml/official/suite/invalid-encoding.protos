@@ -19,7 +19,7 @@
 //   invalid/encoding/utf16-bom
 
 Harness: import("./Harness.protos")
-Test: import("std:test/Test")
+Test: import("std:test/test")
 
 tests: [
     Test("invalid/encoding/ideographic-space", () => {

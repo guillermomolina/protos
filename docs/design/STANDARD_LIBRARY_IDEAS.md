@@ -94,8 +94,8 @@ Use one mathematical Standard Library domain and split modules by responsibility
 inside it:
 
 ```text
-std:math/Math
-std:math/Integer
+std:math/math
+std:math/integer
 ```
 
 Possible future modules, only after focused design, include:
@@ -113,13 +113,13 @@ Core numeric families and optional algorithms/data abstractions.
 Physical source placement would follow the existing Standard Library model:
 
 ```text
-protos/lib/math/Math.protos
-protos/lib/math/Integer.protos
+protos/lib/math/math/module.protos
+protos/lib/math/integer/module.protos
 ```
 
 The names above are exploratory module identities, not committed API.
 
-## `std:math/Integer` direction
+## `std:math/integer` direction
 
 This is the lowest-risk numeric library candidate because ordinary Core
 `Integer` is already exact and unbounded, and many useful algorithms can be
@@ -166,7 +166,7 @@ probabilistic result, accepted magnitude, worst-case cost, cancellation/progress
 expectations, and whether random input is involved. They should not be bundled
 into the first slice merely because arbitrary-precision storage already exists.
 
-## `std:math/Math` direction
+## `std:math/math` direction
 
 `Math` should contain mathematical functions rather than define numeric
 families. Candidate surface includes:
@@ -295,7 +295,7 @@ algorithm/version. Cryptographically secure or host-derived entropy crosses a
 resource/authority boundary and must not be introduced as ambient `Math.random()`.
 
 A future `std:random/...` design is therefore preferable to placing randomness in
-`std:math/Math`.
+`std:math/math`.
 
 ## Candidate Standard Library portfolio
 
@@ -316,7 +316,7 @@ before requiring a new runtime boundary:
 | `csv` | CSV parser/encoder | dialect policy, streaming composition, malformed-input errors |
 | `uri` | URI parsing, normalization, resolution | exact standards/profile and Unicode/percent-encoding rules |
 | `cli` | **Promoted: LIB011 / #428.** argument/option parsing and help generation | Candidate C′ ratified: explicit arguments + inspectable command spec -> lossless result; no hidden Process authority |
-| `semver` | **Promoted: LIB012 / #429; LIB012-0 / #481 A′ ratified.** strict Semantic Versioning value/parser/format/precedence | `std:semver/SemVer`; strict SemVer 2.0.0; build preserved; precedence ignores build; Range/Requirement deferred |
+| `semver` | **Promoted: LIB012 / #429; LIB012-0 / #481 A′ ratified.** strict Semantic Versioning value/parser/format/precedence | `std:semver/sem_ver`; strict SemVer 2.0.0; build preserved; precedence ignores build; Range/Requirement deferred |
 | `toml` | TOML parser/encoder and explicit data model | datetime/numeric mapping and duplicate-key rules |
 
 ### Candidates needing a deeper semantic/API audit
@@ -381,9 +381,9 @@ Do not reserve work-item identifiers while this remains exploratory. If the idea
 is promoted, prefer cost-aware slices rather than one broad "numeric library"
 implementation:
 
-1. focused `std:math/Integer` API audit and pure-Protos exact algorithms;
+1. focused `std:math/integer` API audit and pure-Protos exact algorithms;
 2. separate Float/transcendental quality and implementation-boundary design;
-3. `std:math/Math` only after that contract is closed;
+3. `std:math/math` only after that contract is closed;
 4. independent Rational/Decimal/Complex audits if real use cases justify them;
 5. independent bit/wrapping and random-domain designs.
 
@@ -410,8 +410,8 @@ DO NOT ADD
     std:numbers as a parallel numeric hierarchy/domain
 
 EXPLORE AS STANDARD LIBRARY
-    std:math/Integer
-    std:math/Math
+    std:math/integer
+    std:math/math
 
 DESIGN SEPARATELY BEFORE COMMITTING
     Rational
@@ -431,7 +431,7 @@ be satisfied without entropy or a native secret-bearing cryptographic boundary.
 bounded initial surface:
 
 ```text
-std:crypto/SHA256.digest(Bytes) -> Bytes
+std:crypto/sha256.digest(Bytes) -> Bytes
 ```
 
 `LIB006-A` closes the API/security/implementation-boundary design.

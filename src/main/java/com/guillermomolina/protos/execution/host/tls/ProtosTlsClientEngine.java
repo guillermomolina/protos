@@ -37,7 +37,7 @@ import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManager;
 
 /**
- * The private TLS record engine of {@code std:tls/Client} (D220–S12): a transport-neutral,
+ * The private TLS record engine of {@code std:tls/client} (D220–S12): a transport-neutral,
  * non-blocking driver of one client JSSE {@link SSLEngine}.
  *
  * <p>Ownership boundary. Everything portable is Protos (I130-B {@code lib/tls/}): argument and

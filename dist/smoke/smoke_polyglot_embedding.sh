@@ -73,7 +73,7 @@ case "$tmp_real/" in "$repo_real"/*) fail "smoke directory is inside repository 
 jar=$embed/protos.jar
 cp "$toolchain/lib/protos.jar" "$jar"
 cp "$toolchain"/lib/runtime/*.jar "$embed/runtime/"
-for entry in files sha256 lib/core/Context.protos lib/test/Assertions.protos; do
+for entry in files sha256 lib/core/Context.protos lib/test/assertions/module.protos; do
     unzip -l "$jar" "META-INF/resources/protos/core/$entry" >/dev/null 2>&1 ||
         fail "lib/protos.jar does not package Core resource entry: $entry"
 done

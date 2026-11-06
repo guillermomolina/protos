@@ -4,13 +4,13 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: Array(
     Test("array empty callbacks not inspected", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             mapped: Arrays.map(Array(), 42)
             filtered: Arrays.filter(Array(), 42)
             missing: Arrays.findIndex(Array(), 42)
@@ -25,7 +25,7 @@ tests: Array(
     }),
     Test("array results are open", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             mapped: Arrays.map(Array(1), (element) => {
                 element
@@ -67,7 +67,7 @@ tests: Array(
         Assertions.require(tool009LegacyCase())
     }),
     Test("array copy edit results from closed and frozen sources are open", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         closed: Array(1, 2)
         closed.close()
         frozen: Array(1, 2)

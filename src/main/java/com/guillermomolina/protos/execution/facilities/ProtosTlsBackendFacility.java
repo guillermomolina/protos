@@ -42,9 +42,9 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Private host bridge of {@code std:tls/Client} (D220–S12, I130-B).
+ * Private host bridge of {@code std:tls/client} (D220–S12, I130-B).
  *
- * <p>Every portable rule lives in Protos ({@code lib/tls/Client.protos} and {@code
+ * <p>Every portable rule lives in Protos ({@code lib/tls/client/module.protos} and {@code
  * lib/tls/internal/*.protos}): admission, options, trust descriptors and their bounds, trust
  * selection and the fail-closed sources, CA eligibility, reference-identity validation and
  * subjectAltName matching, SNI policy, the handshake Task, octet pumping and handshake accounting,
@@ -74,13 +74,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * </ul>
  *
  * <p>Like {@link ProtosHttpAsyncFacility}, the facility is a deferred standard initial member of
- * exactly {@code std:tls/Client}: it is created only when an Actor-local instance of that module
+ * exactly {@code std:tls/client}: it is created only when an Actor-local instance of that module
  * initializes, captured lexically by the module source, and its bootstrap slot removed. It retains
  * no Actor, Task, engine or trust state; each engine handle belongs to the Actor execution domain
  * that created it and rejects every other domain.
  */
 public final class ProtosTlsBackendFacility {
-    public static final ProtosModuleKey MODULE_KEY = new ProtosModuleKey("std:tls/Client");
+    public static final ProtosModuleKey MODULE_KEY = ProtosModuleKey.module("std:tls/client");
     public static final String BOOTSTRAP_SLOT = "_tlsBackendFacility";
 
     private ProtosTlsBackendFacility() {}

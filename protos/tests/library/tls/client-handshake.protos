@@ -19,10 +19,10 @@
 // identity, cancellation and borrowed/owning custody. Successful handshakes
 // against a real peer are covered by ProtosTlsClientIntegrationTest.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-tls: import("std:tls/Client")
-Errors: import("std:tls/internal/Errors")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+tls: import("std:tls/client")
+Errors: import("std:tls/internal/errors")
 
 // Bytes from lowercase hexadecimal text.
 hexBytes: (text) => {

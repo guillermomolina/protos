@@ -66,7 +66,7 @@ import org.junit.jupiter.api.Test;
  * Standard Library prototypes and never a production path.
  */
 final class ProtosI123CpuKernelEligibilityTest {
-    private static final String MODULE = "std:math/LinearAlgebra";
+    private static final String MODULE = "std:math/linear_algebra";
     private static final long SEED = 680123L;
     private static final int[][] SHAPES = {{1, 1, 1}, {2, 3, 4}, {4, 7, 5}, {16, 32, 16}, {32, 64, 32}};
     private static final int WARMUP_BATCHES = 25;

@@ -306,6 +306,13 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
                             null,
                             context,
                             declarationActivation.executionDomain());
+            // D242: the host selects the exact Discovery SOURCE identity explicitly and binds its
+            // Actor-local module instance; the snippet performs no ambient self: import.
+            context.createLocalSlot(
+                    "Discovery",
+                    ProtosModuleRuntime.loadCanonicalModuleThroughPreludeForRuntime(
+                            ProtosBundledToolModuleResolver.toolSourceKey("test", "Discovery"),
+                            projectionActivation));
 
             ProtosExecutionOutcome projection;
 
@@ -504,8 +511,6 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
         return Source.newBuilder(
                         ProtosLanguage.ID,
                         """
-                        Discovery: import("self:Discovery")
-
                         Discovery.projectionFromModule(
                             sourceAssociation,
                             discoverySubject

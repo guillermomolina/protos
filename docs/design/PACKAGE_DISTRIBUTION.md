@@ -232,7 +232,7 @@ dep:<dependency-alias>/<logical-module>
 For example:
 
 ```protos
-arrays: import("std:collections/Array")
+arrays: import("std:collections/array")
 parser: import("dep:parser/Parser")
 helpers: import("self:internal/Helpers")
 ```
@@ -354,8 +354,8 @@ resolution graph.
 
 A project that runs under Protos toolchain version X receives the standard
 library shipped/defined for that toolchain compatibility contract. A third-party
-package must not publish something that shadows `std:math/Math`,
-`std:collections/Array`, or another `std:` identity.
+package must not publish something that shadows `std:math/math`,
+`std:collections/array`, or another `std:` identity.
 
 If future Protos compatibility policy allows a Standard Library component to
 version independently, that must be an explicit architecture change rather than

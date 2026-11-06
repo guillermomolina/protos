@@ -21,7 +21,7 @@ This example works only when the host has already enabled `protos.Inspect=true`
 for the Context (see below). Each line answers a String.
 
 The module is a single source,
-[`protos/lib/inspect.protos`](../../../protos/lib/inspect.protos). Its normative
+[`protos/lib/inspect/module.protos`](../../../protos/lib/inspect.protos). Its normative
 owner is §73A "Standard Runtime Inspection" in
 [`spec/semantics/MODULES.md`](../../../spec/semantics/MODULES.md).
 

@@ -103,7 +103,7 @@ final class ProtosJsonParserStress {
                 ProtosObjectValue.class,
                 ProtosTestExecutionSupport.evaluate(
                         """
-                        JSON: import("std:json/JSON")
+                        JSON: import("std:json/json")
                         JSON.parse(input)
                         """,
                         activation));

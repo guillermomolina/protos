@@ -13,16 +13,16 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Level: import("std:logging/Level")
-LogEvent: import("std:logging/LogEvent")
-Logger: import("std:logging/Logger")
-TextFormatter: import("std:logging/TextFormatter")
-TextSink: import("std:logging/TextSink")
-ColoredFormatter: import("std:logging/ColoredFormatter")
-ColorMode: import("std:text/ColorMode")
-Instant: import("std:datetime/Instant")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Level: import("std:logging/level")
+LogEvent: import("std:logging/log_event")
+Logger: import("std:logging/logger")
+TextFormatter: import("std:logging/text_formatter")
+TextSink: import("std:logging/text_sink")
+ColoredFormatter: import("std:logging/colored_formatter")
+ColorMode: import("std:text/color_mode")
+Instant: import("std:datetime/instant")
 
 Failure: Error {}
 

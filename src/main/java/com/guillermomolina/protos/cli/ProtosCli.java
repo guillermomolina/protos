@@ -657,7 +657,7 @@ public final class ProtosCli {
                         Map.of(
                                 "workers",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool002-actor:workers"),
+                                        ProtosModuleKey.source("tool002-actor:workers"),
                                         actorModulesRoot.resolve("workers.protos"))),
                         logicalCaseFallbackResolver);
         // TOOL009-C Slice 4 infrastructure: the Group-flavored suite-native logical
@@ -671,7 +671,7 @@ public final class ProtosCli {
                         Map.of(
                                 "workers",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool002-group:workers"),
+                                        ProtosModuleKey.source("tool002-group:workers"),
                                         groupModulesRoot.resolve("workers.protos"))),
                         logicalCaseFallbackResolver);
         ProtosPrelude packagePrelude =
@@ -682,170 +682,81 @@ public final class ProtosCli {
                                         "package",
                                         packageToolRoot, (packageToolRoot).resolveSibling("shared"),
                                         standardLibraryResolver));
-        // TOOL009 Package Tool infrastructure: the Package-flavored suite-native
-        // logical Case route reuses the same ordinary bundled Test Tool fallback
-        // resolver as the base (exactly as the Actor/Group routes above do; the
-        // route's own "self:Discovery" selection machinery lives under the
-        // ordinary Test Tool root, not under packageToolRoot), overlaid with
-        // exact host-selected references to Package Tool's own RuntimeNames
-        // module and to the Package manifest schema module (ManifestSchemaV1,
-        // whose TOML 1.0 parsing imports std:toml/TOML and therefore resolves
-        // through the Standard Library resolver without any overlay, I079), so
-        // a selected Test body can prove it resolved the Package-flavored
-        // bootstrap (via imports unreachable under any other flavor's fallback
-        // resolver) instead of falling back to the ordinary, unoverlaid test
-        // resolver. A corpus-loaded suite is materialized through
-        // ProtosDirectFileModuleResolver and therefore carries a "direct-file:"
-        // ModuleKey, which never satisfies ProtosBundledToolModuleResolver's
-        // "self:" closure guard; the exact overlay below resolves those literal
-        // specifiers before the closure-checked fallback ever sees them, so the
-        // generic bundled-tool closure guards remain unchanged for every other
-        // consumer. This does not change packagePrelude or the legacy
-        // packageExecutionAsync facility, which keep resolving self: imports
-        // against packageToolRoot exactly as before.
-        // TOOL009 Publication 1: the finite Package non-TOML module graph (the
-        // seven ReleaseVersion/DependencyConstraint/FreshVersionSelection/
-        // RetainedVersionSelection/LockSyntax/LockDocument/ResolutionInput
-        // "self:" specifiers the 157 version/lock/resolution-input case-outcomes
-        // corpora depend on) is overlaid exactly like the manifest schema module
-        // above: exact host-selected references to the real Package Tool
-        // source files, so the same finite exact-overlay strategy governs every
-        // Package-owned module the suite-native route resolves. Their shared
-        // "std:collections/Array" and "std:crypto/SHA256" dependencies already
-        // resolve through the standard library resolver and need no overlay.
-        // D132/TOOL009 note: this overlay now carries more entries than the
-        // 10-pair limit of the Map.of(...) factory overloads used elsewhere in
-        // this file; Map.ofEntries(Map.entry(...), ...) is the ordinary JDK
-        // replacement with identical (immutable, unordered) Map semantics.
+        // I151_B56_PACKAGE_SOURCE_ROUTING:
+        // The host grants exact SOURCE entrances to selected Package Cases.
+        // Package-owned transitives are resolved by the Package resolver,
+        // never by the Test Tool's external Case resolver or an exact overlay.
+        ProtosBundledToolModuleResolver packageCaseSourceResolver =
+                new ProtosBundledToolModuleResolver(
+                        "package",
+                        packageToolRoot,
+                        packageToolRoot.resolveSibling("shared"),
+                        standardLibraryResolver);
+
+        Set<String> packageCaseEntrances = Set.of(
+                        "tool-source:package/ContentIdentity.protos",
+                        "tool-source:package/DependencyConstraint.protos",
+                        "tool-source:package/ExecutionPlan.protos",
+                        "tool-source:package/FreshVersionSelection.protos",
+                        "tool-source:package/LockDocument.protos",
+                        "tool-source:package/LockFile.protos",
+                        "tool-source:package/LockSyntax.protos",
+                        "tool-source:package/ManifestCommand.protos",
+                        "tool-source:package/ManifestSchemaV1.protos",
+                        "tool-source:package/MetadataPublication.protos",
+                        "tool-source:package/ProjectDocument.protos",
+                        "tool-source:package/ProjectFile.protos",
+                        "tool-source:package/ProjectMetadata.protos",
+                        "tool-source:package/ReleaseVersion.protos",
+                        "tool-source:package/ResolutionInput.protos",
+                        "tool-source:package/ResolutionRoot.protos",
+                        "tool-source:package/RetainedVersionSelection.protos",
+                        "tool-source:package/RuntimeNames.protos"
+        );
+
         ProtosModuleResolver packageLogicalCaseFallbackResolver =
-                new ProtosExactModuleOverlayResolver(
-                        Map.ofEntries(
-                                Map.entry(
-                                        "self:RuntimeNames",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:runtime-names"),
-                                                packageToolRoot.resolve("RuntimeNames.protos"))),
-                                Map.entry(
-                                        "self:ManifestSchemaV1",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:manifest-schema-v1"),
-                                                packageToolRoot.resolve(
-                                                        "ManifestSchemaV1.protos"))),
-                                Map.entry(
-                                        "self:ReleaseVersion",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:release-version"),
-                                                packageToolRoot.resolve("ReleaseVersion.protos"))),
-                                Map.entry(
-                                        "self:DependencyConstraint",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:dependency-constraint"),
-                                                packageToolRoot.resolve(
-                                                        "DependencyConstraint.protos"))),
-                                Map.entry(
-                                        "self:FreshVersionSelection",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:fresh-version-selection"),
-                                                packageToolRoot.resolve(
-                                                        "FreshVersionSelection.protos"))),
-                                Map.entry(
-                                        "self:RetainedVersionSelection",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:retained-version-selection"),
-                                                packageToolRoot.resolve(
-                                                        "RetainedVersionSelection.protos"))),
-                                Map.entry(
-                                        "self:LockSyntax",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:lock-syntax"),
-                                                packageToolRoot.resolve("LockSyntax.protos"))),
-                                Map.entry(
-                                        "self:LockDocument",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:lock-document"),
-                                                packageToolRoot.resolve("LockDocument.protos"))),
-                                Map.entry(
-                                        "self:ResolutionInput",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:resolution-input"),
-                                                packageToolRoot.resolve(
-                                                        "ResolutionInput.protos"))),
-                                // TOOL009 Package Non-TOML Publication 2: the project-tree
-                                // corpora's suite-native fixtures reach these six additional
-                                // Package Tool modules and their own transitive self: imports
-                                // (ManifestCommand -> self:ManifestSchemaV1, already overlaid
-                                // above).
-                                Map.entry(
-                                        "self:ResolutionRoot",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:resolution-root"),
-                                                packageToolRoot.resolve(
-                                                        "ResolutionRoot.protos"))),
-                                Map.entry(
-                                        "self:LockFile",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:lock-file"),
-                                                packageToolRoot.resolve("LockFile.protos"))),
-                                Map.entry(
-                                        "self:ContentIdentity",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:content-identity"),
-                                                packageToolRoot.resolve(
-                                                        "ContentIdentity.protos"))),
-                                Map.entry(
-                                        "self:ExecutionPlan",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:execution-plan"),
-                                                packageToolRoot.resolve(
-                                                        "ExecutionPlan.protos"))),
-                                Map.entry(
-                                        "self:ProjectFile",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:project-file"),
-                                                packageToolRoot.resolve("ProjectFile.protos"))),
-                                Map.entry(
-                                        "self:ProjectDocument",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:project-document"),
-                                                packageToolRoot.resolve(
-                                                        "ProjectDocument.protos"))),
-                                Map.entry(
-                                        "self:ProjectMetadata",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:project-metadata"),
-                                                packageToolRoot.resolve(
-                                                        "ProjectMetadata.protos"))),
-                                Map.entry(
-                                        "self:MetadataPublication",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:metadata-publication"),
-                                                packageToolRoot.resolve(
-                                                        "MetadataPublication.protos"))),
-                                Map.entry(
-                                        "self:ManifestCommand",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:manifest-command"),
-                                                packageToolRoot.resolve(
-                                                        "ManifestCommand.protos")))),
-                        logicalCaseFallbackResolver);
+                new ProtosModuleResolver() {
+                    @Override
+                    public ProtosModuleKey resolve(
+                            String specifier,
+                            java.util.Optional<ProtosModuleKey> importer)
+                            throws Exception {
+                        if (packageCaseEntrances.contains(specifier)) {
+                            String logicalName =
+                                    specifier.substring(
+                                            "tool-source:package/".length(),
+                                            specifier.length() - ".protos".length());
+
+                            return ProtosBundledToolModuleResolver.toolSourceKey(
+                                    "package", logicalName);
+                        }
+
+                        if (importer.isPresent()) {
+                            ProtosModuleKey origin = importer.orElseThrow();
+                            if (origin.isSource()
+                                    && origin.canonicalId()
+                                            .startsWith("bundled-tool:package/")) {
+                                return packageCaseSourceResolver.resolve(
+                                        specifier, importer);
+                            }
+                        }
+
+                        return logicalCaseFallbackResolver.resolve(
+                                specifier, importer);
+                    }
+
+                    @Override
+                    public ProtosModuleSource loadSource(ProtosModuleKey key)
+                            throws Exception {
+                        if (key.isSource()
+                                && key.canonicalId()
+                                        .startsWith("bundled-tool:package/")) {
+                            return packageCaseSourceResolver.loadSource(key);
+                        }
+
+                        return logicalCaseFallbackResolver.loadSource(key);
+                    }
+                };
         ProtosPrelude actorPrelude =
                 new ProtosCoreBootstrap()
                         .bootstrap(
@@ -854,7 +765,7 @@ public final class ProtosCli {
                                         Map.of(
                                                 "workers",
                                                 new ProtosExactModuleOverlayResolver.ExactModule(
-                                                        new ProtosModuleKey("tool002-actor:workers"),
+                                                        ProtosModuleKey.source("tool002-actor:workers"),
                                                         actorModulesRoot.resolve("workers.protos"))),
                                         standardLibraryResolver));
         ProtosPrelude groupPrelude =
@@ -865,7 +776,7 @@ public final class ProtosCli {
                                         Map.of(
                                                 "workers",
                                                 new ProtosExactModuleOverlayResolver.ExactModule(
-                                                        new ProtosModuleKey("tool002-group:workers"),
+                                                        ProtosModuleKey.source("tool002-group:workers"),
                                                         groupModulesRoot.resolve("workers.protos"))),
                                         standardLibraryResolver));
         try (ProtosNioReadOnlyTreeFilesystemBackend filesystemBackend =
@@ -1866,8 +1777,21 @@ public final class ProtosCli {
                 throw new IllegalStateException(
                         "session is not bound to a Polyglot Process Context");
             }
-            return processContext.executeModuleSource(
-                    Objects.requireNonNull(source, "source"), activation);
+            // D242: executable bundled-tool entries are SOURCE files, not ambient
+            // MODULE roots. Keep the Process/Actor/Context/capabilities, but bind the
+            // canonical source key so ./Helper.protos resolves from this entry.
+            ProtosModuleSource selected = Objects.requireNonNull(source, "source");
+            if (!selected.key().isSource()) {
+                throw new IllegalArgumentException(
+                        "bundled tool entry must be an exact SOURCE");
+            }
+            ProtosActivation sourceActivation =
+                    activation.prelude().orElseThrow().newModuleActivation(
+                            activation.actorModuleState(),
+                            selected.key(),
+                            activation.context(),
+                            activation.executionDomain());
+            return processContext.executeModuleSource(selected, sourceActivation);
         }
 
         Object evaluatePersistent(Source source) {

@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-18
+Last updated: 2026-11-06
 
 This document is the primary normative owner of module contexts, module identity, loading, caching, initialization, cycles, and module lifetime.
 
@@ -12,9 +12,13 @@ The material below is migrated without intended semantic change from `../PROTOS_
 
 The language has no special semantic category of global variables.
 
-Every module executes inside a `moduleContext`, which is an ordinary execution-context object. Bindings created at the top level of a module are local slots of that module context.
+D242 distinguishes exactly two source-backed import target kinds, **MODULE** and **SOURCE**, both reached through the one ordinary `import(String)` facility. Every source executes inside an ordinary execution-context object; the kinds differ only in which object is the import result.
+
+- A **SOURCE** executes in its own `moduleContext`. Bindings created at its top level are local slots of that `moduleContext`, and importing the SOURCE yields that complete context, including every top-level binding.
+- A **MODULE** is a logical module directory containing a mandatory `module.protos` initializer. A directory without that file is not an importable logical module. Its initializer executes in a separate **private initializer context**; bindings created at its top level with bare `:` are local slots of that private context and remain private. Importing the MODULE yields its distinct **public module object**, an ordinary object that delegates to `Object` and carries no export metadata.
 
 ```js
+// SOURCE geometry.protos
 version: "0.1"
 
 printVersion: () => {
@@ -25,18 +29,28 @@ printVersion: () => {
 Conceptually:
 
 ```text
-moduleContext
+moduleContext (SOURCE import result)
 ├── version
 └── printVersion
 ```
 
-Closures created during module execution capture the module context through the ordinary lexical-context mechanism. No separate global lookup or global assignment rule exists.
+Inside a MODULE initializer, `context` identifies the private initializer context and `this` identifies the public module object. A MODULE publishes a member by ordinary slot creation on its receiver:
 
-Like every execution context, a `moduleContext` delegates through the standard `Context` prototype to `Object` (see Execution Context).
+```js
+// range/module.protos
+implementation: import("./Range.protos")      // private initializer binding
+this.Range: implementation.slotValue("Range")  // ordinary public own slot
+```
 
-Each module has its own module context. Modules do not implicitly share mutable global state.
+`this.Name: value` creates an ordinary own slot of the public module object immediately, exactly as slot creation on any other receiver does (`OBJECT_MODEL.md`). There is no `export` syntax, export table, Module class, proxy namespace, live binding, temporal dead zone, hoisting, automatic namespace import, or completion-time copying of private bindings. The public visibility of a MODULE is exactly the current set of own slots of its public object; the private bindings of its initializer are never part of it. The initializer's final expression value does not replace the public module object.
 
-Cross-module visibility is established explicitly: a module obtains another module's instance through `import(specifier)` and accesses its top-level bindings as slots of that module instance through ordinary member lookup. Core v0.1 introduces no dedicated import declaration syntax and no export declaration syntax or separate export mechanism. Module instance identity, caching, initialization, cycle, and failure semantics are defined in the section Module Loading, Identity, and Cycles; only host-specific module-specifier resolution remains outside Core v0.1.
+Lexical lookup in a MODULE initializer proceeds from the private initializer context, then to the public module object, then to the frozen standard prelude (`EXECUTION_AND_CONTROL.md`). Closures created during module execution capture these contexts through the ordinary lexical-context mechanism; an exported Closure therefore retains access to private initializer bindings it captured. No separate global lookup or global assignment rule exists.
+
+Like every execution context, a `moduleContext` and a MODULE private initializer context delegate through the standard `Context` prototype to `Object` (see Execution Context).
+
+Each module has its own contexts. Modules do not implicitly share mutable global state.
+
+Cross-module visibility is established explicitly: a program obtains a MODULE's public object or a SOURCE's complete context through `import(specifier)` and accesses its slots through ordinary member lookup. Reading a member does not invoke it: when `Range` is an object stored in a slot, `module.Range(...)` is an ordinary send of the message `Range` to `module` and is not automatically a constructor call; a program that wants to construct selects the object first (`Range: module.Range`, then `Range(1, 10)`). Core v0.1 introduces no dedicated import declaration syntax and no export declaration syntax. Module instance identity, caching, initialization, cycle, and failure semantics are defined in the section Module Loading, Identity, and Cycles; host-specific module-specifier resolution is bounded by the resolution rules below.
 
 Universal language facilities such as core prototypes and standard behavior may be supplied through a shared prelude or root lexical environment. Such facilities remain part of the ordinary context and lookup model rather than introducing a global-variable namespace.
 
@@ -72,29 +86,35 @@ The implementation may physically share immutable implementation artifacts — p
 
 This preserves module isolation: modules may share immutable standard facilities, but they do not acquire shared mutable global state through the prelude.
 
-Therefore, at module top level:
+Therefore, at top level:
 
 ```js
 x: value
 ```
 
-creates `x` as a local slot of the current `moduleContext`.
+creates `x` as a local slot of the current SOURCE `moduleContext`, or of the current MODULE private initializer context; and, in a MODULE initializer,
+
+```js
+this.x: value
+```
+
+creates `x` as an own slot of the public module object.
+
+Runtime-provisioned facilities that a host or the Standard Library installs before an initializer executes are installed into the MODULE's private initializer context (or into a SOURCE's `moduleContext`). They never become public members of a MODULE unless its initializer publishes them with ordinary slot creation.
 ## Module Loading, Identity, and Cycles
 
-Each module executes inside a `moduleContext`, an ordinary execution-context object, as described in Module Contexts and Top-Level Bindings. The importable unit is the **module instance**. A module instance is an ordinary object, and in Core v0.1 the module instance of a Protos source-backed module is the module's own `moduleContext` object:
+The importable unit is the **module instance**, the Actor-local ordinary object that `import` returns:
 
-- the module body executes with the module instance as its current execution context;
-- a top-level binding created with `:` becomes a local slot of the module instance;
-- `import(specifier)` yields the module instance;
-- reading a member of a module instance therefore observes the module's top-level binding slots exactly as they exist at that moment.
+- for a SOURCE, the module instance is the source's own `moduleContext`; the source body executes with it as its current execution context, a top-level binding created with `:` becomes its local slot, and reading a member observes the source's top-level binding slots exactly as they exist at that moment;
+- for a MODULE, the module instance is its public module object; the initializer executes in its distinct private initializer context with the public module object as receiver, and reading a member observes the public object's own slots exactly as they exist at that moment.
 
-For a Protos source-backed module there is no separate namespace object, wrapper, copy, or proxy. Module identity is ordinary object identity (`===`), and a module's observable surface is its current top-level slot state.
+There is no separate namespace object, wrapper, copy, or proxy. Module identity is ordinary object identity (`===`). A MODULE's public object and a SOURCE's context are never the same object, so `import("./x.protos") !== import("self:x")` even when the MODULE's initializer publishes values drawn from that SOURCE; the published values themselves retain their exact identities.
 
 ### Foreign module instances
 
 When a successful resolution yields a canonical `ModuleKey` whose module is provided by a foreign provider rather than by Protos source, the module instance is an **Actor-local Protos module facade over the provider-acquired foreign target**. That facade is the module instance for every rule in this document: it participates in the same canonical `ModuleKey` identity, Actor-local module cache, cache-before-initialization, `INITIALIZING` / `READY` states, cycles and partial initialization, failed-initialization eviction, and retry rules as a source-backed module instance. Within one Actor the same canonical `ModuleKey` yields the same active facade under `===`; distinct Actors obtain distinct facades for the same `ModuleKey`.
 
-The facade is inserted into the Actor-local cache in state `INITIALIZING` before the provider acquisition/initialization of the foreign target that it depends on; a recursive import observing that state returns the same facade. A failure of that initialization follows Failed Initialization below. A foreign module object, host class, foreign module/class value, host wrapper, provider cache, or source-language module cache never replaces the Protos module instance identity. The facade's Protos-facing behavior and any failures it produces follow `VALUES_AND_COLLECTIONS.md` (Foreign Values). This section does not change the module instance of a Protos source-backed module.
+The facade is inserted into the Actor-local cache in state `INITIALIZING` before the provider acquisition/initialization of the foreign target that it depends on; a recursive import observing that state returns the same facade. A failure of that initialization follows Failed Initialization below. A foreign module object, host class, foreign module/class value, host wrapper, provider cache, or source-language module cache never replaces the Protos module instance identity. The facade's Protos-facing behavior and any failures it produces follow `VALUES_AND_COLLECTIONS.md` (Foreign Values). This section does not change the module instance of a MODULE or SOURCE.
 
 ### `import(specifier)` argument and host-resolution boundary
 
@@ -209,6 +229,16 @@ The exact external form of a `ModuleKey` is host-defined, but it must provide st
 
 `ModuleKey` is an internal loader/runtime concept. It is not required to be exposed as a normal language object.
 
+A canonical `ModuleKey` carries its resolved **target kind** — MODULE, SOURCE, or FOREIGN (Foreign module instances) — as part of its identity. The resolver, not the spelling of a specifier prefix, determines the kind. A MODULE key identifies one logical module directory and its `module.protos` initializer; a SOURCE key identifies one exact authorized `.protos` file within its canonical owner. Keys of different kinds never denote the same cache entry, even when a SOURCE file is physically adjacent to a MODULE initializer.
+
+Resolution of source-backed targets obeys these rules:
+
+- **Module-directory discovery.** A MODULE route resolves to exactly one logical directory containing `module.protos`. No `.protos` suffix is appended to a MODULE name, no neighbouring file is consulted as a fallback, no search path is traversed, and importing a MODULE never initializes a parent directory's MODULE automatically. A parent aggregate exists only when a parent directory has its own explicitly authored `module.protos`.
+- **Explicit relative SOURCE imports.** A specifier beginning with `./` or `../` and ending in `.protos` names an exact SOURCE file relative to the physical location of the importing MODULE initializer or SOURCE. Resolution stays within the importing target's authorized owner (its package, Standard Library distribution, tool, or direct-file root); traversal outside that owner is rejected.
+- **No direct SOURCE import of an initializer.** A `module.protos` file is never resolvable as SOURCE, so a MODULE initializer cannot execute a second time under a different identity.
+- **Namespace collisions and spelling.** Exact spelling is required. Case-fold-ambiguous, case-variant, reserved, or symlink-escaping paths are rejected rather than resolved to a nearby target.
+- **Package authority.** A package's own MODULEs are reached through `self:<logical-path>`. A dependency's MODULE is reached only through `dep:<alias>/<export>` where `<export>` is declared in that dependency's `[exports]` mapping; each `[exports]` value is a logical module directory, never a `.protos` file name. A `dep:` route never reaches a dependency's SOURCE file or an undeclared module directory.
+
 The distinction is:
 
 ```text
@@ -238,9 +268,9 @@ Actor B: canonical foo -> foo@B
 
 When an Actor imports a canonical module that is absent from that Actor's module cache:
 
-1. Create the module instance, creating its `moduleContext` (for a foreign module, its facade; see Foreign module instances).
+1. Create the module instance: for a SOURCE, its `moduleContext`; for a MODULE, its public module object together with a distinct private initializer context; for a foreign module, its facade (see Foreign module instances).
 2. Insert that module instance into the Actor-local module cache in state `INITIALIZING`.
-3. Execute the module body in that `moduleContext` (for a foreign module, perform the provider initialization of the foreign target).
+3. Execute the body: a SOURCE in its `moduleContext`; a MODULE initializer in its private initializer context with the public module object as receiver; for a foreign module, perform the provider initialization of the foreign target.
 4. If initialization completes successfully, transition the module to `READY`.
 5. If initialization fails, apply the failure semantics defined below.
 
@@ -308,7 +338,7 @@ A cycle is not rejected merely because it is cyclic.
 
 ### Partially Initialized Modules Are Observable
 
-An import of a module already in state `INITIALIZING` returns that same module instance immediately; it does not wait for the module to become `READY`. The observable state is exactly the state of that module's `moduleContext` at that point in sequential execution.
+An import of a module already in state `INITIALIZING` returns that same module instance immediately; it does not wait for the module to become `READY`. The observable state is exactly the state of that module instance at that point in sequential execution: a SOURCE's `moduleContext` with the top-level bindings created so far, or a MODULE's public object with the `this.Name:` slots published so far. A recursive import of a MODULE observes the identical partially initialized public object, never its private initializer context.
 
 For example, suppose module `a` executes:
 
@@ -318,7 +348,7 @@ b: import("./b")
 y: 20
 ```
 
-and module `b` executes:
+(for a MODULE `a`, the same applies with `this.x: 10` and `this.y: 20`) and module `b` executes:
 
 ```js
 a: import("./a")
@@ -345,7 +375,7 @@ When execution of the module body completes normally, the cached module instance
 INITIALIZING -> READY
 ```
 
-The same module instance and the same `moduleContext` (for a foreign module, the same facade) remain cached. Subsequent imports in that Actor return that instance without re-executing the module body. No new module identity is created merely because initialization completed.
+The same module instance — the same SOURCE `moduleContext`, the same MODULE public object, or for a foreign module the same facade — remains cached; a MODULE initializer's final expression value never replaces it. Subsequent imports in that Actor return that instance without re-executing the module body. No new module identity is created merely because initialization completed.
 
 ### Failed Initialization
 
@@ -411,7 +441,7 @@ An Actor's module cache and its Actor-local module instances belong to that Acto
 
 ### The Initial Module of an Actor
 
-The initial module executed by an Actor follows the same conceptual module-context model: it executes in a `moduleContext` that belongs to that Actor, and its module state is Actor-local rather than process-global. A new Actor does not inherit its creator's initial module context.
+The initial module executed by an Actor follows the same conceptual module-context model: it executes in contexts that belong to that Actor (a SOURCE `moduleContext`, or a MODULE private initializer context with its public module object), and its module state is Actor-local rather than process-global. A new Actor does not inherit its creator's initial module context.
 
 The Actor's initial module is executed directly by the Actor that owns it rather than obtained through `import()`. That direct execution does not place the initial module outside the module model when the initial module has an importable canonical identity.
 
@@ -420,9 +450,9 @@ Whether the Actor's initial entry is treated as an importable initial module or 
 If the initial module can be resolved by `import()` to a canonical `ModuleKey`, then before executing its body the runtime:
 
 1. determines or assigns that canonical `ModuleKey`;
-2. creates the module instance and its `moduleContext`;
+2. creates the module instance (a SOURCE `moduleContext`, or a MODULE public object together with a distinct private initializer context, never reusing that private context as the public object);
 3. inserts that instance into the Actor-local module cache in state `INITIALIZING`;
-4. executes the module body in that `moduleContext`;
+4. executes the body exactly as for an imported module of the same kind;
 5. transitions the instance to `READY` on successful initialization;
 6. on failed initialization, removes that cache entry according to the failure semantics defined above.
 
@@ -472,12 +502,14 @@ an importable initial module of the lifecycle above:
 2. exactly one module instance is created for it in the RootActor;
 3. that instance is inserted into the RootActor's module cache in state
    `INITIALIZING` before its body executes;
-4. the RootActor's bootstrap-local slots are installed on that instance's
-   `moduleContext` before the first source expression (RootActor Process
-   bootstrap slot below);
+4. the RootActor's bootstrap-local slots are installed before the first source
+   expression (RootActor Process bootstrap slot below): on a SOURCE's
+   `moduleContext`, or on a MODULE's private initializer context — never on its
+   public module object;
 5. only after the module initializes successfully is the bootstrap binding
-   selected, as a local slot of that exact instance, with no delegated lookup and
-   no inherited fallback; and
+   selected, as an exact own slot of that module instance (the SOURCE's complete
+   context or the MODULE's public object), with no delegated lookup, no inherited
+   fallback, and no search of MODULE private initializer bindings; and
 6. the binding is invoked in the same RootActor, with that module instance's
    environment, and the module body is not executed a second time to obtain the
    behavior.
@@ -493,15 +525,18 @@ change the semantics of host evaluations in the default direct-entry mode
 
 `../io/PROCESS_IO.md` owns the capability/authority contract for the RootActor's
 local `process` slot. This module specification owns lifecycle placement only: the
-host creates that slot after the initial `moduleContext` exists (and, for an
+host creates that slot after the initial context exists (and, for an
 importable initial module, after cache-before-execute registration) but before the
-first source expression executes. It is ordinary local module state thereafter.
-Imported modules and non-root Actor initial modules do not receive it implicitly.
+first source expression executes. For a MODULE it is a slot of the private
+initializer context and is therefore private initialization authority: it never
+becomes a public member unless the initializer publishes it with ordinary slot
+creation. It is ordinary local state thereafter. Imported modules and non-root
+Actor initial modules do not receive it implicitly.
 
 The same lifecycle placement applies to every other optional bootstrap-local
 grant of the RootActor initial module, including the D223-A1 `resolver` slot
 (`../io/PROCESS_IO.md`, Root resolver capability provisioning). The
-`std:network/Resolvers` module (`../io/NETWORK.md` §14.1) and its grant are
+`std:network/resolvers` module (`../io/NETWORK.md` §14.1) and its grant are
 separate: importing that module yields only the authority-free `Resolver`
 protocol prototype and the `ResolutionError` prototype, installs no `resolver`
 slot, creates no Resolver capability, and initializes no name-service
@@ -511,7 +546,7 @@ machinery. Neither member is a standard-prelude binding.
 
 Core v0.1 does not require the host to assign a fabricated filesystem or package identity to every possible host entry point. If, when execution of an Actor's initial entry begins, that entry is not importable through the host's module resolver and therefore has no canonical `ModuleKey` reachable by `import()`, it executes as a standalone entry point and remains outside the normal import lookup namespace. The instance created for that standalone execution:
 
-- is Actor-local: it executes in a `moduleContext` belonging to the Actor that launched it, and that mutable `moduleContext` is not shared with another Actor;
+- is a SOURCE in kind and is Actor-local: it executes in a `moduleContext` belonging to the Actor that launched it, and that mutable `moduleContext` is not shared with another Actor;
 - has no canonical `ModuleKey` and is not registered in the Actor-local module cache, so no `import()` can address it and it never aliases an imported module;
 - is never retroactively assigned a canonical identity or adopted into the module cache, even if the host's resolution capabilities change after that execution began.
 
@@ -584,9 +619,18 @@ math: import("math")
 math.sin(x)
 ```
 
-No ES-module-style static binding declarations, CommonJS `exports`, Python namespaces, or another language's module syntax are introduced. Core v0.1 defines no export declaration syntax and no separate export mechanism: a module's directly observable surface is its top-level binding slots, accessed through the module instance. Cross-module visibility remains explicit.
+No ES-module-style static binding declarations, CommonJS `exports`, Python namespaces, or another language's module syntax are introduced. Core v0.1 defines no export declaration syntax and no separate export mechanism: a MODULE's directly observable surface is the own slots of its public object, created by ordinary `this.Name:` slot creation, and a SOURCE's directly observable surface is its complete top-level binding slots. Cross-module visibility remains explicit.
 
-The exact resolver rules for files, packages, standard-library modules, search paths, and other host-specific sources are outside Core Language v0.1.
+```js
+range: import("self:range")   // MODULE: the public object
+Range: range.Range            // select the published object
+item: Range(1, 10)            // ordinary call of the selected object
+
+source: import("./range/Range.protos")  // SOURCE: the complete context
+source.privateHelper                    // every top-level binding is visible
+```
+
+Beyond the D242 resolution rules of Canonical Module Identity, the exact resolver rules for files, packages, standard-library locations, and other host-specific sources remain host policy.
 
 # Actor/module isolation integration migrated from the legacy concurrency ledger
 

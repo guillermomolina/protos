@@ -15,12 +15,12 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: Array(
     Test("array map extra callback parameter binds null", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         mapped: Arrays.map(Array(1), (element, index) => {
             index
         })
@@ -28,13 +28,13 @@ tests: Array(
     }),
     Test("array map noninvokable error", () => {
         Assertions.signals(Error, () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             Arrays.map(Array(1), 42)
         })
     }),
     Test("array map snapshot", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             source: Array(1, 2)
             calls: 0
             mapped: Arrays.map(source, (element) => {

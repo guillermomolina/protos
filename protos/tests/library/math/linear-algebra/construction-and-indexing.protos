@@ -13,17 +13,17 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-// LIB024 (D214 C1/S1): std:math/LinearAlgebra construction, numeric admission and indexing.
+// LIB024 (D214 C1/S1): std:math/linear_algebra construction, numeric admission and indexing.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-LA: import("std:math/LinearAlgebra")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+LA: import("std:math/linear_algebra")
 Vector: LA.Vector
 Matrix: LA.Matrix
 
 tests: [
     Test("explicit import publishes frozen prototypes", () => {
-        again: import("std:math/LinearAlgebra")
+        again: import("std:math/linear_algebra")
         Assertions.require(again.Vector === LA.Vector)
         Assertions.require(again.Matrix === LA.Matrix)
         Assertions.require(Vector(1).parent() === LA.Vector)

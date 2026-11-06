@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * A Standard Library {@code std:math/LinearAlgebra} Matrix (D214 C1/S1, LIB024).
+ * A Standard Library {@code std:math/linear_algebra} Matrix (D214 C1/S1, LIB024).
  *
  * <p>An ordinary Protos object with private storage: the exact semantic Integer dimensions and
  * the dense row-major elements, none of which is a slot. The dimensions are kept as supplied,

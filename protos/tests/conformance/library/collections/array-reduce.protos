@@ -4,17 +4,17 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: Array(
     Test("array reduce ignores arguments beyond the reducer parameters", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         Assertions.require(Arrays.reduce(Array(1, 2), (accumulator) => { accumulator }) == 1)
     }),
     Test("array reduce fold start boundaries", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             unseededCalls: 0
             unseeded: Arrays.reduce(Array(10, 3), (accumulator, element) => {
@@ -54,7 +54,7 @@ tests: Array(
     }),
     Test("array reduce left fold snapshot", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             source: Array(10, 3, 2, 1)
             calls: 0
             reduced: Arrays.reduce(source, (accumulator, element) => {
@@ -87,7 +87,7 @@ tests: Array(
     }),
     Test("array reduce repeated large left fold", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             source: Array(
                 1, 2, 3, 4, 5, 6, 7, 8,
                 9, 10, 11, 12, 13, 14, 15, 16,
@@ -110,7 +110,7 @@ tests: Array(
     }),
     Test("array reduce sort balanced traversal", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             source: Array(8, 7, 6, 5, 4, 3, 2, 1)
 
             reduceCalls: 0
@@ -144,13 +144,13 @@ tests: Array(
     }),
     Test("array reduce too many initial values error", () => {
         Assertions.signals(Error, () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             Arrays.reduce(Array(), (accumulator, element) => { accumulator }, 1, 2)
         })
     }),
     Test("array reduce trivial inputs do not inspect reducer", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             marker: Array(7)
             empty: Arrays.reduce(Array(), 42)
             singleton: Arrays.reduce(Array(marker), 42)

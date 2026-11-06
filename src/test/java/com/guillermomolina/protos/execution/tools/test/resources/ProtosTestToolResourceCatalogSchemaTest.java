@@ -68,7 +68,7 @@ final class ProtosTestToolResourceCatalogSchemaTest {
 
         Fixture fixture = fixture();
         String source =
-                "Catalog: import(\"self:ResourceCatalog\")\n"
+                "Catalog: import(\"./ResourceCatalog.protos\")\n"
                         + "entries: Catalog.parse("
                         + protosString(document)
                         + ")\n"
@@ -140,7 +140,7 @@ final class ProtosTestToolResourceCatalogSchemaTest {
         Fixture fixture = fixture();
         Object result =
                 completed(
-                        "Catalog: import(\"self:ResourceCatalog\")\n"
+                        "Catalog: import(\"./ResourceCatalog.protos\")\n"
                                 + "Catalog.parse("
                                 + protosString(document)
                                 + ")",
@@ -153,7 +153,7 @@ final class ProtosTestToolResourceCatalogSchemaTest {
         StringBuilder source =
                 new StringBuilder(
                         """
-                        Catalog: import("self:ResourceCatalog")
+                        Catalog: import("./ResourceCatalog.protos")
                         passed: true
 
                         reject: (document) => {
@@ -206,7 +206,7 @@ final class ProtosTestToolResourceCatalogSchemaTest {
         ProtosExecutionOutcome outcome =
                 com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
 source,
-fixture.prelude().newModuleActivation());
+com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(fixture.prelude(), "test"));
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),

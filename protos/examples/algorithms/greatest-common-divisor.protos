@@ -15,6 +15,6 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Integers: import("std:math/Integer")
+Integers: import("std:math/integer")
 
 print(Integers.gcd(54, 24))

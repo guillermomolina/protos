@@ -40,7 +40,7 @@ final class ProtosTestToolSuiteGraphTest {
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(
-                                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
                                         + "a: SuiteGraph.leaf(\"a\", \"corpus/test\", \"test/ordinary\")\n"
                                         + "b: SuiteGraph.leaf(\"b\", \"corpus/test\", \"test/ordinary\")\n"
                                         + "c: SuiteGraph.leaf(\"c\", \"corpus/test\", \"test/ordinary\")\n"
@@ -71,7 +71,7 @@ final class ProtosTestToolSuiteGraphTest {
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(
-                                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
                                         + "leaf: SuiteGraph.leaf(\""
                                         + logicalId
                                         + "\", \"corpus/test\", \"test/ordinary\")\n"
@@ -88,7 +88,7 @@ final class ProtosTestToolSuiteGraphTest {
                 assertInstanceOf(
                         ProtosStringValue.class,
                         completed(
-                                "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                                "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
                                         + "RepositorySuite.root.id"));
         assertEquals("protos/repository", rootId.value());
 
@@ -96,8 +96,8 @@ final class ProtosTestToolSuiteGraphTest {
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(
-                                "SuiteGraph: import(\"self:SuiteGraph\")\n"
-                                        + "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
+                                        + "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
                                         + "SuiteGraph.flattenLeafIds(RepositorySuite.root)"));
 
         assertEquals(28, flattened.indexedSize());
@@ -138,8 +138,8 @@ final class ProtosTestToolSuiteGraphTest {
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(
-                                "SuiteGraph: import(\"self:SuiteGraph\")\n"
-                                        + "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
+                                        + "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
                                         + "SuiteGraph.flattenLeaves(RepositorySuite.root)"));
 
         assertEquals(28, leaves.indexedSize());
@@ -180,8 +180,8 @@ final class ProtosTestToolSuiteGraphTest {
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(
-                                "SuiteGraph: import(\"self:SuiteGraph\")\n"
-                                        + "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
+                                        + "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
                                         + "SuiteGraph.flattenLeaves(RepositorySuite.root)"));
 
         assertEquals(28, leaves.indexedSize());
@@ -219,13 +219,13 @@ final class ProtosTestToolSuiteGraphTest {
     @Test
     void d126CorpusIdsAreMandatoryCanonicalAndLeafLocal() throws Exception {
         assertFailed(
-                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
                         + "SuiteGraph.leaf(\"protos/a\", \"Protos/corpus\", \"test/ordinary\")");
         assertFailed(
-                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
                         + "SuiteGraph.leaf(\"protos/a\", \"protos//corpus\", \"test/ordinary\")");
         assertFailed(
-                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
                         + "leaf: {\n"
                         + "    kind: \"leaf\"\n"
                         + "    id: \"protos/a\"\n"
@@ -239,13 +239,13 @@ final class ProtosTestToolSuiteGraphTest {
     void d125ExecutionRequirementIdsAreMandatoryCanonicalAndLeafLocal()
             throws Exception {
         assertFailed(
-                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
                         + "SuiteGraph.leaf(\"protos/a\", \"Protos/test\")");
         assertFailed(
-                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
                         + "SuiteGraph.leaf(\"protos/a\", \"protos//test\")");
         assertFailed(
-                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
                         + "leaf: {\n"
                         + "    kind: \"leaf\"\n"
                         + "    id: \"protos/a\"\n"
@@ -258,36 +258,36 @@ final class ProtosTestToolSuiteGraphTest {
     @Test
     void repositorySuiteDescriptorsAreFrozen() throws Exception {
         assertFailed(
-                "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
                         + "RepositorySuite.root.id = \"protos/changed\"");
         assertFailed(
-                "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
                         + "leaf: RepositorySuite.root.children[0]\n"
                         + "leaf.id = \"protos/changed\"");
         assertFailed(
-                "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
                         + "leaf: RepositorySuite.root.children[0]\n"
                         + "leaf.corpus = \"protos/corpus/changed\"");
         assertFailed(
-                "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
                         + "leaf: RepositorySuite.root.children[0]\n"
                         + "leaf.executionRequirement = \"protos/test/changed\"");
     }
 
     @Test
     void d123CanonicalSuiteIdsRejectNonCanonicalForms() throws Exception {
-        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"Protos/actor\", \"corpus/test\", \"test/ordinary\")");
-        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos//actor\", \"corpus/test\", \"test/ordinary\")");
-        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"/protos/actor\", \"corpus/test\", \"test/ordinary\")");
-        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos/actor/\", \"corpus/test\", \"test/ordinary\")");
-        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos/actor suite\", \"corpus/test\", \"test/ordinary\")");
-        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos/actor:host\", \"corpus/test\", \"test/ordinary\")");
+        assertFailed("SuiteGraph: import(\"./SuiteGraph.protos\")\nSuiteGraph.leaf(\"Protos/actor\", \"corpus/test\", \"test/ordinary\")");
+        assertFailed("SuiteGraph: import(\"./SuiteGraph.protos\")\nSuiteGraph.leaf(\"protos//actor\", \"corpus/test\", \"test/ordinary\")");
+        assertFailed("SuiteGraph: import(\"./SuiteGraph.protos\")\nSuiteGraph.leaf(\"/protos/actor\", \"corpus/test\", \"test/ordinary\")");
+        assertFailed("SuiteGraph: import(\"./SuiteGraph.protos\")\nSuiteGraph.leaf(\"protos/actor/\", \"corpus/test\", \"test/ordinary\")");
+        assertFailed("SuiteGraph: import(\"./SuiteGraph.protos\")\nSuiteGraph.leaf(\"protos/actor suite\", \"corpus/test\", \"test/ordinary\")");
+        assertFailed("SuiteGraph: import(\"./SuiteGraph.protos\")\nSuiteGraph.leaf(\"protos/actor:host\", \"corpus/test\", \"test/ordinary\")");
     }
 
     @Test
     void duplicateIdsFailClosed() throws Exception {
         assertFailed(
-                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
                         + "first: SuiteGraph.leaf(\"same\", \"corpus/test\", \"test/ordinary\")\n"
                         + "second: SuiteGraph.leaf(\"same\", \"corpus/test\", \"test/ordinary\")\n"
                         + "root: SuiteGraph.suite(\"root\", Array(first, second))\n"
@@ -297,7 +297,7 @@ final class ProtosTestToolSuiteGraphTest {
     @Test
     void cyclesFailClosed() throws Exception {
         assertFailed(
-                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
                         + "children: Array(null)\n"
                         + "cycle: {\n"
                         + "    kind: \"suite\"\n"
@@ -311,7 +311,7 @@ final class ProtosTestToolSuiteGraphTest {
     @Test
     void unknownNodeKindsFailClosed() throws Exception {
         assertFailed(
-                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
                         + "unknown: {\n"
                         + "    kind: \"tree\"\n"
                         + "    id: \"unknown\"\n"
@@ -323,14 +323,14 @@ final class ProtosTestToolSuiteGraphTest {
     @Test
     void emptyIdsFailClosed() throws Exception {
         assertFailed(
-                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
                         + "SuiteGraph.leaf(\"\", \"corpus/test\", \"test/ordinary\")");
     }
 
     @Test
     void nonStringIdsFailClosed() throws Exception {
         assertFailed(
-                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
                         + "SuiteGraph.leaf(42, \"test/ordinary\")");
     }
 
@@ -433,7 +433,7 @@ final class ProtosTestToolSuiteGraphTest {
 
     private static Fixture fixture() {
         ProtosPrelude prelude = SharedPrelude.INSTANCE;
-        return new Fixture(prelude, prelude.newModuleActivation());
+        return new Fixture(prelude, com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 
     private record Fixture(ProtosPrelude prelude, ProtosActivation activation) {}

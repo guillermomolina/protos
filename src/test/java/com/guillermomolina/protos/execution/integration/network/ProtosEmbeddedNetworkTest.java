@@ -66,8 +66,8 @@ final class ProtosEmbeddedNetworkTest {
     /** The initial module: helpers are Closures so later host entries reach its {@code network}. */
     private static final String PROGRAM =
             """
-            IpAddress: import("std:network/IpAddresses").IpAddress
-            IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+            IpAddress: import("std:network/ip_addresses").IpAddress
+            IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
             loopback: IpAddress(4, 2130706433)
             before: 0
             after: 0

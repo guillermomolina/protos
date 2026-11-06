@@ -214,14 +214,14 @@ final class ProtosWorkspacePackageAuthorityIsolationIntegrationTest {
     private Path materializeProject() throws Exception {
         Path project = temp.resolve("project");
         copyTree(WORKSPACE_CASE, project);
-        overlay(APPLICATION.resolve("Main.protos"), project.resolve("Main.protos"));
-        overlay(APPLICATION.resolve("Leak.protos"), project.resolve("Leak.protos"));
+        overlay(APPLICATION.resolve("Main/module.protos"), project.resolve("Main/module.protos"));
+        overlay(APPLICATION.resolve("Leak/module.protos"), project.resolve("Leak/module.protos"));
         overlay(
-                APPLICATION.resolve("NetworkGrant.protos"),
-                project.resolve("NetworkGrant.protos"));
+                APPLICATION.resolve("NetworkGrant/module.protos"),
+                project.resolve("NetworkGrant/module.protos"));
         overlay(
-                APPLICATION.resolve("libs/a/internal/Thing.protos"),
-                project.resolve("libs/a/internal/Thing.protos"));
+                APPLICATION.resolve("libs/a/internal/Thing/module.protos"),
+                project.resolve("libs/a/internal/Thing/module.protos"));
         return project;
     }
 

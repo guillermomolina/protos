@@ -20,6 +20,7 @@ package com.guillermomolina.protos.runtime;
 import com.guillermomolina.protos.execution.ProtosClosureExecutionPlan;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.callables.ProtosSuspensionCapableNativeClosureBody;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.Assumption;
@@ -35,6 +36,7 @@ public final class ProtosClosureValue extends ProtosObjectValue {
     private final ProtosObjectValue methodHome;
     private final ProtosReturnHome returnHome;
     private final ProtosPrelude prelude;
+    private final ProtosModuleKey definingModuleKey;
     private volatile ProtosClosureExecutionPlan executionPlan;
     private final java.util.function.Supplier<ProtosClosureExecutionPlan> executionPlanRematerializer;
     private final ProtosNativeClosureBody nativeBody;
@@ -129,6 +131,21 @@ public final class ProtosClosureValue extends ProtosObjectValue {
             ProtosClosureExecutionPlan executionPlan,
             ProtosNativeClosureBody nativeBody,
             java.util.function.Supplier<ProtosClosureExecutionPlan> executionPlanRematerializer) {
+        this(definition, capturedLexicalContexts, capturedReceiver, methodHome, returnHome,
+                prelude, executionPlan, nativeBody, executionPlanRematerializer, null);
+    }
+
+    private ProtosClosureValue(
+            CanonicalClosure definition,
+            List<ProtosObjectValue> capturedLexicalContexts,
+            Object capturedReceiver,
+            ProtosObjectValue methodHome,
+            ProtosReturnHome returnHome,
+            ProtosPrelude prelude,
+            ProtosClosureExecutionPlan executionPlan,
+            ProtosNativeClosureBody nativeBody,
+            java.util.function.Supplier<ProtosClosureExecutionPlan> executionPlanRematerializer,
+            ProtosModuleKey definingModuleKey) {
         this(
                 definition,
                 ProtosLexicalEnvironment.ofContexts(capturedLexicalContexts),
@@ -138,7 +155,8 @@ public final class ProtosClosureValue extends ProtosObjectValue {
                 prelude,
                 executionPlan,
                 nativeBody,
-                executionPlanRematerializer);
+                executionPlanRematerializer,
+                definingModuleKey);
     }
 
     /**
@@ -158,6 +176,20 @@ public final class ProtosClosureValue extends ProtosObjectValue {
                 prelude, executionPlan, null, null);
     }
 
+    /** D242: captures the lexical SOURCE/MODULE origin at closure creation. */
+    public ProtosClosureValue(
+            CanonicalClosure definition,
+            ProtosLexicalEnvironment capturedEnvironment,
+            Object capturedReceiver,
+            ProtosObjectValue methodHome,
+            ProtosReturnHome returnHome,
+            ProtosPrelude prelude,
+            ProtosClosureExecutionPlan executionPlan,
+            ProtosModuleKey definingModuleKey) {
+        this(definition, capturedEnvironment, capturedReceiver, methodHome, returnHome,
+                prelude, executionPlan, null, null, definingModuleKey);
+    }
+
     private ProtosClosureValue(
             CanonicalClosure definition,
             ProtosLexicalEnvironment capturedEnvironment,
@@ -168,6 +200,21 @@ public final class ProtosClosureValue extends ProtosObjectValue {
             ProtosClosureExecutionPlan executionPlan,
             ProtosNativeClosureBody nativeBody,
             java.util.function.Supplier<ProtosClosureExecutionPlan> executionPlanRematerializer) {
+        this(definition, capturedEnvironment, capturedReceiver, methodHome, returnHome,
+                prelude, executionPlan, nativeBody, executionPlanRematerializer, null);
+    }
+
+    private ProtosClosureValue(
+            CanonicalClosure definition,
+            ProtosLexicalEnvironment capturedEnvironment,
+            Object capturedReceiver,
+            ProtosObjectValue methodHome,
+            ProtosReturnHome returnHome,
+            ProtosPrelude prelude,
+            ProtosClosureExecutionPlan executionPlan,
+            ProtosNativeClosureBody nativeBody,
+            java.util.function.Supplier<ProtosClosureExecutionPlan> executionPlanRematerializer,
+            ProtosModuleKey definingModuleKey) {
         super(ProtosObjectValue.rootObject());
         this.definition = definition;
         this.capturedEnvironment = capturedEnvironment;
@@ -179,6 +226,7 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         this.executionPlan = executionPlan;
         this.executionPlanRematerializer = executionPlanRematerializer;
         this.nativeBody = nativeBody;
+        this.definingModuleKey = definingModuleKey;
     }
 
     public static ProtosClosureValue nativeClosure(ProtosNativeClosureBody body) {
@@ -228,6 +276,11 @@ public final class ProtosClosureValue extends ProtosObjectValue {
                     }
                 };
         return nativeClosure(implementation);
+    }
+
+    /** Lexical import origin, or null for native/host-supplied Closures. */
+    public ProtosModuleKey definingModuleKeyOrNullForRuntime() {
+        return definingModuleKey;
     }
 
     public CanonicalClosure definition() {
@@ -434,7 +487,7 @@ public final class ProtosClosureValue extends ProtosObjectValue {
     }
 
     public ProtosClosureValue parallelProjection(java.util.List<ProtosObjectValue> roots,Object receiver,ProtosPrelude prelude,ProtosClosureExecutionPlan plan) {
-        return new ProtosClosureValue(definition,roots,java.util.Objects.requireNonNull(receiver),null,null,java.util.Objects.requireNonNull(prelude),plan,nativeBody);
+        return new ProtosClosureValue(definition,roots,java.util.Objects.requireNonNull(receiver),null,null,java.util.Objects.requireNonNull(prelude),plan,nativeBody,null,definingModuleKey);
     }
 
     public ProtosClosureValue parallelProjectionDeferred(
@@ -445,7 +498,7 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return new ProtosClosureValue(
                 definition, roots, java.util.Objects.requireNonNull(receiver), null, null,
                 java.util.Objects.requireNonNull(prelude), null, nativeBody,
-                executionPlanRematerializer);
+                executionPlanRematerializer, definingModuleKey);
     }
 
     public ProtosClosureValue bindMethod(
@@ -454,7 +507,7 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         ProtosClosureValue bound = new ProtosClosureValue(
                 definition, capturedEnvironment, Objects.requireNonNull(receiver, "receiver"),
                 Objects.requireNonNull(home, "home"), returnHome, prelude, executionPlan, nativeBody,
-                executionPlanRematerializer);
+                executionPlanRematerializer, definingModuleKey);
         if (contextLocalExecutionProjectionRequired) {
             bound.requireContextLocalExecutionProjectionForRuntime();
         }

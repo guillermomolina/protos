@@ -26,6 +26,8 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -58,16 +60,33 @@ final class ProtosTestToolPackageExecutionEnvironmentTest {
                                         TEST_TOOL_ROOT.resolveSibling("shared"),
                                         new ProtosStandardLibraryModuleResolver(
                                                 STANDARD_LIBRARY)));
+        ProtosBundledToolModuleResolver packageResolver =
+                new ProtosBundledToolModuleResolver(
+                        "package",
+                        PACKAGE_TOOL_ROOT,
+                        PACKAGE_TOOL_ROOT.resolveSibling("shared"),
+                        new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
+
+        // D242: private package implementation is an exact SOURCE.
+        assertEquals(
+                ProtosModuleKey.source(
+                        "bundled-tool:package/ManifestSchemaV1.protos"),
+                packageResolver.resolve(
+                        "./ManifestSchemaV1.protos",
+                        java.util.Optional.of(packageResolver.entryModule("Main"))));
+
         ProtosPrelude packagePrelude =
-                new ProtosCoreBootstrap()
-                        .bootstrap(
-                                CORE,
-                                new ProtosBundledToolModuleResolver(
-                                        "package",
-                                        PACKAGE_TOOL_ROOT, (PACKAGE_TOOL_ROOT).resolveSibling("shared"),
-                                        new ProtosStandardLibraryModuleResolver(
-                                                STANDARD_LIBRARY)));
-        ProtosActivation activation = testPrelude.newModuleActivation();
+                new ProtosCoreBootstrap().bootstrap(CORE, packageResolver);
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(testPrelude, "test");
+
+        // The host selects real package SOURCE bytes; no anonymous
+        // SOURCE identity or legacy self-import is fabricated.
+        activation.context().createLocalSlot(
+                "packageFixtureSource",
+                new ProtosStringValue(
+                        Files.readString(
+                                PACKAGE_TOOL_ROOT.resolve("ManifestSchemaV1.protos"),
+                                StandardCharsets.UTF_8)));
 
         ProtosExactExecutionFacility.install(
                 activation,

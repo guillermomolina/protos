@@ -39,7 +39,6 @@ import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
-import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceParameter;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
@@ -76,7 +75,7 @@ public final class ProtosStandardLibraryDocumentationExtractor {
     private static final String REPOSITORY = "guillermomolina/protos";
     private static final String GENERATOR_NAME = "protos-stdlib-doc-extractor";
     private static final String GENERATOR_VERSION = "1";
-    private static final String SOURCE_SUFFIX = ".protos";
+    private static final String MODULE_INITIALIZER = "module.protos";
     private static final String STANDARD_MEMBER_MARKER = "% @standard-member";
     private static final Set<String> WINDOWS_RESERVED_SEGMENTS =
             Set.of(
@@ -281,8 +280,7 @@ public final class ProtosStandardLibraryDocumentationExtractor {
 
         List<Symbol> symbols = new ArrayList<>(topLevelSlots.size());
         for (TopLevelSlot slot : topLevelSlots) {
-            SurfaceName name = (SurfaceName) slot.creation().target();
-            SymbolIdentity identity = new SymbolIdentity(moduleIdentity, name.name());
+            SymbolIdentity identity = new SymbolIdentity(moduleIdentity, slot.name());
             String documentation =
                     symbolDocumentation.get(slot.creation().span().startOffset());
             Callable callable = callable(slot.creation().value());
@@ -314,7 +312,7 @@ public final class ProtosStandardLibraryDocumentationExtractor {
 
         Set<String> slotNames = new HashSet<>();
         for (TopLevelSlot slot : topLevelSlots) {
-            slotNames.add(((SurfaceName) slot.creation().target()).name());
+            slotNames.add(slot.name());
         }
 
         Set<String> declared = new HashSet<>();
@@ -403,10 +401,16 @@ public final class ProtosStandardLibraryDocumentationExtractor {
                 && significant.get(0).token().lexeme().equals(name);
     }
 
+    /**
+     * D242: public Standard Library MODULEs are exactly the {@code module.protos} initializers of
+     * logical module directories. Private SOURCE files are never independently published.
+     */
     private static List<Path> discoverSources(Path libraryRoot) throws IOException {
         try (Stream<Path> paths = Files.walk(libraryRoot)) {
             return paths.filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(SOURCE_SUFFIX))
+                    .filter(path -> path.getFileName().toString().equals(MODULE_INITIALIZER))
+                    .filter(path -> path.getParent() != null
+                            && !path.getParent().equals(libraryRoot))
                     .filter(path -> !isCorePath(libraryRoot.relativize(path)))
                     .filter(path -> !isInternalPath(libraryRoot.relativize(path)))
                     .sorted(Comparator.comparing(path -> slashPath(libraryRoot.relativize(path))))
@@ -434,12 +438,14 @@ public final class ProtosStandardLibraryDocumentationExtractor {
         return false;
     }
 
+    /** The {@code std:} identity of one MODULE is its initializer's parent directory path. */
     private static String logicalModuleName(Path relativePath) throws IOException {
         String relative = slashPath(relativePath);
-        if (!relative.endsWith(SOURCE_SUFFIX)) {
-            throw new IOException("Standard Library source lacks .protos suffix: " + relative);
+        String suffix = "/" + MODULE_INITIALIZER;
+        if (!relative.endsWith(suffix)) {
+            throw new IOException("Standard Library MODULE lacks module.protos: " + relative);
         }
-        String logicalName = relative.substring(0, relative.length() - SOURCE_SUFFIX.length());
+        String logicalName = relative.substring(0, relative.length() - suffix.length());
         String[] segments = logicalName.split("/", -1);
         if (segments.length == 0 || segments[0].equalsIgnoreCase("core")) {
             throw new IOException("invalid importable Standard Library module: " + logicalName);
@@ -522,15 +528,14 @@ public final class ProtosStandardLibraryDocumentationExtractor {
         List<TopLevelSlot> slots = new ArrayList<>();
         for (SurfaceExpression expression : program.expressions()) {
             SurfaceExpression unwrapped = unwrapGroups(expression);
-            if (unwrapped instanceof SurfaceSlotCreation creation
-                    && creation.target() instanceof SurfaceName) {
-                slots.add(new TopLevelSlot(creation, expression.span()));
+            String published = publishedSlotName(unwrapped);
+            if (published != null) {
+                slots.add(new TopLevelSlot(
+                        (SurfaceSlotCreation) unwrapped, expression.span(), published));
             } else {
                 String removed = directlyRemovedModuleSlot(unwrapped);
                 if (removed != null) {
-                    slots.removeIf(slot ->
-                            ((SurfaceName) slot.creation().target())
-                                    .name().equals(removed));
+                    slots.removeIf(slot -> slot.name().equals(removed));
                 }
             }
         }
@@ -539,7 +544,22 @@ public final class ProtosStandardLibraryDocumentationExtractor {
     }
 
     /**
-     * A direct top-level context.removeSlot("name") removes that binding
+     * D242: a MODULE publishes exactly the own slots it creates on its public object. Only a
+     * direct top-level {@code this.Name: value} slot creation is a published symbol; bare
+     * {@code Name: value} bindings are private to the initializer and are never documented.
+     */
+    private static String publishedSlotName(SurfaceExpression expression) {
+        if (expression instanceof SurfaceSlotCreation creation
+                && creation.target() instanceof SurfaceMember member
+                && unwrapGroups(member.receiver()) instanceof SurfaceIntrinsic intrinsic
+                && intrinsic.kind() == SurfaceIntrinsic.Kind.THIS) {
+            return member.name();
+        }
+        return null;
+    }
+
+    /**
+     * A direct top-level this.removeSlot("name") removes that slot
      * from the module's published surface. A call nested inside a Closure,
      * conditional or another expression is not an unconditional removal.
      * Process expressions in source order so a later creation is retained.
@@ -549,7 +569,7 @@ public final class ProtosStandardLibraryDocumentationExtractor {
                 || !(unwrapGroups(call.receiver()) instanceof SurfaceMember member)
                 || !member.name().equals("removeSlot")
                 || !(unwrapGroups(member.receiver()) instanceof SurfaceIntrinsic intrinsic)
-                || intrinsic.kind() != SurfaceIntrinsic.Kind.CONTEXT
+                || intrinsic.kind() != SurfaceIntrinsic.Kind.THIS
                 || call.arguments().size() != 1
                 || call.arguments().get(0).spread()
                 || !(unwrapGroups(call.arguments().get(0).expression())
@@ -698,7 +718,8 @@ public final class ProtosStandardLibraryDocumentationExtractor {
         return result.toString();
     }
 
-    private record TopLevelSlot(SurfaceSlotCreation creation, SourceSpan expressionSpan) {
+    private record TopLevelSlot(
+            SurfaceSlotCreation creation, SourceSpan expressionSpan, String name) {
     }
 
     private record ParsedModule(Module module, List<Symbol> symbols) {

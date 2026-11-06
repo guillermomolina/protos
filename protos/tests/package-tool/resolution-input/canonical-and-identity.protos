@@ -13,14 +13,14 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("canonical-root", () => {
-        Version: import("self:ReleaseVersion")
-        Constraint: import("self:DependencyConstraint")
-        Input: import("self:ResolutionInput")
+        Version: import("tool-source:package/ReleaseVersion.protos")
+        Constraint: import("tool-source:package/DependencyConstraint.protos")
+        Input: import("tool-source:package/ResolutionInput.protos")
 
         manifest: (packageId, versionText, compatibility, dependencies) => {
             {
@@ -59,9 +59,9 @@ tests: [
         Assertions.require(ok)
     }),
     Test("canonical-complete", () => {
-        Version: import("self:ReleaseVersion")
-        Constraint: import("self:DependencyConstraint")
-        Input: import("self:ResolutionInput")
+        Version: import("tool-source:package/ReleaseVersion.protos")
+        Constraint: import("tool-source:package/DependencyConstraint.protos")
+        Input: import("tool-source:package/ResolutionInput.protos")
 
         manifest: (packageId, versionText, compatibility, dependencies) => {
             {
@@ -142,9 +142,9 @@ tests: [
         Assertions.require(ok)
     }),
     Test("constraint-equivalence", () => {
-        Version: import("self:ReleaseVersion")
-        Constraint: import("self:DependencyConstraint")
-        Input: import("self:ResolutionInput")
+        Version: import("tool-source:package/ReleaseVersion.protos")
+        Constraint: import("tool-source:package/DependencyConstraint.protos")
+        Input: import("tool-source:package/ResolutionInput.protos")
 
         manifest: (packageId, versionText, compatibility, dependencies) => {
             {
@@ -199,9 +199,9 @@ tests: [
         Assertions.require(ok)
     }),
     Test("compatibility-affects-digest", () => {
-        Version: import("self:ReleaseVersion")
-        Constraint: import("self:DependencyConstraint")
-        Input: import("self:ResolutionInput")
+        Version: import("tool-source:package/ReleaseVersion.protos")
+        Constraint: import("tool-source:package/DependencyConstraint.protos")
+        Input: import("tool-source:package/ResolutionInput.protos")
 
         manifest: (packageId, versionText, compatibility, dependencies) => {
             {
@@ -237,9 +237,9 @@ tests: [
         Assertions.require(Input.digest(withoutRestriction).hex != Input.digest(withRestriction).hex)
     }),
     Test("path-member-target", () => {
-        Version: import("self:ReleaseVersion")
-        Constraint: import("self:DependencyConstraint")
-        Input: import("self:ResolutionInput")
+        Version: import("tool-source:package/ReleaseVersion.protos")
+        Constraint: import("tool-source:package/DependencyConstraint.protos")
+        Input: import("tool-source:package/ResolutionInput.protos")
 
         manifest: (packageId, versionText, compatibility, dependencies) => {
             {
@@ -300,9 +300,9 @@ tests: [
         Assertions.require(found)
     }),
     Test("matches-header", () => {
-        Version: import("self:ReleaseVersion")
-        Constraint: import("self:DependencyConstraint")
-        Input: import("self:ResolutionInput")
+        Version: import("tool-source:package/ReleaseVersion.protos")
+        Constraint: import("tool-source:package/DependencyConstraint.protos")
+        Input: import("tool-source:package/ResolutionInput.protos")
 
         manifest: (packageId, versionText, compatibility, dependencies) => {
             {

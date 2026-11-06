@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("row parser basic", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             rows: Map()
             count: 0
@@ -54,7 +54,7 @@ tests: [
     }),
     Test("row parser boundaries", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             checkSplit: (left, right) => {
                 rows: Map()
@@ -122,7 +122,7 @@ tests: [
     }),
     Test("row parser independence", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             rowsA: Map()
             rowsB: Map()
@@ -165,7 +165,7 @@ tests: [
     }),
     Test("row parser lifecycle", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             finished: CSV.rowParser((row) => { null })
             finished.feed("a")

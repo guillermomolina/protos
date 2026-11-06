@@ -46,9 +46,17 @@ public final class ProtosCanonicalInitialModuleExecution {
             throw new IOException("canonical initial module preparation failed", failure);
         }
 
-        ProtosObjectValue instance = initialActivation.context();
+        if (key.isForeign()) {
+            throw new IOException("canonical initial module must be source-backed");
+        }
+        // D242: the initial activation Context is always the private lexical Context. A MODULE
+        // receives a distinct fresh public object as its cached import result; a SOURCE caches its
+        // complete Context.
+        ProtosObjectValue lexicalContext = initialActivation.context();
+        final ProtosObjectValue instance;
         try {
-            prelude.installStandardModuleMembersForRuntime(key, instance);
+            prelude.installStandardModuleMembersForRuntime(key, lexicalContext);
+            instance = key.isModule() ? prelude.newPublicModuleObject() : lexicalContext;
         } catch (RuntimeException failure) {
             throw new IOException("canonical initial module preparation failed", failure);
         }
@@ -56,11 +64,18 @@ public final class ProtosCanonicalInitialModuleExecution {
                 new ProtosActorModuleState.ModuleRecord(instance);
         state.put(key, record); // normative cache-before-execute point
         ProtosActivation activation =
-                prelude.newModuleActivation(
-                        state,
-                        key,
-                        instance,
-                        initialActivation.executionDomain());
+                key.isModule()
+                        ? prelude.newModuleInitializerActivation(
+                                state,
+                                key,
+                                lexicalContext,
+                                instance,
+                                initialActivation.executionDomain())
+                        : prelude.newModuleActivation(
+                                state,
+                                key,
+                                instance,
+                                initialActivation.executionDomain());
 
         try {
             ProtosExecutionOutcome outcome = executeSource(source, activation);

@@ -14,8 +14,8 @@
 // the specific language governing rights and limitations under the License.
 
 projectFilesystem: filesystem
-MetadataPublication: import("self:MetadataPublication")
-BootstrapMessage: import("self:BootstrapMessage")
+MetadataPublication: import("./MetadataPublication.protos")
+BootstrapMessage: import("./BootstrapMessage.protos")
 writer: TextWriter(process.stdout(), process.stdoutEncoding())
 writer.writeLine(BootstrapMessage.banner).value()
 writer.writeLine(process.args()[0]).value()

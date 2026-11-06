@@ -41,7 +41,7 @@ class ProtosCollectionsSetModuleTest {
                         ProtosMapValue.class,
                         ProtosTestExecutionSupport.evaluate(
                                 """
-                                Set: import("std:collections/Set")
+                                Set: import("std:collections/set")
                                 Set()
                                 """,
                                 prelude.newModuleActivation()));
@@ -50,7 +50,7 @@ class ProtosCollectionsSetModuleTest {
                         ProtosIdentityMapValue.class,
                         ProtosTestExecutionSupport.evaluate(
                                 """
-                                IdentitySet: import("std:collections/IdentitySet")
+                                IdentitySet: import("std:collections/identity_set")
                                 IdentitySet()
                                 """,
                                 prelude.newModuleActivation()));
@@ -69,13 +69,13 @@ class ProtosCollectionsSetModuleTest {
 
         Object first =
                 ProtosTestExecutionSupport.evaluate(
-                        "import(\"std:collections/Set\")", actorA);
+                        "import(\"std:collections/set\")", actorA);
         Object repeated =
                 ProtosTestExecutionSupport.evaluate(
-                        "import(\"std:collections/Set\")", actorA);
+                        "import(\"std:collections/set\")", actorA);
         Object otherActor =
                 ProtosTestExecutionSupport.evaluate(
-                        "import(\"std:collections/Set\")", actorB);
+                        "import(\"std:collections/set\")", actorB);
 
         assertSame(first, repeated);
         assertNotSame(first, otherActor);

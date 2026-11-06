@@ -9,7 +9,7 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-ProcessStreams: import("std:io/ProcessStreams")
+ProcessStreams: import("std:io/process_streams")
 
 // ProcessStreams consumes the Process-selected Encoding. Closing this borrowing
 // TextWriter closes only the wrapper, so later Process output remains available.

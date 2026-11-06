@@ -60,7 +60,7 @@ import java.util.Locale;
 /**
  * Private runtime facility of {@code std:inspect} (D205, LIB022-B).
  *
- * <p>The public operations are ordinary Closures of {@code lib/inspect.protos}. This frozen
+ * <p>The public operations are ordinary Closures of {@code lib/inspect/module.protos}. This frozen
  * facility is a deferred standard initial member of exactly that module, created only when an
  * authorized Actor-local instance of the module initializes; its bootstrap slot is removed, so it
  * is never module surface or a Prelude binding.
@@ -77,7 +77,7 @@ import java.util.Locale;
  * Context, root, plan or registry.
  */
 public final class ProtosInspectFacility {
-    public static final ProtosModuleKey MODULE_KEY = new ProtosModuleKey("std:inspect");
+    public static final ProtosModuleKey MODULE_KEY = ProtosModuleKey.module("std:inspect");
     public static final String BOOTSTRAP_SLOT = "_inspectFacility";
 
     /** Explicit bound on one diagnostic String; a longer rendering is marked as truncated. */

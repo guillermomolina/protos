@@ -15,9 +15,9 @@ Protos networking is a set of separate values, each with one job:
 |---|---|---|
 | `network` | Live authority for TCP: `connectTcp(endpoint)` and `listenTcp(ipVersion:, address:, port:)` | A bootstrap-local host grant |
 | `resolver` | Live authority to turn a hostname into addresses | A separate bootstrap-local host grant |
-| `IpAddress` | A transferable, immutable address value | `std:network/IpAddresses`, or a Resolver result |
-| `IpEndpoint` | A numeric address plus a port | `std:network/IpEndpoints` |
-| TLS trust | Which certificate authorities a TLS client accepts | An explicit `std:tls/Client` `Trust` choice |
+| `IpAddress` | A transferable, immutable address value | `std:network/ip_addresses`, or a Resolver result |
+| `IpEndpoint` | A numeric address plus a port | `std:network/ip_endpoints` |
+| TLS trust | Which certificate authorities a TLS client accepts | An explicit `std:tls/client` `Trust` choice |
 
 A `network` grant does not grant Resolver authority, and a `resolver` grant
 does not grant `network`. Neither selects any TLS trust.
@@ -25,9 +25,9 @@ does not grant `network`. Neither selects any TLS trust.
 ## Module imports
 
 ```protos
-IpAddress: import("std:network/IpAddresses").IpAddress
-IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
-Resolvers: import("std:network/Resolvers")
+IpAddress: import("std:network/ip_addresses").IpAddress
+IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
+Resolvers: import("std:network/resolvers")
 ```
 
 `Resolvers` exports the authority-free `Resolver` protocol prototype and
@@ -50,7 +50,7 @@ accepts only a numeric `IpEndpoint`, never a hostname, so the application
 chooses an address, or decides explicitly how to try several, and connects:
 
 ```protos
-IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
 
 originalHostname: "example.org"
 addresses: (() => {
@@ -100,7 +100,7 @@ Network, connection, HTTP or TLS resource.
   neither `network` nor `resolver`, and no flag grants them. A Java host grants
   them; see [Embedding Protos in a Java application](../embedding/java.md).
 - Imported modules do not inherit those bootstrap-local slots. Pass the
-  capabilities as arguments, as `std:http/UrlClient` expects.
+  capabilities as arguments, as `std:http/url_client` expects.
 - Live `network` and `resolver` capabilities are not transferable Actor
   messages and cannot enter P. Resolved `IpAddress` and `IpEndpoint` values
   can.

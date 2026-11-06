@@ -196,7 +196,7 @@ final class ProtosEmbeddedModulesTest {
             assertEquals("failed", outcome(context, "import(\"app:known.protos\")"));
             assertEquals("failed", outcome(context, "Actor.spawn(\"app:unknown\", \"start\")"));
             // std: still resolves from the Standard Library alongside the catalog.
-            assertEquals("ok", outcome(context, "import(\"std:test/Assertions\")"));
+            assertEquals("ok", outcome(context, "import(\"std:test/assertions\")"));
             assertTrue(embedded(context).isLive());
         }
     }
@@ -294,7 +294,7 @@ final class ProtosEmbeddedModulesTest {
                     NullPointerException.class, () -> ProtosEmbeddedModules.install(context, nullKey));
             for (String invalid :
                     new String[] {
-                        "app:", "std:collections/Set", "foreign:v1:amF2YQ:eA", "java:x", "worker",
+                        "app:", "std:collections/set", "foreign:v1:amF2YQ:eA", "java:x", "worker",
                         "APP:worker", " app:worker", "./app:worker"
                     }) {
                 // A valid entry beside the invalid one must not be published either.

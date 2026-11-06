@@ -13,10 +13,10 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Manifest: import("self:Manifest")
-ResourceBinding: import("self:ResourceBinding")
-ResourceReservation: import("self:ResourceReservation")
-ResourceCatalog: import("self:ResourceCatalog")
+Manifest: import("./Manifest.protos")
+ResourceBinding: import("./ResourceBinding.protos")
+ResourceReservation: import("./ResourceReservation.protos")
+ResourceCatalog: import("./ResourceCatalog.protos")
 
 readSource: (spec, filesystem) => {
     file: filesystem.open(Manifest.pathValue(Manifest.casePath(spec))).value()

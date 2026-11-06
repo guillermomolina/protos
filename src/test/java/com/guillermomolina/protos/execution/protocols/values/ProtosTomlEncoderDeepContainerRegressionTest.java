@@ -67,7 +67,7 @@ final class ProtosTomlEncoderDeepContainerRegressionTest {
 
     private static Object evaluate(String body) throws Exception {
         return ProtosTestExecutionSupport.evaluate(
-                "TOML: import(\"std:toml/TOML\")\n" + body,
+                "TOML: import(\"std:toml/toml\")\n" + body,
                 prelude.newModuleActivation());
     }
 }

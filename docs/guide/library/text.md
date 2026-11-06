@@ -14,10 +14,10 @@ exact contract.
 
 | Module | Operations |
 |---|---|
-| `std:text/Style` | `Style(foreground)`, `recognizes(value)` |
-| `std:text/StyledText` | `StyledText(text)`, `StyledText(text, style)`, `concat(...fragments)`, `recognizes(value)` |
-| `std:text/ANSI` | `render(styledText, stylingEnabled)` |
-| `std:text/ColorMode` | `AUTO`, `ALWAYS`, `NEVER`, `recognizes(value)`, `resolve(mode, autoEnabled)` |
+| `std:text/style` | `Style(foreground)`, `recognizes(value)` |
+| `std:text/styled_text` | `StyledText(text)`, `StyledText(text, style)`, `concat(...fragments)`, `recognizes(value)` |
+| `std:text/ansi` | `render(styledText, stylingEnabled)` |
+| `std:text/color_mode` | `AUTO`, `ALWAYS`, `NEVER`, `recognizes(value)`, `resolve(mode, autoEnabled)` |
 
 A foreground is exactly one of `"default"`, `"black"`, `"red"`, `"green"`,
 `"yellow"`, `"blue"`, `"magenta"`, `"cyan"`, or `"white"`. Only foreground
@@ -34,9 +34,9 @@ The factory bodies are unchanged: each is still a Closure bound to its private
 module facility, and the public invocation forms are the same.
 
 ```protos
-Style: import("std:text/Style")
-StyledText: import("std:text/StyledText")
-ANSI: import("std:text/ANSI")
+Style: import("std:text/style")
+StyledText: import("std:text/styled_text")
+ANSI: import("std:text/ansi")
 
 status: StyledText.concat("build ", StyledText("ok", Style("green")), "!")
 
@@ -57,20 +57,20 @@ checks whether output is a terminal or reads environment variables such as
 `NO_COLOR`; the program decides `autoEnabled` itself and passes the result on.
 
 ```protos
-ColorMode: import("std:text/ColorMode")
+ColorMode: import("std:text/color_mode")
 
 enabled: ColorMode.resolve(ColorMode.AUTO, false)
 ANSI.render(status, enabled) // "build ok!"
 ```
 
 Modes are their canonical Strings (`ColorMode.AUTO` is `"AUTO"`); no other
-spelling or letter case is accepted. `std:logging/ColoredFormatter` uses the
+spelling or letter case is accepted. `std:logging/colored_formatter` uses the
 same policy (see [Structured logging](logging.md)).
 
 ## Encoding helpers
 
-Each of `std:text/UTF8`, `std:text/UTF16BE`, `std:text/UTF16LE`, and
-`std:text/Latin1` has the same six operations over the corresponding Core
+Each of `std:text/utf8`, `std:text/utf16be`, `std:text/utf16le`, and
+`std:text/latin1` has the same six operations over the corresponding Core
 `Encoding`:
 
 | Operation | Answers |
@@ -85,7 +85,7 @@ is closed; an *owning* one closes it too. Chapter 11 explains the ownership
 model in [Process, I/O, Filesystems, and Authority](../11-process-io-filesystems-and-authority.md).
 
 ```protos
-UTF8: import("std:text/UTF8")
+UTF8: import("std:text/utf8")
 
 bytes: UTF8.encode("héllo")
 bytes.size()        // 6

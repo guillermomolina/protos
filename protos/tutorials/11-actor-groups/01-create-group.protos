@@ -10,8 +10,8 @@
  */
 
 // Actor.group requires one or more explicit ActorRefs and returns a GroupRef.
-first: Actor.spawn("std:collections/Set", "construct", "Ada")
-second: Actor.spawn("std:collections/Set", "construct", "Grace")
+first: Actor.spawn("std:collections/set", "construct", "Ada")
+second: Actor.spawn("std:collections/set", "construct", "Grace")
 workers: Actor.group(first, second)
 
 print(workers === workers)

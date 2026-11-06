@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("delegated error category selection in callbacks", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             ValidationError: Error {}
             FatalValidation: ValidationError {}
@@ -99,7 +99,7 @@ tests: [
     }),
     Test("error handled delegated pipeline", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             validator: {
                 limit: 0
@@ -155,7 +155,7 @@ tests: [
     }),
     Test("handler resignal escapes selected handler", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             machine: {
                 step: (value) => {
@@ -231,7 +231,7 @@ tests: [
     }),
     Test("per element handler lexical state", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             processor: {
                 apply: (value) => {

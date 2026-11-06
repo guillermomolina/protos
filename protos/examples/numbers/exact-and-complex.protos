@@ -15,8 +15,8 @@
 
 // Exact rational arithmetic, Float mixing, Complex components, and square roots.
 // Each print is a small executable check; the expected output is eight true lines.
-Math: import("std:math/Math")
-IntegerMath: import("std:math/Integer")
+Math: import("std:math/math")
+IntegerMath: import("std:math/integer")
 
 half: 1 / 2
 z: Complex(3, 4)

@@ -50,7 +50,7 @@ final class ProtosRootActorBootstrapAuthorityTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosProcessRuntime process = new ProtosProcessRuntime(actorRefPrototype());
         ProtosActor root = process.rootActorForRuntime();
-        ProtosModuleKey rootKey = new ProtosModuleKey("root");
+        ProtosModuleKey rootKey = ProtosModuleKey.source("root");
 
         assertTrue(
                 new ProtosActorBootstrap(new ProtosModuleRuntime(resolver))
@@ -80,7 +80,7 @@ final class ProtosRootActorBootstrapAuthorityTest {
         ProtosPrelude absentPrelude =
                 new ProtosCoreBootstrap().bootstrap(CORE, absentResolver);
         ProtosProcessRuntime absent = new ProtosProcessRuntime(actorRefPrototype());
-        ProtosModuleKey absentKey = new ProtosModuleKey("root-absent");
+        ProtosModuleKey absentKey = ProtosModuleKey.source("root-absent");
 
         assertTrue(
                 new ProtosActorBootstrap(new ProtosModuleRuntime(absentResolver))
@@ -109,7 +109,7 @@ final class ProtosRootActorBootstrapAuthorityTest {
         ProtosFilesystemValue filesystem = new ProtosFilesystemValue();
         ProtosProcessRuntime granted =
                 new ProtosProcessRuntime(actorRefPrototype(), filesystem);
-        ProtosModuleKey grantedKey = new ProtosModuleKey("root-granted");
+        ProtosModuleKey grantedKey = ProtosModuleKey.source("root-granted");
 
         assertTrue(
                 new ProtosActorBootstrap(new ProtosModuleRuntime(grantedResolver))
@@ -155,13 +155,13 @@ final class ProtosRootActorBootstrapAuthorityTest {
                         .initialize(
                                 root,
                                 prelude,
-                                new ProtosModuleKey("root"),
+                                ProtosModuleKey.source("root"),
                                 "boot",
                                 List.of()));
 
         ProtosObjectValue child =
                 root.moduleState()
-                        .lookup(new ProtosModuleKey("child"))
+                        .lookup(ProtosModuleKey.source("child"))
                         .orElseThrow()
                         .instance();
         assertFalse(child.hasLocalSlot("process"));
@@ -178,7 +178,7 @@ final class ProtosRootActorBootstrapAuthorityTest {
         ProtosProcessRuntime process =
                 new ProtosProcessRuntime(actorRefPrototype(), filesystem);
         ProtosActor child = process.createHostedActorForRuntime(actorRefPrototype());
-        ProtosModuleKey childKey = new ProtosModuleKey("child");
+        ProtosModuleKey childKey = ProtosModuleKey.source("child");
 
         assertTrue(
                 new ProtosActorBootstrap(new ProtosModuleRuntime(resolver))
@@ -202,7 +202,7 @@ final class ProtosRootActorBootstrapAuthorityTest {
         ProtosActor root = process.rootActorForRuntime();
         ProtosActorBootstrap bootstrap =
                 new ProtosActorBootstrap(new ProtosModuleRuntime(resolver));
-        ProtosModuleKey rootKey = new ProtosModuleKey("root");
+        ProtosModuleKey rootKey = ProtosModuleKey.source("root");
 
         assertTrue(bootstrap.initialize(root, prelude, rootKey, "boot", List.of()));
         ProtosObjectValue rootModule =
@@ -227,7 +227,7 @@ final class ProtosRootActorBootstrapAuthorityTest {
         assertSame(rootCapability.processForRuntime(), delegated.processForRuntime());
 
         ProtosActor child = process.createHostedActorForRuntime(actorRefPrototype());
-        ProtosModuleKey childKey = new ProtosModuleKey("child");
+        ProtosModuleKey childKey = ProtosModuleKey.source("child");
         assertTrue(
                 bootstrap.initialize(
                         child, prelude, childKey, "boot", List.of(delegated)));
@@ -254,7 +254,7 @@ final class ProtosRootActorBootstrapAuthorityTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosProcessRuntime process = new ProtosProcessRuntime(actorRefPrototype());
         ProtosActor root = process.rootActorForRuntime();
-        ProtosModuleKey rootKey = new ProtosModuleKey("root");
+        ProtosModuleKey rootKey = ProtosModuleKey.source("root");
 
         assertTrue(
                 new ProtosActorBootstrap(new ProtosModuleRuntime(resolver))
@@ -265,7 +265,7 @@ final class ProtosRootActorBootstrapAuthorityTest {
         Object processCapability = rootModule.readLocalSlot("process").orElseThrow();
         ProtosObjectValue child =
                 root.moduleState()
-                        .lookup(new ProtosModuleKey("child"))
+                        .lookup(ProtosModuleKey.source("child"))
                         .orElseThrow()
                         .instance();
 
@@ -291,7 +291,7 @@ final class ProtosRootActorBootstrapAuthorityTest {
             if (!sources.containsKey(exactSpecifier)) {
                 throw new IllegalArgumentException("unknown module: " + exactSpecifier);
             }
-            return new ProtosModuleKey(exactSpecifier);
+            return ProtosModuleKey.source(exactSpecifier);
         }
 
         @Override

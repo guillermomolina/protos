@@ -46,8 +46,8 @@ import org.junit.jupiter.api.Test;
  * I060-B/D167 placement guards for the buffered byte wrapper factories.
  *
  * <p>{@code BufferedReader} and {@code BufferedWriter} are FROZEN runtime-owned standard objects
- * published only as initial members of {@code std:io/BufferedReader} and
- * {@code std:io/BufferedWriter}. Module instances stay Actor-local while the factory identity is
+ * published only as initial members of {@code std:io/buffered_reader} and
+ * {@code std:io/buffered_writer}. Module instances stay Actor-local while the factory identity is
  * shared; every construction creates a fresh wrapper. Isolation transfer keeps the factories as
  * exact anchors and never imports a module to recover them; the counting resolver makes any such
  * import deterministically observable.
@@ -56,24 +56,24 @@ final class ProtosStandardBufferedByteIoPlacementTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final ProtosModuleKey READER_MODULE =
-            new ProtosModuleKey("std:io/BufferedReader");
+            ProtosModuleKey.module("std:io/buffered_reader");
     private static final ProtosModuleKey WRITER_MODULE =
-            new ProtosModuleKey("std:io/BufferedWriter");
+            ProtosModuleKey.module("std:io/buffered_writer");
     private static final String SOURCE_MODULES =
             """
-            Array(import("std:io/BufferedReader"), import("std:io/BufferedWriter"))
+            Array(import("std:io/buffered_reader"), import("std:io/buffered_writer"))
             """;
     private static final String SOURCE_FACTORIES =
             """
-            BufferedReader: import("std:io/BufferedReader").BufferedReader
-            BufferedWriter: import("std:io/BufferedWriter").BufferedWriter
+            BufferedReader: import("std:io/buffered_reader").BufferedReader
+            BufferedWriter: import("std:io/buffered_writer").BufferedWriter
             Array(BufferedReader, BufferedWriter)
             """;
 
     private static final String SOURCE_PARALLEL_FACTORIES =
             """
-            BufferedReader: import("std:io/BufferedReader").BufferedReader
-            BufferedWriter: import("std:io/BufferedWriter").BufferedWriter
+            BufferedReader: import("std:io/buffered_reader").BufferedReader
+            BufferedWriter: import("std:io/buffered_writer").BufferedWriter
             factories: Array(BufferedReader, BufferedWriter)
             factories
             """;
@@ -126,8 +126,16 @@ final class ProtosStandardBufferedByteIoPlacementTest {
         }
         for (String name : new String[] {"BufferedReader", "BufferedWriter"}) {
             String source =
-                    Files.readString(STANDARD_LIBRARY.resolve("io").resolve(name + ".protos"));
-            assertFalse(source.contains(name + ":"), name);
+                    Files.readString(
+                            STANDARD_LIBRARY.resolve("io")
+                                    .resolve(name.equals("BufferedReader")
+                                            ? "buffered_reader" : "buffered_writer")
+                                    .resolve("module.protos"));
+            assertFalse(
+                    source.lines().anyMatch(line ->
+                            !line.stripLeading().startsWith("//")
+                                    && line.stripLeading().startsWith(name + ":")),
+                    name);
         }
         System.out.println("STDLIB_BUFFERED_READER_PRESENT=PASS");
         System.out.println("STDLIB_BUFFERED_WRITER_PRESENT=PASS");

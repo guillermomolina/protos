@@ -34,7 +34,7 @@ final class ProtosPackageRunDriverTest extends ProtosPackageRunDriverTestSupport
         Path project = temporaryRoot.resolve("workspace");
         copyTree(WORKSPACE_CASE, project);
         Files.writeString(
-                project.resolve("Main.protos"),
+                ProtosPackageRunDriverTestSupport.moduleFile(project, "Main"),
                 "writer: TextWriter(process.stdout(), process.stdoutEncoding())\n"
                         + "writer.writeLine(process.args().at(0)).value()\n"
                         + "42\n",

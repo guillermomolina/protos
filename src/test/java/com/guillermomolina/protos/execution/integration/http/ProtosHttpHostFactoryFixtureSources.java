@@ -113,11 +113,11 @@ final class ProtosHttpHostFactoryFixtureSources {
      */
     static final String ROOT_SERVICE =
             """
-            http: import("std:http/Host")
-            IpAddress: import("std:network/IpAddresses").IpAddress
-            IpEndpoints: import("std:network/IpEndpoints")
+            http: import("std:http/host")
+            IpAddress: import("std:network/ip_addresses").IpAddress
+            IpEndpoints: import("std:network/ip_endpoints")
             IpEndpoint: IpEndpoints.IpEndpoint
-            ProcessStreams: import("std:io/ProcessStreams")
+            ProcessStreams: import("std:io/process_streams")
             out: ProcessStreams.stdoutWriter(process)
             loopback: IpAddress(4, 2130706433)
             hits: 0
@@ -375,8 +375,8 @@ final class ProtosHttpHostFactoryFixtureSources {
 
     static final String PROGRAM =
             """
-            http: import("std:http/Host")
-            IpAddress: import("std:network/IpAddresses").IpAddress
+            http: import("std:http/host")
+            IpAddress: import("std:network/ip_addresses").IpAddress
             site: import("app:factory")
             loopback: IpAddress(4, 2130706433)
             service: Actor.spawn("app:service", "start")
@@ -720,7 +720,7 @@ final class ProtosHttpHostFactoryFixtureSources {
                                 note(stage + ": unexpected echo")
                             }
                             stage = "spawn"
-                            worker = Actor.spawn("std:http/internal/HostWorker", "startWithFactory", probeListener.acceptCapability(), "app:factory", binding, 1, 1, null)
+                            worker = Actor.spawn("std:http/internal/host_worker", "startWithFactory", probeListener.acceptCapability(), "app:factory", binding, 1, 1, null)
                             stage = "serve request"
                             served: worker.request("serve", initialization())
                             stage = "ready"

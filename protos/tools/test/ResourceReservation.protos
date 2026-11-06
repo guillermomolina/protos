@@ -26,9 +26,9 @@
 // exact/single-use and a stale reservation cannot release another attempt's
 // compatible occupancy.
 
-Manifest: import("self:Manifest")
-ResourceCatalog: import("self:ResourceCatalog")
-ResourceBinding: import("self:ResourceBinding")
+Manifest: import("./Manifest.protos")
+ResourceCatalog: import("./ResourceCatalog.protos")
+ResourceBinding: import("./ResourceBinding.protos")
 
 frozenTuple: (...items) => {
     items

@@ -13,12 +13,12 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("body-missing-root-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -29,7 +29,7 @@ tests: [
         })
     }),
     Test("body-duplicate-root-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -41,7 +41,7 @@ tests: [
         })
     }),
     Test("body-duplicate-member-declaration-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -54,7 +54,7 @@ tests: [
         })
     }),
     Test("body-duplicate-member-ref-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -67,7 +67,7 @@ tests: [
         })
     }),
     Test("body-root-repeated-as-member-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -79,7 +79,7 @@ tests: [
         })
     }),
     Test("body-duplicate-registry-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -92,7 +92,7 @@ tests: [
         })
     }),
     Test("body-duplicate-git-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -105,7 +105,7 @@ tests: [
         })
     }),
     Test("body-duplicate-dependency-alias-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -120,7 +120,7 @@ tests: [
         })
     }),
     Test("body-dangling-declaring-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -133,7 +133,7 @@ tests: [
         })
     }),
     Test("body-dangling-target-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -145,7 +145,7 @@ tests: [
         })
     }),
     Test("body-blank-line-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -156,7 +156,7 @@ tests: [
         })
     }),
     Test("body-unknown-record-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -168,7 +168,7 @@ tests: [
         })
     }),
     Test("body-registry-wrong-field-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -180,7 +180,7 @@ tests: [
         })
     }),
     Test("body-git-missing-content-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -192,7 +192,7 @@ tests: [
         })
     }),
     Test("body-content-uppercase-digest-error", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +

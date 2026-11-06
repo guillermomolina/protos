@@ -96,7 +96,7 @@ final class ProtosProcessRuntimeTest {
                     @Override
                     public ProtosModuleKey resolve(
                             String exactSpecifier, Optional<ProtosModuleKey> importingModule) {
-                        return new ProtosModuleKey("canonical:" + exactSpecifier);
+                        return ProtosModuleKey.source("canonical:" + exactSpecifier);
                     }
 
                     @Override
@@ -117,7 +117,7 @@ final class ProtosProcessRuntimeTest {
                                 bootstrap.initialize(
                                         root,
                                         prelude,
-                                        new ProtosModuleKey("canonical:app"),
+                                        ProtosModuleKey.source("canonical:app"),
                                         "boot",
                                         List.of()));
 
@@ -170,7 +170,7 @@ final class ProtosProcessRuntimeTest {
                     @Override
                     public ProtosModuleKey resolve(
                             String exactSpecifier, Optional<ProtosModuleKey> importingModule) {
-                        return new ProtosModuleKey("canonical:" + exactSpecifier);
+                        return ProtosModuleKey.source("canonical:" + exactSpecifier);
                     }
 
                     @Override
@@ -197,7 +197,7 @@ final class ProtosProcessRuntimeTest {
         ProtosActivation activation =
                 prelude.newModuleActivation(
                         root.moduleState(),
-                        new ProtosModuleKey("creator"),
+                        ProtosModuleKey.source("creator"),
                         prelude.newExecutionContext(),
                         root.executionDomain());
 

@@ -36,8 +36,8 @@ final class ProtosTestToolFileSelectionPlanTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Manifest: import("self:Manifest")
-                        FileSelection: import("self:FileSelection")
+                        Manifest: import("./Manifest.protos")
+                        FileSelection: import("./FileSelection.protos")
 
                         first:
                             Manifest.projectTreeCaseSpec(
@@ -100,8 +100,8 @@ final class ProtosTestToolFileSelectionPlanTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Manifest: import("self:Manifest")
-                        FileSelection: import("self:FileSelection")
+                        Manifest: import("./Manifest.protos")
+                        FileSelection: import("./FileSelection.protos")
 
                         spec:
                             Manifest.projectTreeCaseSpec(
@@ -142,8 +142,8 @@ final class ProtosTestToolFileSelectionPlanTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Manifest: import("self:Manifest")
-                        FileSelection: import("self:FileSelection")
+                        Manifest: import("./Manifest.protos")
+                        FileSelection: import("./FileSelection.protos")
 
                         spec:
                             Manifest.projectTreeCaseSpec(
@@ -188,8 +188,8 @@ final class ProtosTestToolFileSelectionPlanTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Manifest: import("self:Manifest")
-                        FileSelection: import("self:FileSelection")
+                        Manifest: import("./Manifest.protos")
+                        FileSelection: import("./FileSelection.protos")
 
                         first:
                             Manifest.projectTreeCaseSpec(
@@ -246,8 +246,8 @@ final class ProtosTestToolFileSelectionPlanTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Manifest: import("self:Manifest")
-                        FileSelection: import("self:FileSelection")
+                        Manifest: import("./Manifest.protos")
+                        FileSelection: import("./FileSelection.protos")
 
                         first:
                             Manifest.projectTreeCaseSpec(
@@ -317,6 +317,6 @@ final class ProtosTestToolFileSelectionPlanTest {
 
         return ProtosTestExecutionSupport.execute(
                 source,
-                prelude.newModuleActivation());
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 }

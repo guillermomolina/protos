@@ -14,7 +14,7 @@
 // the specific language governing rights and limitations under the LICENSE.
 
 
-Runner: import("self:Runner")
+Runner: import("./Runner.protos")
 
 // Healthy D108 envelope: no CaseRuns is still a valid completed run and lets the
 // projection prove that the historical runTuple is retained unchanged.

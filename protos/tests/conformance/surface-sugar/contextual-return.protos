@@ -26,8 +26,8 @@
 // ends with a `reached` assertion that runs only when control came back to
 // the test body normally.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 findCaret: (items, trace) => {
     items.each((item) => {

@@ -372,7 +372,7 @@ class ProtosParallelExecutionTest{
    }
    probeSource.append("]\n");
    var pair=assertInstanceOf(ProtosArrayValue.class,evalHosted(h,
-       "LA: import(\"std:math/LinearAlgebra\")\n"
+       "LA: import(\"std:math/linear_algebra\")\n"
            + "Vector: LA.Vector\n"
            + "Matrix: LA.Matrix\n"
            + "v: Vector(1, 1 / 2, 2.5, Complex(1, 2))\n"
@@ -419,7 +419,7 @@ class ProtosParallelExecutionTest{
   try(var h=ProtosHostedExecutionTestFixture.open(p)){
    var d=h.activation().executionDomain();
    var pair=assertInstanceOf(ProtosArrayValue.class,evalHosted(h,
-       "LA: import(\"std:math/LinearAlgebra\")\n"
+       "LA: import(\"std:math/linear_algebra\")\n"
            + "Vector: LA.Vector\n"
            + "Matrix: LA.Matrix\n"
            + "v: Vector(1, 1 / 2, 2.5, Complex(1, 2))\n"
@@ -483,7 +483,7 @@ class ProtosParallelExecutionTest{
  private static ProtosObjectValue linearAlgebraMember(ProtosPrelude p,String name){
   ProtosObjectValue context=p.newExecutionContext();
   p.installStandardModuleMembersForRuntime(
-      new com.guillermomolina.protos.runtime.modules.ProtosModuleKey("std:math/LinearAlgebra"),context);
+      com.guillermomolina.protos.runtime.modules.ProtosModuleKey.module("std:math/linear_algebra"),context);
   return (ProtosObjectValue)context.readLocalSlot(name).orElseThrow();
  }
 }

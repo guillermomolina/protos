@@ -39,7 +39,7 @@ final class ProtosMathIntegerModuleTest {
 
         Object imported =
                 ProtosTestExecutionSupport.evaluate(
-                        "import(\"std:math/Integer\")",
+                        "import(\"std:math/integer\")",
                         prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 

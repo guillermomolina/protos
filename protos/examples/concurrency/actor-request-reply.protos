@@ -9,8 +9,8 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-// The shipped std:collections/Set module is also a valid Actor bootstrap module:
+// The shipped std:collections/set module is also a valid Actor bootstrap module:
 // its `construct` binding returns a Map behavior object.
-worker: Actor.spawn("std:collections/Set", "construct", "Ada", "Grace")
+worker: Actor.spawn("std:collections/set", "construct", "Ada", "Grace")
 print(worker.request("size").value())
 worker.stop()

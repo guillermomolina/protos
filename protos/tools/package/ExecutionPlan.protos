@@ -13,14 +13,14 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Root: import("self:ResolutionRoot")
-LockFile: import("self:LockFile")
-Input: import("self:ResolutionInput")
-Names: import("self:RuntimeNames")
-Syntax: import("self:LockSyntax")
-Constraint: import("self:DependencyConstraint")
-Manifest: import("self:ManifestCommand")
-Version: import("self:ReleaseVersion")
+Root: import("./ResolutionRoot.protos")
+LockFile: import("./LockFile.protos")
+Input: import("./ResolutionInput.protos")
+Names: import("./RuntimeNames.protos")
+Syntax: import("./LockSyntax.protos")
+Constraint: import("./DependencyConstraint.protos")
+Manifest: import("./ManifestCommand.protos")
+Version: import("./ReleaseVersion.protos")
 
 workspaceRef: (packageId) => {
     {

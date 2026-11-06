@@ -340,7 +340,7 @@ final class ProtosI026FDapBehaviorTest {
      */
     private static final String FIND_INDEX_VALUE_PROGRAM =
             """
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             Arrays.findIndex([1, 2, 3], (value) => {
                 value == 2
@@ -782,7 +782,7 @@ final class ProtosI026FDapBehaviorTest {
                 new ProtosCoreBootstrap()
                         .bootstrap(
                                 Path.of("protos", "lib", "core"),
-                                // The findIndex program imports std:collections/Array.
+                                // The findIndex program imports std:collections/array.
                                 new ProtosStandardLibraryModuleResolver(
                                         Path.of("protos", "lib")));
         ProtosActivation activation = prelude.newModuleActivation();

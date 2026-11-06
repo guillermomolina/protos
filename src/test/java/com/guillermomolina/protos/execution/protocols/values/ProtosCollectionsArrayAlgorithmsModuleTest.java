@@ -59,7 +59,7 @@ class ProtosCollectionsArrayAlgorithmsModuleTest {
                     () ->
                             ProtosTestExecutionSupport.evaluate(
                                     """
-                                    Arrays: import("std:collections/Array")
+                                    Arrays: import("std:collections/array")
                                     Arrays.%s(wrongSource, callback)
                                     """
                                             .formatted(operation),

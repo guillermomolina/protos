@@ -6,7 +6,6 @@ import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.oracle.truffle.api.source.Source;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -29,14 +28,8 @@ import java.util.function.Consumer;
  * expected-identity Strings. The tool Process is terminated before successful custody is returned.
  */
 final class ProtosPackageContentVerification {
-    private static final String VERIFY_SOURCE =
-            "ContentIdentity: import(\"self:ContentIdentity\")\n"
-                    + "expected: {\n"
-                    + "    method: expectedContentIdentityMethod\n"
-                    + "    algorithm: expectedContentIdentityAlgorithm\n"
-                    + "    hex: expectedContentIdentityHex\n"
-                    + "}\n"
-                    + "ContentIdentity.verify(capturedFilesystem, expected)\n";
+    /** D242: exact bundled Package Tool SOURCE entry {@code ContentVerification.protos}. */
+    private static final String ENTRY = "ContentVerification";
 
     private ProtosPackageContentVerification() {}
 
@@ -105,7 +98,7 @@ final class ProtosPackageContentVerification {
 
             try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
                 try {
-                    ProtosPolyglotProcessContext processContext =
+                    // The hosted Process context executes the explicit SOURCE entry below.
                             runtimeHost.hostProcess(
                                     process,
                                     InputStream.nullInputStream(),
@@ -121,15 +114,12 @@ final class ProtosPackageContentVerification {
                             expectedAlgorithm,
                             expectedHex);
 
-                    Source verifySource =
-                            Source.newBuilder(
-                                            ProtosLanguage.ID,
-                                            VERIFY_SOURCE,
-                                            "<package-content-verification>")
-                                    .mimeType(ProtosLanguage.MIME_TYPE)
-                                    .build();
                     ProtosExecutionOutcome outcome =
-                            processContext.execute(verifySource, bootstrap.activation());
+                            ProtosCanonicalInitialModuleExecution.execute(
+                                    toolPrelude,
+                                    toolResolver,
+                                    toolResolver.entryModule(ENTRY),
+                                    bootstrap.activation());
                     if (outcome.state() != ProtosExecutionOutcome.State.COMPLETED
                             || outcome.value() != capturedFilesystem) {
                         throw new IOException(

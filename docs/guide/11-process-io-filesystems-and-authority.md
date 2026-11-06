@@ -1347,7 +1347,7 @@ capabilities and their resources.
 
 ## Name resolution is a separate capability
 
-`std:network/Resolvers` (D223-A1, `spec/io/NETWORK.md` §14) turns a hostname
+`std:network/resolvers` (D223-A1, `spec/io/NETWORK.md` §14) turns a hostname
 into numeric `IpAddress` candidates. Resolution authority is its own
 capability: the bootstrap-local `resolver` slot exists only when the host
 grants it explicitly. A `network` grant does not imply it, socket permission
@@ -1392,7 +1392,7 @@ the [TLS client guide](library/tls.md) follow one explicit chain: a `resolver`
 answers `IpAddress` values; an `IpAddress` and a port make an `IpEndpoint`;
 `network.connectTcp` turns the endpoint into a connection; the original
 hostname plus an explicitly selected trust authenticate that connection with
-`std:tls/Client`; and the authenticated duplex carries one `std:http/Client`
+`std:tls/client`; and the authenticated duplex carries one `std:http/client`
 exchange.
 
 ## Practical examples
@@ -1406,7 +1406,7 @@ Runs under the standalone CLI, for example
 `protos main.protos one two`:
 
 ```protos
-ProcessStreams: import("std:io/ProcessStreams")
+ProcessStreams: import("std:io/process_streams")
 
 writer: ProcessStreams.stdoutWriter(process)
 writer.writeLine("Process output uses explicit Process authority").value()
@@ -1421,12 +1421,12 @@ This is the executable tutorial
 ### Filesystem: whole-file text helpers
 
 Needs a host that binds `filesystem`, such as a Java embedding with file
-access. `std:io/Files` provides `readAllBytes`, `writeAllBytes`,
+access. `std:io/files` provides `readAllBytes`, `writeAllBytes`,
 `readAllText`, and `writeAllText`; each takes the Filesystem explicitly and
 returns a Future:
 
 ```protos
-Files: import("std:io/Files")
+Files: import("std:io/files")
 
 path: Path.relative().child("notes.txt")
 Files.writeAllText(filesystem, path, "explicit authority", Encoding.UTF8).value()
@@ -1481,8 +1481,8 @@ allows socket access. Addresses are numeric; there is no DNS lookup and no
 String endpoint:
 
 ```protos
-IpAddress: import("std:network/IpAddresses").IpAddress
-IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+IpAddress: import("std:network/ip_addresses").IpAddress
+IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
 
 loopback: IpAddress(4, 2130706433)    // 127.0.0.1
 connection: network.connectTcp(IpEndpoint(loopback, 8080)).value()

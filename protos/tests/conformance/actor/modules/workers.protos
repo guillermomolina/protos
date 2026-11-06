@@ -41,20 +41,20 @@ mailbox: () => {
 }
 
 // D235-B1-F: reports this Actor's view of the shared Core Range prototypes and
-// of its own Actor-local std:collections/Range instance.
+// of its own Actor-local std:collections/range instance.
 ranges: () => {
     {
         identity: () => {
-            Ranges: import("std:collections/Range")
+            Ranges: import("std:collections/range")
             (Ranges.Range === Range) && (Ranges.InvertedRange === InvertedRange)
         }
         rebind: () => {
-            Ranges: import("std:collections/Range")
+            Ranges: import("std:collections/range")
             Ranges.Range = 7
             (Ranges.Range == 7) && (Range(0, 1).parent() === Range)
         }
         moduleRange: () => {
-            import("std:collections/Range").Range
+            import("std:collections/range").Range
         }
         bounds: (range) => {
             Array(range.parent() === InvertedRange, range.start, range.stop)

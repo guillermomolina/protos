@@ -13,15 +13,15 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-JSON: import("std:json/JSON")
-Level: import("std:logging/Level")
-LogEvent: import("std:logging/LogEvent")
-Logger: import("std:logging/Logger")
-JsonFormatter: import("std:logging/JsonFormatter")
-TextSink: import("std:logging/TextSink")
-Instant: import("std:datetime/Instant")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+JSON: import("std:json/json")
+Level: import("std:logging/level")
+LogEvent: import("std:logging/log_event")
+Logger: import("std:logging/logger")
+JsonFormatter: import("std:logging/json_formatter")
+TextSink: import("std:logging/text_sink")
+Instant: import("std:datetime/instant")
 
 Failure: Error {}
 

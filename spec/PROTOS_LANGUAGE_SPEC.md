@@ -318,7 +318,7 @@ Objects may be closed or frozen.
 
 Horizontal composition does not modify the delegation chain.
 
-Top-level bindings are slots of a module execution context.
+Top-level bindings are slots of a module execution context: a SOURCE import yields that complete context, while a MODULE initializer's bare top-level bindings stay private and its public object exposes only the slots published with `this.Name: value`.
 
 There is no special global-variable category.
 
@@ -349,7 +349,7 @@ The primary normative contract formerly contained here has moved to `semantics/V
 
 ## Standard Array Parallel Operations
 
-Core defines no parallel Array operations; parallel Array algorithms are Standard Library functions of `std:collections/Array`. The Core placement boundary is owned by `concurrency/PARALLEL_EXECUTION.md` §71.6. This heading remains as a compatibility/navigation anchor and is not an independent normative owner.
+Core defines no parallel Array operations; parallel Array algorithms are Standard Library functions of `std:collections/array`. The Core placement boundary is owned by `concurrency/PARALLEL_EXECUTION.md` §71.6. This heading remains as a compatibility/navigation anchor and is not an independent normative owner.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 

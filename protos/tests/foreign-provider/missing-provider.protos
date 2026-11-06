@@ -16,7 +16,7 @@
 // I085-B: importing a foreign scheme no configured provider owns signals an
 // Error. Run by dist/test_external_foreign_providers.py.
 
-Assertions: import("std:test/Assertions")
+Assertions: import("std:test/assertions")
 
 Assertions.signals(Error, () => import("noexiste:demo"))
 

@@ -46,8 +46,8 @@ final class ProtosProjectBindingTest {
         roots.add(new ProtosProjectBinding.PackageRoot("root", "", ROOT));
         roots.add(new ProtosProjectBinding.PackageRoot("member", "libs/member", MEMBER));
         ArrayList<ProtosProjectBinding.Source> sources = new ArrayList<>();
-        sources.add(new ProtosProjectBinding.Source("root", "Main", ROOT.resolve("Main.protos")));
-        sources.add(new ProtosProjectBinding.Source("member", "Api", MEMBER.resolve("Api.protos")));
+        sources.add(new ProtosProjectBinding.Source(ProtosProjectBinding.Source.Kind.SOURCE, "root", "Main", ROOT.resolve("Main.protos")));
+        sources.add(new ProtosProjectBinding.Source(ProtosProjectBinding.Source.Kind.SOURCE, "member", "Api", MEMBER.resolve("Api.protos")));
 
         ProtosProjectBinding binding = new ProtosProjectBinding(projection, roots, sources);
         roots.clear();
@@ -61,7 +61,7 @@ final class ProtosProjectBindingTest {
                 () -> projection.packages().add(new ProtosProjectBindingProjection.PackageRef("x", "x")));
         assertThrows(
                 UnsupportedOperationException.class,
-                () -> binding.sources().add(new ProtosProjectBinding.Source("root", "Other", ROOT.resolve("Other.protos"))));
+                () -> binding.sources().add(new ProtosProjectBinding.Source(ProtosProjectBinding.Source.Kind.SOURCE, "root", "Other", ROOT.resolve("Other.protos"))));
     }
 
     @Test
@@ -118,18 +118,34 @@ final class ProtosProjectBindingTest {
                 () -> new ProtosProjectBinding(
                         projection,
                         roots,
-                        List.of(new ProtosProjectBinding.Source("foreign", "Main", ROOT.resolve("Main.protos")))));
+                        List.of(new ProtosProjectBinding.Source(ProtosProjectBinding.Source.Kind.SOURCE, "foreign", "Main", ROOT.resolve("Main.protos")))));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new ProtosProjectBinding(
                         projection,
                         roots,
-                        List.of(new ProtosProjectBinding.Source("member", "Api", ROOT.resolve("Outside.protos")))));
+                        List.of(new ProtosProjectBinding.Source(ProtosProjectBinding.Source.Kind.SOURCE, "member", "Api", ROOT.resolve("Outside.protos")))));
         ProtosProjectBinding.Source source =
-                new ProtosProjectBinding.Source("root", "Main", ROOT.resolve("Main.protos"));
+                new ProtosProjectBinding.Source(ProtosProjectBinding.Source.Kind.SOURCE, "root", "Main", ROOT.resolve("Main.protos"));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new ProtosProjectBinding(projection, roots, List.of(source, source)));
+    }
+
+    @Test
+    void moduleAndSourceWithSameLogicalNameAreDistinctBoundIdentities() {
+        ProtosProjectBinding binding =
+                new ProtosProjectBinding(
+                        standardProjection(),
+                        standardRoots(),
+                        List.of(
+                                new ProtosProjectBinding.Source(
+                                        ProtosProjectBinding.Source.Kind.MODULE,
+                                        "root", "items", ROOT.resolve("items/module.protos")),
+                                new ProtosProjectBinding.Source(
+                                        ProtosProjectBinding.Source.Kind.SOURCE,
+                                        "root", "items", ROOT.resolve("items.protos"))));
+        assertEquals(2, binding.sources().size());
     }
 
     @Test

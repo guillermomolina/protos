@@ -23,7 +23,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.oracle.truffle.api.source.Source;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -46,22 +45,18 @@ import java.util.function.Consumer;
 public final class ProtosFormatterToolBootstrap {
 
     private static final String TOOL_NAME = "formatter";
-    private static final String ENTRY_MODULE = "Main";
     private static final String EXPECTED_TOOL_ID = "TOOL010";
     private static final String SOURCE_LAYOUT_SLOT =
             "formatterSourceLayout";
 
-    private static final String VERIFY_SOURCE =
-            "formatter: import(\"self:Main\")\n"
-                    + "formatter.toolId\n";
+    /** D242 bundled formatter SOURCE entry {@code Verify.protos}. */
+    private static final String VERIFY_SOURCE = "Verify";
 
-    private static final String ACCEPT_SOURCE_LAYOUT_SOURCE =
-            "formatter: import(\"self:Main\")\n"
-                    + "formatter.acceptSourceLayout(formatterSourceLayout)\n";
+    /** D242 bundled formatter SOURCE entry {@code AcceptSourceLayout.protos}. */
+    private static final String ACCEPT_SOURCE_LAYOUT_SOURCE = "AcceptSourceLayout";
 
-    private static final String FORMAT_STRUCTURAL_SOURCE =
-            "formatter: import(\"self:Main\")\n"
-                    + "formatter.formatStructural(formatterSourceLayout)\n";
+    /** D242 bundled formatter SOURCE entry {@code FormatStructural.protos}. */
+    private static final String FORMAT_STRUCTURAL_SOURCE = "FormatStructural";
 
     private ProtosFormatterToolBootstrap() {}
 
@@ -239,7 +234,7 @@ public final class ProtosFormatterToolBootstrap {
         ProtosProcessRuntime process = bootstrap.process();
 
         try {
-            ProtosPolyglotProcessContext processContext =
+            // The hosted Process context executes the explicit SOURCE entry below.
                     runtimeHost.hostProcess(
                             process,
                             InputStream.nullInputStream(),
@@ -269,20 +264,13 @@ public final class ProtosFormatterToolBootstrap {
                                 bridgedSourceLayout);
             }
 
-            // Resolve the exact entry eagerly. This performs no project/package lookup.
-            toolResolver.entryModule(ENTRY_MODULE);
-
-            Source source =
-                    Source.newBuilder(
-                                    ProtosLanguage.ID,
-                                    operationSource,
-                                    "<formatter-tool-operation>")
-                            .mimeType(ProtosLanguage.MIME_TYPE)
-                            .build();
-
+            // D242: the host selects the exact SOURCE entry identity; the entry imports the
+            // published formatter MODULE through its own bundled-tool provenance.
             ProtosExecutionOutcome outcome =
-                    processContext.execute(
-                            source,
+                    ProtosCanonicalInitialModuleExecution.execute(
+                            toolPrelude,
+                            toolResolver,
+                            toolResolver.entryModule(operationSource),
                             bootstrap.activation());
 
             return new OperationResult(

@@ -13,11 +13,11 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-http: import("std:http/UrlClient")
-IpAddresses: import("std:network/IpAddresses")
-IpEndpoints: import("std:network/IpEndpoints")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+http: import("std:http/url_client")
+IpAddresses: import("std:network/ip_addresses")
+IpEndpoints: import("std:network/ip_endpoints")
 
 // The suite holds no granted Network or Resolver. These Tests use structural
 // in-memory fixtures that satisfy the connectTcp and lookupAddresses

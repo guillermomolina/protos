@@ -5,6 +5,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
@@ -163,6 +164,44 @@ public final class ProtosModuleRuntime {
         }
     }
 
+    /**
+     * D242 activation frame of one source-backed import.
+     *
+     * <p>MODULE: {@code importResult} is a fresh ordinary public object and {@code lexicalContext}
+     * a distinct private initializer Context; runtime-provisioned Standard Library facilities are
+     * installed only into the private Context. SOURCE: both are the same complete source Context,
+     * exactly as before D242. The import result is cached before the initializer executes and is
+     * never replaced by the initializer's final value.
+     */
+    private record ModuleFrame(ProtosObjectValue importResult, ProtosObjectValue lexicalContext) {
+        static ModuleFrame allocate(ProtosPrelude prelude, ProtosModuleKey key) {
+            if (key.isModule()) {
+                ProtosObjectValue publicModule = prelude.newPublicModuleObject();
+                ProtosObjectValue privateContext = prelude.newExecutionContext();
+                prelude.installStandardModuleMembersForRuntime(key, privateContext);
+                return new ModuleFrame(publicModule, privateContext);
+            }
+            if (!key.isSource()) {
+                throw new IllegalStateException("source-backed import requires MODULE or SOURCE");
+            }
+            ProtosObjectValue sourceContext = prelude.newExecutionContext();
+            prelude.installStandardModuleMembersForRuntime(key, sourceContext);
+            return new ModuleFrame(sourceContext, sourceContext);
+        }
+
+        ProtosActivation activation(
+                ProtosPrelude prelude,
+                ProtosActorModuleState actorState,
+                ProtosModuleKey key,
+                ProtosActorExecutionDomain domain) {
+            if (importResult == lexicalContext) {
+                return prelude.newModuleActivation(actorState, key, lexicalContext, domain);
+            }
+            return prelude.newModuleInitializerActivation(
+                    actorState, key, lexicalContext, importResult, domain);
+        }
+    }
+
     PreparedModuleInitialization prepareBytecodeImport(
             List<?> supplied,
             ProtosActivation caller) {
@@ -245,19 +284,15 @@ public final class ProtosModuleRuntime {
                                 () ->
                                         new IllegalStateException(
                                                 "module import requires an owning Core prelude"));
-        ProtosObjectValue moduleInstance = prelude.newExecutionContext();
-        prelude.installStandardModuleMembersForRuntime(key, moduleInstance);
+        ModuleFrame frame = ModuleFrame.allocate(prelude, key);
+        ProtosObjectValue moduleInstance = frame.importResult();
         ProtosActorModuleState.ModuleRecord record =
                 new ProtosActorModuleState.ModuleRecord(moduleInstance);
         actorState.put(key, record);
 
         try {
             ProtosActivation moduleActivation =
-                    prelude.newModuleActivation(
-                            actorState,
-                            key,
-                            moduleInstance,
-                            caller.executionDomain());
+                    frame.activation(prelude, actorState, key, caller.executionDomain());
             if (task != null) {
                 moduleActivation.attachTask(task);
             } else {
@@ -435,11 +470,12 @@ public final class ProtosModuleRuntime {
                                 () ->
                                         new IllegalStateException(
                                                 "module import requires an owning Core prelude"));
-        ProtosObjectValue moduleInstance = prelude.newExecutionContext();
-        prelude.installStandardModuleMembersForRuntime(key, moduleInstance);
+        ModuleFrame frame = ModuleFrame.allocate(prelude, key);
+        ProtosObjectValue moduleInstance = frame.importResult();
 
         if (initialBootstrap) {
-            installBootstrapLocalsForRuntime(moduleInstance, bootstrapLocals);
+            // D242: bootstrap grants are private initializer authority, never public exports.
+            installBootstrapLocalsForRuntime(frame.lexicalContext(), bootstrapLocals);
         }
 
         ProtosActorModuleState.ModuleRecord record =
@@ -451,11 +487,7 @@ public final class ProtosModuleRuntime {
                     Objects.requireNonNull(resolver.loadSource(key), "module source")
                             .requireKey(key);
             ProtosActivation moduleActivation =
-                    prelude.newModuleActivation(
-                            actorState,
-                            key,
-                            moduleInstance,
-                            caller.executionDomain());
+                    frame.activation(prelude, actorState, key, caller.executionDomain());
             executeModuleSource(source, moduleActivation);
             record.markReady();
             return moduleInstance;

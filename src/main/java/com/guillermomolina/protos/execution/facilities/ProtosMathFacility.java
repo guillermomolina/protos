@@ -27,9 +27,9 @@ import com.guillermomolina.protos.runtime.ProtosSquareRoot;
 import java.util.List;
 
 /**
- * Private runtime facility of {@code std:math/Math} (D198, I090-C).
+ * Private runtime facility of {@code std:math/math} (D198, I090-C).
  *
- * <p>The public {@code sqrt} is an ordinary Closure of {@code lib/math/Math.protos}. Following the
+ * <p>The public {@code sqrt} is an ordinary Closure of {@code lib/math/math/module.protos}. Following the
  * D101/D187 pattern, this frozen facility is provisioned as a standard initial member of exactly
  * that module, which captures it lexically and removes the bootstrap slot during initialization,
  * so it is never module surface or a Prelude binding.
@@ -41,7 +41,7 @@ import java.util.List;
  * </ul>
  */
 public final class ProtosMathFacility {
-    public static final ProtosModuleKey MODULE_KEY = new ProtosModuleKey("std:math/Math");
+    public static final ProtosModuleKey MODULE_KEY = ProtosModuleKey.module("std:math/math");
     public static final String BOOTSTRAP_SLOT = "_mathSqrtFacility";
 
     private ProtosMathFacility() {}
@@ -63,7 +63,7 @@ public final class ProtosMathFacility {
         ProtosPrelude prelude =
                 activation.prelude()
                         .orElseThrow(() -> new IllegalStateException(
-                                "std:math/Math sqrt requires the caller's Prelude"));
+                                "std:math/math sqrt requires the caller's Prelude"));
         Object root = ProtosSquareRoot.sqrt(supplied.get(0), prelude);
         if (root == null) {
             throw invalid(activation);

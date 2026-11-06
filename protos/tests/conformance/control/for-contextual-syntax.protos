@@ -21,9 +21,9 @@
 // body Closure's own parameter, `Range` is an ordinary lexical lookup, and the
 // result is the result of the selected each/eachStep.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Arrays: import("std:collections/Array")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Arrays: import("std:collections/array")
 
 sameValues: (actual, expected) => {
     same: actual.size() == expected.size()

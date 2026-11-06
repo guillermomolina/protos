@@ -6,7 +6,7 @@ non-normative: each module's own doc comments under
 specification under [`spec/`](../../../spec/) wins over any guide prose.
 
 The Standard Library is Protos source distributed with the toolchain. A few
-source-backed modules (for example `std:math/Math`, `std:interop`,
+source-backed modules (for example `std:math/math`, `std:interop`,
 `std:runtime`, and `std:inspect`) also use a private native facility that the
 runtime hands to that module alone; it is never part of the module's surface.
 
@@ -18,12 +18,12 @@ need authority that already exists:
   modules likewise use only the duplex or `TcpListener` you pass them; real TCP
   needs a `network` that only an authorized host provisions (see
   [HTTP/1.1](http.md)).
-- `std:network/Resolvers` exports the authority-free `Resolver` protocol and
+- `std:network/resolvers` exports the authority-free `Resolver` protocol and
   `ResolutionError`. Resolving names needs a `resolver` capability that only an
   explicit host grant provisions, independently of `network`; see
   [Name resolution is a separate capability](../11-process-io-filesystems-and-authority.md#name-resolution-is-a-separate-capability)
   and [Explicit networking and name resolution](networking.md).
-- `std:tls/Client` holds no network authority and has no default trust: you
+- `std:tls/client` holds no network authority and has no default trust: you
   pass it a connected duplex and an explicit `Trust`; see [TLS client](tls.md).
 - `std:inspect` requires authority the host must already have granted to the
   Context (the `protos.Inspect` option). Without it, the import itself signals
@@ -38,31 +38,31 @@ may change between versions, and may be unavailable on some runtimes.
 Every module is imported by its exact `std:` path and bound to a name:
 
 ```protos
-Regex: import("std:regex/Regex")
-SemVer: import("std:semver/SemVer")
+Regex: import("std:regex/regex")
+SemVer: import("std:semver/sem_ver")
 Interop: import("std:interop")
 ```
 
 There is no wildcard import and no package-level re-export: `std:datetime` alone
-is not a module; import `std:datetime/Date`, `std:datetime/Instant`, and so on.
+is not a module; import `std:datetime/date`, `std:datetime/instant`, and so on.
 
 ## Guides
 
 | Guide | Modules | Use it for |
 |---|---|---|
-| [Numeric arithmetic and roots](../05-values-identity-equality-and-collections.md#working-with-integer-float-fraction-and-complex) | `std:math/Math`, `std:math/Integer` | `Math.sqrt(value)` over Numbers, and exact Integer algorithms (`gcd`, `lcm`, `factorial`, `pow`, `powMod`) |
-| [Vectors and matrices](linear-algebra.md) | `std:math/LinearAlgebra` | Dense numeric `Vector` and `Matrix` values with exact shapes and a fixed contraction order |
-| [Array algorithms](../05-values-identity-equality-and-collections.md#core-collections-and-standard-library-algorithms-are-different-layers) | `std:collections/Array` | Copy/edit operations `append`, `concat`, `slice`, `insertAt`, `removeAt`, `reverse` that answer new Arrays, and `sort` with a default `<` comparator |
-| [Directed Integer ranges](../05-values-identity-equality-and-collections.md#directed-integer-ranges) | `std:collections/Range` | Compatibility module re-exporting the Core Prelude `Range` and `InvertedRange` prototypes, with `each`, `eachStep`, `invert`, and `reverse` over unbounded Integers |
-| [Regular expressions](regex.md) | `std:regex/Regex` | Portable, linear-time pattern matching, captures, replacement, and splitting |
+| [Numeric arithmetic and roots](../05-values-identity-equality-and-collections.md#working-with-integer-float-fraction-and-complex) | `std:math/math`, `std:math/integer` | `Math.sqrt(value)` over Numbers, and exact Integer algorithms (`gcd`, `lcm`, `factorial`, `pow`, `powMod`) |
+| [Vectors and matrices](linear-algebra.md) | `std:math/linear_algebra` | Dense numeric `Vector` and `Matrix` values with exact shapes and a fixed contraction order |
+| [Array algorithms](../05-values-identity-equality-and-collections.md#core-collections-and-standard-library-algorithms-are-different-layers) | `std:collections/array` | Copy/edit operations `append`, `concat`, `slice`, `insertAt`, `removeAt`, `reverse` that answer new Arrays, and `sort` with a default `<` comparator |
+| [Directed Integer ranges](../05-values-identity-equality-and-collections.md#directed-integer-ranges) | `std:collections/range` | Compatibility module re-exporting the Core Prelude `Range` and `InvertedRange` prototypes, with `each`, `eachStep`, `invert`, and `reverse` over unbounded Integers |
+| [Regular expressions](regex.md) | `std:regex/regex` | Portable, linear-time pattern matching, captures, replacement, and splitting |
 | [Dates, times, and durations](datetime.md) | `std:datetime/*` | Civil dates and times, instants, fixed offsets, durations, periods, ISO 8601 and RFC 3339 text |
 | [Structured logging](logging.md) | `std:logging/*` | Explicit loggers, levels, structured fields, text/JSON/colored formatting, and sinks |
 | [Text styling and encodings](text.md) | `std:text/*` | Styled text, ANSI rendering, color-mode policy, and UTF-8/UTF-16/Latin-1 helpers |
-| [Semantic versions](semver.md) | `std:semver/SemVer` | Strict Semantic Versioning 2.0.0 parsing, formatting, equality, and precedence |
-| [HTTP/1.1](http.md) | `std:http/Server`, `std:http/Host`, `std:http/Client`, `std:http/Router`, `std:http/UrlClient` | One request on a supplied duplex, continuous hosting on an owned `TcpListener`, one client exchange on a supplied duplex, authority-free route dispatch, and one URL request from explicit capabilities |
-| [Explicit networking and name resolution](networking.md) | `std:network/Resolvers` | Host-granted `resolver` lookups, choosing an `IpAddress`, and connecting to a numeric `IpEndpoint` |
-| [Command-line specifications](cli.md) | `std:cli/CommandLine` | Named-parameter options and positionals, command trees, argument parsing, and help text |
-| [TLS client](tls.md) | `std:tls/Client` | Authenticating a connected duplex with explicit trust and the original hostname |
+| [Semantic versions](semver.md) | `std:semver/sem_ver` | Strict Semantic Versioning 2.0.0 parsing, formatting, equality, and precedence |
+| [HTTP/1.1](http.md) | `std:http/server`, `std:http/host`, `std:http/client`, `std:http/router`, `std:http/url_client` | One request on a supplied duplex, continuous hosting on an owned `TcpListener`, one client exchange on a supplied duplex, authority-free route dispatch, and one URL request from explicit capabilities |
+| [Explicit networking and name resolution](networking.md) | `std:network/resolvers` | Host-granted `resolver` lookups, choosing an `IpAddress`, and connecting to a numeric `IpEndpoint` |
+| [Command-line specifications](cli.md) | `std:cli/command_line` | Named-parameter options and positionals, command trees, argument parsing, and help text |
+| [TLS client](tls.md) | `std:tls/client` | Authenticating a connected duplex with explicit trust and the original hostname |
 | [Explicit foreign operations](interop.md) | `std:interop` | `invoke`, `instantiate`, `readMember`, and `writeMember` on foreign values |
 | [Runtime metadata](runtime.md) | `std:runtime` | Four read-only String fields: `implementation`, `implementationVersion`, `engineVersion`, `platform` (no Context mode) |
 | [Runtime inspection](inspect.md) | `std:inspect` | Host-authorized diagnostics of value representations, Closures, Bytecode and Truffle trees |
@@ -112,7 +112,7 @@ signals an ordinary `Error` (see [Runtime inspection](inspect.md)):
   25.5.5.0.3 (JDK 25.0.5.0.3), with the optimizing runtime and guest JIT.
 
 `std:regex` depends on Unicode property data. Since Protos 0.3.312 that data is
-embedded in the Native executable, so `import("std:regex/Regex")` works in both
+embedded in the Native executable, so `import("std:regex/regex")` works in both
 distributions.
 
 The one module whose usefulness differs is `std:interop`: it acts only on

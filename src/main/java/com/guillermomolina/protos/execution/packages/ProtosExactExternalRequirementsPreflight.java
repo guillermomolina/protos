@@ -27,7 +27,6 @@ import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
-import com.oracle.truffle.api.source.Source;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -51,9 +50,8 @@ import java.util.function.Consumer;
  * materialization for these identities is host authority outside this class.
  */
 final class ProtosExactExternalRequirementsPreflight {
-    private static final String REQUIREMENTS_SOURCE =
-            "Plan: import(\"self:ExecutionPlan\")\n"
-                    + "Plan.exactExternalRequirements(projectTreeFilesystem)\n";
+    /** D242: exact bundled Package Tool SOURCE entry {@code ExactExternalRequirements.protos}. */
+    private static final String ENTRY = "ExactExternalRequirements";
     private static final Set<String> REQUIREMENT_FIELDS = Set.of("ref", "content");
 
     private ProtosExactExternalRequirementsPreflight() {}
@@ -113,7 +111,7 @@ final class ProtosExactExternalRequirementsPreflight {
             ProtosProcessRuntime process = bootstrap.process();
 
             try {
-                ProtosPolyglotProcessContext processContext =
+                // The hosted Process context executes the explicit SOURCE entry below.
                         runtimeHost.hostProcess(
                                 process,
                                 InputStream.nullInputStream(),
@@ -137,15 +135,12 @@ final class ProtosExactExternalRequirementsPreflight {
                 }
                 context.createLocalSlot("projectTreeFilesystem", filesystem);
 
-                Source source =
-                        Source.newBuilder(
-                                        ProtosLanguage.ID,
-                                        REQUIREMENTS_SOURCE,
-                                        "<exact-external-requirements-preflight>")
-                                .mimeType(ProtosLanguage.MIME_TYPE)
-                                .build();
                 ProtosExecutionOutcome outcome =
-                        processContext.execute(source, bootstrap.activation());
+                        ProtosCanonicalInitialModuleExecution.execute(
+                                toolPrelude,
+                                toolResolver,
+                                toolResolver.entryModule(ENTRY),
+                                bootstrap.activation());
                 if (outcome.state() != ProtosExecutionOutcome.State.COMPLETED) {
                     throw new IOException(
                             "external requirements Package Tool preflight did not complete normally");

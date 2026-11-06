@@ -13,9 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Files: import("std:io/Files")
-ProcessStreams: import("std:io/ProcessStreams")
-Arrays: import("std:collections/Array")
+Files: import("std:io/files")
+ProcessStreams: import("std:io/process_streams")
+Arrays: import("std:collections/array")
 
 parts: Array(process.args()[0], process.environment().get("MODE"))
 report: Arrays.reduce(parts, (left, right) => left + ":" + right)

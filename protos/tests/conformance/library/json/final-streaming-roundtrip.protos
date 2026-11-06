@@ -15,13 +15,13 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("final cross slice roundtrip", () => {
         tool009LegacyCase: () => {
-            JSON: import("std:json/JSON")
+            JSON: import("std:json/json")
 
             source: "{\"n\":12345678901234567890e-7,\"s\":\"line\\n\\uD83D\\uDE00\",\"a\":[true,null]}"
             tree: JSON.parse(source)
@@ -54,7 +54,7 @@ tests: [
     }),
     Test("final long incremental string", () => {
         tool009LegacyCase: () => {
-            JSON: import("std:json/JSON")
+            JSON: import("std:json/json")
 
             seen: false
             parser: JSON.eventParser((event) => {

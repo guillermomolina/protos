@@ -32,13 +32,13 @@ final class ProtosWorkspacePackageModuleKeyTest {
     @Test
     void packageIdAndInternalLogicalNameAreTheOnlyCanonicalIdentityInputs() throws Exception {
         ProtosModuleKey first =
-                ProtosWorkspacePackageModuleKey.encode("org/example:π", "internal/Thing");
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "org/example:π", "internal/Thing");
         ProtosModuleKey same =
-                ProtosWorkspacePackageModuleKey.encode("org/example:π", "internal/Thing");
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "org/example:π", "internal/Thing");
         ProtosModuleKey otherPackage =
-                ProtosWorkspacePackageModuleKey.encode("org/other:π", "internal/Thing");
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "org/other:π", "internal/Thing");
         ProtosModuleKey otherModule =
-                ProtosWorkspacePackageModuleKey.encode("org/example:π", "internal/Other");
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "org/example:π", "internal/Other");
 
         assertEquals(first, same);
         assertNotEquals(first, otherPackage);
@@ -52,7 +52,7 @@ final class ProtosWorkspacePackageModuleKeyTest {
     void canonicalKeyRoundTripsOpaquePackageIdWithoutNormalization() throws Exception {
         String packageId = "Scope/Ä:pkg";
         ProtosModuleKey key =
-                ProtosWorkspacePackageModuleKey.encode(packageId, "core/Internal_2");
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, packageId, "core/Internal_2");
 
         ProtosWorkspacePackageModuleKey.Address address =
                 ProtosWorkspacePackageModuleKey.decode(key);
@@ -65,7 +65,7 @@ final class ProtosWorkspacePackageModuleKeyTest {
     @Test
     void distinctLookupAliasesCannotEnterCanonicalModuleIdentity() throws Exception {
         ProtosModuleKey key =
-                ProtosWorkspacePackageModuleKey.encode("a-pkg", "internal/Thing");
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "a-pkg", "internal/Thing");
 
         ProtosWorkspacePackageModuleKey.Address address =
                 ProtosWorkspacePackageModuleKey.decode(key);
@@ -78,24 +78,24 @@ final class ProtosWorkspacePackageModuleKeyTest {
     void rejectsInvalidLogicalNamesAndForeignOrNonCanonicalKeys() throws Exception {
         assertThrows(
                 Exception.class,
-                () -> ProtosWorkspacePackageModuleKey.encode("pkg", "../Thing"));
+                () -> ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "pkg", "../Thing"));
         assertThrows(
                 Exception.class,
-                () -> ProtosWorkspacePackageModuleKey.encode("pkg", "CON"));
+                () -> ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "pkg", "CON"));
         assertThrows(
                 Exception.class,
-                () -> ProtosWorkspacePackageModuleKey.encode("", "Main"));
+                () -> ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "", "Main"));
 
         assertThrows(
                 Exception.class,
                 () ->
                         ProtosWorkspacePackageModuleKey.decode(
-                                new ProtosModuleKey("std:collections/Array")));
+                                ProtosModuleKey.module("std:collections/array")));
         assertThrows(
                 Exception.class,
                 () ->
                         ProtosWorkspacePackageModuleKey.decode(
-                                new ProtosModuleKey("pkg-workspace:v1:broken")));
+                                ProtosModuleKey.source("pkg-workspace:v1:broken")));
 
         String packageId = base64("pkg");
         String module = base64("Main");
@@ -103,8 +103,31 @@ final class ProtosWorkspacePackageModuleKeyTest {
                 Exception.class,
                 () ->
                         ProtosWorkspacePackageModuleKey.decode(
-                                new ProtosModuleKey(
-                                        "pkg-workspace:v1:" + packageId + "=:" + module)));
+                                ProtosModuleKey.module(
+                                        "pkg-workspace:v1:module:" + packageId + "=:" + module)));
+    }
+
+    @Test
+    void sourceAndModuleIdentitiesAreDisjoint() throws Exception {
+        ProtosModuleKey module =
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "pkg", "range");
+        ProtosModuleKey source =
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.SOURCE, "pkg", "range");
+        assertNotEquals(module, source);
+        assertEquals("range/module.protos", ProtosWorkspacePackageModuleKey.decode(module).resourcePath());
+        assertEquals("range.protos", ProtosWorkspacePackageModuleKey.decode(source).resourcePath());
+        assertThrows(
+                Exception.class,
+                () -> ProtosWorkspacePackageModuleKey.decode(
+                        ProtosModuleKey.source(module.canonicalId())));
+        assertThrows(
+                Exception.class,
+                () -> ProtosWorkspacePackageModuleKey.encode(
+                        ProtosModuleKey.Kind.SOURCE, "pkg", "range/module"));
+        assertThrows(
+                Exception.class,
+                () -> ProtosWorkspacePackageModuleKey.encode(
+                        ProtosModuleKey.Kind.FOREIGN, "pkg", "range"));
     }
 
     private static String base64(String value) {

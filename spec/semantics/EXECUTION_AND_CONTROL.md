@@ -51,7 +51,8 @@ For Core v0.1:
 
 - a Closure invocation's fresh activation context has the Closure's captured lexical context as its immediate lexical parent;
 - an object-construction context uses the genuine lexical context of the enclosing execution as its lexical parent while the object body executes, but the object under construction is not thereby captured as a lexical parent by methods created in that body;
-- a module's `moduleContext` has the frozen standard prelude context as its immediate lexical parent while the module body executes;
+- a SOURCE's `moduleContext` has the frozen standard prelude context as its immediate lexical parent while the source body executes;
+- a MODULE's private initializer context has the MODULE's public module object as its immediate lexical parent, and that public module object has the frozen standard prelude context as its immediate lexical parent, while the `module.protos` initializer executes (D242, `MODULES.md`). The public module object participates in this chain as a lexical context although it is an ordinary object rather than an execution context; lookup reads only its own slots, never its delegation parent;
 - the frozen standard prelude context has no lexical parent.
 
 Following lexical parents therefore visits execution-context objects, but it never follows any visited context object's ordinary delegation parent. In particular, `Context`, `Object`, or behavior inherited through them does not become an unqualified lexical binding merely because execution contexts delegate through `Context`.
@@ -201,7 +202,11 @@ The order above is fixed. In particular:
 
 Closure capture does not snapshot these slot values. Closures capture their genuine lexical execution contexts by reference under `CALLABLES.md`, so later mutation of an existing captured slot, and later creation of a slot in a still-captured context where creation is otherwise valid, is observed by subsequent bare lookup through that same context.
 
-At module top level, the current lexical context is the module's `moduleContext` and its lexical parent is the frozen standard prelude. Module execution has no additional implicit global receiver namespace. Consequently the module-top-level bare-name path is exactly: local module binding, then local prelude binding, then absence. Module-specific ownership, freezing, isolation, and import behavior remain owned by `MODULES.md`.
+At SOURCE top level, the current lexical context is the SOURCE's `moduleContext` and its lexical parent is the frozen standard prelude. Consequently the SOURCE top-level bare-name path is exactly: local module binding, then local prelude binding, then absence.
+
+At MODULE initializer top level (D242), the current lexical context is the private initializer context. The bare-name path is exactly: local private initializer binding, then own slot of the public module object, then local prelude binding, then absence. Closures created by the initializer capture this same chain, so they observe later-published public slots and later-created private bindings by reference.
+
+During a MODULE initializer, `context` denotes the private initializer context and `this` denotes the public module object. Bare `name: value` therefore creates a private binding, while `this.name: value` creates an ordinary own slot of the public module object through ordinary receiver slot creation (`OBJECT_MODEL.md`); unqualified `name = value` assigns through the same lexical chain under §7 and may therefore update an existing public own slot found there. No module-specific lookup, assignment, or slot-creation rule exists, and ordinary message send and member access gain no module-kind distinction. Module execution has no additional implicit global receiver namespace. Module-specific ownership, freezing, isolation, and import behavior remain owned by `MODULES.md`.
 ## 7. Unqualified Assignment and Creation
 
 Bare read, bare assignment, and bare creation are distinct operations and do not share one generic lookup walk.

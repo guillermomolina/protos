@@ -17,7 +17,7 @@
 // first: `LA.Vector(1)` would be a message send to a slot holding a prototype,
 // not a Closure, and would signal an Error.
 
-LA: import("std:math/LinearAlgebra")
+LA: import("std:math/linear_algebra")
 Vector: LA.Vector
 
 v: Vector(1, 2, 3)

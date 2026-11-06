@@ -43,7 +43,7 @@ final class ProtosWorkspacePackageDependencyRoutingTest {
         ProtosModuleKey rootEntry = resolver.entryModule("Main");
 
         ProtosModuleKey target =
-                ProtosWorkspacePackageModuleKey.encode("member-pkg", "Public/Entry");
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "member-pkg", "Public/Entry");
         assertEquals(
                 target,
                 resolver.resolve("dep:member/Api", Optional.of(rootEntry)));
@@ -83,7 +83,7 @@ final class ProtosWorkspacePackageDependencyRoutingTest {
         ProtosWorkspacePackageModuleResolver resolver = resolver(plan());
         ProtosModuleKey rootEntry = resolver.entryModule("Main");
         ProtosModuleKey otherMain =
-                ProtosWorkspacePackageModuleKey.encode("other-pkg", "Main");
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "other-pkg", "Main");
 
         assertThrows(
                 IOException.class,

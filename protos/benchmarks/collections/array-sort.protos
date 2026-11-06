@@ -22,7 +22,7 @@ repeat: (count, operation) => {
     }
 }
 
-Arrays: import("std:collections/Array")
+Arrays: import("std:collections/array")
 source: Array(
     17, 4, 29, 8, 1, 24, 12, 31,
     6, 20, 15, 3, 27, 10, 32, 14,

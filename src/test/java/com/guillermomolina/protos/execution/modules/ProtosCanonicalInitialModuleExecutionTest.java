@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 
 final class ProtosCanonicalInitialModuleExecutionTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
-    private static final ProtosModuleKey MAIN = new ProtosModuleKey("test:Main");
+    private static final ProtosModuleKey MAIN = ProtosModuleKey.source("test:Main");
 
     @Test
     void cachesBootstrapContextBeforeExecutingCanonicalEntry() throws Exception {

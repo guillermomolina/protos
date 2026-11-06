@@ -65,17 +65,17 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     @Test
     void extractsOnlyImportableStandardLibrarySurfaceWithCoverage() throws Exception {
         writeModule(
-                "collections/Set",
+                "collections/set",
                 """
                 // legal preamble
                 //! Set utilities.
                 //!
                 //! Canonical module documentation.
                 /// Creates a set containing `elements`.
-                call: (...elements) => {
+                this.call: (...elements) => {
                     elements
                 }
-                helper: 1
+                this.helper: 1
                 """);
         writeCore(
                 "Object",
@@ -89,7 +89,7 @@ class ProtosStandardLibraryDocumentationExtractorTest {
         assertEquals(1, extraction.artifact().modules().size());
         assertEquals(2, extraction.artifact().symbols().size());
         assertEquals(
-                "std:collections/Set",
+                "std:collections/set",
                 ((StandardModuleIdentity) extraction.artifact().modules().get(0).identity()).name());
         assertEquals(
                 "Set utilities.\n\nCanonical module documentation.",
@@ -115,7 +115,7 @@ class ProtosStandardLibraryDocumentationExtractorTest {
         assertEquals(2, coverage.symbolCount());
         assertEquals(1, coverage.documentedSymbolCount());
         assertEquals(
-                List.of("std:collections/Set::helper"),
+                List.of("std:collections/set::helper"),
                 coverage.missingSymbolDocumentation());
 
         byte[] first = ProtosDocumentationJson.serialize(extraction.artifact());
@@ -123,7 +123,7 @@ class ProtosStandardLibraryDocumentationExtractorTest {
                 ProtosStandardLibraryDocumentationExtractor.extract(temp, REVISION).artifact());
         assertArrayEquals(first, second);
         String json = new String(first, StandardCharsets.UTF_8);
-        assertTrue(json.contains("\"name\":\"std:collections/Set\""));
+        assertTrue(json.contains("\"name\":\"std:collections/set\""));
         assertTrue(json.contains("\"documentation\":null"));
         assertFalse(json.contains("std:core"));
     }
@@ -131,12 +131,12 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     @Test
     void directlyRemovedPrivateModuleSlotIsNotPublished() throws Exception {
         writeModule(
-                "collections/Private",
+                "collections/private",
                 """
                 //! Private helper fixture.
                 _helper: 1
                 /// Published Closure using the captured helper.
-                published: () => { _helper }
+                this.published: () => { _helper }
                 context.removeSlot("_helper")
                 """);
 
@@ -152,32 +152,32 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     @Test
     void internalDirectorySegmentModulesAreNotDocumented() throws Exception {
         writeModule(
-                "http/Public",
+                "http/public",
                 """
                 //! Public module fixture.
                 /// Public member.
-                visible: 1
+                this.visible: 1
                 """);
         writeModule(
-                "http/internal/Hidden",
+                "http/internal/hidden",
                 """
                 //! Internal module fixture.
                 /// Internal member.
-                hidden: 1
+                this.hidden: 1
                 """);
         writeModule(
-                "http/internalTools/Named",
+                "http/internal_tools/named",
                 """
                 //! Directory name merely containing the word.
                 /// Named member.
-                named: 1
+                this.named: 1
                 """);
         writeModule(
-                "http/InternalHelpers",
+                "http/internal_helpers",
                 """
                 //! Module name merely containing the word.
                 /// Helper member.
-                helper: 1
+                this.helper: 1
                 """);
 
         ProtosStandardLibraryDocumentationExtractor.Extraction extraction =
@@ -189,9 +189,9 @@ class ProtosStandardLibraryDocumentationExtractorTest {
                         .toList();
         assertEquals(
                 List.of(
-                        "protos/lib/http/InternalHelpers.protos",
-                        "protos/lib/http/Public.protos",
-                        "protos/lib/http/internalTools/Named.protos"),
+                        "protos/lib/http/internal_helpers/module.protos",
+                        "protos/lib/http/internal_tools/named/module.protos",
+                        "protos/lib/http/public/module.protos"),
                 sources.stream().sorted().toList());
         assertTrue(
                 extraction.artifact().symbols().stream()
@@ -202,13 +202,13 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     @Test
     void nestedRemovalDoesNotHideTopLevelSlot() throws Exception {
         writeModule(
-                "collections/NestedRemoval",
+                "collections/nested_removal",
                 """
                 //! Nested removal fixture.
                 /// Documented helper.
-                helper: 1
+                this.helper: 1
                 /// Deferred removal, not executed at module initialization.
-                deferred: () => { context.removeSlot("helper") }
+                this.deferred: () => { this.removeSlot("helper") }
                 """);
 
         ProtosStandardLibraryDocumentationExtractor.Extraction extraction =
@@ -221,13 +221,13 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     @Test
     void recreationAfterDirectRemovalIsPublished() throws Exception {
         writeModule(
-                "collections/Recreated",
+                "collections/recreated",
                 """
                 //! Recreated binding fixture.
-                helper: 1
-                context.removeSlot("helper")
+                this.helper: 1
+                this.removeSlot("helper")
                 /// The final public binding.
-                helper: 2
+                this.helper: 2
                 """);
 
         ProtosStandardLibraryDocumentationExtractor.Extraction extraction =
@@ -244,10 +244,10 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     @Test
     void groupedTopLevelSlotCanReceiveDocumentation() throws Exception {
         writeModule(
-                "collections/Grouped",
+                "collections/grouped",
                 """
                 /// Calls with `value`.
-                (call: (value) => value)
+                (this.call: (value) => value)
                 """);
 
         ProtosStandardLibraryDocumentationExtractor.Extraction extraction =
@@ -264,11 +264,11 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     @Test
     void blankLineBreaksSymbolDocumentationAssociation() throws Exception {
         writeModule(
-                "collections/Blank",
+                "collections/blank",
                 """
                 /// Documentation.
 
-                call: 1
+                this.call: 1
                 """);
 
         IllegalArgumentException error = assertThrows(
@@ -282,11 +282,11 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     @Test
     void ordinaryCommentBreaksSymbolDocumentationAssociation() throws Exception {
         writeModule(
-                "collections/Ordinary",
+                "collections/ordinary",
                 """
                 /// Documentation.
                 // implementation note
-                call: 1
+                this.call: 1
                 """);
 
         assertThrows(
@@ -297,13 +297,13 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     @Test
     void nestedDocumentationIsValidButNotPublishedAsTopLevelSymbol() throws Exception {
         writeModule(
-                "collections/Nested",
+                "collections/nested",
                 """
-                holder: {
+                this.holder: {
                     /// Nested documentation.
                     nested: 1
                 }
-                next: 1
+                this.next: 1
                 """);
 
         ProtosStandardLibraryDocumentationExtractor.Extraction extraction =
@@ -321,7 +321,7 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     @Test
     void standardMemberDeclarationsPublishSymbolsWithoutSlots() throws Exception {
         writeModule(
-                "collections/Pair",
+                "collections/pair",
                 """
                 //! Pair compatibility module.
 
@@ -329,11 +329,11 @@ class ProtosStandardLibraryDocumentationExtractorTest {
                   //% @standard-member Right |   The right prototype.
                 """);
         writeModule(
-                "collections/Plain",
+                "collections/plain",
                 """
                 //! Plain module.
                 /// A value.
-                value: 1
+                this.value: 1
                 """);
 
         ProtosStandardLibraryDocumentationExtractor.Extraction extraction =
@@ -342,11 +342,11 @@ class ProtosStandardLibraryDocumentationExtractorTest {
         assertEquals(2, extraction.artifact().modules().size());
         assertEquals(1, extraction.artifact().modules().stream()
                 .filter(module -> ((StandardModuleIdentity) module.identity()).name()
-                        .equals("std:collections/Pair"))
+                        .equals("std:collections/pair"))
                 .count());
         List<Symbol> pair = extraction.artifact().symbols().stream()
                 .filter(symbol -> ((StandardModuleIdentity) symbol.identity().module()).name()
-                        .equals("std:collections/Pair"))
+                        .equals("std:collections/pair"))
                 .toList();
         assertEquals(2, pair.size());
         assertEquals("Left", pair.get(0).identity().slotName());
@@ -355,7 +355,7 @@ class ProtosStandardLibraryDocumentationExtractorTest {
         Symbol left = pair.get(0);
         assertEquals("The left prototype.", left.documentation());
         assertNull(left.callable());
-        assertEquals("protos/lib/collections/Pair.protos", left.source().path());
+        assertEquals("protos/lib/collections/pair/module.protos", left.source().path());
         assertEquals(3, left.source().range().startLine());
         assertEquals(1, left.source().range().startColumn());
         assertEquals(3, left.source().range().endLine());
@@ -405,12 +405,12 @@ class ProtosStandardLibraryDocumentationExtractorTest {
                 "value: 1 //% @standard-member Left | Inline.\n",
                 "must begin its line");
         assertStandardMemberRejected(
-                "//% @standard-member value | Collides.\nvalue: 1\n",
+                "//% @standard-member value | Collides.\nthis.value: 1\n",
                 "collides with a module slot");
     }
 
     private void assertStandardMemberRejected(String source, String message) throws IOException {
-        writeModule("collections/Bad", source);
+        writeModule("collections/bad", source);
         IllegalArgumentException error = assertThrows(
                 IllegalArgumentException.class,
                 () -> ProtosStandardLibraryDocumentationExtractor.extract(temp, REVISION));
@@ -420,10 +420,10 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     @Test
     void inlineDocumentationMarkerIsRejected() throws Exception {
         writeModule(
-                "collections/Inline",
+                "collections/inline",
                 """
-                first: 1 /// not a documentation line
-                next: 1
+                this.first: 1 /// not a documentation line
+                this.next: 1
                 """);
 
         IllegalArgumentException error = assertThrows(
@@ -437,9 +437,9 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     @Test
     void moduleDocumentationAfterFirstConstructIsRejected() throws Exception {
         writeModule(
-                "collections/LateModule",
+                "collections/late_module",
                 """
-                call: 1
+                this.call: 1
                 //! Too late.
                 """);
 
@@ -454,12 +454,12 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     @Test
     void moreThanOneModuleDocumentationBlockIsRejected() throws Exception {
         writeModule(
-                "collections/TwoModules",
+                "collections/two_modules",
                 """
                 //! First.
                 // ordinary separator
                 //! Second.
-                call: 1
+                this.call: 1
                 """);
 
         IllegalArgumentException error = assertThrows(
@@ -472,8 +472,8 @@ class ProtosStandardLibraryDocumentationExtractorTest {
 
     @Test
     void ambiguousCaseFoldSiblingSpellingIsRejected() throws Exception {
-        writeModule("collections/Set", "call: 1\n");
-        writeModule("Collections/Other", "call: 1\n");
+        writeModule("collections/set", "call: 1\n");
+        writeModule("Collections/other", "call: 1\n");
 
         IOException error = assertThrows(
                 IOException.class,
@@ -534,7 +534,7 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     }
 
     private void writeModule(String logicalName, String source) throws IOException {
-        Path file = temp.resolve("protos/lib").resolve(logicalName + ".protos");
+        Path file = temp.resolve("protos/lib").resolve(logicalName).resolve("module.protos");
         Files.createDirectories(file.getParent());
         Files.writeString(file, source, StandardCharsets.UTF_8);
     }

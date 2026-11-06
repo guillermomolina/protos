@@ -20,8 +20,8 @@
 // TOML import is resolved while this bundled Test Tool module is initialized;
 // exported Closures capture the imported module and do not import again under an
 // exact-source caller.
-TOML: import("std:toml/TOML")
-Manifest: import("self:Manifest")
+TOML: import("std:toml/toml")
+Manifest: import("./Manifest.protos")
 
 frozenTuple: (...items) => {
     items

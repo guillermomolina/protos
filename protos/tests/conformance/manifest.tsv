@@ -243,3 +243,4 @@ execution-context/capture-by-reference-and-late-nearer-creation-retargeting.prot
 execution-context/escape-close-freeze-and-present-null-preserved.protos	suite-native	-
 execution-context/open-creation-and-value-mutation-preserved.protos	suite-native	-
 execution-context/remove-slot-restored-ordinary-object-unaffected.protos	suite-native	-
+modules/module-source-separation.protos	suite-native	-

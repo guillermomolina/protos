@@ -42,7 +42,7 @@ final class ProtosCsvModuleTest {
 
         Object imported =
                 ProtosTestExecutionSupport.evaluate(
-                        "import(\"std:csv/CSV\")",
+                        "import(\"std:csv/csv\")",
                         prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
@@ -64,17 +64,17 @@ final class ProtosCsvModuleTest {
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
-                                "import(\"std:csv/CSV\")", actorA));
+                                "import(\"std:csv/csv\")", actorA));
         ProtosObjectValue moduleA2 =
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
-                                "import(\"std:csv/CSV\")", actorA));
+                                "import(\"std:csv/csv\")", actorA));
         ProtosObjectValue moduleB =
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
-                                "import(\"std:csv/CSV\")", actorB));
+                                "import(\"std:csv/csv\")", actorB));
 
         assertSame(moduleA1, moduleA2, "one Actor must reuse its Actor-local CSV module instance");
         assertNotSame(
@@ -84,17 +84,17 @@ final class ProtosCsvModuleTest {
 
         Object parserA1 =
                 ProtosTestExecutionSupport.evaluate(
-                        "CSV_A1: import(\"std:csv/CSV\")\n"
+                        "CSV_A1: import(\"std:csv/csv\")\n"
                                 + "CSV_A1.rowParser((row) => { null })",
                         actorA);
         Object parserA2 =
                 ProtosTestExecutionSupport.evaluate(
-                        "CSV_A2: import(\"std:csv/CSV\")\n"
+                        "CSV_A2: import(\"std:csv/csv\")\n"
                                 + "CSV_A2.rowParser((row) => { null })",
                         actorA);
         Object parserB =
                 ProtosTestExecutionSupport.evaluate(
-                        "CSV_B: import(\"std:csv/CSV\")\n"
+                        "CSV_B: import(\"std:csv/csv\")\n"
                                 + "CSV_B.rowParser((row) => { null })",
                         actorB);
 

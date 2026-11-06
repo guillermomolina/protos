@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("text adapter overlap", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             readerCalls: 0
             reader: {
@@ -61,7 +61,7 @@ tests: [
     }),
     Test("text adapter reader", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             chunks: Array("a,\"b", ",b\"\r", "\n", "c,d", null)
             index: 0
@@ -115,7 +115,7 @@ tests: [
     }),
     Test("text adapter terminal errors", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             badReader: {
                 readText: () => {
@@ -159,7 +159,7 @@ tests: [
     }),
     Test("text adapter writer", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             sink: ""
             writes: 0

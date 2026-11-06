@@ -1,9 +1,9 @@
 // THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
 // ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
 
-Manifest: import("self:Manifest")
-Runner: import("self:Runner")
-Catalog: import("self:ResourceCatalog")
+Manifest: import("./Manifest.protos")
+Runner: import("./Runner.protos")
+Catalog: import("./ResourceCatalog.protos")
 
 completedObservation: (value) => {
     {

@@ -17,7 +17,7 @@
 // duplex you supply. The Client never opens a connection; here the duplex is
 // in memory and plays a server that answers with a chunked body.
 
-http: import("std:http/Client")
+http: import("std:http/client")
 MemoryDuplex: import("./memory-duplex.protos")
 
 duplex: MemoryDuplex.of(

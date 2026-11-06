@@ -473,7 +473,7 @@ class ProtosLanguageServerIntegratedEditorTest {
                 new ProtosProjectBinding(
                         projection,
                         List.of(new ProtosProjectBinding.PackageRoot(packageId, "", projectRoot)),
-                        List.of(new ProtosProjectBinding.Source(packageId, "Main", source)));
+                        List.of(new ProtosProjectBinding.Source(ProtosProjectBinding.Source.Kind.SOURCE, packageId, "Main", source)));
         return new ProjectFixture(projectRoot, source, binding);
     }
 

@@ -69,7 +69,7 @@ class ProtosModuleRuntimeTest {
 
     @Test
     void semanticStringImportsAndStringLikeObjectIsRejectedBeforeResolver() throws Exception {
-        MemoryResolver resolver = new MemoryResolver().module("m", "value: 7");
+        MemoryResolver resolver = new MemoryResolver().source("m", "value: 7");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation actor = prelude.newModuleActivation();
 
@@ -94,8 +94,8 @@ class ProtosModuleRuntimeTest {
             throws Exception {
         MemoryResolver resolver =
                 new MemoryResolver()
-                        .module("leaf", "secret: 9")
-                        .module(
+                        .source("leaf", "secret: 9")
+                        .source(
                                 "mid",
                                 "dep: import(\"leaf\")\n"
                                         + "notInherited: Error.handle(() => importerOnly, "
@@ -124,12 +124,12 @@ class ProtosModuleRuntimeTest {
     void exactSpecifierTextAndCanonicalIdentityAreDistinctBoundaries() throws Exception {
         MemoryResolver resolver =
                 new MemoryResolver()
-                        .module("empty", "value: 2")
+                        .source("empty", "value: 2")
                         .alias("", "empty")
-                        .module("a", "value: 1")
+                        .source("a", "value: 1")
                         .alias("β/../A", "a")
                         .alias("alias-a", "a")
-                        .module("b", "value: 1");
+                        .source("b", "value: 1");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation actor = prelude.newModuleActivation();
 
@@ -157,8 +157,8 @@ class ProtosModuleRuntimeTest {
     void canonicalKeyCachesBeforeExecutionSupportsCyclesAndSingleEvaluation() throws Exception {
         MemoryResolver resolver = new MemoryResolver()
                 .alias("alias-a", "a")
-                .module("a", "before: 10\nb: import(\"b\")\naSeenByB: b.aBefore\nafter: 20")
-                .module("b", "a: import(\"a\")\naBefore: a.before");
+                .source("a", "before: 10\nb: import(\"b\")\naSeenByB: b.aBefore\nafter: 20")
+                .source("b", "a: import(\"a\")\naBefore: a.before");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation actor = prelude.newModuleActivation();
         ProtosObjectValue a1 =
@@ -181,7 +181,7 @@ class ProtosModuleRuntimeTest {
 
     @Test
     void cachesAreActorLocal() throws Exception {
-        MemoryResolver resolver = new MemoryResolver().module("m", "value: 1");
+        MemoryResolver resolver = new MemoryResolver().source("m", "value: 1");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation actorA = prelude.newModuleActivation();
         ProtosActivation actorB = prelude.newModuleActivation();
@@ -213,7 +213,7 @@ class ProtosModuleRuntimeTest {
                 loadCounts.merge(key.canonicalId(), 1, Integer::sum);
                 return ProtosModuleSource.fromCharacters(key, attempt.getAndIncrement() == 0 ? "broken: (" : "ok: 42");
             }
-        }.module("retry", "ignored");
+        }.source("retry", "ignored");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation actor = prelude.newModuleActivation();
         assertThrows(
@@ -234,7 +234,7 @@ class ProtosModuleRuntimeTest {
     @Test
     void unhostedCanonicalModuleExecutesThroughBytecodePublicParse() throws Exception {
         MemoryResolver resolver =
-                new MemoryResolver().module("direct", "value: 7");
+                new MemoryResolver().source("direct", "value: 7");
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation actor = prelude.newModuleActivation();
@@ -242,7 +242,7 @@ class ProtosModuleRuntimeTest {
         ProtosObjectValue module =
                 new ProtosModuleRuntime(resolver)
                         .loadCanonicalModule(
-                                new ProtosModuleKey("direct"),
+                                ProtosModuleKey.source("direct"),
                                 actor);
 
         ProtosIntegerValue value =
@@ -270,30 +270,296 @@ class ProtosModuleRuntimeTest {
                                 prelude.newModuleActivation()));
     }
 
+    private static Object eval(String source, ProtosActivation activation) {
+        return ProtosTestExecutionSupport.evaluate(source, activation);
+    }
+
+    private static void assertProtosTrue(String source, ProtosActivation activation) {
+        assertSame(ProtosBooleanValue.TRUE, eval(source, activation), source);
+    }
+
+    @Test
+    void d242ModulePublishesOnlyThisSlotsWhileSourceExposesEveryBinding() throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver()
+                        .source("range-source", "privateHelper: 42\nRange: { value: 1 }")
+                        .publicModule(
+                                "range",
+                                "implementation: import(\"range-source\")\n"
+                                        + "this.Range: implementation.slotValue(\"Range\")\n"
+                                        + "\"final value never replaces the module\"");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+
+        ProtosObjectValue module =
+                assertInstanceOf(ProtosObjectValue.class, eval("import(\"range\")", actor));
+        assertEquals(java.util.Set.of("Range"), module.localSlotsSnapshot().keySet());
+        assertFalse(module instanceof com.guillermomolina.protos.runtime.ProtosExecutionContextValue,
+                "MODULE public object is an ordinary object, not an execution Context");
+
+        ProtosObjectValue source =
+                assertInstanceOf(ProtosObjectValue.class, eval("import(\"range-source\")", actor));
+        assertTrue(source.hasLocalSlot("privateHelper"));
+        assertTrue(source.hasLocalSlot("Range"));
+
+        assertProtosTrue(
+                "module: import(\"range\")\n"
+                        + "source: import(\"range-source\")\n"
+                        + "(module !== source).and() {\n"
+                        + "    (module.Range === source.Range).and() {\n"
+                        + "        (module.parent() === Object).and() {\n"
+                        + "            Error.handle(() => module.implementation, "
+                        + "(caught) => caught.parent() === SlotNotFound)\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}",
+                actor);
+    }
+
+    @Test
+    void d242ModuleKindsAreDistinctCanonicalIdentities() {
+        assertNotEquals(ProtosModuleKey.module("x"), ProtosModuleKey.source("x"));
+        assertNotEquals(ProtosModuleKey.module("x"), ProtosModuleKey.foreign("x"));
+        assertEquals(ProtosModuleKey.module("x"), ProtosModuleKey.module("x"));
+        assertTrue(ProtosModuleKey.module("x").isModule());
+        assertTrue(ProtosModuleKey.source("x").isSource());
+    }
+
+    @Test
+    void d242ExportedClosureCapturesPrivateStateAndUsesOrdinaryReceiverBinding() throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver()
+                        .publicModule(
+                                "counter",
+                                "hidden: 0\n"
+                                        + "this.bump: () => { hidden = hidden + 1\nhidden }\n"
+                                        + "this.receiver: () => this\n"
+                                        + "this.contextIsPrivate: context !== this\n"
+                                        + "this.thisIsPublic: this.hasSlot(\"bump\")");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+
+        assertProtosTrue(
+                "counter: import(\"counter\")\n"
+                        + "first: counter.bump()\n"
+                        + "second: counter.bump()\n"
+                        + "extracted: counter.receiver\n"
+                        + "((first == 1).and() { second == 2 }).and() {\n"
+                        + "    (counter.receiver() === counter).and() {\n"
+                        + "        (extracted() === counter).and() {\n"
+                        + "            counter.contextIsPrivate.and() {\n"
+                        + "                counter.thisIsPublic.and() {\n"
+                        + "                    counter.hasSlot(\"hidden\") == false\n"
+                        + "                }\n"
+                        + "            }\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}",
+                actor);
+    }
+
+    @Test
+    void d242InitializerLookupIsPrivateThenPublicThenPrelude() throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver()
+                        .publicModule(
+                                "chain",
+                                "this.shared: \"public\"\n"
+                                        + "this.fromPublic: shared\n"
+                                        + "shared: \"private\"\n"
+                                        + "this.fromPrivate: shared\n"
+                                        + "this.fromPrelude: Object\n"
+                                        + "this.late: () => lateName\n"
+                                        + "this.lateName: \"published later\"");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+
+        assertProtosTrue(
+                "chain: import(\"chain\")\n"
+                        + "(chain.fromPublic == \"public\").and() {\n"
+                        + "    (chain.fromPrivate == \"private\").and() {\n"
+                        + "        (chain.fromPrelude === Object).and() {\n"
+                        + "            (chain.late() == \"published later\").and() {\n"
+                        + "                chain.shared == \"public\"\n"
+                        + "            }\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}",
+                actor);
+    }
+
+    @Test
+    void d242PublishedObjectsKeepMethodHomeAndSuper() throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver()
+                        .publicModule(
+                                "animals",
+                                "animal: { speak: () => \"animal\" }\n"
+                                        + "this.dog: animal { speak: () => super.speak() + \"-dog\" }\n"
+                                        + "this.animal: animal");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+
+        assertProtosTrue(
+                "animals: import(\"animals\")\n"
+                        + "dog: animals.dog\n"
+                        + "rex: dog {}\n"
+                        + "(dog.parent() === animals.animal).and() {\n"
+                        + "    (rex.speak() == \"animal-dog\").and() { dog.speak() == \"animal-dog\" }\n"
+                        + "}",
+                actor);
+    }
+
+    @Test
+    void d242RecursiveImportObservesIdenticalPartialPublicObject() throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver()
+                        .publicModule(
+                                "a",
+                                "this.before: 10\n"
+                                        + "b: import(\"b\")\n"
+                                        + "this.b: b\n"
+                                        + "this.after: 20")
+                        .publicModule(
+                                "b",
+                                "a: import(\"a\")\n"
+                                        + "this.partial: a\n"
+                                        + "this.sawBefore: a.hasSlot(\"before\")\n"
+                                        + "this.sawAfter: a.hasSlot(\"after\")");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+
+        assertProtosTrue(
+                "a: import(\"a\")\n"
+                        + "(a.b.partial === a).and() {\n"
+                        + "    a.b.sawBefore.and() { (a.b.sawAfter == false).and() { a.after == 20 } }\n"
+                        + "}",
+                actor);
+        assertEquals(1, resolver.loads("a"));
+        assertEquals(1, resolver.loads("b"));
+    }
+
+    @Test
+    void d242FailedModuleIsEvictedRetriedAndEscapedPartialSurvives() throws Exception {
+        AtomicInteger attempt = new AtomicInteger();
+        MemoryResolver resolver = new MemoryResolver() {
+            @Override
+            public ProtosModuleSource loadSource(ProtosModuleKey key) throws Exception {
+                if (!key.canonicalId().equals("flaky")) {
+                    return super.loadSource(key);
+                }
+                loadCounts.merge(key.canonicalId(), 1, Integer::sum);
+                return ProtosModuleSource.fromCharacters(
+                        key,
+                        attempt.getAndIncrement() == 0
+                                ? "this.marker: 1\nimport(\"sink\").escaped = this\nfail()"
+                                : "this.marker: 2");
+            }
+        }.publicModule("flaky", "ignored").source("sink", "escaped: null");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+
+        assertThrows(ProtosSignalException.class, () -> eval("import(\"flaky\")", actor));
+        assertProtosTrue(
+                "escaped: import(\"sink\").escaped\n"
+                        + "retried: import(\"flaky\")\n"
+                        + "(escaped.marker == 1).and() {\n"
+                        + "    (retried.marker == 2).and() { retried !== escaped }\n"
+                        + "}",
+                actor);
+        assertEquals(2, resolver.loads("flaky"));
+    }
+
+    @Test
+    void d242MutablePublicModulesAreActorLocal() throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver().publicModule("state", "this.items: []");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actorA = prelude.newModuleActivation();
+        ProtosActivation actorB = prelude.newModuleActivation();
+
+        Object a = eval("import(\"state\")", actorA);
+        Object b = eval("import(\"state\")", actorB);
+        assertNotSame(a, b);
+        assertSame(a, eval("import(\"state\")", actorA));
+        assertSame(
+                prelude.bindings().readLocalSlot("Object").orElseThrow(),
+                ((ProtosObjectValue) a).parent().orElseThrow(),
+                "both public modules share the exact frozen Core Object parent");
+        assertSame(
+                ((ProtosObjectValue) a).parent().orElseThrow(),
+                ((ProtosObjectValue) b).parent().orElseThrow());
+    }
+
+    @Test
+    void d242DirectCanonicalModuleLoadReturnsPublicObject() throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver().publicModule("direct-module", "hidden: 1\nthis.value: 7");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+
+        ProtosObjectValue module =
+                new ProtosModuleRuntime(resolver)
+                        .loadCanonicalModule(ProtosModuleKey.module("direct-module"), actor);
+        assertEquals(java.util.Set.of("value"), module.localSlotsSnapshot().keySet());
+        assertSame(
+                module,
+                actor.actorModuleState()
+                        .lookup(ProtosModuleKey.module("direct-module"))
+                        .orElseThrow()
+                        .instance());
+    }
+
+    /**
+     * D242 explicit MODULE/SOURCE fixture resolver. {@link #source} registers a SOURCE whose import
+     * answers its complete context; {@link #publicModule} registers a MODULE whose initializer runs
+     * in a private context and whose import answers its public object. Kind is never inferred from
+     * spelling.
+     */
     static class MemoryResolver implements ProtosModuleResolver {
         final Map<String, String> aliases = new HashMap<>();
-        final Map<String, String> sources = new HashMap<>();
+        final Map<String, ProtosModuleKey> keys = new HashMap<>();
+        final Map<ProtosModuleKey, String> sources = new HashMap<>();
         final Map<String, Integer> loadCounts = new HashMap<>();
         final AtomicInteger resolveCalls = new AtomicInteger();
         final java.util.List<String> resolvedSpecifiers = new java.util.ArrayList<>();
         final java.util.List<String> resolvedFrom = new java.util.ArrayList<>();
 
-        MemoryResolver module(String key, String source) { aliases.put(key, key); sources.put(key, source); return this; }
-        MemoryResolver alias(String spelling, String key) { aliases.put(spelling, key); return this; }
+        MemoryResolver source(String key, String source) {
+            return register(ProtosModuleKey.source(key), source);
+        }
+
+        MemoryResolver publicModule(String key, String initializer) {
+            return register(ProtosModuleKey.module(key), initializer);
+        }
+
+        private MemoryResolver register(ProtosModuleKey key, String source) {
+            aliases.put(key.canonicalId(), key.canonicalId());
+            keys.put(key.canonicalId(), key);
+            sources.put(key, source);
+            return this;
+        }
+
+        MemoryResolver alias(String spelling, String key) {
+            aliases.put(spelling, key);
+            return this;
+        }
+
         int loads(String key) { return loadCounts.getOrDefault(key, 0); }
 
         @Override public ProtosModuleKey resolve(String exactSpecifier, Optional<ProtosModuleKey> importingModule) throws Exception {
             resolveCalls.incrementAndGet();
             resolvedSpecifiers.add(exactSpecifier);
             resolvedFrom.add(importingModule.map(ProtosModuleKey::canonicalId).orElse("<root>"));
-            String key = aliases.get(exactSpecifier);
+            String name = aliases.get(exactSpecifier);
+            ProtosModuleKey key = name == null ? null : keys.get(name);
             if (key == null) throw new java.io.IOException("not found");
-            return new ProtosModuleKey(key);
+            return key;
         }
 
         @Override public ProtosModuleSource loadSource(ProtosModuleKey key) throws Exception {
             loadCounts.merge(key.canonicalId(), 1, Integer::sum);
-            String source = sources.get(key.canonicalId());
+            String source = sources.get(key);
             if (source == null) throw new java.io.IOException("not found");
             return ProtosModuleSource.fromCharacters(key, source);
         }

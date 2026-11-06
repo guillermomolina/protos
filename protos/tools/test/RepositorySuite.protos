@@ -5,8 +5,8 @@
 //! TOOL005-B2 explicit repository suite membership and TOOL011 repository
 //! progress grouping policy.
 
-SuiteGraph: import("self:SuiteGraph")
-Arrays: import("std:collections/Array")
+SuiteGraph: import("./SuiteGraph.protos")
+Arrays: import("std:collections/array")
 
 root: SuiteGraph.suite(
     "protos/repository",
@@ -230,7 +230,8 @@ conformanceProgressGroups: Array(
             "reflection",
             "object-structural",
             "matching",
-            "execution-context"
+            "execution-context",
+            "modules"
         ),
         Array()
     ),

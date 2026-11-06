@@ -69,7 +69,7 @@ final class ProtosTestToolLogicalCasePlanTest {
                         Files.readString(
                                 DISCOVERY_FIXTURE,
                                 StandardCharsets.UTF_8),
-                        prelude.newModuleActivation());
+                        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
 
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
@@ -99,7 +99,7 @@ final class ProtosTestToolLogicalCasePlanTest {
                         Files.readString(
                                 FIXTURE,
                                 StandardCharsets.UTF_8),
-                        prelude.newModuleActivation());
+                        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
 
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,

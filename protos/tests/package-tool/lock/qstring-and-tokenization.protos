@@ -13,12 +13,12 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("qstring-canonical-roundtrip", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         valueBytes: Encoding.UTF8.encode("A")
         valueBytes.add(10)
         valueBytes.add(34)
@@ -54,7 +54,7 @@ tests: [
         Assertions.require(ok)
     }),
     Test("line-tokenization", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         tokens: Syntax.lineTokens("dependency workspace \"root package\" alias \"json api\" target git \"pkg\" \"abc123\"")
         ok: tokens.size() == 9
         (tokens[0].text == "dependency").ifFalse(() => { ok = false })
@@ -66,7 +66,7 @@ tests: [
         Assertions.require(ok)
     }),
     Test("qstring-noncanonical-short-escape-error", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         bytes: Encoding.UTF8.encode("")
         bytes.add(34)
         bytes.add(92)
@@ -77,7 +77,7 @@ tests: [
         })
     }),
     Test("qstring-unnecessary-unicode-error", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         bytes: Encoding.UTF8.encode("")
         bytes.add(34)
         bytes.add(92)
@@ -92,7 +92,7 @@ tests: [
         })
     }),
     Test("qstring-uppercase-hex-error", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         bytes: Encoding.UTF8.encode("")
         bytes.add(34)
         bytes.add(92)
@@ -107,13 +107,13 @@ tests: [
         })
     }),
     Test("line-double-space-error", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         Assertions.signals(Error, () => {
             Syntax.lineTokens("root  workspace")
         })
     }),
     Test("line-tab-error", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         bytes: Encoding.UTF8.encode("root")
         bytes.add(9)
         bytes.add(119)

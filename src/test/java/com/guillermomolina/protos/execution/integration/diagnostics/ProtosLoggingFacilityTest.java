@@ -69,7 +69,7 @@ final class ProtosLoggingFacilityTest {
 
         ProtosObjectValue otherContext = prelude.newExecutionContext();
         prelude.installStandardModuleMembersForRuntime(
-                new ProtosModuleKey("std:logging/Logger"), otherContext);
+                ProtosModuleKey.module("std:logging/logger"), otherContext);
         assertFalse(otherContext.hasLocalSlot(ProtosLoggingFacility.EVENT_BOOTSTRAP_SLOT));
         assertFalse(otherContext.hasLocalSlot(ProtosLoggingFacility.TEXT_BOOTSTRAP_SLOT));
         assertFalse(otherContext.hasLocalSlot(ProtosLoggingFacility.JSON_BOOTSTRAP_SLOT));

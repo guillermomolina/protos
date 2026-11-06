@@ -205,7 +205,7 @@ final class ProtosActorGroupCommunicationTest {
         ProtosActivation caller =
                 prelude.newModuleActivation(
                         sender.moduleState(),
-                        new ProtosModuleKey("sender"),
+                        ProtosModuleKey.source("sender"),
                         prelude.newExecutionContext(),
                         sender.executionDomain());
         return new Fixture(prelude, sender, caller);
@@ -230,7 +230,7 @@ final class ProtosActorGroupCommunicationTest {
     }
 
     private static void ready(ProtosActor actor, ProtosPrelude prelude, ProtosObjectValue behavior) {
-        actor.bindMessageEnvironmentForRuntime(prelude, new ProtosModuleKey("target"));
+        actor.bindMessageEnvironmentForRuntime(prelude, ProtosModuleKey.source("target"));
         assertTrue(actor.completeInitialization(behavior));
     }
 

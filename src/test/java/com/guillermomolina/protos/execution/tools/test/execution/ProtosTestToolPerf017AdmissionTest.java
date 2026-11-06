@@ -58,7 +58,7 @@ final class ProtosTestToolPerf017AdmissionTest {
                         .bootstrap(
                                 CORE,
                                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
         ProtosTask lane =
                 activation.executionDomain()
                         .createTask(
@@ -126,7 +126,7 @@ final class ProtosTestToolPerf017AdmissionTest {
         Path suite = root.resolve("suite.protos");
         String source =
                 """
-                TestValue: import("std:test/Test")
+                TestValue: import("std:test/test")
                 tests: Array(
                     TestValue("only", () => {
                         22
@@ -138,7 +138,7 @@ final class ProtosTestToolPerf017AdmissionTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosBundledToolModuleResolver resolver = resolver();
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -192,7 +192,7 @@ final class ProtosTestToolPerf017AdmissionTest {
 
         ManualSubmission submission = new ManualSubmission();
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver());
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         Files.writeString(
                 root.resolve("snapshot.protos"),
@@ -241,7 +241,7 @@ final class ProtosTestToolPerf017AdmissionTest {
                         .bootstrap(
                                 CORE,
                                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
         ArrayList<String> diagnostics = new ArrayList<>();
 
         try (ProtosTestToolStalledCaseDiagnosticFacility facility =

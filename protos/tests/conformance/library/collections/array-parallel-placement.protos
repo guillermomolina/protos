@@ -18,12 +18,12 @@
 // D160: parallel Array algorithms are Standard Library policy over the
 // retained minimal isolated-parallel substrate, not Core Array selectors.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: Array(
     Test("array parallel algorithms are module functions", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         Assertions.require(Arrays.hasSlot("parallelMap"))
         Assertions.require(Arrays.hasSlot("parallelFilter"))
         Assertions.require(Arrays.hasSlot("parallelFindIndex"))

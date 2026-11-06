@@ -61,7 +61,7 @@ final class ProtosRootActorServiceBootstrapIntegrationTest {
      */
     private static final String SERVICE =
             """
-            ProcessStreams: import("std:io/ProcessStreams")
+            ProcessStreams: import("std:io/process_streams")
             bodyRuns: 0
             bodyRuns = bodyRuns + 1
             out: ProcessStreams.stdoutWriter(process)
@@ -142,7 +142,7 @@ final class ProtosRootActorServiceBootstrapIntegrationTest {
      */
     private static final String CATALOG_SERVICE =
             """
-            ProcessStreams: import("std:io/ProcessStreams")
+            ProcessStreams: import("std:io/process_streams")
             shared: import("app:shared")
             out: ProcessStreams.stdoutWriter(process)
             service: () => {
@@ -233,7 +233,7 @@ final class ProtosRootActorServiceBootstrapIntegrationTest {
                 write(
                         "relative-root.protos",
                         """
-                        ProcessStreams: import("std:io/ProcessStreams")
+                        ProcessStreams: import("std:io/process_streams")
                         out: ProcessStreams.stdoutWriter(process)
 
                         service: () => {

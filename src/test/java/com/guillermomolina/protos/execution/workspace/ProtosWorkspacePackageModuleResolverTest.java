@@ -42,7 +42,7 @@ final class ProtosWorkspacePackageModuleResolverTest {
         ProtosWorkspacePackageModuleResolver resolver = resolver(rootOnlyPlan());
         ProtosModuleKey entry = resolver.entryModule("Main");
 
-        assertEquals(ProtosWorkspacePackageModuleKey.encode("root-pkg", "Main"), entry);
+        assertEquals(ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "root-pkg", "Main"), entry);
         ProtosObjectValue module = execute(resolver, entry);
         assertIntegerSlot(module, "result", 41);
     }
@@ -51,10 +51,10 @@ final class ProtosWorkspacePackageModuleResolverTest {
     void selfRoutingUsesTheImportingPackageAndDoesNotConsultExports() throws Exception {
         ProtosWorkspacePackageModuleResolver resolver = resolver(rootAndMemberPlan());
         ProtosModuleKey memberMain =
-                ProtosWorkspacePackageModuleKey.encode("member-pkg", "Main");
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "member-pkg", "Main");
 
         assertEquals(
-                ProtosWorkspacePackageModuleKey.encode("member-pkg", "Hidden"),
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "member-pkg", "Hidden"),
                 resolver.resolve("self:Hidden", Optional.of(memberMain)));
 
         ProtosObjectValue module = execute(resolver, memberMain);
@@ -75,7 +75,7 @@ final class ProtosWorkspacePackageModuleResolverTest {
                 () ->
                         resolver.resolve(
                                 "self:Internal/Helper",
-                                Optional.of(new ProtosModuleKey("std:collections/Array"))));
+                                Optional.of(ProtosModuleKey.module("std:collections/array"))));
         assertThrows(
                 IOException.class,
                 () ->
@@ -83,9 +83,9 @@ final class ProtosWorkspacePackageModuleResolverTest {
                                 "self:Internal/Helper",
                                 Optional.of(
                                         ProtosWorkspacePackageModuleKey.encode(
-                                                "outside-plan", "Main"))));
+                                                ProtosModuleKey.Kind.MODULE, "outside-plan", "Main"))));
         assertThrows(IOException.class, () -> resolver.resolve("dep:x/Visible", Optional.of(entry)));
-        assertThrows(IOException.class, () -> resolver.resolve("std:collections/Array", Optional.of(entry)));
+        assertThrows(IOException.class, () -> resolver.resolve("std:collections/array", Optional.of(entry)));
         assertThrows(IOException.class, () -> resolver.resolve("Internal/Helper", Optional.of(entry)));
     }
 
@@ -94,19 +94,54 @@ final class ProtosWorkspacePackageModuleResolverTest {
             throws Exception {
         ProtosWorkspacePackageModuleResolver resolver = resolver(rootOnlyPlan());
         ProtosModuleKey helper =
-                ProtosWorkspacePackageModuleKey.encode("root-pkg", "Internal/Helper");
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "root-pkg", "Internal/Helper");
 
         String source = resolver.loadSource(helper).characters();
         org.junit.jupiter.api.Assertions.assertTrue(source.contains("value: 41"));
         assertThrows(
                 IOException.class,
-                () -> resolver.loadSource(new ProtosModuleKey("std:collections/Array")).characters());
+                () -> resolver.loadSource(ProtosModuleKey.module("std:collections/array")).characters());
         assertThrows(
                 IOException.class,
                 () ->
                         resolver.loadSource(
                                 ProtosWorkspacePackageModuleKey.encode(
-                                        "outside-plan", "Internal/Helper")).characters());
+                                        ProtosModuleKey.Kind.MODULE, "outside-plan", "Internal/Helper")).characters());
+    }
+
+    @Test
+    void moduleInitializersReachPrivateSourcesOnlyRelativelyWithinTheirPackage()
+            throws Exception {
+        ProtosWorkspacePackageModuleResolver resolver = resolver(rootAndMemberPlan());
+        ProtosModuleKey composite =
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "root-pkg", "Composite");
+        ProtosModuleKey detail =
+                ProtosWorkspacePackageModuleKey.encode(
+                        ProtosModuleKey.Kind.SOURCE, "root-pkg", "Composite/Detail");
+
+        assertEquals(composite, resolver.resolve("self:Composite", Optional.of(resolver.entryModule("Main"))));
+        assertEquals(detail, resolver.resolve("./Detail.protos", Optional.of(composite)));
+        assertEquals(detail, resolver.resolve("../Composite/Detail.protos", Optional.of(composite)));
+        // module.protos is never a SOURCE alias, traversal stays inside the package, and
+        // SOURCE routes need the explicit .protos spelling.
+        assertThrows(IOException.class, () -> resolver.resolve("./module.protos", Optional.of(composite)));
+        assertThrows(IOException.class, () -> resolver.resolve("../../outside.protos", Optional.of(composite)));
+        assertThrows(IOException.class, () -> resolver.resolve("./Detail", Optional.of(composite)));
+        assertThrows(IOException.class, () -> resolver.resolve("./detail.protos", Optional.of(composite)));
+        assertThrows(IOException.class, () -> resolver.resolve("./Detail.protos", Optional.empty()));
+        assertThrows(IOException.class, () -> resolver.resolve("self:Composite/Detail", Optional.of(composite)));
+        // A SOURCE of another package is not reachable by relative traversal.
+        ProtosModuleKey memberMain =
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "member-pkg", "Main");
+        assertThrows(
+                IOException.class,
+                () -> resolver.resolve("../../Composite/Detail.protos", Optional.of(memberMain)));
+
+        ProtosObjectValue module = execute(resolver, composite);
+        assertIntegerSlot(module, "result", 10);
+        assertEquals(java.util.Set.of("result"), module.localSlotsSnapshot().keySet());
+        ProtosObjectValue source = execute(resolver, detail);
+        assertIntegerSlot(source, "secret", 9);
     }
 
     private static ProtosWorkspacePackageModuleResolver resolver(

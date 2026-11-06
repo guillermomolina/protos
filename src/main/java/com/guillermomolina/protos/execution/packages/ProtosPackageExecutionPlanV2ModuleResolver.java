@@ -51,7 +51,6 @@ final class ProtosPackageExecutionPlanV2ModuleResolver implements ProtosModuleRe
     private static final String SELF_PREFIX = "self:";
     private static final String DEP_PREFIX = "dep:";
     private static final String STD_PREFIX = "std:";
-    private static final String SOURCE_SUFFIX = ".protos";
 
     private final ProtosPackageExecutionPlanV2.WorkspaceRef root;
     private final Map<ProtosPackageExecutionPlanV2.NodeRef, ProtosPackageExecutionPlanV2.PackageNode>
@@ -131,8 +130,8 @@ final class ProtosPackageExecutionPlanV2ModuleResolver implements ProtosModuleRe
 
     /** Returns the exact root-package entry identity without inventing an ambient self import. */
     ProtosModuleKey entryModule(String logicalModule) throws IOException {
-        workspaceSources.requireSource(root.packageId(), logicalModule);
-        return ProtosWorkspacePackageModuleKey.encode(root.packageId(), logicalModule);
+        workspaceSources.requireSource(ProtosModuleKey.Kind.MODULE, root.packageId(), logicalModule);
+        return ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, root.packageId(), logicalModule);
     }
 
     @Override
@@ -145,7 +144,7 @@ final class ProtosPackageExecutionPlanV2ModuleResolver implements ProtosModuleRe
         if (exactSpecifier.startsWith(SELF_PREFIX)) {
             ProtosPackageExecutionPlanV2.PackageNode importer =
                     requireImporter(importingModule, "self import");
-            return moduleKey(importer, exactSpecifier.substring(SELF_PREFIX.length()));
+            return targetKey(ProtosModuleKey.Kind.MODULE, importer, exactSpecifier.substring(SELF_PREFIX.length()));
         }
         if (exactSpecifier.startsWith(DEP_PREFIX)) {
             return resolveDependency(exactSpecifier, importingModule);
@@ -153,13 +152,35 @@ final class ProtosPackageExecutionPlanV2ModuleResolver implements ProtosModuleRe
         if (exactSpecifier.startsWith(STD_PREFIX)) {
             return resolveStandard(exactSpecifier, importingModule);
         }
+        if (ProtosPackageRuntimeNames.isRelativeSourceSpecifier(exactSpecifier)
+                && importingModule.isPresent()
+                && ProtosStandardLibraryModuleResolver.owns(importingModule.get())) {
+            // Relative SOURCE imports inside the Standard Library stay in its custody.
+            return resolveStandard(exactSpecifier, importingModule);
+        }
+        if (ProtosPackageRuntimeNames.isRelativeSourceSpecifier(exactSpecifier)) {
+            ProtosPackageExecutionPlanV2.PackageNode importer =
+                    requireImporter(importingModule, "relative SOURCE import");
+            ProtosModuleKey importerKey = importingModule.orElseThrow();
+            String importerName =
+                    ProtosWorkspacePackageModuleKey.owns(importerKey)
+                            ? ProtosWorkspacePackageModuleKey.decode(importerKey).logicalModule()
+                            : ProtosExternalPackageModuleKey.decode(importerKey).logicalModule();
+            String sourceName =
+                    ProtosPackageRuntimeNames.resolveRelativeSource(
+                            ProtosPackageRuntimeNames.owningDirectory(
+                                    importerKey.kind(), importerName),
+                            exactSpecifier);
+            return targetKey(ProtosModuleKey.Kind.SOURCE, importer, sourceName);
+        }
         throw new IOException("unsupported package module specifier");
     }
 
     @Override
     public ProtosModuleSource loadSource(ProtosModuleKey key) throws IOException {
         Objects.requireNonNull(key, "key");
-        if (key.canonicalId().startsWith(STD_PREFIX)) {
+        if (!ProtosWorkspacePackageModuleKey.owns(key)
+                && !ProtosExternalPackageModuleKey.owns(key)) {
             try {
                 return standardLibraryResolver.loadSource(key);
             } catch (IOException e) {
@@ -175,7 +196,7 @@ final class ProtosPackageExecutionPlanV2ModuleResolver implements ProtosModuleRe
             return ProtosModuleSource.fromPath(
                     key,
                     workspaceSources.requireSource(
-                            address.packageId(), address.logicalModule()));
+                            address.kind(), address.packageId(), address.logicalModule()));
         }
         if (ProtosExternalPackageModuleKey.owns(key)) {
             ProtosExternalPackageModuleKey.Address address =
@@ -186,7 +207,7 @@ final class ProtosPackageExecutionPlanV2ModuleResolver implements ProtosModuleRe
                     decodeStrictUtf8(
                             readExternalResource(
                                     address.identity(),
-                                    sourceResourceName(address.logicalModule()))));
+                                    sourceResourceName(address.kind(), address.logicalModule()))));
         }
         throw new IOException("module key is outside package execution plan domains");
     }
@@ -217,7 +238,8 @@ final class ProtosPackageExecutionPlanV2ModuleResolver implements ProtosModuleRe
         if (internalLogicalModule == null) {
             throw new IOException("package dependency export is not visible");
         }
-        return moduleKey(target, internalLogicalModule);
+        // D242: [exports] values are logical module directories; dep: never reaches a SOURCE.
+        return targetKey(ProtosModuleKey.Kind.MODULE, target, internalLogicalModule);
     }
 
     private ProtosModuleKey resolveStandard(
@@ -227,8 +249,9 @@ final class ProtosPackageExecutionPlanV2ModuleResolver implements ProtosModuleRe
                     Objects.requireNonNull(
                             standardLibraryResolver.resolve(exactSpecifier, importingModule),
                             "standard-library resolver returned null ModuleKey");
-            if (!key.canonicalId().startsWith(STD_PREFIX)) {
-                throw new IOException("standard-library resolver returned a foreign ModuleKey");
+            if (ProtosWorkspacePackageModuleKey.owns(key)
+                    || ProtosExternalPackageModuleKey.owns(key)) {
+                throw new IOException("standard-library resolver returned a package ModuleKey");
             }
             return key;
         } catch (IOException e) {
@@ -239,21 +262,25 @@ final class ProtosPackageExecutionPlanV2ModuleResolver implements ProtosModuleRe
     }
 
     /**
-     * Canonical identity of one logical module in {@code node}. Workspace modules must exist under
-     * the workspace physical rules; external existence is checked lazily by {@link #loadSource}.
+     * Canonical identity of one MODULE directory or SOURCE file in {@code node}. Workspace targets
+     * must exist under the workspace physical rules; external existence is checked lazily by
+     * {@link #loadSource}.
      */
-    private ProtosModuleKey moduleKey(
-            ProtosPackageExecutionPlanV2.PackageNode node, String logicalModule)
+    private ProtosModuleKey targetKey(
+            ProtosModuleKey.Kind kind,
+            ProtosPackageExecutionPlanV2.PackageNode node,
+            String logicalModule)
             throws IOException {
-        String checkedModule = ProtosPackageRuntimeNames.requireLogicalName(logicalModule);
+        String checkedModule = ProtosPackageRuntimeNames.requireTargetName(kind, logicalModule);
         return switch (node) {
             case ProtosPackageExecutionPlanV2.WorkspacePackage workspace -> {
-                workspaceSources.requireSource(workspace.ref().packageId(), checkedModule);
+                workspaceSources.requireSource(kind, workspace.ref().packageId(), checkedModule);
                 yield ProtosWorkspacePackageModuleKey.encode(
-                        workspace.ref().packageId(), checkedModule);
+                        kind, workspace.ref().packageId(), checkedModule);
             }
             case ProtosPackageExecutionPlanV2.ExternalPackage external ->
-                    ProtosExternalPackageModuleKey.encode(external.identity(), checkedModule);
+                    ProtosExternalPackageModuleKey.encode(
+                            kind, external.identity(), checkedModule);
         };
     }
 
@@ -309,13 +336,15 @@ final class ProtosPackageExecutionPlanV2ModuleResolver implements ProtosModuleRe
         }
     }
 
-    /** {@code Internal/Helper} becomes the package-relative resource {@code Internal/Helper.protos}. */
-    private static ProtosPackageResourceName sourceResourceName(String logicalModule)
-            throws IOException {
-        String[] segments =
-                ProtosPackageRuntimeNames.requireLogicalName(logicalModule).split("/", -1);
-        segments[segments.length - 1] = segments[segments.length - 1] + SOURCE_SUFFIX;
-        return new ProtosPackageResourceName(List.of(segments));
+    /**
+     * D242: MODULE {@code geometry/shapes} becomes {@code geometry/shapes/module.protos}; SOURCE
+     * {@code geometry/Helper} becomes exactly {@code geometry/Helper.protos}.
+     */
+    private static ProtosPackageResourceName sourceResourceName(
+            ProtosModuleKey.Kind kind, String logicalModule) throws IOException {
+        String checked = ProtosPackageRuntimeNames.requireTargetName(kind, logicalModule);
+        return new ProtosPackageResourceName(
+                List.of(ProtosPackageRuntimeNames.resourcePath(kind, checked).split("/", -1)));
     }
 
     private static String decodeStrictUtf8(byte[] bytes) throws IOException {

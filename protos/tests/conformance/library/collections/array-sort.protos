@@ -4,25 +4,25 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: Array(
     Test("array sort invalid comparator order error", () => {
         Assertions.signals(InvalidComparatorOrder, () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             Arrays.sort(Array(2, 1), (left, right) => { true })
         })
     }),
     Test("array sort invalid comparator result error", () => {
         Assertions.signals(InvalidComparatorResult, () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             Arrays.sort(Array(2, 1), (left, right) => { 123 })
         })
     }),
     Test("array sort stability", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             first: Array(1, 10)
             second: Array(1, 20)
             zero: Array(0, 30)
@@ -41,7 +41,7 @@ tests: Array(
     }),
     Test("array sort stable merge order", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             source: Array(3, 1, 2)
             trace: Map()
             calls: 0
@@ -75,7 +75,7 @@ tests: Array(
     }),
     Test("array sort trivial inputs do not inspect comparator", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             marker: Array(7)
             empty: Arrays.sort(Array(), 42)
             singleton: Arrays.sort(Array(marker), 42)
@@ -90,7 +90,7 @@ tests: Array(
         Assertions.require(tool009LegacyCase())
     }),
     Test("array sort default comparator orders ascending", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(3, 1, 2)
         sorted: Arrays.sort(source)
         Assertions.require(sorted !== source)
@@ -99,14 +99,14 @@ tests: Array(
         Assertions.require(((source[0] == 3) && (source[1] == 1)) && (source[2] == 2))
     }),
     Test("array sort default comparator empty answers fresh array", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array()
         sorted: Arrays.sort(source)
         Assertions.require(sorted !== source)
         Assertions.require(sorted.size() == 0)
     }),
     Test("array sort default comparator singleton answers fresh array", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(7)
         sorted: Arrays.sort(source)
         Assertions.require(sorted !== source)
@@ -114,25 +114,25 @@ tests: Array(
         Assertions.require(sorted[0] == 7)
     }),
     Test("array sort explicit descending comparator", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         sorted: Arrays.sort(Array(1, 3, 2), (left, right) => left > right)
         Assertions.require(((sorted[0] == 3) && (sorted[1] == 2)) && (sorted[2] == 1))
     }),
     Test("array sort explicit null comparator does not use default", () => {
         Assertions.signals(Error, () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
             Arrays.sort(Array(2, 1), null)
         })
     }),
     Test("array sort trivial inputs ignore explicit null comparator", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         empty: Arrays.sort(Array(), null)
         singleton: Arrays.sort(Array(5), null)
         Assertions.require(empty.size() == 0)
         Assertions.require((singleton.size() == 1) && (singleton[0] == 5))
     }),
     Test("array sort custom comparator stays stable for equal keys", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         first: Array(2, "a")
         second: Array(1, "b")
         third: Array(2, "c")

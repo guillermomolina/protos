@@ -1,0 +1,744 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Construction, parsing, and formatting of canonical `IpAddress` values; the
+//! The canonical `IpAddress` prototype is published by the runtime;
+//! its construction, equality and hash behavior are implemented in Protos. 
+
+/// Private exact octet codec. Addresses are encoded as fixed-width arrays of 4
+/// (IPv4) or 16 (IPv6) Integer octets in network order using exact guest
+/// Integer arithmetic, so all 128 IPv6 bits are preserved. It carries no
+/// Network authority and is captured below before its binding is removed.
+_ipOctets: {
+    // Answers the IpAddress of `version` whose network-order octets are
+    // `octets`, an Array of exactly 4 or 16 Integers in 0..255.
+    from: (version, octets) => {
+        width: 0
+        if(version == 4) { width = 4 }
+        if(version == 6) { width = 16 }
+        if(width == 0) {
+            Error().signal()
+        }
+
+        Array.recognizes(octets).ifFalse(() => {
+            Error().signal()
+        })
+        (octets.size() == width).ifFalse(() => {
+            Error().signal()
+        })
+
+        bits: 0
+        index: 0
+        while(index < width) {
+            octet: octets[index]
+            Integer.recognizes(octet).ifFalse(() => {
+                Error().signal()
+            })
+            if((octet < 0) || (octet > 255)) {
+                Error().signal()
+            }
+            bits = bits * 256 + octet
+            index = index + 1
+        }
+
+        IpAddress(version, bits)
+    }
+
+    // Answers a frozen Array of the 4 or 16 network-order Integer octets of a
+    // recognized IpAddress, keeping leading zero octets.
+    to: (address) => {
+        IpAddress.recognizes(address).ifFalse(() => {
+            Error().signal()
+        })
+
+        result: null
+        if(address.version == 4) {
+            result = Array(0, 0, 0, 0)
+        }
+        if(address.version == 6) {
+            result = Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        }
+
+        remaining: address.bits
+        index: result.size() - 1
+        while(index >= 0) {
+            result[index] = remaining.mod(256)
+            remaining = remaining.div(256)
+            index = index - 1
+        }
+
+        (remaining == 0).ifFalse(() => {
+            Error().signal()
+        })
+
+        result.freeze()
+    }
+}
+_ipOctets.freeze()
+
+/// Answers the IPv4 `IpAddress` with octets `a.b.c.d`; each must be an Integer in
+/// 0..255.
+this.v4: ((codec) => (a, b, c, d) => {
+    requireComponent: (value) => {
+        // Validate the exact ordinary-Integer family without conversion.
+        Integer.recognizes(value).ifFalse(() => {
+            Error().signal()
+        })
+        if(value < 0) {
+            Error().signal()
+        }
+        if(value > 255) {
+            Error().signal()
+        }
+    }
+
+    requireComponent(a)
+    requireComponent(b)
+    requireComponent(c)
+    requireComponent(d)
+
+    codec.from(4, Array(a, b, c, d))
+})(_ipOctets)
+
+/// Answers the IPv6 `IpAddress` with hextets `a` through `h`; each must be an Integer
+/// in 0..65535.
+this.v6: ((codec) => (a, b, c, d, e, f, g, h) => {
+    requireHextet: (value) => {
+        // Validate the exact ordinary-Integer family without conversion or
+        // delegation.
+        Integer.recognizes(value).ifFalse(() => {
+            Error().signal()
+        })
+        if(value < 0) {
+            Error().signal()
+        }
+        if(value > 65535) {
+            Error().signal()
+        }
+    }
+
+    requireHextet(a)
+    requireHextet(b)
+    requireHextet(c)
+    requireHextet(d)
+    requireHextet(e)
+    requireHextet(f)
+    requireHextet(g)
+    requireHextet(h)
+
+    // Sixteen network-order octets; no signed-64 intermediate is formed.
+    octets: Array(
+        a.div(256), a.mod(256),
+        b.div(256), b.mod(256),
+        c.div(256), c.mod(256),
+        d.div(256), d.mod(256),
+        e.div(256), e.mod(256),
+        f.div(256), f.mod(256),
+        g.div(256), g.mod(256),
+        h.div(256), h.mod(256)
+    )
+
+    codec.from(6, octets)
+})(_ipOctets)
+
+/// Parses numeric IP address text: dotted-decimal IPv4 without leading zeros, or
+/// IPv6 hextets with optional `::` compression and a trailing dotted-decimal
+/// IPv4 part. Text containing `:` is parsed as IPv6. Invalid text signals an
+/// Error.
+this.parse: (text) => {
+    // Validate the exact semantic String family without conversion.
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+
+    totalSize: text.size()
+    if(totalSize > 45) {
+        fail()
+    }
+
+    decimalDigitValue: (character) => {
+        result: -1
+
+        if(character == "0") { result = 0 }
+        if(character == "1") { result = 1 }
+        if(character == "2") { result = 2 }
+        if(character == "3") { result = 3 }
+        if(character == "4") { result = 4 }
+        if(character == "5") { result = 5 }
+        if(character == "6") { result = 6 }
+        if(character == "7") { result = 7 }
+        if(character == "8") { result = 8 }
+        if(character == "9") { result = 9 }
+
+        result
+    }
+
+    parseIpv4Components: (source) => {
+        size: source.size()
+        if(size < 7) {
+            fail()
+        }
+        if(size > 15) {
+            fail()
+        }
+
+        index: 0
+        octetIndex: 0
+        current: 0
+        digitCount: 0
+        leadingZero: false
+
+        a: null
+        b: null
+        c: null
+        d: null
+
+        finishOctet: () => {
+            if(digitCount == 0) {
+                fail()
+            }
+            if(current > 255) {
+                fail()
+            }
+
+            if(octetIndex == 0) { a = current }
+            if(octetIndex == 1) { b = current }
+            if(octetIndex == 2) { c = current }
+            if(octetIndex == 3) { d = current }
+
+            octetIndex = octetIndex + 1
+            current = 0
+            digitCount = 0
+            leadingZero = false
+        }
+
+        while(index < size) {
+            character: source[index]
+            isSeparator: character == "."
+
+            if(isSeparator) {
+                if(octetIndex >= 3) {
+                    fail()
+                }
+                finishOctet()
+            }
+
+            isSeparator.ifFalse(() => {
+                digit: decimalDigitValue(character)
+                if(digit < 0) {
+                    fail()
+                }
+
+                if(digitCount == 0) {
+                    if(digit == 0) {
+                        leadingZero = true
+                    }
+                }
+
+                if(digitCount > 0) {
+                    if(leadingZero) {
+                        fail()
+                    }
+                }
+
+                digitCount = digitCount + 1
+                if(digitCount > 3) {
+                    fail()
+                }
+
+                current = current * 10 + digit
+                if(current > 255) {
+                    fail()
+                }
+            })
+
+            index = index + 1
+        }
+
+        finishOctet()
+
+        (octetIndex == 4).ifFalse(() => {
+            fail()
+        })
+
+        Array(a, b, c, d)
+    }
+
+    parseIpv4: (source) => {
+        components: parseIpv4Components(source)
+        v4(components[0], components[1], components[2], components[3])
+    }
+
+    hexDigitValue: (character) => {
+        result: decimalDigitValue(character)
+
+        if(result < 0) {
+            if(character == "a") { result = 10 }
+            if(character == "b") { result = 11 }
+            if(character == "c") { result = 12 }
+            if(character == "d") { result = 13 }
+            if(character == "e") { result = 14 }
+            if(character == "f") { result = 15 }
+
+            if(character == "A") { result = 10 }
+            if(character == "B") { result = 11 }
+            if(character == "C") { result = 12 }
+            if(character == "D") { result = 13 }
+            if(character == "E") { result = 14 }
+            if(character == "F") { result = 15 }
+        }
+
+        result
+    }
+
+    parseIpv6: (source) => {
+        size: source.size()
+        if(size < 2) {
+            fail()
+        }
+        if(size > 45) {
+            fail()
+        }
+
+        // Core Array has fixed indexed extent; it deliberately has no append
+        // selector. IPv6 itself is bounded to eight hextets, so use an exact
+        // eight-entry call-local workspace and an explicit logical count.
+        hextets: Array(0, 0, 0, 0, 0, 0, 0, 0)
+        hextetCount: 0
+        compressionIndex: -1
+        index: 0
+
+        appendHextet: (value) => {
+            if(hextetCount >= 8) {
+                fail()
+            }
+            hextets[hextetCount] = value
+            hextetCount = hextetCount + 1
+        }
+
+        if(source[0] == ":") {
+            if(size < 2) {
+                fail()
+            }
+            (source[1] == ":").ifFalse(() => {
+                fail()
+            })
+            compressionIndex = 0
+            index = 2
+        }
+
+        appendHexToken: (token) => {
+            tokenSize: token.size()
+            if(tokenSize == 0) {
+                fail()
+            }
+            if(tokenSize > 4) {
+                fail()
+            }
+
+            tokenIndex: 0
+            value: 0
+
+            while(tokenIndex < tokenSize) {
+                digit: hexDigitValue(token[tokenIndex])
+                if(digit < 0) {
+                    fail()
+                }
+                value = value * 16 + digit
+                tokenIndex = tokenIndex + 1
+            }
+
+            appendHextet(value)
+        }
+
+        while(index < size) {
+            token: ""
+            containsDot: false
+
+            (() => {
+                stillInside: index < size
+                if(stillInside) {
+                    stillInside = source[index] != ":"
+                }
+                stillInside
+            }).whileTrue() {
+                character: source[index]
+                if(character == ".") {
+                    containsDot = true
+                }
+                token = token + character
+                index = index + 1
+            }
+
+            if(token.size() == 0) {
+                fail()
+            }
+
+            if(containsDot) {
+                // An embedded dotted-decimal IPv4 component is legal only as
+                // the final 32 bits of the IPv6 text.
+                if(index < size) {
+                    fail()
+                }
+
+                components: parseIpv4Components(token)
+                appendHextet(components[0] * 256 + components[1])
+                appendHextet(components[2] * 256 + components[3])
+            }
+
+            containsDot.ifFalse(() => {
+                appendHexToken(token)
+            })
+
+            if(index < size) {
+                // The token scan stopped on exactly one colon.
+                index = index + 1
+
+                // A single trailing colon is never valid.
+                if(index == size) {
+                    fail()
+                }
+
+                if(source[index] == ":") {
+                    if(compressionIndex >= 0) {
+                        fail()
+                    }
+                    compressionIndex = hextetCount
+                    index = index + 1
+                }
+            }
+        }
+
+        count: hextetCount
+        expanded: Array(0, 0, 0, 0, 0, 0, 0, 0)
+        expandedCount: 0
+
+        appendExpanded: (value) => {
+            if(expandedCount >= 8) {
+                fail()
+            }
+            expanded[expandedCount] = value
+            expandedCount = expandedCount + 1
+        }
+
+        if(compressionIndex >= 0) {
+            // `::` must stand for at least one zero hextet.
+            if(count >= 8) {
+                fail()
+            }
+
+            zeroCount: 8 - count
+            sourceIndex: 0
+
+            while(sourceIndex < count) {
+                if(sourceIndex == compressionIndex) {
+                    zerosAdded: 0
+                    while(zerosAdded < zeroCount) {
+                        appendExpanded(0)
+                        zerosAdded = zerosAdded + 1
+                    }
+                }
+
+                appendExpanded(hextets[sourceIndex])
+                sourceIndex = sourceIndex + 1
+            }
+
+            if(compressionIndex == count) {
+                zerosAdded: 0
+                while(zerosAdded < zeroCount) {
+                    appendExpanded(0)
+                    zerosAdded = zerosAdded + 1
+                }
+            }
+        }
+
+        if(compressionIndex < 0) {
+            (count == 8).ifFalse(() => {
+                fail()
+            })
+
+            sourceIndex: 0
+            while(sourceIndex < count) {
+                appendExpanded(hextets[sourceIndex])
+                sourceIndex = sourceIndex + 1
+            }
+        }
+
+        (expandedCount == 8).ifFalse(() => {
+            fail()
+        })
+
+        v6(
+            expanded[0],
+            expanded[1],
+            expanded[2],
+            expanded[3],
+            expanded[4],
+            expanded[5],
+            expanded[6],
+            expanded[7]
+        )
+    }
+
+    containsColon: false
+    scanIndex: 0
+    while(scanIndex < totalSize) {
+        if(text[scanIndex] == ":") {
+            containsColon = true
+        }
+        scanIndex = scanIndex + 1
+    }
+
+    result: null
+    if(containsColon) {
+        result = parseIpv6(text)
+    }
+    containsColon.ifFalse(() => {
+        result = parseIpv4(text)
+    })
+    result
+}
+
+/// Formats an `IpAddress`: IPv4 as dotted decimal, IPv6 as lowercase hextets
+/// with the leftmost longest run of two or more zero hextets compressed to `::`,
+/// and IPv4-mapped IPv6 as `::ffff:` followed by dotted decimal.
+this.format: ((codec) => (address) => {
+    IpAddress.recognizes(address).ifFalse(() => {
+        fail()
+    })
+
+    decimalDigitText: (digit) => {
+        result: null
+
+        if(digit == 0) { result = "0" }
+        if(digit == 1) { result = "1" }
+        if(digit == 2) { result = "2" }
+        if(digit == 3) { result = "3" }
+        if(digit == 4) { result = "4" }
+        if(digit == 5) { result = "5" }
+        if(digit == 6) { result = "6" }
+        if(digit == 7) { result = "7" }
+        if(digit == 8) { result = "8" }
+        if(digit == 9) { result = "9" }
+
+        if(result === null) {
+            fail()
+        }
+
+        result
+    }
+
+    octetText: (value) => {
+        hundreds: value.div(100)
+        rest: value.mod(100)
+        tens: rest.div(10)
+        ones: rest.mod(10)
+
+        result: ""
+
+        if(hundreds > 0) {
+            result =
+                decimalDigitText(hundreds) +
+                decimalDigitText(tens) +
+                decimalDigitText(ones)
+        }
+
+        (hundreds > 0).ifFalse(() => {
+            if(tens > 0) {
+                result = decimalDigitText(tens) + decimalDigitText(ones)
+            }
+            (tens > 0).ifFalse(() => {
+                result = decimalDigitText(ones)
+            })
+        })
+
+        result
+    }
+
+    dottedText: (a, b, c, d) => {
+        octetText(a) + "." + octetText(b) + "." + octetText(c) + "." + octetText(d)
+    }
+
+    hexDigitText: (digit) => {
+        result: null
+
+        if(digit == 0) { result = "0" }
+        if(digit == 1) { result = "1" }
+        if(digit == 2) { result = "2" }
+        if(digit == 3) { result = "3" }
+        if(digit == 4) { result = "4" }
+        if(digit == 5) { result = "5" }
+        if(digit == 6) { result = "6" }
+        if(digit == 7) { result = "7" }
+        if(digit == 8) { result = "8" }
+        if(digit == 9) { result = "9" }
+        if(digit == 10) { result = "a" }
+        if(digit == 11) { result = "b" }
+        if(digit == 12) { result = "c" }
+        if(digit == 13) { result = "d" }
+        if(digit == 14) { result = "e" }
+        if(digit == 15) { result = "f" }
+
+        if(result === null) {
+            fail()
+        }
+
+        result
+    }
+
+    hextetText: (value) => {
+        d0: value.div(4096)
+        d1: value.div(256).mod(16)
+        d2: value.div(16).mod(16)
+        d3: value.mod(16)
+
+        result: ""
+        started: false
+
+        if(d0 > 0) {
+            result = result + hexDigitText(d0)
+            started = true
+        }
+
+        if(started) {
+            result = result + hexDigitText(d1)
+        }
+        started.ifFalse(() => {
+            if(d1 > 0) {
+                result = result + hexDigitText(d1)
+                started = true
+            }
+        })
+
+        if(started) {
+            result = result + hexDigitText(d2)
+        }
+        started.ifFalse(() => {
+            if(d2 > 0) {
+                result = result + hexDigitText(d2)
+                started = true
+            }
+        })
+
+        result = result + hexDigitText(d3)
+        result
+    }
+
+    result: null
+    octets: codec.to(address)
+
+    if(address.version == 4) {
+        result = dottedText(octets[0], octets[1], octets[2], octets[3])
+    }
+
+    if(address.version == 6) {
+        hextets: Array(0, 0, 0, 0, 0, 0, 0, 0)
+        hextetIndex: 0
+
+        while(hextetIndex < 8) {
+            hextets[hextetIndex] =
+                octets[hextetIndex * 2] * 256 + octets[hextetIndex * 2 + 1]
+            hextetIndex = hextetIndex + 1
+        }
+
+        mapped: true
+        (hextets[0] == 0).ifFalse(() => { mapped = false })
+        (hextets[1] == 0).ifFalse(() => { mapped = false })
+        (hextets[2] == 0).ifFalse(() => { mapped = false })
+        (hextets[3] == 0).ifFalse(() => { mapped = false })
+        (hextets[4] == 0).ifFalse(() => { mapped = false })
+        (hextets[5] == 65535).ifFalse(() => { mapped = false })
+
+        if(mapped) {
+            result =
+                "::ffff:" + dottedText(octets[12], octets[13], octets[14], octets[15])
+        }
+
+        mapped.ifFalse(() => {
+            bestStart: -1
+            bestLength: 0
+            currentStart: -1
+            currentLength: 0
+
+            considerCurrentRun: () => {
+                if(currentLength >= 2) {
+                    if(currentLength > bestLength) {
+                        bestStart = currentStart
+                        bestLength = currentLength
+                    }
+                }
+            }
+
+            scanIndex: 0
+            while(scanIndex < 8) {
+                if(hextets[scanIndex] == 0) {
+                    if(currentLength == 0) {
+                        currentStart = scanIndex
+                    }
+                    currentLength = currentLength + 1
+                }
+
+                (hextets[scanIndex] == 0).ifFalse(() => {
+                    considerCurrentRun()
+                    currentStart = -1
+                    currentLength = 0
+                })
+
+                scanIndex = scanIndex + 1
+            }
+            considerCurrentRun()
+
+            text: ""
+            needsColon: false
+            emitIndex: 0
+
+            while(emitIndex < 8) {
+                compressed: false
+
+                if(emitIndex == bestStart) {
+                    text = text + "::"
+                    emitIndex = emitIndex + bestLength
+                    needsColon = false
+                    compressed = true
+                }
+
+                compressed.ifFalse(() => {
+                    if(needsColon) {
+                        text = text + ":"
+                    }
+                    text = text + hextetText(hextets[emitIndex])
+                    needsColon = true
+                    emitIndex = emitIndex + 1
+                })
+            }
+
+            result = text
+        })
+    }
+
+    if(result === null) {
+        fail()
+    }
+
+    result
+})(_ipOctets)
+
+// The private octet codec is captured above; it is not module surface.
+context.removeSlot("_ipOctets")
+
+// D242: publish the runtime-provided prototypes explicitly; the runtime
+// installs them only into this initializer's private context.
+/// The canonical frozen `IpAddress` prototype provided by the runtime.
+this.IpAddress: IpAddress

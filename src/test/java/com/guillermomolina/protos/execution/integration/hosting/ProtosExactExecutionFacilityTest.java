@@ -66,8 +66,8 @@ final class ProtosExactExecutionFacilityTest {
             "worker: Actor.spawn(\"workers\", \"echo\")\n"
                     + "worker.request(\"echo\", 42)";
     private static final String ACTOR_CHAIN_CASE_SOURCE =
-            "IpAddress: import(\"std:network/IpAddresses\").IpAddress\n"
-                    + "IpEndpoint: import(\"std:network/IpEndpoints\").IpEndpoint\n"
+            "IpAddress: import(\"std:network/ip_addresses\").IpAddress\n"
+                    + "IpEndpoint: import(\"std:network/ip_endpoints\").IpEndpoint\n"
                     + "address: IpAddress(6, 340282366920938463463374607431768211455)\n"
                     + "endpoint: IpEndpoint(address, 65535)\n"
                     + "worker: Actor.spawn(\"workers\", \"echo\")\n"
@@ -325,7 +325,7 @@ final class ProtosExactExecutionFacilityTest {
 
     private static final class WorkersResolver implements ProtosModuleResolver {
         private static final String SPECIFIER = "workers";
-        private static final ProtosModuleKey KEY = new ProtosModuleKey("tool002-g1:workers");
+        private static final ProtosModuleKey KEY = ProtosModuleKey.source("tool002-g1:workers");
         private final Path source;
         // D172: Actor fixtures import the canonical IP families from std:network.
         private final ProtosModuleResolver standardLibrary =

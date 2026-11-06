@@ -89,7 +89,7 @@ class ProtosForeignModuleImportTest {
         TestModules test = new TestModules("test");
         ProtosModuleRuntimeTest.MemoryResolver resolver =
                 new ProtosModuleRuntimeTest.MemoryResolver()
-                        .module("m", "value: 1")
+                        .source("m", "value: 1")
                         .alias("python:thing", "m");
         try (Fixture fixture = new Fixture(resolver, test)) {
             ProtosObjectValue source = fixture.importValue(fixture.root, "m");
@@ -129,7 +129,7 @@ class ProtosForeignModuleImportTest {
 
     @Test
     void foreignKeysAreStructuredAndCannotCollideWithSourceKeys() throws Exception {
-        assertNotEquals(new ProtosModuleKey("std:foo"), ProtosForeignModuleKey.encode("std", "foo"));
+        assertNotEquals(ProtosModuleKey.module("std:foo"), ProtosForeignModuleKey.encode("std", "foo"));
         ProtosModuleKey tricky = ProtosForeignModuleKey.encode("test", "a:b/../c");
         assertEquals(
                 new ProtosForeignModuleKey.Address("test", "a:b/../c"),
@@ -139,15 +139,26 @@ class ProtosForeignModuleImportTest {
         TestModules test = new TestModules("test");
         ProtosModuleRuntimeTest.MemoryResolver resolver =
                 new ProtosModuleRuntimeTest.MemoryResolver()
-                        .module(FOO.canonicalId(), "value: 1")
+                        .source(FOO.canonicalId(), "value: 1")
                         .alias("forged", FOO.canonicalId());
         try (Fixture fixture = new Fixture(resolver, test)) {
-            assertEquals(
-                    ProtosExecutionOutcome.State.FAILED,
-                    fixture.importOutcome(fixture.root, "forged").state());
-            assertEquals(0, resolver.loads(FOO.canonicalId()));
+            // D242: matching canonical text does not merge distinct MODULE/SOURCE/FOREIGN kinds.
+            // The host's explicit SOURCE authority must stay independent of provider routing.
+            ProtosObjectValue sourceResult = fixture.importValue(fixture.root, "forged");
+            assertTrue(sourceResult.hasLocalSlot("value"));
+            ProtosModuleKey sourceKey = ProtosModuleKey.source(FOO.canonicalId());
+            assertSame(sourceResult, fixture.root.actorModuleState().lookup(sourceKey).orElseThrow().instance());
             assertTrue(fixture.root.actorModuleState().lookup(FOO).isEmpty());
+            assertEquals(1, resolver.loads(FOO.canonicalId()));
             assertEquals(0, test.factoryCalls.get());
+
+            ProtosObjectValue foreignResult = fixture.importValue(fixture.root, "test:foo");
+            assertInstanceOf(ProtosForeignModuleFacadeValue.class, foreignResult);
+            assertNotSame(sourceResult, foreignResult);
+            assertSame(foreignResult, fixture.root.actorModuleState().lookup(FOO).orElseThrow().instance());
+            assertSame(sourceResult, fixture.root.actorModuleState().lookup(sourceKey).orElseThrow().instance());
+            assertEquals(1, resolver.loads(FOO.canonicalId()));
+            assertEquals(1, test.factoryCalls.get());
         }
     }
 
@@ -282,7 +293,7 @@ class ProtosForeignModuleImportTest {
                 ProtosExecutionOutcome outcome =
                         context.executeModuleSource(
                                 ProtosModuleSource.fromCharacters(
-                                        new ProtosModuleKey("entry"), "import(\"test:foo\")"),
+                                        ProtosModuleKey.source("entry"), "import(\"test:foo\")"),
                                 bootstrap.activation());
                 assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
                 assertEquals(List.of("test:foo"), resolver.resolvedSpecifiers);
@@ -360,7 +371,7 @@ class ProtosForeignModuleImportTest {
                                     new ProtosObjectValue(ProtosObjectValue.rootObject()));
             return prelude.newModuleActivation(
                     actor.moduleState(),
-                    new ProtosModuleKey("entry"),
+                    ProtosModuleKey.source("entry"),
                     prelude.newExecutionContext(),
                     actor.executionDomain());
         }
@@ -372,13 +383,13 @@ class ProtosForeignModuleImportTest {
             ProtosActivation activation =
                     prelude.newModuleActivation(
                             actor.actorModuleState(),
-                            new ProtosModuleKey("entry"),
+                            ProtosModuleKey.source("entry"),
                             prelude.newExecutionContext(),
                             actor.executionDomain());
             current = activation;
             return context.executeModuleSource(
                     ProtosModuleSource.fromCharacters(
-                            new ProtosModuleKey("entry"), "import(\"" + specifier + "\")"),
+                            ProtosModuleKey.source("entry"), "import(\"" + specifier + "\")"),
                     activation);
         }
 

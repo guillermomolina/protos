@@ -20,7 +20,7 @@
 //! sibling shards; it is not Standard Library API.
 //!
 //! Expected values arrive as the official tagged-JSON text and are read with
-//! `std:json/JSON`. Comparison mirrors the official toml-test comparator
+//! `std:json/json`. Comparison mirrors the official toml-test comparator
 //! (`json.go` at the pinned commit) on the Protos semantic tree:
 //!
 //! - an object with exactly the two names `type` and `value` is a tagged
@@ -44,10 +44,10 @@
 //! the decoder is never its own oracle. Decimal float spellings become exact
 //! rationals, rounded once to binary64 by `Float(Integer / Integer)`.
 
-Arrays: import("std:collections/Array")
-Assertions: import("std:test/Assertions")
-JSON: import("std:json/JSON")
-TOML: import("std:toml/TOML")
+Arrays: import("std:collections/array")
+Assertions: import("std:test/assertions")
+JSON: import("std:json/json")
+TOML: import("std:toml/toml")
 
 fail: () => {
     Error().signal()
@@ -636,7 +636,7 @@ temporalNode: (kind, tag, text) => {
 }
 
 /// Answers the Protos TOML semantic node for an official tagged JSON node, built
-/// only through the public `std:toml/TOML` constructors.
+/// only through the public `std:toml/toml` constructors.
 nodeFromOfficial: (expected) => {
     result: null
     handled: false

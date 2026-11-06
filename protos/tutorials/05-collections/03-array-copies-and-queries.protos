@@ -11,7 +11,7 @@
 
 // Standard Library Array operations return fresh shallow Arrays without
 // changing the fixed length or indexed contents of the original.
-Arrays: import("std:collections/Array")
+Arrays: import("std:collections/array")
 
 values: Array(10, 20, 30)
 appended: Arrays.append(values, 40)

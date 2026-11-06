@@ -17,7 +17,7 @@
 // supply. It never listens on a port, so this lesson uses an in-memory duplex
 // and runs under the standalone CLI.
 
-http: import("std:http/Server")
+http: import("std:http/server")
 MemoryDuplex: import("./memory-duplex.protos")
 
 duplex: MemoryDuplex.of("GET /hello?name=Protos HTTP/1.1\r\nHost: localhost\r\n\r\n")

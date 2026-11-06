@@ -30,7 +30,7 @@ import java.util.Base64;
 import org.junit.jupiter.api.Test;
 
 final class ProtosExternalPackageModuleKeyTest {
-    private static final String PREFIX = "pkg-external:v1:";
+    private static final String PREFIX = "pkg-external:v1:module:";
     private static final ProtosPackageContentIdentity CONTENT =
             new ProtosPackageContentIdentity(
                     "protos-package-tree-v1",
@@ -50,38 +50,38 @@ final class ProtosExternalPackageModuleKeyTest {
     @Test
     void registryAndGitKeysRoundTripExactly() throws Exception {
         for (ProtosExactExternalPackageIdentity identity : new ProtosExactExternalPackageIdentity[] {REGISTRY, GIT}) {
-            ProtosModuleKey key = ProtosExternalPackageModuleKey.encode(identity, "core/Internal_2");
+            ProtosModuleKey key = ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, identity, "core/Internal_2");
             ProtosExternalPackageModuleKey.Address address =
                     ProtosExternalPackageModuleKey.decode(key);
 
             assertEquals(identity, address.identity());
             assertEquals("core/Internal_2", address.logicalModule());
             assertTrue(ProtosExternalPackageModuleKey.owns(key));
-            assertEquals(key, ProtosExternalPackageModuleKey.encode(identity, "core/Internal_2"));
+            assertEquals(key, ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, identity, "core/Internal_2"));
         }
     }
 
     @Test
     void everyIdentityComponentAndTheLogicalModuleDistinguishKeys() throws Exception {
-        ProtosModuleKey base = ProtosExternalPackageModuleKey.encode(REGISTRY, "Thing");
+        ProtosModuleKey base = ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, REGISTRY, "Thing");
 
-        assertNotEquals(base, ProtosExternalPackageModuleKey.encode(REGISTRY, "Other"));
+        assertNotEquals(base, ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, REGISTRY, "Other"));
         assertNotEquals(
                 base,
                 ProtosExternalPackageModuleKey.encode(
-                        new ProtosExactExternalPackageIdentity.Registry(
+                        ProtosModuleKey.Kind.MODULE, new ProtosExactExternalPackageIdentity.Registry(
                                 "Scope/Ä:pkg", "1.0.0", CONTENT),
                         "Thing"));
         assertNotEquals(
                 base,
                 ProtosExternalPackageModuleKey.encode(
-                        new ProtosExactExternalPackageIdentity.Registry(
+                        ProtosModuleKey.Kind.MODULE, new ProtosExactExternalPackageIdentity.Registry(
                                 "Scope/Ä:pkg", "1.0.0-rc.1", OTHER_CONTENT),
                         "Thing"));
         assertNotEquals(
-                ProtosExternalPackageModuleKey.encode(GIT, "Thing"),
+                ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, GIT, "Thing"),
                 ProtosExternalPackageModuleKey.encode(
-                        new ProtosExactExternalPackageIdentity.Git(
+                        ProtosModuleKey.Kind.MODULE, new ProtosExactExternalPackageIdentity.Git(
                                 "Scope/Ä:pkg", "abc124", CONTENT),
                         "Thing"));
     }
@@ -89,11 +89,11 @@ final class ProtosExternalPackageModuleKeyTest {
     @Test
     void sameContentUnderDistinctLogicalIdentitiesYieldsDistinctKeys() throws Exception {
         ProtosModuleKey registryKey = ProtosExternalPackageModuleKey.encode(
-                new ProtosExactExternalPackageIdentity.Registry("pkg", "abc123", CONTENT), "Thing");
+                ProtosModuleKey.Kind.MODULE, new ProtosExactExternalPackageIdentity.Registry("pkg", "abc123", CONTENT), "Thing");
         ProtosModuleKey gitKey = ProtosExternalPackageModuleKey.encode(
-                new ProtosExactExternalPackageIdentity.Git("pkg", "abc123", CONTENT), "Thing");
+                ProtosModuleKey.Kind.MODULE, new ProtosExactExternalPackageIdentity.Git("pkg", "abc123", CONTENT), "Thing");
         ProtosModuleKey otherPackageKey = ProtosExternalPackageModuleKey.encode(
-                new ProtosExactExternalPackageIdentity.Registry("other", "abc123", CONTENT), "Thing");
+                ProtosModuleKey.Kind.MODULE, new ProtosExactExternalPackageIdentity.Registry("other", "abc123", CONTENT), "Thing");
 
         assertNotEquals(registryKey, gitKey);
         assertNotEquals(registryKey, otherPackageKey);
@@ -101,11 +101,11 @@ final class ProtosExternalPackageModuleKeyTest {
 
     @Test
     void identityExcludesAliasesExportsAndPhysicalProvenance() throws Exception {
-        ProtosModuleKey key = ProtosExternalPackageModuleKey.encode(REGISTRY, "internal/Thing");
+        ProtosModuleKey key = ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, REGISTRY, "internal/Thing");
         String canonical = key.canonicalId();
 
         assertTrue(canonical.startsWith(PREFIX + "registry:"));
-        assertEquals(9, canonical.split(":", -1).length);
+        assertEquals(10, canonical.split(":", -1).length);
         assertFalse(canonical.contains("dep:"));
         assertFalse(canonical.contains("https"));
         assertFalse(canonical.contains("/store/"));
@@ -119,21 +119,21 @@ final class ProtosExternalPackageModuleKeyTest {
     @Test
     void workspaceAndExternalDomainsAreDisjoint() throws Exception {
         ProtosModuleKey workspace =
-                ProtosWorkspacePackageModuleKey.encode("Scope/Ä:pkg", "internal/Thing");
-        ProtosModuleKey external = ProtosExternalPackageModuleKey.encode(REGISTRY, "internal/Thing");
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "Scope/Ä:pkg", "internal/Thing");
+        ProtosModuleKey external = ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, REGISTRY, "internal/Thing");
 
         assertFalse(ProtosExternalPackageModuleKey.owns(workspace));
         assertFalse(ProtosWorkspacePackageModuleKey.owns(external));
         assertThrows(IOException.class, () -> ProtosExternalPackageModuleKey.decode(workspace));
         assertThrows(IOException.class, () -> ProtosWorkspacePackageModuleKey.decode(external));
-        assertFalse(ProtosExternalPackageModuleKey.owns(new ProtosModuleKey("std:collections/Array")));
+        assertFalse(ProtosExternalPackageModuleKey.owns(ProtosModuleKey.module("std:collections/array")));
     }
 
     @Test
     void rejectsInvalidLogicalModulesOnEncode() {
-        assertThrows(IOException.class, () -> ProtosExternalPackageModuleKey.encode(GIT, "../Thing"));
-        assertThrows(IOException.class, () -> ProtosExternalPackageModuleKey.encode(GIT, "CON"));
-        assertThrows(IOException.class, () -> ProtosExternalPackageModuleKey.encode(GIT, ""));
+        assertThrows(IOException.class, () -> ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, GIT, "../Thing"));
+        assertThrows(IOException.class, () -> ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, GIT, "CON"));
+        assertThrows(IOException.class, () -> ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, GIT, ""));
     }
 
     @Test
@@ -168,9 +168,35 @@ final class ProtosExternalPackageModuleKeyTest {
         assertRejected(PREFIX + "registry:" + malformedUtf8 + ":" + exact + tail);
     }
 
+    @Test
+    void targetKindIsPartOfCanonicalIdentityAndResourcePath() throws IOException {
+        ProtosModuleKey module =
+                ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, REGISTRY, "lib/shapes");
+        ProtosModuleKey source =
+                ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.SOURCE, REGISTRY, "lib/shapes");
+        assertNotEquals(module, source);
+        assertTrue(source.canonicalId().startsWith("pkg-external:v1:source:registry:"));
+        assertEquals(
+                "lib/shapes/module.protos",
+                ProtosExternalPackageModuleKey.decode(module).resourcePath());
+        assertEquals(
+                "lib/shapes.protos",
+                ProtosExternalPackageModuleKey.decode(source).resourcePath());
+        // A key whose kind disagrees with its canonical tag is rejected.
+        assertThrows(
+                IOException.class,
+                () -> ProtosExternalPackageModuleKey.decode(
+                        ProtosModuleKey.source(module.canonicalId())));
+        // A SOURCE can never name a module initializer.
+        assertThrows(
+                IOException.class,
+                () -> ProtosExternalPackageModuleKey.encode(
+                        ProtosModuleKey.Kind.SOURCE, REGISTRY, "lib/module"));
+    }
+
     private static void assertDecodes(String canonicalId) {
         try {
-            ProtosExternalPackageModuleKey.decode(new ProtosModuleKey(canonicalId));
+            ProtosExternalPackageModuleKey.decode(ProtosModuleKey.module(canonicalId));
         } catch (IOException failure) {
             throw new AssertionError("expected canonical key to decode: " + canonicalId, failure);
         }
@@ -179,7 +205,7 @@ final class ProtosExternalPackageModuleKeyTest {
     private static void assertRejected(String canonicalId) {
         assertThrows(
                 IOException.class,
-                () -> ProtosExternalPackageModuleKey.decode(new ProtosModuleKey(canonicalId)));
+                () -> ProtosExternalPackageModuleKey.decode(ProtosModuleKey.module(canonicalId)));
     }
 
     private static String base64(String value) {

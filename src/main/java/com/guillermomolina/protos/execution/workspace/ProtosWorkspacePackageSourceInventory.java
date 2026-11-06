@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.io.IOException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
@@ -39,8 +40,12 @@ import java.util.Objects;
  * logical-module to source lookup.
  */
 final class ProtosWorkspacePackageSourceInventory {
-    record Source(String packageId, String logicalModule, Path source) {
+    record Source(ProtosModuleKey.Kind kind, String packageId, String logicalModule, Path source) {
         Source {
+            Objects.requireNonNull(kind, "kind");
+            if (kind == ProtosModuleKey.Kind.FOREIGN) {
+                throw new IllegalArgumentException("inventory accepts only MODULE or SOURCE");
+            }
             Objects.requireNonNull(packageId, "packageId");
             Objects.requireNonNull(logicalModule, "logicalModule");
             Objects.requireNonNull(source, "source");
@@ -75,7 +80,8 @@ final class ProtosWorkspacePackageSourceInventory {
         }
         sources.sort(
                 Comparator.comparing(Source::packageId)
-                        .thenComparing(Source::logicalModule));
+                        .thenComparing(Source::logicalModule)
+                        .thenComparing(Source::kind));
         return List.copyOf(sources);
     }
 
@@ -126,13 +132,40 @@ final class ProtosWorkspacePackageSourceInventory {
                             return FileVisitResult.CONTINUE;
                         }
 
+                        // D242: the initializer belongs to its enclosing MODULE
+                        // directory. Other .protos files retain exact SOURCE
+                        // identities. An initializer is never a SOURCE alias.
+                        boolean moduleInitializer =
+                                file.getFileName()
+                                        .toString()
+                                        .equals(ProtosPackageRuntimeNames.MODULE_INITIALIZER);
+                        if (moduleInitializer) {
+                            int separator = logicalModule.lastIndexOf('/');
+                            if (separator < 0) {
+                                // A package-root module.protos has no logical
+                                // module directory under the D242 layout.
+                                return FileVisitResult.CONTINUE;
+                            }
+                            logicalModule = logicalModule.substring(0, separator);
+                        }
+
                         Path canonicalSource =
-                                sourceLookup.requireSource(packageId, logicalModule);
+                                sourceLookup.requireSource(
+                                        moduleInitializer
+                                                ? ProtosModuleKey.Kind.MODULE
+                                                : ProtosModuleKey.Kind.SOURCE,
+                                        packageId,
+                                        logicalModule);
                         if (!canonicalSource.equals(realSource)) {
                             throw new IOException(
                                     "workspace package source inventory round-trip mismatch");
                         }
-                        sources.add(new Source(packageId, logicalModule, canonicalSource));
+                        sources.add(
+                                new Source(
+                                        moduleInitializer
+                                                ? ProtosModuleKey.Kind.MODULE
+                                                : ProtosModuleKey.Kind.SOURCE,
+                                        packageId, logicalModule, canonicalSource));
                         return FileVisitResult.CONTINUE;
                     }
                 });

@@ -13,9 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-http: import("std:http/Client")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+http: import("std:http/client")
 
 // Latin1 keeps every test octet byte-exact, including obs-text 0x80-0xFF.
 ascii: (text) => {
@@ -254,7 +254,7 @@ exchange: (chunks, onResponse) => {
     exchangeWith(chunks, get(), onResponse, null)
 }
 
-ClientHead: import("std:http/internal/ClientHead")
+ClientHead: import("std:http/internal/client_head")
 
 limitsOf: (statusLine, headerBytes, headerFields) => {
     limits: {

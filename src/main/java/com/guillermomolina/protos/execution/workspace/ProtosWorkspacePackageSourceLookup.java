@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.util.Objects;
 
 /** Exact confined source-file lookup for already-bound workspace packages. */
@@ -42,17 +43,24 @@ final class ProtosWorkspacePackageSourceLookup {
         return directoryIndex;
     }
 
-    Path requireSource(String packageId, String logicalModule) throws IOException {
+    /**
+     * D242: a MODULE target selects {@code <logicalModule>/module.protos}; a SOURCE target selects
+     * exactly {@code <logicalModule>.protos}. Every path segment is matched exactly and confined to
+     * the owning package.
+     */
+    Path requireSource(ProtosModuleKey.Kind kind, String packageId, String logicalModule)
+            throws IOException {
         ProtosWorkspacePackageDirectoryIndex.PackageDirectory packageDirectory =
                 directoryIndex.requirePackage(packageId);
-        String checkedModule = ProtosPackageRuntimeNames.requireLogicalName(logicalModule);
+        String checkedModule = ProtosPackageRuntimeNames.requireTargetName(kind, logicalModule);
 
         Path packageRoot = packageDirectory.directory().toRealPath();
         if (!Files.isDirectory(packageRoot)) {
             throw new IOException("workspace package source root is not a directory");
         }
 
-        String[] segments = checkedModule.split("/", -1);
+        String[] segments =
+                ProtosPackageRuntimeNames.resourcePath(kind, checkedModule).split("/", -1);
         Path current = packageRoot;
         for (int index = 0; index < segments.length - 1; index++) {
             Path selected = requireExactChild(current, segments[index], true);
@@ -67,7 +75,7 @@ final class ProtosWorkspacePackageSourceLookup {
             current = realSelected;
         }
 
-        String sourceName = segments[segments.length - 1] + ".protos";
+        String sourceName = segments[segments.length - 1];
         Path selectedSource = requireExactChild(current, sourceName, false);
         Path realSource = selectedSource.toRealPath();
         if (!Files.isRegularFile(realSource) || !realSource.startsWith(packageRoot)) {

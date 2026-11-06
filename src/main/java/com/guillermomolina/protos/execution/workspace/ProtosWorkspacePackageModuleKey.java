@@ -34,13 +34,25 @@ final class ProtosWorkspacePackageModuleKey {
 
     private ProtosWorkspacePackageModuleKey() {}
 
-    static ProtosModuleKey encode(String packageId, String logicalModule) throws IOException {
+    /**
+     * D242: {@code logicalModule} names a logical module directory for MODULE keys and the exact
+     * source file path without its {@code .protos} suffix for SOURCE keys. The kind tag keeps the
+     * two identities disjoint even when their logical spellings coincide.
+     */
+    static ProtosModuleKey encode(
+            ProtosModuleKey.Kind kind, String packageId, String logicalModule) throws IOException {
+        Objects.requireNonNull(kind, "kind");
+        if (kind == ProtosModuleKey.Kind.FOREIGN) {
+            throw new IOException("workspace package keys are source-backed");
+        }
         if (packageId == null || packageId.isEmpty()) {
             throw new IOException("empty workspace PackageId");
         }
-        String checkedModule = ProtosPackageRuntimeNames.requireLogicalName(logicalModule);
+        String checkedModule = ProtosPackageRuntimeNames.requireTargetName(kind, logicalModule);
         return new ProtosModuleKey(
-                PREFIX + encodeUtf8(packageId) + ":" + encodeUtf8(checkedModule));
+                kind,
+                PREFIX + ProtosPackageRuntimeNames.kindTag(kind) + ":"
+                        + encodeUtf8(packageId) + ":" + encodeUtf8(checkedModule));
     }
 
     static Address decode(ProtosModuleKey key) throws IOException {
@@ -50,7 +62,11 @@ final class ProtosWorkspacePackageModuleKey {
             throw new IOException("module key is outside workspace package domain");
         }
 
-        String encoded = canonical.substring(PREFIX.length());
+        String tag = ProtosPackageRuntimeNames.kindTag(key.kind()) + ":";
+        if (key.isForeign() || !canonical.startsWith(PREFIX + tag)) {
+            throw new IOException("invalid workspace package ModuleKey kind");
+        }
+        String encoded = canonical.substring(PREFIX.length() + tag.length());
         int separator = encoded.indexOf(':');
         if (separator <= 0
                 || separator == encoded.length() - 1
@@ -66,18 +82,18 @@ final class ProtosWorkspacePackageModuleKey {
         if (packageId.isEmpty()) {
             throw new IOException("empty workspace PackageId");
         }
-        ProtosPackageRuntimeNames.requireLogicalName(logicalModule);
+        ProtosPackageRuntimeNames.requireTargetName(key.kind(), logicalModule);
 
-        ProtosModuleKey reconstructed = encode(packageId, logicalModule);
+        ProtosModuleKey reconstructed = encode(key.kind(), packageId, logicalModule);
         if (!reconstructed.equals(key)) {
             throw new IOException("non-canonical workspace package ModuleKey");
         }
 
-        return new Address(packageId, logicalModule);
+        return new Address(key.kind(), packageId, logicalModule);
     }
 
     static boolean owns(ProtosModuleKey key) {
-        return key != null && key.canonicalId().startsWith(PREFIX);
+        return key != null && !key.isForeign() && key.canonicalId().startsWith(PREFIX);
     }
 
     private static String encodeUtf8(String value) {
@@ -99,5 +115,10 @@ final class ProtosWorkspacePackageModuleKey {
         }
     }
 
-    record Address(String packageId, String logicalModule) {}
+    record Address(ProtosModuleKey.Kind kind, String packageId, String logicalModule) {
+        /** Exact package-relative resource path of this target's source. */
+        String resourcePath() {
+            return ProtosPackageRuntimeNames.resourcePath(kind, logicalModule);
+        }
+    }
 }

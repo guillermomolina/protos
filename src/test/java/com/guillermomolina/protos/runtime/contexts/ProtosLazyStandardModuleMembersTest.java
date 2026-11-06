@@ -40,9 +40,9 @@ import org.junit.jupiter.api.Test;
  * exact key is provisioned, once per module context, and never become Prelude-shared anchors.
  */
 final class ProtosLazyStandardModuleMembersTest {
-    private static final ProtosModuleKey LAZY_KEY = new ProtosModuleKey("std:lazyFixture");
-    private static final ProtosModuleKey EAGER_KEY = new ProtosModuleKey("std:eagerFixture");
-    private static final ProtosModuleKey UNRELATED_KEY = new ProtosModuleKey("std:unrelated");
+    private static final ProtosModuleKey LAZY_KEY = ProtosModuleKey.module("std:lazyFixture");
+    private static final ProtosModuleKey EAGER_KEY = ProtosModuleKey.module("std:eagerFixture");
+    private static final ProtosModuleKey UNRELATED_KEY = ProtosModuleKey.module("std:unrelated");
     private static final String SLOT = "_lazyFacility";
 
     @Test
@@ -99,7 +99,7 @@ final class ProtosLazyStandardModuleMembersTest {
 
         ProtosObjectValue unrelated = prelude.newExecutionContext();
         prelude.installStandardModuleMembersForRuntime(
-                new ProtosModuleKey("std:runtime"), unrelated);
+                ProtosModuleKey.module("std:runtime"), unrelated);
         assertFalse(unrelated.hasLocalSlot(slot));
 
         ProtosObjectValue first = prelude.newExecutionContext();

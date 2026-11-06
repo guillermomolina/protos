@@ -13,12 +13,12 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("header-lines-only", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -32,21 +32,21 @@ tests: [
         Assertions.require(ok)
     }),
     Test("header-lock-format-line", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         parsed: Syntax.parseLockFormatLine("lock-format 1")
         ok: parsed.value == 1
         (parsed.text == "1").ifFalse(() => { ok = false })
         Assertions.require(ok)
     }),
     Test("header-resolver-version-line", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         parsed: Syntax.parseResolverVersionLine("resolver-version 1")
         ok: parsed.value == 1
         (parsed.text == "1").ifFalse(() => { ok = false })
         Assertions.require(ok)
     }),
     Test("header-resolution-input-line", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         parsed: Syntax.parseResolutionInputLine("resolution-input protos-resolution-input-v1 sha256:0123456789abcdef")
         ok: parsed.method == "protos-resolution-input-v1"
         (parsed.algorithm == "sha256").ifFalse(() => { ok = false })
@@ -54,7 +54,7 @@ tests: [
         Assertions.require(ok)
     }),
     Test("header-sequence-no-object", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -69,7 +69,7 @@ tests: [
         Assertions.require(ok)
     }),
     Test("header-object-compose-isolated", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -106,7 +106,7 @@ tests: [
         Assertions.require(ok)
     }),
     Test("header-parse-call-only", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -115,7 +115,7 @@ tests: [
         Assertions.require(true)
     }),
     Test("header-field-lock-format", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -124,7 +124,7 @@ tests: [
         Assertions.require(header.lockFormat == 1)
     }),
     Test("header-field-lock-format-text", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -133,7 +133,7 @@ tests: [
         Assertions.require(header.lockFormatText == "1")
     }),
     Test("header-field-resolver-version", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -142,7 +142,7 @@ tests: [
         Assertions.require(header.resolverVersion == 1)
     }),
     Test("header-field-resolver-version-text", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -151,7 +151,7 @@ tests: [
         Assertions.require(header.resolverVersionText == "1")
     }),
     Test("header-field-resolution-method", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -160,7 +160,7 @@ tests: [
         Assertions.require(header.resolutionMethod == "protos-resolution-input-v1")
     }),
     Test("header-field-digest-algorithm", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -169,7 +169,7 @@ tests: [
         Assertions.require(header.digestAlgorithm == "sha256")
     }),
     Test("header-field-digest-hex", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +

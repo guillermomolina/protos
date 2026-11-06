@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal request-target splitter of std:http/Router (D222-C, HTTP.md
+//! Internal request-target splitter of std:http/router (D222-C, HTTP.md
 //! §17.4). This module is an unpublished implementation artifact, not an
 //! approved Standard Library API. It is pure: it reads only the target octets
 //! it is given, never the request or its body, and answers fresh values.
 //! Nothing is percent-decoded, normalized, or rewritten.
 
-MessageSyntax: import("std:http/internal/MessageSyntax")
+MessageSyntax: import("./MessageSyntax.protos")
 
 // Raw segments of the absolute path [start, end), which begins with "/":
 // each segment is the Latin1 projection of the octets between two "/".

@@ -46,7 +46,7 @@ final class ProtosNetworkingIpAddressesModuleTest {
 
         Object imported =
                 ProtosTestExecutionSupport.evaluate(
-                        "import(\"std:network/IpAddresses\")",
+                        "import(\"std:network/ip_addresses\")",
                         prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
@@ -70,12 +70,12 @@ final class ProtosNetworkingIpAddressesModuleTest {
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
-                                "import(\"std:network/IpAddresses\")", prelude.newModuleActivation()));
+                                "import(\"std:network/ip_addresses\")", prelude.newModuleActivation()));
         ProtosObjectValue second =
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
-                                "import(\"std:network/IpAddresses\")", prelude.newModuleActivation()));
+                                "import(\"std:network/ip_addresses\")", prelude.newModuleActivation()));
 
         assertNotSame(first, second);
         assertSame(

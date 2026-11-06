@@ -35,7 +35,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The single PLAT051 semantic transfer family of {@code std:regex/Regex} Pattern and Match values
+ * The single PLAT051 semantic transfer family of {@code std:regex/regex} Pattern and Match values
  * (PLAT051-B, D187).
  *
  * <p>Pattern and Match semantics stay in {@code Regex.protos}. This family only mints the values

@@ -109,7 +109,7 @@ final class ProtosNetworkAuthorityConfinementTest {
                                 .initialize(
                                         process.rootActorForRuntime(),
                                         prelude,
-                                        new ProtosModuleKey("root-import-probe"),
+                                        ProtosModuleKey.source("root-import-probe"),
                                         "boot",
                                         List.of()));
     }
@@ -135,7 +135,7 @@ final class ProtosNetworkAuthorityConfinementTest {
                 bootstrap.initialize(
                         process.rootActorForRuntime(),
                         prelude,
-                        new ProtosModuleKey("root-ok"),
+                        ProtosModuleKey.source("root-ok"),
                         "boot",
                         List.of()));
 
@@ -147,7 +147,7 @@ final class ProtosNetworkAuthorityConfinementTest {
                         bootstrap.initialize(
                                 child,
                                 prelude,
-                                new ProtosModuleKey("network-actor-probe"),
+                                ProtosModuleKey.source("network-actor-probe"),
                                 "boot",
                                 List.of()));
     }
@@ -162,7 +162,7 @@ final class ProtosNetworkAuthorityConfinementTest {
                 new ProtosProcessRuntime(
                         prelude.actorRefPrototypeForRuntime(), null, network);
         ProtosActor root = process.rootActorForRuntime();
-        ProtosModuleKey key = new ProtosModuleKey("root-transfer-probe");
+        ProtosModuleKey key = ProtosModuleKey.source("root-transfer-probe");
 
         assertTrue(
                 new ProtosActorBootstrap(new ProtosModuleRuntime(resolver))
@@ -223,7 +223,7 @@ final class ProtosNetworkAuthorityConfinementTest {
             if (!sources.containsKey(exactSpecifier)) {
                 throw new IllegalArgumentException("unknown module: " + exactSpecifier);
             }
-            return new ProtosModuleKey(exactSpecifier);
+            return ProtosModuleKey.source(exactSpecifier);
         }
 
         @Override

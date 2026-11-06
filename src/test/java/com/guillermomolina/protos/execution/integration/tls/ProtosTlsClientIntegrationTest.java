@@ -51,7 +51,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * I130-B (D220–S12, TLS.md): the public {@code std:tls/Client} module against a real JSSE server.
+ * I130-B (D220–S12, TLS.md): the public {@code std:tls/client} module against a real JSSE server.
  *
  * <p>Each snippet is guest Protos code in a bootstrapped Prelude, so every live Task is
  * attributable. The duplex {@code dx} is a native in-memory transport whose far end is a {@link
@@ -71,10 +71,10 @@ final class ProtosTlsClientIntegrationTest {
 
     private static final String HARNESS_PRELUDE =
             """
-            tls: import("std:tls/Client")
-            http: import("std:http/Client")
-            IpAddresses: import("std:network/IpAddresses")
-            Assertions: import("std:test/Assertions")
+            tls: import("std:tls/client")
+            http: import("std:http/client")
+            IpAddresses: import("std:network/ip_addresses")
+            Assertions: import("std:test/assertions")
             ascii: (text) => {
                 Encoding.Latin1.encode(text)
             }
@@ -333,7 +333,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         server(TLS13),
                         """
-                        Identity: import("std:tls/internal/Identity")
+                        Identity: import("std:tls/internal/identity")
                         Assertions.require(Identity.dnsName(unicode, "*.xn--bcher-kva.protos.test", true) !== null)
                         Assertions.require(Identity.dnsName(unicode, "xn--4dbrk0ce.example", true) !== null)
                         invalid: [
@@ -854,7 +854,7 @@ final class ProtosTlsClientIntegrationTest {
             assertEquals(
                     ProtosExecutionOutcome.State.COMPLETED,
                     outcome.state(),
-                    () -> "snippet failed: " + describe(outcome.error()));
+                    () -> "snippet failed: " + describe(outcome.error()) + "; trace=" + outcome.failureDiagnosticTrace());
             assertSame(ProtosBooleanValue.TRUE, outcome.value());
         }
     }

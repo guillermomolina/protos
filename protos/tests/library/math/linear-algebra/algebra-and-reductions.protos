@@ -16,9 +16,9 @@
 // LIB024 (D214 C1/S1): Vector/Matrix algebra, D214-F1 strict reductions and Complex products.
 // Float results are compared with `===`, so signed zeros and NaN are exact.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-LA: import("std:math/LinearAlgebra")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+LA: import("std:math/linear_algebra")
 Vector: LA.Vector
 Matrix: LA.Matrix
 

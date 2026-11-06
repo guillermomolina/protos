@@ -44,7 +44,7 @@ Resolver: {
         name: null
         if(args.size() == 1) {
             if(String.recognizes(args[0])) {
-                DnsNames: import("std:network/internal/DnsNames")
+                DnsNames: import("std:network/internal/dns_names")
                 admitted: DnsNames.admit(bridge, args[0], 1, false)
                 if(admitted !== null) {
                     if(!DnsNames.numericLiteral(admitted.text)) {

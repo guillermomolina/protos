@@ -400,7 +400,7 @@ public final class ProtosCoreBootstrap {
         bootstrapContext.removeLocalSlot("IpAddress");
         bootstrapContext.removeLocalSlot("IpEndpoint");
         // D223-A1: the source-backed Resolver protocol and source-defined ResolutionError are
-        // std:network/Resolvers members, never public Prelude bindings.
+        // std:network/resolvers members, never public Prelude bindings.
         ProtosObjectValue resolverPrototype =
                 requirePrototype(
                         bootstrapContext, "Resolver", ProtosObjectValue.rootObject());
@@ -504,7 +504,7 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue bufferedWriterFactory =
                 ProtosStandardBufferedByteIoProtocol.createWriterFactory(
                         bufferedBytesPrototype, bootstrapActivation);
-        // D214 C1/S1: Vector and Matrix are std:math/LinearAlgebra members, not Prelude bindings.
+        // D214 C1/S1: Vector and Matrix are std:math/linear_algebra members, not Prelude bindings.
         Map<String, ProtosObjectValue> linearAlgebraMembers =
                 ProtosStandardLinearAlgebraProtocol.createModuleMembers();
         ProtosObjectValue vectorPrototype = linearAlgebraMembers.get("Vector");
@@ -646,12 +646,12 @@ public final class ProtosCoreBootstrap {
                 Map.of(
                         ProtosInspectFacility.BOOTSTRAP_SLOT,
                         ProtosInspectFacility::createFacility),
-                // LIB025: the private asynchronous bridge of std:http/Server.
+                // LIB025: the private asynchronous bridge of std:http/server.
                 ProtosHttpAsyncFacility.MODULE_KEY,
                 Map.of(
                         ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
                         ProtosHttpAsyncFacility::createFacility),
-                // I126: the same private bridge for std:http/Host and its Worker bootstrap.
+                // I126: the same private bridge for std:http/host and its Worker bootstrap.
                 ProtosHttpAsyncFacility.HOST_MODULE_KEY,
                 Map.of(
                         ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
@@ -660,12 +660,12 @@ public final class ProtosCoreBootstrap {
                 Map.of(
                         ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
                         ProtosHttpAsyncFacility::createFacility),
-                // I127: the same private bridge for std:http/Client.
+                // I127: the same private bridge for std:http/client.
                 ProtosHttpAsyncFacility.CLIENT_MODULE_KEY,
                 Map.of(
                         ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
                         ProtosHttpAsyncFacility::createFacility),
-                // LIB026: the same private bridge for std:http/Router and std:http/UrlClient.
+                // LIB026: the same private bridge for std:http/router and std:http/url_client.
                 ProtosHttpAsyncFacility.ROUTER_MODULE_KEY,
                 Map.of(
                         ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
@@ -674,7 +674,7 @@ public final class ProtosCoreBootstrap {
                 Map.of(
                         ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
                         ProtosHttpAsyncFacility::createFacility),
-                // I130-B: the private TLS backend bridge of std:tls/Client.
+                // I130-B: the private TLS backend bridge of std:tls/client.
                 ProtosTlsBackendFacility.MODULE_KEY,
                 Map.of(
                         ProtosTlsBackendFacility.BOOTSTRAP_SLOT,
@@ -699,15 +699,15 @@ public final class ProtosCoreBootstrap {
             ProtosObjectValue matrixPrototype,
             ProtosObjectValue rangePrototype,
             ProtosObjectValue invertedRangePrototype) {
-        // std:text/ANSI receives the same facilities as the modules that mint their families.
+        // std:text/ansi receives the same facilities as the modules that mint their families.
         ProtosObjectValue styleFacility = ProtosSealedFamilyFacility.createFacility();
         ProtosObjectValue styledTextFacility = ProtosSealedFamilyFacility.createFacility();
         return Map.ofEntries(
                 Map.entry(
-                        new ProtosModuleKey("std:network/IpAddresses"),
+                        ProtosModuleKey.module("std:network/ip_addresses"),
                         Map.of("IpAddress", ipAddressPrototype)),
                 Map.entry(
-                        new ProtosModuleKey("std:network/IpEndpoints"),
+                        ProtosModuleKey.module("std:network/ip_endpoints"),
                         Map.of("IpEndpoint", ipEndpointPrototype)),
                 Map.entry(
                         ProtosPrelude.RESOLVERS_MODULE_KEY,
@@ -715,17 +715,17 @@ public final class ProtosCoreBootstrap {
                                 "Resolver", resolverPrototype,
                                 "ResolutionError", resolutionErrorPrototype)),
                 Map.entry(
-                        new ProtosModuleKey("std:io/BufferedReader"),
+                        ProtosModuleKey.module("std:io/buffered_reader"),
                         Map.of("BufferedReader", bufferedReaderFactory)),
                 Map.entry(
-                        new ProtosModuleKey("std:io/BufferedWriter"),
+                        ProtosModuleKey.module("std:io/buffered_writer"),
                         Map.of("BufferedWriter", bufferedWriterFactory)),
                 Map.entry(
-                        new ProtosModuleKey("std:math/LinearAlgebra"),
+                        ProtosModuleKey.module("std:math/linear_algebra"),
                         Map.of("Vector", vectorPrototype, "Matrix", matrixPrototype)),
                 // D235-B1-F: the compatibility module exports the exact Core Prelude identities.
                 Map.entry(
-                        new ProtosModuleKey("std:collections/Range"),
+                        ProtosModuleKey.module("std:collections/range"),
                         Map.of(
                                 "Range", rangePrototype,
                                 "InvertedRange", invertedRangePrototype)),

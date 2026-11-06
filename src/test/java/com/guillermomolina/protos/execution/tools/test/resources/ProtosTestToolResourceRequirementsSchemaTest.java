@@ -66,7 +66,7 @@ final class ProtosTestToolResourceRequirementsSchemaTest {
 
         Fixture fixture = fixture();
         String source =
-                "Requirements: import(\"self:ResourceRequirements\")\n"
+                "Requirements: import(\"./ResourceRequirements.protos\")\n"
                         + "declarations: Requirements.parse("
                         + protosString(document)
                         + ")\n"
@@ -150,7 +150,7 @@ final class ProtosTestToolResourceRequirementsSchemaTest {
         Fixture fixture = fixture();
         Object result =
                 completed(
-                        "Requirements: import(\"self:ResourceRequirements\")\n"
+                        "Requirements: import(\"./ResourceRequirements.protos\")\n"
                                 + "Requirements.parse("
                                 + protosString(document)
                                 + ")",
@@ -163,7 +163,7 @@ final class ProtosTestToolResourceRequirementsSchemaTest {
         StringBuilder source =
                 new StringBuilder(
                         """
-                        Requirements: import("self:ResourceRequirements")
+                        Requirements: import("./ResourceRequirements.protos")
                         passed: true
 
                         reject: (document) => {
@@ -216,7 +216,7 @@ final class ProtosTestToolResourceRequirementsSchemaTest {
         ProtosExecutionOutcome outcome =
                 com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
 source,
-fixture.prelude().newModuleActivation());
+com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(fixture.prelude(), "test"));
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),

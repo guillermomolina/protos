@@ -17,7 +17,7 @@
 // holds no authority and reads no body, so this lesson calls the handler
 // directly with request objects and runs under the standalone CLI.
 
-Router: import("std:http/Router").Router
+Router: import("std:http/router").Router
 
 // Each route names a method and a path pattern. `{name}` captures one path
 // segment; the handler receives the request and the match.

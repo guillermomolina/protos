@@ -13,9 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Manifest: import("self:Manifest")
-Runner: import("self:Runner")
-Catalog: import("self:ResourceCatalog")
+Manifest: import("./Manifest.protos")
+Runner: import("./Runner.protos")
+Catalog: import("./ResourceCatalog.protos")
 
 baseFirst: Manifest.caseSpec(Array(
     "i8c/first.protos",

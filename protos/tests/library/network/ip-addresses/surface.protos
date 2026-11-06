@@ -13,14 +13,14 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-IpAddress: import("std:network/IpAddresses").IpAddress
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+IpAddress: import("std:network/ip_addresses").IpAddress
 
 tests: [
     Test("surface ipv4", () => {
         tool009LegacyCase: () => {
-            IpAddresses: import("std:network/IpAddresses")
+            IpAddresses: import("std:network/ip_addresses")
 
             // Exact module exports are checked by the Java harness because the current
             // guest Object protocol does not yet expose slot-name enumeration.
@@ -50,7 +50,7 @@ tests: [
     }),
     Test("ipv6", () => {
         tool009LegacyCase: () => {
-            IpAddresses: import("std:network/IpAddresses")
+            IpAddresses: import("std:network/ip_addresses")
 
             zero: IpAddresses.v6(0, 0, 0, 0, 0, 0, 0, 0)
             Assertions.require(IpAddress.recognizes(zero))
@@ -77,7 +77,7 @@ tests: [
         Assertions.require(tool009LegacyCase())
     }),
     Test("private octet codec is not module surface", () => {
-        IpAddresses: import("std:network/IpAddresses")
+        IpAddresses: import("std:network/ip_addresses")
 
         Assertions.require(!IpAddresses.hasSlot("_ipOctets"))
         Assertions.require(!IpAddresses.hasSlot("toOctets"))

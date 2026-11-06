@@ -1,6 +1,6 @@
-# TLS client: `std:tls/Client`
+# TLS client: `std:tls/client`
 
-`std:tls/Client` authenticates a TLS client session over a byte duplex you
+`std:tls/client` authenticates a TLS client session over a byte duplex you
 already have. It is written in Protos over a private runtime-provisioned
 backend and composes with the ordinary byte-I/O protocols, Futures and the
 HTTP client. The normative contract is [`spec/io/TLS.md`](../../../spec/io/TLS.md)
@@ -11,11 +11,11 @@ wins.
 
 | Module | Use it when |
 |---|---|
-| `std:tls/Client` | You already have a connected byte duplex (normally a TCP connection) and want an authenticated secure duplex over it |
-| `std:http/Client` | You already have a duplex (plain or secure) and want exactly one HTTP/1.1 exchange on it |
-| `std:http/UrlClient` | You want one complete HTTP or HTTPS request to an absolute URL, composed for you from the `network`, `resolver` and `trust` you pass explicitly |
+| `std:tls/client` | You already have a connected byte duplex (normally a TCP connection) and want an authenticated secure duplex over it |
+| `std:http/client` | You already have a duplex (plain or secure) and want exactly one HTTP/1.1 exchange on it |
+| `std:http/url_client` | You want one complete HTTP or HTTPS request to an absolute URL, composed for you from the `network`, `resolver` and `trust` you pass explicitly |
 
-Importing `std:tls/Client` grants nothing. It acquires no network, no name
+Importing `std:tls/client` grants nothing. It acquires no network, no name
 resolution, no URL parsing, no clock and no default trust store. Every
 authority it uses comes from its arguments. See [Explicit networking and name
 resolution](networking.md) for where the duplex comes from, and the
@@ -37,7 +37,7 @@ Trust.system()
 ```
 
 ```protos
-TLS: import("std:tls/Client")
+TLS: import("std:tls/client")
 Client: TLS.Client
 Trust: TLS.Trust
 ```
@@ -180,7 +180,7 @@ existing facility:
 2. Connect with the explicitly granted `network`.
 3. Call `Client.handshake` (or `.owning`) with the **original hostname** and
    an explicitly selected trust.
-4. Exchange application bytes, or compose `std:http/Client` over the secure
+4. Exchange application bytes, or compose `std:http/client` over the secure
    duplex.
 5. Close what you own: the secure duplex first, then a borrowed transport.
 
@@ -190,8 +190,8 @@ the [HTTP guide](http.md#client-one-exchange-on-one-duplex). It is not a
 standalone program:
 
 ```protos
-TLS: import("std:tls/Client")
-HttpClient: import("std:http/Client").Client
+TLS: import("std:tls/client")
+HttpClient: import("std:http/client").Client
 
 received: (() => {
     secure: TLS.Client.handshake(connection, originalHostname, TLS.Trust.javaCacerts()).value()
@@ -209,7 +209,7 @@ The complete, host-dependent program is
 [`examples/io/tls-client-over-tcp.protos`](../../../protos/examples/io/tls-client-over-tcp.protos).
 When you only need one URL-based request,
 [`examples/io/http-url-client.protos`](../../../protos/examples/io/http-url-client.protos)
-lets `std:http/UrlClient` perform the same composition. Both need a Java host
+lets `std:http/url_client` perform the same composition. Both need a Java host
 that grants `network` and `resolver`; the standalone CLI grants neither.
 
 ## Portability and limitations

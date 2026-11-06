@@ -23,12 +23,12 @@
 //! here. The `unicode` argument supplies only raw Unicode facts of one scalar
 //! (`codePoint`) and the NFC test (`isNfc`); it is consulted only for labels
 //! beginning "xn--". There is no Unicode-to-ASCII conversion, mapping or
-//! fallback. Callers choose the minimum label count: std:tls/Client requires
-//! two, std:network/Resolvers one.
+//! fallback. Callers choose the minimum label count: std:tls/client requires
+//! two, std:network/resolvers one.
 
-IpAddresses: import("std:network/IpAddresses")
+IpAddresses: import("std:network/ip_addresses")
 IpAddress: IpAddresses.IpAddress
-Arrays: import("std:collections/Array")
+Arrays: import("std:collections/array")
 
 maxNameOctets: 253
 maxLabelOctets: 63

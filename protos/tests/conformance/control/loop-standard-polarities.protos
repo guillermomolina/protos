@@ -19,8 +19,8 @@
 // the body, exits on canonical false). Each returns the exact result of its
 // last normally completed body activation.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 // Callback order is recorded as decimal digits: 1 for a condition
 // activation and 2 for a body activation, oldest first.

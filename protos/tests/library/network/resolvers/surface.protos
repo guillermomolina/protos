@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-// D223-A1 (NETWORK.md §14.1–14.2): the public surface of std:network/Resolvers
+// D223-A1 (NETWORK.md §14.1–14.2): the public surface of std:network/resolvers
 // without any host grant. The bootstrap-local resolver slot is absent here, so
 // no name-service work can occur.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Resolvers: import("std:network/Resolvers")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Resolvers: import("std:network/resolvers")
 Resolver: Resolvers.Resolver
 ResolutionError: Resolvers.ResolutionError
 
@@ -63,7 +63,7 @@ tests: Array(
     }),
     Test("importing the module installs no resolver authority", () => {
         Assertions.require(!context.hasSlot("resolver"))
-        again: import("std:network/Resolvers")
+        again: import("std:network/resolvers")
         Assertions.require(again.Resolver === Resolver)
         Assertions.require(!context.hasSlot("resolver"))
     })

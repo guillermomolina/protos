@@ -28,9 +28,9 @@ capturedFor: (packageId) => {
     found
 }
 
-Plan: import("self:ExecutionPlan")
-LockFile: import("self:LockFile")
-Identity: import("self:ContentIdentity")
+Plan: import("tool-source:package/ExecutionPlan.protos")
+LockFile: import("tool-source:package/LockFile.protos")
+Identity: import("tool-source:package/ContentIdentity.protos")
 
 lock: LockFile.load(projectTreeFilesystem)
 verified: Array()

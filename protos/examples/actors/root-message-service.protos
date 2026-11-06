@@ -22,7 +22,7 @@
 // The module body is capability-free on purpose: the visitor Actor loads this
 // same module in its own Actor, where `process` does not exist.
 
-ProcessStreams: import("std:io/ProcessStreams")
+ProcessStreams: import("std:io/process_streams")
 
 // RootActor-local mutable state; other Actors reach it only through messages.
 visits: 0

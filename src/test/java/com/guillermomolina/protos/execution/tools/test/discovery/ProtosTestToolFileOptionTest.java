@@ -38,7 +38,7 @@ final class ProtosTestToolFileOptionTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Options: import("self:Options")
+                        Options: import("./Options.protos")
                         [
                             Options.filePaths(["test"]),
                             Options.directoryPaths(["test"])
@@ -66,7 +66,7 @@ final class ProtosTestToolFileOptionTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Options: import("self:Options")
+                        Options: import("./Options.protos")
                         Options.filePaths([
                             "test",
                             "--file",
@@ -87,7 +87,7 @@ final class ProtosTestToolFileOptionTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Options: import("self:Options")
+                        Options: import("./Options.protos")
                         Options.filePaths([
                             "test",
                             "--file",
@@ -107,7 +107,7 @@ final class ProtosTestToolFileOptionTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Options: import("self:Options")
+                        Options: import("./Options.protos")
                         Options.filePaths([
                             "test",
                             "--file",
@@ -131,7 +131,7 @@ final class ProtosTestToolFileOptionTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Options: import("self:Options")
+                        Options: import("./Options.protos")
                         Options.directoryPaths([
                             "test",
                             "--directory",
@@ -159,7 +159,7 @@ final class ProtosTestToolFileOptionTest {
         for (String expression : expressions) {
             ProtosExecutionOutcome outcome =
                     execute(
-                            "Options: import(\"self:Options\")\n"
+                            "Options: import(\"./Options.protos\")\n"
                                     + "Options.filePaths("
                                     + expression
                                     + ")\n");
@@ -182,7 +182,7 @@ final class ProtosTestToolFileOptionTest {
         for (String expression : expressions) {
             ProtosExecutionOutcome outcome =
                     execute(
-                            "Options: import(\"self:Options\")\n"
+                            "Options: import(\"./Options.protos\")\n"
                                     + "arguments: "
                                     + expression
                                     + "\n"
@@ -214,7 +214,7 @@ final class ProtosTestToolFileOptionTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Options: import("self:Options")
+                        Options: import("./Options.protos")
 
                         arguments: [
                             "test",
@@ -291,6 +291,6 @@ final class ProtosTestToolFileOptionTest {
 
         return ProtosTestExecutionSupport.execute(
                 source,
-                prelude.newModuleActivation());
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 }

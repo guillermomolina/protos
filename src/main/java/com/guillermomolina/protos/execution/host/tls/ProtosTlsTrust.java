@@ -35,7 +35,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Host certificate-material primitives of the {@code std:tls/Client} backend (D220–S12).
+ * Host certificate-material primitives of the {@code std:tls/client} backend (D220–S12).
  *
  * <p>This class owns no trust policy. Descriptor construction, the count and size bounds,
  * snapshotting, explicit source selection, the fail-closed {@code Trust.system()} and the absence

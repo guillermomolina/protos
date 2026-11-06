@@ -55,7 +55,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
 
         String source =
                 """
-                TestValue: import("std:test/Test")
+                TestValue: import("std:test/test")
 
                 tests: Array(
                     TestValue("first", () => {
@@ -83,7 +83,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                         .bootstrap(CORE, resolver);
 
         ProtosActivation activation =
-                prelude.newModuleActivation();
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost =
                         ProtosPolyglotRuntimeHost.open();
@@ -175,7 +175,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
 
         String source =
                 """
-                TestValue: import("std:test/Test")
+                TestValue: import("std:test/test")
 
                 tests: Array(
                     TestValue("first", () => {
@@ -203,7 +203,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                         .bootstrap(CORE, resolver);
 
         ProtosActivation activation =
-                prelude.newModuleActivation();
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost =
                         ProtosPolyglotRuntimeHost.open();
@@ -278,7 +278,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
 
         String admittedSource =
                 """
-                TestValue: import("std:test/Test")
+                TestValue: import("std:test/test")
 
                 tests: Array(
                     TestValue("only", () => {
@@ -289,7 +289,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
 
         String freshExecutionSource =
                 """
-                TestValue: import("std:test/Test")
+                TestValue: import("std:test/test")
 
                 tests: Array(
                     TestValue("only", () => {
@@ -314,7 +314,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                         .bootstrap(CORE, resolver);
 
         ProtosActivation activation =
-                prelude.newModuleActivation();
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost =
                         ProtosPolyglotRuntimeHost.open();

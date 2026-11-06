@@ -55,9 +55,9 @@ final class ProtosTestToolTool011ProgressGroupingTest {
     private static final Path CONFORMANCE_MANIFEST = CONFORMANCE.resolve("manifest.tsv");
 
     private static final String PRELUDE =
-            "SuiteGraph: import(\"self:SuiteGraph\")\n"
-                    + "RepositorySuite: import(\"self:RepositorySuite\")\n"
-                    + "Arrays: import(\"std:collections/Array\")\n"
+            "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
+                    + "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
+                    + "Arrays: import(\"std:collections/array\")\n"
                     + "leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)\n"
                     + "conformance: Arrays.filter(leaves, (leaf) => leaf.id == \"protos/conformance\")[0]\n";
 
@@ -372,7 +372,8 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                         "reflection",
                         "object-structural",
                         "matching",
-                        "execution-context")) {
+                        "execution-context",
+                        "modules")) {
             roots.put(root, "conformance/object-model");
         }
         for (String root : List.of("error", "control", "future")) {
@@ -567,7 +568,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
-                () -> "expected completion, error=" + outcome.error());
+                () -> "expected completion, error=" + outcome.error() + "; trace=" + outcome.failureDiagnosticTrace());
         return outcome.value();
     }
 
@@ -587,7 +588,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                         TOOL_ROOT.resolveSibling("shared"),
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        return ProtosTestExecutionSupport.execute(source, prelude.newModuleActivation());
+        return ProtosTestExecutionSupport.execute(source, com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 
     private static R run(String... args) {

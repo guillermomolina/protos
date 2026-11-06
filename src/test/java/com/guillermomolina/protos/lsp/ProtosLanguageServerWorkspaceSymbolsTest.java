@@ -60,6 +60,29 @@ class ProtosLanguageServerWorkspaceSymbolsTest {
     }
 
     @Test
+    void d242WorkspaceSymbolsPreserveModuleAndSourceNameCollision() throws Exception {
+        ProjectFixture fixture = project("kind-distinct", "initialName: 0\n");
+        Path standalone = Files.writeString(fixture.root().resolve("items.protos"), "sourceName: 1\n");
+        Path directory = Files.createDirectories(fixture.root().resolve("items"));
+        Path initializer = Files.writeString(directory.resolve("module.protos"), "moduleName: 2\n");
+        ProtosProjectBinding binding =
+                new ProtosProjectBinding(
+                        fixture.binding().projection(),
+                        fixture.binding().packageRoots(),
+                        List.of(
+                                new ProtosProjectBinding.Source(
+                                        ProtosProjectBinding.Source.Kind.MODULE,
+                                        "kind-distinct-package", "items", initializer.toRealPath()),
+                                new ProtosProjectBinding.Source(
+                                        ProtosProjectBinding.Source.Kind.SOURCE,
+                                        "kind-distinct-package", "items", standalone.toRealPath())));
+        ProjectFixture selected = new ProjectFixture(fixture.root(), fixture.source(), binding);
+        ProtosLanguageServer server = initialized(List.of(selected));
+        assertEquals(List.of("moduleName"), names(symbols(server, "moduleName")));
+        assertEquals(List.of("sourceName"), names(symbols(server, "sourceName")));
+    }
+
+    @Test
     void exactOpenDocumentOverlayReplacesDiskAndLooseDocumentsRemainExcluded() throws Exception {
         ProjectFixture project = project("overlay", "diskName: 1\n");
         ProtosLanguageServer server = initialized(List.of(project));
@@ -164,7 +187,7 @@ class ProtosLanguageServerWorkspaceSymbolsTest {
                 projection,
                 List.of(new ProtosProjectBinding.PackageRoot(
                         directoryName + "-package", "", root)),
-                List.of(new ProtosProjectBinding.Source(
+                List.of(new ProtosProjectBinding.Source(ProtosProjectBinding.Source.Kind.SOURCE,
                         directoryName + "-package", "Main", source)));
         return new ProjectFixture(root, source, binding);
     }

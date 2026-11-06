@@ -80,7 +80,7 @@ final class ProtosWorkspaceRunCliTest {
                     + "[exports]\n"
                     + "Api = \"Api\"\n";
     private static final String EXTERNAL_API =
-            "value: \"external-module\"\n";
+            "this.value: \"external-module\"\n";
     private static final String MIXED_MAIN =
             "Api: import(\"dep:reg/Api\")\n"
                     + "writer: TextWriter(process.stdout(), process.stdoutEncoding())\n"
@@ -335,8 +335,9 @@ final class ProtosWorkspaceRunCliTest {
                 external.resolve("protos.toml"),
                 EXTERNAL_MANIFEST,
                 StandardCharsets.UTF_8);
+        Files.createDirectories(external.resolve("Api"));
         Files.writeString(
-                external.resolve("Api.protos"),
+                external.resolve("Api/module.protos"),
                 EXTERNAL_API,
                 StandardCharsets.UTF_8);
 
@@ -344,7 +345,7 @@ final class ProtosWorkspaceRunCliTest {
                 contentIdentity(
                         Map.of(
                                 "protos.toml", EXTERNAL_MANIFEST,
-                                "Api.protos", EXTERNAL_API));
+                                "Api/module.protos", EXTERNAL_API));
         ProtosExactExternalPackageIdentity.Registry identity =
                 new ProtosExactExternalPackageIdentity.Registry(
                         "external-a", "1.0.0", content);
@@ -357,8 +358,9 @@ final class ProtosWorkspaceRunCliTest {
                 project.resolve("protos.lock"),
                 mixedLock(content),
                 StandardCharsets.UTF_8);
+        Files.createDirectories(project.resolve("Main"));
         Files.writeString(
-                project.resolve("Main.protos"),
+                project.resolve("Main/module.protos"),
                 MIXED_MAIN,
                 StandardCharsets.UTF_8);
 
@@ -434,8 +436,8 @@ final class ProtosWorkspaceRunCliTest {
     private Path materializeProject() throws Exception {
         Path project = temp.resolve("project");
         copyTree(WORKSPACE_CASE, project);
-        overlay(APPLICATION.resolve("Main.protos"), project.resolve("Main.protos"));
-        overlay(APPLICATION.resolve("Fail.protos"), project.resolve("Fail.protos"));
+        overlay(APPLICATION.resolve("Main/module.protos"), project.resolve("Main/module.protos"));
+        overlay(APPLICATION.resolve("Fail/module.protos"), project.resolve("Fail/module.protos"));
         return project;
     }
 

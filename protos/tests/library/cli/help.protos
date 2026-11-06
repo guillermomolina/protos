@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("help rendering d118", () => {
         tool009LegacyCase: () => {
-            CommandLine: import("std:cli/CommandLine")
+            CommandLine: import("std:cli/command_line")
 
             option: (
                 key,
@@ -121,7 +121,7 @@ tests: [
     }),
     Test("help rendering path d118", () => {
         tool009LegacyCase: () => {
-            CommandLine: import("std:cli/CommandLine")
+            CommandLine: import("std:cli/command_line")
 
             target: CommandLine.positional(
                 key: "target",

@@ -15,12 +15,12 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("parse high surrogate followed by raw error", () => {
-        JSON: import("std:json/JSON")
+        JSON: import("std:json/json")
 
         input: "\"\\uD834x\""
 
@@ -29,7 +29,7 @@ tests: [
         })
     }),
     Test("parse high surrogate nonlow pair error", () => {
-        JSON: import("std:json/JSON")
+        JSON: import("std:json/json")
 
         input: "\"\\uD834\\u0041\""
 
@@ -38,7 +38,7 @@ tests: [
         })
     }),
     Test("parse invalid escape error", () => {
-        JSON: import("std:json/JSON")
+        JSON: import("std:json/json")
 
         input: "\"\\x41\""
 
@@ -47,7 +47,7 @@ tests: [
         })
     }),
     Test("parse unpaired high surrogate error", () => {
-        JSON: import("std:json/JSON")
+        JSON: import("std:json/json")
 
         input: "\"\\uD834\""
 
@@ -56,7 +56,7 @@ tests: [
         })
     }),
     Test("parse unpaired low surrogate error", () => {
-        JSON: import("std:json/JSON")
+        JSON: import("std:json/json")
 
         input: "\"\\uDEAD\""
 

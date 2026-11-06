@@ -77,9 +77,9 @@ final class ProtosTestToolLib025HttpProgressGroupingTest {
                     "url-client-admission");
 
     private static final String PRELUDE =
-            "SuiteGraph: import(\"self:SuiteGraph\")\n"
-                    + "RepositorySuite: import(\"self:RepositorySuite\")\n"
-                    + "Arrays: import(\"std:collections/Array\")\n"
+            "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
+                    + "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
+                    + "Arrays: import(\"std:collections/array\")\n"
                     + "leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)\n"
                     + "http: Arrays.filter(leaves, (leaf) => leaf.id == \"protos/library/http\")[0]\n";
 
@@ -387,7 +387,7 @@ final class ProtosTestToolLib025HttpProgressGroupingTest {
 
     private static Object completed(List<String[]> keys, String source) throws Exception {
         ProtosPrelude prelude = newPrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
         List<ProtosArrayValue> elements = new ArrayList<>(keys.size());
         for (String[] key : keys) {
             elements.add(
@@ -405,7 +405,7 @@ final class ProtosTestToolLib025HttpProgressGroupingTest {
 
     private static void assertFailed(String source) throws Exception {
         ProtosExecutionOutcome outcome =
-                ProtosTestExecutionSupport.execute(source, newPrelude().newModuleActivation());
+                ProtosTestExecutionSupport.execute(source, com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(newPrelude(), "test"));
         assertEquals(
                 ProtosExecutionOutcome.State.FAILED,
                 outcome.state(),

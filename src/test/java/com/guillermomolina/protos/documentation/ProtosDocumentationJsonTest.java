@@ -40,9 +40,9 @@ import org.junit.jupiter.api.Test;
 class ProtosDocumentationJsonTest {
     @Test
     void canonicalBytesAreIndependentOfInputEntityOrder() {
-        StandardModuleIdentity setModule = new StandardModuleIdentity("std:collections/Set");
+        StandardModuleIdentity setModule = new StandardModuleIdentity("std:collections/set");
         StandardModuleIdentity textModule = new StandardModuleIdentity("std:text");
-        SourceProvenance setSource = source("protos/lib/collections/Set.protos", 1, 1, 5, 1);
+        SourceProvenance setSource = source("protos/lib/collections/set/module.protos", 1, 1, 5, 1);
         SourceProvenance textSource = source("protos/lib/text.protos", 1, 1, 3, 1);
 
         Module set = new Module(setModule, "Set docs.", setSource);
@@ -72,8 +72,8 @@ class ProtosDocumentationJsonTest {
 
     @Test
     void canonicalJsonSeparatesIdentityProvenanceAndCallableFacts() {
-        StandardModuleIdentity module = new StandardModuleIdentity("std:collections/Set");
-        SourceProvenance source = source("protos/lib/collections/Set.protos", 7, 2, 9, 1);
+        StandardModuleIdentity module = new StandardModuleIdentity("std:collections/set");
+        SourceProvenance source = source("protos/lib/collections/set/module.protos", 7, 2, 9, 1);
         Artifact artifact = new Artifact(
                 new Generator("protos-doc", "test-version"),
                 new RepositoryRevisionScope("guillermomolina/protos", "abc123"),
@@ -95,10 +95,10 @@ class ProtosDocumentationJsonTest {
                   "generator":{"name":"protos-doc","version":"test-version"},
                   "provenance":{"kind":"repositoryRevision","repository":"guillermomolina/protos","revision":"abc123"},
                   "modules":[
-                    {"kind":"module","identity":{"kind":"std","name":"std:collections/Set"},"documentation":"A **set**.","source":{"path":"protos/lib/collections/Set.protos","range":{"start":{"line":7,"column":2},"end":{"line":9,"column":1}}}}
+                    {"kind":"module","identity":{"kind":"std","name":"std:collections/set"},"documentation":"A **set**.","source":{"path":"protos/lib/collections/set/module.protos","range":{"start":{"line":7,"column":2},"end":{"line":9,"column":1}}}}
                   ],
                   "symbols":[
-                    {"kind":"slot","identity":{"module":{"kind":"std","name":"std:collections/Set"},"slot":"contains"},"documentation":"Checks \\"membership\\".\\nSecond line.","source":{"path":"protos/lib/collections/Set.protos","range":{"start":{"line":7,"column":2},"end":{"line":9,"column":1}}},"callable":{"parameters":["element"],"restParameter":"additional"}}
+                    {"kind":"slot","identity":{"module":{"kind":"std","name":"std:collections/set"},"slot":"contains"},"documentation":"Checks \\"membership\\".\\nSecond line.","source":{"path":"protos/lib/collections/set/module.protos","range":{"start":{"line":7,"column":2},"end":{"line":9,"column":1}}},"callable":{"parameters":["element"],"restParameter":"additional"}}
                   ],
                   "articles":[],
                   "relationships":[]

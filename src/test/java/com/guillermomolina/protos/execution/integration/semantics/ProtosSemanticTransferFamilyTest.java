@@ -704,7 +704,7 @@ final class ProtosSemanticTransferFamilyTest {
             extends ProtosSemanticTransferFamily {
 
         NumericCandidateFamily() {
-            super(new ProtosModuleKey("std:i091-feasibility/Numeric"));
+            super(ProtosModuleKey.module("std:i091-feasibility/Numeric"));
         }
 
         ProtosSemanticTransferValue mint(
@@ -782,7 +782,7 @@ final class ProtosSemanticTransferFamilyTest {
         ProtosActorExecutionDomain lastDestinationDomain;
 
         FixtureFamily(String ownerModule, Mode mode) {
-            super(new ProtosModuleKey(ownerModule));
+            super(ProtosModuleKey.source(ownerModule));
             this.mode = mode;
         }
 

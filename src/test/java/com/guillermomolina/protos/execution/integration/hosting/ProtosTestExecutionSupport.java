@@ -61,6 +61,24 @@ public final class ProtosTestExecutionSupport {
 
     private ProtosTestExecutionSupport() {}
 
+    /**
+     * I151/D242 test-harness provenance for snippets that exercise bundled-tool implementation
+     * files. The activation's current module identity is an exact SOURCE key located at the root
+     * of {@code toolName}'s bundled-tool closure, so snippets reach private helpers only through
+     * explicitly relative SOURCE imports ({@code ./Manifest.protos}), never through an ambient
+     * {@code self:} access path.
+     */
+    public static com.guillermomolina.protos.runtime.ProtosActivation toolHarnessActivation(
+            com.guillermomolina.protos.runtime.ProtosPrelude prelude, String toolName) {
+        Objects.requireNonNull(prelude, "prelude");
+        Objects.requireNonNull(toolName, "toolName");
+        return prelude.newModuleActivation(
+                new com.guillermomolina.protos.runtime.ProtosActorModuleState(),
+                com.guillermomolina.protos.runtime.modules.ProtosModuleKey.source(
+                        "bundled-tool:" + toolName + "/I151ToolHarness.protos"),
+                prelude.newExecutionContext());
+    }
+
     public static ProtosExecutionOutcome execute(
             String source, ProtosActivation activation) {
         return execute("<retained-java-harness>", source, activation);

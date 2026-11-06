@@ -150,19 +150,19 @@ final class ProtosTlsTrustVerifier extends X509ExtendedTrustManager {
     @Override
     public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine)
             throws CertificateException {
-        throw new CertificateException("std:tls/Client authenticates no TLS client");
+        throw new CertificateException("std:tls/client authenticates no TLS client");
     }
 
     @Override
     public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket)
             throws CertificateException {
-        throw new CertificateException("std:tls/Client authenticates no TLS client");
+        throw new CertificateException("std:tls/client authenticates no TLS client");
     }
 
     @Override
     public void checkClientTrusted(X509Certificate[] chain, String authType)
             throws CertificateException {
-        throw new CertificateException("std:tls/Client authenticates no TLS client");
+        throw new CertificateException("std:tls/client authenticates no TLS client");
     }
 
     @Override

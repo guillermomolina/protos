@@ -71,7 +71,7 @@ final class ProtosTestToolBug010ProgressTemporalVisibilityTest {
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
 
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         ArrayList<String> reportedLines = new ArrayList<>();
         Map<String, ProtosFutureValue> pending = new LinkedHashMap<>();
@@ -109,10 +109,10 @@ final class ProtosTestToolBug010ProgressTemporalVisibilityTest {
 
         String source =
                 """
-                Discovery: import("self:Discovery")
-                Runner: import("self:LogicalCaseRunner")
-                Progress: import("self:Progress")
-                TestValue: import("std:test/Test")
+                Discovery: import("./Discovery.protos")
+                Runner: import("./LogicalCaseRunner.protos")
+                Progress: import("./Progress.protos")
+                TestValue: import("std:test/test")
 
                 suite: {
                     tests: Array(

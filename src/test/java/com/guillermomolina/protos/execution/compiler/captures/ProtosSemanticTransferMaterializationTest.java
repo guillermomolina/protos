@@ -46,11 +46,11 @@ import org.junit.jupiter.api.io.TempDir;
  */
 final class ProtosSemanticTransferMaterializationTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
-    private static final ProtosModuleKey GUEST_KEY = new ProtosModuleKey("std:plat051-fixture/guest");
-    private static final ProtosModuleKey HOLDER_KEY = new ProtosModuleKey("plat051-test:holder");
+    private static final ProtosModuleKey GUEST_KEY = ProtosModuleKey.module("std:plat051-fixture/guest");
+    private static final ProtosModuleKey HOLDER_KEY = ProtosModuleKey.source("plat051-test:holder");
 
     private static final String GUEST_SOURCE =
-            "surface: (text) => {\n"
+            "this.surface: (text) => {\n"
                     + "    () => { text }\n"
                     + "}\n";
     private static final String HOLDER_SOURCE =
@@ -222,7 +222,8 @@ final class ProtosSemanticTransferMaterializationTest {
     }
 
     private static ProtosHostedExecutionTestFixture open(GuestFamily family, Path dir) throws Exception {
-        Path guest = Files.writeString(dir.resolve("guest.protos"), GUEST_SOURCE);
+        Path guestRoot = Files.createDirectories(dir.resolve("guest"));
+        Path guest = Files.writeString(guestRoot.resolve("module.protos"), GUEST_SOURCE);
         Path holder = Files.writeString(dir.resolve("holder.protos"), HOLDER_SOURCE);
         ProtosModuleResolver resolver =
                 new ProtosExactModuleOverlayResolver(

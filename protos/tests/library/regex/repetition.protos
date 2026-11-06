@@ -13,9 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Regex: import("std:regex/Regex")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Regex: import("std:regex/regex")
 
 requireSpan: (found, first, last) => {
     Assertions.require(found !== null)

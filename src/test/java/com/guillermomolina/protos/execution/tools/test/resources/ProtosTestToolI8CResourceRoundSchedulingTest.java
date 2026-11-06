@@ -54,7 +54,7 @@ final class ProtosTestToolI8CResourceRoundSchedulingTest {
         ProtosExecutionOutcome outcome =
                 com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
 Files.readString(FIXTURE, StandardCharsets.UTF_8),
-prelude.newModuleActivation());
+com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
 
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,

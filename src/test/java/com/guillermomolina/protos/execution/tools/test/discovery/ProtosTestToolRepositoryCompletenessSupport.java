@@ -128,7 +128,19 @@ final class ProtosTestToolRepositoryCompletenessSupport {
                     "conformance/group/modules/workers.protos",
                     "auxiliary module bound as tool002-group:workers",
                     "conformance/library/toml/official/suite/Harness.protos",
-                    "auxiliary harness of the toml-official suite sources");
+                    "auxiliary harness of the toml-official suite sources",
+                    "conformance/modules/fixtures/cycle/a.protos",
+                    "D242 conformance module import fixture",
+                    "conformance/modules/fixtures/cycle/b.protos",
+                    "D242 conformance module import fixture",
+                    "conformance/modules/fixtures/failure/counter.protos",
+                    "D242 conformance module import fixture",
+                    "conformance/modules/fixtures/failure/failing.protos",
+                    "D242 conformance module import fixture",
+                    "conformance/modules/fixtures/range/Range.protos",
+                    "D242 conformance module import fixture",
+                    "conformance/modules/fixtures/range/module.protos",
+                    "D242 conformance module import fixture");
 
     /**
      * A JUnit-owned boundary: a source under {@code directory} that declares no suite-native
@@ -164,7 +176,7 @@ final class ProtosTestToolRepositoryCompletenessSupport {
 
     private static final Pattern TEST_IMPORT =
             Pattern.compile(
-                    "(?m)^[A-Za-z_][A-Za-z0-9_]*[ \\t]*:[ \\t]*import\\(\"std:test/Test\"\\)");
+                    "(?m)^[A-Za-z_][A-Za-z0-9_]*[ \\t]*:[ \\t]*import\\(\"std:test/test\"\\)");
     private static final Pattern TESTS_BINDING = Pattern.compile("(?m)^tests[ \\t]*:");
 
     private static final Map<Path, String> OWNER_TEXT = new ConcurrentHashMap<>();
@@ -215,7 +227,7 @@ final class ProtosTestToolRepositoryCompletenessSupport {
 
     /**
      * Classifies sources keyed by their path relative to {@code protos/tests/}. A source is
-     * intended production when it declares the suite-native surface (an {@code std:test/Test}
+     * intended production when it declares the suite-native surface (an {@code std:test/test}
      * import and a top-level {@code tests} Array) inside a production tree and outside D133
      * project data. Exclusions follow ownership boundaries only and are never derived from
      * registrations.
@@ -349,7 +361,7 @@ final class ProtosTestToolRepositoryCompletenessSupport {
         Inventory inventory = classify(physicalSources());
         List<String> roots = List.copyOf(corpusRoots());
         ProtosPrelude prelude = SharedPrelude.INSTANCE;
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
         List<ProtosNioReadOnlyTreeFilesystemBackend> backends = new ArrayList<>();
         try {
             for (int index = 0; index < roots.size(); index++) {
@@ -418,13 +430,13 @@ final class ProtosTestToolRepositoryCompletenessSupport {
                         .collect(Collectors.joining(",\n"));
 
         return """
-                SuiteGraph: import("self:SuiteGraph")
-                RepositorySuite: import("self:RepositorySuite")
-                Manifest: import("self:Manifest")
-                Plans: import("self:RepositoryCorpusPlans")
-                Audit: import("self:RepositoryCorpusAudit")
-                ArrayAccumulator: import("self:ArrayAccumulator")
-                Arrays: import("std:collections/Array")
+                SuiteGraph: import("./SuiteGraph.protos")
+                RepositorySuite: import("./RepositorySuite.protos")
+                Manifest: import("./Manifest.protos")
+                Plans: import("./RepositoryCorpusPlans.protos")
+                Audit: import("./RepositoryCorpusAudit.protos")
+                ArrayAccumulator: import("./ArrayAccumulator.protos")
+                Arrays: import("std:collections/array")
 
                 bindings: Array(
                 %s
@@ -559,7 +571,7 @@ final class ProtosTestToolRepositoryCompletenessSupport {
     }
 
     static ProtosActivation newActivation() {
-        return SharedPrelude.INSTANCE.newModuleActivation();
+        return ProtosTestExecutionSupport.toolHarnessActivation(SharedPrelude.INSTANCE, "test");
     }
 
     private static void installFilesystem(
@@ -577,11 +589,25 @@ final class ProtosTestToolRepositoryCompletenessSupport {
     }
 
     static Object completed(String source, ProtosActivation activation) {
-        ProtosExecutionOutcome outcome = ProtosTestExecutionSupport.execute(source, activation);
+        // D242: synthetic and real audit programs import private tool SOURCE files.
+        // Preserve the caller's Context (including host capabilities), Actor state,
+        // and execution domain; replace only module source provenance.
+        ProtosActivation sourceActivation =
+                activation.prelude().orElseThrow().newModuleActivation(
+                        activation.actorModuleState(),
+                        ProtosBundledToolModuleResolver.toolSourceKey(
+                                "test", "I151RepositoryAuditHarness"),
+                        activation.context(),
+                        activation.executionDomain());
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(source, sourceActivation);
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
-                () -> "Protos execution did not complete; error=" + outcome.error());
+                () -> "Protos execution did not complete; error slots="
+                        + outcome.error().localSlotsSnapshot()
+                        + "; error parent=" + outcome.error().parent()
+                        + "; first lines=" + source.lines().limit(8).toList());
         return outcome.value();
     }
 

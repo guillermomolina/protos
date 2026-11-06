@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -47,12 +48,35 @@ final class ProtosWorkspacePackageSourceInventoryTest {
 
         assertEquals(
                 List.of(
-                        new ProtosWorkspacePackageSourceInventory.Source(
+                        new ProtosWorkspacePackageSourceInventory.Source(ProtosModuleKey.Kind.SOURCE,
                                 "root", "Alpha", alpha.toRealPath()),
-                        new ProtosWorkspacePackageSourceInventory.Source(
+                        new ProtosWorkspacePackageSourceInventory.Source(ProtosModuleKey.Kind.SOURCE,
                                 "root", "tools/Parser", parser.toRealPath())),
                 sources);
         assertThrows(UnsupportedOperationException.class, () -> sources.add(sources.get(0)));
+    }
+
+    @Test
+    void inventoriesModuleInitializersAndExactSourceFilesSeparately()
+            throws Exception {
+        Path items = Files.createDirectories(temporary.resolve("items"));
+        Path initializer = writeSource(items, "module.protos");
+        Path helper = writeSource(items, "Helper.protos");
+        Path exactSource = writeSource(temporary, "items.protos");
+
+        List<ProtosWorkspacePackageSourceInventory.Source> sources =
+                inventory(temporary, node("root", "")).snapshot();
+
+        assertEquals(
+                List.of(
+                        new ProtosWorkspacePackageSourceInventory.Source(ProtosModuleKey.Kind.MODULE,
+                                "root", "items", initializer.toRealPath()),
+                        new ProtosWorkspacePackageSourceInventory.Source(
+                                ProtosModuleKey.Kind.SOURCE,
+                                "root", "items", exactSource.toRealPath()),
+                        new ProtosWorkspacePackageSourceInventory.Source(ProtosModuleKey.Kind.SOURCE,
+                                "root", "items/Helper", helper.toRealPath())),
+                sources);
     }
 
     @Test
@@ -70,9 +94,9 @@ final class ProtosWorkspacePackageSourceInventoryTest {
 
         assertEquals(
                 List.of(
-                        new ProtosWorkspacePackageSourceInventory.Source(
+                        new ProtosWorkspacePackageSourceInventory.Source(ProtosModuleKey.Kind.SOURCE,
                                 "member-pkg", "Api", api.toRealPath()),
-                        new ProtosWorkspacePackageSourceInventory.Source(
+                        new ProtosWorkspacePackageSourceInventory.Source(ProtosModuleKey.Kind.SOURCE,
                                 "root", "Main", rootMain.toRealPath())),
                 sources);
     }
@@ -97,7 +121,7 @@ final class ProtosWorkspacePackageSourceInventoryTest {
 
         assertEquals(
                 List.of(
-                        new ProtosWorkspacePackageSourceInventory.Source(
+                        new ProtosWorkspacePackageSourceInventory.Source(ProtosModuleKey.Kind.SOURCE,
                                 "member-pkg", "Api", api.toRealPath())),
                 sources);
     }
@@ -135,7 +159,7 @@ final class ProtosWorkspacePackageSourceInventoryTest {
 
         assertEquals(
                 List.of(
-                        new ProtosWorkspacePackageSourceInventory.Source(
+                        new ProtosWorkspacePackageSourceInventory.Source(ProtosModuleKey.Kind.SOURCE,
                                 "root", "Main", main.toRealPath())),
                 sources);
     }

@@ -46,7 +46,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * D198 (I090-C): the public surface of {@code std:math/Math}, the exact F3 roots, and the N4 and
+ * D198 (I090-C): the public surface of {@code std:math/math}, the exact F3 roots, and the N4 and
  * real-Float special values of {@code sqrt}, exercised through the imported module function.
  * Finite inexact coordinates are checked against an independent oracle by
  * {@link ProtosMathSqrtAccuracyTest}.
@@ -110,7 +110,7 @@ final class ProtosMathModuleTest {
         Object result = evaluate(
                 """
                 (() => {
-                    Math: import("std:math/Math")
+                    Math: import("std:math/math")
                     touched: false
                     touch: () => {
                         touched = true
@@ -136,7 +136,7 @@ final class ProtosMathModuleTest {
         Object result = evaluate(
                 """
                 (() => {
-                    Math: import("std:math/Math")
+                    Math: import("std:math/math")
                     Custom: Math {
                         sqrt: (value) => "replaced"
                     }
@@ -427,7 +427,7 @@ final class ProtosMathModuleTest {
 
     private static ProtosObjectValue importMath(ProtosActivation activation) {
         return assertInstanceOf(ProtosObjectValue.class,
-                ProtosTestExecutionSupport.evaluate("import(\"std:math/Math\")", activation));
+                ProtosTestExecutionSupport.evaluate("import(\"std:math/math\")", activation));
     }
 
     private static Object evaluate(String source) {

@@ -10,7 +10,7 @@
  */
 
 // Composing one-to-many mapping, pairing, stable partitioning, and deduplication.
-Arrays: import("std:collections/Array")
+Arrays: import("std:collections/array")
 
 source: Array(1, 2, 2, 3)
 expanded: Arrays.flatMap(source, (x) => { Array(x, x * 10) })

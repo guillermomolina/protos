@@ -339,7 +339,7 @@ The Standard Library supplies square roots via an **explicit** import; `sqrt`
 is not a `Number` message and is not a Prelude function:
 
 ```protos
-Math: import("std:math/Math")
+Math: import("std:math/math")
 Math.sqrt(4)                      // exact Integer 2
 Math.sqrt(1 / 4)                  // exact Fraction 1/2
 Math.sqrt(-4)                     // Complex(0, 2)
@@ -349,13 +349,13 @@ Math.sqrt(Complex(3, 4))          // Complex(2, 1)
 `Math.sqrt(value)` requires exactly one semantic Number. Exact roots stay
 exact when rational; other roots are binary64 approximations within the
 specified accuracy contract. Negative reals yield principal Complex roots.
-For exact Integer algorithms, `std:math/Integer` separately provides `gcd`,
+For exact Integer algorithms, `std:math/integer` separately provides `gcd`,
 `lcm`, `factorial`, `pow`, and `powMod`; these are Standard Library functions,
 not implicit arithmetic or methods on every Number.
 
 See the executable
 [`exact-and-complex.protos` example](../../protos/examples/numbers/exact-and-complex.protos),
-the [`std:math` sources](../../protos/lib/math/Math.protos), and the
+the [`std:math` sources](../../protos/lib/math/math/module.protos), and the
 [Standard Library index](library/README.md).
 
 ## `===` and `==` answer different questions
@@ -1048,7 +1048,7 @@ The Standard Library builds higher-level behavior using those mechanisms.
 For example:
 
 ```text
-std:collections/Array
+std:collections/array
 ```
 
 provides ordinary Protos algorithms such as mapping, filtering, indexed search,
@@ -1062,7 +1062,7 @@ The same module also provides copy/edit operations and a default ascending
 sort:
 
 ```protos
-Arrays: import("std:collections/Array")
+Arrays: import("std:collections/array")
 
 values: Array(10, 20, 30)
 
@@ -1109,7 +1109,7 @@ and `values` remains `[10, 20, 30]`. A few rules to keep in mind:
 The module also has ordered queries and fresh prefix/suffix copies:
 
 ```protos
-Arrays: import("std:collections/Array")
+Arrays: import("std:collections/array")
 values: Array(10, 20, 30)
 
 found: Arrays.find(values, (item) => item > 15)
@@ -1147,7 +1147,7 @@ independent shallow Array. Neither operation mutates the input.
 For one-to-many mapping, pairing, grouping, and deduplication, use the same Array module:
 
 ```protos
-Arrays: import("std:collections/Array")
+Arrays: import("std:collections/array")
 values: Array(1, 2, 2, 3)
 
 expanded: Arrays.flatMap(values, (x) => { Array(x, x * 10) })
@@ -1186,8 +1186,8 @@ result or equality/hash failure propagates normally.
 Current Standard Library modules include:
 
 ```text
-std:collections/Set
-std:collections/IdentitySet
+std:collections/set
+std:collections/identity_set
 ```
 
 They deliberately reuse existing keyed semantics:
@@ -1260,9 +1260,9 @@ elements. `reverse()` keeps exactly the same elements and reverses their
 order. Their meanings do not depend on which constructor built the range. Both answer new ranges; instances are frozen, with reflectable `start`
 and `stop` slots, and compare by identity.
 
-The `std:collections/Range` module still exists for compatibility: its
+The `std:collections/range` module still exists for compatibility: its
 `Range` and `InvertedRange` members are the very same objects
-(`import("std:collections/Range").Range === Range`).
+(`import("std:collections/range").Range === Range`).
 
 The earlier module helpers `Ranges.each(start, stop, block)` and
 `Ranges.reverseEach(start, stop, block)` no longer exist.
@@ -1270,12 +1270,12 @@ The earlier module helpers `Ranges.each(start, stop, block)` and
 ## Vectors and matrices
 
 Arrays hold any values. For numeric linear algebra, the Standard Library module
-`std:math/LinearAlgebra` provides two prototypes, `Vector` and `Matrix`, whose
+`std:math/linear_algebra` provides two prototypes, `Vector` and `Matrix`, whose
 elements must be genuine Numbers. Import the module explicitly and bind both
 prototypes before calling them:
 
 ```protos
-LA: import("std:math/LinearAlgebra")
+LA: import("std:math/linear_algebra")
 Vector: LA.Vector
 Matrix: LA.Matrix
 
@@ -1336,7 +1336,7 @@ performance.
 
 For arithmetic, [`exact-and-complex.protos`](../../protos/examples/numbers/exact-and-complex.protos)
 demonstrates exact division, mixed Float arithmetic, Complex components, and
-`std:math/Math`.
+`std:math/math`.
 
 The current tutorial material includes direct examples for keyed collections:
 
@@ -1362,11 +1362,11 @@ and [`array-pairing-and-deduplication.protos`](../../protos/examples/collections
 The current Standard Library collection sources are also ordinary Protos and are
 useful as larger examples:
 
-- [`../../protos/lib/collections/Array.protos`](../../protos/lib/collections/Array.protos)
+- [`../../protos/lib/collections/array/module.protos`](../../protos/lib/collections/array/module.protos)
   implements higher-level Array algorithms over the Core Array surface;
-- [`../../protos/lib/collections/Set.protos`](../../protos/lib/collections/Set.protos)
+- [`../../protos/lib/collections/set/module.protos`](../../protos/lib/collections/set/module.protos)
   builds equality-based set behavior over Map;
-- [`../../protos/lib/collections/IdentitySet.protos`](../../protos/lib/collections/IdentitySet.protos)
+- [`../../protos/lib/collections/identity_set/module.protos`](../../protos/lib/collections/identity_set/module.protos)
   builds identity-based set behavior over IdentityMap.
 
 These files demonstrate current runnable behavior. The specification remains the

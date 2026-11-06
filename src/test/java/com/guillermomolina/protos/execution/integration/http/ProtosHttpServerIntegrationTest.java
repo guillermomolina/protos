@@ -45,7 +45,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * LIB025 (D215, HTTP.md): Task topology, Future identity, cancellation and lifecycle of the
- * public {@code std:http/Server} module over a deterministic in-memory duplex.
+ * public {@code std:http/server} module over a deterministic in-memory duplex.
  *
  * <p>The duplex, its Futures and the probes are native fixtures so that every live Task is
  * attributable: the root Task, the one service Task, and any Task the snippet itself creates.
@@ -57,8 +57,8 @@ final class ProtosHttpServerIntegrationTest {
 
     private static final String PRELUDE =
             """
-            http: import("std:http/Server")
-            Assertions: import("std:test/Assertions")
+            http: import("std:http/server")
+            Assertions: import("std:test/assertions")
             ascii: (text) => {
                 Encoding.Latin1.encode(text)
             }

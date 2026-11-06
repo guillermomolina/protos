@@ -16,8 +16,8 @@
 // BUG026: P Closure projections see the frozen standard Prelude (§71.15)
 // without capturing caller contexts; Array result graphs keep their shape.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("prelude Integer is visible inside the P worker", () => {

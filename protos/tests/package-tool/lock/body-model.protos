@@ -13,12 +13,12 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("body-root-only", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -34,7 +34,7 @@ tests: [
         Assertions.require(ok)
     }),
     Test("body-complete-model", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -58,7 +58,7 @@ tests: [
         Assertions.require(ok)
     }),
     Test("body-out-of-order-structural", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -73,7 +73,7 @@ tests: [
         )
     }),
     Test("record-registry-node", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         record: Lock.parseRecord(
             "registry-node registry \"pkg\" \"1.2.3\" locator \"community/pkg\" authority \"public\" content protos-package-tree-v1 sha256:abcd"
         )
@@ -87,7 +87,7 @@ tests: [
         Assertions.require(ok)
     }),
     Test("record-git-node", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         record: Lock.parseRecord(
             "git-node git \"pkg\" \"deadbeef\" fetch \"https://example.invalid/repo.git\" content protos-package-tree-v1 sha256:abcd"
         )
@@ -99,7 +99,7 @@ tests: [
         Assertions.require(ok)
     }),
     Test("record-dependency", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         record: Lock.parseRecord(
             "dependency workspace \"root\" alias \"json\" target registry \"pkg\" \"1.0.0\""
         )

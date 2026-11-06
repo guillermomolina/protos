@@ -23,11 +23,11 @@
 //! applied before discovery, so a ref outside the active scope is simply
 //! unknown here and fails closed.
 
-JSON: import("std:json/JSON")
-Arrays: import("std:collections/Array")
-Discovery: import("self:Discovery")
-CaseRef: import("self:CaseRef")
-ArrayAccumulator: import("self:ArrayAccumulator")
+JSON: import("std:json/json")
+Arrays: import("std:collections/array")
+Discovery: import("./Discovery.protos")
+CaseRef: import("./CaseRef.protos")
+ArrayAccumulator: import("./ArrayAccumulator.protos")
 
 selectionError: () => {
     Error().signal()

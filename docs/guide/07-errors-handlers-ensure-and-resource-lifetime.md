@@ -773,7 +773,7 @@ Current repository code already composes these mechanisms in ordinary Protos.
 
 The filesystem convenience module:
 
-- [`../../protos/lib/io/Files.protos`](../../protos/lib/io/Files.protos)
+- [`../../protos/lib/io/files/module.protos`](../../protos/lib/io/files/module.protos)
 
 uses `Error.handle(...)` and `ensure(...)` around asynchronous filesystem
 acquisition, reads, cancellation, and cleanup.

@@ -13,12 +13,12 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Document: import("self:ProjectDocument")
-Input: import("self:ResolutionInput")
-LockFile: import("self:LockFile")
-Metadata: import("self:ProjectMetadata")
-Publication: import("self:MetadataPublication")
-Root: import("self:ResolutionRoot")
+Document: import("./ProjectDocument.protos")
+Input: import("./ResolutionInput.protos")
+LockFile: import("./LockFile.protos")
+Metadata: import("./ProjectMetadata.protos")
+Publication: import("./MetadataPublication.protos")
+Root: import("./ResolutionRoot.protos")
 
 workspaceRefMatches: (ref, packageId) => {
     matches: ref.kind == "workspace"

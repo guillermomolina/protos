@@ -126,7 +126,7 @@ An external provider JAR is executable Java code. Passing it with
   (blocking foreign calls, callbacks) and §24K (foreign mutable state);
 - [`spec/concurrency/FUTURES_AND_TASKS.md`](../../../spec/concurrency/FUTURES_AND_TASKS.md),
   Synchronous foreign callbacks and the current Task;
-- [`protos/lib/interop.protos`](../../../protos/lib/interop.protos)
+- [`protos/lib/interop/module.protos`](../../../protos/lib/interop.protos)
   (`std:interop`);
 - [`ProtosForeignPullEachTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/foreign/api/ProtosForeignPullEachTest.java)
   and

@@ -49,7 +49,7 @@ final class ProtosTestToolDiscoveryImportedModuleTest {
 
         String suiteSource =
                 """
-                TestValue: import("std:test/Test")
+                TestValue: import("std:test/test")
 
                 missing: (body) => {
                     failed: false
@@ -105,7 +105,7 @@ final class ProtosTestToolDiscoveryImportedModuleTest {
 
             ProtosPrelude prelude =
                     new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-            var activation = prelude.newModuleActivation();
+            var activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
             ProtosExecutionOutcome discoveryImport =
                     ProtosCanonicalInitialModuleExecution.execute(
@@ -137,7 +137,7 @@ final class ProtosTestToolDiscoveryImportedModuleTest {
             ProtosExecutionOutcome projection =
                     ProtosTestExecutionSupport.execute(
                             """
-                            Discovery: import("self:Discovery")
+                            Discovery: import("./Discovery.protos")
 
                             signature:
                                 Discovery.declarationSignatureFromModule(

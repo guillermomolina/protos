@@ -39,13 +39,13 @@ import org.junit.jupiter.api.Test;
 class ProtosDocumentationModelTest {
     @Test
     void sourceMovementAndCallableEvolutionDoNotChangeSymbolIdentity() {
-        StandardModuleIdentity module = new StandardModuleIdentity("std:collections/Set");
+        StandardModuleIdentity module = new StandardModuleIdentity("std:collections/set");
         SymbolIdentity identity = new SymbolIdentity(module, "contains");
 
         Symbol first = new Symbol(
                 identity,
                 "Tests membership.",
-                source("protos/lib/collections/Set.protos", 10, 1, 10, 20),
+                source("protos/lib/collections/set/module.protos", 10, 1, 10, 20),
                 new Callable(List.of("element"), null));
         Symbol moved = new Symbol(
                 identity,
@@ -60,11 +60,11 @@ class ProtosDocumentationModelTest {
 
     @Test
     void exactArtifactScopeSeparatesOccurrencesWithoutChangingLineage() {
-        StandardModuleIdentity module = new StandardModuleIdentity("std:collections/Set");
+        StandardModuleIdentity module = new StandardModuleIdentity("std:collections/set");
         Symbol symbol = new Symbol(
                 new SymbolIdentity(module, "contains"),
                 null,
-                source("protos/lib/collections/Set.protos", 1, 1, 2, 1),
+                source("protos/lib/collections/set/module.protos", 1, 1, 2, 1),
                 null);
 
         Artifact first = artifact(
@@ -112,8 +112,8 @@ class ProtosDocumentationModelTest {
 
     @Test
     void duplicateSymbolIdentityWithinOneArtifactIsRejected() {
-        StandardModuleIdentity module = new StandardModuleIdentity("std:collections/Set");
-        SourceProvenance source = source("protos/lib/collections/Set.protos", 1, 1, 2, 1);
+        StandardModuleIdentity module = new StandardModuleIdentity("std:collections/set");
+        SourceProvenance source = source("protos/lib/collections/set/module.protos", 1, 1, 2, 1);
         SymbolIdentity identity = new SymbolIdentity(module, "contains");
 
         IllegalArgumentException error = assertThrows(
@@ -126,7 +126,7 @@ class ProtosDocumentationModelTest {
                                 new Symbol(
                                         identity,
                                         null,
-                                        source("protos/lib/collections/Set.protos", 20, 1, 21, 1),
+                                        source("protos/lib/collections/set/module.protos", 20, 1, 21, 1),
                                         new Callable(List.of("x"), null)))));
 
         assertEquals(
@@ -136,9 +136,9 @@ class ProtosDocumentationModelTest {
 
     @Test
     void symbolMustReferenceAModulePresentInArtifact() {
-        StandardModuleIdentity declared = new StandardModuleIdentity("std:collections/Set");
+        StandardModuleIdentity declared = new StandardModuleIdentity("std:collections/set");
         PackageModuleIdentity missing = new PackageModuleIdentity("package-id", "collections/Set");
-        SourceProvenance source = source("protos/lib/collections/Set.protos", 1, 1, 2, 1);
+        SourceProvenance source = source("protos/lib/collections/set/module.protos", 1, 1, 2, 1);
 
         assertThrows(
                 IllegalArgumentException.class,
@@ -179,11 +179,11 @@ class ProtosDocumentationModelTest {
 
     @Test
     void markdownLineEndingsAreCanonicalizedWithoutChangingItsContentModel() {
-        StandardModuleIdentity module = new StandardModuleIdentity("std:collections/Set");
+        StandardModuleIdentity module = new StandardModuleIdentity("std:collections/set");
         Module documented = new Module(
                 module,
                 "First\r\nsecond\rthird",
-                source("protos/lib/collections/Set.protos", 1, 1, 2, 1));
+                source("protos/lib/collections/set/module.protos", 1, 1, 2, 1));
 
         assertEquals("First\nsecond\nthird", documented.documentation());
     }

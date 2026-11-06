@@ -107,7 +107,7 @@ final class ProtosI091RichNumericFeasibilityTest {
         private final int tag;
 
         RatioFixtureFamily(String ownerModule, int tag) {
-            super(new ProtosModuleKey(ownerModule));
+            super(ProtosModuleKey.source(ownerModule));
             this.tag = tag;
         }
 

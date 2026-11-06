@@ -58,7 +58,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * LIB026 (D222-C, HTTP.md §18): the public {@code std:http/UrlClient} module.
+ * LIB026 (D222-C, HTTP.md §18): the public {@code std:http/url_client} module.
  *
  * <p>The first group runs guest snippets in a bootstrapped Prelude. The connection the guest
  * {@code network} fixture answers is a native in-memory transport whose far end is a {@link
@@ -88,11 +88,11 @@ final class ProtosHttpUrlClientIntegrationTest {
 
     private static final String HARNESS_PRELUDE =
             """
-            http: import("std:http/UrlClient")
-            tls: import("std:tls/Client")
-            IpAddresses: import("std:network/IpAddresses")
-            IpEndpoints: import("std:network/IpEndpoints")
-            Assertions: import("std:test/Assertions")
+            http: import("std:http/url_client")
+            tls: import("std:tls/client")
+            IpAddresses: import("std:network/ip_addresses")
+            IpEndpoints: import("std:network/ip_endpoints")
+            Assertions: import("std:test/assertions")
             ascii: (text) => {
                 Encoding.Latin1.encode(text)
             }
@@ -466,7 +466,7 @@ final class ProtosHttpUrlClientIntegrationTest {
      */
     private static final String PROGRAM =
             """
-            http: import("std:http/UrlClient")
+            http: import("std:http/url_client")
             ascii: (text) => {
                 Encoding.Latin1.encode(text)
             }

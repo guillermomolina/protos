@@ -57,7 +57,7 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
     void mixedGraphExecutesThroughExactWorkspaceAndExternalRouting() throws Exception {
         try (Graph graph = new Graph()) {
             ProtosModuleKey entry = graph.resolver.entryModule("Main");
-            assertEquals(ProtosWorkspacePackageModuleKey.encode(ROOT, "Main"), entry);
+            assertEquals(ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, ROOT, "Main"), entry);
 
             ProtosObjectValue module = execute(graph.resolver, entry);
             assertIntegerSlot(module, "local", 7);
@@ -74,13 +74,13 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
         try (Graph graph = new Graph()) {
             ProtosModuleKey entry = graph.resolver.entryModule("Main");
             assertEquals(
-                    ProtosWorkspacePackageModuleKey.encode(ROOT, "Local"),
+                    ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, ROOT, "Local"),
                     graph.resolver.resolve("self:Local", Optional.of(entry)));
 
             ProtosModuleKey a = graph.resolver.resolve("dep:a/Public", Optional.of(entry));
             ProtosModuleKey b = graph.resolver.resolve("dep:b/Public", Optional.of(entry));
-            assertEquals(ProtosExternalPackageModuleKey.encode(graph.aIdentity, "Internal/Thing"), a);
-            assertEquals(ProtosExternalPackageModuleKey.encode(graph.bIdentity, "Internal/Thing"), b);
+            assertEquals(ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, graph.aIdentity, "Internal/Thing"), a);
+            assertEquals(ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, graph.bIdentity, "Internal/Thing"), b);
             assertNotEquals(a, b);
             assertEquals(a, graph.resolver.resolve("dep:sameA/Public", Optional.of(entry)));
         }
@@ -90,17 +90,17 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
     void externalSelfAndExternalDependencyKeepExactIdentity() throws Exception {
         try (Graph graph = new Graph()) {
             ProtosModuleKey thing =
-                    ProtosExternalPackageModuleKey.encode(graph.aIdentity, "Internal/Thing");
+                    ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, graph.aIdentity, "Internal/Thing");
             assertEquals(
-                    ProtosExternalPackageModuleKey.encode(graph.aIdentity, "Internal/Helper"),
+                    ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, graph.aIdentity, "Internal/Helper"),
                     graph.resolver.resolve("self:Internal/Helper", Optional.of(thing)));
             assertEquals(
-                    ProtosExternalPackageModuleKey.encode(graph.cIdentity, "Api"),
+                    ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, graph.cIdentity, "Api"),
                     graph.resolver.resolve("dep:helper/Api", Optional.of(thing)));
 
             // Edges belong to their exact declaring node: B declares no `helper` alias.
             ProtosModuleKey bThing =
-                    ProtosExternalPackageModuleKey.encode(graph.bIdentity, "Internal/Thing");
+                    ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, graph.bIdentity, "Internal/Thing");
             assertThrows(
                     IOException.class,
                     () -> graph.resolver.resolve("dep:helper/Api", Optional.of(bThing)));
@@ -109,10 +109,10 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
 
     @Test
     void registryGitAndSameContentIdentitiesNeverCollapse() throws Exception {
-        ProtosCapturedFilesystemCustody registry = capture("reg", Map.of("Main.protos", "value: 1"));
-        ProtosCapturedFilesystemCustody git = capture("git", Map.of("Main.protos", "value: 2"));
-        ProtosCapturedFilesystemCustody other = capture("other", Map.of("Main.protos", "value: 3"));
-        Path project = workspace(Map.of("Main.protos", "value: 0"));
+        ProtosCapturedFilesystemCustody registry = capture("reg", Map.of("Main/module.protos", "this.value: 1"));
+        ProtosCapturedFilesystemCustody git = capture("git", Map.of("Main/module.protos", "this.value: 2"));
+        ProtosCapturedFilesystemCustody other = capture("other", Map.of("Main/module.protos", "this.value: 3"));
+        Path project = workspace(Map.of("Main/module.protos", "this.value: 0"));
 
         ProtosPackageExecutionPlanV2.ExternalPackage registryNode =
                 registryNode("same", 1, A_HEX, Map.of("Public", "Main"));
@@ -145,9 +145,9 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
             assertNotEquals(r, g);
             assertNotEquals(r, o);
             assertNotEquals(g, o);
-            assertEquals("value: 1", resolver.loadSource(r).characters());
-            assertEquals("value: 2", resolver.loadSource(g).characters());
-            assertEquals("value: 3", resolver.loadSource(o).characters());
+            assertEquals("this.value: 1", resolver.loadSource(r).characters());
+            assertEquals("this.value: 2", resolver.loadSource(g).characters());
+            assertEquals("this.value: 3", resolver.loadSource(o).characters());
         }
     }
 
@@ -178,31 +178,31 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
             assertThrows(
                     IOException.class,
                     () -> resolver.resolve(
-                            "self:Local", Optional.of(new ProtosModuleKey("std:collections/Array"))));
+                            "self:Local", Optional.of(ProtosModuleKey.module("std:collections/array"))));
             assertThrows(
                     IOException.class,
                     () -> resolver.resolve(
                             "self:Local",
-                            Optional.of(ProtosWorkspacePackageModuleKey.encode("outside", "Main"))));
+                            Optional.of(ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "outside", "Main"))));
             assertThrows(
                     IOException.class,
                     () -> resolver.resolve(
                             "self:Internal/Helper",
                             Optional.of(ProtosExternalPackageModuleKey.encode(
-                                    registry("unknown", "1.0.0", A_HEX), "Main"))));
+                                    ProtosModuleKey.Kind.MODULE, registry("unknown", "1.0.0", A_HEX), "Main"))));
             ProtosModuleKey wrongContent =
                     ProtosExternalPackageModuleKey.encode(
-                            registry("pkg", "1.0.0", D_HEX), "Internal/Thing");
+                            ProtosModuleKey.Kind.MODULE, registry("pkg", "1.0.0", D_HEX), "Internal/Thing");
             assertThrows(
                     IOException.class,
                     () -> resolver.resolve("self:Internal/Helper", Optional.of(wrongContent)));
             assertThrows(IOException.class, () -> resolver.loadSource(wrongContent));
             assertThrows(
                     IOException.class,
-                    () -> resolver.loadSource(new ProtosModuleKey("pkg-external:v1:registry:bad")));
+                    () -> resolver.loadSource(ProtosModuleKey.source("pkg-external:v1:registry:bad")));
             assertThrows(
                     IOException.class,
-                    () -> resolver.loadSource(new ProtosModuleKey("file:///tmp/Main.protos")));
+                    () -> resolver.loadSource(ProtosModuleKey.source("file:///tmp/Main.protos")));
         }
     }
 
@@ -212,19 +212,19 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
     void externalSourceIsLoadedLazilyFromCapturedCustodyWithoutPhysicalPath() throws Exception {
         try (Graph graph = new Graph()) {
             Files.writeString(
-                    graph.aSource.resolve("Internal/Thing.protos"), "value: 999",
+                    graph.aSource.resolve("Internal/Thing/module.protos"), "this.value: 999",
                     StandardCharsets.UTF_8);
-            Files.delete(graph.aSource.resolve("Internal/Helper.protos"));
+            Files.delete(graph.aSource.resolve("Internal/Helper/module.protos"));
 
             ProtosModuleKey nested =
-                    ProtosExternalPackageModuleKey.encode(graph.aIdentity, "Internal/Helper");
+                    ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, graph.aIdentity, "Internal/Helper");
             ProtosModuleSource source = graph.resolver.loadSource(nested);
             assertEquals(nested, source.key());
-            assertEquals("value: 11", source.characters());
+            assertEquals("this.value: 11", source.characters());
             assertTrue(source.physicalPath().isEmpty());
 
-            ProtosModuleKey top = ProtosExternalPackageModuleKey.encode(graph.cIdentity, "Api");
-            assertEquals("value: 33", graph.resolver.loadSource(top).characters());
+            ProtosModuleKey top = ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, graph.cIdentity, "Api");
+            assertEquals("this.value: 33", graph.resolver.loadSource(top).characters());
         }
     }
 
@@ -232,7 +232,7 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
     void missingDirectoryAndMalformedExternalSourcesFailClosed() throws Exception {
         try (Graph graph = new Graph()) {
             for (String module : List.of("Missing", "Dir", "Bad")) {
-                ProtosModuleKey key = ProtosExternalPackageModuleKey.encode(graph.aIdentity, module);
+                ProtosModuleKey key = ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, graph.aIdentity, module);
                 assertThrows(IOException.class, () -> graph.resolver.loadSource(key), module);
             }
         }
@@ -241,15 +241,15 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
     @Test
     void externalLoadingFailsAfterTheOwningScopeClosesAndResolverNeverClosesIt() throws Exception {
         try (Graph graph = new Graph()) {
-            ProtosModuleKey key = ProtosExternalPackageModuleKey.encode(graph.cIdentity, "Api");
-            assertEquals("value: 33", graph.resolver.loadSource(key).characters());
+            ProtosModuleKey key = ProtosExternalPackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, graph.cIdentity, "Api");
+            assertEquals("this.value: 33", graph.resolver.loadSource(key).characters());
             assertTrue(graph.scope.contains(graph.cIdentity));
 
             graph.scope.close();
             assertThrows(IOException.class, () -> graph.resolver.loadSource(key));
             assertEquals(
-                    "value: 7",
-                    graph.resolver.loadSource(ProtosWorkspacePackageModuleKey.encode(ROOT, "Local"))
+                    "this.value: 7",
+                    graph.resolver.loadSource(ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, ROOT, "Local"))
                             .characters());
         }
     }
@@ -257,19 +257,19 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
     @Test
     void workspaceSourceKeepsPhysicalWorkspaceRules() throws Exception {
         try (Graph graph = new Graph()) {
-            ProtosModuleKey local = ProtosWorkspacePackageModuleKey.encode(ROOT, "Local");
+            ProtosModuleKey local = ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, ROOT, "Local");
             ProtosModuleSource source = graph.resolver.loadSource(local);
             assertEquals(local, source.key());
-            assertEquals("value: 7", source.characters());
+            assertEquals("this.value: 7", source.characters());
             assertEquals(
-                    graph.project.toRealPath().resolve("Local.protos"),
+                    graph.project.toRealPath().resolve("Local/module.protos"),
                     source.physicalPath().orElseThrow());
             assertThrows(IOException.class, () -> graph.resolver.entryModule("Missing"));
             assertThrows(IOException.class, () -> graph.resolver.entryModule("local"));
             assertThrows(
                     IOException.class,
                     () -> graph.resolver.loadSource(
-                            ProtosWorkspacePackageModuleKey.encode(ROOT, "Missing")));
+                            ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, ROOT, "Missing")));
         }
     }
 
@@ -277,31 +277,31 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
 
     @Test
     void standardLibraryResolutionAndLoadingDelegateAndForeignKeysAreRejected() throws Exception {
-        ProtosModuleKey std = new ProtosModuleKey("std:collections/Array");
+        ProtosModuleKey std = ProtosModuleKey.module("std:collections/array");
         ProtosModuleResolver standard =
                 new ProtosModuleResolver() {
                     @Override
                     public ProtosModuleKey resolve(
                             String exactSpecifier, Optional<ProtosModuleKey> importingModule) {
                         return exactSpecifier.equals("std:foreign")
-                                ? new ProtosModuleKey("pkg-workspace:v1:foreign")
+                                ? ProtosModuleKey.source("pkg-workspace:v1:foreign")
                                 : std;
                     }
 
                     @Override
                     public ProtosModuleSource loadSource(ProtosModuleKey key) {
-                        return ProtosModuleSource.fromCharacters(key, "value: 5");
+                        return ProtosModuleSource.fromCharacters(key, "this.value: 5");
                     }
                 };
-        Path project = workspace(Map.of("Main.protos", "value: 0"));
+        Path project = workspace(Map.of("Main/module.protos", "this.value: 0"));
         ProtosPackageExecutionPlanV2 plan = plan(List.of(), List.of());
         try (ProtosExternalPackageResourceScope scope =
                 ProtosExternalPackageResourceScope.reconcile(plan, List.of())) {
             ProtosPackageExecutionPlanV2ModuleResolver resolver =
                     new ProtosPackageExecutionPlanV2ModuleResolver(project, plan, scope, standard);
             Optional<ProtosModuleKey> entry = Optional.of(resolver.entryModule("Main"));
-            assertEquals(std, resolver.resolve("std:collections/Array", entry));
-            assertEquals("value: 5", resolver.loadSource(std).characters());
+            assertEquals(std, resolver.resolve("std:collections/array", entry));
+            assertEquals("this.value: 5", resolver.loadSource(std).characters());
             assertThrows(IOException.class, () -> resolver.resolve("std:foreign", entry));
         }
     }
@@ -326,43 +326,44 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
             project =
                     workspace(
                             Map.of(
-                                    "Main.protos",
+                                    "Main/module.protos",
                                     String.join(
                                             "\n",
                                             "L: import(\"self:Local\")",
                                             "A: import(\"dep:a/Public\")",
                                             "B: import(\"dep:b/Public\")",
-                                            "local: L.value",
-                                            "a: A.value",
-                                            "aDep: A.depValue",
-                                            "b: B.value",
+                                            "this.local: L.value",
+                                            "this.a: A.value",
+                                            "this.aDep: A.depValue",
+                                            "this.b: B.value",
                                             ""),
-                                    "Local.protos",
-                                    "value: 7"));
+                                    "Local/module.protos",
+                                    "this.value: 7"));
             ProtosCapturedFilesystemCustody a =
                     capture(
                             "a",
                             Map.of(
-                                    "Internal/Thing.protos",
+                                    "Internal/Thing/module.protos",
                                     String.join(
                                             "\n",
                                             "H: import(\"self:Internal/Helper\")",
                                             "D: import(\"dep:helper/Api\")",
-                                            "value: H.value",
-                                            "depValue: D.value",
+                                            "this.value: H.value",
+                                            "this.depValue: D.value",
                                             ""),
-                                    "Internal/Helper.protos",
-                                    "value: 11"),
+                                    "Internal/Helper/module.protos",
+                                    "this.value: 11"),
                             source -> {
-                                Files.createDirectories(source.resolve("Dir.protos"));
+                                Files.createDirectories(source.resolve("Dir/module.protos"));
+                                Files.createDirectories(source.resolve("Bad"));
                                 Files.write(
-                                        source.resolve("Bad.protos"),
+                                        source.resolve("Bad/module.protos"),
                                         new byte[] {'v', (byte) 0xc3, (byte) 0x28});
                             });
             aSource = temporaryRoot.resolve("a");
             ProtosCapturedFilesystemCustody b =
-                    capture("b", Map.of("Internal/Thing.protos", "value: 22"));
-            ProtosCapturedFilesystemCustody c = capture("c", Map.of("Api.protos", "value: 33"));
+                    capture("b", Map.of("Internal/Thing/module.protos", "this.value: 22"));
+            ProtosCapturedFilesystemCustody c = capture("c", Map.of("Api/module.protos", "this.value: 33"));
 
             ProtosPackageExecutionPlanV2.ExternalPackage aNode =
                     registryNode(

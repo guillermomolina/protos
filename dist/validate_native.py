@@ -1750,7 +1750,7 @@ def validate(archive: Path) -> None:
 
         source = external_source_dir / "unicode-resource-proof.protos"
         source.write_text(
-            'Arrays: import("std:collections/Array")\n'
+            'Arrays: import("std:collections/array")\n'
             'print("DIST005 unicode áéí π 😀")\n',
             encoding="utf-8",
         )

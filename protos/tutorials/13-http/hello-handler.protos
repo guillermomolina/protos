@@ -16,7 +16,7 @@
 //! The handler module of `03-host-and-client-over-tcp.protos`. It is not a
 //! lesson on its own: the embedding host installs it as `app:hello`.
 //!
-//! `std:http/Host` never receives a Closure. Each Worker Actor imports its own
+//! `std:http/host` never receives a Closure. Each Worker Actor imports its own
 //! instance of this module by name and calls its `handle` binding, so nothing
 //! mutable is shared between Workers.
 

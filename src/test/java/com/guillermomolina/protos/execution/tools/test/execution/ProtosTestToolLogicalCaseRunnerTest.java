@@ -63,7 +63,7 @@ final class ProtosTestToolLogicalCaseRunnerTest {
                                 resolver);
 
         ProtosActivation activation =
-                prelude.newModuleActivation();
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         ArrayList<String> admissions =
                 new ArrayList<>();
@@ -106,9 +106,9 @@ final class ProtosTestToolLogicalCaseRunnerTest {
 
         String source =
                 """
-                Discovery: import("self:Discovery")
-                Runner: import("self:LogicalCaseRunner")
-                TestValue: import("std:test/Test")
+                Discovery: import("./Discovery.protos")
+                Runner: import("./LogicalCaseRunner.protos")
+                TestValue: import("std:test/test")
 
                 suite: {
                     tests: Array(
@@ -246,7 +246,7 @@ final class ProtosTestToolLogicalCaseRunnerTest {
                                 resolver);
 
         ProtosActivation activation =
-                prelude.newModuleActivation();
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         Map<String, ProtosFutureValue> pending =
                 new LinkedHashMap<>();
@@ -319,9 +319,9 @@ final class ProtosTestToolLogicalCaseRunnerTest {
 
         String source =
                 """
-                Discovery: import("self:Discovery")
-                Runner: import("self:LogicalCaseRunner")
-                TestValue: import("std:test/Test")
+                Discovery: import("./Discovery.protos")
+                Runner: import("./LogicalCaseRunner.protos")
+                TestValue: import("std:test/test")
 
                 suite: {
                     tests: Array(
@@ -421,7 +421,7 @@ final class ProtosTestToolLogicalCaseRunnerTest {
                                 resolver);
 
         ProtosActivation activation =
-                prelude.newModuleActivation();
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         ArrayList<String> admissions =
                 new ArrayList<>();
@@ -475,9 +475,9 @@ final class ProtosTestToolLogicalCaseRunnerTest {
 
         String source =
                 """
-                Discovery: import("self:Discovery")
-                Runner: import("self:LogicalCaseRunner")
-                TestValue: import("std:test/Test")
+                Discovery: import("./Discovery.protos")
+                Runner: import("./LogicalCaseRunner.protos")
+                TestValue: import("std:test/test")
 
                 suiteA: {
                     tests: Array(

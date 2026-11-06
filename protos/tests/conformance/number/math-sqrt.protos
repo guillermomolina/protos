@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-// D198 (I090-C): the public std:math/Math surface and sqrt results. A helper
+// D198 (I090-C): the public std:math/math surface and sqrt results. A helper
 // compares Float coordinates by identity, so signed zeros and NaN are exact.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Math: import("std:math/Math")
-IntegerMath: import("std:math/Integer")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Math: import("std:math/math")
+IntegerMath: import("std:math/integer")
 
 nan: 0.0 / 0.0
 inf: 1.0 / 0.0
@@ -33,7 +33,7 @@ tests: [
     Test("module surface", () => {
         Assertions.require(Math.hasSlot("sqrt"))
         Assertions.require(!Math.hasSlot("_mathSqrtFacility"))
-        Assertions.require(Math === import("std:math/Math"))
+        Assertions.require(Math === import("std:math/math"))
         Assertions.require(!Number.hasSlot("sqrt"))
         Assertions.require(!Complex.hasSlot("sqrt"))
     }),

@@ -147,7 +147,7 @@ final class ProtosActorTerminationTest {
         ManualExecutor carriers = new ManualExecutor();
         ProtosActorScheduler scheduler = new ProtosActorScheduler(carriers, 1);
         ProtosActor actor = new ProtosActor(x.actorRefPrototype);
-        actor.bindMessageEnvironmentForRuntime(x.prelude, new ProtosModuleKey("tasks"));
+        actor.bindMessageEnvironmentForRuntime(x.prelude, ProtosModuleKey.source("tasks"));
         actor.completeInitialization(behavior());
         scheduler.attach(actor);
         Dependency wait = new Dependency();
@@ -205,7 +205,7 @@ final class ProtosActorTerminationTest {
         Fixture x = fixture();
         ProtosActor target = new ProtosActor(
                 x.actorRefPrototype, new ProtosActorExecutionDomain(), new ProtosActorModuleState(), 1);
-        target.bindMessageEnvironmentForRuntime(x.prelude, new ProtosModuleKey("target"));
+        target.bindMessageEnvironmentForRuntime(x.prelude, ProtosModuleKey.source("target"));
         target.completeInitialization(behavior());
         ProtosFutureValue request = x.request(target, "echo", new ProtosStringValue("kept"));
         assertEquals(1, target.mailboxForRuntime().size());
@@ -227,7 +227,7 @@ final class ProtosActorTerminationTest {
     private static Fixture fixture() throws Exception {
         ProtosModuleResolver resolver = new ProtosModuleResolver() {
             @Override public ProtosModuleKey resolve(String exact, Optional<ProtosModuleKey> importing) {
-                return new ProtosModuleKey("canonical:" + exact);
+                return ProtosModuleKey.source("canonical:" + exact);
             }
             @Override public ProtosModuleSource loadSource(ProtosModuleKey key) {
                 return ProtosModuleSource.fromCharacters(key, "boot: () => {\n    {}\n}");
@@ -250,7 +250,7 @@ final class ProtosActorTerminationTest {
                 new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze());
         creator.markReady();
         ProtosActivation activation = prelude.newModuleActivation(
-                creator.moduleState(), new ProtosModuleKey("creator"),
+                creator.moduleState(), ProtosModuleKey.source("creator"),
                 prelude.newExecutionContext(), creator.executionDomain());
         ProtosActorRefValue seed = assertInstanceOf(ProtosActorRefValue.class,
                 ProtosInvocation.invokeMessage(actorObject, "spawn",
@@ -273,7 +273,7 @@ final class ProtosActorTerminationTest {
         ProtosActor readyTarget(int capacity, ProtosObjectValue behavior) {
             ProtosActor actor = new ProtosActor(actorRefPrototype,
                     new ProtosActorExecutionDomain(), new ProtosActorModuleState(), capacity);
-            actor.bindMessageEnvironmentForRuntime(prelude, new ProtosModuleKey("target"));
+            actor.bindMessageEnvironmentForRuntime(prelude, ProtosModuleKey.source("target"));
             actor.completeInitialization(behavior);
             new ProtosActorScheduler(new ManualExecutor(), 1).attach(actor);
             return actor;

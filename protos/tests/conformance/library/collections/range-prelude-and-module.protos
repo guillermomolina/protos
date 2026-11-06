@@ -14,13 +14,13 @@
 // the specific language governing rights and limitations under the License.
 
 // D235-B1-F: Range and InvertedRange are frozen Core Prelude prototypes, and
-// std:collections/Range is a compatibility module exporting the same objects.
+// std:collections/range is a compatibility module exporting the same objects.
 // D236-B1 / D239-C1: each prototype owns an ordinary construct that
 // normalizes direction; Range(a, b) reaches it through the inherited
 // standard Object.call.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: Array(
     Test("range prelude bindings need no import", () => {
@@ -86,7 +86,7 @@ tests: Array(
         Assertions.require(Range(0, 1).parent() === canonical)
     }),
     Test("range module exports the exact prelude identities", () => {
-        Ranges: import("std:collections/Range")
+        Ranges: import("std:collections/range")
 
         names: Ranges.slotNames()
         Assertions.require((names.size() == 2) &&
@@ -95,7 +95,7 @@ tests: Array(
         Assertions.require(Range === Ranges.Range)
         Assertions.require(InvertedRange === Ranges.InvertedRange)
 
-        again: import("std:collections/Range")
+        again: import("std:collections/range")
         Assertions.require(again === Ranges)
         Assertions.require(again.Range === Range)
 
@@ -108,13 +108,13 @@ tests: Array(
         Assertions.require(Ranges.slotNames().size() == 2)
     }),
     Test("range module member rebinding leaves the canonical prototype", () => {
-        Ranges: import("std:collections/Range")
+        Ranges: import("std:collections/range")
         canonical: Range
 
         (() => {
             Ranges.Range = 7
             Assertions.require(Ranges.Range == 7)
-            Assertions.require(import("std:collections/Range").Range == 7)
+            Assertions.require(import("std:collections/range").Range == 7)
             Assertions.require(Range === canonical)
             Assertions.require(InvertedRange === Ranges.InvertedRange)
             Assertions.require(Range(0, 2).parent() === canonical)

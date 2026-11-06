@@ -20,8 +20,8 @@
 // The standalone CLI does not provide these grants.
 // This is a manual example; automated tests must use local fixtures.
 
-UrlClient: import("std:http/UrlClient").UrlClient
-Trust: import("std:tls/Client").Trust
+UrlClient: import("std:http/url_client").UrlClient
+Trust: import("std:tls/client").Trust
 
 trust: Trust.javaCacerts()
 

@@ -45,7 +45,7 @@ final class ProtosCommandLineSpecModuleTest {
 
         Object imported =
                 ProtosTestExecutionSupport.evaluate(
-                        "import(\"std:cli/CommandLine\")",
+                        "import(\"std:cli/command_line\")",
                         prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
@@ -57,7 +57,7 @@ final class ProtosCommandLineSpecModuleTest {
         Object result =
                 evaluate(
                         """
-                        CommandLine: import("std:cli/CommandLine")
+                        CommandLine: import("std:cli/command_line")
 
                         optionDescriptor: {
                             key: "jobs"
@@ -129,7 +129,7 @@ final class ProtosCommandLineSpecModuleTest {
                         ProtosObjectValue.class,
                         evaluate(
                                 """
-                                CommandLine: import("std:cli/CommandLine")
+                                CommandLine: import("std:cli/command_line")
                                 CommandLine.option(
                                     key: "verbose",
                                     long: "verbose",
@@ -163,7 +163,7 @@ final class ProtosCommandLineSpecModuleTest {
                         ProtosObjectValue.class,
                         evaluate(
                                 """
-                                CommandLine: import("std:cli/CommandLine")
+                                CommandLine: import("std:cli/command_line")
                                 CommandLine.positional(
                                     key: "target",
                                     minOccurrences: 0,
@@ -184,7 +184,7 @@ final class ProtosCommandLineSpecModuleTest {
         Object result =
                 evaluate(
                         """
-                        CommandLine: import("std:cli/CommandLine")
+                        CommandLine: import("std:cli/command_line")
 
                         jobs: {
                             key: "jobs"
@@ -279,7 +279,7 @@ final class ProtosCommandLineSpecModuleTest {
                         ProtosObjectValue.class,
                         evaluate(
                                 """
-                                CommandLine: import("std:cli/CommandLine")
+                                CommandLine: import("std:cli/command_line")
                                 CommandLine.command({
                                     name: "tool"
                                     help: null
@@ -600,7 +600,7 @@ final class ProtosCommandLineSpecModuleTest {
         Object result =
                 evaluate(
                         """
-                        CommandLine: import("std:cli/CommandLine")
+                        CommandLine: import("std:cli/command_line")
 
                         shared: {
                             name: "shared"
@@ -651,7 +651,7 @@ final class ProtosCommandLineSpecModuleTest {
         Object result =
                 evaluate(
                         """
-                        CommandLine: import("std:cli/CommandLine")
+                        CommandLine: import("std:cli/command_line")
 
                         depth: %d
                         current: {
@@ -705,7 +705,7 @@ final class ProtosCommandLineSpecModuleTest {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        String source = "CommandLine: import(\"std:cli/CommandLine\")\n" + body;
+        String source = "CommandLine: import(\"std:cli/command_line\")\n" + body;
         assertThrows(
                 ProtosSignalException.class,
                 () -> ProtosTestExecutionSupport.evaluate(source, prelude.newModuleActivation()),

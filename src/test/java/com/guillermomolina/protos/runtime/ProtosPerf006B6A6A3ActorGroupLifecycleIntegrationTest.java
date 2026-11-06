@@ -33,7 +33,7 @@ final class ProtosPerf006B6A6A3ActorGroupLifecycleIntegrationTest {
                 ProtosActivation caller =
                         prelude.newModuleActivation(
                                 sender.moduleState(),
-                                new ProtosModuleKey("perf006-b6a6a3-sender"),
+                                ProtosModuleKey.source("perf006-b6a6a3-sender"),
                                 prelude.newExecutionContext(),
                                 sender.executionDomain());
 
@@ -139,7 +139,7 @@ final class ProtosPerf006B6A6A3ActorGroupLifecycleIntegrationTest {
 
     private static Target cPrimeTarget(ProtosPrelude prelude, String name) {
         ProtosActor actor = new ProtosActor(actorRefPrototype());
-        ProtosModuleKey key = new ProtosModuleKey("perf006-b6a6a3-" + name);
+        ProtosModuleKey key = ProtosModuleKey.source("perf006-b6a6a3-" + name);
         actor.bindMessageEnvironmentForRuntime(prelude, key);
         ProtosActivation lexical =
                 prelude.newModuleActivation(
@@ -177,7 +177,7 @@ final class ProtosPerf006B6A6A3ActorGroupLifecycleIntegrationTest {
 
     private static ProtosActor readySender(ProtosPrelude prelude) {
         ProtosActor actor = new ProtosActor(actorRefPrototype());
-        ProtosModuleKey key = new ProtosModuleKey("perf006-b6a6a3-sender");
+        ProtosModuleKey key = ProtosModuleKey.source("perf006-b6a6a3-sender");
         actor.bindMessageEnvironmentForRuntime(prelude, key);
         assertTrue(
                 actor.completeInitialization(

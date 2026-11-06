@@ -405,7 +405,7 @@ def shard_text(shard, cases, snapshot, omitted):
     lines.extend([
         "",
         'Harness: import("./%s")' % HARNESS_NAME,
-        'Test: import("std:test/Test")',
+        'Test: import("std:test/test")',
         "",
         "tests: [",
     ])

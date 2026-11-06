@@ -32,9 +32,9 @@
 //! already-discovered authoritative CasePlan. The V1 spelling is frozen;
 //! an incompatible encoding must use another version.
 
-JSON: import("std:json/JSON")
-Arrays: import("std:collections/Array")
-CasePlan: import("self:LogicalCasePlan")
+JSON: import("std:json/json")
+Arrays: import("std:collections/array")
+CasePlan: import("./LogicalCasePlan.protos")
 
 caseRefError: () => {
     Error().signal()

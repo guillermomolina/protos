@@ -28,8 +28,8 @@
 // Temporary contention is intentionally not represented here. That belongs to a
 // later atomic reservation boundary.
 
-Manifest: import("self:Manifest")
-ResourceCatalog: import("self:ResourceCatalog")
+Manifest: import("./Manifest.protos")
+ResourceCatalog: import("./ResourceCatalog.protos")
 
 frozenTuple: (...items) => {
     items

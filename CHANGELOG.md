@@ -7,6 +7,15 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.449-SNAPSHOT
+
+- `I151`: implement D242 MODULE/SOURCE separation across the Protos module system.
+  - Separate public MODULE imports from private SOURCE imports. MODULEs publish explicit members through `module.protos`; SOURCES expose their execution context and use relative file identities.
+  - Preserve lexical SOURCE origin across Closure creation and invocation, including Test Tool execution, canonical caching, cyclic imports and failed-import eviction.
+  - Restructure Standard Library modules using lowercase MODULE paths and explicit exports; migrate dependent libraries, tools, examples, tutorials, documentation and conformance suites.
+  - Update Package Tool execution, Test Tool corpus routing and Java integration harnesses for exact SOURCE entrances without restoring obsolete public import routes.
+  - Validate the complete Protos and Java test suites, portable distribution, foreign-provider tests and repository checks.
+
 ## 0.3.448-SNAPSHOT
 
 - `I148`: adopt D241-B source-backed `Filesystem.open` and `Network.listenTcp`.

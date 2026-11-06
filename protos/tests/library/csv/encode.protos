@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("encode canonical", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             Assertions.require(CSV.encode(Array()) == "")
             Assertions.require(CSV.encode(Array(Array("a", "b"))) == "a,b\r\n")
@@ -46,7 +46,7 @@ tests: [
     }),
     Test("encode invalid", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             Assertions.signals(Error, () => { CSV.encode() })
             Assertions.signals(Error, () => { CSV.encode("a") })
@@ -64,7 +64,7 @@ tests: [
     }),
     Test("encode roundtrip", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             sameTable: (left, right) => {
                 same: left.size() == right.size()

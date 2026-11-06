@@ -13,10 +13,10 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Syntax: import("self:LockSyntax")
-Version: import("self:ReleaseVersion")
-Arrays: import("std:collections/Array")
-SHA256: import("std:crypto/SHA256")
+Syntax: import("./LockSyntax.protos")
+Version: import("./ReleaseVersion.protos")
+Arrays: import("std:collections/array")
+SHA256: import("std:crypto/sha256")
 
 nonEmptyString: (text) => {
     encoded: Encoding.UTF8.encode(text)

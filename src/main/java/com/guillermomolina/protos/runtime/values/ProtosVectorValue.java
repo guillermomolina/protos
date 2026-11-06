@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * A Standard Library {@code std:math/LinearAlgebra} Vector (D214 C1/S1, LIB024).
+ * A Standard Library {@code std:math/linear_algebra} Vector (D214 C1/S1, LIB024).
  *
  * <p>An ordinary Protos object whose dense, fixed-length numeric payload is private R1 storage of
  * element references: it is not a slot, so reflection and slot copying never see it. Every

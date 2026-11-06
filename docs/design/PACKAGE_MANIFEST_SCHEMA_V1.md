@@ -584,7 +584,7 @@ No other schema-v1 field accepts Integer.
 
 The parser applies TOML 1.0 integer syntax. Schema v1 accepts only the exact
 value `1`, so schema validation rejects every other Integer, including any value
-outside the TOML signed-64-bit range; the shared `std:toml/TOML` parser itself
+outside the TOML signed-64-bit range; the shared `std:toml/toml` parser itself
 represents Integers with ordinary Protos Integer semantics (I079).
 
 ## Unsupported TOML value families

@@ -15,8 +15,8 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 // I079: one parser, two explicitly selected TOML specification versions. Each Test
 // runs the same input through TOML 1.1 (`parse` and `parseDialect(..., "1.1")`) and
@@ -24,7 +24,7 @@ Test: import("std:test/Test")
 
 tests: [
     Test("TOML 1.1 accepts and TOML 1.0 rejects the \\e escape", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = \"a\\eb\"\n"
 
@@ -37,7 +37,7 @@ tests: [
         })
     }),
     Test("TOML 1.1 accepts and TOML 1.0 rejects hexadecimal byte escapes", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = \"\\x41\"\n"
 
@@ -48,7 +48,7 @@ tests: [
         })
     }),
     Test("TOML 1.0 rejects TOML 1.1 escapes in quoted keys and multiline strings", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         keyInput: "\"k\\x41\" = 1\n"
         multilineInput: "x = \"\"\"a\\e\"\"\"\n"
@@ -63,14 +63,14 @@ tests: [
         })
     }),
     Test("TOML 1.0 keeps the TOML 1.0 escapes", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = \"\\b\\t\\n\\f\\r\\\"\\\\\\u0041\\U00000042\"\n"
 
         Assertions.require(TOML.parseDialect(input, "1.0").value["x"].value.size() == 9)
     }),
     Test("TOML 1.1 accepts and TOML 1.0 rejects multiline inline tables", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = {\n  a = 1,\n  b = 2\n}\n"
 
@@ -83,7 +83,7 @@ tests: [
         })
     }),
     Test("TOML 1.1 accepts and TOML 1.0 rejects comments inside inline tables", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = { a = 1, # note\n b = 2 }\n"
 
@@ -93,7 +93,7 @@ tests: [
         })
     }),
     Test("TOML 1.1 accepts and TOML 1.0 rejects inline-table trailing commas", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = { a = 1, }\n"
 
@@ -106,7 +106,7 @@ tests: [
         })
     }),
     Test("TOML 1.0 accepts single-line inline tables with multiline nested values", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = { a = 1, b = [\n  2,\n  3,\n], c = {}, d = \"\"\"\nm\"\"\" }\n"
 
@@ -118,7 +118,7 @@ tests: [
         Assertions.require(root.value["x"].value["d"].value == "m")
     }),
     Test("TOML 1.1 accepts and TOML 1.0 rejects omitted temporal seconds", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         inputs: [
             "t = 07:32\n",
@@ -139,7 +139,7 @@ tests: [
         null
     }),
     Test("TOML 1.0 accepts temporal values with seconds", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         root: TOML.parseDialect(
             "a = 07:32:10\n" +
@@ -156,14 +156,14 @@ tests: [
         Assertions.require(root.value["d"].kind === "localDate")
     }),
     Test("TOML 1.0 integers are not limited to signed 64 bits", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         root: TOML.parseDialect("x = 9223372036854775808\n", "1.0")
 
         Assertions.require(root.value["x"].value == 9223372036854775808)
     }),
     Test("parseDialect rejects unknown TOML versions", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.parseDialect("x = 1\n", "1.2")

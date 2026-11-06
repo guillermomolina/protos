@@ -1,12 +1,12 @@
-# Command-line specifications: `std:cli/CommandLine`
+# Command-line specifications: `std:cli/command_line`
 
-`std:cli/CommandLine` builds inert, frozen command-line specifications, parses
+`std:cli/command_line` builds inert, frozen command-line specifications, parses
 an argument Array against them, and renders help text. It reads no process
 state: you pass the arguments yourself. The exact contract is the doc comment
-of [`CommandLine.protos`](../../../protos/lib/cli/CommandLine.protos).
+of [`CommandLine.protos`](../../../protos/lib/cli/command_line/module.protos).
 
 ```protos
-CommandLine: import("std:cli/CommandLine")
+CommandLine: import("std:cli/command_line")
 ```
 
 The module publishes exactly `option`, `positional`, `command`, `parse`, and

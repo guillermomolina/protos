@@ -140,7 +140,7 @@ final class ProtosCli008C1GuestStackCliTest {
                         InputStream.nullInputStream(),
                         "-e",
                         """
-                        Arrays: import("std:collections/Array")
+                        Arrays: import("std:collections/array")
 
                         print(Arrays.findIndex([1, 2, 3], (value) => {
                             value == 2

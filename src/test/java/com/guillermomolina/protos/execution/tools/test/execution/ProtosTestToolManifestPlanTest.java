@@ -95,7 +95,7 @@ final class ProtosTestToolManifestPlanTest {
             throws Exception {
         Fixture fixture = fixture();
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
                         + "Manifest.parseLine("
                         + "\"integer/add-small.protos\\tinteger\\t2\")";
 
@@ -125,7 +125,7 @@ final class ProtosTestToolManifestPlanTest {
             throws Exception {
         Fixture fixture = fixture();
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
                         + "case: Manifest.parseLine("
                         + "\"integer/add-small.protos\\tinteger\\t2\")\n"
                         + "(Manifest.caseId(case) == \"integer/add-small.protos\") &&\n"
@@ -144,7 +144,7 @@ final class ProtosTestToolManifestPlanTest {
             throws Exception {
         Fixture fixture = fixture();
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
                         + "first: Manifest.caseSpec(Array(\"i1/first.protos\", \"integer\", \"1\"))\n"
                         + "second: Manifest.caseSpec(Array(\"i1/second.protos\", \"integer\", \"2\"))\n"
                         + "Array(Manifest.caseRequirements(first), "
@@ -177,7 +177,7 @@ final class ProtosTestToolManifestPlanTest {
             throws Exception {
         Fixture fixture = fixture();
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
                         + "shared: Manifest.requirement(\"gpu\", \"shared\", 2)\n"
                         + "exclusive: Manifest.requirement(\"db/integration\", \"exclusive\", null)\n"
                         + "Array(shared, exclusive, "
@@ -243,7 +243,7 @@ final class ProtosTestToolManifestPlanTest {
             throws Exception {
         Fixture fixture = fixture();
         String validSource =
-                "Manifest: import(\"self:Manifest\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
                         + "Array("
                         + "Manifest.requirement(\"gpu\", \"shared\", 1), "
                         + "Manifest.requirement(\"db/integration\", \"shared\", 1), "
@@ -273,7 +273,7 @@ final class ProtosTestToolManifestPlanTest {
         for (String invalidKey : invalidKeys) {
             Fixture invalidFixture = fixture();
             String source =
-                    "Manifest: import(\"self:Manifest\")\n"
+                    "Manifest: import(\"./Manifest.protos\")\n"
                             + "Manifest.requirement(\""
                             + invalidKey
                             + "\", \"shared\", 1)";
@@ -293,7 +293,7 @@ invalidFixture.activation());
             throws Exception {
         Fixture fixture = fixture();
         String validSource =
-                "Manifest: import(\"self:Manifest\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
                         + "Array("
                         + "Manifest.requirement(\"gpu\", \"shared\", 1), "
                         + "Manifest.requirement(\"db/integration\", \"shared\", "
@@ -324,9 +324,9 @@ invalidFixture.activation());
             Fixture invalidFixture =
                     new Fixture(
                             fixture.prelude(),
-                            fixture.prelude().newModuleActivation());
+                            com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(fixture.prelude(), "test"));
             String source =
-                    "Manifest: import(\"self:Manifest\")\n"
+                    "Manifest: import(\"./Manifest.protos\")\n"
                             + "Manifest.requirement("
                             + invalidArgumentsValue
                             + ")";
@@ -348,7 +348,7 @@ invalidFixture.activation());
             throws Exception {
         Fixture fixture = fixture();
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
                         + "base: Manifest.caseSpec(Array(\"i5/resourceful.protos\", \"integer\", \"7\"))\n"
                         + "attached: Manifest.caseSpecWithRequirements(base, Array("
                         + "Array(\"gpu\", \"shared\", 2), "
@@ -429,7 +429,7 @@ invalidFixture.activation());
             throws Exception {
         Fixture controlFixture = fixture();
         String controlSource =
-                "Manifest: import(\"self:Manifest\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
                         + "base: Manifest.caseSpec(Array(\"i5/control.protos\", \"integer\", \"1\"))\n"
                         + "Manifest.caseSpecWithRequirements(base, Array("
                         + "Manifest.requirement(\"gpu\", \"shared\", 1)))";
@@ -453,9 +453,9 @@ controlFixture.activation());
             Fixture fixture =
                     new Fixture(
                             controlFixture.prelude(),
-                            controlFixture.prelude().newModuleActivation());
+                            com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(controlFixture.prelude(), "test"));
             String source =
-                    "Manifest: import(\"self:Manifest\")\n"
+                    "Manifest: import(\"./Manifest.protos\")\n"
                             + "base: Manifest.caseSpec(Array(\"i5/duplicate.protos\", \"integer\", \"1\"))\n"
                             + "Manifest.caseSpecWithRequirements(base, Array("
                             + duplicatePair
@@ -476,7 +476,7 @@ fixture.activation());
             throws Exception {
         Fixture fixture = fixture();
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
                         + "first: Manifest.caseSpec(Array(\"i5/first.protos\", \"integer\", \"1\"))\n"
                         + "second: Manifest.caseSpec(Array(\"i5/second.protos\", \"integer\", \"2\"))\n"
                         + "first = Manifest.caseSpecWithRequirements(first, Array("
@@ -523,7 +523,7 @@ fixture.activation());
             installFilesystem(fixture.prelude(), fixture.activation(), backend);
 
             Object result =
-                    completed("Manifest: import(\"self:Manifest\")\n"
+                    completed("Manifest: import(\"./Manifest.protos\")\n"
                                                     + "Manifest.planCases("
                                                     + "Manifest.load(filesystem)).size()", fixture.activation());
 
@@ -613,7 +613,7 @@ fixture.activation());
 
             Object result =
                     completed(
-                            "Manifest: import(\"self:Manifest\")\n"
+                            "Manifest: import(\"./Manifest.protos\")\n"
                                     + "Manifest.planCases("
                                     + "Manifest.load(filesystem)).size()",
                             fixture.activation());
@@ -701,7 +701,7 @@ fixture.activation());
                     assertInstanceOf(
                             ProtosArrayValue.class,
                             completed(
-                                    "Manifest: import(\"self:Manifest\")\n"
+                                    "Manifest: import(\"./Manifest.protos\")\n"
                                             + "cases: Manifest.planCases("
                                             + "Manifest.loadCaseOutcomes(filesystem, \"ns\"))\n"
                                             + "Array("
@@ -767,7 +767,7 @@ fixture.activation());
 
                 ProtosExecutionOutcome outcome =
                         com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
-                                "Manifest: import(\"self:Manifest\")\n"
+                                "Manifest: import(\"./Manifest.protos\")\n"
                                         + "Manifest.loadCaseOutcomes(filesystem, \"ns\")",
                                 fixture.activation());
                 assertEquals(
@@ -786,7 +786,7 @@ fixture.activation());
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(
-                                "Manifest: import(\"self:Manifest\")\n"
+                                "Manifest: import(\"./Manifest.protos\")\n"
                                         + "base: Manifest.caseSpec(Array(\"sample.protos\", \"boolean\", \"true\"))\n"
                                         + "descriptor: Manifest.projectTreeAuthorityDescriptor(\"workspace\")\n"
                                         + "spec: Manifest.caseSpecWithAuthorityDescriptor(base, descriptor)\n"
@@ -832,7 +832,7 @@ fixture.activation());
                     assertInstanceOf(
                             ProtosArrayValue.class,
                             completed(
-                                    "Manifest: import(\"self:Manifest\")\n"
+                                    "Manifest: import(\"./Manifest.protos\")\n"
                                             + "cases: Manifest.planCases("
                                             + "Manifest.loadProjectTreeCases(filesystem, \"ns\"))\n"
                                             + "firstAuthority: Manifest.caseAuthorityDescriptor(cases[0])\n"
@@ -873,7 +873,7 @@ fixture.activation());
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(
-                                "Manifest: import(\"self:Manifest\")\n"
+                                "Manifest: import(\"./Manifest.protos\")\n"
                                         + "base: Manifest.caseSpec(Array(\"sample.protos\", \"boolean\", \"true\"))\n"
                                         + "authoritySpec: Manifest.caseSpecWithAuthorityDescriptor("
                                         + "base, Manifest.projectTreeAuthorityDescriptor(\"workspace\"))\n"
@@ -922,7 +922,7 @@ fixture.activation());
                         assertInstanceOf(
                                 ProtosArrayValue.class,
                                 completed(
-                                        "Manifest: import(\"self:Manifest\")\n"
+                                        "Manifest: import(\"./Manifest.protos\")\n"
                                                 + "cases: Manifest.planCases("
                                                 + "Manifest.loadProjectTreeCases(filesystem, \""
                                                 + namespaces[index]
@@ -955,7 +955,7 @@ fixture.activation());
         Fixture fixture = fixture();
         ProtosExecutionOutcome outcome =
                 com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
-                        "Manifest: import(\"self:Manifest\")\n"
+                        "Manifest: import(\"./Manifest.protos\")\n"
                                 + "Manifest.parseLine(\"a.protos\\ttrue\")",
                         fixture.activation());
         assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
@@ -981,7 +981,7 @@ fixture.activation());
 
     private static Fixture fixture() {
         ProtosPrelude prelude = SharedPrelude.INSTANCE;
-        return new Fixture(prelude, prelude.newModuleActivation());
+        return new Fixture(prelude, com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 
     private static void installFilesystem(

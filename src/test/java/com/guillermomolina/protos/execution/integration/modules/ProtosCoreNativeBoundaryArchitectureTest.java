@@ -66,7 +66,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/protocols/io/ProtosStandardTcpAcceptorProtocol.java", 1),
                     Map.entry("execution/protocols/io/ProtosStandardTcpListenerProtocol.java", 4),
                     Map.entry("execution/protocols/values/ProtosStandardArrayProtocol.java", 7),
-                    // LIB024 std:math/LinearAlgebra Vector/Matrix protocols through one define helper.
+                    // LIB024 std:math/linear_algebra Vector/Matrix protocols through one define helper.
                     Map.entry("execution/protocols/values/ProtosStandardLinearAlgebraProtocol.java", 1),
                     Map.entry("execution/protocols/io/ProtosStandardEnvironmentProtocol.java", 3),
                     Map.entry("execution/protocols/io/ProtosStandardEncodingProtocol.java", 2),
@@ -105,17 +105,17 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     // I082-D2 adds the projected pull each to call/at/atPut.
                     Map.entry("execution/foreign/api/ProtosForeignProjectedOperations.java", 4),
                     Map.entry("execution/facilities/ProtosLoggingFacility.java", 3),
-                    // I090-C std:math/Math private sqrt facility.
+                    // I090-C std:math/math private sqrt facility.
                     Map.entry("execution/facilities/ProtosMathFacility.java", 1),
                     // LIB022-A std:runtime private runtime-metadata facility.
                     Map.entry("execution/facilities/ProtosRuntimeMetadataFacility.java", 1),
                     // LIB022-B std:inspect private inspection facility.
                     Map.entry("execution/facilities/ProtosInspectFacility.java", 4),
-                    // LIB025 std:http/Server private asynchronous bridge.
+                    // LIB025 std:http/server private asynchronous bridge.
                     Map.entry("execution/facilities/ProtosHttpAsyncFacility.java", 1),
-                    // I130-B std:tls/Client private backend bridge.
+                    // I130-B std:tls/client private backend bridge.
                     Map.entry("execution/facilities/ProtosTlsBackendFacility.java", 1),
-                    // I132-A std:network/Resolvers private host Resolver bridge (D223-A1).
+                    // I132-A std:network/resolvers private host Resolver bridge (D223-A1).
                     Map.entry("execution/facilities/ProtosResolverHostFacility.java", 1),
                     Map.entry("execution/facilities/ProtosRegexUnicodeFacility.java", 3),
                     Map.entry("execution/facilities/ProtosRegexSemanticTransferFamily.java", 3),
@@ -165,13 +165,13 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                             // LIB022-B std:inspect private facility, not Core behavior.
                             || relative.equals(
                                     "execution/facilities/ProtosInspectFacility.java")
-                            // LIB025 std:http/Server private facility, not Core behavior.
+                            // LIB025 std:http/server private facility, not Core behavior.
                             || relative.equals(
                                     "execution/facilities/ProtosHttpAsyncFacility.java")
-                            // I130-B std:tls/Client private facility, not Core behavior.
+                            // I130-B std:tls/client private facility, not Core behavior.
                             || relative.equals(
                                     "execution/facilities/ProtosTlsBackendFacility.java")
-                            // I132-A std:network/Resolvers private host bridge, not Core
+                            // I132-A std:network/resolvers private host bridge, not Core
                             // behavior: it confers no authority and only forwards to the
                             // independently granted Resolver capability.
                             || relative.equals(

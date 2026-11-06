@@ -38,7 +38,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * G2-B (D198, I090-C): every inexact Float coordinate of {@code std:math/Math.sqrt} lies within
+ * G2-B (D198, I090-C): every inexact Float coordinate of {@code std:math/math.sqrt} lies within
  * 4 ULP of the oracle, a zero oracle is matched exactly with its sign, and an infinite oracle is
  * matched exactly.
  *
@@ -66,7 +66,7 @@ final class ProtosMathSqrtAccuracyTest {
                 new ProtosStandardLibraryModuleResolver(Path.of("protos", "lib")));
         caller = prelude.newModuleActivation();
         math = assertInstanceOf(ProtosObjectValue.class,
-                ProtosTestExecutionSupport.evaluate("import(\"std:math/Math\")", caller));
+                ProtosTestExecutionSupport.evaluate("import(\"std:math/math\")", caller));
     }
 
     @Test

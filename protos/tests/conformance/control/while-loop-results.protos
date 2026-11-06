@@ -19,8 +19,8 @@
 // null for zero iterations). D210 retired the former D201 standard `while`
 // selector; `while` remains an ordinary identifier and member name.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 lastBodyOf: (values) => {
     n: 0

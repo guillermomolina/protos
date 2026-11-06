@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("registry-leaf-v2", () => {
-        Plan: import("self:ExecutionPlan")
-        Version: import("self:ReleaseVersion")
+        Plan: import("tool-source:package/ExecutionPlan.protos")
+        Version: import("tool-source:package/ReleaseVersion.protos")
 
         exports: Map()
         exports["Public"] = "internal/Thing"
@@ -78,8 +78,8 @@ tests: [
     }),
     Test("registry-leaf-v2-content-mismatch-error", () => {
         Assertions.signals(Error, () => {
-            Plan: import("self:ExecutionPlan")
-            Version: import("self:ReleaseVersion")
+            Plan: import("tool-source:package/ExecutionPlan.protos")
+            Version: import("tool-source:package/ReleaseVersion.protos")
 
             Plan.buildV2FromVerifiedLeaves(
                 projectTreeFilesystem,

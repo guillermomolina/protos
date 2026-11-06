@@ -13,9 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Version: import("self:ReleaseVersion")
-Constraint: import("self:DependencyConstraint")
-Fresh: import("self:FreshVersionSelection")
+Version: import("./ReleaseVersion.protos")
+Constraint: import("./DependencyConstraint.protos")
+Fresh: import("./FreshVersionSelection.protos")
 
 retainedAvailable: (retained, candidates) => {
     available: false

@@ -194,10 +194,16 @@ Actor-local module instance for that identity through the ordinary module
 loading/cache lifecycle. No creator module instance or module context is
 transferred or shared.
 
-The bootstrap binding name identifies one top-level binding on that destination
-module instance. A top-level module binding is a local slot of that module
-instance, so bootstrap requires that exact name to exist as a local slot there.
-It does not use delegated lookup for bootstrap entry-point selection.
+The bootstrap binding name identifies one exact own slot of that destination
+module instance (`../semantics/MODULES.md`, D242). For a MODULE, the module
+instance is its public module object, so the binding must be a slot the
+initializer published with ordinary slot creation (`this.name: value`); bootstrap
+never searches the MODULE's private initializer bindings when the requested
+public slot is absent. For a SOURCE, the module instance is its complete
+`moduleContext`, so every top-level binding of the source is a candidate.
+Bootstrap does not use delegated lookup for bootstrap entry-point selection.
+Bootstrap-only capabilities provisioned into a module's private initialization
+authority never become public members of a MODULE automatically.
 
 After the module is ready, bootstrap reads that local slot directly and requires
 the resulting value to be ordinarily invokable. A same-named slot inherited from
@@ -2309,8 +2315,10 @@ selection is not revisited for that Process incarnation.
      `../semantics/MODULES.md` (The Initial Module of an Actor), with the
      bootstrap-local capabilities of `../io/PROCESS_IO.md` §22.
   3. After that module initializes successfully, bootstrap selects the binding
-     as a local slot of that module instance exactly as §8 specifies; delegated
-     or inherited slots do not satisfy it.
+     as an exact own slot of that module instance exactly as §8 specifies — the
+     public object of a MODULE or the complete context of a SOURCE; delegated or
+     inherited slots and MODULE private initializer bindings, including the
+     bootstrap-local grants, do not satisfy it.
   4. Bootstrap invokes the binding within the RootActor, using ordinary Protos
      invocation semantics, while the RootActor is `INITIALIZING`.
   5. The normal result must be one ordinary behavior object under §11A. It is

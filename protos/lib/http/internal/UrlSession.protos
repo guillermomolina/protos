@@ -13,19 +13,19 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal service body of std:http/UrlClient (D222-C, HTTP.md §18.4-§18.6).
+//! Internal service body of std:http/url_client (D222-C, HTTP.md §18.4-§18.6).
 //! This module is an unpublished implementation artifact, not an approved
 //! Standard Library API. One admitted request runs in its one service Task:
 //! the explicit Resolver lookup of a host name, the ordered TCP attempts
-//! through the explicit Network, the owning std:tls/Client handshake for
-//! https, the owning std:http/Client exchange, and the buffering of the
+//! through the explicit Network, the owning std:tls/client handshake for
+//! https, the owning std:http/client exchange, and the buffering of the
 //! response inside the exchange callback. It owns no authority beyond the
 //! capabilities it is given and never retries after a TCP connection exists.
 
-MessageSyntax: import("std:http/internal/MessageSyntax")
-IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
-HttpClient: import("std:http/Client").Client
-TlsClient: import("std:tls/Client").Client
+MessageSyntax: import("./MessageSyntax.protos")
+IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
+HttpClient: import("std:http/client").Client
+TlsClient: import("std:tls/client").Client
 
 /// Answers the zero-argument service body of one admitted request, to be run
 /// as its one service Task. prepared is the UrlRequest.prepare snapshot whose

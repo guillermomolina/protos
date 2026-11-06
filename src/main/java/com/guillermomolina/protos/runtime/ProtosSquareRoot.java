@@ -21,7 +21,7 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.math.BigInteger;
 
 /**
- * The principal square root of the Standard Library function {@code std:math/Math.sqrt} (D198,
+ * The principal square root of the Standard Library function {@code std:math/math.sqrt} (D198,
  * I090-C).
  *
  * <p>The argument is read only through its host representation; no guest message is sent. Every

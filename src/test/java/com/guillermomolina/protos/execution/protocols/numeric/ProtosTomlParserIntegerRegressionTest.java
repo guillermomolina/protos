@@ -46,7 +46,7 @@ final class ProtosTomlParserIntegerRegressionTest {
         ProtosActivation activation = prelude.newModuleActivation();
         activation.context().createLocalSlot("input", new ProtosStringValue(input));
         return ProtosTestExecutionSupport.evaluate(
-                "TOML: import(\"std:toml/TOML\")\n" + body,
+                "TOML: import(\"std:toml/toml\")\n" + body,
                 activation);
     }
 }

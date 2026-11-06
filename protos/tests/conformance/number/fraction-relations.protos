@@ -17,8 +17,8 @@
 // Fraction and binary64 Float; family-sensitive identity; coherent hashes;
 // trusted Fraction authenticity.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("exact equality with float", () => {

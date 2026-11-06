@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
@@ -324,7 +325,17 @@ abstract class ProtosPackageToolProtosTestSupport {
             Path source,
             ProtosActivation activation)
             throws Exception {
-        return execute(Files.readString(source, StandardCharsets.UTF_8), activation);
+        // D242: these fixtures exercise private package-tool SOURCE helpers. Resolve
+        // ./Helper.protos under the package tool root, but preserve every host grant
+        // already installed on the fixture's original execution Context.
+        ProtosActivation sourceActivation =
+                activation.prelude().orElseThrow().newModuleActivation(
+                        activation.actorModuleState(),
+                        ProtosBundledToolModuleResolver.toolSourceKey(
+                                "package", "I151ToolHarness"),
+                        activation.context(),
+                        activation.executionDomain());
+        return execute(Files.readString(source, StandardCharsets.UTF_8), sourceActivation);
     }
 
     protected static void assertIoErrorOutcome(
@@ -365,8 +376,76 @@ abstract class ProtosPackageToolProtosTestSupport {
     protected static ProtosPrelude newPackagePrelude() throws Exception {
         ProtosStandardLibraryModuleResolver standard =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
-        ProtosBundledToolModuleResolver resolver =
-                new ProtosBundledToolModuleResolver("package", TOOL_ROOT, (TOOL_ROOT).resolveSibling("shared"), standard);
+        // I151_B60_JAVA_PACKAGE_SOURCE_ENTRANCES:
+        // Only this host-created fixture SOURCE may import the exact
+        // Package implementation entrances selected for TOOL009.
+        // All other imports retain the bundled-tool resolver's custody rules.
+        ProtosBundledToolModuleResolver toolResolver =
+                new ProtosBundledToolModuleResolver(
+                        "package",
+                        TOOL_ROOT,
+                        TOOL_ROOT.resolveSibling("shared"),
+                        standard);
+
+        Set<String> entrances = Set.of(
+                        "tool-source:package/ContentIdentity.protos",
+                        "tool-source:package/DependencyConstraint.protos",
+                        "tool-source:package/ExecutionPlan.protos",
+                        "tool-source:package/FreshVersionSelection.protos",
+                        "tool-source:package/LockDocument.protos",
+                        "tool-source:package/LockFile.protos",
+                        "tool-source:package/LockSyntax.protos",
+                        "tool-source:package/ManifestCommand.protos",
+                        "tool-source:package/ManifestSchemaV1.protos",
+                        "tool-source:package/MetadataPublication.protos",
+                        "tool-source:package/ProjectDocument.protos",
+                        "tool-source:package/ProjectFile.protos",
+                        "tool-source:package/ProjectMetadata.protos",
+                        "tool-source:package/ReleaseVersion.protos",
+                        "tool-source:package/ResolutionInput.protos",
+                        "tool-source:package/ResolutionRoot.protos",
+                        "tool-source:package/RetainedVersionSelection.protos",
+                        "tool-source:package/RuntimeNames.protos"
+        );
+
+        ProtosModuleKey harnessSource =
+                ProtosBundledToolModuleResolver.toolSourceKey(
+                        "package", "I151ToolHarness");
+
+        ProtosModuleResolver resolver =
+                new ProtosModuleResolver() {
+                    @Override
+                    public ProtosModuleKey resolve(
+                            String specifier,
+                            java.util.Optional<ProtosModuleKey> importer)
+                            throws Exception {
+                        if (entrances.contains(specifier)) {
+                            if (importer.isEmpty()
+                                    || !importer.orElseThrow().equals(harnessSource)) {
+                                throw new IOException(
+                                        "Package SOURCE entrance requires fixture importer");
+                            }
+
+                            String prefix = "tool-source:package/";
+                            String logicalName =
+                                    specifier.substring(
+                                            prefix.length(),
+                                            specifier.length() - ".protos".length());
+
+                            return ProtosBundledToolModuleResolver.toolSourceKey(
+                                    "package", logicalName);
+                        }
+
+                        return toolResolver.resolve(specifier, importer);
+                    }
+
+                    @Override
+                    public ProtosModuleSource loadSource(ProtosModuleKey key)
+                            throws Exception {
+                        return toolResolver.loadSource(key);
+                    }
+                };
+
         return new ProtosCoreBootstrap().bootstrap(CORE, resolver);
     }
 
@@ -426,7 +505,13 @@ abstract class ProtosPackageToolProtosTestSupport {
             String label) {
         switch (expected) {
             case "true" -> {
-                assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), label);
+                assertEquals(
+                        ProtosExecutionOutcome.State.COMPLETED,
+                        outcome.state(),
+                        () -> label + " guest failure slots="
+                                + (outcome.state() == ProtosExecutionOutcome.State.FAILED
+                                        ? outcome.error().localSlotsSnapshot()
+                                        : "<not failed>"));
                 assertSame(ProtosBooleanValue.TRUE, outcome.value(), label);
             }
             case "error" ->

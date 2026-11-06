@@ -40,8 +40,8 @@ final class ProtosTestToolResourceAdmissionBindingTest {
     void resourceFreeRequirementsBindToFrozenEmptySet() throws Exception {
         ProtosExecutionOutcome outcome =
                 execute(
-                        "Binding: import(\"self:ResourceBinding\")\n"
-                                + "Catalog: import(\"self:ResourceCatalog\")\n"
+                        "Binding: import(\"./ResourceBinding.protos\")\n"
+                                + "Catalog: import(\"./ResourceCatalog.protos\")\n"
                                 + "bindings: Binding.bindRequirements(Array(), Catalog.empty())\n"
                                 + "bindings\n");
 
@@ -69,9 +69,9 @@ final class ProtosTestToolResourceAdmissionBindingTest {
                         + "provider = \"service/db\"\n";
 
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Catalog: import(\"self:ResourceCatalog\")\n"
-                        + "Binding: import(\"self:ResourceBinding\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
+                        + "Catalog: import(\"./ResourceCatalog.protos\")\n"
+                        + "Binding: import(\"./ResourceBinding.protos\")\n"
                         + "catalog: Catalog.parse(" + protosString(catalog) + ")\n"
                         + "requirements: Array("
                         + "Manifest.requirement(\"gpu\", \"shared\", 2), "
@@ -129,9 +129,9 @@ final class ProtosTestToolResourceAdmissionBindingTest {
     @Test
     void sharedRequirementMayConsumeExactlyTheCatalogCapacity() throws Exception {
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Catalog: import(\"self:ResourceCatalog\")\n"
-                        + "Binding: import(\"self:ResourceBinding\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
+                        + "Catalog: import(\"./ResourceCatalog.protos\")\n"
+                        + "Binding: import(\"./ResourceBinding.protos\")\n"
                         + "catalog: Catalog.parse("
                         + protosString(
                                 "resource-catalog-version = 1\n"
@@ -171,9 +171,9 @@ final class ProtosTestToolResourceAdmissionBindingTest {
 
         for (String requirementExpression : requirementExpressions) {
             String source =
-                    "Manifest: import(\"self:Manifest\")\n"
-                            + "Catalog: import(\"self:ResourceCatalog\")\n"
-                            + "Binding: import(\"self:ResourceBinding\")\n"
+                    "Manifest: import(\"./Manifest.protos\")\n"
+                            + "Catalog: import(\"./ResourceCatalog.protos\")\n"
+                            + "Binding: import(\"./ResourceBinding.protos\")\n"
                             + "catalog: Catalog.parse(" + protosString(catalog) + ")\n"
                             + "Binding.bindRequirements("
                             + "Array(" + requirementExpression + "), catalog)\n";
@@ -189,9 +189,9 @@ final class ProtosTestToolResourceAdmissionBindingTest {
     @Test
     void duplicateCatalogKeysFailClosedDefensively() throws Exception {
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Catalog: import(\"self:ResourceCatalog\")\n"
-                        + "Binding: import(\"self:ResourceBinding\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
+                        + "Catalog: import(\"./ResourceCatalog.protos\")\n"
+                        + "Binding: import(\"./ResourceBinding.protos\")\n"
                         + "entry: Catalog.catalogEntry("
                         + "\"gpu\", 1, \"run\", \"device/gpu\", null)\n"
                         + "Binding.bindRequirements("
@@ -205,9 +205,9 @@ final class ProtosTestToolResourceAdmissionBindingTest {
     @Test
     void bindCaseReadsOnlyTheExistingCaseSpecRequirementCarrier() throws Exception {
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Catalog: import(\"self:ResourceCatalog\")\n"
-                        + "Binding: import(\"self:ResourceBinding\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
+                        + "Catalog: import(\"./ResourceCatalog.protos\")\n"
+                        + "Binding: import(\"./ResourceBinding.protos\")\n"
                         + "base: Manifest.caseSpec(Array(\"sample.protos\", \"boolean\", \"true\"))\n"
                         + "spec: Manifest.caseSpecWithRequirements("
                         + "base, Array(Manifest.requirement(\"gpu\", \"shared\", 1)))\n"
@@ -249,7 +249,7 @@ final class ProtosTestToolResourceAdmissionBindingTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         return com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
 source,
-prelude.newModuleActivation());
+com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 
     private static ProtosArrayValue arrayAt(ProtosArrayValue array, int index) {

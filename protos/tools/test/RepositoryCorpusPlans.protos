@@ -6,7 +6,7 @@
 //! No filesystem discovery is used.
 //!
 //! TOOL009-C: every case in every corpus of this module is `suite-native`; the
-//! authoritative test behavior lives in each source's own `std:test/Test`
+//! authoritative test behavior lives in each source's own `std:test/test`
 //! declaration (D152/D153/LIB018/D155), not in this manifest's expectation
 //! column.
 //!
@@ -14,7 +14,7 @@
 //! corpus only through an entry here; RepositoryCorpusAudit rejects a source
 //! left out of, stale in, or repeated in these plans.
 
-Manifest: import("self:Manifest")
+Manifest: import("./Manifest.protos")
 
 planFromEntries: (prefix, entries) => {
     cases: Array()

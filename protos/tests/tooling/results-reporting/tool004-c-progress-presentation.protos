@@ -1,8 +1,8 @@
 // THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
 // ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
 
-Manifest: import("self:Manifest")
-Progress: import("self:Progress")
+Manifest: import("./Manifest.protos")
+Progress: import("./Progress.protos")
 
 lines: Array()
 

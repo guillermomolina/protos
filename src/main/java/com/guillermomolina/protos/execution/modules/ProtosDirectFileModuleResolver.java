@@ -125,7 +125,9 @@ public final class ProtosDirectFileModuleResolver
         Objects.requireNonNull(importingModule, "importingModule");
         requireOpen();
 
-        if (localSpecifier(exactSpecifier)) {
+        if (localSpecifier(exactSpecifier)
+                && (importingModule.isEmpty()
+                        || localPaths.containsKey(importingModule.get()))) {
             return resolveLocal(exactSpecifier, importingModule);
         }
         return fallbackResolver.resolve(exactSpecifier, importingModule);
@@ -202,6 +204,10 @@ public final class ProtosDirectFileModuleResolver
 
         if (normalized.isEmpty()) {
             throw new IOException("direct-file local module must name a source file");
+        }
+        if (normalized.peekLast().equalsIgnoreCase("module.protos")) {
+            // D242: a MODULE initializer is never executable a second time as SOURCE.
+            throw new IOException("module initializer cannot be imported as SOURCE");
         }
         return List.copyOf(normalized);
     }
@@ -332,8 +338,9 @@ public final class ProtosDirectFileModuleResolver
         return specifier.startsWith("./") || specifier.startsWith("../");
     }
 
+    /** D242: every direct-file entry and local import is a SOURCE identified by its exact path. */
     private static ProtosModuleKey localKey(List<String> components) {
-        return new ProtosModuleKey(
+        return ProtosModuleKey.source(
                 LOCAL_KEY_PREFIX + String.join("/", components));
     }
 

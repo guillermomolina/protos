@@ -40,20 +40,20 @@ class ProtosModuleSourceIdentityTest {
 
     @Test
     void fileBackedResolverRetainsCanonicalKeyExactCharactersAndSelectedPath() throws Exception {
-        Path collections = Files.createDirectories(root.resolve("collections"));
-        Path file = collections.resolve("Probe.protos");
+        Path collections = Files.createDirectories(root.resolve("collections/probe"));
+        Path file = collections.resolve("module.protos");
         Files.writeString(file, "value: \"olá\"", StandardCharsets.UTF_8);
 
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(root);
-        ProtosModuleKey key = resolver.resolve("std:collections/Probe", Optional.empty());
+        ProtosModuleKey key = resolver.resolve("std:collections/probe", Optional.empty());
         ProtosModuleSource moduleSource = resolver.loadSource(key);
         Path exact = file.toAbsolutePath().normalize();
 
         assertEquals(key, moduleSource.key());
         assertEquals("value: \"olá\"", moduleSource.characters());
         assertEquals(Optional.of(exact), moduleSource.physicalPath());
-        assertEquals("Probe.protos", moduleSource.sourceName());
+        assertEquals("module.protos", moduleSource.sourceName());
     }
 
     @Test
@@ -62,7 +62,7 @@ class ProtosModuleSourceIdentityTest {
         Path file = root.resolve("Hosted.protos");
         Files.writeString(file, "value: 42", StandardCharsets.UTF_8);
         ProtosModuleSource moduleSource =
-                ProtosModuleSource.fromPath(new ProtosModuleKey("test:hosted"), file);
+                ProtosModuleSource.fromPath(ProtosModuleKey.source("test:hosted"), file);
         Path exact = file.toAbsolutePath().normalize();
 
         Source source = materialize(moduleSource);
@@ -87,7 +87,7 @@ class ProtosModuleSourceIdentityTest {
         }
 
         ProtosModuleSource moduleSource =
-                ProtosModuleSource.fromPath(new ProtosModuleKey("test:symlink"), selected);
+                ProtosModuleSource.fromPath(ProtosModuleKey.source("test:symlink"), selected);
         Path exactSelected = selected.toAbsolutePath().normalize();
 
         assertEquals(Optional.of(exactSelected), moduleSource.physicalPath());
@@ -113,7 +113,7 @@ class ProtosModuleSourceIdentityTest {
     void hostedMaterializationBuildsLiteralSourceFromNeutralFacts() {
         ProtosModuleSource moduleSource =
                 ProtosModuleSource.fromCharacters(
-                        new ProtosModuleKey("test:source-owned"),
+                        ProtosModuleKey.source("test:source-owned"),
                         "1");
 
         Source source = materialize(moduleSource);
@@ -126,10 +126,10 @@ class ProtosModuleSourceIdentityTest {
     @Test
     void resolverSourceKeyMismatchFailsClosed() {
         ProtosModuleSource source =
-                ProtosModuleSource.fromCharacters(new ProtosModuleKey("test:a"), "1");
+                ProtosModuleSource.fromCharacters(ProtosModuleKey.source("test:a"), "1");
         assertThrows(
                 IllegalArgumentException.class,
-                () -> source.requireKey(new ProtosModuleKey("test:b")));
+                () -> source.requireKey(ProtosModuleKey.source("test:b")));
     }
 
     private static Source materialize(ProtosModuleSource moduleSource) {

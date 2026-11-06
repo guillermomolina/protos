@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 
 final class ProtosTomlClosureConformanceTest {
     private static final Path PUBLIC_TOML =
-            Path.of("protos", "lib", "toml", "TOML.protos");
+            Path.of("protos", "lib", "toml", "toml", "module.protos");
     private static final Path TOOLS = Path.of("protos", "tools");
     private static final List<Path> TOML_10_SCHEMA_CONSUMERS =
             List.of(
@@ -56,7 +56,7 @@ final class ProtosTomlClosureConformanceTest {
         }
         for (Path consumer : TOML_10_SCHEMA_CONSUMERS) {
             String text = Files.readString(consumer, StandardCharsets.UTF_8);
-            assertTrue(text.contains("import(\"std:toml/TOML\")"), consumer::toString);
+            assertTrue(text.contains("import(\"std:toml/toml\")"), consumer::toString);
             assertTrue(text.contains("TOML.parseDialect(text, \"1.0\")"), consumer::toString);
         }
     }

@@ -1,0 +1,2188 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Protos regular expressions (D187): a restricted, portable, predictable
+//! dialect whose matching unit is the Unicode scalar, with Unicode 17.0.0
+//! properties, simple locale-independent case folding, no implicit
+//! normalization, and no grapheme matching.
+//!
+//! Accepted syntax: literals; `\t`, `\n`, `\r`, `\f`; `\u{HEX}` scalar escapes
+//! (1 to 6 hexadecimal digits); a backslash before any printable ASCII scalar
+//! that is neither a letter nor a digit (including space and `#`); `.`;
+//! classes `[...]` and `[^...]` with ranges, nested classes, intersection `&&`,
+//! and subtraction `--`; `\d`, `\s`, `\w` and their negations; `\p{...}` and
+//! `\P{...}`; concatenation; ordered alternation `|`; numbered `(...)`,
+//! non-capturing `(?:...)`, and named `(?<name>...)` groups; greedy `?`, `*`,
+//! `+`, `{n}`, `{n,}`, `{n,m}` and their lazy forms with a trailing `?`; and the
+//! assertions `^`, `$`, `\A`, `\z`, `\b`, `\B`. Everything else signals an
+//! ordinary Error, including backreferences, look-around, atomic groups,
+//! possessive quantifiers, recursion, conditionals, inline flags, `\G`, `\K`,
+//! `\X`, and POSIX bracket classes. Literal `]`, `{`, and `}`, and literal `[`,
+//! `]`, `-`, and `&` inside a class, must be escaped.
+//!
+//! `\p{...}` accepts a General_Category value, one of the binary properties
+//! Alphabetic, Uppercase, Lowercase, White_Space, Noncharacter_Code_Point, and
+//! Default_Ignorable_Code_Point, `Any`, `ASCII`, `Assigned`, or a Script value,
+//! tried in that order; or `name=value` where `name` is General_Category,
+//! Script, or Script_Extensions. Names and values match loosely as Unicode
+//! aliases. `\d` is Decimal_Number, `\s` is White_Space, and `\w` is the UTS #18
+//! word set (Alphabetic, Mark, Decimal_Number, Connector_Punctuation,
+//! Join_Control).
+
+/// Compiles `source` into a fresh, frozen Pattern under the flag letters of
+/// `flags`: `i` (simple Unicode case-insensitive), `m` (`^` and `$` at line
+/// boundaries: CRLF, LF, CR, NEL, LS, PS), `s` (`.` also matches those line
+/// terminators), and `x` (Pattern_White_Space and `#` comments to the end of
+/// the line are ignored outside classes; unescaped whitespace or `#` inside a
+/// class signals an Error). Each letter may appear at most once and their order
+/// is irrelevant. A non-String argument, an unknown or repeated flag, or a
+/// source outside the accepted dialect signals an Error.
+///
+/// A Pattern exposes `source`, the canonical `flags` String (present letters in
+/// `imsx` order), `captureCount`, the number of explicit capturing groups,
+/// numbered from 1 in opening-parenthesis order, and `captureNames`, a frozen
+/// Map from each capture name to its group number. Independent compilations
+/// answer distinct Patterns; equality is ordinary identity.
+///
+/// Matching works on Unicode scalars and every offset is a String scalar
+/// index. The selected match is leftmost-first: the earliest start wins, and
+/// for one start the pattern priority decides (alternatives in source order,
+/// greedy quantifiers prefer another iteration, lazy ones prefer to stop).
+/// Matching never backtracks exponentially: one search costs at most pattern
+/// size times input length. A non-String subject signals an Error.
+///
+/// - `fullMatch(text)` answers the selected match starting at 0 that ends at
+///   `text.size()`, or null.
+/// - `search(text)` answers the selected match starting anywhere, or null.
+/// - `searchFrom(text, offset)` is `search` restricted to starts at or after
+///   the Integer `offset`, `0 <= offset <= text.size()` (otherwise an Error);
+///   assertions still see the scalars before `offset`.
+/// - `eachMatch(text, block)` invokes `block(match)` for every successive
+///   non-overlapping match, ignores its result, and answers null. After an
+///   empty match at `k` the next search starts at `k + 1`, so an empty match is
+///   reported at most once per offset, including `text.size()`.
+/// - `findAll(text)` answers a fresh Array of the matches `eachMatch` visits.
+/// - `replaceFirst(text, replacement)` answers `text` with the match `search`
+///   selects replaced by the expansion of `replacement`, or a String equal to
+///   `text` when there is no match.
+/// - `replaceAll(text, replacement)` answers `text` with every match
+///   `eachMatch` visits replaced by the expansion of `replacement`. An empty
+///   match at `k` inserts the expansion at `k` and removes nothing: the scalar
+///   skipped to continue the search is kept, so `""` replaced by `"-"` in
+///   `"ab"` answers `"-a-b-"`.
+/// - `split(text)` answers a fresh Array of the fields between the matches
+///   `eachMatch` visits. Matched delimiters and their captures are omitted;
+///   leading, interior, and trailing empty fields are kept, so a subject with
+///   n matches answers n + 1 fields, and an empty match removes nothing:
+///   `""` splits `"ab"` into `"", "a", "b", ""`.
+///
+/// A replacement String is literal text except for `$`: `$$` is a literal
+/// `$`, `${0}` the whole match, `${N}` group N (decimal without leading
+/// zeros), and `${name}` the named capture. A group that did not participate
+/// expands to the empty String. Any other use of `$`, or a number or name that
+/// is not a group of the Pattern, signals an Error before any replacement,
+/// even when `text` has no match. `Regex.escapeReplacement(x)` is a
+/// replacement that inserts `x` literally. Non-String arguments signal an
+/// Error.
+///
+/// A Match is frozen: `captureCount`; `group(key)`, `start(key)`, and
+/// `end(key)` for a group number (0 is the whole match) or a capture name,
+/// answering null for a group that did not participate; `groups()`, a fresh
+/// Array of every group's text; and `namedGroups()`, a fresh Map from each
+/// capture name to its text. A repeated group reports its last participation.
+/// An optional iteration that consumes no input is chosen under the ordinary
+/// greedy or lazy priority, keeping its captures, and ends the repetition.
+this.compileWithFlags: ((unicode, transfer) => {
+    Arrays: import("std:collections/array")
+
+    maxScalar: 1114111
+
+    // Answers a fresh Array of `count` nulls in O(count): Arrays do not grow,
+    // and doubling halves keeps the copying geometric.
+    sized: null
+    sized = (count) => {
+        result: Array()
+        if(count > 0) {
+            half: sized(count.div(2))
+            result = Array(...half, ...half)
+            if((count % 2) == 1) {
+                result = Array(...result, null)
+            }
+        }
+        result
+    }
+
+    // Answers a fresh Array of the values stored under keys 0..count-1.
+    freshArray: (entries, count) => {
+        result: sized(count)
+        index: 0
+        while(index < count) {
+            result[index] = entries[index]
+            index = index + 1
+        }
+        result
+    }
+
+    // Answers a frozen Array of the values stored under keys 0..count-1.
+    frozenArray: (entries, count) => {
+        result: freshArray(entries, count)
+        result.freeze()
+        result
+    }
+
+    // Character sets are frozen Arrays [lo0, hi0, lo1, hi1, ...] of ascending,
+    // disjoint, non-adjacent inclusive Unicode scalar ranges; surrogates are
+    // never members.
+
+    // Collects ranges supplied in ascending start order, coalescing overlapping
+    // and adjacent ranges.
+    newRangeWriter: () => {
+        bounds: Map()
+        count: 0
+        low: -2
+        high: -2
+        add: (rangeLow, rangeHigh) => {
+            if(rangeLow <= (high + 1)) {
+                if(rangeHigh > high) {
+                    high = rangeHigh
+                }
+            } else {
+                if(high >= 0) {
+                    bounds[count] = low
+                    bounds[count + 1] = high
+                    count = count + 2
+                }
+                low = rangeLow
+                high = rangeHigh
+            }
+        }
+        finish: () => {
+            if(high >= 0) {
+                bounds[count] = low
+                bounds[count + 1] = high
+                count = count + 2
+                high = -2
+            }
+            frozenArray(bounds, count)
+        }
+        writer: { add: add; finish: finish }
+        writer
+    }
+
+    scalarSet: [0, 55295, 57344, 1114111]
+    scalarSet.freeze()
+    asciiSet: [0, 127]
+    asciiSet.freeze()
+    // LF, CR, NEL, LINE SEPARATOR, and PARAGRAPH SEPARATOR; CRLF is a pair of them.
+    lineTerminatorSet: [10, 10, 13, 13, 133, 133, 8232, 8233]
+    lineTerminatorSet.freeze()
+
+    singleton: (scalar) => {
+        result: [scalar, scalar]
+        result.freeze()
+        result
+    }
+
+    union: (left, right) => {
+        writer: newRangeWriter()
+        leftIndex: 0
+        rightIndex: 0
+        while((leftIndex < left.size()) || (rightIndex < right.size())) {
+            takeLeft: (rightIndex >= right.size()) ||
+                ((leftIndex < left.size()) && (left[leftIndex] <= right[rightIndex]))
+            if(takeLeft) {
+                writer.add(left[leftIndex], left[leftIndex + 1])
+                leftIndex = leftIndex + 2
+            } else {
+                writer.add(right[rightIndex], right[rightIndex + 1])
+                rightIndex = rightIndex + 2
+            }
+        }
+        writer.finish()
+    }
+
+    intersect: (left, right) => {
+        writer: newRangeWriter()
+        leftIndex: 0
+        rightIndex: 0
+        while((leftIndex < left.size()) && (rightIndex < right.size())) {
+            low: left[leftIndex]
+            if(right[rightIndex] > low) {
+                low = right[rightIndex]
+            }
+            high: left[leftIndex + 1]
+            if(right[rightIndex + 1] < high) {
+                high = right[rightIndex + 1]
+            }
+            if(low <= high) {
+                writer.add(low, high)
+            }
+            if(left[leftIndex + 1] < right[rightIndex + 1]) {
+                leftIndex = leftIndex + 2
+            } else {
+                rightIndex = rightIndex + 2
+            }
+        }
+        writer.finish()
+    }
+
+    // The complement is taken within the Unicode scalar values.
+    complement: (set) => {
+        writer: newRangeWriter()
+        next: 0
+        index: 0
+        while(index < set.size()) {
+            if(set[index] > next) {
+                writer.add(next, set[index] - 1)
+            }
+            next = set[index + 1] + 1
+            index = index + 2
+        }
+        if(next <= maxScalar) {
+            writer.add(next, maxScalar)
+        }
+        intersect(writer.finish(), scalarSet)
+    }
+
+    subtract: (left, right) => {
+        intersect(left, complement(right))
+    }
+
+    // Normalizes `count` unordered [low, high] pairs stored under keys 0..count-1.
+    fromPairs: (pairs, count) => {
+        sorted: Arrays.sort(frozenArray(pairs, count), (first, second) => {
+            first[0] < second[0]
+        })
+        writer: newRangeWriter()
+        for(pair in sorted) {
+            writer.add(pair[0], pair[1])
+        }
+        writer.finish()
+    }
+
+    // Unicode property policy. The facility only resolves Unicode 17.0.0 data;
+    // which properties are accepted and in which order bare names are tried is
+    // decided here.
+    enumeratedProperties: ["General_Category", "Script", "Script_Extensions"]
+    binaryProperties: [
+        "Alphabetic",
+        "Uppercase",
+        "Lowercase",
+        "White_Space",
+        "Noncharacter_Code_Point",
+        "Default_Ignorable_Code_Point"
+    ]
+
+    includes: (names, candidate) => {
+        found: false
+        if(candidate !== null) {
+            for(name in names) {
+                if(name == candidate) {
+                    found = true
+                }
+            }
+        }
+        found
+    }
+
+    // ASCII lowercase without spaces, hyphens, or underscores, for the names
+    // that are not Unicode property aliases.
+    looseName: (text) => {
+        output: Encoding.UTF8.encode("")
+        for(octet in Encoding.UTF8.encode(text)) {
+            ((octet == 32) || (octet == 45) || (octet == 95)).ifFalse(() => {
+                if((octet >= 65) && (octet <= 90)) {
+                    output.add(octet + 32)
+                } else {
+                    output.add(octet)
+                }
+            })
+        }
+        Encoding.UTF8.decode(output)
+    }
+
+    // Answers the set named by `\p{name}` (`value` null) or `\p{name=value}`.
+    propertySet: (name, value) => {
+        result: null
+        if(value === null) {
+            result = unicode.ranges("General_Category", name)
+            if(result === null) {
+                canonical: unicode.propertyName(name)
+                if(includes(binaryProperties, canonical)) {
+                    result = unicode.ranges(canonical, "Yes")
+                }
+            }
+            if(result === null) {
+                loose: looseName(name)
+                if(loose == "any") {
+                    result = scalarSet
+                }
+                if(loose == "ascii") {
+                    result = asciiSet
+                }
+                if(loose == "assigned") {
+                    result = complement(unicode.ranges("General_Category", "Unassigned"))
+                }
+            }
+            if(result === null) {
+                result = unicode.ranges("Script", name)
+            }
+        } else {
+            canonical: unicode.propertyName(name)
+            if(includes(enumeratedProperties, canonical)) {
+                result = unicode.ranges(canonical, value)
+            }
+        }
+        if(result === null) {
+            Error().signal()
+        }
+        result
+    }
+
+    digitSet: unicode.ranges("General_Category", "Decimal_Number")
+    spaceSet: unicode.ranges("White_Space", "Yes")
+    wordSet: union(
+        union(
+            union(
+                unicode.ranges("Alphabetic", "Yes"),
+                unicode.ranges("General_Category", "Mark")
+            ),
+            union(
+                digitSet,
+                unicode.ranges("General_Category", "Connector_Punctuation")
+            )
+        ),
+        unicode.ranges("Join_Control", "Yes")
+    )
+    dotSet: subtract(scalarSet, lineTerminatorSet)
+
+    isAsciiLetter: (scalar) => {
+        ((scalar >= 65) && (scalar <= 90)) || ((scalar >= 97) && (scalar <= 122))
+    }
+
+    isAsciiDigit: (scalar) => {
+        (scalar >= 48) && (scalar <= 57)
+    }
+
+    hexValue: (scalar) => {
+        result: -1
+        if(isAsciiDigit(scalar)) {
+            result = scalar - 48
+        }
+        if((scalar >= 65) && (scalar <= 70)) {
+            result = scalar - 55
+        }
+        if((scalar >= 97) && (scalar <= 102)) {
+            result = scalar - 87
+        }
+        result
+    }
+
+    isPatternWhiteSpace: (scalar) => {
+        ((scalar >= 9) && (scalar <= 13)) || (scalar == 32) || (scalar == 133) ||
+            (scalar == 8206) || (scalar == 8207) || (scalar == 8232) || (scalar == 8233)
+    }
+
+    isLineTerminator: (scalar) => {
+        (scalar == 10) || (scalar == 13) || (scalar == 133) || (scalar == 8232) || (scalar == 8233)
+    }
+
+    // Decodes the UTF-8 encoding of a String into a Map from scalar index to
+    // Unicode scalar value. Core String indexing is not constant time, so the
+    // parser reads this Map instead.
+    decodeScalars: (text) => {
+        scalars: Map()
+        count: 0
+        pending: 0
+        value: 0
+        for(octet in Encoding.UTF8.encode(text)) {
+            if(pending > 0) {
+                value = value * 64 + (octet - 128)
+                pending = pending - 1
+            } else {
+                value = octet
+                if((octet >= 192) && (octet < 224)) {
+                    value = octet - 192
+                    pending = 1
+                }
+                if((octet >= 224) && (octet < 240)) {
+                    value = octet - 224
+                    pending = 2
+                }
+                if(octet >= 240) {
+                    value = octet - 240
+                    pending = 3
+                }
+            }
+            if(pending == 0) {
+                scalars[count] = value
+                count = count + 1
+            }
+        }
+        scalars
+    }
+
+    // Private immutable Match construction for the matcher.
+    // `bounds` holds 2 * (captureCount + 1) entries: the start and end Unicode
+    // scalar offsets of group g at 2g and 2g + 1 as a half-open span, both null
+    // when the group did not participate in the selected match. `texts` holds
+    // captureCount + 1 entries: the captured String of each participating
+    // group, possibly empty, or null. Group 0 is the whole match and always
+    // participates. A repeated group reports its last selected participation.
+    // `captureNames` and `groupNames` are the Pattern's capture metadata: the
+    // frozen Map from each name to its group and the frozen Array holding each
+    // group's name or null. The Match retains no subject and no compiled
+    // program, so the transfer family can snapshot it without matching again.
+    newMatch: (captureNames, groupNames, bounds, texts) => {
+        groupTotal: groupNames.size()
+        ((bounds.size() == (2 * groupTotal)) && (texts.size() == groupTotal)).ifFalse(() => {
+            Error().signal()
+        })
+        capturedBounds: Array(...bounds)
+        capturedBounds.freeze()
+        capturedTexts: Array(...texts)
+        capturedTexts.freeze()
+        groupIndex: 0
+        while(groupIndex < groupTotal) {
+            first: capturedBounds[2 * groupIndex]
+            last: capturedBounds[2 * groupIndex + 1]
+            captured: capturedTexts[groupIndex]
+            absent: (first === null) && (last === null) && (captured === null)
+            present: Integer.recognizes(first) && Integer.recognizes(last) &&
+                String.recognizes(captured)
+            if(present) {
+                ((first >= 0) && (first <= last) && (captured.size() == (last - first))).ifFalse(() => {
+                    Error().signal()
+                })
+            }
+            ((absent || present) && (present || (groupIndex > 0))).ifFalse(() => {
+                Error().signal()
+            })
+            groupIndex = groupIndex + 1
+        }
+
+        // Answers the group number selected by an Integer number or a capture name.
+        selectGroup: (key) => {
+            selected: null
+            if(Integer.recognizes(key)) {
+                if((key >= 0) && (key < groupTotal)) {
+                    selected = key
+                }
+            }
+            if(String.recognizes(key)) {
+                if(captureNames.containsKey(key)) {
+                    selected = captureNames[key]
+                }
+            }
+            if(selected === null) {
+                Error().signal()
+            }
+            selected
+        }
+
+        result: {
+            captureCount: groupTotal - 1
+            group: (key) => {
+                capturedTexts[selectGroup(key)]
+            }
+            start: (key) => {
+                capturedBounds[2 * selectGroup(key)]
+            }
+            end: (key) => {
+                capturedBounds[2 * selectGroup(key) + 1]
+            }
+            // Fresh snapshots: mutating them never alters the Match.
+            groups: () => {
+                Array(...capturedTexts)
+            }
+            namedGroups: () => {
+                snapshot: Map()
+                for(groupName in groupNames) {
+                    (groupName === null).ifFalse(() => {
+                        snapshot[groupName] = capturedTexts[captureNames[groupName]]
+                    })
+                }
+                snapshot
+            }
+        }
+        // Minted as a frozen Regex transfer-family value with these slots.
+        transfer.mintMatch(result, capturedBounds, capturedTexts, groupNames)
+    }
+
+    // Answers whether `scalar` belongs to `ranges`, by binary search over its
+    // ascending disjoint ranges.
+    contains: (ranges, scalar) => {
+        low: 0
+        high: ranges.size().div(2) - 1
+        found: false
+        while(!found && (low <= high)) {
+            middle: (low + high).div(2)
+            if(scalar < ranges[2 * middle]) {
+                high = middle - 1
+            } else {
+                if(scalar > ranges[2 * middle + 1]) {
+                    low = middle + 1
+                } else {
+                    found = true
+                }
+            }
+        }
+        found
+    }
+
+    appendScalar: (bytes, scalar) => {
+        if(scalar < 128) {
+            bytes.add(scalar)
+        }
+        if((scalar >= 128) && (scalar < 2048)) {
+            bytes.add(192 + scalar.div(64))
+            bytes.add(128 + (scalar % 64))
+        }
+        if((scalar >= 2048) && (scalar < 65536)) {
+            bytes.add(224 + scalar.div(4096))
+            bytes.add(128 + (scalar.div(64) % 64))
+            bytes.add(128 + (scalar % 64))
+        }
+        if(scalar >= 65536) {
+            bytes.add(240 + scalar.div(262144))
+            bytes.add(128 + (scalar.div(4096) % 64))
+            bytes.add(128 + (scalar.div(64) % 64))
+            bytes.add(128 + (scalar % 64))
+        }
+    }
+
+    // Per-operation subject: the scalars are decoded once so the matcher reads
+    // each one in constant time. `appendSpan` appends the UTF-8 encoding of a
+    // half-open scalar span to a byte buffer, and `slice` rebuilds the exact
+    // String of such a span, both without normalization.
+    newInput: (text) => {
+        scalars: decodeScalars(text)
+        appendSpan: (bytes, first, last) => {
+            index: first
+            while(index < last) {
+                appendScalar(bytes, scalars[index])
+                index = index + 1
+            }
+        }
+        input: {
+            scalars: scalars
+            size: scalars.size()
+            appendSpan: appendSpan
+            slice: (first, last) => {
+                bytes: Encoding.UTF8.encode("")
+                appendSpan(bytes, first, last)
+                Encoding.UTF8.decode(bytes)
+            }
+        }
+        input
+    }
+
+    // Prioritized Thompson NFA (Pike VM) over the postfix node table. A thread
+    // state is a node phase: enter (3n), exit (3n + 1), or the loop decision of
+    // a repeat (3n + 2). Counted repetition is never expanded: a repeat whose
+    // count matters (anything but `?`, `*`, `{0}`, `{1}`) keeps its count
+    // in a per-thread counter, capped at `min` once unbounded repetition has
+    // met its minimum.
+    //
+    // Threads advance in lockstep over the input. At each position the epsilon
+    // closure is an explicit depth-first stack explored in priority order:
+    // ordered alternatives, greedy iterate-before-exit, lazy exit-before-
+    // iterate. The first thread to reach a (state, marker, counters) key at a
+    // position wins and the later, lower-priority ones are dropped: captures
+    // never influence the future of a match because there are no
+    // backreferences. A new start thread is seeded after every surviving thread,
+    // so an earlier start always outranks a later one, and once a match is
+    // selected every lower-priority thread and every later start is cut. This
+    // keeps a single search within O(m * n) thread steps.
+    //
+    // An optional iteration that completes without consuming input is selected
+    // under the ordinary priority, captures included, but then ends the
+    // repetition: it is never followed by another iteration at the same
+    // position, which guarantees termination of nullable bodies. `marker` names the outermost active repeat whose current
+    // iteration began at the current position (nested iterations start no
+    // earlier, so every inner active repeat is then also empty so far), or -1.
+    // A mandatory empty iteration of a body that can never consume input jumps
+    // straight to `min`: every remaining mandatory iteration would repeat the
+    // same zero-width path with the same captures.
+    //
+    // All mutable state is local to one execution; the derived tables are
+    // frozen and shared by every operation on the Pattern.
+    newMatcher: (program) => {
+        nodes: program.nodes
+        nodeCount: nodes.size()
+        root: program.root
+        groupSlots: 2 * (program.captureCount + 1)
+        parents: sized(nodeCount)
+        positions: sized(nodeCount)
+        depths: sized(nodeCount)
+        consumers: sized(nodeCount)
+        counterSlots: sized(nodeCount)
+        bounds: Map()
+        counterTotal: 0
+        index: 0
+        while(index < nodeCount) {
+            node: nodes[index]
+            op: node.op
+            consumes: op == "set"
+            if((op == "concat") || (op == "alternate")) {
+                position: 0
+                for(item in node.items) {
+                    parents[item] = index
+                    positions[item] = position
+                    position = position + 1
+                    consumes = consumes || consumers[item]
+                }
+            }
+            if((op == "capture") || (op == "repeat")) {
+                parents[node.item] = index
+                positions[node.item] = 0
+                consumes = consumers[node.item]
+            }
+            if(op == "repeat") {
+                maximum: node.max
+                consumes = consumes && ((maximum === null) || (maximum > 0))
+                simple: ((maximum !== null) && (maximum <= 1)) || ((maximum === null) && (node.min == 0))
+                simple.ifFalse(() => {
+                    counterSlots[index] = counterTotal
+                    bound: maximum
+                    if(maximum === null) {
+                        bound = node.min
+                    }
+                    bounds[counterTotal] = bound
+                    counterTotal = counterTotal + 1
+                })
+            }
+            consumers[index] = consumes
+            index = index + 1
+        }
+        // Repeat nesting depth; parents always have larger indexes.
+        index = nodeCount - 1
+        while(index >= 0) {
+            depth: 0
+            (parents[index] === null).ifFalse(() => {
+                depth = depths[parents[index]]
+            })
+            if(nodes[index].op == "repeat") {
+                depth = depth + 1
+            }
+            depths[index] = depth
+            index = index - 1
+        }
+        parents.freeze()
+        positions.freeze()
+        depths.freeze()
+        consumers.freeze()
+        counterSlots.freeze()
+        counterBounds: frozenArray(bounds, counterTotal)
+        initialCounters: null
+        if(counterTotal > 0) {
+            zeros: sized(counterTotal)
+            index = 0
+            while(index < counterTotal) {
+                zeros[index] = 0
+                index = index + 1
+            }
+            zeros.freeze()
+            initialCounters = zeros
+        }
+        initialCaptures: sized(groupSlots)
+        initialCaptures.freeze()
+        markerRange: nodeCount + 1
+        wordSet: program.wordSet
+
+        // Thread state, captures, and counters are immutable once shared;
+        // updates copy.
+        replaced: (values, slot, value) => {
+            copy: Array(...values)
+            copy[slot] = value
+            copy.freeze()
+            copy
+        }
+
+        // Mixed-radix identity of everything that can change the future of a
+        // thread at one position; every count lies within its bound.
+        keyOf: (state, marker, counters) => {
+            key: state * markerRange + marker + 1
+            (counters === null).ifFalse(() => {
+                slot: 0
+                while(slot < counterTotal) {
+                    key = key * (counterBounds[slot] + 1) + counters[slot]
+                    slot = slot + 1
+                }
+            })
+            key
+        }
+
+        (input, from, anchored, toEnd) => {
+            scalars: input.scalars
+            size: input.size
+            position: from
+            best: null
+            pending: Map()
+            pendingCount: 0
+            visited: null
+            waiting: null
+            waitingCount: 0
+            stack: Map()
+            depth: 0
+            cut: false
+
+            push: (state, marker, counters, captures) => {
+                stack[depth] = { state: state; marker: marker; counters: counters; captures: captures }
+                depth = depth + 1
+            }
+
+            isWord: (at) => {
+                (at >= 0) && (at < size) && contains(wordSet, scalars[at])
+            }
+
+            // A CR immediately followed by LF is one line-boundary sequence.
+            holds: (kind) => {
+                result: false
+                if((kind == "textStart") || ((kind == "lineStart") && (position == 0))) {
+                    result = position == 0
+                }
+                if((kind == "textEnd") || (kind == "end") || ((kind == "lineEnd") && (position == size))) {
+                    result = position == size
+                }
+                if((kind == "lineStart") && (position > 0)) {
+                    previous: scalars[position - 1]
+                    result = isLineTerminator(previous) &&
+                        !((previous == 13) && (position < size) && (scalars[position] == 10))
+                }
+                if((kind == "lineEnd") && (position < size)) {
+                    current: scalars[position]
+                    result = isLineTerminator(current) &&
+                        !((current == 10) && (position > 0) && (scalars[position - 1] == 13))
+                }
+                if((kind == "wordBoundary") || (kind == "notWordBoundary")) {
+                    result = (isWord(position - 1) != isWord(position)) == (kind == "wordBoundary")
+                }
+                result
+            }
+
+            // Starts an iteration of repeat `at`, marking it fresh unless an
+            // outer active repeat already is.
+            iterate: (at, marker, counters, captures) => {
+                fresh: marker
+                if(marker == -1) {
+                    fresh = at
+                }
+                push(3 * nodes[at].item, fresh, counters, captures)
+            }
+
+            // Pushes successors in reverse priority order, so the preferred
+            // one is explored first.
+            step: (entry) => {
+                state: entry.state
+                marker: entry.marker
+                counters: entry.counters
+                captures: entry.captures
+                at: state.div(3)
+                phase: state % 3
+                node: nodes[at]
+                op: node.op
+                if(phase == 0) {
+                    if(op == "set") {
+                        waiting[waitingCount] = entry
+                        waitingCount = waitingCount + 1
+                    }
+                    if(op == "empty") {
+                        push(state + 1, marker, counters, captures)
+                    }
+                    if(op == "assert") {
+                        if(holds(node.kind)) {
+                            push(state + 1, marker, counters, captures)
+                        }
+                    }
+                    if(op == "concat") {
+                        push(3 * node.items[0], marker, counters, captures)
+                    }
+                    if(op == "alternate") {
+                        item: node.items.size() - 1
+                        while(item >= 0) {
+                            push(3 * node.items[item], marker, counters, captures)
+                            item = item - 1
+                        }
+                    }
+                    if(op == "capture") {
+                        push(3 * node.item, marker, counters, replaced(captures, 2 * node.group, position))
+                    }
+                    if(op == "repeat") {
+                        // Counters are reset to 0 whenever a repeat exits.
+                        if((counterSlots[at] === null) && (node.max !== null) && (node.max == 0)) {
+                            push(state + 1, marker, counters, captures)
+                        } else {
+                            if((counterSlots[at] === null) && (node.min == 1)) {
+                                iterate(at, marker, counters, captures)
+                            } else {
+                                push(state + 2, marker, counters, captures)
+                            }
+                        }
+                    }
+                }
+                if((phase == 1) && (at == root)) {
+                    if((toEnd == false) || (position == size)) {
+                        best = replaced(captures, 1, position)
+                        cut = true
+                    }
+                }
+                if((phase == 1) && (at != root)) {
+                    parent: parents[at]
+                    owner: nodes[parent]
+                    kind: owner.op
+                    if(kind == "concat") {
+                        next: positions[at] + 1
+                        if(next < owner.items.size()) {
+                            push(3 * owner.items[next], marker, counters, captures)
+                        } else {
+                            push(3 * parent + 1, marker, counters, captures)
+                        }
+                    }
+                    if(kind == "alternate") {
+                        push(3 * parent + 1, marker, counters, captures)
+                    }
+                    if(kind == "capture") {
+                        push(3 * parent + 1, marker, counters, replaced(captures, 2 * owner.group + 1, position))
+                    }
+                    if(kind == "repeat") {
+                        // One iteration of `parent` is complete.
+                        empty: (marker != -1) && (depths[marker] <= depths[parent])
+                        rest: marker
+                        if(marker == parent) {
+                            rest = -1
+                        }
+                        slot: counterSlots[parent]
+                        if(slot === null) {
+                            // `?` and `{1}` always exit; `*` loops back
+                            // unless the optional iteration was empty.
+                            if(((owner.max !== null) && (owner.max == 1)) || empty) {
+                                push(3 * parent + 1, rest, counters, captures)
+                            } else {
+                                push(3 * parent + 2, rest, counters, captures)
+                            }
+                        } else {
+                            count: counters[slot]
+                            if(empty && (count >= owner.min)) {
+                                push(3 * parent + 1, rest, replaced(counters, slot, 0), captures)
+                            } else {
+                                next: count + 1
+                                if((consumers[owner.item] == false) && (next < owner.min)) {
+                                    next = owner.min
+                                }
+                                if((owner.max === null) && (next > owner.min)) {
+                                    next = owner.min
+                                }
+                                push(3 * parent + 2, rest, replaced(counters, slot, next), captures)
+                            }
+                        }
+                    }
+                }
+                if(phase == 2) {
+                    slot: counterSlots[at]
+                    canIterate: true
+                    canExit: true
+                    exitCounters: counters
+                    (slot === null).ifFalse(() => {
+                        count: counters[slot]
+                        canIterate = (node.max === null) || (count < node.max)
+                        canExit = count >= node.min
+                        exitCounters = replaced(counters, slot, 0)
+                    })
+                    if(node.greedy) {
+                        if(canExit) {
+                            push(state - 1, marker, exitCounters, captures)
+                        }
+                        if(canIterate) {
+                            iterate(at, marker, counters, captures)
+                        }
+                    } else {
+                        if(canIterate) {
+                            iterate(at, marker, counters, captures)
+                        }
+                        if(canExit) {
+                            push(state - 1, marker, exitCounters, captures)
+                        }
+                    }
+                }
+            }
+
+            close: () => {
+                while((depth > 0) && !cut) {
+                    depth = depth - 1
+                    entry: stack[depth]
+                    key: keyOf(entry.state, entry.marker, entry.counters)
+                    visited.containsKey(key).ifFalse(() => {
+                        visited[key] = true
+                        step(entry)
+                    })
+                }
+                depth = 0
+            }
+
+            running: true
+            while(running) {
+                visited = Map()
+                waiting = Map()
+                waitingCount = 0
+                cut = false
+                entryIndex: 0
+                while((entryIndex < pendingCount) && !cut) {
+                    entry: pending[entryIndex]
+                    push(entry.state, entry.marker, entry.counters, entry.captures)
+                    close()
+                    entryIndex = entryIndex + 1
+                }
+                if(!cut && (best === null) && (!anchored || (position == from))) {
+                    push(3 * root, -1, initialCounters, replaced(initialCaptures, 0, position))
+                    close()
+                }
+                pending = Map()
+                pendingCount = 0
+                if(position < size) {
+                    scalar: scalars[position]
+                    item: 0
+                    while(item < waitingCount) {
+                        entry: waiting[item]
+                        if(contains(nodes[entry.state.div(3)].ranges, scalar)) {
+                            // Consuming input ends the freshness of every
+                            // active iteration.
+                            pending[pendingCount] = {
+                                state: entry.state + 1
+                                marker: -1
+                                counters: entry.counters
+                                captures: entry.captures
+                            }
+                            pendingCount = pendingCount + 1
+                        }
+                        item = item + 1
+                    }
+                }
+                position = position + 1
+                running = (pendingCount > 0) || ((best === null) && !anchored && (position <= size))
+            }
+            best
+        }
+    }
+
+    // Private Pattern construction. The compiled `program` is reachable only
+    // from the Closures created here, never from a slot, and every operation
+    // keeps its execution state local.
+    newPattern: (patternSource, patternFlags, program) => {
+        execute: newMatcher(program)
+        groupTotal: program.captureCount + 1
+
+        requireText: (text) => {
+            String.recognizes(text).ifFalse(() => {
+                Error().signal()
+            })
+        }
+
+        // Answers the selected Match starting at or after `from`, or null.
+        matchIn: (input, from, anchored, toEnd) => {
+            spans: execute(input, from, anchored, toEnd)
+            result: null
+            (spans === null).ifFalse(() => {
+                texts: sized(groupTotal)
+                group: 0
+                while(group < groupTotal) {
+                    (spans[2 * group] === null).ifFalse(() => {
+                        texts[group] = input.slice(spans[2 * group], spans[2 * group + 1])
+                    })
+                    group = group + 1
+                }
+                result = newMatch(program.captureNames, program.groupNames, spans, texts)
+            })
+            result
+        }
+
+        // Visits successive non-overlapping matches of a decoded subject. After
+        // an empty match at k the next search starts at k + 1, so each position
+        // yields at most one empty match and an empty match at the end is the
+        // last one. This is the only search progression: eachMatch, findAll,
+        // replaceAll, and split all consume it. Skipping a scalar only advances
+        // the search; callers that copy input keep their own copy boundary.
+        traverse: (input, visit) => {
+            from: 0
+            while(from <= input.size) {
+                found: matchIn(input, from, false, false)
+                if(found === null) {
+                    from = input.size + 1
+                } else {
+                    visit(found)
+                    from = found.end(0)
+                    if(found.start(0) == from) {
+                        from = from + 1
+                    }
+                }
+            }
+        }
+
+        // Parses `replacement` into a frozen Array of parts, each a literal
+        // String or a group number, before any output is produced: `$$` is a
+        // literal `$`, and `${N}` (decimal, no leading zero) or `${name}` must
+        // denote a group of this Pattern. Any other `$` signals an Error, even
+        // when the subject has no match. Names resolve to numbers here.
+        parseReplacement: (replacement) => {
+            requireText(replacement)
+            scalars: decodeScalars(replacement)
+            size: scalars.size()
+            parts: Map()
+            count: 0
+            literal: Encoding.UTF8.encode("")
+            flushLiteral: () => {
+                if(literal.size() > 0) {
+                    parts[count] = Encoding.UTF8.decode(literal)
+                    count = count + 1
+                    literal = Encoding.UTF8.encode("")
+                }
+            }
+            index: 0
+            while(index < size) {
+                scalar: scalars[index]
+                if(scalar == 36) {
+                    marker: -1
+                    if((index + 1) < size) {
+                        marker = scalars[index + 1]
+                    }
+                    if(marker == 36) {
+                        literal.add(36)
+                        index = index + 2
+                    } else {
+                        (marker == 123).ifFalse(() => {
+                            Error().signal()
+                        })
+                        first: index + 2
+                        close: first
+                        while((close < size) && (scalars[close] != 125)) {
+                            close = close + 1
+                        }
+                        ((close < size) && (close > first)).ifFalse(() => {
+                            Error().signal()
+                        })
+                        group: null
+                        if((scalars[first] >= 48) && (scalars[first] <= 57)) {
+                            if((scalars[first] == 48) && (close > (first + 1))) {
+                                Error().signal()
+                            }
+                            number: 0
+                            digit: first
+                            while(digit < close) {
+                                ((scalars[digit] >= 48) && (scalars[digit] <= 57)).ifFalse(() => {
+                                    Error().signal()
+                                })
+                                number = number * 10 + (scalars[digit] - 48)
+                                digit = digit + 1
+                            }
+                            (number < groupTotal).ifFalse(() => {
+                                Error().signal()
+                            })
+                            group = number
+                        } else {
+                            nameBytes: Encoding.UTF8.encode("")
+                            digit: first
+                            while(digit < close) {
+                                appendScalar(nameBytes, scalars[digit])
+                                digit = digit + 1
+                            }
+                            name: Encoding.UTF8.decode(nameBytes)
+                            program.captureNames.containsKey(name).ifFalse(() => {
+                                Error().signal()
+                            })
+                            group = program.captureNames[name]
+                        }
+                        flushLiteral()
+                        parts[count] = group
+                        count = count + 1
+                        index = close + 1
+                    }
+                } else {
+                    appendScalar(literal, scalar)
+                    index = index + 1
+                }
+            }
+            flushLiteral()
+            frozenArray(parts, count)
+        }
+
+        appendText: (output, text) => {
+            for(octet in Encoding.UTF8.encode(text)) {
+                output.add(octet)
+            }
+        }
+
+        // Replaces the first selected match, or every match `traverse` visits,
+        // reading captures from each selected Match. `copyFrom` is the first
+        // subject scalar not yet copied; after an empty match at k it stays k,
+        // so the scalar the search skips is still copied.
+        replace: (text, replacement, every) => {
+            requireText(text)
+            template: parseReplacement(replacement)
+            input: newInput(text)
+            output: Encoding.UTF8.encode("")
+            copyFrom: 0
+            replaceMatch: (found) => {
+                input.appendSpan(output, copyFrom, found.start(0))
+                for(part in template) {
+                    if(String.recognizes(part)) {
+                        appendText(output, part)
+                    } else {
+                        captured: found.group(part)
+                        (captured === null).ifFalse(() => {
+                            appendText(output, captured)
+                        })
+                    }
+                }
+                copyFrom = found.end(0)
+            }
+            if(every) {
+                traverse(input, replaceMatch)
+            } else {
+                found: matchIn(input, 0, false, false)
+                (found === null).ifFalse(() => {
+                    replaceMatch(found)
+                })
+            }
+            input.appendSpan(output, copyFrom, input.size)
+            Encoding.UTF8.decode(output)
+        }
+
+        searchFrom: (text, offset) => {
+            requireText(text)
+            (Integer.recognizes(offset) && (offset >= 0) && (offset <= text.size())).ifFalse(() => {
+                Error().signal()
+            })
+            matchIn(newInput(text), offset, false, false)
+        }
+
+        pattern: {
+            source: patternSource
+            flags: patternFlags
+            captureCount: program.captureCount
+            captureNames: program.captureNames
+            fullMatch: (text) => {
+                requireText(text)
+                matchIn(newInput(text), 0, true, true)
+            }
+            search: (text) => {
+                searchFrom(text, 0)
+            }
+            searchFrom: searchFrom
+            eachMatch: (text, block) => {
+                requireText(text)
+                traverse(newInput(text), (found) => {
+                    block(found)
+                })
+                null
+            }
+            findAll: (text) => {
+                requireText(text)
+                found: Map()
+                count: 0
+                traverse(newInput(text), (match) => {
+                    found[count] = match
+                    count = count + 1
+                })
+                freshArray(found, count)
+            }
+            replaceFirst: (text, replacement) => {
+                replace(text, replacement, false)
+            }
+            replaceAll: (text, replacement) => {
+                replace(text, replacement, true)
+            }
+            // Each match delimits a field; `fieldStart` is independent of the
+            // search progression, so a skipped scalar stays in its field.
+            split: (text) => {
+                requireText(text)
+                input: newInput(text)
+                fields: Map()
+                count: 0
+                fieldStart: 0
+                traverse(input, (found) => {
+                    fields[count] = input.slice(fieldStart, found.start(0))
+                    count = count + 1
+                    fieldStart = found.end(0)
+                })
+                fields[count] = input.slice(fieldStart, input.size)
+                freshArray(fields, count + 1)
+            }
+        }
+        // Minted as a frozen Regex transfer-family value with these slots.
+        transfer.mintPattern(pattern)
+    }
+
+    compileSource: (source, flags) => {
+        String.recognizes(source).ifFalse(() => {
+            Error().signal()
+        })
+        String.recognizes(flags).ifFalse(() => {
+            Error().signal()
+        })
+
+        caseInsensitive: false
+        multiline: false
+        dotAll: false
+        extended: false
+        for(octet in Encoding.UTF8.encode(flags)) {
+            known: false
+            if(octet == 105) {
+                if(caseInsensitive) {
+                    Error().signal()
+                }
+                caseInsensitive = true
+                known = true
+            }
+            if(octet == 109) {
+                if(multiline) {
+                    Error().signal()
+                }
+                multiline = true
+                known = true
+            }
+            if(octet == 115) {
+                if(dotAll) {
+                    Error().signal()
+                }
+                dotAll = true
+                known = true
+            }
+            if(octet == 120) {
+                if(extended) {
+                    Error().signal()
+                }
+                extended = true
+                known = true
+            }
+            known.ifFalse(() => {
+                Error().signal()
+            })
+        }
+        canonicalFlags: ""
+        if(caseInsensitive) {
+            canonicalFlags = canonicalFlags + "i"
+        }
+        if(multiline) {
+            canonicalFlags = canonicalFlags + "m"
+        }
+        if(dotAll) {
+            canonicalFlags = canonicalFlags + "s"
+        }
+        if(extended) {
+            canonicalFlags = canonicalFlags + "x"
+        }
+
+        // Under `i`, every literal and class leaf is closed under simple case
+        // folding before set operations and negation.
+        caseFold: (set) => {
+            result: set
+            if(caseInsensitive) {
+                result = unicode.caseClosure(set)
+            }
+            result
+        }
+
+        scalars: decodeScalars(source)
+        length: scalars.size()
+        position: 0
+
+        // Answers the scalar at `index`, or -1 past the end of the source.
+        scalarAt: (index) => {
+            result: -1
+            if(index < length) {
+                result = scalars[index]
+            }
+            result
+        }
+
+        // The compiled program is a postfix node table: every node is a frozen
+        // record and refers to its children by smaller node indexes, so later
+        // stages can traverse it iteratively without reinterpreting the source.
+        // Node `op`s: "set" (ranges), "empty", "assert" (kind), "concat" (items),
+        // "alternate" (items in priority order), "capture" (group, name, item),
+        // and "repeat" (item, min, max or null when unbounded, greedy). Counted
+        // repetition is never expanded. `weight` estimates the expanded
+        // automaton size of a node as an unbounded Integer.
+        nodes: Map()
+        nodeCount: 0
+        addNode: (node) => {
+            node.freeze()
+            nodes[nodeCount] = node
+            nodeCount = nodeCount + 1
+            nodeCount - 1
+        }
+
+        setNode: (ranges) => {
+            addNode({ op: "set"; ranges: ranges; weight: 1 })
+        }
+
+        weightOf: (indexes) => {
+            total: 0
+            for(index in indexes) {
+                total = total + nodes[index].weight
+            }
+            total
+        }
+
+        captureCount: 0
+        captureNames: Map()
+        usesWordBoundary: false
+
+        // Group frames form an explicit stack, so nesting depth never consumes
+        // host stack. `last` is "none", "atom", "assert", or "quantified" and
+        // decides whether a quantifier may follow.
+        newFrame: (group, name) => {
+            created: {
+                group: group
+                name: name
+                alternatives: Map()
+                alternativeCount: 0
+                items: Map()
+                itemCount: 0
+                last: "none"
+            }
+            created
+        }
+        frames: Map()
+        depth: 0
+        frame: newFrame(null, null)
+
+        pushItem: (node, kind) => {
+            frame.items[frame.itemCount] = node
+            frame.itemCount = frame.itemCount + 1
+            frame.last = kind
+        }
+
+        pushAssertion: (kind) => {
+            if((kind == "wordBoundary") || (kind == "notWordBoundary")) {
+                usesWordBoundary = true
+            }
+            pushItem(addNode({ op: "assert"; kind: kind; weight: 1 }), "assert")
+        }
+
+        finishSequence: (current) => {
+            count: current.itemCount
+            result: null
+            if(count == 0) {
+                result = addNode({ op: "empty"; weight: 1 })
+            }
+            if(count == 1) {
+                result = current.items[0]
+            }
+            if(count > 1) {
+                items: frozenArray(current.items, count)
+                result = addNode({ op: "concat"; items: items; weight: weightOf(items) })
+            }
+            current.items = Map()
+            current.itemCount = 0
+            current.last = "none"
+            result
+        }
+
+        finishAlternation: (current) => {
+            current.alternatives[current.alternativeCount] = finishSequence(current)
+            current.alternativeCount = current.alternativeCount + 1
+            count: current.alternativeCount
+            result: current.alternatives[0]
+            if(count > 1) {
+                items: frozenArray(current.alternatives, count)
+                result = addNode({ op: "alternate"; items: items; weight: weightOf(items) + count - 1 })
+            }
+            result
+        }
+
+        parseCaptureName: () => {
+            bytes: Encoding.UTF8.encode("")
+            (isAsciiLetter(scalarAt(position)) || (scalarAt(position) == 95)).ifFalse(() => {
+                Error().signal()
+            })
+            while(isAsciiLetter(scalarAt(position)) || isAsciiDigit(scalarAt(position)) ||
+                (scalarAt(position) == 95)) {
+                bytes.add(scalarAt(position))
+                position = position + 1
+            }
+            (scalarAt(position) == 62).ifFalse(() => {
+                Error().signal()
+            })
+            position = position + 1
+            Encoding.UTF8.decode(bytes)
+        }
+
+        // Capturing groups are numbered when their opening parenthesis is read.
+        openGroup: () => {
+            position = position + 1
+            group: null
+            name: null
+            if(scalarAt(position) == 63) {
+                position = position + 1
+                marker: scalarAt(position)
+                handled: false
+                if(marker == 58) {
+                    position = position + 1
+                    handled = true
+                }
+                if(marker == 60) {
+                    position = position + 1
+                    name = parseCaptureName()
+                    captureCount = captureCount + 1
+                    group = captureCount
+                    handled = true
+                }
+                // Look-around, atomic, inline-flag, conditional, recursive,
+                // branch-reset, comment, and callout groups are excluded.
+                handled.ifFalse(() => {
+                    Error().signal()
+                })
+            } else {
+                captureCount = captureCount + 1
+                group = captureCount
+            }
+            (name === null).ifFalse(() => {
+                if(captureNames.containsKey(name)) {
+                    Error().signal()
+                }
+                captureNames[name] = group
+            })
+            frames[depth] = frame
+            depth = depth + 1
+            frame = newFrame(group, name)
+        }
+
+        closeGroup: () => {
+            if(depth == 0) {
+                Error().signal()
+            }
+            inner: finishAlternation(frame)
+            closed: frame
+            depth = depth - 1
+            frame = frames[depth]
+            node: inner
+            (closed.group === null).ifFalse(() => {
+                node = addNode({
+                    op: "capture"
+                    group: closed.group
+                    name: closed.name
+                    item: inner
+                    weight: nodes[inner].weight + 2
+                })
+            })
+            pushItem(node, "atom")
+            position = position + 1
+        }
+
+        parseDecimal: () => {
+            isAsciiDigit(scalarAt(position)).ifFalse(() => {
+                Error().signal()
+            })
+            value: 0
+            while(isAsciiDigit(scalarAt(position))) {
+                value = value * 10 + (scalarAt(position) - 48)
+                position = position + 1
+            }
+            value
+        }
+
+        parseQuantifier: () => {
+            (frame.last == "atom").ifFalse(() => {
+                Error().signal()
+            })
+            first: scalarAt(position)
+            minimum: 0
+            maximum: null
+            position = position + 1
+            if(first == 43) {
+                minimum = 1
+            }
+            if(first == 63) {
+                maximum = 1
+            }
+            if(first == 123) {
+                minimum = parseDecimal()
+                if(scalarAt(position) == 125) {
+                    maximum = minimum
+                } else {
+                    (scalarAt(position) == 44).ifFalse(() => {
+                        Error().signal()
+                    })
+                    position = position + 1
+                    (scalarAt(position) == 125).ifFalse(() => {
+                        maximum = parseDecimal()
+                        if(maximum < minimum) {
+                            Error().signal()
+                        }
+                    })
+                    (scalarAt(position) == 125).ifFalse(() => {
+                        Error().signal()
+                    })
+                }
+                position = position + 1
+            }
+            greedy: true
+            if(scalarAt(position) == 63) {
+                greedy = false
+                position = position + 1
+            }
+            // Possessive quantifiers are excluded.
+            if(scalarAt(position) == 43) {
+                Error().signal()
+            }
+            index: frame.itemCount - 1
+            item: frame.items[index]
+            copies: maximum
+            if(maximum === null) {
+                copies = minimum + 1
+            }
+            weight: (nodes[item].weight + 1) * copies + 1
+            frame.items[index] = addNode({
+                op: "repeat"
+                item: item
+                min: minimum
+                max: maximum
+                greedy: greedy
+                weight: weight
+            })
+            frame.last = "quantified"
+        }
+
+        parseScalarEscape: () => {
+            (scalarAt(position) == 123).ifFalse(() => {
+                Error().signal()
+            })
+            position = position + 1
+            value: 0
+            digits: 0
+            while((digits <= 6) && (hexValue(scalarAt(position)) >= 0)) {
+                value = value * 16 + hexValue(scalarAt(position))
+                digits = digits + 1
+                position = position + 1
+            }
+            if((digits < 1) || (digits > 6) || (scalarAt(position) != 125)) {
+                Error().signal()
+            }
+            position = position + 1
+            if((value > maxScalar) || ((value >= 55296) && (value <= 57343))) {
+                Error().signal()
+            }
+            value
+        }
+
+        propertyCache: Map()
+
+        parseProperty: () => {
+            (scalarAt(position) == 123).ifFalse(() => {
+                Error().signal()
+            })
+            position = position + 1
+            nameBytes: Encoding.UTF8.encode("")
+            valueBytes: null
+            while(scalarAt(position) != 125) {
+                current: scalarAt(position)
+                // Every Unicode property and value alias is ASCII.
+                if((current < 0) || (current > 127)) {
+                    Error().signal()
+                }
+                if(current == 61) {
+                    (valueBytes === null).ifFalse(() => {
+                        Error().signal()
+                    })
+                    valueBytes = Encoding.UTF8.encode("")
+                } else {
+                    target: nameBytes
+                    (valueBytes === null).ifFalse(() => {
+                        target = valueBytes
+                    })
+                    target.add(current)
+                }
+                position = position + 1
+            }
+            position = position + 1
+            if(nameBytes.size() == 0) {
+                Error().signal()
+            }
+            name: Encoding.UTF8.decode(nameBytes)
+            value: null
+            key: "=" + name
+            (valueBytes === null).ifFalse(() => {
+                if(valueBytes.size() == 0) {
+                    Error().signal()
+                }
+                value = Encoding.UTF8.decode(valueBytes)
+                key = name + "=" + value
+            })
+            propertyCache.containsKey(key).ifFalse(() => {
+                propertyCache[key] = propertySet(name, value)
+            })
+            propertyCache[key]
+        }
+
+        // Reads one escape at `position` (a backslash) and answers a record of
+        // kind "scalar" (value), "set" (ranges, already case-folded and
+        // negated), or "assert" (name). Assertions are invalid inside classes.
+        parseEscape: (inClass) => {
+            position = position + 1
+            escaped: scalarAt(position)
+            if(escaped < 0) {
+                Error().signal()
+            }
+            position = position + 1
+            result: null
+            answerScalar: (value) => {
+                result = { kind: "scalar"; value: value }
+            }
+            answerSet: (ranges) => {
+                result = { kind: "set"; ranges: ranges }
+            }
+            answerAssertion: (name) => {
+                if(inClass) {
+                    Error().signal()
+                }
+                result = { kind: "assert"; name: name }
+            }
+            if(escaped == 116) {
+                answerScalar(9)
+            }
+            if(escaped == 110) {
+                answerScalar(10)
+            }
+            if(escaped == 114) {
+                answerScalar(13)
+            }
+            if(escaped == 102) {
+                answerScalar(12)
+            }
+            if(escaped == 117) {
+                answerScalar(parseScalarEscape())
+            }
+            if(escaped == 100) {
+                answerSet(caseFold(digitSet))
+            }
+            if(escaped == 68) {
+                answerSet(complement(caseFold(digitSet)))
+            }
+            if(escaped == 115) {
+                answerSet(caseFold(spaceSet))
+            }
+            if(escaped == 83) {
+                answerSet(complement(caseFold(spaceSet)))
+            }
+            if(escaped == 119) {
+                answerSet(caseFold(wordSet))
+            }
+            if(escaped == 87) {
+                answerSet(complement(caseFold(wordSet)))
+            }
+            if(escaped == 112) {
+                answerSet(caseFold(parseProperty()))
+            }
+            if(escaped == 80) {
+                answerSet(complement(caseFold(parseProperty())))
+            }
+            if(escaped == 65) {
+                answerAssertion("textStart")
+            }
+            if(escaped == 122) {
+                answerAssertion("textEnd")
+            }
+            if(escaped == 98) {
+                answerAssertion("wordBoundary")
+            }
+            if(escaped == 66) {
+                answerAssertion("notWordBoundary")
+            }
+            if(result === null) {
+                // Any other printable ASCII scalar that is neither a letter nor
+                // a digit escapes itself; every other escape is rejected.
+                ((escaped >= 32) && (escaped <= 126) && !isAsciiLetter(escaped) &&
+                    !isAsciiDigit(escaped)).ifFalse(() => {
+                    Error().signal()
+                })
+                answerScalar(escaped)
+            }
+            result
+        }
+
+        literalSet: (scalar) => {
+            caseFold(singleton(scalar))
+        }
+
+        // Class frames also form an explicit stack. Within one class, juxtaposed
+        // items form a union operand; `&&` and `--` combine operands left to
+        // right; negation applies last.
+        newClassFrame: (inverted) => {
+            created: {
+                inverted: inverted
+                left: null
+                operator: null
+                pairs: Map()
+                pairCount: 0
+                nested: Map()
+                nestedCount: 0
+            }
+            created
+        }
+
+        addNested: (classFrame, ranges) => {
+            classFrame.nested[classFrame.nestedCount] = ranges
+            classFrame.nestedCount = classFrame.nestedCount + 1
+        }
+
+        finishOperand: (classFrame) => {
+            if((classFrame.pairCount + classFrame.nestedCount) == 0) {
+                Error().signal()
+            }
+            operand: caseFold(fromPairs(classFrame.pairs, classFrame.pairCount))
+            index: 0
+            while(index < classFrame.nestedCount) {
+                operand = union(operand, classFrame.nested[index])
+                index = index + 1
+            }
+            classFrame.pairs = Map()
+            classFrame.pairCount = 0
+            classFrame.nested = Map()
+            classFrame.nestedCount = 0
+            if(classFrame.operator === null) {
+                classFrame.left = operand
+            }
+            if(classFrame.operator == "and") {
+                classFrame.left = intersect(classFrame.left, operand)
+            }
+            if(classFrame.operator == "minus") {
+                classFrame.left = subtract(classFrame.left, operand)
+            }
+        }
+
+        // Reads one class item and answers its scalar, or -1 when the item was a
+        // set escape, which is added to `classFrame` directly.
+        parseClassAtom: (classFrame) => {
+            current: scalarAt(position)
+            if((current < 0) || (current == 91) || (current == 93) || (current == 45) ||
+                (current == 38)) {
+                Error().signal()
+            }
+            if(extended && (isPatternWhiteSpace(current) || (current == 35))) {
+                Error().signal()
+            }
+            result: -1
+            if(current == 92) {
+                token: parseEscape(true)
+                if(token.kind == "scalar") {
+                    result = token.value
+                }
+                if(token.kind == "set") {
+                    addNested(classFrame, token.ranges)
+                }
+            } else {
+                result = current
+                position = position + 1
+            }
+            result
+        }
+
+        parseClass: () => {
+            classFrames: Map()
+            classDepth: 0
+            result: null
+            openClass: () => {
+                position = position + 1
+                // POSIX bracket expressions are excluded: `[:` and `[=` never
+                // open a class, and inside a class neither does `[.`. An
+                // outermost class may start with a literal `.`.
+                if((scalarAt(position) == 58) || (scalarAt(position) == 61) ||
+                    ((classDepth > 0) && (scalarAt(position) == 46))) {
+                    Error().signal()
+                }
+                inverted: scalarAt(position) == 94
+                if(inverted) {
+                    position = position + 1
+                }
+                classFrames[classDepth] = newClassFrame(inverted)
+                classDepth = classDepth + 1
+            }
+            openClass()
+            while(result === null) {
+                current: classFrames[classDepth - 1]
+                first: scalarAt(position)
+                second: scalarAt(position + 1)
+                kind: "atom"
+                if(first == 93) {
+                    kind = "close"
+                }
+                if(first == 91) {
+                    kind = "open"
+                }
+                if((first == 38) && (second == 38)) {
+                    kind = "and"
+                }
+                if((first == 45) && (second == 45)) {
+                    kind = "minus"
+                }
+                // `~~` is symmetric difference in other dialects; it is excluded.
+                if((first == 126) && (second == 126)) {
+                    Error().signal()
+                }
+
+                if(kind == "close") {
+                    finishOperand(current)
+                    finished: current.left
+                    if(current.inverted) {
+                        finished = complement(finished)
+                    }
+                    position = position + 1
+                    classDepth = classDepth - 1
+                    if(classDepth == 0) {
+                        result = finished
+                    } else {
+                        addNested(classFrames[classDepth - 1], finished)
+                    }
+                }
+                if(kind == "open") {
+                    openClass()
+                }
+                if((kind == "and") || (kind == "minus")) {
+                    finishOperand(current)
+                    current.operator = kind
+                    position = position + 2
+                }
+                if(kind == "atom") {
+                    low: parseClassAtom(current)
+                    if(low >= 0) {
+                        high: low
+                        if((scalarAt(position) == 45) && (scalarAt(position + 1) != 45)) {
+                            position = position + 1
+                            high = parseClassAtom(current)
+                            if((high < 0) || (high < low)) {
+                                Error().signal()
+                            }
+                        }
+                        current.pairs[current.pairCount] = [low, high]
+                        current.pairCount = current.pairCount + 1
+                    }
+                }
+            }
+            result
+        }
+
+        skipIgnorable: () => {
+            if(extended) {
+                while(isPatternWhiteSpace(scalarAt(position)) || (scalarAt(position) == 35)) {
+                    if(scalarAt(position) == 35) {
+                        while((position < length) && !isLineTerminator(scalars[position])) {
+                            position = position + 1
+                        }
+                    } else {
+                        position = position + 1
+                    }
+                }
+            }
+        }
+
+        while(position < length) {
+            skipIgnorable()
+            if(position < length) {
+                current: scalars[position]
+                kind: "literal"
+                if(current == 40) {
+                    kind = "open"
+                }
+                if(current == 41) {
+                    kind = "close"
+                }
+                if(current == 124) {
+                    kind = "alternate"
+                }
+                if((current == 42) || (current == 43) || (current == 63) || (current == 123)) {
+                    kind = "quantifier"
+                }
+                if(current == 91) {
+                    kind = "class"
+                }
+                if(current == 92) {
+                    kind = "escape"
+                }
+                if(current == 46) {
+                    kind = "dot"
+                }
+                if(current == 94) {
+                    kind = "caret"
+                }
+                if(current == 36) {
+                    kind = "dollar"
+                }
+                // A literal `]` or `}` must be escaped.
+                if((current == 93) || (current == 125)) {
+                    Error().signal()
+                }
+
+                if(kind == "open") {
+                    openGroup()
+                }
+                if(kind == "close") {
+                    closeGroup()
+                }
+                if(kind == "alternate") {
+                    frame.alternatives[frame.alternativeCount] = finishSequence(frame)
+                    frame.alternativeCount = frame.alternativeCount + 1
+                    position = position + 1
+                }
+                if(kind == "quantifier") {
+                    parseQuantifier()
+                }
+                if(kind == "class") {
+                    pushItem(setNode(parseClass()), "atom")
+                }
+                if(kind == "escape") {
+                    token: parseEscape(false)
+                    if(token.kind == "scalar") {
+                        pushItem(setNode(literalSet(token.value)), "atom")
+                    }
+                    if(token.kind == "set") {
+                        pushItem(setNode(token.ranges), "atom")
+                    }
+                    if(token.kind == "assert") {
+                        pushAssertion(token.name)
+                    }
+                }
+                if(kind == "dot") {
+                    if(dotAll) {
+                        pushItem(setNode(scalarSet), "atom")
+                    } else {
+                        pushItem(setNode(dotSet), "atom")
+                    }
+                    position = position + 1
+                }
+                if(kind == "caret") {
+                    if(multiline) {
+                        pushAssertion("lineStart")
+                    } else {
+                        pushAssertion("textStart")
+                    }
+                    position = position + 1
+                }
+                // Outside multiline mode `$` is kept distinct from `\z` as kind
+                // "end", so the matcher applies its end-of-input rule without
+                // reparsing.
+                if(kind == "dollar") {
+                    if(multiline) {
+                        pushAssertion("lineEnd")
+                    } else {
+                        pushAssertion("end")
+                    }
+                    position = position + 1
+                }
+                if(kind == "literal") {
+                    pushItem(setNode(literalSet(current)), "atom")
+                    position = position + 1
+                }
+            }
+        }
+
+        (depth == 0).ifFalse(() => {
+            Error().signal()
+        })
+        root: finishAlternation(frame)
+        captureNames.freeze()
+        groupNames: sized(captureCount + 1)
+        frames = Map()
+        frame = null
+        nameIndex: 0
+        while(nameIndex < nodeCount) {
+            node: nodes[nameIndex]
+            if((node.op == "capture") && (node.name !== null)) {
+                groupNames[node.group] = node.name
+            }
+            nameIndex = nameIndex + 1
+        }
+        groupNames.freeze()
+        boundaryWords: null
+        if(usesWordBoundary) {
+            boundaryWords = wordSet
+        }
+        nodeTable: frozenArray(nodes, nodeCount)
+        rootWeight: nodes[root].weight
+
+        // Private compiled program consumed by the matcher.
+        program: {
+            nodes: nodeTable
+            root: root
+            captureCount: captureCount
+            captureNames: captureNames
+            groupNames: groupNames
+            caseInsensitive: caseInsensitive
+            multiline: multiline
+            dotAll: dotAll
+            wordSet: boundaryWords
+            lineTerminators: lineTerminatorSet
+            weight: rootWeight
+        }
+        program.freeze()
+        nodes = null
+        scalars = null
+        newPattern(source, canonicalFlags, program)
+    }
+
+    // Destination-local construction for values transferred into this Actor or
+    // P worker (PLAT051): a Pattern is recompiled from its source and canonical
+    // flags; a Match is rebuilt from its snapshot of captures, bounds, and
+    // group names, without matching again. The runtime keeps this Closure in
+    // this module instance's private record; it is not module surface.
+    transfer.installFactory((kind, first, second, third) => {
+        built: null
+        if(kind == "Pattern") {
+            built = compileSource(first, second)
+        } else {
+            names: Map()
+            group: 0
+            for(name in first) {
+                (name === null).ifFalse(() => {
+                    names[name] = group
+                })
+                group = group + 1
+            }
+            names.freeze()
+            built = newMatch(names, first, second, third)
+        }
+        built
+    })
+
+    compileSource
+})(_regexUnicodeFacility, _regexTransferFacility)
+
+// The runtime-provisioned Unicode data and transfer facilities are captured
+// privately above; they are not module surface.
+context.removeSlot("_regexUnicodeFacility")
+context.removeSlot("_regexTransferFacility")
+
+/// Compiles `source` without flags; equivalent to
+/// `compileWithFlags(source, "")`.
+this.compile: (source) => {
+    compileWithFlags(source, "")
+}
+
+/// Answers regex source that matches exactly the scalars of `text` under every
+/// flag combination. Every ASCII syntax character, `#`, `-`, and `&` gains a
+/// backslash; tab, LF, CR, and FF become `\t`, `\n`, `\r`, and `\f`; space
+/// becomes `\ `; and the remaining Pattern_White_Space scalars become
+/// `\u{HEX}` escapes with uppercase hexadecimal digits. Every other scalar is
+/// kept. A non-String argument signals an Error.
+this.escape: (text) => {
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+    output: Encoding.UTF8.encode("")
+    appendAscii: (spelling) => {
+        for(octet in Encoding.UTF8.encode(spelling)) {
+            output.add(octet)
+        }
+    }
+    appendHexEscape: (scalar) => {
+        digits: "0123456789ABCDEF"
+        hex: ""
+        remaining: scalar
+        while(remaining > 0) {
+            hex = digits[remaining % 16] + hex
+            remaining = remaining.div(16)
+        }
+        appendAscii("\\u{" + hex + "}")
+    }
+    // Multi-byte UTF-8 sequences are collected whole so the scalars that are
+    // Pattern_White_Space can be recognized.
+    pending: Encoding.UTF8.encode("")
+    expected: 0
+    scalar: 0
+    for(octet in Encoding.UTF8.encode(text)) {
+        if(expected == 0) {
+            if(octet < 128) {
+                handled: false
+                if(octet == 9) {
+                    appendAscii("\\t")
+                    handled = true
+                }
+                if(octet == 10) {
+                    appendAscii("\\n")
+                    handled = true
+                }
+                if(octet == 13) {
+                    appendAscii("\\r")
+                    handled = true
+                }
+                if(octet == 12) {
+                    appendAscii("\\f")
+                    handled = true
+                }
+                if(octet == 11) {
+                    appendHexEscape(11)
+                    handled = true
+                }
+                handled.ifFalse(() => {
+                    special: (octet == 32) || (octet == 35) || (octet == 36) || (octet == 38) ||
+                        (octet == 40) || (octet == 41) || (octet == 42) || (octet == 43) ||
+                        (octet == 45) || (octet == 46) || (octet == 63) || (octet == 91) ||
+                        (octet == 92) || (octet == 93) || (octet == 94) || (octet == 123) ||
+                        (octet == 124) || (octet == 125)
+                    if(special) {
+                        output.add(92)
+                    }
+                    output.add(octet)
+                })
+            } else {
+                pending.add(octet)
+                scalar = octet - 192
+                expected = 1
+                if(octet >= 224) {
+                    scalar = octet - 224
+                    expected = 2
+                }
+                if(octet >= 240) {
+                    scalar = octet - 240
+                    expected = 3
+                }
+            }
+        } else {
+            pending.add(octet)
+            scalar = scalar * 64 + (octet - 128)
+            expected = expected - 1
+            if(expected == 0) {
+                if((scalar == 133) || (scalar == 8206) || (scalar == 8207) || (scalar == 8232) ||
+                    (scalar == 8233)) {
+                    appendHexEscape(scalar)
+                } else {
+                    for(held in pending) {
+                        output.add(held)
+                    }
+                }
+                pending = Encoding.UTF8.encode("")
+            }
+        }
+    }
+    Encoding.UTF8.decode(output)
+}
+
+/// Answers replacement text that denotes exactly `text` under the replacement
+/// grammar, in which `$$` is a literal `$` and `${...}` refers to a capture:
+/// every `$` is doubled and every other scalar, including `{`, `}`, and
+/// backslash, is kept. A non-String argument signals an Error.
+this.escapeReplacement: (text) => {
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+    output: Encoding.UTF8.encode("")
+    for(octet in Encoding.UTF8.encode(text)) {
+        if(octet == 36) {
+            output.add(36)
+        }
+        output.add(octet)
+    }
+    Encoding.UTF8.decode(output)
+}

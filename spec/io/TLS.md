@@ -5,7 +5,7 @@ Status: Draft
 Last updated: 2026-10-29
 
 This document is the primary normative owner of the optional Standard Library
-TLS client facility `std:tls/Client` selected by D220–S12. It defines how an
+TLS client facility `std:tls/client` selected by D220–S12. It defines how an
 application upgrades an already connected byte duplex to an authenticated,
 confidential TLS duplex.
 
@@ -28,7 +28,7 @@ governs.
 
 ## 1. Scope and governing model
 
-`std:tls/Client` performs one TLS client handshake over a caller-supplied
+`std:tls/client` performs one TLS client handshake over a caller-supplied
 duplex and, only on complete success, delivers a secure duplex through which
 application data is read and written. It provides no TCP connection, DNS
 resolution, URL parsing, HTTP request, timer, proxy, redirect, connection
@@ -43,13 +43,13 @@ components, not public modules, backend registries or normative privileges.
 
 ## 2. Module, exports and entry points
 
-The explicit module `std:tls/Client` exports exactly `Client`, `Trust` and
+The explicit module `std:tls/client` exports exactly `Client`, `Trust` and
 `TlsError`. There is no Prelude binding and no implicit import. Importing the
 module confers no `Network` capability, no default trust and no ambient
 certificate-authority authority. Each Actor that imports the module obtains
 its own module instance under `../semantics/MODULES.md`; no TLS state is
 shared between module instances, Actors or Contexts. A program that does not
-import `std:tls/Client` pays no TLS allocation, provisioning or state.
+import `std:tls/client` pays no TLS allocation, provisioning or state.
 
 ```text
 Client.handshake(duplex, serverIdentity, trust,
@@ -375,7 +375,7 @@ updates. `Trust.javaCacerts()` is never live operating-system trust.
 
 ## 12. HTTP composition
 
-A secure duplex composes with the unchanged `std:http/Client`
+A secure duplex composes with the unchanged `std:http/client`
 `Client.exchangeOne(duplex, request, onResponse, limits)` and
 `Client.exchangeOne.owning(...)` of `HTTP.md` §16. This facility modifies no
 HTTP framing, parses no URL and adds no automatic TLS to any HTTP facility.
@@ -383,7 +383,7 @@ HTTP framing, parses no URL and adds no automatic TLS to any HTTP facility.
 ## 13. Deferred
 
 The following remain outside this contract and require separate explicit
-design: TLS server operation, HTTPS hosting for `std:http/Host`, mutual TLS,
+design: TLS server operation, HTTPS hosting for `std:http/host`, mutual TLS,
 operating-system trust adapters, alternative TLS engines, session resumption,
 0-RTT, DNS/URL convenience and HTTP/2. Unicode (U-label) reference input and
 any Unicode-to-ASCII conversion are outside this contract (§4).

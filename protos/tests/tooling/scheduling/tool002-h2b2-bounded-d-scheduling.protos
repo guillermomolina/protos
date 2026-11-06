@@ -13,8 +13,8 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Manifest: import("self:Manifest")
-Runner: import("self:Runner")
+Manifest: import("./Manifest.protos")
+Runner: import("./Runner.protos")
 
 simple: Manifest.caseSpec(Array("h2b2/simple.protos", "integer", "10"))
 futureResolved: Manifest.caseSpec(Array("h2b2/future-resolved.protos", "future-integer", "20"))

@@ -13,12 +13,12 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal construction-argument validation of std:http/Host (D216,
+//! Internal construction-argument validation of std:http/host (D216,
 //! HTTP.md §15.2, §15.3, §15.5). This module is an unpublished implementation
 //! artifact, not an approved Standard Library API. It performs no I/O,
 //! acquires no custody, and creates no Actor.
 
-Limits: import("std:http/internal/Limits")
+Limits: import("./Limits.protos")
 
 maxSigned32: 2147483647
 

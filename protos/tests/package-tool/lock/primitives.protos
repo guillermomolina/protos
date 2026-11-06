@@ -13,12 +13,12 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("primitive-line-bare", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         tokens: Syntax.lineTokens("lock-format 1")
         ok: tokens.size() == 2
         (tokens[0].text == "lock-format").ifFalse(() => { ok = false })
@@ -28,7 +28,7 @@ tests: [
         Assertions.require(ok)
     }),
     Test("primitive-decimal", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         token: Syntax.lineTokens("123")[0]
         parsed: Syntax.parseDecimalToken(token)
         ok: parsed.value == 123
@@ -36,12 +36,12 @@ tests: [
         Assertions.require(ok)
     }),
     Test("primitive-method", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         token: Syntax.lineTokens("protos-resolution-input-v1")[0]
         Assertions.require(Syntax.parseMethodToken(token) == "protos-resolution-input-v1")
     }),
     Test("primitive-digest", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         token: Syntax.lineTokens("sha256:0123456789abcdef")[0]
         parsed: Syntax.parseDigestToken(token)
         ok: parsed.algorithm == "sha256"

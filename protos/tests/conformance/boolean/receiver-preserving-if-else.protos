@@ -16,8 +16,8 @@
 // D211 contextual if/else. The file name is the historical location of the
 // retired D200 receiver-preserving Object.if/Object.else coverage.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("standard Object publishes no if, else, elseIf or elif", () => {

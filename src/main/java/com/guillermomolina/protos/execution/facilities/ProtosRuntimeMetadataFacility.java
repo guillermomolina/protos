@@ -30,7 +30,7 @@ import java.util.List;
 /**
  * Private runtime facility of {@code std:runtime} (D205, LIB022-A).
  *
- * <p>The public {@code info} is an ordinary Closure of {@code lib/runtime.protos}. This frozen
+ * <p>The public {@code info} is an ordinary Closure of {@code lib/runtime/module.protos}. This frozen
  * facility is a deferred standard initial member of exactly that module: it is created only when
  * an Actor-local instance of the module initializes, is captured lexically by the module source,
  * and its bootstrap slot is removed, so it is never module surface or a Prelude binding.
@@ -47,7 +47,7 @@ import java.util.List;
  * observation happens on invocation.
  */
 public final class ProtosRuntimeMetadataFacility {
-    public static final ProtosModuleKey MODULE_KEY = new ProtosModuleKey("std:runtime");
+    public static final ProtosModuleKey MODULE_KEY = ProtosModuleKey.module("std:runtime");
     public static final String BOOTSTRAP_SLOT = "_runtimeMetadataFacility";
 
     private static final String IMPLEMENTATION = "Protos";

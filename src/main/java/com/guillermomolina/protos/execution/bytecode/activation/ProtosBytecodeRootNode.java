@@ -2754,7 +2754,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation.methodHome().orElse(null),
                     activation.returnHome().orElse(null),
                     activation.prelude().orElse(null),
-                    executionPlanCell.plan());
+                    executionPlanCell.plan(),
+                    activation.currentModuleKey().orElse(null));
         }
     }
 
@@ -2788,7 +2789,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation.methodHomeOrNullForRuntime(),
                     activation.returnHomeOrNullForRuntime(),
                     activation.preludeOrNullForRuntime(),
-                    executionPlanCell.plan());
+                    executionPlanCell.plan(),
+                    activation.currentModuleKey().orElse(null));
         }
 
         @Specialization(guards = {
@@ -2808,7 +2810,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation.methodHomeOrNullForRuntime(),
                     activation.returnHomeOrNullForRuntime(),
                     activation.preludeOrNullForRuntime(),
-                    executionPlanCell.plan());
+                    executionPlanCell.plan(),
+                    activation.currentModuleKey().orElse(null));
         }
 
         @Specialization(guards = {"compactCapture", "!hasPublishedActivation(frame)"})

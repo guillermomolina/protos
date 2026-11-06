@@ -14,9 +14,9 @@
 // the specific language governing rights and limitations under the License.
 
 // Authority-free Router example. Runs in the standalone CLI.
-// The resulting handler is an ordinary callable suitable for std:http/Server.
+// The resulting handler is an ordinary callable suitable for std:http/server.
 
-Router: import("std:http/Router").Router
+Router: import("std:http/router").Router
 
 handler: Router.compile([
     {

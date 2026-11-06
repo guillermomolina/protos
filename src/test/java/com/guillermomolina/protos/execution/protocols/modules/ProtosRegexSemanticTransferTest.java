@@ -39,7 +39,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * PLAT051-B: {@code std:regex/Regex} Pattern and Match are values of the single Regex semantic
+ * PLAT051-B: {@code std:regex/regex} Pattern and Match are values of the single Regex semantic
  * transfer family. They cross Actor and P boundaries as inert snapshots (Pattern: source and
  * canonical flags; Match: captures, bounds, count and names) and are rebuilt by the destination's
  * own Regex module, so no compiled program, subject or source Closure crosses.
@@ -48,7 +48,7 @@ final class ProtosRegexSemanticTransferTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path MAIN = Path.of("src", "main", "java", "com", "guillermomolina", "protos");
-    private static final ProtosModuleKey HOLDER_KEY = new ProtosModuleKey("plat051b-test:holder");
+    private static final ProtosModuleKey HOLDER_KEY = ProtosModuleKey.source("plat051b-test:holder");
 
     private static final String HOLDER_SOURCE =
             "describePattern: (p) => {\n"
@@ -78,7 +78,7 @@ final class ProtosRegexSemanticTransferTest {
 
     // Guest source: two backslashes in the guest String literal denote one regex backslash.
     private static final String SETUP =
-            "Regex: import(\"std:regex/Regex\")\n"
+            "Regex: import(\"std:regex/regex\")\n"
                     + "H: import(\"plat051b-holder\")\n"
                     + "p: Regex.compileWithFlags(\"(?<w>é+)(\\\\d)?\", \"i\")\n"
                     + "p2: Regex.compileWithFlags(\"(?<w>é+)(\\\\d)?\", \"i\")\n"

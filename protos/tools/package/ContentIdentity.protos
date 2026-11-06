@@ -13,9 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Arrays: import("std:collections/Array")
-Files: import("std:io/Files")
-SHA256: import("std:crypto/SHA256")
+Arrays: import("std:collections/array")
+Files: import("std:io/files")
+SHA256: import("std:crypto/sha256")
 
 emptyBytes: () => {
     Encoding.UTF8.encode("")

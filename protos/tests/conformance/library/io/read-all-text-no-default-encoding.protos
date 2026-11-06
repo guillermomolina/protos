@@ -14,7 +14,7 @@
 // the specific language governing rights and limitations under the License.
 // D203: an omitted encoding binds null; no default Encoding is invented, so
 // decoding fails and the Future resolves with that Error.
-Files: import("std:io/Files")
+Files: import("std:io/files")
 handled: false
 Error.handle(
     () => { Files.readAllText(filesystem, Path.relative().child("target.bin")).value()

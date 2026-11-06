@@ -27,8 +27,8 @@
 //! identifies a source. Membership is set-based and diagnostics are sorted, so
 //! the result does not depend on the order in which any input was enumerated.
 
-Arrays: import("std:collections/Array")
-ArrayAccumulator: import("self:ArrayAccumulator")
+Arrays: import("std:collections/array")
+ArrayAccumulator: import("./ArrayAccumulator.protos")
 
 /// An intended production source that no registration names.
 missingRegistration: "MISSING_REGISTRATION"

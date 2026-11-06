@@ -169,7 +169,7 @@ final class ProtosActorCrossDomainConformanceTest {
             AtomicInteger calls = new AtomicInteger();
             ProtosActor member = new ProtosActor(actorRefPrototype());
             member.bindMessageEnvironmentForRuntime(
-                    prelude, new ProtosModuleKey("race-target-" + iteration));
+                    prelude, ProtosModuleKey.source("race-target-" + iteration));
             ProtosObjectValue behavior = pingBehavior(calls);
             ProtosActorGroupRuntime group = new ProtosActorGroupRuntime();
             group.addMemberForRuntime(member);
@@ -255,7 +255,7 @@ final class ProtosActorCrossDomainConformanceTest {
     private static ProtosActivation callerActivation(ProtosPrelude prelude, ProtosActor actor) {
         return prelude.newModuleActivation(
                 actor.moduleState(),
-                new ProtosModuleKey("caller"),
+                ProtosModuleKey.source("caller"),
                 prelude.newExecutionContext(),
                 actor.executionDomain());
     }
@@ -263,7 +263,7 @@ final class ProtosActorCrossDomainConformanceTest {
     private static ProtosActor ready(
             ProtosActor actor, ProtosPrelude prelude, ProtosObjectValue behavior) {
         actor.bindMessageEnvironmentForRuntime(
-                prelude, new ProtosModuleKey("actor-" + actor.incarnationIdentityForRuntime()));
+                prelude, ProtosModuleKey.source("actor-" + actor.incarnationIdentityForRuntime()));
         assertTrue(actor.completeInitialization(behavior));
         return actor;
     }

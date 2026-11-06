@@ -124,8 +124,8 @@ final class ProtosTestToolResourceRequirementsDiscoveryTest {
     }
 
     private static String planningSource() {
-        return "Manifest: import(\"self:Manifest\")\n"
-                + "Requirements: import(\"self:ResourceRequirements\")\n"
+        return "Manifest: import(\"./Manifest.protos\")\n"
+                + "Requirements: import(\"./ResourceRequirements.protos\")\n"
                 + "spec: Manifest.caseSpec(Array(\"a.protos\", \"boolean\", \"true\"))\n"
                 + "plan: Array(Array(spec))\n"
                 + "joined: Requirements.loadFromCorpus(filesystem, plan)\n"
@@ -161,7 +161,7 @@ final class ProtosTestToolResourceRequirementsDiscoveryTest {
                         SHARED_ROOT,
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosNioReadOnlyTreeFilesystemBackend backend =
                 new ProtosNioReadOnlyTreeFilesystemBackend(corpusRoot)) {

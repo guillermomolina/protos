@@ -58,7 +58,7 @@ final class ProtosActorBootstrapTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActor actor = new ProtosActor(actorRefPrototype());
         ProtosObjectValue transferred = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosModuleKey key = new ProtosModuleKey("app/bootstrap");
+        ProtosModuleKey key = ProtosModuleKey.source("app/bootstrap");
 
         boolean becameReady =
                 new ProtosActorBootstrap(new ProtosModuleRuntime(resolver))
@@ -73,6 +73,70 @@ final class ProtosActorBootstrapTest {
         assertEquals(
                 com.guillermomolina.protos.runtime.ProtosActorModuleState.InitializationState.READY,
                 actor.moduleState().lookup(key).orElseThrow().state());
+    }
+
+    @Test
+    void d242ModuleBootstrapSelectsPublicExportAndPreservesPrivateLexicalSlots()
+            throws Exception {
+        CanonicalResolver resolver =
+                new CanonicalResolver()
+                        .module(
+                                "app/bootstrap",
+                                "privateValue: 17\n"
+                                        + "this.bootstrap: () => {\n"
+                                        + "    moduleReceiver: this\n"
+                                        + "    { owner: moduleReceiver; observed: privateValue }\n"
+                                        + "}");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActor actor = new ProtosActor(actorRefPrototype());
+        ProtosModuleKey key = ProtosModuleKey.module("app/bootstrap");
+
+        assertTrue(
+                new ProtosActorBootstrap(new ProtosModuleRuntime(resolver))
+                        .initialize(actor, prelude, key, "bootstrap", List.of()));
+
+        ProtosObjectValue publicModule =
+                actor.moduleState().lookup(key).orElseThrow().instance();
+        ProtosObjectValue behavior = actor.currentBehavior().orElseThrow();
+
+        assertTrue(publicModule.hasLocalSlot("bootstrap"));
+        assertFalse(publicModule.hasLocalSlot("privateValue"));
+        assertTrue(behavior.hasLocalSlot("observed"));
+        assertSame(
+                publicModule,
+                behavior.readLocalSlot("owner").orElseThrow());
+    }
+
+    @Test
+    void d242PrivateModuleBindingCannotBeUsedAsActorBootstrap()
+            throws Exception {
+        CanonicalResolver resolver =
+                new CanonicalResolver()
+                        .module(
+                                "app/bootstrap",
+                                "bootstrap: () => { {} }");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActor actor = new ProtosActor(actorRefPrototype());
+        ProtosModuleKey key = ProtosModuleKey.module("app/bootstrap");
+
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        new ProtosActorBootstrap(new ProtosModuleRuntime(resolver))
+                                .initialize(
+                                        actor,
+                                        prelude,
+                                        key,
+                                        "bootstrap",
+                                        List.of()));
+
+        assertEquals(
+                ProtosActor.LifecycleState.TERMINATED,
+                actor.lifecycleState());
+
+        ProtosObjectValue publicModule =
+                actor.moduleState().lookup(key).orElseThrow().instance();
+        assertFalse(publicModule.hasLocalSlot("bootstrap"));
     }
 
     @Test
@@ -101,7 +165,7 @@ final class ProtosActorBootstrapTest {
                 new CanonicalResolver()
                         .module("app/bootstrap", "bootstrap: () => { { state: {} } }");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosModuleKey key = new ProtosModuleKey("app/bootstrap");
+        ProtosModuleKey key = ProtosModuleKey.source("app/bootstrap");
         ProtosActor first = new ProtosActor(actorRefPrototype());
         ProtosActor second = new ProtosActor(actorRefPrototype());
         ProtosActorBootstrap bootstrap =
@@ -131,7 +195,7 @@ final class ProtosActorBootstrapTest {
                                 .initialize(
                                         actor,
                                         prelude,
-                                        new ProtosModuleKey("app/bootstrap"),
+                                        ProtosModuleKey.source("app/bootstrap"),
                                         "call",
                                         List.of()));
         assertEquals(ProtosActor.LifecycleState.TERMINATED, actor.lifecycleState());
@@ -168,7 +232,7 @@ final class ProtosActorBootstrapTest {
 
         ProtosActorBootstrap bootstrap =
                 new ProtosActorBootstrap(new ProtosModuleRuntime(resolver));
-        ProtosModuleKey key = new ProtosModuleKey("app/bootstrap");
+        ProtosModuleKey key = ProtosModuleKey.source("app/bootstrap");
 
         ProtosActor numericActor = new ProtosActor(actorRefPrototype());
 
@@ -218,7 +282,7 @@ final class ProtosActorBootstrapTest {
                                 .initialize(
                                         actor,
                                         prelude,
-                                        new ProtosModuleKey("app/bootstrap"),
+                                        ProtosModuleKey.source("app/bootstrap"),
                                         "bootstrap",
                                         List.of()));
 
@@ -235,7 +299,7 @@ final class ProtosActorBootstrapTest {
         ProtosActor actor = new ProtosActor(actorRefPrototype());
         ProtosActorBootstrap bootstrap =
                 new ProtosActorBootstrap(new ProtosModuleRuntime(resolver));
-        ProtosModuleKey key = new ProtosModuleKey("app/bootstrap");
+        ProtosModuleKey key = ProtosModuleKey.source("app/bootstrap");
 
         assertTrue(bootstrap.initialize(actor, prelude, key, "bootstrap", List.of()));
         ProtosObjectValue behavior = actor.currentBehavior().orElseThrow();
@@ -347,7 +411,7 @@ final class ProtosActorBootstrapTest {
                     @Override
                     public ProtosModuleKey resolve(
                             String exactSpecifier, Optional<ProtosModuleKey> importingModule) {
-                        return new ProtosModuleKey("canonical:" + exactSpecifier);
+                        return ProtosModuleKey.source("canonical:" + exactSpecifier);
                     }
 
                     @Override
@@ -379,7 +443,7 @@ final class ProtosActorBootstrapTest {
         ProtosActivation activation =
                 prelude.newModuleActivation(
                         root.moduleState(),
-                        new ProtosModuleKey("creator"),
+                        ProtosModuleKey.source("creator"),
                         prelude.newExecutionContext(),
                         root.executionDomain());
         CountingListenerBackend backend = new CountingListenerBackend();
@@ -480,7 +544,7 @@ final class ProtosActorBootstrapTest {
                                 .initialize(
                                         actor,
                                         prelude,
-                                        new ProtosModuleKey("app/bootstrap"),
+                                        ProtosModuleKey.source("app/bootstrap"),
                                         "bootstrap",
                                         List.of()));
         assertEquals(ProtosActor.LifecycleState.TERMINATED, actor.lifecycleState());

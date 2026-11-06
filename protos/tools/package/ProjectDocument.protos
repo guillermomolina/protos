@@ -13,9 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Arrays: import("std:collections/Array")
-Root: import("self:ResolutionRoot")
-Syntax: import("self:LockSyntax")
+Arrays: import("std:collections/array")
+Root: import("./ResolutionRoot.protos")
+Syntax: import("./LockSyntax.protos")
 
 nonEmptyQstring: (text) => {
     bytes: Encoding.UTF8.encode(text)

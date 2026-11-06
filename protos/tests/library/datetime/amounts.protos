@@ -13,11 +13,11 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Duration: import("std:datetime/Duration")
-Period: import("std:datetime/Period")
-Date: import("std:datetime/Date")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Duration: import("std:datetime/duration")
+Period: import("std:datetime/period")
+Date: import("std:datetime/date")
 
 // Requires `a` and `b` to be semantically equal, distinct identities, and
 // hash-coherent.

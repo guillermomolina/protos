@@ -149,7 +149,7 @@ distinct: (array) => {
     })
 
     snapshot: Array(...array)
-    Sets: import("std:collections/Set")
+    Sets: import("std:collections/set")
     seen: Sets()
     retained: Array(...snapshot)
     count: 0

@@ -1236,8 +1236,8 @@ final class ProtosActorValueTransferTest {
     private static ProtosObjectValue linearAlgebraMember(ProtosPrelude prelude, String name) {
         ProtosObjectValue context = prelude.newExecutionContext();
         prelude.installStandardModuleMembersForRuntime(
-                new com.guillermomolina.protos.runtime.modules.ProtosModuleKey(
-                        "std:math/LinearAlgebra"),
+                com.guillermomolina.protos.runtime.modules.ProtosModuleKey.module(
+                        "std:math/linear_algebra"),
                 context);
         ProtosObjectValue member = (ProtosObjectValue) context.readLocalSlot(name).orElseThrow();
         assertTrue(member.isFrozen());

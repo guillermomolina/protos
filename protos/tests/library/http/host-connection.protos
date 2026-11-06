@@ -13,12 +13,12 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Server: import("std:http/Server").Server
-HostConnection: import("std:http/internal/HostConnection")
-HostWorker: import("std:http/internal/HostWorker")
-HttpError: import("std:http/Server").HttpError
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Server: import("std:http/server").Server
+HostConnection: import("std:http/internal/host_connection")
+HostWorker: import("std:http/internal/host_worker")
+HttpError: import("std:http/server").HttpError
 
 // HTTP.md §§15.5, 15.6, 15.10: the Worker-side admission and custody of
 // delivered connections. Real TCP cannot be made to fail an accept or a close

@@ -13,16 +13,16 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal URL and request preparation of std:http/UrlClient (D222-C,
+//! Internal URL and request preparation of std:http/url_client (D222-C,
 //! HTTP.md §18.2-§18.3). This module is an unpublished implementation
 //! artifact, not an approved Standard Library API. It is pure: it parses the
 //! URL with std:uri, validates and snapshots the caller's authorities and
-//! request, and answers the lower std:http/Client request. It resolves no
+//! request, and answers the lower std:http/client request. It resolves no
 //! name, opens no connection and reads no capability.
 
 uri: import("std:uri")
-IpAddresses: import("std:network/IpAddresses")
-MessageSyntax: import("std:http/internal/MessageSyntax")
+IpAddresses: import("std:network/ip_addresses")
+MessageSyntax: import("./MessageSyntax.protos")
 
 authoritySlots: ["network", "resolver", "trust"]
 requestSlots: ["method", "headers", "body"]
@@ -166,7 +166,7 @@ classifyHost: (host) => {
 /// address, name, port, request}, or null when it is not admissible. address
 /// is the IpAddress of a numeric host (connected directly, and the TLS
 /// reference), otherwise name is the original host name (the only Resolver
-/// lookup and the TLS reference). request is the ordinary std:http/Client
+/// lookup and the TLS reference). request is the ordinary std:http/client
 /// request {method, target, headers, body} with exactly one injected Host
 /// first and the caller fields after it in order; its final head syntax is
 /// checked by the caller through ClientHead.prepareRequest. facility is the

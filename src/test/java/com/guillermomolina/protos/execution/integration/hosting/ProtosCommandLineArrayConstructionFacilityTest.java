@@ -55,7 +55,7 @@ final class ProtosCommandLineArrayConstructionFacilityTest {
 
         ProtosObjectValue otherContext = prelude.newExecutionContext();
         prelude.installStandardModuleMembersForRuntime(
-                new ProtosModuleKey("std:cli/Other"), otherContext);
+                ProtosModuleKey.module("std:cli/Other"), otherContext);
         assertFalse(
                 otherContext.hasLocalSlot(
                         ProtosCommandLineArrayConstructionFacility.BOOTSTRAP_SLOT));
@@ -212,7 +212,7 @@ final class ProtosCommandLineArrayConstructionFacilityTest {
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
-                                "import(\"std:cli/CommandLine\")", activation));
+                                "import(\"std:cli/command_line\")", activation));
         assertFalse(
                 module.hasLocalSlot(ProtosCommandLineArrayConstructionFacility.BOOTSTRAP_SLOT));
         assertEquals(
@@ -222,7 +222,7 @@ final class ProtosCommandLineArrayConstructionFacilityTest {
         Object positionals =
                 ProtosTestExecutionSupport.evaluate(
                         """
-                        CommandLine: import("std:cli/CommandLine")
+                        CommandLine: import("std:cli/command_line")
                         spec: CommandLine.command({
                             name: "tool"
                             help: null

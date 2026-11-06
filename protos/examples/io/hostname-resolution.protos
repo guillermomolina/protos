@@ -24,7 +24,7 @@
 // A self-contained, controlled-fixture version of the same composition runs in
 // ProtosResolverAuthorityTest.
 
-IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
 
 originalHostname: "api.github.com"
 
@@ -50,7 +50,7 @@ connected: (() => {
     // For HTTPS, the ORIGINAL hostname — never a resolved address or alias — is
     // the TLS reference identity (and SNI), and the HTTP Host authority:
     //
-    //     Client: import("std:tls/Client").Client
+    //     Client: import("std:tls/client").Client
     //     secure: Client.handshake(connection, originalHostname, trust).value()
     //     headers: [["Host", Encoding.Latin1.encode(originalHostname)], ...]
     //

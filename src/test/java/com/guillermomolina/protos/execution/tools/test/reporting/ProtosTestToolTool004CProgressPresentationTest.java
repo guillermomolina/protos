@@ -55,7 +55,7 @@ final class ProtosTestToolTool004CProgressPresentationTest {
         ProtosExecutionOutcome outcome =
                 com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
 Files.readString(FIXTURE, StandardCharsets.UTF_8),
-prelude.newModuleActivation());
+com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
 
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
@@ -82,7 +82,7 @@ prelude.newModuleActivation());
         assertTrue(progress.contains("\"INFRA\""));
 
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
-        assertTrue(main.contains("Progress: import(\"self:Progress\")"));
+        assertTrue(main.contains("Progress: import(\"./Progress.protos\")"));
         assertTrue(
                 main.contains(
                         "TextWriter(process.stderr(), process.stderrEncoding())"));

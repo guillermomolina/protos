@@ -13,12 +13,12 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("canonical-root-roundtrip", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -28,7 +28,7 @@ tests: [
         Assertions.require(Lock.write(model) == text)
     }),
     Test("canonical-complete-roundtrip", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         text:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -47,7 +47,7 @@ tests: [
         Assertions.require(Lock.write(model) == text)
     }),
     Test("writer-normalizes-class-order", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         source:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -68,7 +68,7 @@ tests: [
         Assertions.require(Lock.write(model) == expected)
     }),
     Test("writer-registry-semver-order", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         source:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -86,7 +86,7 @@ tests: [
         Assertions.require(Lock.write(Lock.parseStructural(source)) == expected)
     }),
     Test("writer-workspace-order", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         source:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -104,7 +104,7 @@ tests: [
         Assertions.require(Lock.write(Lock.parseStructural(source)) == expected)
     }),
     Test("writer-git-order", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         source:
             "lock-format 1\n" +
             "resolver-version 1\n" +
@@ -122,7 +122,7 @@ tests: [
         Assertions.require(Lock.write(Lock.parseStructural(source)) == expected)
     }),
     Test("writer-dependency-total-order", () => {
-        Lock: import("self:LockDocument")
+        Lock: import("tool-source:package/LockDocument.protos")
         source:
             "lock-format 1\n" +
             "resolver-version 1\n" +

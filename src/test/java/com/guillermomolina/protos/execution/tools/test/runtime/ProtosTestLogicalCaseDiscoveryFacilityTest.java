@@ -63,11 +63,11 @@ final class ProtosTestLogicalCaseDiscoveryFacilityTest {
                                 resolver);
 
         var activation =
-                prelude.newModuleActivation();
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         String suiteSource =
                 """
-                TestValue: import("std:test/Test")
+                TestValue: import("std:test/test")
 
                 tests: Array(
                     TestValue("first", () => {
@@ -115,9 +115,9 @@ final class ProtosTestLogicalCaseDiscoveryFacilityTest {
                 ProtosTestExecutionSupport.execute(
                         """
                         Discovery:
-                            import("self:Discovery")
+                            import("./Discovery.protos")
                         CasePlan:
-                            import("self:LogicalCasePlan")
+                            import("./LogicalCasePlan.protos")
 
                         projection:
                             logicalCaseDiscovery(
@@ -286,7 +286,7 @@ final class ProtosTestLogicalCaseDiscoveryFacilityTest {
                                 CORE,
                                 toolResolver);
         var activation =
-                prelude.newModuleActivation();
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         Files.writeString(
                 root.resolve("suite.protos"),

@@ -204,7 +204,7 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
             @org.junit.jupiter.api.io.TempDir Path root) throws Exception {
         ManualSubmission submission = new ManualSubmission();
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, fallbackResolver());
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
         String source = identitySource();
 
         Files.writeString(
@@ -295,7 +295,7 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
             String source, List<String> signature, String selector) throws Exception {
         ManualSubmission submission = new ManualSubmission();
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, fallbackResolver());
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         Path root =
                 Files.createTempDirectory(

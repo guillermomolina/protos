@@ -56,8 +56,8 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
 
         String source =
                 """
-                TestValue: import("std:test/Test")
-                Assertions: import("std:test/Assertions")
+                TestValue: import("std:test/test")
+                Assertions: import("std:test/assertions")
 
                 Assertions.signals(Error, () => { process })
                 Assertions.signals(Error, () => { filesystem })
@@ -128,7 +128,7 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
 
         String source =
                 """
-                TestValue: import("std:test/Test")
+                TestValue: import("std:test/test")
 
                 tests: Array(
                     TestValue("second", () => {
@@ -183,7 +183,7 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
 
         String source =
                 """
-                TestValue: import("std:test/Test")
+                TestValue: import("std:test/test")
 
                 tests: Array(
                     TestValue("first", () => {
@@ -251,8 +251,8 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
 
         String source =
                 """
-                Assertions: import("std:test/Assertions")
-                Test: import("std:test/Test")
+                Assertions: import("std:test/assertions")
+                Test: import("std:test/test")
 
                 tests: [
                     Test("fresh", () => {
@@ -304,7 +304,9 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
                                     ? "null"
                                     : result.outcome()
                                             .error()
-                                            .localSlotsSnapshot());
+                                            .localSlotsSnapshot())
+                            + "; trace="
+                            + result.outcome().failureDiagnosticTrace();
 
             assertEquals(
                     ProtosTestLogicalCaseAttemptBridge.Phase.CASE_EXECUTION,
@@ -381,7 +383,9 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
                                     ? "null"
                                     : result.outcome()
                                             .error()
-                                            .localSlotsSnapshot());
+                                            .localSlotsSnapshot())
+                            + "; trace="
+                            + result.outcome().failureDiagnosticTrace();
 
             assertEquals(
                     ProtosTestLogicalCaseAttemptBridge.Phase.CASE_EXECUTION,
@@ -450,7 +454,7 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
         Files.writeString(
                 suite,
                 """
-                TestValue: import("std:test/Test")
+                TestValue: import("std:test/test")
                 Helper: import("./helper.protos")
 
                 tests: Array(
@@ -473,69 +477,80 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
     }
 
     /**
-     * Mirrors {@code ProtosCli}'s production {@code packageLogicalCaseFallbackResolver}
-     * construction: the base is the ordinary Test Tool bundled resolver (its {@code
-     * self:Discovery} selection machinery is what the suite-native bridge always evaluates),
-     * overlaid with the exact Package Tool modules the resolution-input-lock fixtures need.
+     * D242 test-only resolver for one externally selected logical Case.
+     *
+     * <p>The host admits exactly two Package Tool SOURCE entrances from the
+     * Case. Every transitive import is resolved and loaded by the owning
+     * bundled Package Tool resolver, which enforces its physical root and
+     * exact SOURCE identity. Test Tool and Standard Library imports retain
+     * their ordinary resolvers. No production overlay policy is changed.
      */
     private static ProtosModuleResolver packageFallbackResolver() {
-        ProtosModuleResolver standardLibraryResolver =
+        ProtosModuleResolver standard =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
-        ProtosModuleResolver ordinaryTestResolver =
-                new ProtosBundledToolModuleResolver(
-                        "test", TOOL_ROOT, SHARED_ROOT, standardLibraryResolver);
 
-        return new ProtosExactModuleOverlayResolver(
-                Map.ofEntries(
-                        Map.entry(
-                                "self:ReleaseVersion",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:release-version"),
-                                        PACKAGE_TOOL_ROOT.resolve("ReleaseVersion.protos"))),
-                        Map.entry(
-                                "self:LockFile",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:lock-file"),
-                                        PACKAGE_TOOL_ROOT.resolve("LockFile.protos"))),
-                        Map.entry(
-                                "self:LockDocument",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:lock-document"),
-                                        PACKAGE_TOOL_ROOT.resolve("LockDocument.protos"))),
-                        Map.entry(
-                                "self:LockSyntax",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:lock-syntax"),
-                                        PACKAGE_TOOL_ROOT.resolve("LockSyntax.protos"))),
-                        Map.entry(
-                                "self:ResolutionInput",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:resolution-input"),
-                                        PACKAGE_TOOL_ROOT.resolve("ResolutionInput.protos"))),
-                        Map.entry(
-                                "self:MetadataPublication",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey(
-                                                "tool001-package:metadata-publication"),
-                                        PACKAGE_TOOL_ROOT.resolve(
-                                                "MetadataPublication.protos"))),
-                        Map.entry(
-                                "self:ResolutionRoot",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:resolution-root"),
-                                        PACKAGE_TOOL_ROOT.resolve("ResolutionRoot.protos"))),
-                        Map.entry(
-                                "self:ManifestSchemaV1",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:manifest-schema-v1"),
-                                        PACKAGE_TOOL_ROOT.resolve("ManifestSchemaV1.protos"))),
-                        Map.entry(
-                                "self:DependencyConstraint",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey(
-                                                "tool001-package:dependency-constraint"),
-                                        PACKAGE_TOOL_ROOT.resolve(
-                                                "DependencyConstraint.protos")))),
-                ordinaryTestResolver);
+        ProtosBundledToolModuleResolver testResolver =
+                new ProtosBundledToolModuleResolver(
+                        "test", TOOL_ROOT, SHARED_ROOT, standard);
+
+        ProtosBundledToolModuleResolver packageResolver =
+                new ProtosBundledToolModuleResolver(
+                        "package",
+                        PACKAGE_TOOL_ROOT,
+                        PACKAGE_TOOL_ROOT.resolveSibling("shared"),
+                        standard);
+
+        return new ProtosModuleResolver() {
+            @Override
+            public ProtosModuleKey resolve(
+                    String specifier,
+                    java.util.Optional<ProtosModuleKey> importer)
+                    throws Exception {
+                // I151_B49_OWNER_ROUTING: the host authorizes exactly two
+                // entrances from its external Case SOURCE into Package Tool.
+                boolean versionEntry =
+                        specifier.equals(
+                                "tool-source:package/ReleaseVersion.protos");
+                boolean lockEntry =
+                        specifier.equals(
+                                "tool-source:package/LockFile.protos");
+
+                if (versionEntry || lockEntry) {
+                    // D242: these are two exact SOURCE entrances authorized
+                    // by this Case-specific host resolver. A Test body may
+                    // execute with a different currentModuleKey from its
+                    // declaring SOURCE; that key is not the authority grant.
+                    // No arbitrary Package Tool file is selectable here.
+                    return ProtosBundledToolModuleResolver.toolSourceKey(
+                            "package",
+                            versionEntry ? "ReleaseVersion" : "LockFile");
+                }
+
+                // Once imported, the Package Tool owns all its transitive
+                // relative SOURCE imports. Do not route them through an
+                // exact-entry overlay or through the external Case root.
+                if (importer.isPresent()) {
+                    ProtosModuleKey origin = importer.orElseThrow();
+                    if (!origin.isForeign()
+                            && origin.canonicalId()
+                                    .startsWith("bundled-tool:package/")) {
+                        return packageResolver.resolve(specifier, importer);
+                    }
+                }
+
+                return testResolver.resolve(specifier, importer);
+            }
+
+            @Override
+            public ProtosModuleSource loadSource(ProtosModuleKey key)
+                    throws Exception {
+                if (!key.isForeign()
+                        && key.canonicalId()
+                                .startsWith("bundled-tool:package/")) {
+                    return packageResolver.loadSource(key);
+                }
+                return testResolver.loadSource(key);
+            }
+        };
     }
 }

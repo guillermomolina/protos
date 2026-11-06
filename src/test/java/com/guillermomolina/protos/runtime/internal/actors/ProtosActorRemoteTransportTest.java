@@ -153,7 +153,7 @@ final class ProtosActorRemoteTransportTest {
     private static Fixture fixture() throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosActor caller = new ProtosActor(actorRefPrototype());
-        ProtosModuleKey moduleKey = new ProtosModuleKey("caller");
+        ProtosModuleKey moduleKey = ProtosModuleKey.source("caller");
         caller.bindMessageEnvironmentForRuntime(prelude, moduleKey);
         caller.completeInitialization(new ProtosObjectValue(ProtosObjectValue.rootObject()));
         ProtosActivation activation =

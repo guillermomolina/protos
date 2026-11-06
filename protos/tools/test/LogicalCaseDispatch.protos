@@ -22,7 +22,7 @@
 //! ExecutionRequirementId to the bound suite-native execution route at the
 //! LogicalCaseRunner executorAsync boundary.
 
-Manifest: import("self:Manifest")
+Manifest: import("./Manifest.protos")
 
 dispatchError: () => {
     Error().signal()

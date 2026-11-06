@@ -15,124 +15,124 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("string constructor non-String error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.string(1)
         })
     }),
     Test("integer constructor non-Integer error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.integer(1.0)
         })
     }),
     Test("float constructor non-Float error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.float(1)
         })
     }),
     Test("boolean constructor non-Boolean error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.boolean("true")
         })
     }),
     Test("local date year below range error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.localDate(0, 1, 1)
         })
     }),
     Test("local date year above range error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.localDate(10000, 1, 1)
         })
     }),
     Test("local date non-leap February 29 error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.localDate(2023, 2, 29)
         })
     }),
     Test("local date April 31 error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.localDate(2024, 4, 31)
         })
     }),
     Test("local time hour 24 error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.localTime(24, 0, 0, 0, 0)
         })
     }),
     Test("local time minute 60 error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.localTime(0, 60, 0, 0, 0)
         })
     }),
     Test("local time second 61 error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.localTime(0, 0, 61, 0, 0)
         })
     }),
     Test("local date time second 61 error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.localDateTime(2026, 1, 1, 0, 0, 61, 0, 0)
         })
     }),
     Test("offset date time second 61 error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.offsetDateTime(2026, 1, 1, 0, 0, 61, 0, 0, 0)
         })
     }),
     Test("fraction coefficient without digits error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.localTime(0, 0, 0, 1, 0)
         })
     }),
     Test("fraction coefficient exceeding digits error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.localTime(0, 0, 0, 10, 1)
         })
     }),
     Test("offset minutes out of range error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.offsetDateTime(2024, 1, 1, 0, 0, 0, 0, 0, 1440)
         })
     }),
     Test("array of unknown node kind error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         forged: {
             kind: "unknown"
@@ -144,21 +144,21 @@ tests: [
         })
     }),
     Test("table duplicate key error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.table("x", TOML.integer(1), "x", TOML.integer(2))
         })
     }),
     Test("table dangling key error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.table("dangling")
         })
     }),
     Test("table non-String key error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.table(1, TOML.integer(1))

@@ -19,9 +19,9 @@
 // reach no host operation even for admissible names. Admission against a real
 // capability is covered by ProtosResolverAuthorityTest.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Resolvers: import("std:network/Resolvers")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Resolvers: import("std:network/resolvers")
 Resolver: Resolvers.Resolver
 ResolutionError: Resolvers.ResolutionError
 
@@ -65,8 +65,8 @@ tests: Array(
         Assertions.require(invalid(Resolver.lookupAddresses("a.com", "b.com")))
     }),
     Test("the Resolver one-label rule is not the TLS two-label rule", () => {
-        DnsNames: import("std:network/internal/DnsNames")
-        Identity: import("std:tls/internal/Identity")
+        DnsNames: import("std:network/internal/dns_names")
+        Identity: import("std:tls/internal/identity")
         asciiOnly: {
             codePoint: (scalar) => {
                 Error().signal()

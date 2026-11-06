@@ -46,7 +46,7 @@ import org.junit.jupiter.api.Test;
  * I066/D172 placement guards for the canonical IP families.
  *
  * <p>The families are runtime-retained FROZEN standard objects exposed only as initial members of
- * {@code std:network/IpAddresses} and {@code std:network/IpEndpoints}. Isolation transfer keeps
+ * {@code std:network/ip_addresses} and {@code std:network/ip_endpoints}. Isolation transfer keeps
  * them as exact anchors and never imports a module to recover them; the counting resolver below
  * makes any such import deterministically observable.
  */
@@ -54,13 +54,13 @@ final class ProtosStandardIpFamilyPlacementTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final ProtosModuleKey IP_ADDRESSES =
-            new ProtosModuleKey("std:network/IpAddresses");
+            ProtosModuleKey.module("std:network/ip_addresses");
     private static final ProtosModuleKey IP_ENDPOINTS =
-            new ProtosModuleKey("std:network/IpEndpoints");
+            ProtosModuleKey.module("std:network/ip_endpoints");
     private static final String SOURCE_ENDPOINT =
             """
-            IpAddresses: import("std:network/IpAddresses")
-            IpEndpoints: import("std:network/IpEndpoints")
+            IpAddresses: import("std:network/ip_addresses")
+            IpEndpoints: import("std:network/ip_endpoints")
             IpAddress: IpAddresses.IpAddress
             IpEndpoint: IpEndpoints.IpEndpoint
             address: IpAddress(6, 340282366920938463463374607431768211455)
@@ -112,7 +112,7 @@ final class ProtosStandardIpFamilyPlacementTest {
     @Test
     void standardModuleMemberSeamIsGeneralAndKeyed() throws Exception {
         ProtosPrelude core = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosModuleKey key = new ProtosModuleKey("std:example/Members");
+        ProtosModuleKey key = ProtosModuleKey.module("std:example/Members");
         ProtosObjectValue member = new ProtosObjectValue(ProtosObjectValue.rootObject());
         member.freeze();
         ProtosPrelude prelude =
@@ -133,7 +133,7 @@ final class ProtosStandardIpFamilyPlacementTest {
 
         ProtosObjectValue unregistered = prelude.newExecutionContext();
         prelude.installStandardModuleMembersForRuntime(
-                new ProtosModuleKey("std:example/Other"), unregistered);
+                ProtosModuleKey.module("std:example/Other"), unregistered);
         prelude.installStandardModuleMembersForRuntime(null, unregistered);
         assertTrue(unregistered.localSlotsSnapshot().isEmpty());
 
@@ -240,7 +240,7 @@ final class ProtosStandardIpFamilyPlacementTest {
     }
 
     private static final String IP_ADDRESS =
-            "IpAddress: import(\"std:network/IpAddresses\").IpAddress\n";
+            "IpAddress: import(\"std:network/ip_addresses\").IpAddress\n";
     private static final BigInteger THIRTY_ONE = BigInteger.valueOf(31);
 
     private static BigInteger expectedHash(BigInteger bits, int version) {

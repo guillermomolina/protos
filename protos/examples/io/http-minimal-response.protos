@@ -14,11 +14,11 @@
 // the specific language governing rights and limitations under the License.
 
 // Answer one HTTP/1.1 request with a fixed response, and observe how an
-// unsupported request is rejected. std:http/Server works on any duplex, so an
+// unsupported request is rejected. std:http/server works on any duplex, so an
 // in-memory one is enough and no Network authority is needed.
 
-http: import("std:http/Server")
-Assertions: import("std:test/Assertions")
+http: import("std:http/server")
+Assertions: import("std:test/assertions")
 
 // An in-memory duplex that follows the byte-I/O protocols: read(maxBytes)
 // needs an Integer above zero and answers 1 to maxBytes octets, then null;

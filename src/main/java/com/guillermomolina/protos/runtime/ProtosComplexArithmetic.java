@@ -29,7 +29,7 @@ import java.math.BigInteger;
  * {@code real op Complex} must be computable here; keeping the Complex-receiver direction in the
  * same kernel prevents two diverging encodings of the separable, exceptional and signed-zero
  * rules. Nothing here sends a message to a guest value, and no Integer or Float operator that
- * never meets a Complex operand reaches this class; only the {@code std:math/LinearAlgebra}
+ * never meets a Complex operand reaches this class; only the {@code std:math/linear_algebra}
  * kernels use {@link #canonicalNumberBinary} for every Number pair (D214, LIB024).
  *
  * <p>Coupled finite Float results (rule {@code R}) cannot use host double arithmetic, which rounds
@@ -122,7 +122,7 @@ public final class ProtosComplexArithmetic {
 
     /**
      * The canonical standard result of {@code left op right} for two genuine Numbers of any
-     * family, for the {@code std:math/LinearAlgebra} kernels (D214, LIB024). Only {@code ADD} and
+     * family, for the {@code std:math/linear_algebra} kernels (D214, LIB024). Only {@code ADD} and
      * {@code MULTIPLY} are admitted.
      *
      * <p>A Complex operand takes {@link #binary}, two Integers the exact Integer service with its

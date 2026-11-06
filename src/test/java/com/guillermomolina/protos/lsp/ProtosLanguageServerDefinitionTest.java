@@ -192,7 +192,7 @@ class ProtosLanguageServerDefinitionTest {
                                 packageId,
                                 "",
                                 projectRoot)),
-                        List.of(new ProtosProjectBinding.Source(
+                        List.of(new ProtosProjectBinding.Source(ProtosProjectBinding.Source.Kind.SOURCE,
                                 packageId,
                                 "Main",
                                 source)));

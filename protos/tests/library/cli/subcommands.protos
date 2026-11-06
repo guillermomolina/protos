@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("parse subcommand deep", () => {
         tool009LegacyCase: () => {
-            CommandLine: import("std:cli/CommandLine")
+            CommandLine: import("std:cli/command_line")
 
             target: CommandLine.positional(
                 key: "target",
@@ -91,7 +91,7 @@ tests: [
     }),
     Test("parse subcommand delimiter", () => {
         tool009LegacyCase: () => {
-            CommandLine: import("std:cli/CommandLine")
+            CommandLine: import("std:cli/command_line")
 
             tail: CommandLine.positional(
                 key: "tail",
@@ -134,7 +134,7 @@ tests: [
     }),
     Test("parse subcommand options", () => {
         tool009LegacyCase: () => {
-            CommandLine: import("std:cli/CommandLine")
+            CommandLine: import("std:cli/command_line")
 
             flag: (key, longName) => {
                 CommandLine.option(
@@ -222,7 +222,7 @@ tests: [
     }),
     Test("parse subcommands d115", () => {
         tool009LegacyCase: () => {
-            CommandLine: import("std:cli/CommandLine")
+            CommandLine: import("std:cli/command_line")
 
             positional: (key, minimum, maximum) => {
                 CommandLine.positional(

@@ -40,7 +40,7 @@ class ProtosCollectionsSetMutationModuleTest {
 
     @Test
     void mutationStateIsExactlyTheUnderlyingMapState() throws Exception {
-        for (String module : new String[] {"Set", "IdentitySet"}) {
+        for (String module : new String[] {"set", "identity_set"}) {
             ProtosArrayValue allowed =
                     runWithState(
                             module,

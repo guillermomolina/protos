@@ -14,7 +14,7 @@
 // the specific language governing rights and limitations under the License.
 
 
-Manifest: import("self:Manifest")
+Manifest: import("./Manifest.protos")
 plan: Manifest.load(filesystem)
 cases: Manifest.planCases(plan)
 first: cases[0]

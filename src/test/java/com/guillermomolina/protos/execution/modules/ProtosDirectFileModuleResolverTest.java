@@ -94,11 +94,11 @@ final class ProtosDirectFileModuleResolverTest {
                     IOException.class,
                     () -> resolver.resolve("./helper.protos", Optional.empty()));
             assertThrows(
-                    IOException.class,
+                    Exception.class,
                     () ->
                             resolver.resolve(
                                     "./helper.protos",
-                                    Optional.of(new ProtosModuleKey("std:example"))));
+                                    Optional.of(ProtosModuleKey.module("std:example"))));
         }
     }
 
@@ -189,7 +189,7 @@ final class ProtosDirectFileModuleResolverTest {
         Path entry = root.resolve("main.protos");
         Files.writeString(entry, "entry", StandardCharsets.UTF_8);
 
-        ProtosModuleKey standardKey = new ProtosModuleKey("std:example");
+        ProtosModuleKey standardKey = ProtosModuleKey.module("std:example");
         ProtosModuleSource standardSource =
                 ProtosModuleSource.fromCharacters(standardKey, "standard");
         ProtosModuleResolver fallback =

@@ -13,9 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Document: import("self:LockDocument")
-Publication: import("self:MetadataPublication")
-Input: import("self:ResolutionInput")
+Document: import("./LockDocument.protos")
+Publication: import("./MetadataPublication.protos")
+Input: import("./ResolutionInput.protos")
 
 readText: (projectFilesystem) => {
     file: projectFilesystem.open(Path.relative().child("protos.lock")).value()

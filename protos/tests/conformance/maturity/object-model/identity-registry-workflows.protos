@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("closure identity registry lifecycle", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             agent: {
                 value: 0
@@ -102,7 +102,7 @@ tests: [
     }),
     Test("custom equality dual map live state", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             entitySource: {
                 id: 0
@@ -219,7 +219,7 @@ tests: [
     }),
     Test("dual index entity registry transitions", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             record: {
                 key: ""
@@ -324,7 +324,7 @@ tests: [
     }),
     Test("identity map receiver registry", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             sensor: {
                 value: 0
@@ -354,7 +354,7 @@ tests: [
     }),
     Test("numeric equality identity registry transitions", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             logical: Map()
             exact: IdentityMap()

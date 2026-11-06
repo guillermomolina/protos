@@ -13,10 +13,10 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Document: import("self:ProjectDocument")
-Files: import("std:io/Files")
-Root: import("self:ResolutionRoot")
-SHA256: import("std:crypto/SHA256")
+Document: import("./ProjectDocument.protos")
+Files: import("std:io/files")
+Root: import("./ResolutionRoot.protos")
+SHA256: import("std:crypto/sha256")
 
 appendBytes: (target, source) => {
     for(octet in source) {

@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("collection unwind preserves receiver state", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             service: {
                 run: (value) => {
@@ -140,7 +140,7 @@ tests: [
     }),
     Test("delegated closure collection workflow", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             worker: {
                 factor: 1
@@ -193,7 +193,7 @@ tests: [
     }),
     Test("extracted methods through collection", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             base: {
                 value: 0
@@ -222,7 +222,7 @@ tests: [
     }),
     Test("method slot replacement after extraction", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             prototype: {
                 read: () => { value + 1 }
@@ -311,7 +311,7 @@ tests: [
     }),
     Test("sibling extractions repeated rounds", () => {
         tool009LegacyCase: () => {
-            Arrays: import("std:collections/Array")
+            Arrays: import("std:collections/array")
 
             prototype: {
                 offset: 1

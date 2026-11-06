@@ -18,7 +18,7 @@ package com.guillermomolina.protos.execution;
 
 /**
  * A failure fact conclusively established by the private JSSE/PKIX backend of {@code
- * std:tls/Client} (D220–S12).
+ * std:tls/client} (D220–S12).
  *
  * <p>A {@link Fact} is backend evidence, not a public {@code TlsError.kind}: the mapping to the
  * portable kinds, the preservation of transport Errors and every cleanup decision belong to the

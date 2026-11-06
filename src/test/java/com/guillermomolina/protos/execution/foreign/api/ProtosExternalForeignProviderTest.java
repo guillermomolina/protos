@@ -584,7 +584,7 @@ class ProtosExternalForeignProviderTest {
                                     new ProtosObjectValue(ProtosObjectValue.rootObject()));
             return prelude.newModuleActivation(
                     actor.moduleState(),
-                    new ProtosModuleKey("entry"),
+                    ProtosModuleKey.source("entry"),
                     prelude.newExecutionContext(),
                     actor.executionDomain());
         }
@@ -597,11 +597,11 @@ class ProtosExternalForeignProviderTest {
             ProtosActivation activation =
                     prelude.newModuleActivation(
                             actor.actorModuleState(),
-                            new ProtosModuleKey("entry"),
+                            ProtosModuleKey.source("entry"),
                             prelude.newExecutionContext(),
                             actor.executionDomain());
             return context.executeModuleSource(
-                    ProtosModuleSource.fromCharacters(new ProtosModuleKey("entry"), source),
+                    ProtosModuleSource.fromCharacters(ProtosModuleKey.source("entry"), source),
                     activation);
         }
 

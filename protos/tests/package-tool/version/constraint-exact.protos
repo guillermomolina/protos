@@ -13,12 +13,12 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("constraint-exact-parse", () => {
-        Constraint: import("self:DependencyConstraint")
+        Constraint: import("tool-source:package/DependencyConstraint.protos")
         c: Constraint.parse("12.34.56")
         ok: true
         (c.kind === "exact").ifFalse(() => { ok = false })
@@ -30,11 +30,11 @@ tests: [
         Assertions.require(ok)
     }),
     Test("constraint-exact-stable-match", () => {
-        Constraint: import("self:DependencyConstraint")
+        Constraint: import("tool-source:package/DependencyConstraint.protos")
         Assertions.require(Constraint.satisfiesText("1.4.2", "1.4.2"))
     }),
     Test("constraint-exact-stable-mismatch", () => {
-        Constraint: import("self:DependencyConstraint")
+        Constraint: import("tool-source:package/DependencyConstraint.protos")
         ok: true
         if(Constraint.satisfiesText("1.4.2", "1.4.3")) { ok = false }
         if(Constraint.satisfiesText("1.4.2", "1.5.2")) { ok = false }
@@ -42,24 +42,24 @@ tests: [
         Assertions.require(ok)
     }),
     Test("constraint-exact-prerelease-match", () => {
-        Constraint: import("self:DependencyConstraint")
+        Constraint: import("tool-source:package/DependencyConstraint.protos")
         Assertions.require(Constraint.satisfiesText("2.0.0-rc.1", "2.0.0-rc.1"))
     }),
     Test("constraint-exact-prerelease-distinct", () => {
-        Constraint: import("self:DependencyConstraint")
+        Constraint: import("tool-source:package/DependencyConstraint.protos")
         ok: true
         if(Constraint.satisfiesText("2.0.0-rc.1", "2.0.0-rc.2")) { ok = false }
         if(Constraint.satisfiesText("2.0.0-rc.1", "2.0.0")) { ok = false }
         Assertions.require(ok)
     }),
     Test("constraint-partial-rejected-error", () => {
-        Constraint: import("self:DependencyConstraint")
+        Constraint: import("tool-source:package/DependencyConstraint.protos")
         Assertions.signals(Error, () => {
             Constraint.parse("1.4")
         })
     }),
     Test("constraint-wildcard-rejected-error", () => {
-        Constraint: import("self:DependencyConstraint")
+        Constraint: import("tool-source:package/DependencyConstraint.protos")
         Assertions.signals(Error, () => {
             Constraint.parse("1.x")
         })

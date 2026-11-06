@@ -13,7 +13,7 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal limit capture of std:http/Client (D218-B, HTTP.md §16.12). This
+//! Internal limit capture of std:http/client (D218-B, HTTP.md §16.12). This
 //! module is an unpublished implementation artifact, not an approved Standard
 //! Library API. It is distinct from Limits, whose server limit names and
 //! signed-64 range it does not share.

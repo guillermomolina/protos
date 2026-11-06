@@ -14,14 +14,14 @@
 // the specific language governing rights and limitations under the License.
 
 // Package ReleaseVersion policy over the Standard Library SemVer value
-// (LIB012-C). std:semver/SemVer owns the SemVer 2.0.0 grammar and precedence;
+// (LIB012-C). std:semver/sem_ver owns the SemVer 2.0.0 grammar and precedence;
 // this module only narrows the accepted domain to
 // MAJOR.MINOR.PATCH[-PRERELEASE] (build metadata is rejected) and projects the
 // generic value onto the Package record shape consumed by lock rendering and
 // the host ExecutionPlanV2 boundary: Integer major/minor/patch, prerelease null
 // or an Array of {numeric, number, text} identifiers, and the source text.
 
-SemVer: import("std:semver/SemVer")
+SemVer: import("std:semver/sem_ver")
 
 parse: (text) => {
     generic: SemVer.parse(text)

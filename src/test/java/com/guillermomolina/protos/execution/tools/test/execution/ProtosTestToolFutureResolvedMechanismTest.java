@@ -56,7 +56,7 @@ final class ProtosTestToolFutureResolvedMechanismTest {
                                 STANDARD_LIBRARY));
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
         ProtosExactExecutionFacility.installInspection(activation);
 
         try (ProtosNioReadOnlyTreeFilesystemBackend backend =

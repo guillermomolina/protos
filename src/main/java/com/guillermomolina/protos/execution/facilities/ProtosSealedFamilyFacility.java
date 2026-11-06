@@ -38,7 +38,7 @@ import java.util.List;
  * out of Protos-visible slots. Each facility is its own family. Following the D101/D187 pattern,
  * each frozen facility is provisioned as a standard initial member of one exact module, which
  * captures it lexically and removes the bootstrap slot during initialization, so it never belongs
- * to the published module surface. The renderer module std:text/ANSI (LIB020-B) receives the same
+ * to the published module surface. The renderer module std:text/ansi (LIB020-B) receives the same
  * two facility instances under the same bootstrap slots, so it reads run and foreground state of
  * exactly the families those modules mint; it likewise captures and removes them.
  *
@@ -52,12 +52,12 @@ import java.util.List;
  * </ul>
  */
 public final class ProtosSealedFamilyFacility {
-    public static final ProtosModuleKey STYLE_MODULE_KEY = new ProtosModuleKey("std:text/Style");
+    public static final ProtosModuleKey STYLE_MODULE_KEY = ProtosModuleKey.module("std:text/style");
     public static final String STYLE_BOOTSTRAP_SLOT = "_styleFacility";
     public static final ProtosModuleKey STYLED_TEXT_MODULE_KEY =
-            new ProtosModuleKey("std:text/StyledText");
+            ProtosModuleKey.module("std:text/styled_text");
     public static final String STYLED_TEXT_BOOTSTRAP_SLOT = "_styledTextFacility";
-    public static final ProtosModuleKey ANSI_MODULE_KEY = new ProtosModuleKey("std:text/ANSI");
+    public static final ProtosModuleKey ANSI_MODULE_KEY = ProtosModuleKey.module("std:text/ansi");
 
     private ProtosSealedFamilyFacility() {}
 

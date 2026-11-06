@@ -15,12 +15,12 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("semantic constructors preserve approved TOML kinds and payloads", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         text: TOML.string("hello")
         huge: TOML.integer(123456789012345678901234567890)
@@ -74,7 +74,7 @@ tests: [
         Assertions.require(root.value["values"] === values)
     }),
     Test("D104 preserves second sixty as TOML semantic data", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         time: TOML.localTime(12, 34, 60, 0, 0)
         local: TOML.localDateTime(2025, 2, 3, 4, 5, 60, 0, 0)

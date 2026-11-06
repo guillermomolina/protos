@@ -15,12 +15,12 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Style: import("std:text/Style")
-StyledText: import("std:text/StyledText")
-ANSI: import("std:text/ANSI")
-ColorMode: import("std:text/ColorMode")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Style: import("std:text/style")
+StyledText: import("std:text/styled_text")
+ANSI: import("std:text/ansi")
+ColorMode: import("std:text/color_mode")
 
 // An object whose reflective and equality behavior records any invocation.
 hostile: (log) => {

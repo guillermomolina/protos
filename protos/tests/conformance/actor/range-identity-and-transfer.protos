@@ -14,15 +14,15 @@
 // the specific language governing rights and limitations under the License.
 
 // D235-B1-F: Actors share the frozen Core Range prototypes while each owns a
-// distinct std:collections/Range module instance.
+// distinct std:collections/range module instance.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("range actor module identity and rebinding isolation", () => {
         tool009LegacyCase: () => {
-            Ranges: import("std:collections/Range")
+            Ranges: import("std:collections/range")
             worker: Actor.spawn("workers", "ranges")
 
             worker.request("identity").then((sameInWorker) => {

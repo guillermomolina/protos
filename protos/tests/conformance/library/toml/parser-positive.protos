@@ -15,12 +15,12 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("parse TOML 1.1 strings numbers booleans and heterogeneous arrays", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input:
             "basic = \"a\\x41\\e\"\n" +
@@ -67,7 +67,7 @@ tests: [
         Assertions.require(root.value["items"].value[3].kind === "float")
     }),
     Test("parse all temporal kinds with optional seconds and D104 leap second", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input:
             "date = 1979-05-27\n" +
@@ -108,7 +108,7 @@ tests: [
         Assertions.require(zulu.value.offsetMinutes == 0)
     }),
     Test("parse tables dotted keys TOML 1.1 inline tables and arrays of tables", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input:
             "title = \"demo\"\n" +
@@ -147,7 +147,7 @@ tests: [
         Assertions.require(products.value[1].value["name"].value == "Nail")
     }),
     Test("parse comment containing horizontal tab", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         root: TOML.parse("value = 1 # horizontal\tcomment\n")
 
@@ -156,7 +156,7 @@ tests: [
         Assertions.require(root.value["value"].value == 1)
     }),
     Test("parse empty array and empty inline table before more content", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         root: TOML.parse(
             "empty = []\n" +

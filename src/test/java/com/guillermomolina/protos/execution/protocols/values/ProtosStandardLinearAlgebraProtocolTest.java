@@ -53,14 +53,14 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * LIB024 Java-side guards for the D214 C1/S1 {@code std:math/LinearAlgebra} Vector and Matrix:
+ * LIB024 Java-side guards for the D214 C1/S1 {@code std:math/linear_algebra} Vector and Matrix:
  * publication, representation, failure atomicity, D214-F1 reductions and the Complex contract.
  * Source-level API behavior lives in {@code protos/tests/library/math/linear-algebra/}.
  */
 final class ProtosStandardLinearAlgebraProtocolTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
-    private static final String MODULE = "std:math/LinearAlgebra";
+    private static final String MODULE = "std:math/linear_algebra";
 
     /* ---- A. Publication and import ---- */
 
@@ -91,12 +91,14 @@ final class ProtosStandardLinearAlgebraProtocolTest {
             }
         }
         String source =
-                Files.readString(STANDARD_LIBRARY.resolve("math").resolve("LinearAlgebra.protos"));
+                Files.readString(STANDARD_LIBRARY.resolve("math").resolve("linear_algebra").resolve("module.protos"));
         // Doc examples may bind the members; no code line may redeclare them.
         for (String line : source.lines().toList()) {
             if (!line.strip().startsWith("//")) {
-                assertFalse(line.contains("Vector:"), line);
-                assertFalse(line.contains("Matrix:"), line);
+                // Public publication (this.Vector / this.Matrix) is allowed; only a
+                // duplicate private/local declaration would shadow an installed member.
+                assertFalse(line.strip().startsWith("Vector:"), line);
+                assertFalse(line.strip().startsWith("Matrix:"), line);
             }
         }
     }
@@ -107,7 +109,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         ProtosPrelude prelude = prelude();
         String program =
                 """
-                LA: import("std:math/LinearAlgebra")
+                LA: import("std:math/linear_algebra")
                 Vector: LA.Vector
                 Matrix: LA.Matrix
                 [LA.Vector, LA.Matrix, Vector(1, 2), Matrix(1, 1, 5)]
@@ -134,7 +136,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
                 elements(
                         evaluate(
                                 """
-                                LA: import("std:math/LinearAlgebra")
+                                LA: import("std:math/linear_algebra")
                 Vector: LA.Vector
                 Matrix: LA.Matrix
                                 Tagged: LA.Vector { label: 7 }
@@ -183,7 +185,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
                 elements(
                         evaluate(
                                 """
-                                LA: import("std:math/LinearAlgebra")
+                                LA: import("std:math/linear_algebra")
                 Vector: LA.Vector
                 Matrix: LA.Matrix
                                 values: [1, 2, 3, 4]
@@ -273,7 +275,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         Object bracket =
                 evaluate(
                         """
-                        LA: import("std:math/LinearAlgebra")
+                        LA: import("std:math/linear_algebra")
                 Vector: LA.Vector
                 Matrix: LA.Matrix
                         v: Vector(10, 20, 30)
@@ -672,7 +674,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         Object equal =
                 evaluate(
                         """
-                        LA: import("std:math/LinearAlgebra")
+                        LA: import("std:math/linear_algebra")
                 Vector: LA.Vector
                 Matrix: LA.Matrix
                         v: Vector(1, 2)
@@ -780,7 +782,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         Object evaluated =
                 evaluate(
                         """
-                        LA: import("std:math/LinearAlgebra")
+                        LA: import("std:math/linear_algebra")
                         Tagged: LA.Matrix { label: 7 }
                         [Tagged(1, 2, 1.0, 2.0), Tagged]
                         """,
@@ -963,7 +965,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         Object evaluated =
                 evaluate(
                         """
-                        LA: import("std:math/LinearAlgebra")
+                        LA: import("std:math/linear_algebra")
                         Matrix: LA.Matrix
                         unit: Matrix(2, 2, 1.0, 0.0, 0.0, 1.0)
                         packed: Matrix(2, 2, 1.0, 2.0, 3.0, 4.0).matmul(unit)

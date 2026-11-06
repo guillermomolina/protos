@@ -5,16 +5,16 @@ arithmetic. It deliberately separates concepts that many libraries blur:
 
 | Module | Represents | Has `compare` |
 |---|---|---|
-| `std:datetime/Date` | Civil date (proleptic Gregorian, years `-9999`..`9999`) | yes |
-| `std:datetime/Time` | Time of day with nanoseconds, no leap seconds | yes |
-| `std:datetime/LocalDateTime` | A Date plus a Time; not an instant | yes |
-| `std:datetime/Instant` | Point on a uniform timeline, nanoseconds from `1970-01-01T00:00:00Z` | yes |
-| `std:datetime/Offset` | Fixed offset in seconds, `-18:00:00`..`+18:00:00`; not a time zone | yes |
-| `std:datetime/OffsetDateTime` | A LocalDateTime plus an Offset | no |
-| `std:datetime/Duration` | Exact elapsed nanoseconds | yes |
-| `std:datetime/Period` | Calendar amount: years, months, days | no |
-| `std:datetime/ISO8601` | Bounded ISO 8601 text profile | — |
-| `std:datetime/RFC3339` | Bounded RFC 3339 timestamp adapter | — |
+| `std:datetime/date` | Civil date (proleptic Gregorian, years `-9999`..`9999`) | yes |
+| `std:datetime/time` | Time of day with nanoseconds, no leap seconds | yes |
+| `std:datetime/local_date_time` | A Date plus a Time; not an instant | yes |
+| `std:datetime/instant` | Point on a uniform timeline, nanoseconds from `1970-01-01T00:00:00Z` | yes |
+| `std:datetime/offset` | Fixed offset in seconds, `-18:00:00`..`+18:00:00`; not a time zone | yes |
+| `std:datetime/offset_date_time` | A LocalDateTime plus an Offset | no |
+| `std:datetime/duration` | Exact elapsed nanoseconds | yes |
+| `std:datetime/period` | Calendar amount: years, months, days | no |
+| `std:datetime/iso8601` | Bounded ISO 8601 text profile | — |
+| `std:datetime/rfc3339` | Bounded RFC 3339 timestamp adapter | — |
 
 Each source file's doc comment under
 [`protos/lib/datetime/`](../../../protos/lib/datetime/) is the exact contract.
@@ -35,9 +35,9 @@ Arguments are validated, never clamped or wrapped. The snippets on this page
 build on each other's imports; comments show the answered value.
 
 ```protos
-Date: import("std:datetime/Date")
-Time: import("std:datetime/Time")
-LocalDateTime: import("std:datetime/LocalDateTime")
+Date: import("std:datetime/date")
+Time: import("std:datetime/time")
+LocalDateTime: import("std:datetime/local_date_time")
 
 release: Date(2026, 10, 8)
 noon: Time(12, 0, 0, 0)                  // hour, minute, second, nanosecond
@@ -66,8 +66,8 @@ validates the fields and answers the frozen value. The public `Date(...)`,
 unbounded Integer `nanoseconds` slot.
 
 ```protos
-Instant: import("std:datetime/Instant")
-Duration: import("std:datetime/Duration")
+Instant: import("std:datetime/instant")
+Duration: import("std:datetime/duration")
 
 epoch: Instant(0)
 oneHour: Duration(3600 * 1000000000)
@@ -88,7 +88,7 @@ one year. Applying a period combines years and months, clamps the day once to
 the end of the resulting month, then adds days.
 
 ```protos
-Period: import("std:datetime/Period")
+Period: import("std:datetime/period")
 
 Period.addToDate(Period(0, 1, 0), Date(2026, 1, 31))   // Date(2026, 2, 28)
 Period.subtractFromDate(Period(1, 0, 0), Date(2024, 2, 29)) // Date(2023, 2, 28)
@@ -104,8 +104,8 @@ An `OffsetDateTime` stores a local date-time and an offset exactly as given.
 Converting to an instant is pure arithmetic:
 
 ```protos
-Offset: import("std:datetime/Offset")
-OffsetDateTime: import("std:datetime/OffsetDateTime")
+Offset: import("std:datetime/offset")
+OffsetDateTime: import("std:datetime/offset_date_time")
 
 plusTwo: Offset(2 * 3600)
 local: OffsetDateTime(LocalDateTime(Date(2026, 10, 8), Time(12, 30, 0, 0)), plusTwo)
@@ -140,8 +140,8 @@ Internet timestamps: four-digit non-negative years, minute-resolution offsets,
 uppercase `T` and `Z`. It rejects lowercase `t`/`z`, `:60`, and `-00:00`.
 
 ```protos
-ISO8601: import("std:datetime/ISO8601")
-RFC3339: import("std:datetime/RFC3339")
+ISO8601: import("std:datetime/iso8601")
+RFC3339: import("std:datetime/rfc3339")
 
 ISO8601.formatDate(Date(2026, 2, 28))                 // "2026-02-28"
 ISO8601.formatInstant(Instant(0))                      // "1970-01-01T00:00:00Z"

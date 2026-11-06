@@ -18,12 +18,12 @@
 // Requires the bootstrap-local `network` capability, which the standalone CLI
 // does not grant: a Java Polyglot embedding with socket access runs this
 // program, and it answers true on success. To stay self-contained it also
-// plays the origin server on loopback with std:http/Server.
+// plays the origin server on loopback with std:http/server.
 
-Server: import("std:http/Server").Server
-Client: import("std:http/Client").Client
-IpAddress: import("std:network/IpAddresses").IpAddress
-IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+Server: import("std:http/server").Server
+Client: import("std:http/client").Client
+IpAddress: import("std:network/ip_addresses").IpAddress
+IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
 
 loopback: IpAddress(4, 2130706433)    // 127.0.0.1
 

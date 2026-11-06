@@ -54,7 +54,7 @@ final class ProtosNetworkBootstrapAuthorityTest {
                 new ProtosProcessRuntime(
                         prelude.actorRefPrototypeForRuntime(), null, network);
         ProtosActor root = process.rootActorForRuntime();
-        ProtosModuleKey key = new ProtosModuleKey("root-network");
+        ProtosModuleKey key = ProtosModuleKey.source("root-network");
 
         assertTrue(
                 new ProtosActorBootstrap(new ProtosModuleRuntime(resolver))
@@ -78,7 +78,7 @@ final class ProtosNetworkBootstrapAuthorityTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosProcessRuntime process =
                 new ProtosProcessRuntime(prelude.actorRefPrototypeForRuntime());
-        ProtosModuleKey key = new ProtosModuleKey("root-network-absent");
+        ProtosModuleKey key = ProtosModuleKey.source("root-network-absent");
 
         assertTrue(
                 new ProtosActorBootstrap(new ProtosModuleRuntime(resolver))
@@ -116,7 +116,7 @@ final class ProtosNetworkBootstrapAuthorityTest {
         ProtosActorBootstrap bootstrap =
                 new ProtosActorBootstrap(new ProtosModuleRuntime(resolver));
 
-        ProtosModuleKey rootKey = new ProtosModuleKey("root-with-import");
+        ProtosModuleKey rootKey = ProtosModuleKey.source("root-with-import");
         assertTrue(
                 bootstrap.initialize(
                         process.rootActorForRuntime(),
@@ -127,14 +127,14 @@ final class ProtosNetworkBootstrapAuthorityTest {
         ProtosObjectValue imported =
                 process.rootActorForRuntime()
                         .moduleState()
-                        .lookup(new ProtosModuleKey("imported-child"))
+                        .lookup(ProtosModuleKey.source("imported-child"))
                         .orElseThrow()
                         .instance();
         assertFalse(imported.hasLocalSlot("network"));
 
         ProtosActor child =
                 process.createHostedActorForRuntime(prelude.actorRefPrototypeForRuntime());
-        ProtosModuleKey childKey = new ProtosModuleKey("hosted-child");
+        ProtosModuleKey childKey = ProtosModuleKey.source("hosted-child");
         assertTrue(bootstrap.initialize(child, prelude, childKey, "boot", List.of()));
         assertFalse(
                 child.moduleState()
@@ -162,7 +162,7 @@ final class ProtosNetworkBootstrapAuthorityTest {
                         prelude.actorRefPrototypeForRuntime(), null, null, null, granted);
         ProtosActorBootstrap bootstrap =
                 new ProtosActorBootstrap(new ProtosModuleRuntime(resolver));
-        ProtosModuleKey rootKey = new ProtosModuleKey("root-resolver");
+        ProtosModuleKey rootKey = ProtosModuleKey.source("root-resolver");
         assertTrue(
                 bootstrap.initialize(
                         process.rootActorForRuntime(), prelude, rootKey, "boot", List.of()));
@@ -173,13 +173,13 @@ final class ProtosNetworkBootstrapAuthorityTest {
         assertFalse(
                 process.rootActorForRuntime()
                         .moduleState()
-                        .lookup(new ProtosModuleKey("resolver-imported-child"))
+                        .lookup(ProtosModuleKey.source("resolver-imported-child"))
                         .orElseThrow()
                         .instance()
                         .hasLocalSlot("resolver"));
         ProtosActor child =
                 process.createHostedActorForRuntime(prelude.actorRefPrototypeForRuntime());
-        ProtosModuleKey childKey = new ProtosModuleKey("resolver-hosted-child");
+        ProtosModuleKey childKey = ProtosModuleKey.source("resolver-hosted-child");
         assertTrue(bootstrap.initialize(child, prelude, childKey, "boot", List.of()));
         assertFalse(
                 child.moduleState().lookup(childKey).orElseThrow().instance().hasLocalSlot("resolver"));
@@ -190,7 +190,7 @@ final class ProtosNetworkBootstrapAuthorityTest {
                         null,
                         new ProtosNetworkCapabilityValue(prelude, new Object()));
         assertTrue(networkOnly.rootResolverForRuntime().isEmpty());
-        ProtosModuleKey networkKey = new ProtosModuleKey("network-only-root");
+        ProtosModuleKey networkKey = ProtosModuleKey.source("network-only-root");
         assertTrue(
                 bootstrap.initialize(
                         networkOnly.rootActorForRuntime(), prelude, networkKey, "boot", List.of()));
@@ -284,7 +284,7 @@ final class ProtosNetworkBootstrapAuthorityTest {
             if (!sources.containsKey(exactSpecifier)) {
                 throw new IllegalArgumentException("unknown module: " + exactSpecifier);
             }
-            return new ProtosModuleKey(exactSpecifier);
+            return ProtosModuleKey.source(exactSpecifier);
         }
 
         @Override

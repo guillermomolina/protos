@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -44,10 +45,10 @@ final class ProtosWorkspacePackageSourceLookupTest {
         ProtosWorkspacePackageSourceLookup lookup =
                 lookup(temporary, node("root", ""), node("member-pkg", "libs/member"));
 
-        assertEquals(rootMain.toRealPath(), lookup.requireSource("root", "Main"));
-        assertEquals(nested.toRealPath(), lookup.requireSource("root", "tools/Parser"));
-        assertEquals(core.toRealPath(), lookup.requireSource("root", "core"));
-        assertEquals(memberApi.toRealPath(), lookup.requireSource("member-pkg", "Api"));
+        assertEquals(rootMain.toRealPath(), lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "Main"));
+        assertEquals(nested.toRealPath(), lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "tools/Parser"));
+        assertEquals(core.toRealPath(), lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "core"));
+        assertEquals(memberApi.toRealPath(), lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "member-pkg", "Api"));
     }
 
     @Test
@@ -58,10 +59,10 @@ final class ProtosWorkspacePackageSourceLookupTest {
         ProtosWorkspacePackageSourceLookup lookup =
                 lookup(temporary, node("root", ""), node("member-pkg", "libs/member"));
 
-        assertEquals(memberApi.toRealPath(), lookup.requireSource("member-pkg", "Api"));
+        assertEquals(memberApi.toRealPath(), lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "member-pkg", "Api"));
         assertThrows(
                 IOException.class,
-                () -> lookup.requireSource("root", "libs/member/Api"));
+                () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "libs/member/Api"));
     }
 
     @Test
@@ -78,8 +79,8 @@ final class ProtosWorkspacePackageSourceLookupTest {
         ProtosWorkspacePackageSourceLookup lookup =
                 lookup(temporary, node("root", ""), node("member-pkg", "libs/member"));
 
-        assertThrows(IOException.class, () -> lookup.requireSource("root", "Alias"));
-        assertEquals(memberApi.toRealPath(), lookup.requireSource("member-pkg", "Api"));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "Alias"));
+        assertEquals(memberApi.toRealPath(), lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "member-pkg", "Api"));
     }
 
     @Test
@@ -87,7 +88,7 @@ final class ProtosWorkspacePackageSourceLookupTest {
         writeSource(temporary, "Feature.protos");
         ProtosWorkspacePackageSourceLookup lookup = lookup(temporary, node("root", ""));
 
-        assertThrows(IOException.class, () -> lookup.requireSource("root", "feature"));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "feature"));
 
         Path folded = temporary.resolve("feature.protos");
         Assumptions.assumeFalse(
@@ -95,8 +96,8 @@ final class ProtosWorkspacePackageSourceLookupTest {
                 "host filesystem does not preserve distinct case spellings");
         writeSource(temporary, "feature.protos");
 
-        assertThrows(IOException.class, () -> lookup.requireSource("root", "Feature"));
-        assertThrows(IOException.class, () -> lookup.requireSource("root", "feature"));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "Feature"));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "feature"));
     }
 
     @Test
@@ -104,14 +105,14 @@ final class ProtosWorkspacePackageSourceLookupTest {
         Files.createDirectory(temporary.resolve("Directory.protos"));
         ProtosWorkspacePackageSourceLookup lookup = lookup(temporary, node("root", ""));
 
-        assertThrows(IOException.class, () -> lookup.requireSource("root", "Missing"));
-        assertThrows(IOException.class, () -> lookup.requireSource("root", "Directory"));
-        assertThrows(IOException.class, () -> lookup.requireSource("root", ""));
-        assertThrows(IOException.class, () -> lookup.requireSource("root", "tools//Parser"));
-        assertThrows(IOException.class, () -> lookup.requireSource("root", "../Parser"));
-        assertThrows(IOException.class, () -> lookup.requireSource("root", "bad-name"));
-        assertThrows(IOException.class, () -> lookup.requireSource("root", "CON"));
-        assertThrows(IOException.class, () -> lookup.requireSource("missing-pkg", "Main"));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "Missing"));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "Directory"));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", ""));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "tools//Parser"));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "../Parser"));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "bad-name"));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "CON"));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "missing-pkg", "Main"));
     }
 
     @Test
@@ -130,11 +131,11 @@ final class ProtosWorkspacePackageSourceLookupTest {
         }
 
         ProtosWorkspacePackageSourceLookup lookup = lookup(workspace, node("root", ""));
-        assertEquals(realSource.toRealPath(), lookup.requireSource("root", "Alias"));
+        assertEquals(realSource.toRealPath(), lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "Alias"));
 
         Path escapingLink = workspace.resolve("Escape.protos");
         Files.createSymbolicLink(escapingLink, outsideSource);
-        assertThrows(IOException.class, () -> lookup.requireSource("root", "Escape"));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "Escape"));
     }
 
     @Test
@@ -156,8 +157,8 @@ final class ProtosWorkspacePackageSourceLookupTest {
                         node("first-pkg", "libs/first"),
                         node("second-pkg", "libs/second"));
 
-        assertThrows(IOException.class, () -> lookup.requireSource("first-pkg", "Escape"));
-        assertEquals(siblingSource.toRealPath(), lookup.requireSource("second-pkg", "Sibling"));
+        assertThrows(IOException.class, () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "first-pkg", "Escape"));
+        assertEquals(siblingSource.toRealPath(), lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "second-pkg", "Sibling"));
     }
 
     private static Path writeSource(Path directory, String name) throws IOException {
@@ -180,6 +181,39 @@ final class ProtosWorkspacePackageSourceLookupTest {
         ProtosWorkspacePackageDirectoryIndex directoryIndex =
                 ProtosWorkspacePackageDirectoryIndex.bind(projectIndex);
         return ProtosWorkspacePackageSourceLookup.bind(directoryIndex);
+    }
+
+    @Test
+    void moduleTargetsSelectOnlyTheirInitializerAndSourcesNeverAliasIt() throws Exception {
+        Path range = Files.createDirectories(temporary.resolve("range"));
+        Path initializer = writeSource(range, "module.protos");
+        Path implementation = writeSource(range, "Range.protos");
+        writeSource(temporary, "range.protos");
+        Files.createDirectories(temporary.resolve("empty"));
+
+        ProtosWorkspacePackageSourceLookup lookup = lookup(temporary, node("root", ""));
+
+        assertEquals(
+                initializer.toRealPath(),
+                lookup.requireSource(ProtosModuleKey.Kind.MODULE, "root", "range"));
+        assertEquals(
+                implementation.toRealPath(),
+                lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "range/Range"));
+        assertEquals(
+                temporary.resolve("range.protos").toRealPath(),
+                lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "range"));
+        assertThrows(
+                IOException.class,
+                () -> lookup.requireSource(ProtosModuleKey.Kind.SOURCE, "root", "range/module"));
+        assertThrows(
+                IOException.class,
+                () -> lookup.requireSource(ProtosModuleKey.Kind.MODULE, "root", "empty"));
+        assertThrows(
+                IOException.class,
+                () -> lookup.requireSource(ProtosModuleKey.Kind.MODULE, "root", "range/Range"));
+        assertThrows(
+                IOException.class,
+                () -> lookup.requireSource(ProtosModuleKey.Kind.MODULE, "root", "Range"));
     }
 
     private static ProtosPackageExecutionPlan.PackageNode node(

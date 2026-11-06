@@ -50,7 +50,7 @@ final class ProtosRootActorServiceAuthorityIntegrationTest {
 
     private static final String SERVICE =
             """
-            ProcessStreams: import("std:io/ProcessStreams")
+            ProcessStreams: import("std:io/process_streams")
             probe: import("./probe.protos")
             out: ProcessStreams.stdoutWriter(process)
             rootContext: context

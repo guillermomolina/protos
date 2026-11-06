@@ -101,7 +101,7 @@ final class ProtosPackageRunDriverMixedApplicationTest extends ProtosPackageRunD
             throws Exception {
         Path project = project("mixed-network");
         Files.writeString(
-                project.resolve("Main.protos"),
+                ProtosPackageRunDriverTestSupport.moduleFile(project, "Main"),
                 "A: import(\"dep:reg/Api\")\n[network, Network, A.total]\n",
                 StandardCharsets.UTF_8);
         RecordingProvider provider = new RecordingProvider(materializations("mixed-network"));
@@ -124,7 +124,7 @@ final class ProtosPackageRunDriverMixedApplicationTest extends ProtosPackageRunD
     void mixedApplicationExplicitNoneKeepsNetworkSlotAbsent() throws Exception {
         Path project = project("mixed-none");
         Files.writeString(
-                project.resolve("Main.protos"),
+                ProtosPackageRunDriverTestSupport.moduleFile(project, "Main"),
                 "A: import(\"dep:reg/Api\")\nA.total\nnetwork\n",
                 StandardCharsets.UTF_8);
         RecordingProvider provider = new RecordingProvider(materializations("mixed-none"));

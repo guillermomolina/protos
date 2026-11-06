@@ -47,7 +47,7 @@ final class ProtosPackageExecutionPlanAdapterTest {
                     "cases",
                     "workspace");
     private static final String BUILD_PLAN =
-            "Plan: import(\"self:ExecutionPlan\")\n"
+            "Plan: import(\"./ExecutionPlan.protos\")\n"
                     + "Plan.build(projectTreeFilesystem)\n";
 
     private static ProtosPrelude prelude;
@@ -163,7 +163,7 @@ final class ProtosPackageExecutionPlanAdapterTest {
             implements AutoCloseable {
         Object buildPlan() {
             ProtosExecutionOutcome outcome =
-                    hosted.execute("<package-execution-plan>", BUILD_PLAN);
+                    hosted.executeAsTool("package", "<package-execution-plan>", BUILD_PLAN);
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
             return outcome.value();
         }

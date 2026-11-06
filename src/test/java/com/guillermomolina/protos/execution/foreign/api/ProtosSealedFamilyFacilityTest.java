@@ -41,8 +41,8 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * LIB020-A evidence for the private sealing facilities of std:text/Style and std:text/StyledText
- * (shared with std:text/ANSI by LIB020-B),
+ * LIB020-A evidence for the private sealing facilities of std:text/style and std:text/styled_text
+ * (shared with std:text/ansi by LIB020-B),
  * for the logical run content that StyledText keeps out of Protos-visible state, and for the
  * non-portability of both families across Actor and isolated-parallel transfer.
  */
@@ -50,8 +50,8 @@ final class ProtosSealedFamilyFacilityTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final String IMPORTS =
-            "Style: import(\"std:text/Style\")\n"
-                    + "StyledText: import(\"std:text/StyledText\")\n";
+            "Style: import(\"std:text/style\")\n"
+                    + "StyledText: import(\"std:text/styled_text\")\n";
 
     @Test
     void facilitiesAreDistinctFrozenMembersOfTheirExactModulesOnly() throws Exception {
@@ -68,7 +68,7 @@ final class ProtosSealedFamilyFacilityTest {
 
         ProtosObjectValue otherContext = prelude.newExecutionContext();
         prelude.installStandardModuleMembersForRuntime(
-                new ProtosModuleKey("std:text/UTF8"), otherContext);
+                ProtosModuleKey.module("std:text/utf8"), otherContext);
         assertFalse(otherContext.hasLocalSlot(ProtosSealedFamilyFacility.STYLE_BOOTSTRAP_SLOT));
         assertFalse(
                 otherContext.hasLocalSlot(ProtosSealedFamilyFacility.STYLED_TEXT_BOOTSTRAP_SLOT));
@@ -81,12 +81,12 @@ final class ProtosSealedFamilyFacilityTest {
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
-                                "import(\"std:text/Style\")", activation));
+                                "import(\"std:text/style\")", activation));
         ProtosObjectValue styledText =
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
-                                "import(\"std:text/StyledText\")", activation));
+                                "import(\"std:text/styled_text\")", activation));
 
         assertEquals(Set.of("construct", "recognizes"), style.localSlotsSnapshot().keySet());
         assertEquals(
@@ -121,7 +121,7 @@ final class ProtosSealedFamilyFacilityTest {
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
-                                "import(\"std:text/ANSI\")", activation));
+                                "import(\"std:text/ansi\")", activation));
         assertEquals(Set.of("render"), ansi.localSlotsSnapshot().keySet());
         assertEquals(
                 "\u001b[31mx\u001b[0m",
@@ -129,7 +129,7 @@ final class ProtosSealedFamilyFacilityTest {
                                 ProtosStringValue.class,
                                 ProtosTestExecutionSupport.evaluate(
                                         IMPORTS
-                                                + "import(\"std:text/ANSI\").render("
+                                                + "import(\"std:text/ansi\").render("
                                                 + "StyledText(\"x\", Style(\"red\")), true)",
                                         activation))
                         .value());

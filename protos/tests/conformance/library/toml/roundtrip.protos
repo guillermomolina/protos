@@ -15,12 +15,12 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("official style TOML 1.1 document round-trips semantically", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input:
             "title = \"TOML Example\"\n" +
@@ -69,7 +69,7 @@ tests: [
         Assertions.require(products.value[1].value["color"].value == "gray")
     }),
     Test("mutating parsed semantic data is local to that parse result", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         root: TOML.parse("value = 1\n")
         root.value["extra"] = TOML.integer(99)
@@ -77,7 +77,7 @@ tests: [
         Assertions.require(root.value.containsKey("extra"))
     }),
     Test("fresh parse does not observe semantic state from earlier mutation", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         // Re-parse through the same imported module after mutating an
         // earlier result: no parser or semantic state may be shared.

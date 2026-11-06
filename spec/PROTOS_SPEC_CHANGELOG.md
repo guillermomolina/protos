@@ -23,6 +23,40 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.496] - 2026-11-06
+
+### D242 / I151 — MODULE/SOURCE separation and public module objects
+- `semantics/MODULES.md`: `import(String)` resolves exactly two source-backed
+  target kinds. A MODULE is a logical directory with a mandatory
+  `module.protos`; importing it answers a distinct ordinary public module object,
+  cached as `INITIALIZING` before its initializer runs in a separate private
+  initializer context. Bare top-level declarations stay private; `this.Name:`
+  publishes an ordinary own slot immediately; the final expression never replaces
+  the public object; recursive imports observe the identical partial object;
+  failure evicts the active entry without rollback. A SOURCE is an explicitly
+  authorized exact `.protos` file whose import result remains its complete
+  `moduleContext`. Target kind is part of canonical `ModuleKey` identity;
+  explicit relative SOURCE imports, module-directory discovery without suffix
+  inference, fallback, search paths or parent initialization, exact spelling,
+  `[exports]` as logical module directories, `dep:` confinement and rejection of
+  direct SOURCE imports of `module.protos` are specified. Runtime-provisioned
+  and RootActor bootstrap-local facilities belong to private initialization
+  authority.
+- `semantics/EXECUTION_AND_CONTROL.md`: MODULE initializer lexical chain
+  private context → public module object → frozen prelude; `context` is the
+  private context and `this` the public object; no module-specific lookup,
+  assignment or slot-creation rule.
+- `semantics/CALLABLES.md`: Closures published by a MODULE keep lexical capture
+  and follow ordinary receiver-bound extraction, `methodHome` and `super`;
+  published objects keep identity and delegation parent.
+- `semantics/OBJECT_MODEL.md`: module publication is ordinary slot creation.
+- `concurrency/ACTORS.md`: bootstrap selects an exact own slot of a MODULE's
+  public object or of a SOURCE's complete context; private initializer bindings
+  and bootstrap-only capabilities are never searched or published.
+- `PROTOS_LANGUAGE_SPEC.md`: overview sentence on top-level bindings updated.
+- Standard Library routes in normative documents use the lowercase/underscore
+  MODULE spellings (for example `std:http/server`, `std:network/resolvers`).
+
 ## [0.1.495] - 2026-11-06
 
 ### D241-B / I148 — Named open options and required listen parameters

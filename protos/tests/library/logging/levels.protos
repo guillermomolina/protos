@@ -13,9 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Level: import("std:logging/Level")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Level: import("std:logging/level")
 
 ordered: [Level.TRACE, Level.DEBUG, Level.INFO, Level.WARN, Level.ERROR]
 
@@ -33,7 +33,7 @@ tests: [
         Assertions.require(Level.INFO === "INFO")
         Assertions.require(Level.WARN === "WARN")
         Assertions.require(Level.ERROR === "ERROR")
-        Assertions.require(import("std:logging/Level").INFO === Level.INFO)
+        Assertions.require(import("std:logging/level").INFO === Level.INFO)
     }),
     Test("exactly five levels and no FATAL", () => {
         Assertions.require(Level.hasSlot("FATAL") == false)

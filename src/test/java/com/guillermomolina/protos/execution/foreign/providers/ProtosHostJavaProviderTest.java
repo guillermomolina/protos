@@ -225,9 +225,9 @@ class ProtosHostJavaProviderTest {
     void explicitInteropReadsOnlyTheExposedMemberSurfaceAndAddsNoVerbs() throws Exception {
         ProtosModuleRuntimeTest.MemoryResolver resolver =
                 new ProtosModuleRuntimeTest.MemoryResolver()
-                        .module(
+                        .publicModule(
                                 "std:interop",
-                                Files.readString(Path.of("protos", "lib", "interop.protos")));
+                                Files.readString(Path.of("protos", "lib", "interop", "module.protos")));
         try (Fixture fixture = new Fixture(resolver)) {
             String i = "I: import(\"std:interop\")\n" + G;
             assertEquals(
@@ -463,7 +463,7 @@ class ProtosHostJavaProviderTest {
     void configuredButUnusedJavaProviderAndDefaultHostStayZeroUse() throws Exception {
         int lazy = ProtosHostJavaFixtureTypes.LAZY_INITIALIZATIONS.get();
         ProtosModuleRuntimeTest.MemoryResolver resolver =
-                new ProtosModuleRuntimeTest.MemoryResolver().module("lib", "value: 42");
+                new ProtosModuleRuntimeTest.MemoryResolver().source("lib", "value: 42");
         try (Fixture fixture = new Fixture(resolver)) {
             assertEquals("42", integer(fixture.eval("import(\"lib\").value")));
             assertEquals(
@@ -582,7 +582,7 @@ class ProtosHostJavaProviderTest {
                                     new ProtosObjectValue(ProtosObjectValue.rootObject()));
             return prelude.newModuleActivation(
                     actor.moduleState(),
-                    new ProtosModuleKey("entry"),
+                    ProtosModuleKey.source("entry"),
                     prelude.newExecutionContext(),
                     actor.executionDomain());
         }
@@ -596,11 +596,11 @@ class ProtosHostJavaProviderTest {
             current =
                     prelude.newModuleActivation(
                             actor.actorModuleState(),
-                            new ProtosModuleKey("entry"),
+                            ProtosModuleKey.source("entry"),
                             prelude.newExecutionContext(),
                             actor.executionDomain());
             return context.executeModuleSource(
-                    ProtosModuleSource.fromCharacters(new ProtosModuleKey("entry"), source),
+                    ProtosModuleSource.fromCharacters(ProtosModuleKey.source("entry"), source),
                     current);
         }
 

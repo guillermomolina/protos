@@ -16,7 +16,7 @@
 // I085-B: an external Java provider with opaque handles, loaded from a JAR
 // outside the portable distribution. Run by dist/test_external_foreign_providers.py.
 
-Assertions: import("std:test/Assertions")
+Assertions: import("std:test/assertions")
 
 lib: import("inventado:demo")
 

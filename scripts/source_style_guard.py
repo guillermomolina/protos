@@ -359,7 +359,7 @@ def run(repo, base, head):
         if assertion_violation:
             print(
                 "SOURCE_STYLE_ASSERTION_HINT: "
-                "use std:test/Assertions require/signals for the "
+                "use std:test/assertions require/signals for the "
                 "proven assertion shapes",
                 file=sys.stderr,
             )

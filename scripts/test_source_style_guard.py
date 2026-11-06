@@ -253,7 +253,7 @@ result
     def test_ratified_assertions_api_is_permitted(self):
         head = self.commit_files({
             "protos/tests/library/probe.protos": """
-Assertions: import("std:test/Assertions")
+Assertions: import("std:test/assertions")
 
 Assertions.require(true)
 
@@ -387,7 +387,7 @@ require(true)
             "SOURCE_STYLE_ASSERTION_DUPLICATION:",
             diagnostic,
         )
-        self.assertIn("std:test/Assertions", diagnostic)
+        self.assertIn("std:test/assertions", diagnostic)
         self.assertNotIn(
             "add one reviewed exact exception",
             diagnostic,

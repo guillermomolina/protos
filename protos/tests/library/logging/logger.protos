@@ -13,11 +13,11 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Level: import("std:logging/Level")
-Logger: import("std:logging/Logger")
-Instant: import("std:datetime/Instant")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Level: import("std:logging/level")
+Logger: import("std:logging/logger")
+Instant: import("std:datetime/instant")
 
 Failure: Error {}
 

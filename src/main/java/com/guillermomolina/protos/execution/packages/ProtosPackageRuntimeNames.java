@@ -17,7 +17,10 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -46,6 +49,93 @@ final class ProtosPackageRuntimeNames {
             requireSegment(segment);
         }
         return logicalName;
+    }
+
+    /** D242 file name of every logical module initializer. */
+    static final String MODULE_INITIALIZER = "module.protos";
+
+    static final String SOURCE_SUFFIX = ".protos";
+
+    /**
+     * D242 target-name validation. A MODULE name is a logical module directory. A SOURCE name is
+     * the exact package-relative file path without its {@code .protos} suffix; its final segment
+     * may never be {@code module}, so a SOURCE identity cannot alias a MODULE initializer.
+     */
+    static String requireTargetName(ProtosModuleKey.Kind kind, String logicalName)
+            throws IOException {
+        requireLogicalName(logicalName);
+        if (kind == ProtosModuleKey.Kind.SOURCE) {
+            String last = logicalName.substring(logicalName.lastIndexOf('/') + 1);
+            if (last.equals("module")) {
+                throw new IOException("module initializer cannot be imported as SOURCE");
+            }
+        } else if (kind != ProtosModuleKey.Kind.MODULE) {
+            throw new IOException("package targets are MODULE or SOURCE");
+        }
+        return logicalName;
+    }
+
+    static String kindTag(ProtosModuleKey.Kind kind) {
+        return switch (kind) {
+            case MODULE -> "module";
+            case SOURCE -> "source";
+            case FOREIGN -> "foreign";
+        };
+    }
+
+    /** Exact package-relative resource path for one already-validated target name. */
+    static String resourcePath(ProtosModuleKey.Kind kind, String logicalName) {
+        return kind == ProtosModuleKey.Kind.MODULE
+                ? logicalName + "/" + MODULE_INITIALIZER
+                : logicalName + SOURCE_SUFFIX;
+    }
+
+    /** Package-relative directory that owns relative SOURCE imports from the given target. */
+    static String owningDirectory(ProtosModuleKey.Kind kind, String logicalName) {
+        if (kind == ProtosModuleKey.Kind.MODULE) {
+            return logicalName;
+        }
+        int slash = logicalName.lastIndexOf('/');
+        return slash < 0 ? "" : logicalName.substring(0, slash);
+    }
+
+    static boolean isRelativeSourceSpecifier(String specifier) {
+        return specifier != null
+                && (specifier.startsWith("./") || specifier.startsWith("../"))
+                && specifier.endsWith(SOURCE_SUFFIX);
+    }
+
+    /**
+     * Resolves one explicitly relative SOURCE specifier against its owning package directory and
+     * returns the SOURCE target name. Traversal above the package root is rejected; the
+     * {@code module.protos} initializer is never resolvable as SOURCE.
+     */
+    static String resolveRelativeSource(String owningDirectory, String specifier)
+            throws IOException {
+        if (!isRelativeSourceSpecifier(specifier)) {
+            throw new IOException("relative SOURCE import must be ./ or ../ and end in .protos");
+        }
+        List<String> segments = new ArrayList<>();
+        if (!owningDirectory.isEmpty()) {
+            segments.addAll(List.of(owningDirectory.split("/", -1)));
+        }
+        String path = specifier.substring(0, specifier.length() - SOURCE_SUFFIX.length());
+        for (String segment : path.split("/", -1)) {
+            switch (segment) {
+                case "." -> { }
+                case ".." -> {
+                    if (segments.isEmpty()) {
+                        throw new IOException("relative SOURCE import escapes package root");
+                    }
+                    segments.remove(segments.size() - 1);
+                }
+                default -> segments.add(segment);
+            }
+        }
+        if (segments.isEmpty()) {
+            throw new IOException("empty relative SOURCE import");
+        }
+        return requireTargetName(ProtosModuleKey.Kind.SOURCE, String.join("/", segments));
     }
 
     private static void requireSegment(String segment) throws IOException {

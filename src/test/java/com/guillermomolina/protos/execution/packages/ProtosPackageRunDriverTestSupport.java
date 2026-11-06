@@ -112,7 +112,7 @@ abstract class ProtosPackageRunDriverTestSupport {
             "Next: import(\"dep:depnext/Api\")\n"
                     + "GitC: import(\"dep:depgit/Api\")\n"
                     + "RegC: import(\"dep:depreg/Api\")\n"
-                    + "total: 1000 + Next.value + GitC.value + RegC.value\n";
+                    + "this.total: 1000 + Next.value + GitC.value + RegC.value\n";
 
     static final String A2_MANIFEST =
             "manifest-version = 1\n"
@@ -150,8 +150,8 @@ abstract class ProtosPackageRunDriverTestSupport {
     @BeforeAll
     static void digestExternalTemplates() throws Exception {
         a1Template = tree(templates.resolve("a1"), A1_MANIFEST, A1_API);
-        a2Template = tree(templates.resolve("a2"), A2_MANIFEST, "value: 20\n");
-        cTemplate = tree(templates.resolve("c"), C_MANIFEST, "value: 3\n");
+        a2Template = tree(templates.resolve("a2"), A2_MANIFEST, "this.value: 20\n");
+        cTemplate = tree(templates.resolve("c"), C_MANIFEST, "this.value: 3\n");
         assumeSecureConfinement(templates);
 
         ProtosPackageContentIdentity a1Content = digest(a1Template);
@@ -200,7 +200,8 @@ abstract class ProtosPackageRunDriverTestSupport {
         Path project = Files.createDirectories(temporaryRoot.resolve(name).resolve("project"));
         Files.writeString(project.resolve("protos.toml"), ROOT_MANIFEST, StandardCharsets.UTF_8);
         Files.writeString(project.resolve("protos.lock"), lock, StandardCharsets.UTF_8);
-        Files.writeString(project.resolve("Main.protos"), ROOT_MAIN, StandardCharsets.UTF_8);
+        Files.createDirectories(project.resolve("Main"));
+        Files.writeString(project.resolve("Main/module.protos"), ROOT_MAIN, StandardCharsets.UTF_8);
         assumeSecureConfinement(project);
         return project;
     }
@@ -208,7 +209,8 @@ abstract class ProtosPackageRunDriverTestSupport {
     Path workspaceProject(String name, String main) throws Exception {
         Path project = temporaryRoot.resolve(name);
         copyTree(WORKSPACE_CASE, project);
-        Files.writeString(project.resolve("Main.protos"), main, StandardCharsets.UTF_8);
+        Files.createDirectories(project.resolve("Main"));
+        Files.writeString(project.resolve("Main/module.protos"), main, StandardCharsets.UTF_8);
         assumeSecureConfinement(project);
         return project;
     }
@@ -324,9 +326,10 @@ abstract class ProtosPackageRunDriverTestSupport {
                     .createLocalSlot(
                             "capturedFilesystem", custody.materialize(hosted.activation()));
             ProtosExecutionOutcome outcome =
-                    hosted.execute(
+                    hosted.executeAsTool(
+                            "package",
                             "<package-run-driver-test-digest>",
-                            "Identity: import(\"self:ContentIdentity\")\n"
+                            "Identity: import(\"./ContentIdentity.protos\")\n"
                                     + "Identity.digest(capturedFilesystem).hex\n");
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
             return new ProtosPackageContentIdentity(
@@ -379,8 +382,17 @@ abstract class ProtosPackageRunDriverTestSupport {
     static Path tree(Path root, String manifest, String api) throws Exception {
         Files.createDirectories(root);
         Files.writeString(root.resolve("protos.toml"), manifest, StandardCharsets.UTF_8);
-        Files.writeString(root.resolve("Api.protos"), api, StandardCharsets.UTF_8);
+        // D242: [exports] Api = "Api" names the logical module directory Api/.
+        Files.createDirectories(root.resolve("Api"));
+        Files.writeString(root.resolve("Api/module.protos"), api, StandardCharsets.UTF_8);
         return root;
+    }
+
+    /** D242 initializer path of one logical module directory, with its directory created. */
+    static Path moduleFile(Path root, String logicalModule) throws IOException {
+        Path initializer = root.resolve(logicalModule).resolve("module.protos");
+        Files.createDirectories(initializer.getParent());
+        return initializer;
     }
 
     static Path copyTree(Path source, Path target) throws IOException {

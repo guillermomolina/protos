@@ -84,17 +84,28 @@ final class ProtosFormatterToolBootstrapTest {
                         standardLibraryResolver);
 
         ProtosModuleKey entry =
-                resolver.entryModule("Main");
+                resolver.entryModule("Verify");
 
         assertEquals(
-                new ProtosModuleKey(
-                        "bundled-tool:formatter/Main"),
+                ProtosModuleKey.source(
+                        "bundled-tool:formatter/Verify.protos"),
                 entry);
 
-        assertTrue(
-                resolver.loadSource(entry)
-                        .characters()
-                        .contains("toolId: \"TOOL010\""));
+        // D242: the formatter interface is the published MODULE self:main, reached from the
+        // explicitly selected SOURCE entry; it publishes exactly its intended members.
+        ProtosModuleKey module = resolver.resolve("self:main", java.util.Optional.of(entry));
+        assertEquals(ProtosModuleKey.module("bundled-tool:formatter/main"), module);
+        String initializer = resolver.loadSource(module).characters();
+        assertTrue(initializer.contains("this.toolId: \"TOOL010\""));
+        assertTrue(initializer.contains("this.acceptSourceLayout:"));
+        assertTrue(initializer.contains("this.formatStructural:"));
+        assertTrue(initializer.contains("Structural: import(\"../Structural.protos\")"));
+        org.junit.jupiter.api.Assertions.assertThrows(
+                Exception.class,
+                () -> resolver.resolve("self:main", java.util.Optional.empty()));
+        org.junit.jupiter.api.Assertions.assertThrows(
+                Exception.class,
+                () -> resolver.resolve("./main/module.protos", java.util.Optional.of(entry)));
 
         AtomicReference<ProtosProcessRuntime> observed =
                 new AtomicReference<>();

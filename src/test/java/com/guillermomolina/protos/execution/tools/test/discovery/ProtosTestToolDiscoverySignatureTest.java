@@ -35,8 +35,8 @@ final class ProtosTestToolDiscoverySignatureTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Discovery: import("self:Discovery")
-                        TestValue: import("std:test/Test")
+                        Discovery: import("./Discovery.protos")
+                        TestValue: import("std:test/test")
 
                         calls: {
                             value: 0
@@ -70,7 +70,7 @@ final class ProtosTestToolDiscoverySignatureTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Discovery: import("self:Discovery")
+                        Discovery: import("./Discovery.protos")
                         Discovery.declarationSignature(Array()).size() == 0
                         """);
 
@@ -83,8 +83,8 @@ final class ProtosTestToolDiscoverySignatureTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Discovery: import("self:Discovery")
-                        TestValue: import("std:test/Test")
+                        Discovery: import("./Discovery.protos")
+                        TestValue: import("std:test/test")
 
                         Discovery.declarationSignature(
                             Array(
@@ -102,7 +102,7 @@ final class ProtosTestToolDiscoverySignatureTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Discovery: import("self:Discovery")
+                        Discovery: import("./Discovery.protos")
                         Discovery.declarationSignature({})
                         """);
 
@@ -114,8 +114,8 @@ final class ProtosTestToolDiscoverySignatureTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Discovery: import("self:Discovery")
-                        TestValue: import("std:test/Test")
+                        Discovery: import("./Discovery.protos")
+                        TestValue: import("std:test/test")
 
                         signature:
                             Discovery.declarationSignature(
@@ -133,7 +133,7 @@ final class ProtosTestToolDiscoverySignatureTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Discovery: import("self:Discovery")
+                        Discovery: import("./Discovery.protos")
 
                         malformed: {
                             name: 42
@@ -151,8 +151,8 @@ final class ProtosTestToolDiscoverySignatureTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Discovery: import("self:Discovery")
-                        TestValue: import("std:test/Test")
+                        Discovery: import("./Discovery.protos")
+                        TestValue: import("std:test/test")
 
                         module: {
                             unrelated: 42
@@ -179,7 +179,7 @@ final class ProtosTestToolDiscoverySignatureTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Discovery: import("self:Discovery")
+                        Discovery: import("./Discovery.protos")
 
                         module: {
                             unrelated: 42
@@ -196,8 +196,8 @@ final class ProtosTestToolDiscoverySignatureTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Discovery: import("self:Discovery")
-                        TestValue: import("std:test/Test")
+                        Discovery: import("./Discovery.protos")
+                        TestValue: import("std:test/test")
 
                         base: {
                             tests: Array(
@@ -220,8 +220,8 @@ final class ProtosTestToolDiscoverySignatureTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Discovery: import("self:Discovery")
-                        TestValue: import("std:test/Test")
+                        Discovery: import("./Discovery.protos")
+                        TestValue: import("std:test/test")
 
                         module: {
                             tests: Array(
@@ -251,8 +251,8 @@ final class ProtosTestToolDiscoverySignatureTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Discovery: import("self:Discovery")
-                        TestValue: import("std:test/Test")
+                        Discovery: import("./Discovery.protos")
+                        TestValue: import("std:test/test")
 
                         calls: {
                             value: 0
@@ -300,8 +300,8 @@ final class ProtosTestToolDiscoverySignatureTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Discovery: import("self:Discovery")
-                        TestValue: import("std:test/Test")
+                        Discovery: import("./Discovery.protos")
+                        TestValue: import("std:test/test")
 
                         missingModule: {
                             tests: Array(
@@ -360,8 +360,8 @@ final class ProtosTestToolDiscoverySignatureTest {
         ProtosExecutionOutcome outcome =
                 execute(
                         """
-                        Discovery: import("self:Discovery")
-                        TestValue: import("std:test/Test")
+                        Discovery: import("./Discovery.protos")
+                        TestValue: import("std:test/test")
 
                         calls: {
                             value: 0
@@ -417,6 +417,6 @@ final class ProtosTestToolDiscoverySignatureTest {
 
         return ProtosTestExecutionSupport.execute(
                 source,
-                prelude.newModuleActivation());
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 }

@@ -9,8 +9,8 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("current stable", () => {

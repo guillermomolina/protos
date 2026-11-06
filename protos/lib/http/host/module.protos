@@ -1,0 +1,164 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Standard Library continuous HTTP/1.1 hosting (D216, HTTP.md §15).
+//!
+//! `Host.owning(listener, handlerModule, handlerBinding, workers: 1,
+//! maxConnections: 64, maxPendingAccepts: workers, limits: null)` takes
+//! custody of a live `TcpListener` of the calling Actor and services
+//! successive TCP connections with `workers` Worker Actors of the same
+//! Process. Each Worker receives only a `TcpAcceptor` derived from the
+//! listener, resolves `handlerModule` and its own binding `handlerBinding`
+//! itself, accepts by itself, and services each accepted connection exactly
+//! once with `Server.serveOne.owning`. Admission is bounded by the fixed
+//! per-Worker quotas of `maxConnections` and `maxPendingAccepts`.
+//!
+//! `Host.owningWithFactory(listener, factoryModule, factoryBinding,
+//! initialization, workers: 1, maxConnections: 64, maxPendingAccepts: workers,
+//! limits: null)` hosts exactly the same way (D225-A, HTTP.md
+//! §15.13), except that each Worker builds its own handler: it receives its
+//! own Actor-boundary copy of `initialization`, resolves its own binding
+//! `factoryBinding` of `factoryModule`, and calls it exactly once with that
+//! copy before it becomes ready. `initialization` may carry ordinary
+//! transferable data and `ActorRef` values; live resources, Closures, Futures
+//! and every other non-transferable value, including a `TcpAcceptor`, are
+//! rejected as at any ordinary Actor boundary.
+//!
+//! The returned host is an Actor-local control object: `ready()`,
+//! `shutdown("drain")`, `shutdown("abort")` and `termination()` answer fresh
+//! local Futures resolving to that host. Cancelling such a Future abandons
+//! only that observation. The host acquires no Network or other ambient
+//! authority and defines no timeout.
+
+/// The prototype of every hosting failure. Each failure is a fresh
+/// occurrence whose `kind` is "startup", "listener", "worker", or
+/// "shutdown".
+this.HostError: Error {}
+
+/// The continuous HTTP/1.1 host.
+this.Host: ((facility) => {
+    HostConfig: import("../internal/HostConfig.protos")
+    HostLifecycle: import("../internal/HostLifecycle.protos")
+
+    // HTTP.md §15.2: every construction argument is validated before any
+    // effect. An invalid call signals a fresh InvalidIOArgument without
+    // listener custody, Workers or I/O. Answers the captured configuration
+    // and one TcpAcceptor per Worker.
+    admit: (listener, moduleSpecifier, bindingName, options) => {
+        config: HostConfig.capture(facility, options)
+        valid: (config !== null) && String.recognizes(moduleSpecifier) && String.recognizes(bindingName)
+        acceptors: null
+        if(valid) {
+            acceptors = HostConfig.acceptors(facility, listener, config.workers)
+            valid = acceptors !== null
+        }
+        if(!valid) {
+            invalid: InvalidIOArgument {}
+            invalid.signal()
+        }
+        admitted: {
+            config: config
+            acceptors: acceptors
+        }
+        admitted
+    }
+
+    // D241: per-call options are named parameters with ordinary D203
+    // defaults; the private options object only feeds the existing admission.
+    owning: (
+        listener,
+        handlerModule,
+        handlerBinding,
+        workers: 1,
+        maxConnections: 64,
+        maxPendingAccepts: workers,
+        limits: null
+    ) => {
+        options: {
+            workers: workers
+            maxConnections: maxConnections
+            maxPendingAccepts: maxPendingAccepts
+            limits: limits
+        }
+        admitted: admit(listener, handlerModule, handlerBinding, options)
+        config: admitted.config
+        // Only the acceptor, the handler Strings, the quotas and the
+        // captured limits cross into a Worker (HTTP.md §15.4).
+        spawnWorker: (acceptor, connectionQuota, pendingQuota) => {
+            Actor.spawn(
+                "std:http/internal/host_worker",
+                "start",
+                acceptor,
+                handlerModule,
+                handlerBinding,
+                connectionQuota,
+                pendingQuota,
+                config.limits
+            )
+        }
+        HostLifecycle.start(facility, HostError, listener, admitted.acceptors, spawnWorker, config, [])
+    }
+
+    // HTTP.md §15.13: initialization is not a structural argument and is
+    // never an Actor.spawn argument, whose TcpAcceptor delegation stays
+    // reserved for the acceptor derived here. Each Worker receives it as the
+    // argument of its "serve" request, an ordinary Actor transfer: one
+    // independent copy per Worker, and a non-transferable value, including a
+    // caller-supplied TcpAcceptor, signals NonTransferableValue while the
+    // Workers are created, which HostLifecycle reports as a startup failure
+    // with its mandatory cleanup.
+    owningWithFactory: (
+        listener,
+        factoryModule,
+        factoryBinding,
+        initialization,
+        workers: 1,
+        maxConnections: 64,
+        maxPendingAccepts: workers,
+        limits: null
+    ) => {
+        options: {
+            workers: workers
+            maxConnections: maxConnections
+            maxPendingAccepts: maxPendingAccepts
+            limits: limits
+        }
+        admitted: admit(listener, factoryModule, factoryBinding, options)
+        config: admitted.config
+        spawnWorker: (acceptor, connectionQuota, pendingQuota) => {
+            Actor.spawn(
+                "std:http/internal/host_worker",
+                "startWithFactory",
+                acceptor,
+                factoryModule,
+                factoryBinding,
+                connectionQuota,
+                pendingQuota,
+                config.limits
+            )
+        }
+        HostLifecycle.start(facility, HostError, listener, admitted.acceptors, spawnWorker, config, [initialization])
+    }
+
+    host: {
+        owning: owning
+        owningWithFactory: owningWithFactory
+    }
+    host
+})(_httpAsyncFacility)
+
+// The runtime-provisioned facility is captured privately above; it is not
+// module surface.
+context.removeSlot("_httpAsyncFacility")

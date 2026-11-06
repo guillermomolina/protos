@@ -352,7 +352,7 @@ packages. Therefore manifest parsing is toolchain bootstrap functionality.
 Manifest parsing must not require project package resolution; that would create
 a package-resolution cycle. A Standard Library module installed with the
 toolchain does not create that cycle: Package Tool now parses `protos.toml`
-with `std:toml/TOML` selecting TOML 1.0 (D087 as amended, I079). The format
+with `std:toml/toml` selecting TOML 1.0 (D087 as amended, I079). The format
 itself admits any strategy that preserves this boundary, for example:
 
 - embed a small conforming TOML parser;

@@ -13,14 +13,14 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal route compilation and dispatch of std:http/Router (D222-C,
+//! Internal route compilation and dispatch of std:http/router (D222-C,
 //! HTTP.md §17.2-§17.6). This module is an unpublished implementation
 //! artifact, not an approved Standard Library API. It is pure: it never
 //! invokes a route handle, reads a request body, or acquires authority. All
 //! specificity and conflict checks happen once, at compilation.
 
-MessageSyntax: import("std:http/internal/MessageSyntax")
-RouteTarget: import("std:http/internal/RouteTarget")
+MessageSyntax: import("./MessageSyntax.protos")
+RouteTarget: import("./RouteTarget.protos")
 
 entrySlots: ["method", "path", "handle"]
 
@@ -222,7 +222,7 @@ relation: (first, second) => {
 /// Validates and snapshots routes (HTTP.md §17.2, §17.5) and answers a frozen
 /// table, or null when routes is not an Array of admissible entries or two
 /// routes of the same method are duplicate or crossing. facility is the
-/// private asynchronous bridge of std:http/Router, used only for its
+/// private asynchronous bridge of std:http/router, used only for its
 /// read-only representation probes.
 compile: (facility, routes) => {
     valid: Array.recognizes(routes)

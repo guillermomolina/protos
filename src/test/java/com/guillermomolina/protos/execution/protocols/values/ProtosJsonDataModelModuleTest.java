@@ -48,7 +48,7 @@ class ProtosJsonDataModelModuleTest {
         ProtosActivation activation = prelude.newModuleActivation();
         Object module =
                 ProtosTestExecutionSupport.evaluate(
-                        "import(\"std:json/JSON\")",
+                        "import(\"std:json/json\")",
                         activation);
         assertThrows(
                 ProtosSignalException.class,
@@ -59,7 +59,7 @@ class ProtosJsonDataModelModuleTest {
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
                                 """
-                                JSON: import("std:json/JSON")
+                                JSON: import("std:json/json")
                                 JSON.object(
                                     "name", JSON.string("Ada"),
                                     "numbers", JSON.array(

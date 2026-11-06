@@ -36,11 +36,11 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.List;
 
 /**
- * Private asynchronous bridge of {@code std:http/Server} (D215, LIB025).
+ * Private asynchronous bridge of {@code std:http/server} (D215, LIB025).
  *
  * <p>Every HTTP rule (request parsing, body framing, error classification, response validation
  * and serialization, emission policy, session state, limits) lives in the Protos sources {@code
- * lib/http/Server.protos} and {@code lib/http/internal/*.protos}. This frozen facility supplies
+ * lib/http/server/module.protos} and {@code lib/http/internal/*.protos}. This frozen facility supplies
  * only the integration that the public Future protocol cannot express without creating Tasks:
  *
  * <ul>
@@ -76,40 +76,40 @@ import java.util.List;
  * it is never module surface or a Prelude binding. It retains no Actor, Task or session state.
  *
  * <p>I126 (D216, HTTP.md §15): the same facility, with no additional operation, is also a deferred
- * member of {@code std:http/Host}, whose construction validates options and limits with {@code
+ * member of {@code std:http/host}, whose construction validates options and limits with {@code
  * ordinaryObject} and whose lifecycle runs its completion Task with {@code startService} and
  * {@code enterService}, so that its cleanup also runs when cancelled before starting, and of
- * {@code std:http/internal/HostWorker}, whose Worker bootstrap uses
+ * {@code std:http/internal/host_worker}, whose Worker bootstrap uses
  * {@code provides(handler, "call")} to validate the resolved handler binding.
  *
  * <p>I127 (D218-B, HTTP.md §16): the same facility, with no additional operation, is also a
- * deferred member of {@code std:http/Client}. Its single-exchange session uses {@code failed},
+ * deferred member of {@code std:http/client}. Its single-exchange session uses {@code failed},
  * {@code resolved}, the probes, {@code startService} and {@code enterService} exactly as the
- * server session does; every client rule lives in {@code lib/http/Client.protos} and {@code
+ * server session does; every client rule lives in {@code lib/http/client/module.protos} and {@code
  * lib/http/internal/Client*.protos}.
  *
  * <p>LIB026 (D222-C, HTTP.md §17-§18): the same facility, with no additional operation, is also
- * a deferred member of {@code std:http/Router}, which uses only {@code ordinaryObject} and {@code
- * provides}, and of {@code std:http/UrlClient}, which uses {@code failed}, the probes, {@code
+ * a deferred member of {@code std:http/router}, which uses only {@code ordinaryObject} and {@code
+ * provides}, and of {@code std:http/url_client}, which uses {@code failed}, the probes, {@code
  * startService} and {@code enterService} for its one outer service Task. Every routing and URL
- * rule lives in {@code lib/http/Router.protos}, {@code lib/http/UrlClient.protos} and their
+ * rule lives in {@code lib/http/router/module.protos}, {@code lib/http/url_client/module.protos} and their
  * {@code lib/http/internal} helpers; network, resolution and TLS stay with their own facilities.
  *
  * <p>I130-B (D220–S12): the operations are package-visible so that {@link
- * ProtosTlsBackendFacility} publishes the same eight operations to {@code std:tls/Client} without
+ * ProtosTlsBackendFacility} publishes the same eight operations to {@code std:tls/client} without
  * a second implementation; the HTTP facility surface is unchanged.
  */
 public final class ProtosHttpAsyncFacility {
-    public static final ProtosModuleKey MODULE_KEY = new ProtosModuleKey("std:http/Server");
-    public static final ProtosModuleKey HOST_MODULE_KEY = new ProtosModuleKey("std:http/Host");
+    public static final ProtosModuleKey MODULE_KEY = ProtosModuleKey.module("std:http/server");
+    public static final ProtosModuleKey HOST_MODULE_KEY = ProtosModuleKey.module("std:http/host");
     public static final ProtosModuleKey HOST_WORKER_MODULE_KEY =
-            new ProtosModuleKey("std:http/internal/HostWorker");
+            ProtosModuleKey.module("std:http/internal/host_worker");
     public static final ProtosModuleKey CLIENT_MODULE_KEY =
-            new ProtosModuleKey("std:http/Client");
+            ProtosModuleKey.module("std:http/client");
     public static final ProtosModuleKey ROUTER_MODULE_KEY =
-            new ProtosModuleKey("std:http/Router");
+            ProtosModuleKey.module("std:http/router");
     public static final ProtosModuleKey URL_CLIENT_MODULE_KEY =
-            new ProtosModuleKey("std:http/UrlClient");
+            ProtosModuleKey.module("std:http/url_client");
     public static final String BOOTSTRAP_SLOT = "_httpAsyncFacility";
 
     private ProtosHttpAsyncFacility() {}

@@ -424,11 +424,20 @@ final class ProtosTestLogicalCaseAttemptBridge {
                 "selectedSelector",
                 new ProtosStringValue(request.selector()));
 
-        return prelude.newModuleActivation(
-                rootActor.moduleState(),
-                null,
-                context,
-                rootActor.executionDomain());
+        ProtosActivation selection =
+                prelude.newModuleActivation(
+                        rootActor.moduleState(),
+                        null,
+                        context,
+                        rootActor.executionDomain());
+        // D242: the host selects the exact Discovery SOURCE identity explicitly and binds its
+        // Actor-local module instance; the snippet performs no ambient self: import.
+        context.createLocalSlot(
+                "Discovery",
+                ProtosModuleRuntime.loadCanonicalModuleThroughPreludeForRuntime(
+                        ProtosBundledToolModuleResolver.toolSourceKey("test", "Discovery"),
+                        selection));
+        return selection;
     }
 
     /**
@@ -493,8 +502,6 @@ final class ProtosTestLogicalCaseAttemptBridge {
         return source(
                 "<tool009-logical-case-selection>",
                 """
-                Discovery: import("self:Discovery")
-
                 selected:
                     Discovery.resolveSelectedTest(
                         discoverySubject,

@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("parse basic", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             simple: CSV.parse("alpha,beta,gamma")
             Assertions.require(simple.size() == 1)
@@ -64,7 +64,7 @@ tests: [
     }),
     Test("parse invalid", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             Assertions.signals(Error, () => { CSV.parse("a\"b") })
             Assertions.signals(Error, () => { CSV.parse("\"a\"b") })
@@ -80,7 +80,7 @@ tests: [
     }),
     Test("parse record boundaries", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             empty: CSV.parse("")
             Assertions.require(empty.size() == 0)
@@ -133,7 +133,7 @@ tests: [
     }),
     Test("arity domain rejection", () => {
         tool009LegacyCase: () => {
-            CSV: import("std:csv/CSV")
+            CSV: import("std:csv/csv")
 
             Assertions.signals(Error, () => { CSV.parse() })
             Assertions.signals(Error, () => { CSV.parse(42) })

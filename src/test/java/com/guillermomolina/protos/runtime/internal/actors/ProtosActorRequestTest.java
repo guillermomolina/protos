@@ -270,7 +270,7 @@ final class ProtosActorRequestTest {
                     @Override
                     public ProtosModuleKey resolve(
                             String exactSpecifier, Optional<ProtosModuleKey> importingModule) {
-                        return new ProtosModuleKey("canonical:" + exactSpecifier);
+                        return ProtosModuleKey.source("canonical:" + exactSpecifier);
                     }
 
                     @Override
@@ -294,7 +294,7 @@ final class ProtosActorRequestTest {
         ProtosActivation creatorActivation =
                 prelude.newModuleActivation(
                         creator.moduleState(),
-                        new ProtosModuleKey("creator"),
+                        ProtosModuleKey.source("creator"),
                         prelude.newExecutionContext(),
                         creator.executionDomain());
 
@@ -350,7 +350,7 @@ final class ProtosActorRequestTest {
                             new ProtosActorModuleState(),
                             capacity);
             actor.bindMessageEnvironmentForRuntime(
-                    prelude, new ProtosModuleKey("target"));
+                    prelude, ProtosModuleKey.source("target"));
             actor.completeInitialization(behavior);
             new ProtosActorScheduler(carriers, 1).attach(actor);
             return actor;

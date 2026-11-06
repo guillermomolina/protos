@@ -13,43 +13,43 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("manifest-schema-base-empty-id-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseBase("manifest-version = 1\n[package]\nid = \"\"\nversion = \"1.0.0\"\n")
         })
     }),
     Test("manifest-schema-base-empty-locator-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseBase("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\nlocator = \"\"\n")
         })
     }),
     Test("manifest-schema-base-empty-version-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseBase("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"\"\n")
         })
     }),
     Test("manifest-schema-base-locator-and-known-optional", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         model: Schema.parseBase("manifest-version = 1\n[package]\nid = \"pkg-id\"\nversion = \"1.2.3\"\nlocator = \"community/pkg\"\n[compatibility]\nfuture-field = 7\n")
         ok: model.package.id == "pkg-id"
         (model.package.locator == "community/pkg").ifFalse(() => { ok = false })
         Assertions.require(ok)
     }),
     Test("manifest-schema-base-manifest-version-type-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseBase("manifest-version = \"1\"\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n")
         })
     }),
     Test("manifest-schema-base-minimal", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         model: Schema.parseBase("manifest-version = 1\n[package]\nid = \"pkg-id\"\nversion = \"1.2.3\"\n")
         ok: model.package.id == "pkg-id"
         (model.package.version == "1.2.3").ifFalse(() => { ok = false })
@@ -57,37 +57,37 @@ tests: [
         Assertions.require(ok)
     }),
     Test("manifest-schema-base-missing-manifest-version-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseBase("[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n")
         })
     }),
     Test("manifest-schema-base-missing-package-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseBase("manifest-version = 1\n")
         })
     }),
     Test("manifest-schema-base-package-not-table-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseBase("manifest-version = 1\npackage = \"pkg\"\n")
         })
     }),
     Test("manifest-schema-base-package-unknown-field-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseBase("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\nname = \"wrong-field\"\n")
         })
     }),
     Test("manifest-schema-base-unknown-root-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseBase("manifest-version = 1\nunknown = true\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n")
         })
     }),
     Test("manifest-schema-base-unsupported-generation-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseBase("manifest-version = 2\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n")
         })

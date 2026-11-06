@@ -101,19 +101,38 @@ public final class ProtosActorBootstrap {
                             .orElseThrow(() -> bootstrapError(activation));
             // The binding runs in its own module's environment, as every later message turn of
             // this Actor does: specifiers it resolves are relative to that canonical module.
+            // D242: MODULE bootstrap invocation has the public module as its
+            // receiver. The Actor bootstrap context remains private.
+            // SOURCE retains its complete context as its ordinary receiver.
             ProtosActivation invocation =
-                    prelude.newModuleActivation(
-                            actor.moduleState(),
-                            canonicalModuleKey,
-                            bootstrapContext,
-                            actor.executionDomain());
+                    canonicalModuleKey.isModule()
+                            ? prelude.newModuleInitializerActivation(
+                                    actor.moduleState(),
+                                    canonicalModuleKey,
+                                    bootstrapContext,
+                                    module,
+                                    actor.executionDomain())
+                            : prelude.newModuleActivation(
+                                    actor.moduleState(),
+                                    canonicalModuleKey,
+                                    bootstrapContext,
+                                    actor.executionDomain());
+            List<?> arguments =
+                    List.copyOf(
+                            ProtosActorValueTransfer.materializeArguments(
+                                    transferredArguments, invocation));
+
+            // D242: MODULE exports are ordinary methods selected on the
+            // public object. Invoking the extracted Closure directly would
+            // discard the MODULE receiver and method home.
+            //
+            // SOURCE bootstrap retains its complete source Context contract.
             Object result =
-                    ProtosInvocation.invoke(
-                            bootstrapBinding,
-                            List.copyOf(
-                                    ProtosActorValueTransfer.materializeArguments(
-                                            transferredArguments, invocation)),
-                            invocation);
+                    canonicalModuleKey.isModule()
+                            ? ProtosInvocation.invokeMessage(
+                                    module, bindingName, arguments, invocation)
+                            : ProtosInvocation.invoke(
+                                    bootstrapBinding, arguments, invocation);
             // A represented Number is a semantic value, not an ordinary
             // Actor behavior object. Check semantic membership, not the Java
             // representation: BigInteger, Fraction and Complex all extend

@@ -82,7 +82,7 @@ final class ProtosGroupRefPublicApiTest {
         ProtosActivation caller =
                 prelude.newModuleActivation(
                         sender.moduleState(),
-                        new ProtosModuleKey("sender"),
+                        ProtosModuleKey.source("sender"),
                         prelude.newExecutionContext(),
                         sender.executionDomain());
 
@@ -154,7 +154,7 @@ final class ProtosGroupRefPublicApiTest {
             ProtosObjectValue behavior,
             String moduleName) {
         ProtosActor actor = new ProtosActor(actorRefPrototype);
-        actor.bindMessageEnvironmentForRuntime(prelude, new ProtosModuleKey(moduleName));
+        actor.bindMessageEnvironmentForRuntime(prelude, ProtosModuleKey.source(moduleName));
         assertTrue(actor.completeInitialization(behavior));
         return actor;
     }

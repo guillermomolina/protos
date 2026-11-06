@@ -31,6 +31,9 @@ import java.util.Optional;
  * aliasing, normalization, extension inference, or filesystem/classpath search takes place. Every
  * other specifier, including an unauthorized {@code app:} one, is delegated unchanged to the
  * fallback, so {@code std:} and the exclusive {@code foreign:} key domain are never affected.
+ *
+ * <p>D242: an authorized application entry is an explicitly authorized SOURCE: its import result
+ * is its complete source Context. The catalog never manufactures a public MODULE identity.
  */
 final class ProtosApplicationModuleResolver implements ProtosModuleResolver {
     static final String PREFIX = "app:";
@@ -84,7 +87,7 @@ final class ProtosApplicationModuleResolver implements ProtosModuleResolver {
             String exactSpecifier, Optional<ProtosModuleKey> importingModule) throws Exception {
         Objects.requireNonNull(exactSpecifier, "exactSpecifier");
         if (sources.containsKey(exactSpecifier)) {
-            return new ProtosModuleKey(exactSpecifier);
+            return ProtosModuleKey.source(exactSpecifier);
         }
         return fallback.resolve(exactSpecifier, importingModule);
     }
@@ -92,7 +95,7 @@ final class ProtosApplicationModuleResolver implements ProtosModuleResolver {
     @Override
     public ProtosModuleSource loadSource(ProtosModuleKey key) throws Exception {
         Objects.requireNonNull(key, "key");
-        String characters = sources.get(key.canonicalId());
+        String characters = key.isSource() ? sources.get(key.canonicalId()) : null;
         if (characters != null) {
             return ProtosModuleSource.fromCharacters(key, characters);
         }

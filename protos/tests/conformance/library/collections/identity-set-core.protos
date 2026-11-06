@@ -4,13 +4,13 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: Array(
     Test("identity set algebra membership", () => {
         tool009LegacyCase: () => {
-            IdentitySet: import("std:collections/IdentitySet")
+            IdentitySet: import("std:collections/identity_set")
             left: IdentitySet(1, 2)
             right: IdentitySet(1.0, 2, 3)
 
@@ -44,13 +44,13 @@ tests: Array(
     }),
     Test("identity set remove absent error", () => {
         Assertions.signals(Error, () => {
-            IdentitySet: import("std:collections/IdentitySet")
+            IdentitySet: import("std:collections/identity_set")
             IdentitySet.remove(IdentitySet(), 1)
         })
     }),
     Test("identity set uses semantic identity", () => {
         tool009LegacyCase: () => {
-            IdentitySet: import("std:collections/IdentitySet")
+            IdentitySet: import("std:collections/identity_set")
             values: IdentitySet(1, 1.0, 1)
             ok: true
             (IdentitySet.size(values) == 2).ifFalse(() => { ok = false })

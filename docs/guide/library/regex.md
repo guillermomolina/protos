@@ -1,6 +1,6 @@
-# Regular expressions: `std:regex/Regex`
+# Regular expressions: `std:regex/regex`
 
-`std:regex/Regex` is a deliberately restricted regular-expression dialect. It
+`std:regex/regex` is a deliberately restricted regular-expression dialect. It
 trades features such as backreferences and look-around for three guarantees:
 
 - **portable** — the same pattern means the same thing on every distribution;
@@ -11,10 +11,10 @@ trades features such as backreferences and look-around for three guarantees:
   is no exponential backtracking.
 
 The exact contract is the doc comment of
-[`Regex.protos`](../../../protos/lib/regex/Regex.protos).
+[`Regex.protos`](../../../protos/lib/regex/regex/module.protos).
 
 ```protos
-Regex: import("std:regex/Regex")
+Regex: import("std:regex/regex")
 ```
 
 ## Compiling a pattern
@@ -84,7 +84,7 @@ did not participate. `groups()` answers an Array of every group's text and
 signals an Error.
 
 ```protos
-Regex: import("std:regex/Regex")
+Regex: import("std:regex/regex")
 
 date: Regex.compile("(?<year>\\d{4})-(?<month>\\d{2})-(\\d{2})")
 found: date.search("on 2026-10-06!")

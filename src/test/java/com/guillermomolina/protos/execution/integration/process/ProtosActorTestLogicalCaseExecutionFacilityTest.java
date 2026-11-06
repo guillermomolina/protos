@@ -63,7 +63,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
 
     private static final String SOURCE_ONE_INCREMENT =
             """
-            TestValue: import("std:test/Test")
+            TestValue: import("std:test/test")
 
             tests: Array(
                 TestValue("incrementsOnce", () => {
@@ -75,7 +75,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
 
     private static final String SOURCE_TWO_REQUESTS_SAME_INCARNATION =
             """
-            TestValue: import("std:test/Test")
+            TestValue: import("std:test/test")
 
             tests: Array(
                 TestValue("stateful", () => {
@@ -95,7 +95,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = actorResolver();
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -144,7 +144,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = actorResolver();
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -186,7 +186,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
 
         ProtosModuleResolver resolver = actorResolver();
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
         ManualSubmission submission = new ManualSubmission();
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
@@ -239,7 +239,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = actorResolver();
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -282,7 +282,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
             throws Exception {
         String source =
                 """
-                TestValue: import("std:test/Test")
+                TestValue: import("std:test/test")
 
                 tests: Array(
                     TestValue("second", () => {
@@ -301,7 +301,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = actorResolver();
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -413,7 +413,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
                 Map.of(
                         "workers",
                         new ProtosExactModuleOverlayResolver.ExactModule(
-                                new ProtosModuleKey("tool002-actor:workers"),
+                                ProtosModuleKey.source("tool002-actor:workers"),
                                 ACTOR_WORKERS_MODULE)),
                 ordinaryTestResolver);
     }

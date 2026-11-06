@@ -15,12 +15,12 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("encode non-table root error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         root: TOML.integer(1)
 
@@ -29,7 +29,7 @@ tests: [
         })
     }),
     Test("encode forged node kind error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         forged: {
             kind: "unknown"
@@ -41,7 +41,7 @@ tests: [
         })
     }),
     Test("encode cyclic table error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         cyclic: TOML.table()
         cyclic.value["self"] = cyclic

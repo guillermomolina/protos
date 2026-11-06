@@ -43,10 +43,10 @@ final class ProtosTestToolCaseSelectionTest {
      */
     private static final String SUITE =
             """
-            Discovery: import("self:Discovery")
-            CaseRef: import("self:CaseRef")
-            Selection: import("self:CaseSelection")
-            TestValue: import("std:test/Test")
+            Discovery: import("./Discovery.protos")
+            CaseRef: import("./CaseRef.protos")
+            Selection: import("./CaseSelection.protos")
+            TestValue: import("std:test/test")
 
             calls: {
                 value: 0
@@ -79,7 +79,7 @@ final class ProtosTestToolCaseSelectionTest {
                 "v1.5b5b22636f72707573222c2273756974652e70726f746f73225d2c226669727374225d",
                 evaluateString(
                         """
-                        CaseRef: import("self:CaseRef")
+                        CaseRef: import("./CaseRef.protos")
                         CaseRef.derive(Array("corpus", "suite.protos"), "first")
                         """));
 
@@ -88,7 +88,7 @@ final class ProtosTestToolCaseSelectionTest {
                         + "70727565626120e29c93225d",
                 evaluateString(
                         """
-                        CaseRef: import("self:CaseRef")
+                        CaseRef: import("./CaseRef.protos")
                         CaseRef.derive(Array("corpus", "ñandú/ü.protos"), "prueba ✓")
                         """));
 
@@ -96,7 +96,7 @@ final class ProtosTestToolCaseSelectionTest {
                 ref("corpus", "ñandú/ü.protos", "prueba ✓"),
                 evaluateString(
                         """
-                        CaseRef: import("self:CaseRef")
+                        CaseRef: import("./CaseRef.protos")
                         CaseRef.derive(Array("corpus", "ñandú/ü.protos"), "prueba ✓")
                         """));
     }
@@ -105,8 +105,8 @@ final class ProtosTestToolCaseSelectionTest {
     void identityIsSourceIdentityPlusSelectorOnly() throws Exception {
         assertTrue(
                 """
-                CaseRef: import("self:CaseRef")
-                LogicalCasePlan: import("self:LogicalCasePlan")
+                CaseRef: import("./CaseRef.protos")
+                LogicalCasePlan: import("./LogicalCasePlan.protos")
 
                 source: Array("corpus", "suite.protos")
                 other: Array("corpus", "other.protos")
@@ -132,8 +132,8 @@ final class ProtosTestToolCaseSelectionTest {
             throws Exception {
         assertTrue(
                 """
-                CaseRef: import("self:CaseRef")
-                LogicalCasePlan: import("self:LogicalCasePlan")
+                CaseRef: import("./CaseRef.protos")
+                LogicalCasePlan: import("./LogicalCasePlan.protos")
 
                 plain: Array("corpus", "fixture.protos")
                 projectA: Array(
@@ -181,7 +181,7 @@ final class ProtosTestToolCaseSelectionTest {
         for (String text : refs) {
             ProtosExecutionOutcome outcome =
                     execute(
-                            "CaseRef: import(\"self:CaseRef\")\n"
+                            "CaseRef: import(\"./CaseRef.protos\")\n"
                                     + "CaseRef.requireSupported(\""
                                     + text
                                     + "\")\n");
@@ -196,7 +196,7 @@ final class ProtosTestToolCaseSelectionTest {
                 "v1.ab",
                 evaluateString(
                         """
-                        CaseRef: import("self:CaseRef")
+                        CaseRef: import("./CaseRef.protos")
                         CaseRef.requireSupported("v1.ab")
                         """));
     }
@@ -318,7 +318,7 @@ final class ProtosTestToolCaseSelectionTest {
     void arrayAccumulatorPreservesOrderIdentityAndIndependence() throws Exception {
         assertTrue(
                 """
-                ArrayAccumulator: import("self:ArrayAccumulator")
+                ArrayAccumulator: import("./ArrayAccumulator.protos")
 
                 values: Array()
                 count: 0
@@ -453,7 +453,7 @@ final class ProtosTestToolCaseSelectionTest {
                 SUITE
                         + """
 
-                        LogicalCasePlan: import("self:LogicalCasePlan")
+                        LogicalCasePlan: import("./LogicalCasePlan.protos")
                         outsideEntry: LogicalCasePlan.build(
                             Array("corpus", "outside.protos"),
                             Array("first")
@@ -481,7 +481,7 @@ final class ProtosTestToolCaseSelectionTest {
     void optionsRetainListFlagAndRepeatedCaseRefsInCliOrder() throws Exception {
         assertTrue(
                 """
-                Options: import("self:Options")
+                Options: import("./Options.protos")
 
                 arguments: [
                     "test",
@@ -562,6 +562,6 @@ final class ProtosTestToolCaseSelectionTest {
 
         return ProtosTestExecutionSupport.execute(
                 source,
-                prelude.newModuleActivation());
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 }

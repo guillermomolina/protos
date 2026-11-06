@@ -14,9 +14,9 @@
 // the specific language governing rights and limitations under the License.
 
 // Apply a linear transformation to a point and verify it two ways, with exact
-// Integer arithmetic from std:math/LinearAlgebra. Expected output: -1, 2, then true.
+// Integer arithmetic from std:math/linear_algebra. Expected output: -1, 2, then true.
 
-LA: import("std:math/LinearAlgebra")
+LA: import("std:math/linear_algebra")
 Vector: LA.Vector
 Matrix: LA.Matrix
 

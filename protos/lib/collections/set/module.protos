@@ -1,0 +1,133 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Sets represented as ordinary Maps keyed by their members (ordinary `hash` plus `==`
+//! key equality).
+
+/// Answers a fresh Set containing `elements`.
+this.construct: (...elements) => {
+    result: Map()
+    for(element in elements) {
+        result[element] = true
+    }
+    result
+}
+
+/// Answers whether `element` is a member of `set`.
+this.contains: (set, element) => {
+    set.containsKey(element)
+}
+
+/// Answers the number of members of `set`.
+this.size: (set) => {
+    set.size()
+}
+
+/// Adds `element` to `set` in place and answers `set`.
+this.add: (set, element) => {
+    set[element] = true
+    set
+}
+
+/// Removes `element` from `set` in place and answers `set`.
+this.remove: (set, element) => {
+    set.remove(element)
+    set
+}
+
+/// Calls `block(element)` for each member of `set` and answers `set`.
+this.each: (set, block) => {
+    set.each((element, marker) => {
+        block(element)
+    })
+    set
+}
+
+/// Answers a fresh Set of the members of `left` or `right`.
+this.union: (left, right) => {
+    result: Map()
+    left.each((element, marker) => {
+        result[element] = true
+    })
+    right.each((element, marker) => {
+        result[element] = true
+    })
+    result
+}
+
+/// Answers a fresh Set of the members of `left` that are also in `right`.
+this.intersection: (left, right) => {
+    result: Map()
+    left.each((element, marker) => {
+        if(right.containsKey(element)) {
+            result[element] = true
+        }
+    })
+    result
+}
+
+/// Answers a fresh Set of the members of `left` that are not in `right`.
+this.difference: (left, right) => {
+    result: Map()
+    left.each((element, marker) => {
+        right.containsKey(element).ifFalse(() => {
+            result[element] = true
+        })
+    })
+    result
+}
+
+/// Answers whether `left` and `right` have exactly the same members.
+this.sameMembers: (left, right) => {
+    (left.size() == right.size()).ifFalse(() => {
+        ^false
+    })
+    left.each((element, marker) => {
+        right.containsKey(element).ifFalse(() => {
+            ^false
+        })
+    })
+    true
+}
+
+/// Answers whether every member of `left` is a member of `right`.
+this.isSubset: (left, right) => {
+    left.each((element, marker) => {
+        right.containsKey(element).ifFalse(() => {
+            ^false
+        })
+    })
+    true
+}
+
+/// Answers whether every member of `right` is a member of `left`.
+this.isSuperset: (left, right) => {
+    right.each((element, marker) => {
+        left.containsKey(element).ifFalse(() => {
+            ^false
+        })
+    })
+    true
+}
+
+/// Answers whether `left` and `right` have no member in common.
+this.isDisjoint: (left, right) => {
+    left.each((element, marker) => {
+        if(right.containsKey(element)) {
+            ^false
+        }
+    })
+    true
+}

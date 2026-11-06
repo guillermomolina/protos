@@ -25,8 +25,8 @@
 // by its exact `app:` identity, never by a `./` path. `network` exists only in
 // this RootActor's initial module.
 
-Host: import("std:http/Host").Host
-IpAddress: import("std:network/IpAddresses").IpAddress
+Host: import("std:http/host").Host
+IpAddress: import("std:network/ip_addresses").IpAddress
 
 loopback: IpAddress(4, 2130706433)    // 127.0.0.1
 

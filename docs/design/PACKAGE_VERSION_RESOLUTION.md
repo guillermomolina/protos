@@ -1268,7 +1268,7 @@ filesystem traversal, lock output, timestamps and caches as frozen by F2B1/F2B2.
 }
 ```
 
-over `std:crypto/SHA256.digest(ResolutionInput.bytes(root))`.
+over `std:crypto/sha256.digest(ResolutionInput.bytes(root))`.
 
 `matchesHeader(root, header)` requires:
 

@@ -57,7 +57,7 @@ import org.junit.jupiter.api.io.TempDir;
  * without a parallel Case authority and without touching the legacy {@code packageExecutionAsync}
  * facility or its {@code packagePrelude} bootstrap. The manifest schema coverage below invokes
  * the real {@code protos/tools/package/ManifestSchemaV1.protos} module (not a copy embedded in
- * this test), whose TOML 1.0 parsing resolves {@code std:toml/TOML} through the bundled-tool
+ * this test), whose TOML 1.0 parsing resolves {@code std:toml/toml} through the bundled-tool
  * Standard Library resolver alone, never through project package resolution (I079). None of the
  * TOML corpus fixtures under
  * {@code protos/tests/package-tool/toml-syntax} are used here; every suite source is a dedicated
@@ -72,7 +72,7 @@ import org.junit.jupiter.api.io.TempDir;
  * DependencyConstraint -> ReleaseVersion}, {@code RetainedVersionSelection ->
  * FreshVersionSelection -> DependencyConstraint -> ReleaseVersion}, {@code LockDocument ->
  * LockSyntax -> ReleaseVersion}, and {@code ResolutionInput -> LockSyntax / ReleaseVersion +
- * std:collections/Array + std:crypto/SHA256} all resolve and execute for real.
+ * std:collections/array + std:crypto/sha256} all resolve and execute for real.
  */
 final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -85,7 +85,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
 
     private static final String SOURCE_USES_PACKAGE_RUNTIME_NAMES =
             """
-            TestValue: import("std:test/Test")
+            TestValue: import("std:test/test")
             RuntimeNames: import("package-runtime-names")
 
             tests: Array(
@@ -97,7 +97,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
 
     private static final String SOURCE_TWO_TESTS =
             """
-            TestValue: import("std:test/Test")
+            TestValue: import("std:test/test")
 
             tests: Array(
                 TestValue("a", () => {
@@ -111,7 +111,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
 
     private static final String SOURCE_SELECTED_TEST_FAILS =
             """
-            TestValue: import("std:test/Test")
+            TestValue: import("std:test/test")
 
             tests: Array(
                 TestValue("fails", () => {
@@ -122,7 +122,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
 
     private static final String SOURCE_USES_MANIFEST_SCHEMA_V1 =
             """
-            TestValue: import("std:test/Test")
+            TestValue: import("std:test/test")
             Schema: import("self:ManifestSchemaV1")
 
             tests: Array(
@@ -150,7 +150,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
     // RetainedVersionSelection/LockSyntax/LockDocument/ResolutionInput).
     private static final String SOURCE_USES_RETAINED_VERSION_SELECTION =
             """
-            TestValue: import("std:test/Test")
+            TestValue: import("std:test/test")
             Selection: import("self:RetainedVersionSelection")
 
             tests: Array(
@@ -166,7 +166,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
 
     private static final String SOURCE_USES_LOCK_DOCUMENT =
             """
-            TestValue: import("std:test/Test")
+            TestValue: import("std:test/test")
             Document: import("self:LockDocument")
 
             tests: Array(
@@ -197,7 +197,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
 
     private static final String SOURCE_USES_RESOLUTION_INPUT =
             """
-            TestValue: import("std:test/Test")
+            TestValue: import("std:test/test")
             Input: import("self:ResolutionInput")
             Version: import("self:ReleaseVersion")
 
@@ -232,7 +232,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = SharedCore.RESOLVER;
         ProtosPrelude prelude = SharedCore.PRELUDE;
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -303,7 +303,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = SharedCore.RESOLVER;
         ProtosPrelude prelude = SharedCore.PRELUDE;
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -370,7 +370,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = SharedCore.RESOLVER;
         ProtosPrelude prelude = SharedCore.PRELUDE;
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -398,7 +398,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             assertTrue(activation.executionDomain().dispatchOne());
 
             // "self:ManifestSchemaV1" resolves to the real
-            // protos/tools/package/ManifestSchemaV1.protos. Its "std:toml/TOML" import is
+            // protos/tools/package/ManifestSchemaV1.protos. Its "std:toml/toml" import is
             // lazy: it lives inside the "parseBase" callable body, not at module top level. The
             // selected Test body calls "Schema.parseBase(...)", which is the only thing that
             // forces that lazy import to resolve through the Standard Library resolver; the
@@ -419,7 +419,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = SharedCore.RESOLVER;
         ProtosPrelude prelude = SharedCore.PRELUDE;
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -448,8 +448,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
 
             // "self:RetainedVersionSelection" resolves to the real
             // protos/tools/package/RetainedVersionSelection.protos, which imports
-            // "self:FreshVersionSelection", which imports "self:DependencyConstraint" and
-            // "self:ReleaseVersion". The retained candidate ("9.9.9") is absent from the
+            // "./FreshVersionSelection.protos", which imports "./DependencyConstraint.protos" and
+            // "./ReleaseVersion.protos". The retained candidate ("9.9.9") is absent from the
             // candidate set, so RetainedVersionSelection.select falls back to
             // Fresh.select, which itself calls Constraint.satisfies and Version.compare
             // to pick the highest satisfying candidate. A "true" observation is reachable
@@ -468,7 +468,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = SharedCore.RESOLVER;
         ProtosPrelude prelude = SharedCore.PRELUDE;
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -497,7 +497,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             assertTrue(activation.executionDomain().dispatchOne());
 
             // "self:LockDocument" resolves to the real protos/tools/package/LockDocument.protos,
-            // which imports "self:LockSyntax" and "self:ReleaseVersion". Document.write renders
+            // which imports "./LockSyntax.protos" and "./ReleaseVersion.protos". Document.write renders
             // the header/root lines through the real LockSyntax renderHeader/renderNodeRef/
             // renderQstring functions and then re-validates the result through
             // LockSyntax.parseStructural/parseHeader before returning it. The exact rendered
@@ -516,7 +516,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = SharedCore.RESOLVER;
         ProtosPrelude prelude = SharedCore.PRELUDE;
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -545,8 +545,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             assertTrue(activation.executionDomain().dispatchOne());
 
             // "self:ResolutionInput" resolves to the real
-            // protos/tools/package/ResolutionInput.protos, which imports "self:LockSyntax",
-            // "self:ReleaseVersion", "std:collections/Array", and "std:crypto/SHA256".
+            // protos/tools/package/ResolutionInput.protos, which imports "./LockSyntax.protos",
+            // "./ReleaseVersion.protos", "std:collections/array", and "std:crypto/sha256".
             // Input.digest renders the canonical resolution-input text through the real
             // LockSyntax.renderQstring and ReleaseVersion.parse/compare (via versionText),
             // sorts the (empty) member array through the real standard Array library, and
@@ -567,7 +567,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = SharedCore.RESOLVER;
         ProtosPrelude prelude = SharedCore.PRELUDE;
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -627,7 +627,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = SharedCore.RESOLVER;
         ProtosPrelude prelude = SharedCore.PRELUDE;
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -666,7 +666,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             throws Exception {
         String source =
                 """
-                TestValue: import("std:test/Test")
+                TestValue: import("std:test/test")
 
                 counter: { value: 0 }
 
@@ -683,7 +683,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = SharedCore.RESOLVER;
         ProtosPrelude prelude = SharedCore.PRELUDE;
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -727,7 +727,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = SharedCore.RESOLVER;
         ProtosPrelude prelude = SharedCore.PRELUDE;
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -766,7 +766,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         ManualSubmission submission = new ManualSubmission();
         ProtosModuleResolver resolver = SharedCore.RESOLVER;
         ProtosPrelude prelude = SharedCore.PRELUDE;
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestLogicalCaseExecutionFacility facility =
@@ -871,7 +871,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
     // its bootstrapped caller Core Prelude, initialized exactly once. It holds no
     // activation, runtime host, submission queue, facility, Process, source-root
     // mapping, or Actor module state: every test still creates its own fresh
-    // activation via prelude.newModuleActivation() and its own host/facility/queue.
+    // activation via com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test") and its own host/facility/queue.
     private static final class SharedCore {
         private static final ProtosModuleResolver RESOLVER = packageResolver();
         private static final ProtosPrelude PRELUDE = create();
@@ -893,7 +893,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         // selection machinery is what the suite-native bridge always needs), overlaid
         // with the exact Package Tool modules the real corpora depend on: the
         // RuntimeNames proof-of-bootstrap module and the Package-owned modules, among
-        // them ManifestSchemaV1, whose std:toml/TOML import resolves through the
+        // them ManifestSchemaV1, whose std:toml/toml import resolves through the
         // Standard Library resolver without an overlay entry.
         ProtosModuleResolver ordinaryTestResolver =
                 new ProtosBundledToolModuleResolver(
@@ -903,52 +903,52 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
                         Map.entry(
                                 "package-runtime-names",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:runtime-names"),
+                                        ProtosModuleKey.source("tool001-package:runtime-names"),
                                         PACKAGE_TOOL_ROOT.resolve("RuntimeNames.protos"))),
                         Map.entry(
                                 "self:ManifestSchemaV1",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:manifest-schema-v1"),
+                                        ProtosModuleKey.source("tool001-package:manifest-schema-v1"),
                                         PACKAGE_TOOL_ROOT.resolve("ManifestSchemaV1.protos"))),
                         Map.entry(
                                 "self:ReleaseVersion",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:release-version"),
+                                        ProtosModuleKey.source("tool001-package:release-version"),
                                         PACKAGE_TOOL_ROOT.resolve("ReleaseVersion.protos"))),
                         Map.entry(
                                 "self:DependencyConstraint",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey(
+                                        ProtosModuleKey.source(
                                                 "tool001-package:dependency-constraint"),
                                         PACKAGE_TOOL_ROOT.resolve("DependencyConstraint.protos"))),
                         Map.entry(
                                 "self:FreshVersionSelection",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey(
+                                        ProtosModuleKey.source(
                                                 "tool001-package:fresh-version-selection"),
                                         PACKAGE_TOOL_ROOT.resolve(
                                                 "FreshVersionSelection.protos"))),
                         Map.entry(
                                 "self:RetainedVersionSelection",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey(
+                                        ProtosModuleKey.source(
                                                 "tool001-package:retained-version-selection"),
                                         PACKAGE_TOOL_ROOT.resolve(
                                                 "RetainedVersionSelection.protos"))),
                         Map.entry(
                                 "self:LockSyntax",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:lock-syntax"),
+                                        ProtosModuleKey.source("tool001-package:lock-syntax"),
                                         PACKAGE_TOOL_ROOT.resolve("LockSyntax.protos"))),
                         Map.entry(
                                 "self:LockDocument",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:lock-document"),
+                                        ProtosModuleKey.source("tool001-package:lock-document"),
                                         PACKAGE_TOOL_ROOT.resolve("LockDocument.protos"))),
                         Map.entry(
                                 "self:ResolutionInput",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:resolution-input"),
+                                        ProtosModuleKey.source("tool001-package:resolution-input"),
                                         PACKAGE_TOOL_ROOT.resolve("ResolutionInput.protos")))),
                 ordinaryTestResolver);
     }

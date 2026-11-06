@@ -1,4 +1,4 @@
-# HTTP/1.1: `std:http/Server`, `std:http/Host`, `std:http/Client`, `std:http/Router`, `std:http/UrlClient`
+# HTTP/1.1: `std:http/server`, `std:http/host`, `std:http/client`, `std:http/router`, `std:http/url_client`
 
 The Standard Library ships three independent HTTP/1.1 modules and two optional
 composition modules. Each one is written in Protos over existing byte I/O,
@@ -12,18 +12,18 @@ URL client). If this guide and the specification disagree, the specification win
 
 | Module | Use it when | Needs |
 |---|---|---|
-| `std:http/Server` | You already have one connection (or any duplex) and want to answer exactly one request on it | A duplex: `ByteReadable` + `ByteWritable` (+ `Closable` for `owning`) |
-| `std:http/Host` | You want to serve successive TCP connections continuously with Worker Actors | A live `TcpListener` you acquired with your own `network` |
-| `std:http/Client` | You already have one connection (or any duplex) and want to send exactly one request on it | A duplex, as for the server |
-| `std:http/Router` | You want one handler that dispatches on method and path to several route handlers | Nothing: it is authority-free |
-| `std:http/UrlClient` | You want one HTTP or HTTPS request to an absolute URL, with a buffered response | Your `network`, a `resolver` for host names, and explicit TLS `trust` for `https` |
+| `std:http/server` | You already have one connection (or any duplex) and want to answer exactly one request on it | A duplex: `ByteReadable` + `ByteWritable` (+ `Closable` for `owning`) |
+| `std:http/host` | You want to serve successive TCP connections continuously with Worker Actors | A live `TcpListener` you acquired with your own `network` |
+| `std:http/client` | You already have one connection (or any duplex) and want to send exactly one request on it | A duplex, as for the server |
+| `std:http/router` | You want one handler that dispatches on method and path to several route handlers | Nothing: it is authority-free |
+| `std:http/url_client` | You want one HTTP or HTTPS request to an absolute URL, with a buffered response | Your `network`, a `resolver` for host names, and explicit TLS `trust` for `https` |
 
 A short decision rule:
 
 - `Server`: you already own or borrow a duplex and serve once.
 - `Host`: you want continuous application hosting with Worker Actors.
 - `Client`: you already have the duplex (plain, or secure from
-  [`std:tls/Client`](tls.md)).
+  [`std:tls/client`](tls.md)).
 - `Router`: you need authority-free request dispatch.
 - `UrlClient`: you want one URL-based request composed from explicit
   authorities.
@@ -32,11 +32,11 @@ Each module is imported by its exact path; no Prelude or ambient binding exists,
 and importing one does not import the others:
 
 ```protos
-http: import("std:http/Server")      // http.Server, http.HttpError
-hosting: import("std:http/Host")     // hosting.Host, hosting.HostError
-client: import("std:http/Client")    // client.Client, client.ClientError
-routing: import("std:http/Router")   // routing.Router
-urls: import("std:http/UrlClient")   // urls.UrlClient
+http: import("std:http/server")      // http.Server, http.HttpError
+hosting: import("std:http/host")     // hosting.Host, hosting.HostError
+client: import("std:http/client")    // client.Client, client.ClientError
+routing: import("std:http/router")   // routing.Router
+urls: import("std:http/url_client")   // urls.UrlClient
 ```
 
 Every connection carries exactly one request and one *final* response.
@@ -73,8 +73,8 @@ select and connect steps, and the [TLS client guide](tls.md) shows how to
 authenticate the connection yourself:
 
 ```protos
-IpAddress: import("std:network/IpAddresses").IpAddress
-IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+IpAddress: import("std:network/ip_addresses").IpAddress
+IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
 
 loopback: IpAddress(4, 2130706433)    // 127.0.0.1
 connection: network.connectTcp(IpEndpoint(loopback, 8080)).value()
@@ -211,7 +211,7 @@ duplicates, crossing overlaps such as `/a/{x}` with `/{y}/b`, and malformed
 paths signal an `Error` right away, never per request.
 
 ```protos
-routing: import("std:http/Router")
+routing: import("std:http/router")
 ascii: (text) => { Encoding.Latin1.encode(text) }
 
 handler: routing.Router.compile([
@@ -250,8 +250,8 @@ UrlClient.requestOne(url, request, limits,
 ```
 
 ```protos
-UrlClient: import("std:http/UrlClient").UrlClient
-Trust: import("std:tls/Client").Trust
+UrlClient: import("std:http/url_client").UrlClient
+Trust: import("std:tls/client").Trust
 
 // network and resolver are bootstrap-local grants; resolver may be null for
 // numeric hosts. trust is explicit and used only for https.
@@ -364,7 +364,7 @@ host.termination()        -> Future<host>
 ```
 
 ```protos
-Host: import("std:http/Host").Host
+Host: import("std:http/host").Host
 
 serverLimits: {
     maxRequestBodyBytes: 4096
@@ -465,7 +465,7 @@ single-member GroupRef to it, which lets them `request` and `send` but not
 `stop()` it:
 
 ```protos
-Host: import("std:http/Host").Host
+Host: import("std:http/host").Host
 
 hits: 0
 host: null
@@ -641,7 +641,7 @@ kind: http.HttpError.handle(
 None of the following exists in these modules. Do not expect it:
 
 - HTTPS in `Server` or `Host`; the low-level `Client` runs over a secure
-  duplex from [`std:tls/Client`](tls.md) but does no TLS itself;
+  duplex from [`std:tls/client`](tls.md) but does no TLS itself;
 - DNS resolution, URL parsing, or connection acquisition by the low-level
   Client (use `UrlClient` with explicit capabilities);
 - keep-alive, pipelining, or more than one request per connection;
@@ -694,7 +694,7 @@ More exhaustive behavior is exercised by the
 
 - [`spec/io/HTTP.md`](../../../spec/io/HTTP.md): §§1–13 Server, §15 Host
   (§15.13 for `owningWithFactory`), §16 Client, §17 Router, §18 UrlClient.
-- [`spec/io/TLS.md`](../../../spec/io/TLS.md): `std:tls/Client` and trust.
+- [`spec/io/TLS.md`](../../../spec/io/TLS.md): `std:tls/client` and trust.
 - [`spec/io/NETWORK.md`](../../../spec/io/NETWORK.md): TCP, listeners, and
   `network` authority.
 - [`spec/io/IO_CORE.md`](../../../spec/io/IO_CORE.md) and

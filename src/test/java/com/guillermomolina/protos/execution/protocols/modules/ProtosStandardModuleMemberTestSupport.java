@@ -33,15 +33,15 @@ final class ProtosStandardModuleMemberTestSupport {
 
     static ProtosObjectValue member(ProtosPrelude prelude, String moduleId, String name) {
         ProtosObjectValue context = prelude.newExecutionContext();
-        prelude.installStandardModuleMembersForRuntime(new ProtosModuleKey(moduleId), context);
+        prelude.installStandardModuleMembersForRuntime(ProtosModuleKey.module(moduleId), context);
         return (ProtosObjectValue) context.readLocalSlot(name).orElseThrow();
     }
 
     static ProtosObjectValue bufferedReaderFactory(ProtosPrelude prelude) {
-        return member(prelude, "std:io/BufferedReader", "BufferedReader");
+        return member(prelude, "std:io/buffered_reader", "BufferedReader");
     }
 
     static ProtosObjectValue bufferedWriterFactory(ProtosPrelude prelude) {
-        return member(prelude, "std:io/BufferedWriter", "BufferedWriter");
+        return member(prelude, "std:io/buffered_writer", "BufferedWriter");
     }
 }

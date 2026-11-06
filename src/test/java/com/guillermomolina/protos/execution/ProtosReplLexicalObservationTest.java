@@ -579,13 +579,13 @@ final class ProtosReplLexicalObservationTest {
 
             ctx.executeModuleSource(
                     ProtosModuleSource.fromCharacters(
-                            new ProtosModuleKey("d228-module-ok"), "1 + 1"),
+                            ProtosModuleKey.source("d228-module-ok"), "1 + 1"),
                     activation);
             assertRetiredAndObservable(hosted, "executeModuleSource completed");
 
             attempt(() -> ctx.executeModuleSource(
                     ProtosModuleSource.fromCharacters(
-                            new ProtosModuleKey("d228-module-broken"), "broken: ("),
+                            ProtosModuleKey.source("d228-module-broken"), "broken: ("),
                     activation));
             assertRetiredAndObservable(hosted, "executeModuleSource failed");
         }

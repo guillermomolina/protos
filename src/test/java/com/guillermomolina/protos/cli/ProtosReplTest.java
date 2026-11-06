@@ -317,8 +317,8 @@ final class ProtosReplTest {
 
     @Test
     void ordinaryNetworkAndUriObjectsKeepStructuralInspection() {
-        R r = repl("IpAddress: import(\"std:network/IpAddresses\").IpAddress\n"
-                + "IpEndpoint: import(\"std:network/IpEndpoints\").IpEndpoint\n"
+        R r = repl("IpAddress: import(\"std:network/ip_addresses\").IpAddress\n"
+                + "IpEndpoint: import(\"std:network/ip_endpoints\").IpEndpoint\n"
                 + "Uri: import(\"std:uri\")\n"
                 + "\"BUG031_VALUES_START\"\n"
                 + "address: IpAddress(4, 2130706433)\n"

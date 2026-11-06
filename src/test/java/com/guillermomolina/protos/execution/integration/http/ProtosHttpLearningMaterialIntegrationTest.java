@@ -37,7 +37,7 @@ import org.junit.jupiter.api.Timeout;
  * <p>The standalone CLI grants no {@code network}, so these programs cannot join the print-based
  * CLI learning-material regression. Each one runs unchanged as the initial module of a standard
  * Polyglot Context that allows host socket access, which provisions the bootstrap-local {@code
- * network}. Thread creation is granted only to programs whose {@code std:http/Host} starts Worker
+ * network}. Thread creation is granted only to programs whose {@code std:http/host} starts Worker
  * Actors. Handler modules are supplied through the {@code app:} catalog, from which each Worker
  * Actor resolves its own instance. Listeners use {@code port: null}, so no port is chosen by the
  * test; no verdict depends on a sleep; the class timeout bounds every wait, and closing the Context

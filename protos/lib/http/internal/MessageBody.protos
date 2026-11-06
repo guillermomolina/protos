@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal HTTP/1.1 message-body framing for the future std:http/Server driver
-//! (D215, LIB025-B1) and for std:http/Client (D218-B). This module is an
+//! Internal HTTP/1.1 message-body framing for the future std:http/server driver
+//! (D215, LIB025-B1) and for std:http/client (D218-B). This module is an
 //! unpublished implementation artifact, not an approved Standard Library API. It
 //! performs no I/O and owns no authority: it only frames request-body and
 //! response-body octets and encodes response-chunk octets.
 
-MessageSyntax: import("std:http/internal/MessageSyntax")
+MessageSyntax: import("./MessageSyntax.protos")
 
 // The shared directional framing engine. config holds the framing mode, the
 // declared content length, the chunk-line, trailer, and decoded-body budgets,

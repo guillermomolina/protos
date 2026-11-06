@@ -24,9 +24,20 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
-/** Host resolver for modules shipped in the Protos standard distribution. */
+/**
+ * Host resolver for modules shipped in the Protos standard distribution.
+ *
+ * <p>D242: {@code std:<logical/path>} resolves only to the MODULE whose initializer is exactly
+ * {@code <logical/path>/module.protos}. MODULE path segments use the lowercase/underscore
+ * spelling; no {@code .protos} suffix is added and no neighbouring file is consulted. An explicitly
+ * relative {@code ./X.protos} or {@code ../X.protos} specifier from a Standard Library MODULE
+ * initializer or SOURCE resolves to that exact SOURCE file inside the distribution root. A
+ * {@code module.protos} file is never importable as SOURCE.
+ */
 public final class ProtosStandardLibraryModuleResolver implements ProtosModuleResolver {
     private static final String PREFIX = "std:";
+    static final String MODULE_INITIALIZER = "module.protos";
+    private static final String SOURCE_SUFFIX = ".protos";
     private static final Set<String> WINDOWS_RESERVED_SEGMENTS =
             Set.of(
                     "CON",
@@ -61,6 +72,11 @@ public final class ProtosStandardLibraryModuleResolver implements ProtosModuleRe
                         .normalize();
     }
 
+    /** Canonical MODULE identity of {@code std:<logicalName>}; performs no file access. */
+    public static ProtosModuleKey moduleKey(String logicalName) {
+        return ProtosModuleKey.module(PREFIX + logicalName);
+    }
+
     @Override
     public ProtosModuleKey resolve(
             String exactSpecifier, Optional<ProtosModuleKey> importingModule)
@@ -68,29 +84,124 @@ public final class ProtosStandardLibraryModuleResolver implements ProtosModuleRe
         Objects.requireNonNull(exactSpecifier, "exactSpecifier");
         Objects.requireNonNull(importingModule, "importingModule");
 
-        String logicalName = requireStandardLogicalName(exactSpecifier);
-        sourcePath(logicalName);
-        return new ProtosModuleKey(PREFIX + logicalName);
+        if (exactSpecifier.startsWith("./") || exactSpecifier.startsWith("../")) {
+            ProtosModuleKey importer =
+                    importingModule.orElseThrow(
+                            () -> new IOException("relative SOURCE import requires an importer"));
+            String sourcePath =
+                    resolveRelativeSourcePath(owningDirectory(importer), exactSpecifier);
+            sourceFile(sourcePath);
+            return ProtosModuleKey.source(PREFIX + sourcePath);
+        }
+        String logicalName = requireModuleLogicalName(exactSpecifier);
+        moduleInitializer(logicalName);
+        return moduleKey(logicalName);
     }
 
     @Override
     public ProtosModuleSource loadSource(ProtosModuleKey key) throws IOException {
         Objects.requireNonNull(key, "key");
-        String logicalName = requireStandardLogicalName(key.canonicalId());
-        Path source = sourcePath(logicalName);
-        return ProtosModuleSource.fromPath(key, source);
+        if (key.isModule()) {
+            return ProtosModuleSource.fromPath(
+                    key, moduleInitializer(requireModuleLogicalName(key.canonicalId())));
+        }
+        if (key.isSource()) {
+            return ProtosModuleSource.fromPath(key, sourceFile(requireSourcePath(key)));
+        }
+        throw new IOException("standard-library resolver owns only MODULE and SOURCE keys");
     }
 
-    private Path sourcePath(String logicalName) throws IOException {
+    /** True when {@code key} is a Standard Library MODULE or SOURCE identity. */
+    public static boolean owns(ProtosModuleKey key) {
+        return key != null && !key.isForeign() && key.canonicalId().startsWith(PREFIX);
+    }
+
+    private static String owningDirectory(ProtosModuleKey importer) throws IOException {
+        if (importer.isModule()) {
+            return requireModuleLogicalName(importer.canonicalId());
+        }
+        if (importer.isSource()) {
+            String path = requireSourcePath(importer);
+            int slash = path.lastIndexOf('/');
+            return slash < 0 ? "" : path.substring(0, slash);
+        }
+        throw new IOException("relative SOURCE import requires a Standard Library importer");
+    }
+
+    private static String requireSourcePath(ProtosModuleKey key) throws IOException {
+        String identifier = key.canonicalId();
+        if (!key.isSource() || !identifier.startsWith(PREFIX)) {
+            throw new IOException("invalid standard-library SOURCE identity");
+        }
+        String path = identifier.substring(PREFIX.length());
+        String checked = resolveRelativeSourcePath("", "./" + path);
+        if (!checked.equals(path)) {
+            throw new IOException("non-canonical standard-library SOURCE identity");
+        }
+        return checked;
+    }
+
+    private static String resolveRelativeSourcePath(String owningDirectory, String specifier)
+            throws IOException {
+        if (!specifier.endsWith(SOURCE_SUFFIX)) {
+            throw new IOException("relative SOURCE import must name an exact .protos file");
+        }
+        java.util.ArrayList<String> segments = new java.util.ArrayList<>();
+        if (!owningDirectory.isEmpty()) {
+            segments.addAll(java.util.List.of(owningDirectory.split("/", -1)));
+        }
+        String[] parts = specifier.split("/", -1);
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
+            boolean last = i == parts.length - 1;
+            if (part.equals(".") && i == 0) {
+                continue;
+            }
+            if (part.equals("..")) {
+                if (segments.isEmpty()) {
+                    throw new IOException("relative SOURCE import escapes the distribution root");
+                }
+                segments.remove(segments.size() - 1);
+                continue;
+            }
+            String segment =
+                    last ? part.substring(0, part.length() - SOURCE_SUFFIX.length()) : part;
+            if (!isPortableSegment(segment) || isWindowsReservedSegment(segment)) {
+                throw new IOException("invalid standard-library SOURCE path");
+            }
+            segments.add(segment);
+        }
+        if (segments.isEmpty()) {
+            throw new IOException("invalid standard-library SOURCE path");
+        }
+        if (segments.get(segments.size() - 1).equalsIgnoreCase("module")) {
+            throw new IOException("module initializer cannot be imported as SOURCE");
+        }
+        if (segments.get(0).equalsIgnoreCase("core")) {
+            throw new IOException("Core bootstrap sources are not importable");
+        }
+        return String.join("/", segments) + SOURCE_SUFFIX;
+    }
+
+    private Path moduleInitializer(String logicalName) throws IOException {
         String[] segments = logicalName.split("/", -1);
+        Path current = libraryRoot;
+        for (String segment : segments) {
+            current = requireExactChild(current, segment, true);
+        }
+        return confined(requireExactChild(current, MODULE_INITIALIZER, false));
+    }
+
+    private Path sourceFile(String sourcePath) throws IOException {
+        String[] segments = sourcePath.split("/", -1);
         Path current = libraryRoot;
         for (int i = 0; i < segments.length - 1; i++) {
             current = requireExactChild(current, segments[i], true);
         }
+        return confined(requireExactChild(current, segments[segments.length - 1], false));
+    }
 
-        Path source =
-                requireExactChild(
-                        current, segments[segments.length - 1] + ".protos", false);
+    private Path confined(Path source) throws IOException {
         Path realRoot = libraryRoot.toRealPath();
         Path realSource = source.toRealPath();
         if (!realSource.startsWith(realRoot)) {
@@ -132,7 +243,7 @@ public final class ProtosStandardLibraryModuleResolver implements ProtosModuleRe
         return exact;
     }
 
-    private static String requireStandardLogicalName(String identifier) throws IOException {
+    private static String requireModuleLogicalName(String identifier) throws IOException {
         if (!identifier.startsWith(PREFIX)) {
             throw new IOException("unsupported module specifier");
         }
@@ -147,11 +258,24 @@ public final class ProtosStandardLibraryModuleResolver implements ProtosModuleRe
             throw new IOException("invalid standard-library module name");
         }
         for (String segment : segments) {
-            if (!isPortableSegment(segment) || isWindowsReservedSegment(segment)) {
+            if (!isPortableSegment(segment)
+                    || isWindowsReservedSegment(segment)
+                    || !isLowercaseSegment(segment)) {
                 throw new IOException("invalid standard-library module name");
             }
         }
         return logicalName;
+    }
+
+    /** D242 public MODULE routes use lowercase/underscore spelling only. */
+    private static boolean isLowercaseSegment(String segment) {
+        for (int i = 0; i < segment.length(); i++) {
+            char c = segment.charAt(i);
+            if (c >= 'A' && c <= 'Z') {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean isPortableSegment(String segment) {

@@ -66,7 +66,7 @@ final class ProtosTestToolPackageFailedExecutionTest {
                                         PACKAGE_TOOL_ROOT, (PACKAGE_TOOL_ROOT).resolveSibling("shared"),
                                         new ProtosStandardLibraryModuleResolver(
                                                 STANDARD_LIBRARY)));
-        ProtosActivation activation = testPrelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(testPrelude, "test");
 
         ProtosExactExecutionFacility.install(
                 activation,

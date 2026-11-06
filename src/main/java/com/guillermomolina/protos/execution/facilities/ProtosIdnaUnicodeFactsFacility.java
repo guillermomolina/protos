@@ -35,7 +35,7 @@ import java.util.List;
  * Shared host-only Unicode facts read by the Protos IDNA2008 rules of {@code
  * std:network/internal/DnsNames} (I130-C3, D223-A1).
  *
- * <p>The two operations are installed on private facilities ({@code std:tls/Client}'s TLS
+ * <p>The two operations are installed on private facilities ({@code std:tls/client}'s TLS
  * backend facility and the Core Resolver bridge). They supply raw ICU properties of one scalar and
  * the NFC test only: they validate no DNS name, perform no IDNA conversion or mapping, and decide
  * no admission. Every decision stays in Protos.

@@ -15,12 +15,12 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("encode all ten semantic kinds with deterministic inline presentation", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         root: TOML.table(
             "text", TOML.string("hello"),
@@ -62,7 +62,7 @@ tests: [
         Assertions.require(parsed.value["table"].value["inner"].value === false)
     }),
     Test("D109 encodes canonical shortest round-trip float tokens", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         encoded: TOML.encode(
             TOML.table(
@@ -88,7 +88,7 @@ tests: [
         )
     }),
     Test("D109 round-trips hard binary64 values without host display semantics", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         tiny: 5e-324
         huge: 1.7976931348623157e308
@@ -110,7 +110,7 @@ tests: [
         Assertions.require((1.0 / parsedNegativeZero) == (0.0 - (1.0 / 0.0)))
     }),
     Test("encode escapes keys and String values as basic strings", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         encoded: TOML.encode(
             TOML.table(
@@ -125,7 +125,7 @@ tests: [
         )
     }),
     Test("encode round-trips nested Arrays at ordinary depth", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         node: TOML.integer(7)
         remaining: 32
@@ -149,7 +149,7 @@ tests: [
         Assertions.require(decoded.value == 7)
     }),
     Test("encode round-trips nested inline Tables at ordinary depth", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         node: TOML.integer(9)
         remaining: 32
@@ -172,7 +172,7 @@ tests: [
         Assertions.require(decoded.value == 9)
     }),
     Test("encode shared acyclic containers with deterministic temporal spelling", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         shared: TOML.table("value", TOML.integer(1))
         encoded: TOML.encode(
@@ -203,7 +203,7 @@ tests: [
         )
     }),
     Test("encode round-trips a long zero-padded temporal fraction", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         encoded: TOML.encode(
             TOML.table("time", TOML.localTime(0, 0, 0, 7, 400))

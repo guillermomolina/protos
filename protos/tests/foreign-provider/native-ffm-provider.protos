@@ -16,7 +16,7 @@
 // I085-B: an external provider calling the real C library strlen through the
 // JDK Foreign Function and Memory API. Run by dist/test_external_foreign_providers.py.
 
-Assertions: import("std:test/Assertions")
+Assertions: import("std:test/assertions")
 
 libc: import("oslib:libc")
 

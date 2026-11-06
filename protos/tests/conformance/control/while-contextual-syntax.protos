@@ -20,8 +20,8 @@
 // bare `while(argument) { body }` shape is contextual; every other `while`
 // spelling keeps its ordinary meaning.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("zero iterations return null without running the body", () => {

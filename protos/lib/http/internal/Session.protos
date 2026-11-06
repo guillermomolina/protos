@@ -13,15 +13,15 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal HTTP/1.1 single-request session of std:http/Server (D215,
+//! Internal HTTP/1.1 single-request session of std:http/server (D215,
 //! LIB025). This module is an unpublished implementation artifact, not an
 //! approved Standard Library API. It coordinates one admitted service over the
 //! wire helpers of MessageHead and MessageBody; it owns no authority beyond the
 //! duplex it is given.
 
-MessageHead: import("std:http/internal/MessageHead")
-MessageBody: import("std:http/internal/MessageBody")
-BufferedReader: import("std:io/BufferedReader").BufferedReader
+MessageHead: import("./MessageHead.protos")
+MessageBody: import("./MessageBody.protos")
+BufferedReader: import("std:io/buffered_reader").BufferedReader
 
 /// Establishes the private state of one admitted session and answers its
 /// zero-argument service body, to be run as the one service Task. limits is

@@ -20,8 +20,8 @@
 // (D239-C1: the selected construct, then standard Object.construct forwards
 // to the selected init).
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("names associate by selected formal rather than source order", () => {

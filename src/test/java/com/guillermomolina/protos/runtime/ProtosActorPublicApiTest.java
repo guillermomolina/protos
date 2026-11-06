@@ -155,7 +155,7 @@ final class ProtosActorPublicApiTest {
         ManualExecutor executor = new ManualExecutor();
         ProtosObjectValue actorObject = actorObject(new ProtosModuleRuntime(resolver), executor);
         ProtosActor creator = new ProtosActor(actorRefPrototype());
-        ProtosActivation activation = actorActivation(prelude, creator, new ProtosModuleKey("creator"));
+        ProtosActivation activation = actorActivation(prelude, creator, ProtosModuleKey.source("creator"));
 
         assertThrows(
                 ProtosSignalException.class,
@@ -185,7 +185,7 @@ final class ProtosActorPublicApiTest {
         ManualExecutor executor = new ManualExecutor();
         ProtosObjectValue actorObject = actorObject(new ProtosModuleRuntime(resolver), executor);
         ProtosActor creator = new ProtosActor(actorRefPrototype());
-        ProtosActivation activation = actorActivation(prelude, creator, new ProtosModuleKey("creator"));
+        ProtosActivation activation = actorActivation(prelude, creator, ProtosModuleKey.source("creator"));
 
         assertThrows(
                 ProtosSignalException.class,
@@ -217,7 +217,7 @@ final class ProtosActorPublicApiTest {
         ManualExecutor executor = new ManualExecutor();
         ProtosObjectValue actorObject = actorObject(new ProtosModuleRuntime(resolver), executor);
         ProtosActor creator = new ProtosActor(actorRefPrototype());
-        ProtosModuleKey creatorKey = new ProtosModuleKey("creator");
+        ProtosModuleKey creatorKey = ProtosModuleKey.source("creator");
         ProtosActivation activation = actorActivation(prelude, creator, creatorKey);
         ProtosObjectValue source = new ProtosObjectValue(ProtosObjectValue.rootObject());
         source.createLocalSlot("self", source);
@@ -399,7 +399,7 @@ final class ProtosActorPublicApiTest {
             if (resolutionFails) {
                 throw new java.io.IOException("resolution failed");
             }
-            return new ProtosModuleKey("canonical:" + exactSpecifier);
+            return ProtosModuleKey.source("canonical:" + exactSpecifier);
         }
 
         @Override

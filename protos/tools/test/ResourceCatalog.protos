@@ -20,8 +20,8 @@
 // TOML parser with TOML 1.0 selected, into inert private catalog records only.
 // D099 host-path/CLI acquisition, D076 reservation and provider
 // resolution/provisioning remain outside this slice.
-TOML: import("std:toml/TOML")
-Manifest: import("self:Manifest")
+TOML: import("std:toml/toml")
+Manifest: import("./Manifest.protos")
 
 frozenTuple: (...items) => {
     items

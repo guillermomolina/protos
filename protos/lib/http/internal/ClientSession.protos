@@ -13,15 +13,15 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal HTTP/1.1 single-exchange session of std:http/Client (D218-B,
+//! Internal HTTP/1.1 single-exchange session of std:http/client (D218-B,
 //! HTTP.md §16). This module is an unpublished implementation artifact, not an
 //! approved Standard Library API. It coordinates one admitted exchange over
 //! ClientHead and MessageBody; it owns no authority beyond the duplex it is
 //! given and never acquires a connection, resolves a name, or retries.
 
-ClientHead: import("std:http/internal/ClientHead")
-MessageBody: import("std:http/internal/MessageBody")
-BufferedReader: import("std:io/BufferedReader").BufferedReader
+ClientHead: import("./ClientHead.protos")
+MessageBody: import("./MessageBody.protos")
+BufferedReader: import("std:io/buffered_reader").BufferedReader
 
 /// Establishes the private state of one admitted exchange and answers its
 /// zero-argument service body, to be run as the one service Task. prepared is

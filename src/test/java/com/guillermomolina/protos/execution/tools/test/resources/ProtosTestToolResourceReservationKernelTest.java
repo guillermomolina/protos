@@ -225,10 +225,10 @@ final class ProtosTestToolResourceReservationKernelTest {
     }
 
     private static String commonImports() {
-        return "Manifest: import(\"self:Manifest\")\n"
-                + "Catalog: import(\"self:ResourceCatalog\")\n"
-                + "Binding: import(\"self:ResourceBinding\")\n"
-                + "Reservation: import(\"self:ResourceReservation\")\n";
+        return "Manifest: import(\"./Manifest.protos\")\n"
+                + "Catalog: import(\"./ResourceCatalog.protos\")\n"
+                + "Binding: import(\"./ResourceBinding.protos\")\n"
+                + "Reservation: import(\"./ResourceReservation.protos\")\n";
     }
 
     private static String catalog(String key, int capacity, String scope) {
@@ -266,7 +266,7 @@ final class ProtosTestToolResourceReservationKernelTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         return com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
 source,
-prelude.newModuleActivation());
+com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 
     private static ProtosArrayValue arrayAt(ProtosArrayValue array, int index) {

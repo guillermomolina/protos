@@ -118,7 +118,7 @@ final class ProtosResolverAuthorityTest {
             ProtosExecutionOutcome first =
                     run(host, prelude, null, used,
                             "resolver.lookupAddresses(\"example.com\").value().size() == 1");
-            assertEquals(ProtosExecutionOutcome.State.COMPLETED, first.state(), String.valueOf(first.error()));
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, first.state(), String.valueOf(first.error()) + "; trace=" + first.failureDiagnosticTrace());
             assertSame(ProtosBooleanValue.TRUE, first.value());
             ProtosProcessRuntime owner = used.ownerForRuntime().orElseThrow();
             assertTrue(used.retiredForRuntime());
@@ -132,7 +132,7 @@ final class ProtosResolverAuthorityTest {
 
             // A granted but never used Resolver is retired by its Process too.
             ProtosExecutionOutcome idle = run(host, prelude, null, unused, "context.hasSlot(\"resolver\")");
-            assertSame(ProtosBooleanValue.TRUE, idle.value(), String.valueOf(idle.error()));
+            assertSame(ProtosBooleanValue.TRUE, idle.value(), String.valueOf(idle.error()) + "; trace=" + idle.failureDiagnosticTrace());
             assertTrue(unused.retiredForRuntime());
             assertEquals(1, unusedBackend.closes);
             assertEquals(List.of(), unusedBackend.names);
@@ -146,7 +146,7 @@ final class ProtosResolverAuthorityTest {
             ProtosExecutionOutcome second =
                     run(host, prelude, null, separate,
                             "resolver.lookupAddresses(\"example.org\").value().size() == 1");
-            assertSame(ProtosBooleanValue.TRUE, second.value(), String.valueOf(second.error()));
+            assertSame(ProtosBooleanValue.TRUE, second.value(), String.valueOf(second.error()) + "; trace=" + second.failureDiagnosticTrace());
             assertNotSame(owner, separate.ownerForRuntime().orElseThrow());
             assertEquals(List.of("example.org."), separateBackend.names);
 
@@ -201,7 +201,7 @@ final class ProtosResolverAuthorityTest {
         ProtosResolverCapabilityValue unused = host.provisionHostResolver(prelude);
         ProtosResolverCapabilityValue granted = host.provisionHostResolver(prelude);
         ProtosExecutionOutcome outcome = run(host, prelude, null, granted, "1");
-        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), String.valueOf(outcome.error()));
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), String.valueOf(outcome.error()) + "; trace=" + outcome.failureDiagnosticTrace());
         assertTrue(granted.retiredForRuntime());
         assertFalse(unused.retiredForRuntime());
         assertTrue(unused.ownerForRuntime().isEmpty());
@@ -228,7 +228,7 @@ final class ProtosResolverAuthorityTest {
                     run(host, prelude, null, resolver,
                             "resolver.lookupAddresses(\"example.com\").value()");
         }
-        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), String.valueOf(outcome.error()));
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), String.valueOf(outcome.error()) + "; trace=" + outcome.failureDiagnosticTrace());
         assertTrue(resolver.retiredForRuntime());
 
         ProtosArrayValue addresses = assertInstanceOf(ProtosArrayValue.class, outcome.value());
@@ -256,7 +256,7 @@ final class ProtosResolverAuthorityTest {
         try (ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open()) {
             ProtosExecutionOutcome outcome =
                     run(host, prelude, null, null, """
-                            Resolvers: import("std:network/Resolvers")
+                            Resolvers: import("std:network/resolvers")
                             failureOf: (future) => {
                                 caught: null
                                 Error.handle(() => { future.value() }, (error) => {
@@ -269,7 +269,7 @@ final class ProtosResolverAuthorityTest {
                             invalid: (future) => { failureOf(future).parent() === InvalidIOArgument }
                             invalid(Resolvers.Resolver.lookupAddresses("example.com")) && invalid(child.lookupAddresses("example.com")) && invalid(Resolvers.Resolver.close()) && !context.hasSlot("resolver") && !context.hasSlot("network")
                             """);
-            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), String.valueOf(outcome.error()));
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), String.valueOf(outcome.error()) + "; trace=" + outcome.failureDiagnosticTrace());
             assertSame(ProtosBooleanValue.TRUE, outcome.value());
             assertEquals(0, host.provisionedResolverCountForTesting());
             assertFalse(host.networkHostInitializedForTesting());
@@ -349,7 +349,7 @@ final class ProtosResolverAuthorityTest {
         try (ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open()) {
             ProtosExecutionOutcome outcome =
                     run(host, prelude, null, new ProtosResolverCapabilityValue(prelude, backend), program);
-            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), String.valueOf(outcome.error()));
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), String.valueOf(outcome.error()) + "; trace=" + outcome.failureDiagnosticTrace());
             String expected = "1".repeat(valid.size()) + "0".repeat(invalid.size()) + "0000";
             assertEquals(expected, assertInstanceOf(ProtosStringValue.class, outcome.value()).value());
         }
@@ -373,9 +373,9 @@ final class ProtosResolverAuthorityTest {
         try (ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open()) {
             ProtosExecutionOutcome outcome =
                     run(host, prelude, network, new ProtosResolverCapabilityValue(prelude, backend), """
-                            IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
-                            IpAddress: import("std:network/IpAddresses").IpAddress
-                            Identity: import("std:tls/internal/Identity")
+                            IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
+                            IpAddress: import("std:network/ip_addresses").IpAddress
+                            Identity: import("std:tls/internal/identity")
                             asciiOnly: {
                                 codePoint: (scalar) => { Error().signal() }
                                 isNfc: (scalars) => { Error().signal() }
@@ -396,7 +396,7 @@ final class ProtosResolverAuthorityTest {
                             reference: Identity.reference(asciiOnly, originalHostname)
                             (addresses.size() == 1) && IpAddress.recognizes(addresses[0]) && (connectFailure.parent() === IOError) && (byName.parent() === InvalidIOArgument) && (originalHostname == "API.Example.com") && (reference.sni == "api.example.com") && (Identity.reference(asciiOnly, "localhost") === null)
                             """);
-            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), String.valueOf(outcome.error()));
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), String.valueOf(outcome.error()) + "; trace=" + outcome.failureDiagnosticTrace());
             assertSame(ProtosBooleanValue.TRUE, outcome.value());
         }
         assertEquals(List.of("api.example.com."), backend.names);

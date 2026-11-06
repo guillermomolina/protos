@@ -42,7 +42,7 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/** LIB014-1 evidence for the private Unicode 17.0.0 data facility of std:regex/Regex. */
+/** LIB014-1 evidence for the private Unicode 17.0.0 data facility of std:regex/regex. */
 final class ProtosRegexUnicodeFacilityTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
@@ -62,7 +62,7 @@ final class ProtosRegexUnicodeFacilityTest {
 
         ProtosObjectValue otherContext = prelude.newExecutionContext();
         prelude.installStandardModuleMembersForRuntime(
-                new ProtosModuleKey("std:regex/Other"), otherContext);
+                ProtosModuleKey.module("std:regex/Other"), otherContext);
         assertFalse(otherContext.hasLocalSlot(ProtosRegexUnicodeFacility.BOOTSTRAP_SLOT));
     }
 

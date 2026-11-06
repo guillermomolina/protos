@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("fresh result", () => {
         tool009LegacyCase: () => {
-            SHA256: import("std:crypto/SHA256")
+            SHA256: import("std:crypto/sha256")
             input: Encoding.UTF8.encode("abc")
             first: SHA256.digest(input)
             second: SHA256.digest(input)
@@ -42,7 +42,7 @@ tests: [
     }),
     Test("input unchanged", () => {
         tool009LegacyCase: () => {
-            SHA256: import("std:crypto/SHA256")
+            SHA256: import("std:crypto/sha256")
             input: Encoding.UTF8.encode("")
             input.add(0)
             input.add(255)
@@ -66,7 +66,7 @@ tests: [
     }),
     Test("invalid non bytes", () => {
         Assertions.signals(Error, () => {
-            SHA256: import("std:crypto/SHA256")
+            SHA256: import("std:crypto/sha256")
             SHA256.digest(Array())
         })
     })

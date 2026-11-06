@@ -36,12 +36,20 @@ import java.util.Set;
  *
  * <p>{@code bundled-tool:...} is an internal ModuleKey namespace, not a user-visible import
  * specifier.
+ *
+ * <p>D242: tool entry files and private helper files are SOURCE targets identified by their exact
+ * {@code .protos} path; helpers are reached by explicitly relative {@code ./X.protos} or
+ * {@code ../X.protos} imports confined to the importer's root. {@code self:<dir>} names a published
+ * tool-local MODULE directory with a mandatory {@code module.protos}. A {@code module.protos}
+ * file is never importable as SOURCE.
  */
 public final class ProtosBundledToolModuleResolver implements ProtosModuleResolver {
     private static final String SELF_PREFIX = "self:";
     private static final String SHARED_PREFIX = "tool-shared:";
     private static final String TOOL_KEY_PREFIX = "bundled-tool:";
     private static final String SHARED_KEY_PREFIX = "bundled-tool-shared:";
+    private static final String SOURCE_SUFFIX = ".protos";
+    private static final String MODULE_INITIALIZER = "module.protos";
     private static final Set<String> WINDOWS_RESERVED_SEGMENTS =
             Set.of(
                     "CON", "PRN", "AUX", "NUL",
@@ -75,10 +83,29 @@ public final class ProtosBundledToolModuleResolver implements ProtosModuleResolv
                 Objects.requireNonNull(standardLibraryResolver, "standardLibraryResolver");
     }
 
+    /**
+     * D242 explicit host selection of one exact bundled-tool SOURCE identity, for Java hosts that
+     * bind a tool implementation file directly instead of importing it. Performs no file access;
+     * loading still goes through the owning resolver's custody checks.
+     */
+    public static ProtosModuleKey toolSourceKey(String toolName, String logicalName) {
+        try {
+            if (!isPortableSegment(toolName) || isWindowsReservedSegment(toolName)) {
+                throw new IOException("invalid bundled-tool name");
+            }
+            return ProtosModuleKey.source(
+                    TOOL_KEY_PREFIX + toolName + "/"
+                            + requireSourceFile(requireLogicalName(logicalName) + SOURCE_SUFFIX));
+        } catch (IOException invalid) {
+            throw new IllegalArgumentException(invalid.getMessage(), invalid);
+        }
+    }
+
+    /** Exact SOURCE identity of one executable tool entry file {@code <logicalName>.protos}. */
     public ProtosModuleKey entryModule(String logicalName) throws IOException {
-        String exactLogicalName = requireLogicalName(logicalName);
-        sourcePath(exactLogicalName);
-        return new ProtosModuleKey(canonicalPrefix + exactLogicalName);
+        String sourceFile = requireSourceFile(requireLogicalName(logicalName) + SOURCE_SUFFIX);
+        sourcePath(toolRoot, sourceFile);
+        return ProtosModuleKey.source(canonicalPrefix + sourceFile);
     }
 
     @Override
@@ -88,8 +115,14 @@ public final class ProtosBundledToolModuleResolver implements ProtosModuleResolv
         Objects.requireNonNull(exactSpecifier, "exactSpecifier");
         Objects.requireNonNull(importingModule, "importingModule");
 
-        if (exactSpecifier.startsWith("std:")) {
+        if (exactSpecifier.startsWith("std:")
+                || (isRelative(exactSpecifier)
+                        && importingModule.isPresent()
+                        && ProtosStandardLibraryModuleResolver.owns(importingModule.get()))) {
             return standardLibraryResolver.resolve(exactSpecifier, importingModule);
+        }
+        if (isRelative(exactSpecifier)) {
+            return resolveRelativeSource(exactSpecifier, importingModule);
         }
         if (exactSpecifier.startsWith(SHARED_PREFIX)) {
             Path selectedSharedRoot =
@@ -103,64 +136,144 @@ public final class ProtosBundledToolModuleResolver implements ProtosModuleResolv
                     && !importerId.startsWith(SHARED_KEY_PREFIX)) {
                 throw new IOException("shared bundled-tool import escaped toolchain closure");
             }
-            String logicalName =
-                    requireLogicalName(exactSpecifier.substring(SHARED_PREFIX.length()));
-            sourcePath(selectedSharedRoot, logicalName);
-            return new ProtosModuleKey(SHARED_KEY_PREFIX + logicalName);
+            String sourceFile =
+                    requireSourceFile(
+                            requireLogicalName(exactSpecifier.substring(SHARED_PREFIX.length()))
+                                    + SOURCE_SUFFIX);
+            sourcePath(selectedSharedRoot, sourceFile);
+            return ProtosModuleKey.source(SHARED_KEY_PREFIX + sourceFile);
         }
         if (!exactSpecifier.startsWith(SELF_PREFIX)) {
             throw new IOException("unsupported bundled-tool module specifier");
         }
-        if (importingModule.isPresent()
-                && !importingModule.orElseThrow().canonicalId().startsWith(canonicalPrefix)) {
-            throw new IOException("self import escaped bundled-tool closure");
+        // D242: self: is reachable only from a known bundled-tool importer; it is never an
+        // ambient host access path.
+        if (importingModule.isEmpty()
+                || !importingModule.orElseThrow().canonicalId().startsWith(canonicalPrefix)) {
+            throw new IOException("self import requires an importer inside the bundled-tool closure");
         }
 
         String logicalName =
                 requireLogicalName(exactSpecifier.substring(SELF_PREFIX.length()));
-        sourcePath(logicalName);
-        return new ProtosModuleKey(canonicalPrefix + logicalName);
+        sourcePath(toolRoot, logicalName + "/" + MODULE_INITIALIZER);
+        return ProtosModuleKey.module(canonicalPrefix + logicalName);
+    }
+
+    private static boolean isRelative(String specifier) {
+        return specifier.startsWith("./") || specifier.startsWith("../");
+    }
+
+    /** D242 relative SOURCE import confined to the importer's own tool or shared root. */
+    private ProtosModuleKey resolveRelativeSource(
+            String exactSpecifier, Optional<ProtosModuleKey> importingModule)
+            throws IOException {
+        ProtosModuleKey importer =
+                importingModule.orElseThrow(
+                        () -> new IOException("relative SOURCE import requires importer"));
+        String importerId = importer.canonicalId();
+        final String keyPrefix;
+        final Path root;
+        if (importerId.startsWith(canonicalPrefix)) {
+            keyPrefix = canonicalPrefix;
+            root = toolRoot;
+        } else if (importerId.startsWith(SHARED_KEY_PREFIX)) {
+            keyPrefix = SHARED_KEY_PREFIX;
+            root = sharedRoot.orElseThrow(
+                    () -> new IOException("shared bundled-tool modules unavailable"));
+        } else {
+            throw new IOException("relative SOURCE import escaped bundled-tool closure");
+        }
+        String importerPath = importerId.substring(keyPrefix.length());
+        String directory;
+        if (importer.isModule()) {
+            directory = importerPath;
+        } else {
+            int slash = importerPath.lastIndexOf('/');
+            directory = slash < 0 ? "" : importerPath.substring(0, slash);
+        }
+        java.util.ArrayList<String> segments = new java.util.ArrayList<>();
+        if (!directory.isEmpty()) {
+            segments.addAll(java.util.List.of(directory.split("/", -1)));
+        }
+        String[] parts = exactSpecifier.split("/", -1);
+        for (int i = 0; i < parts.length; i++) {
+            if (i == 0 && parts[i].equals(".")) {
+                continue;
+            }
+            if (parts[i].equals("..")) {
+                if (segments.isEmpty()) {
+                    throw new IOException("relative SOURCE import escaped bundled-tool root");
+                }
+                segments.remove(segments.size() - 1);
+                continue;
+            }
+            segments.add(parts[i]);
+        }
+        String sourceFile = requireSourceFile(String.join("/", segments));
+        sourcePath(root, sourceFile);
+        return ProtosModuleKey.source(keyPrefix + sourceFile);
+    }
+
+    /** Validates one exact SOURCE file path; {@code module.protos} is never a SOURCE. */
+    private static String requireSourceFile(String sourceFile) throws IOException {
+        if (!sourceFile.endsWith(SOURCE_SUFFIX)) {
+            throw new IOException("SOURCE import must name an exact .protos file");
+        }
+        String stem = sourceFile.substring(0, sourceFile.length() - SOURCE_SUFFIX.length());
+        requireLogicalName(stem);
+        String last = stem.substring(stem.lastIndexOf('/') + 1);
+        if (last.equalsIgnoreCase("module")) {
+            throw new IOException("module initializer cannot be imported as SOURCE");
+        }
+        return sourceFile;
     }
 
     @Override
     public ProtosModuleSource loadSource(ProtosModuleKey key) throws Exception {
         Objects.requireNonNull(key, "key");
         String canonicalId = key.canonicalId();
-        if (canonicalId.startsWith("std:")) {
+        if (ProtosStandardLibraryModuleResolver.owns(key)) {
             return standardLibraryResolver.loadSource(key);
         }
         if (canonicalId.startsWith(SHARED_KEY_PREFIX)) {
             Path selectedSharedRoot =
                     sharedRoot.orElseThrow(
                             () -> new IOException("shared bundled-tool modules unavailable"));
-            String logicalName =
-                    requireLogicalName(canonicalId.substring(SHARED_KEY_PREFIX.length()));
-            return ProtosModuleSource.fromPath(key, sourcePath(selectedSharedRoot, logicalName));
+            return ProtosModuleSource.fromPath(
+                    key,
+                    sourcePath(
+                            selectedSharedRoot,
+                            targetFile(key, canonicalId.substring(SHARED_KEY_PREFIX.length()))));
         }
         if (!canonicalId.startsWith(canonicalPrefix)) {
             throw new IOException("module is outside bundled-tool closure");
         }
 
-        String logicalName =
-                requireLogicalName(canonicalId.substring(canonicalPrefix.length()));
-        Path source = sourcePath(toolRoot, logicalName);
+        Path source =
+                sourcePath(toolRoot, targetFile(key, canonicalId.substring(canonicalPrefix.length())));
         return ProtosModuleSource.fromPath(key, source);
     }
 
-    private Path sourcePath(String logicalName) throws IOException {
-        return sourcePath(toolRoot, logicalName);
+    /** Exact root-relative file of one MODULE ({@code dir/module.protos}) or SOURCE key. */
+    private static String targetFile(ProtosModuleKey key, String path) throws IOException {
+        if (key.isModule()) {
+            return requireLogicalName(path) + "/" + MODULE_INITIALIZER;
+        }
+        if (key.isSource()) {
+            return requireSourceFile(path);
+        }
+        throw new IOException("bundled-tool keys are MODULE or SOURCE");
     }
 
-    private static Path sourcePath(Path root, String logicalName) throws IOException {
-        String[] segments = logicalName.split("/", -1);
+    /** Resolves one exact root-relative file path with per-segment exact spelling. */
+    private static Path sourcePath(Path root, String relativeFile) throws IOException {
+        String[] segments = relativeFile.split("/", -1);
         Path current = root;
         for (int i = 0; i < segments.length - 1; i++) {
             current = requireExactChild(current, segments[i], true);
         }
 
-        Path source =
-                requireExactChild(
-                        current, segments[segments.length - 1] + ".protos", false);
+        Path source = requireExactChild(current, segments[segments.length - 1], false);
         Path realRoot = root.toRealPath();
         Path realSource = source.toRealPath();
         if (!realSource.startsWith(realRoot)) {

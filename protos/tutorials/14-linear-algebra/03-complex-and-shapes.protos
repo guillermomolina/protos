@@ -16,7 +16,7 @@
 // Elements are ordinary Protos Numbers, so exact Fractions and Complex values
 // keep their usual arithmetic. Shapes must match exactly.
 
-LA: import("std:math/LinearAlgebra")
+LA: import("std:math/linear_algebra")
 Vector: LA.Vector
 Matrix: LA.Matrix
 

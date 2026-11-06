@@ -58,8 +58,8 @@ public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleR
     public ProtosModuleKey entryModule(String logicalModule) throws IOException {
         String packageId =
                 directoryIndex.rootPackage().packageNode().ref().packageId();
-        sourceLookup.requireSource(packageId, logicalModule);
-        return ProtosWorkspacePackageModuleKey.encode(packageId, logicalModule);
+        sourceLookup.requireSource(ProtosModuleKey.Kind.MODULE, packageId, logicalModule);
+        return ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, packageId, logicalModule);
     }
 
     @Override
@@ -78,20 +78,30 @@ public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleR
         if (exactSpecifier.startsWith(STD_PREFIX)) {
             return resolveStandard(exactSpecifier, importingModule);
         }
+        if (ProtosPackageRuntimeNames.isRelativeSourceSpecifier(exactSpecifier)) {
+            if (importingModule.isPresent()
+                    && ProtosStandardLibraryModuleResolver.owns(importingModule.get())) {
+                // Relative SOURCE imports inside the Standard Library stay in its custody.
+                return resolveStandard(exactSpecifier, importingModule);
+            }
+            return resolveRelativeSource(exactSpecifier, importingModule);
+        }
         throw new IOException("unsupported workspace package module specifier");
     }
 
     @Override
     public ProtosModuleSource loadSource(ProtosModuleKey key) throws IOException {
         Objects.requireNonNull(key, "key");
-        if (key.canonicalId().startsWith(STD_PREFIX)) {
+        if (!ProtosWorkspacePackageModuleKey.owns(key)) {
             try { return standardLibraryResolver.loadSource(key); }
             catch (IOException e) { throw e; }
             catch (Exception e) { throw new IOException("standard-library source loading failed", e); }
         }
         ProtosWorkspacePackageModuleKey.Address address =
                 ProtosWorkspacePackageModuleKey.decode(key);
-        Path source = sourceLookup.requireSource(address.packageId(), address.logicalModule());
+        Path source =
+                sourceLookup.requireSource(
+                        address.kind(), address.packageId(), address.logicalModule());
         return ProtosModuleSource.fromPath(key, source);
     }
 
@@ -99,7 +109,16 @@ public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleR
             String exactSpecifier, Optional<ProtosModuleKey> importingModule) throws IOException {
         try {
             ProtosModuleKey key = Objects.requireNonNull(standardLibraryResolver.resolve(exactSpecifier, importingModule), "standard-library resolver returned null ModuleKey");
-            if (!key.canonicalId().startsWith(STD_PREFIX)) throw new IOException("standard-library resolver returned a foreign ModuleKey");
+            if (exactSpecifier.startsWith(STD_PREFIX)
+                    && (!key.isModule() || !key.canonicalId().startsWith(STD_PREFIX))) {
+                throw new IOException("standard-library resolver must return a public MODULE key");
+            }
+            if (ProtosPackageRuntimeNames.isRelativeSourceSpecifier(exactSpecifier)
+                    && (!key.isSource()
+                            || !ProtosStandardLibraryModuleResolver.owns(key))) {
+                throw new IOException("relative standard-library import must return a SOURCE key");
+            }
+            if (ProtosWorkspacePackageModuleKey.owns(key)) throw new IOException("standard-library resolver returned a workspace ModuleKey");
             return key;
         } catch (IOException e) { throw e; }
         catch (Exception e) { throw new IOException("standard-library resolution failed", e); }
@@ -111,8 +130,24 @@ public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleR
         ProtosWorkspacePackageModuleKey.Address importer =
                 requireOwnedImporter(importingModule, "self import");
         String logicalModule = exactSpecifier.substring(SELF_PREFIX.length());
-        sourceLookup.requireSource(importer.packageId(), logicalModule);
-        return ProtosWorkspacePackageModuleKey.encode(importer.packageId(), logicalModule);
+        sourceLookup.requireSource(ProtosModuleKey.Kind.MODULE, importer.packageId(), logicalModule);
+        return ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, importer.packageId(), logicalModule);
+    }
+
+    /** D242 explicitly relative SOURCE import confined to the importer's own package. */
+    private ProtosModuleKey resolveRelativeSource(
+            String exactSpecifier, Optional<ProtosModuleKey> importingModule)
+            throws IOException {
+        ProtosWorkspacePackageModuleKey.Address importer =
+                requireOwnedImporter(importingModule, "relative SOURCE import");
+        String sourceName =
+                ProtosPackageRuntimeNames.resolveRelativeSource(
+                        ProtosPackageRuntimeNames.owningDirectory(
+                                importer.kind(), importer.logicalModule()),
+                        exactSpecifier);
+        ProtosModuleKey.Kind source = ProtosModuleKey.Kind.SOURCE;
+        sourceLookup.requireSource(source, importer.packageId(), sourceName);
+        return ProtosWorkspacePackageModuleKey.encode(source, importer.packageId(), sourceName);
     }
 
     private ProtosModuleKey resolveDependency(
@@ -147,9 +182,10 @@ public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleR
         internalLogicalModule =
                 ProtosPackageRuntimeNames.requireLogicalName(internalLogicalModule);
 
-        sourceLookup.requireSource(targetPackageId, internalLogicalModule);
+        // D242: [exports] values are logical module directories; dep: never reaches a SOURCE.
+        sourceLookup.requireSource(ProtosModuleKey.Kind.MODULE, targetPackageId, internalLogicalModule);
         return ProtosWorkspacePackageModuleKey.encode(
-                targetPackageId, internalLogicalModule);
+                ProtosModuleKey.Kind.MODULE, targetPackageId, internalLogicalModule);
     }
 
     private ProtosWorkspacePackageModuleKey.Address requireOwnedImporter(

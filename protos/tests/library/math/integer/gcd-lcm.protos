@@ -13,13 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("gcd lcm", () => {
         tool009LegacyCase: () => {
-            IntegerMath: import("std:math/Integer")
+            IntegerMath: import("std:math/integer")
 
             Assertions.require(IntegerMath.gcd(0, 0) == 0)
             Assertions.require(IntegerMath.gcd(0, 42) == 42)
@@ -45,7 +45,7 @@ tests: [
     }),
     Test("arity rejection", () => {
         tool009LegacyCase: () => {
-            IntegerMath: import("std:math/Integer")
+            IntegerMath: import("std:math/integer")
 
             Assertions.signals(Error, () => { IntegerMath.gcd() })
             Assertions.signals(Error, () => { IntegerMath.gcd(1) })
@@ -59,7 +59,7 @@ tests: [
     }),
     Test("domain rejection", () => {
         tool009LegacyCase: () => {
-            IntegerMath: import("std:math/Integer")
+            IntegerMath: import("std:math/integer")
 
             delegatedIntegerLookalike: (1) {}
 
@@ -79,7 +79,7 @@ tests: [
     }),
     Test("large values", () => {
         tool009LegacyCase: () => {
-            IntegerMath: import("std:math/Integer")
+            IntegerMath: import("std:math/integer")
 
             // 2^80, well beyond every signed/unsigned 64-bit range.
             unit: 1208925819614629174706176

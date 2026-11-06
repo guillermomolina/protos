@@ -17,9 +17,9 @@
 // ordinary frozen IpAddress data that composes explicitly with numeric
 // endpoints; ResolutionError occurrences carry only a kind.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Resolvers: import("std:network/Resolvers")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Resolvers: import("std:network/resolvers")
 Resolver: Resolvers.Resolver
 ResolutionError: Resolvers.ResolutionError
 
@@ -43,8 +43,8 @@ invalid: (future) => {
     (failure !== null) && (failure.parent() === InvalidIOArgument)
 }
 
-IpAddresses: import("std:network/IpAddresses")
-IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+IpAddresses: import("std:network/ip_addresses")
+IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
 
 tests: Array(
     Test("resolved address candidates compose explicitly into IpEndpoints", () => {

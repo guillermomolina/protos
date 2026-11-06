@@ -13,7 +13,7 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal accepted-connection custody of std:http/Host (D216, HTTP.md
+//! Internal accepted-connection custody of std:http/host (D216, HTTP.md
 //! §§15.6, 15.10). This module is an unpublished implementation artifact,
 //! not an approved Standard Library API.
 //!

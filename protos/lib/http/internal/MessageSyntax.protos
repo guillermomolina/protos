@@ -13,8 +13,8 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal HTTP/1.1 wire syntax shared by std:http/Server and
-//! std:http/Client (D215, D218-B). This module is an unpublished implementation
+//! Internal HTTP/1.1 wire syntax shared by std:http/server and
+//! std:http/client (D215, D218-B). This module is an unpublished implementation
 //! artifact, not an approved Standard Library API. Every operation is pure: it
 //! performs no I/O, signals no rejection, and only answers Booleans, indices,
 //! Integers, or fresh Bytes. Ranges are half-open [start, end) octet indices.

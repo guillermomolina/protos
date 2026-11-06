@@ -41,7 +41,7 @@ class ProtosCollectionsSetAlgebraModuleTest {
     @Test
     void setDataTransfersAcrossActorsWhileModuleBehaviorRemainsActorLocal()
             throws Exception {
-        for (String module : new String[] {"Set", "IdentitySet"}) {
+        for (String module : new String[] {"set", "identity_set"}) {
             ProtosStandardLibraryModuleResolver resolver =
                     new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
             ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -72,7 +72,7 @@ class ProtosCollectionsSetAlgebraModuleTest {
             assertFalse(copied.isClosed());
             assertFalse(copied.isFrozen());
 
-            if (module.equals("Set")) {
+            if (module.equals("set")) {
                 ProtosMapValue copiedMap =
                         assertInstanceOf(ProtosMapValue.class, copied);
                 assertSame(prelude.mapPrototype(), copiedMap.parent().orElseThrow());

@@ -35,7 +35,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * The native protocol of the {@code std:math/LinearAlgebra} Vector and Matrix prototypes (D214
+ * The native protocol of the {@code std:math/linear_algebra} Vector and Matrix prototypes (D214
  * C1/S1, LIB024).
  *
  * <p>Every method is an ordinary native slot selected by ordinary lookup. Domain, index and shape
@@ -52,7 +52,7 @@ public final class ProtosStandardLinearAlgebraProtocol {
 
     /**
      * Creates the standard {@code Vector} and {@code Matrix} prototypes, direct children of Object
-     * carrying their complete protocols, keyed by their {@code std:math/LinearAlgebra} member
+     * carrying their complete protocols, keyed by their {@code std:math/linear_algebra} member
      * names. Core bootstrap freezes them before publication.
      */
     public static Map<String, ProtosObjectValue> createModuleMembers() {

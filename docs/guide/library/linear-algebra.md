@@ -1,8 +1,8 @@
-# Vectors and matrices: `std:math/LinearAlgebra`
+# Vectors and matrices: `std:math/linear_algebra`
 
-`std:math/LinearAlgebra` provides dense numeric `Vector` and `Matrix` values
+`std:math/linear_algebra` provides dense numeric `Vector` and `Matrix` values
 over the ordinary Protos Number families. The module is
-[`protos/lib/math/LinearAlgebra.protos`](../../../protos/lib/math/LinearAlgebra.protos),
+[`protos/lib/math/linear_algebra/module.protos`](../../../protos/lib/math/linear_algebra/module.protos),
 whose doc comment is the exact reference; the normative value semantics are in
 [`spec/semantics/VALUES_AND_COLLECTIONS.md`](../../../spec/semantics/VALUES_AND_COLLECTIONS.md).
 If this guide and the specification disagree, the specification wins.
@@ -13,7 +13,7 @@ There is no Prelude binding and no separate `std:math/Vector` or
 `std:math/Matrix` module. Import the one module and bind its two prototypes:
 
 ```protos
-LA: import("std:math/LinearAlgebra")
+LA: import("std:math/linear_algebra")
 Vector: LA.Vector
 Matrix: LA.Matrix
 
@@ -140,5 +140,5 @@ execution and no promised SIMD acceleration.
 
 - [`spec/semantics/VALUES_AND_COLLECTIONS.md`](../../../spec/semantics/VALUES_AND_COLLECTIONS.md):
   Number families, Vector and Matrix semantics.
-- [`protos/lib/math/LinearAlgebra.protos`](../../../protos/lib/math/LinearAlgebra.protos):
+- [`protos/lib/math/linear_algebra/module.protos`](../../../protos/lib/math/linear_algebra/module.protos):
   the module reference.

@@ -16,8 +16,8 @@
 // D197-C (I090-B): Integer / Integer is the canonical exact quotient, and
 // Fraction arithmetic is exact rational arithmetic with canonical results.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("quotient normalization", () => {

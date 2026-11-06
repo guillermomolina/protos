@@ -60,7 +60,7 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
     @Test
     void bundledOptionsOwnExactlyTheRatifiedD069JobsPolicy() throws Exception {
         OptionRun importOnly =
-                runSource("Options: import(\"self:Options\")\n1\n");
+                runSource("Options: import(\"./Options.protos\")\n1\n");
         OptionRun ordinaryEach =
                 runSource(
                         "count: 0\n"
@@ -120,7 +120,7 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                         TOOL_ROOT.resolveSibling("shared"),
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestToolAsyncExecutionScope scope =
@@ -266,9 +266,9 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
     void publicMainUsesOneGraphDrivenLogicalCaseRunnerPathForAllSuites() throws Exception {
         String main = Files.readString(TOOL_ROOT.resolve("Main.protos"), StandardCharsets.UTF_8);
 
-        assertTrue(main.contains("Options: import(\"self:Options\")"));
-        assertTrue(main.contains("SuiteGraph: import(\"self:SuiteGraph\")"));
-        assertTrue(main.contains("RepositorySuite: import(\"self:RepositorySuite\")"));
+        assertTrue(main.contains("Options: import(\"./Options.protos\")"));
+        assertTrue(main.contains("SuiteGraph: import(\"./SuiteGraph.protos\")"));
+        assertTrue(main.contains("RepositorySuite: import(\"./RepositorySuite.protos\")"));
         assertTrue(main.contains("arguments: process.args()"));
         assertTrue(main.contains("jobs: Options.jobs(arguments)"));
         assertTrue(main.contains("leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)"));
@@ -318,7 +318,7 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
 
     private static OptionRun runOptionsExpression(String argsExpression) throws Exception {
         return runSource(
-                "Options: import(\"self:Options\")\n"
+                "Options: import(\"./Options.protos\")\n"
                         + "Options.jobs("
                         + argsExpression
                         + ")\n");
@@ -332,7 +332,7 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                         TOOL_ROOT.resolveSibling("shared"),
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
         ProtosExecutionOutcome outcome =
                 com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
 source,

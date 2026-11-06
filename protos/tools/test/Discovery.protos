@@ -16,9 +16,9 @@
 // D153 / LIB018-0: project one suite-native declaration into the inert ordered
 // local selector signature used by Test Tool discovery. Live Test values and
 // body Closures never leave this operation.
-Arrays: import("std:collections/Array")
-Sets: import("std:collections/Set")
-LogicalCasePlan: import("self:LogicalCasePlan")
+Arrays: import("std:collections/array")
+Sets: import("std:collections/set")
+LogicalCasePlan: import("./LogicalCasePlan.protos")
 
 declarationSignature: (tests) => {
     Array.recognizes(tests).ifFalse(() => {

@@ -172,18 +172,25 @@ public final class ProtosProcessSnapshotExecution {
         selectionContext.createLocalSlot("expectedSignature", prelude.newFrozenArray(selectors));
         selectionContext.createLocalSlot("selectedSelector", new ProtosStringValue(selector));
 
-        return prelude.newModuleActivation(
-                moduleActivation.actorModuleState(),
-                null,
-                selectionContext,
-                moduleActivation.executionDomain());
+        ProtosActivation selection =
+                prelude.newModuleActivation(
+                        moduleActivation.actorModuleState(),
+                        null,
+                        selectionContext,
+                        moduleActivation.executionDomain());
+        // D242: the host selects the exact Discovery SOURCE identity explicitly and binds its
+        // Actor-local module instance; the snippet performs no ambient self: import.
+        selectionContext.createLocalSlot(
+                "Discovery",
+                ProtosModuleRuntime.loadCanonicalModuleThroughPreludeForRuntime(
+                        ProtosBundledToolModuleResolver.toolSourceKey("test", "Discovery"),
+                        selection));
+        return selection;
     }
 
     private static Source selectionSource() {
         return exactSource(
                 """
-                Discovery: import("self:Discovery")
-
                 selected:
                     Discovery.resolveSelectedTest(
                         discoverySubject,

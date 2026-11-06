@@ -35,8 +35,8 @@ final class ProtosTestToolResourceRequirementsJoinTest {
     @Test
     void completePlanJoinPreservesCaseAndRequirementOrderWithoutCreatingCases() throws Exception {
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Requirements: import(\"self:ResourceRequirements\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
+                        + "Requirements: import(\"./ResourceRequirements.protos\")\n"
                         + "first: Manifest.caseSpec(Array(\"a.protos\", \"boolean\", \"true\"))\n"
                         + "second: Manifest.caseSpec(Array(\"b.protos\", \"boolean\", \"true\"))\n"
                         + "plan: Array(Array(first, second))\n"
@@ -75,8 +75,8 @@ final class ProtosTestToolResourceRequirementsJoinTest {
     @Test
     void orphanDeclarationFailsClosedBeforeAnyLaterSelection() throws Exception {
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Requirements: import(\"self:ResourceRequirements\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
+                        + "Requirements: import(\"./ResourceRequirements.protos\")\n"
                         + "only: Manifest.caseSpec(Array(\"a.protos\", \"boolean\", \"true\"))\n"
                         + "plan: Array(Array(only))\n"
                         + "declarations: Array(Requirements.declaration(\"missing.protos\", Manifest.requirement(\"gpu\", \"exclusive\", null)))\n"
@@ -87,8 +87,8 @@ final class ProtosTestToolResourceRequirementsJoinTest {
     @Test
     void referencedAmbiguousCaseIdentityFailsBecauseD091RequiresExactlyOneCaseSpec() throws Exception {
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Requirements: import(\"self:ResourceRequirements\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
+                        + "Requirements: import(\"./ResourceRequirements.protos\")\n"
                         + "left: Manifest.caseSpec(Array(\"dup.protos\", \"boolean\", \"true\"))\n"
                         + "right: Manifest.caseSpec(Array(\"dup.protos\", \"error\", \"-\"))\n"
                         + "plan: Array(Array(left, right))\n"
@@ -100,8 +100,8 @@ final class ProtosTestToolResourceRequirementsJoinTest {
     @Test
     void requirementForExistingButLaterUnselectedCaseIsNotOrphan() throws Exception {
         String source =
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Requirements: import(\"self:ResourceRequirements\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
+                        + "Requirements: import(\"./ResourceRequirements.protos\")\n"
                         + "first: Manifest.caseSpec(Array(\"selected.protos\", \"boolean\", \"true\"))\n"
                         + "second: Manifest.caseSpec(Array(\"not-selected.protos\", \"boolean\", \"true\"))\n"
                         + "plan: Array(Array(first, second))\n"
@@ -122,7 +122,7 @@ final class ProtosTestToolResourceRequirementsJoinTest {
         ProtosExecutionOutcome outcome =
                 com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
 source,
-fixture.prelude().newModuleActivation());
+com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(fixture.prelude(), "test"));
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
@@ -135,7 +135,7 @@ fixture.prelude().newModuleActivation());
         ProtosExecutionOutcome outcome =
                 com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
 source,
-fixture.prelude().newModuleActivation());
+com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(fixture.prelude(), "test"));
         assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
     }
 

@@ -9,7 +9,7 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-Files: import("std:io/Files")
+Files: import("std:io/files")
 
 // This lesson requires the host to provision the bootstrap-local `filesystem`
 // capability. The ordinary standalone application CLI intentionally does not do so.

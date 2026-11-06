@@ -17,9 +17,9 @@
 // owner, self:LogicalCaseDispatch: source association projection and D125
 // execution-requirement dispatch.
 
-Assertions: import("std:test/Assertions")
-Manifest: import("self:Manifest")
-Dispatch: import("self:LogicalCaseDispatch")
+Assertions: import("std:test/assertions")
+Manifest: import("./Manifest.protos")
+Dispatch: import("./LogicalCaseDispatch.protos")
 
 native:
     Manifest.caseSpec(

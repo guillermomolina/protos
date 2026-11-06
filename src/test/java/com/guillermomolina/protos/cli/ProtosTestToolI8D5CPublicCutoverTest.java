@@ -66,7 +66,7 @@ final class ProtosTestToolI8D5CPublicCutoverTest {
         ProtosExecutionOutcome outcome =
                 com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
 Files.readString(FIXTURE, StandardCharsets.UTF_8),
-prelude.newModuleActivation());
+com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
 
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
@@ -92,7 +92,7 @@ prelude.newModuleActivation());
 
         assertTrue(
                 main.contains(
-                        "ResourceRequirements: import(\"self:ResourceRequirements\")"));
+                        "ResourceRequirements: import(\"./ResourceRequirements.protos\")"));
         assertTrue(
                 main.contains(
                         "resourceRequirementsApplies: planLoader === \"manifest\""));

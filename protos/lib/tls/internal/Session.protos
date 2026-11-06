@@ -13,17 +13,17 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal handshake session of std:tls/Client (D220–S12, TLS.md §§2.1, 3–5,
+//! Internal handshake session of std:tls/client (D220–S12, TLS.md §§2.1, 3–5,
 //! 8, 10). This module is an unpublished implementation artifact, not an
 //! approved Standard Library API. One admitted handshake runs entirely in its
 //! one service Task: trust resolution, engine provisioning, octet pumping,
 //! handshake accounting, identity verification and, for an owning handshake
 //! that does not deliver a secure duplex, the close of the lower duplex.
 
-Errors: import("std:tls/internal/Errors")
-TrustSource: import("std:tls/internal/TrustSource")
-Identity: import("std:tls/internal/Identity")
-SecureDuplex: import("std:tls/internal/SecureDuplex")
+Errors: import("./Errors.protos")
+TrustSource: import("./TrustSource.protos")
+Identity: import("./Identity.protos")
+SecureDuplex: import("./SecureDuplex.protos")
 
 // One lower read never exceeds one maximal encrypted record (§10).
 encryptedRecordBytes: 18432
@@ -143,7 +143,7 @@ serviceBody: (facility, TlsError, duplex, reference, trust, options, owning) => 
         secure
     }
 
-    // As in std:http/Server: an already-requested Actor-termination
+    // As in std:http/server: an already-requested Actor-termination
     // cancellation is delivered here, so the mandatory close runs as the
     // cleanup of that cancellation unwind (D121).
     closeOwned: () => {

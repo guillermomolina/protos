@@ -205,6 +205,13 @@ public final class ProtosActivation {
                 new ProtosActorExecutionDomain());
     }
 
+    /** D242: imports within a source Closure belong to its defining file. */
+    private static ProtosModuleKey lexicalInvocationModuleKey(
+            ProtosClosureValue closure, ProtosModuleKey callerModuleKey) {
+        ProtosModuleKey origin = closure.definingModuleKeyOrNullForRuntime();
+        return origin == null ? callerModuleKey : origin;
+    }
+
     public static ProtosActivation forClosureInvocation(
             ProtosClosureValue closure,
             java.util.List<?> supplied) {
@@ -258,7 +265,7 @@ public final class ProtosActivation {
                 ownsReturnHome,
                 false,
                 actorModuleState,
-                currentModuleKey,
+                lexicalInvocationModuleKey(closure, currentModuleKey),
                 Objects.requireNonNull(executionDomain, "executionDomain"));
     }
 
@@ -295,7 +302,7 @@ public final class ProtosActivation {
                 ownsReturnHome,
                 false,
                 actorModuleState,
-                currentModuleKey,
+                lexicalInvocationModuleKey(closure, currentModuleKey),
                 Objects.requireNonNull(executionDomain, "executionDomain"));
     }
 
@@ -401,7 +408,7 @@ public final class ProtosActivation {
                 ownsReturnHome,
                 false,
                 actorModuleState,
-                currentModuleKey,
+                lexicalInvocationModuleKey(closure, currentModuleKey),
                 Objects.requireNonNull(executionDomain, "executionDomain"),
                 new DeferredSuppliedArguments(supplied));
     }

@@ -300,6 +300,16 @@ dog: animal {
 ```
 
 The closure preserves both the original receiver and the `methodHome` required to continue delegation correctly.
+
+### Closures and objects published by a MODULE
+
+D242 (`MODULES.md`) introduces no callable rule for module publication. A Closure stored in a MODULE's public object with `this.name: closure` is the same Closure created by the initializer:
+
+- it retains its lexical capture of the initializer's private context, public module object, and prelude chain, so it continues to observe private initializer bindings it captured even though those bindings are not public;
+- reading it through the public object (`module.name`) is an ordinary member read and follows §11 receiver-bound extraction: invoking `module.name(...)` binds `this` to the public module object, while extracting it and invoking it on another receiver binds that receiver, exactly as for any other object;
+- its `methodHome` and `super` resolution follow §12 and `EXECUTION_AND_CONTROL.md` §8 from the object on which the Closure was found, not from any module-specific home.
+
+An object published by a MODULE (`this.Range: Range`) retains its exact identity and its own delegation parent; publication neither copies nor reparents it. Selecting a published object and invoking it (`Range: module.Range`, then `Range(1, 10)`) is an ordinary call of that object (§ `call` is the ordinary invocation protocol); `module.Range(1, 10)` is instead an ordinary message send to the module object.
 ## 13. Return Semantics
 
 A braced Closure body is evaluated as the ordinary semantic `Sequence` defined by `EXECUTION_AND_CONTROL.md`. When that body completes normally, the Closure's normal return value is the Sequence result. Therefore a braced Closure with zero body expressions, such as `() => {}`, returns canonical `null` by the Sequence rule; this is not a separate Closure-specific empty-body rule.

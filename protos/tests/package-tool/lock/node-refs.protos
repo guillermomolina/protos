@@ -13,12 +13,12 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("node-ref-workspace-roundtrip", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         ref: Syntax.parseNodeRef("workspace \"root package\"")
         ok: ref.kind == "workspace"
         (ref.packageId == "root package").ifFalse(() => { ok = false })
@@ -26,7 +26,7 @@ tests: [
         Assertions.require(ok)
     }),
     Test("node-ref-registry-roundtrip", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         ref: Syntax.parseNodeRef("registry \"pkg\" \"2.0.0-rc.1\"")
         ok: ref.kind == "registry"
         (ref.packageId == "pkg").ifFalse(() => { ok = false })
@@ -36,7 +36,7 @@ tests: [
         Assertions.require(ok)
     }),
     Test("node-ref-git-roundtrip", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         ref: Syntax.parseNodeRef("git \"pkg\" \"012345abcdef\"")
         ok: ref.kind == "git"
         (ref.packageId == "pkg").ifFalse(() => { ok = false })
@@ -45,19 +45,19 @@ tests: [
         Assertions.require(ok)
     }),
     Test("node-ref-unknown-kind-error", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         Assertions.signals(Error, () => {
             Syntax.parseNodeRef("other \"pkg\"")
         })
     }),
     Test("node-ref-registry-invalid-version-error", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         Assertions.signals(Error, () => {
             Syntax.parseNodeRef("registry \"pkg\" \"1.2\"")
         })
     }),
     Test("node-ref-extra-token-error", () => {
-        Syntax: import("self:LockSyntax")
+        Syntax: import("tool-source:package/LockSyntax.protos")
         Assertions.signals(Error, () => {
             Syntax.parseNodeRef("workspace \"pkg\" extra")
         })

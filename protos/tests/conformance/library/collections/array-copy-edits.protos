@@ -4,8 +4,8 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 // Answers `true` iff `array` holds exactly `expected` under element `==`.
 sameElements: (array, ...expected) => {
@@ -25,7 +25,7 @@ huge: 100000000000000000000000000000000000000000
 tests: Array(
     // append and concat
     Test("array append to empty and non-empty", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         empty: Array()
         source: Array(1, 2)
         fromEmpty: Arrays.append(empty, 9)
@@ -37,14 +37,14 @@ tests: Array(
         Assertions.require((fromEmpty !== empty) && (appended !== source))
     }),
     Test("array append keeps an Array as one element", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         inner: Array(2, 3)
         appended: Arrays.append(Array(1), inner)
         Assertions.require(appended.size() == 2)
         Assertions.require(appended[1] === inner)
     }),
     Test("array concat two arrays", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         left: Array(1, 2)
         right: Array(3, 4)
         combined: Arrays.concat(left, right)
@@ -53,7 +53,7 @@ tests: Array(
         Assertions.require(sameElements(right, 3, 4))
     }),
     Test("array concat with empty operands", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         empty: Array()
         source: Array(1)
         leftEmpty: Arrays.concat(empty, source)
@@ -65,7 +65,7 @@ tests: Array(
         Assertions.require(bothEmpty !== empty)
     }),
     Test("array concat same operand duplicates sequence", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         marker: Array(0)
         source: Array(marker, 1)
         doubled: Arrays.concat(source, source)
@@ -77,7 +77,7 @@ tests: Array(
         Assertions.require(doubled[2] === marker)
     }),
     Test("array append and concat answer independent storage", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2)
         appended: Arrays.append(source, 3)
         combined: Arrays.concat(source, Array())
@@ -91,7 +91,7 @@ tests: Array(
 
     // slice
     Test("array slice full range answers fresh array", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2, 3)
         full: Arrays.slice(source, 0, 3)
         Assertions.require(sameElements(full, 1, 2, 3))
@@ -100,7 +100,7 @@ tests: Array(
         Assertions.require(source[0] == 1)
     }),
     Test("array slice empty ranges", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2, 3)
         atStart: Arrays.slice(source, 0, 0)
         inMiddle: Arrays.slice(source, 1, 1)
@@ -111,7 +111,7 @@ tests: Array(
         Assertions.require(atStart !== source)
     }),
     Test("array slice first last and interior", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2, 3, 4, 5)
         Assertions.require(sameElements(Arrays.slice(source, 0, 1), 1))
         Assertions.require(sameElements(Arrays.slice(source, 4, 5), 5))
@@ -119,7 +119,7 @@ tests: Array(
         Assertions.require(sameElements(source, 1, 2, 3, 4, 5))
     }),
     Test("array slice of empty array", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array()
         sliced: Arrays.slice(source, 0, 0)
         Assertions.require(sameElements(sliced))
@@ -127,7 +127,7 @@ tests: Array(
         Assertions.signals(Error, () => { Arrays.slice(source, 0, 1) })
     }),
     Test("array slice rejects inverted and out of range bounds", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2, 3)
         Assertions.signals(Error, () => { Arrays.slice(source, 2, 1) })
         Assertions.signals(Error, () => { Arrays.slice(source, -1, 2) })
@@ -139,7 +139,7 @@ tests: Array(
         Assertions.signals(Error, () => { Arrays.slice(source, 0 - huge, 1) })
     }),
     Test("array slice rejects non-Integer bounds", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2, 3)
         Assertions.signals(Error, () => { Arrays.slice(source, 0.0, 1) })
         Assertions.signals(Error, () => { Arrays.slice(source, 0, 1.0) })
@@ -153,7 +153,7 @@ tests: Array(
 
     // insertAt
     Test("array insertAt start middle and end", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2, 3)
         Assertions.require(sameElements(Arrays.insertAt(source, 0, 0), 0, 1, 2, 3))
         Assertions.require(sameElements(Arrays.insertAt(source, 1, 9), 1, 9, 2, 3))
@@ -161,14 +161,14 @@ tests: Array(
         Assertions.require(sameElements(source, 1, 2, 3))
     }),
     Test("array insertAt into empty array", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array()
         inserted: Arrays.insertAt(source, 0, 7)
         Assertions.require(sameElements(inserted, 7))
         Assertions.require(sameElements(source))
     }),
     Test("array insertAt keeps an Array as one element", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         inner: Array(8, 9)
         inserted: Arrays.insertAt(Array(1, 2), 1, inner)
         Assertions.require(inserted.size() == 3)
@@ -176,14 +176,14 @@ tests: Array(
         Assertions.require(inserted[1] === inner)
     }),
     Test("array insertAt preserves suffix order", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2, 3, 4, 5, 6)
         inserted: Arrays.insertAt(source, 2, 0)
         Assertions.require(sameElements(inserted, 1, 2, 0, 3, 4, 5, 6))
         Assertions.require(sameElements(source, 1, 2, 3, 4, 5, 6))
     }),
     Test("array insertAt rejects invalid indexes", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2)
         Assertions.signals(Error, () => { Arrays.insertAt(source, -1, 0) })
         Assertions.signals(Error, () => { Arrays.insertAt(source, 3, 0) })
@@ -196,7 +196,7 @@ tests: Array(
 
     // removeAt
     Test("array removeAt first middle and last", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2, 3)
         Assertions.require(sameElements(Arrays.removeAt(source, 0), 2, 3))
         Assertions.require(sameElements(Arrays.removeAt(source, 1), 1, 3))
@@ -204,14 +204,14 @@ tests: Array(
         Assertions.require(sameElements(source, 1, 2, 3))
     }),
     Test("array removeAt only element", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1)
         removed: Arrays.removeAt(source, 0)
         Assertions.require(sameElements(removed))
         Assertions.require(sameElements(source, 1))
     }),
     Test("array removeAt rejects invalid indexes", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2)
         Assertions.signals(Error, () => { Arrays.removeAt(Array(), 0) })
         Assertions.signals(Error, () => { Arrays.removeAt(source, 2) })
@@ -223,7 +223,7 @@ tests: Array(
         Assertions.require(sameElements(source, 1, 2))
     }),
     Test("array removeAt keeps order and identity of remaining elements", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         a: Array(1)
         b: Array(2)
         c: Array(3)
@@ -235,7 +235,7 @@ tests: Array(
 
     // reverse
     Test("array reverse empty and singleton", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         empty: Array()
         singleton: Array(1)
         reversedEmpty: Arrays.reverse(empty)
@@ -245,7 +245,7 @@ tests: Array(
         Assertions.require((reversedEmpty !== empty) && (reversedSingleton !== singleton))
     }),
     Test("array reverse even and odd lengths", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         even: Array(1, 2, 3, 4)
         odd: Array(1, 2, 3, 4, 5)
         Assertions.require(sameElements(Arrays.reverse(even), 4, 3, 2, 1))
@@ -254,7 +254,7 @@ tests: Array(
         Assertions.require(sameElements(odd, 1, 2, 3, 4, 5))
     }),
     Test("array reverse preserves nested references", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         first: Array(1)
         second: Array(2)
         source: Array(first, second)
@@ -266,7 +266,7 @@ tests: Array(
 
     // cross-cutting contracts
     Test("array copy edits answer recognized open arrays", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2, 3)
         results: Array(
             Arrays.append(source, 4),
@@ -285,7 +285,7 @@ tests: Array(
         Assertions.require(sameElements(source, 1, 2, 3))
     }),
     Test("array copy edits read closed and frozen sources", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         closed: Array(1, 2, 3)
         closed.close()
         frozen: Array(1, 2, 3)
@@ -310,7 +310,7 @@ tests: Array(
         null
     }),
     Test("array copy edits are shallow", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         nested: Array(1)
         source: Array(nested, 2)
         appended: Arrays.append(source, 3)
@@ -322,7 +322,7 @@ tests: Array(
         Assertions.require(appended[0][0] == 99)
     }),
     Test("array copy edits keep self references to the source", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, null)
         source[1] = source
         appended: Arrays.append(source, 3)
@@ -337,7 +337,7 @@ tests: Array(
         Assertions.require(reversed[0] !== reversed)
     }),
     Test("array copy edits accept descendant factory arrays", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         MyArray: Array {
             label: 9
         }
@@ -350,7 +350,7 @@ tests: Array(
         Assertions.require(sameElements(Arrays.reverse(source), 3, 2, 1))
     }),
     Test("array copy edits reject non-Array sources", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         lookalike: Array {}
         imitation: {
             size: () => 1
@@ -369,7 +369,7 @@ tests: Array(
         null
     }),
     Test("array copy edits ignore overridden size at and each", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2, 3)
         source.size: () => 99
         source.at: (index) => 99
@@ -393,7 +393,7 @@ tests: Array(
         Assertions.require((combined.size() == 6) && (combined[5] == 3))
     }),
     Test("array copy edits ignore excess arguments", () => {
-        Arrays: import("std:collections/Array")
+        Arrays: import("std:collections/array")
         source: Array(1, 2)
         Assertions.require(sameElements(Arrays.append(source, 3, 4), 1, 2, 3))
         Assertions.require(sameElements(Arrays.concat(source, Array(3), Array(4)), 1, 2, 3))

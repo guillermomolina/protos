@@ -17,7 +17,7 @@
 // lessons rely on it behaving as a real ByteReadable, ByteWritable, Closable
 // value (BYTE_IO.md §§5-6, IO_CORE.md §8). Any failed check signals an Error.
 
-Assertions: import("std:test/Assertions")
+Assertions: import("std:test/assertions")
 MemoryDuplex: import("./memory-duplex.protos")
 
 duplex: MemoryDuplex.of("abc")

@@ -18,8 +18,8 @@
 // and sends init. A custom construct is an ordinary method whose exact result
 // is the result of the original call.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 // The escaping Closure captures this invocation's return home; init invokes
 // it as an ordinary nested block, so ^ crosses call -> construct -> init.

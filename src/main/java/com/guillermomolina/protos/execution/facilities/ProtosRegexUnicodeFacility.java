@@ -38,12 +38,12 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * Private Unicode 17.0.0 character data for {@code std:regex/Regex} (LIB014, D187).
+ * Private Unicode 17.0.0 character data for {@code std:regex/regex} (LIB014, D187).
  *
  * <p>Following the D101 pattern, regex syntax, the accepted property set, bare-name precedence,
  * class algebra and every other policy stay in Protos; this facility owns only the irreducible
  * Unicode data lookups. The frozen, stateless facility is provisioned as a standard initial member
- * of the exact {@code std:regex/Regex} module, which captures it lexically and removes the
+ * of the exact {@code std:regex/regex} module, which captures it lexically and removes the
  * bootstrap slot during initialization, so it never belongs to the published module surface.
  *
  * <p>Character sets cross this boundary as frozen Arrays of Integers {@code [lo0, hi0, lo1, hi1,
@@ -54,7 +54,7 @@ import java.util.TreeSet;
  * same guard used by the default grapheme segmentation; JDK character tables are never consulted.
  */
 public final class ProtosRegexUnicodeFacility {
-    public static final ProtosModuleKey MODULE_KEY = new ProtosModuleKey("std:regex/Regex");
+    public static final ProtosModuleKey MODULE_KEY = ProtosModuleKey.module("std:regex/regex");
     public static final String BOOTSTRAP_SLOT = "_regexUnicodeFacility";
 
     private static final VersionInfo REQUIRED_UNICODE = VersionInfo.getInstance(17, 0, 0, 0);

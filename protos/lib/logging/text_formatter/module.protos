@@ -1,0 +1,383 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Deterministic plain-text rendering of `std:logging/log_event` values. Each
+//! event renders as exactly one line with no line terminator, source metadata,
+//! color, or terminal control sequence:
+//!
+//! ```text
+//! LINE  = [TIMESTAMP " "] LEVEL " " STRING [" " MAP] [" error=true"]
+//! VALUE = "null" | "true" | "false" | INTEGER | FLOAT | STRING | ARRAY | MAP
+//! ARRAY = "[" [VALUE (", " VALUE)*] "]"
+//! MAP   = "{" [STRING "=" VALUE (", " STRING "=" VALUE)*] "}"
+//! ```
+//!
+//! For example `ERROR "request failed" {"requestId"="r-7"} error=true`.
+//!
+//! `TIMESTAMP` appears exactly when the event has a timestamp and is
+//! `std:datetime/ISO8601.formatInstant` of it, in UTC with the `Z` designator,
+//! for example `1970-01-01T00:00:00.000000001Z DEBUG "tick"`. An instant
+//! outside the civil range that format supports signals an Error; there is no
+//! other timestamp spelling.
+//!
+//! The fields Map is omitted when empty, and ` error=true` appears exactly when
+//! an Error is attached; the attached Error is never inspected, so every Error
+//! renders the same marker, distinct from a field named `"error"`.
+//!
+//! Strings, including the message and Map keys, are double-quoted. `"`, `\`,
+//! LF, CR, and TAB render as `\"`, `\\`, `\n`, `\r`, and `\t`; the remaining
+//! C0 controls, DEL, the C1 controls U+0080 to U+009F, U+2028, and U+2029
+//! render as `\u{HEX}` with uppercase hexadecimal digits and no leading zeros.
+//! Every other Unicode scalar is kept exactly, without normalization.
+//!
+//! Map entries render in ascending order of their keys' Unicode scalar
+//! sequences: the first differing scalar decides, and a proper prefix comes
+//! first. The same order applies at every depth; Map iteration order never
+//! matters.
+//!
+//! Integers render in canonical base 10. Floats render as `NaN`, `Infinity`,
+//! `-Infinity`, `0.0`, `-0.0`, or, for other values, from the decimal with the
+//! fewest significant digits that round-trips to the same binary64 value (the
+//! closest such decimal; an exact tie takes the even last digit). With digits
+//! `d` (`k` of them) and value `d * 10^(n - k)`, the layout is `d` followed by
+//! `n - k` zeros and `.0` when `k <= n <= 21`; `d` with a `.` after its first
+//! `n` digits when `0 < n <= 21`; `0.`, `-n` zeros, and `d` when
+//! `-6 < n <= 0`; and otherwise the first digit, `.` and the remaining digits
+//! when `k > 1`, then `e`, the sign `+` or `-`, and `|n - 1|`. A negative value
+//! is prefixed with `-`. Every finite Float therefore renders with a `.` or an
+//! exponent and never looks like an Integer.
+
+/// Answers the plain-text line of `event`, which must be recognized by
+/// `std:logging/log_event`; any other argument, or a timestamp that
+/// `std:datetime/ISO8601.formatInstant` cannot write, signals an Error.
+/// Rendering invokes no behavior stored in the event.
+this.format: ((numeric) => (event) => {
+    LogEvent: import("std:logging/log_event")
+    ISO8601: import("std:datetime/iso8601")
+    Arrays: import("std:collections/array")
+
+    LogEvent.recognizes(event).ifFalse(() => {
+        Error().signal()
+    })
+
+    output: Encoding.UTF8.encode("")
+
+    appendAscii: (text) => {
+        for(octet in Encoding.UTF8.encode(text)) {
+            output.add(octet)
+        }
+    }
+
+    // Digits of a non-negative Integer, most significant first, in `radix`
+    // with uppercase letters above nine.
+    appendDigits: (magnitude, radix) => {
+        reversed: Encoding.UTF8.encode("")
+        remaining: magnitude
+        if(remaining == 0) {
+            reversed.add(48)
+        }
+        while(remaining > 0) {
+            digit: remaining.mod(radix)
+            if(digit < 10) {
+                reversed.add(48 + digit)
+            }
+            if(digit >= 10) {
+                reversed.add(55 + digit)
+            }
+            remaining = remaining.div(radix)
+        }
+        index: reversed.size() - 1
+        while(index >= 0) {
+            output.add(reversed[index])
+            index = index - 1
+        }
+    }
+
+    appendInteger: (value) => {
+        if(value < 0) {
+            output.add(45)
+            appendDigits(0 - value, 10)
+        }
+        if(value >= 0) {
+            appendDigits(value, 10)
+        }
+    }
+
+    appendZeros: (count) => {
+        remaining: count
+        while(remaining > 0) {
+            output.add(48)
+            remaining = remaining - 1
+        }
+    }
+
+    appendFloat: (value) => {
+        positiveInfinity: 1.0 / 0.0
+        negativeInfinity: 0.0 - positiveInfinity
+        handled: false
+
+        (value == value).ifFalse(() => {
+            appendAscii("NaN")
+            handled = true
+        })
+        if((handled == false) && (value == positiveInfinity)) {
+            appendAscii("Infinity")
+            handled = true
+        }
+        if((handled == false) && (value == negativeInfinity)) {
+            appendAscii("-Infinity")
+            handled = true
+        }
+        if((handled == false) && (value == 0.0)) {
+            if((1.0 / value) == negativeInfinity) {
+                output.add(45)
+            }
+            appendAscii("0.0")
+            handled = true
+        }
+
+        handled.ifFalse(() => {
+            if(value < 0.0) {
+                output.add(45)
+            }
+            decimal: numeric.shortestDecimal(value)
+            digits: Encoding.UTF8.encode("")
+            reversed: Encoding.UTF8.encode("")
+            remaining: decimal[0]
+            while(remaining > 0) {
+                reversed.add(48 + remaining.mod(10))
+                remaining = remaining.div(10)
+            }
+            index: reversed.size() - 1
+            while(index >= 0) {
+                digits.add(reversed[index])
+                index = index - 1
+            }
+
+            k: digits.size()
+            n: k + decimal[1]
+            appendRange: (start, end) => {
+                position: start
+                while(position < end) {
+                    output.add(digits[position])
+                    position = position + 1
+                }
+            }
+
+            fixed: (n <= 21) && (n > -6)
+            if(fixed && (k <= n)) {
+                appendRange(0, k)
+                appendZeros(n - k)
+                appendAscii(".0")
+            }
+            if(fixed && (n > 0) && (n < k)) {
+                appendRange(0, n)
+                output.add(46)
+                appendRange(n, k)
+            }
+            if(fixed && (n <= 0)) {
+                appendAscii("0.")
+                appendZeros(0 - n)
+                appendRange(0, k)
+            }
+            fixed.ifFalse(() => {
+                appendRange(0, 1)
+                if(k > 1) {
+                    output.add(46)
+                    appendRange(1, k)
+                }
+                output.add(101)
+                if((n - 1) < 0) {
+                    output.add(45)
+                    appendDigits(1 - n, 10)
+                }
+                if((n - 1) >= 0) {
+                    output.add(43)
+                    appendDigits(n - 1, 10)
+                }
+            })
+        })
+    }
+
+    // Scalars are decoded from the UTF-8 octets of `text`; every scalar that
+    // needs no escape is copied as its original octets.
+    appendString: (text) => {
+        output.add(34)
+        octets: Encoding.UTF8.encode(text)
+        size: octets.size()
+        index: 0
+        while(index < size) {
+            lead: octets[index]
+            length: 1
+            scalar: lead
+            if(lead >= 240) {
+                length = 4
+                scalar = lead - 240
+            }
+            if((lead >= 224) && (lead < 240)) {
+                length = 3
+                scalar = lead - 224
+            }
+            if((lead >= 192) && (lead < 224)) {
+                length = 2
+                scalar = lead - 192
+            }
+            offset: 1
+            while(offset < length) {
+                scalar = scalar * 64 + (octets[index + offset] - 128)
+                offset = offset + 1
+            }
+
+            escaped: true
+            if(scalar == 34) {
+                appendAscii("\\\"")
+            }
+            if(scalar == 92) {
+                appendAscii("\\\\")
+            }
+            if(scalar == 10) {
+                appendAscii("\\n")
+            }
+            if(scalar == 13) {
+                appendAscii("\\r")
+            }
+            if(scalar == 9) {
+                appendAscii("\\t")
+            }
+            short: (scalar == 34) || (scalar == 92) || (scalar == 10) ||
+                (scalar == 13) || (scalar == 9)
+            control: (scalar < 32) || ((scalar >= 127) && (scalar <= 159)) ||
+                (scalar == 8232) || (scalar == 8233)
+            if((short == false) && control) {
+                appendAscii("\\u{")
+                appendDigits(scalar, 16)
+                output.add(125)
+            }
+            escaped = short || control
+            escaped.ifFalse(() => {
+                offset = 0
+                while(offset < length) {
+                    output.add(octets[index + offset])
+                    offset = offset + 1
+                }
+            })
+            index = index + length
+        }
+        output.add(34)
+    }
+
+    // UTF-8 octet order is Unicode scalar order, and a proper prefix of an
+    // encoding is the encoding of a proper scalar prefix.
+    precedes: (left, right) => {
+        leftSize: left.size()
+        rightSize: right.size()
+        index: 0
+        decided: false
+        result: false
+        while((decided == false) && (index < leftSize) && (index < rightSize)) {
+            (left[index] == right[index]).ifFalse(() => {
+                result = left[index] < right[index]
+                decided = true
+            })
+            index = index + 1
+        }
+        decided.ifFalse(() => {
+            result = leftSize < rightSize
+        })
+        result
+    }
+
+    appendValue: null
+    appendValue = (value) => {
+        handled: false
+        if(value === null) {
+            appendAscii("null")
+            handled = true
+        }
+        if(value === true) {
+            appendAscii("true")
+            handled = true
+        }
+        if(value === false) {
+            appendAscii("false")
+            handled = true
+        }
+        if((handled == false) && String.recognizes(value)) {
+            appendString(value)
+            handled = true
+        }
+        if((handled == false) && Integer.recognizes(value)) {
+            appendInteger(value)
+            handled = true
+        }
+        if((handled == false) && Float.recognizes(value)) {
+            appendFloat(value)
+            handled = true
+        }
+        if((handled == false) && Array.recognizes(value)) {
+            output.add(91)
+            first: true
+            for(element in value) {
+                first.ifFalse(() => {
+                    appendAscii(", ")
+                })
+                first = false
+                appendValue(element)
+            }
+            output.add(93)
+            handled = true
+        }
+        // A recognized event holds only Maps beyond this point.
+        handled.ifFalse(() => {
+            entries: []
+            value.each((key, item) => {
+                entries = Array(...entries, [Encoding.UTF8.encode(key), key, item])
+            })
+            sorted: Arrays.sort(entries, (left, right) => precedes(left[0], right[0]))
+            output.add(123)
+            first: true
+            for(entry in sorted) {
+                first.ifFalse(() => {
+                    appendAscii(", ")
+                })
+                first = false
+                appendString(entry[1])
+                output.add(61)
+                appendValue(entry[2])
+            }
+            output.add(125)
+        })
+    }
+
+    (event.timestamp === null).ifFalse(() => {
+        appendAscii(ISO8601.formatInstant(event.timestamp))
+        output.add(32)
+    })
+    appendAscii(event.level)
+    output.add(32)
+    appendString(event.message)
+    if(event.fields.size() > 0) {
+        output.add(32)
+        appendValue(event.fields)
+    }
+    (event.error === null).ifFalse(() => {
+        appendAscii(" error=true")
+    })
+    Encoding.UTF8.decode(output)
+})(_logTextFacility)
+
+// The runtime-provisioned numeric facility is captured privately above; it is
+// not module surface.
+context.removeSlot("_logTextFacility")

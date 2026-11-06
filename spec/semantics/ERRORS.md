@@ -393,9 +393,9 @@ The standard prototypes required by Core v0.1 are:
 | `NonTransferableValue` | `Error` | `../concurrency/ACTORS.md` |
 | `NonParallelValue` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
 | `ForeignError` | `Error` | `VALUES_AND_COLLECTIONS.md` (Foreign Values) |
-| `InvalidPredicateResult` | `Error` | Standard Library predicate/comparator contracts (`std:collections/Array`); `../concurrency/PARALLEL_EXECUTION.md` §71.6 |
-| `InvalidComparatorResult` | `Error` | Standard Library predicate/comparator contracts (`std:collections/Array`); `../concurrency/PARALLEL_EXECUTION.md` §71.6 |
-| `InvalidComparatorOrder` | `Error` | Standard Library predicate/comparator contracts (`std:collections/Array`); `../concurrency/PARALLEL_EXECUTION.md` §71.6 |
+| `InvalidPredicateResult` | `Error` | Standard Library predicate/comparator contracts (`std:collections/array`); `../concurrency/PARALLEL_EXECUTION.md` §71.6 |
+| `InvalidComparatorResult` | `Error` | Standard Library predicate/comparator contracts (`std:collections/array`); `../concurrency/PARALLEL_EXECUTION.md` §71.6 |
+| `InvalidComparatorOrder` | `Error` | Standard Library predicate/comparator contracts (`std:collections/array`); `../concurrency/PARALLEL_EXECUTION.md` §71.6 |
 | `IOError` | `Error` | `../io/IO_CORE.md` and the modular I/O documents |
 | `InvalidIOArgument` | `IOError` | `../io/IO_CORE.md` |
 | `IOLifecycleError` | `IOError` | `../io/IO_CORE.md` |
@@ -451,11 +451,11 @@ standard prototype listed above.
 
 | Standard Library prototype | Immediate parent | Exporting module / owner |
 | --- | --- | --- |
-| `HttpError` | `Error` | `std:http/Server` / `../io/HTTP.md` §12 |
-| `HostError` | `Error` | `std:http/Host` / `../io/HTTP.md` §15.10 |
-| `ClientError` | `Error` | `std:http/Client` / `../io/HTTP.md` §16 |
-| `TlsError` | `Error` | `std:tls/Client` / `../io/TLS.md` §9 |
-| `ResolutionError` | `Error` | `std:network/Resolvers` / `../io/NETWORK.md` §14.7 |
+| `HttpError` | `Error` | `std:http/server` / `../io/HTTP.md` §12 |
+| `HostError` | `Error` | `std:http/host` / `../io/HTTP.md` §15.10 |
+| `ClientError` | `Error` | `std:http/client` / `../io/HTTP.md` §16 |
+| `TlsError` | `Error` | `std:tls/client` / `../io/TLS.md` §9 |
+| `ResolutionError` | `Error` | `std:network/resolvers` / `../io/NETWORK.md` §14.7 |
 
 Every `ResolutionError` occurrence is fresh and carries an own `kind` slot whose
 value is exactly one of `"noAddress"`, `"unavailable"`, `"denied"` or

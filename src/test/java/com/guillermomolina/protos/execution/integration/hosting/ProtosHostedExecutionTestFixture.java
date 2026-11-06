@@ -95,6 +95,23 @@ final class ProtosHostedExecutionTestFixture implements AutoCloseable {
         return processContext.execute(source(sourceName, characters), activation());
     }
 
+    /**
+     * I151/D242: executes a snippet with bundled-tool harness provenance located at the root of
+     * {@code toolName}, sharing this fixture's bootstrap context, Actor module state and execution
+     * domain. The snippet reaches tool helpers only through relative SOURCE imports.
+     */
+    ProtosExecutionOutcome executeAsTool(
+            String toolName, String sourceName, CharSequence characters) {
+        ProtosActivation toolActivation =
+                prelude.newModuleActivation(
+                        activation().actorModuleState(),
+                        com.guillermomolina.protos.runtime.modules.ProtosModuleKey.source(
+                                "bundled-tool:" + toolName + "/I151ToolHarness.protos"),
+                        activation().context(),
+                        activation().executionDomain());
+        return processContext.execute(source(sourceName, characters), toolActivation);
+    }
+
     Object evaluatePersistent(String sourceName, CharSequence characters) {
         return processContext.evaluatePersistent(source(sourceName, characters), activation());
     }

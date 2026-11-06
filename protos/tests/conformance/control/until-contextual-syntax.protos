@@ -20,8 +20,8 @@
 // last normal body result, and only the exact braced-body suffix shape is
 // contextual; every other `until` spelling keeps its ordinary meaning.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("an immediately true condition runs the body exactly once", () => {

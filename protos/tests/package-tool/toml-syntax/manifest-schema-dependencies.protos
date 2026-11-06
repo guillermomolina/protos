@@ -13,12 +13,12 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("manifest-schema-final-all-dependency-forms", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         model: Schema.parse("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\nlocator = \"community/pkg\"\n[compatibility]\nlanguage = \">=0.1\"\n[exports]\nParser = \"parser/Parser\"\n[dependencies.registry]\nauthority = \"protos-public\"\npackage = \"community/parser\"\nversion = \"^2.1.0\"\n[dependencies.metrics]\ngit = \"https://example.invalid/metrics.git\"\nrev = \"0123456789abcdef\"\n[dependencies.fixture]\npath = \"../fixture\"\n[workspace]\nmembers = [\"app\", \"parser\"]\n")
         ok: model.package.locator == "community/pkg"
         (model.compatibility.language == ">=0.1").ifFalse(() => { ok = false })
@@ -34,12 +34,12 @@ tests: [
         Assertions.require(ok)
     }),
     Test("manifest-schema-final-empty-dependencies", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         model: Schema.parse("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n[dependencies]\n")
         Assertions.require(model.dependencies.size() == 0)
     }),
     Test("manifest-schema-final-inline-dependencies", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         model: Schema.parse("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n[dependencies]\nregistry = { authority = \"a\", package = \"p\", version = \"v\" }\ngitdep = { git = \"g\", rev = \"r\" }\npathdep = { path = \"../p\" }\n")
         ok: model.dependencies["registry"].authority == "a"
         (model.dependencies["registry"].package == "p").ifFalse(() => { ok = false })
@@ -50,7 +50,7 @@ tests: [
         Assertions.require(ok)
     }),
     Test("manifest-schema-final-minimal", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         model: Schema.parse("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n")
         ok: model.package.id == "pkg"
         (model.compatibility === null).ifFalse(() => { ok = false })

@@ -15,12 +15,12 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("parse leading zero integer error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = 01\n"
 
@@ -29,7 +29,7 @@ tests: [
         })
     }),
     Test("parse float without fraction digits error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = 1.\n"
 
@@ -38,7 +38,7 @@ tests: [
         })
     }),
     Test("parse float without exponent digits error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = 1e\n"
 
@@ -47,7 +47,7 @@ tests: [
         })
     }),
     Test("parse invalid calendar date error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = 1979-02-30\n"
 
@@ -56,7 +56,7 @@ tests: [
         })
     }),
     Test("parse invalid second error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = 23:59:61\n"
 
@@ -65,7 +65,7 @@ tests: [
         })
     }),
     Test("parse invalid string escape error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = \"\\q\"\n"
 
@@ -74,7 +74,7 @@ tests: [
         })
     }),
     Test("parse duplicate key error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = 1\nx = 2\n"
 
@@ -83,7 +83,7 @@ tests: [
         })
     }),
     Test("parse duplicate table error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "[a]\n[a]\n"
 
@@ -92,7 +92,7 @@ tests: [
         })
     }),
     Test("parse dotted key extending inline table error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = { a = 1 }\nx.b = 2\n"
 
@@ -101,7 +101,7 @@ tests: [
         })
     }),
     Test("parse multiline inline table without separators error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "x = {\n  a = 1\n  b = 2\n}\n"
 
@@ -110,7 +110,7 @@ tests: [
         })
     }),
     Test("parse malformed assignment line error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "good = 1\nthis is not an assignment\n"
 
@@ -119,14 +119,14 @@ tests: [
         })
     }),
     Test("parse non-String input error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         Assertions.signals(Error, () => {
             TOML.parse(1)
         })
     }),
     Test("parse TOML 1.1 comment control characters error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         // Every C0 control except TAB, LF and CR, plus DEL, is forbidden
         // inside a comment. Latin1 maps each octet to the same code point.
@@ -153,7 +153,7 @@ tests: [
         }
     }),
     Test("parse adversarial nine quote run error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         // Nine quotes are the smallest malformed run that opens a multiline
         // string with three quotes and then exercises the run > 5 rejection.
@@ -165,7 +165,7 @@ tests: [
         })
     }),
     Test("parse dotted key extending inline table value error", () => {
-        TOML: import("std:toml/TOML")
+        TOML: import("std:toml/toml")
 
         input: "tab = { inner = { dog = \"best\" }, inner.cat = \"worst\" }\n"
 

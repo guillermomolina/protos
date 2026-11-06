@@ -12,7 +12,7 @@ Print-dependent cookbook programs are maintained as executable standalone-CLI so
 `^value` when returning early from an enclosing function inside an Array
 callback, records the number of visited elements, and shows `(return)(x)` for
 an ordinary function binding named `return`. It teaches that control-flow
-requirement; ordinary index searches may use `std:collections/Array.findIndex`
+requirement; ordinary index searches may use `std:collections/array.findIndex`
 instead.
 
 | Task | Example |
@@ -46,7 +46,7 @@ instead.
 | Delegate optional behavior to a helper object | `objects/rosetta-delegates.protos` |
 | Work with exact Fractions, Float mixing, Complex numbers and square roots | `numbers/exact-and-complex.protos` |
 | Set, clear, test and toggle Integer flags with an explicit 32-bit mask | `numbers/bit-flags-and-masks.protos` |
-| Apply and verify a linear transformation with Vectors and Matrices (`std:math/LinearAlgebra`) | `numbers/vector-matrix.protos` |
+| Apply and verify a linear transformation with Vectors and Matrices (`std:math/linear_algebra`) | `numbers/vector-matrix.protos` |
 | Show portable runtime metadata (`std:runtime`) | `runtime-introspection/info.protos` |
 | Inspect the runtime (`std:inspect`, requires `--inspect`) | `runtime-introspection/inspect.protos` |
 | Summarize incident severities and distinct responsible teams with Array operations | `collections/array-incident-summary.protos` |
@@ -63,14 +63,14 @@ instead.
 | Serve messages from the RootActor through a single-member GroupRef (RootActor service entry) | `actors/root-message-service.protos` |
 | Execute work in an isolated parallel domain | `concurrency/parallel-execution.protos` |
 | Encode, mutate, and decode bytes | `io/encoding-and-bytes.protos` |
-| Answer one HTTP request and observe a rejected request (`std:http/Server`) | `io/http-minimal-response.protos` |
-| Perform an HTTP GET over an application-opened TCP connection (`std:http/Client`, requires `network`) | `io/http-get.protos` |
-| Host HTTP on loopback with explicit bounds and drain it (`std:http/Host`, requires `network`) | `io/http-loopback-hosting.protos` with `io/http-echo-handler.protos` |
-| Host HTTP Workers that call a RootActor service (`std:http/Host`, RootActor service entry, requires `network`) | `http/root-service-host.protos` with `http/root-service-handler.protos` as `app:root-service-handler` |
-| Dispatch requests by method and path with captured parameters (`std:http/Router`) | `io/http-router.protos` |
-| Make one HTTPS request to a URL (`std:http/UrlClient`, requires `network` and `resolver`, manual) | `io/http-url-client.protos` |
-| Resolve a hostname and connect to a chosen address (`std:network/Resolvers`, requires `network` and `resolver`, manual) | `io/hostname-resolution.protos` |
-| Authenticate TLS over a TCP connection and send one HTTP request (`std:tls/Client`, requires `network` and `resolver`, manual) | `io/tls-client-over-tcp.protos` |
+| Answer one HTTP request and observe a rejected request (`std:http/server`) | `io/http-minimal-response.protos` |
+| Perform an HTTP GET over an application-opened TCP connection (`std:http/client`, requires `network`) | `io/http-get.protos` |
+| Host HTTP on loopback with explicit bounds and drain it (`std:http/host`, requires `network`) | `io/http-loopback-hosting.protos` with `io/http-echo-handler.protos` |
+| Host HTTP Workers that call a RootActor service (`std:http/host`, RootActor service entry, requires `network`) | `http/root-service-host.protos` with `http/root-service-handler.protos` as `app:root-service-handler` |
+| Dispatch requests by method and path with captured parameters (`std:http/router`) | `io/http-router.protos` |
+| Make one HTTPS request to a URL (`std:http/url_client`, requires `network` and `resolver`, manual) | `io/http-url-client.protos` |
+| Resolve a hostname and connect to a chosen address (`std:network/resolvers`, requires `network` and `resolver`, manual) | `io/hostname-resolution.protos` |
+| Authenticate TLS over a TCP connection and send one HTTP request (`std:tls/client`, requires `network` and `resolver`, manual) | `io/tls-client-over-tcp.protos` |
 
 Run the metadata example normally from the product repository root:
 `bin/protos protos/examples/runtime-introspection/info.protos`. The

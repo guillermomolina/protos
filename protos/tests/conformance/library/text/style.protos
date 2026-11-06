@@ -15,9 +15,9 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Style: import("std:text/Style")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Style: import("std:text/style")
 
 foregrounds: ["default", "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"]
 
@@ -158,7 +158,7 @@ tests: [
         Assertions.require(Style.recognizes({}) === false)
         Assertions.require(Style.recognizes(Style) === false)
         Assertions.require(Style.recognizes(Error()) === false)
-        StyledText: import("std:text/StyledText")
+        StyledText: import("std:text/styled_text")
         Assertions.require(Style.recognizes(StyledText("red")) === false)
     }),
     Test("style recognition rejects lookalikes and forgeries", () => {

@@ -40,7 +40,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * I126 (D216, HTTP.md §15): {@code std:http/Host} over real loopback NIO in a standard Polyglot
+ * I126 (D216, HTTP.md §15): {@code std:http/host} over real loopback NIO in a standard Polyglot
  * Context. Workers are real Actors of the embedded Process; HTTP clients are Java sockets owned by
  * the test. Every wait is bounded; no test depends on a sleep for its verdict.
  *
@@ -117,8 +117,8 @@ final class ProtosHttpHostIntegrationTest {
 
     private static final String PROGRAM =
             """
-            http: import("std:http/Host")
-            IpAddress: import("std:network/IpAddresses").IpAddress
+            http: import("std:http/host")
+            IpAddress: import("std:network/ip_addresses").IpAddress
             loopback: IpAddress(4, 2130706433)
             listener: null
             host: null
@@ -688,7 +688,7 @@ final class ProtosHttpHostIntegrationTest {
             assertTrue(x.call("abort"));
         }
         // MODULES.md: the specifier is resolved relative to the importing module, here
-        // std:http/internal/HostWorker, never rebased onto the caller. The resolver rejects
+        // std:http/internal/host_worker, never rebased onto the caller. The resolver rejects
         // it there, which is an asynchronous startup failure.
         for (String specifier : new String[] {"./site", "app:missing"}) {
             try (Fixture x = new Fixture()) {

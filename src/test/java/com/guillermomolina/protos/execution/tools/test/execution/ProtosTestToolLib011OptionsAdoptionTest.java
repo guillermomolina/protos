@@ -56,7 +56,7 @@ final class ProtosTestToolLib011OptionsAdoptionTest {
         ProtosExecutionOutcome outcome =
                 com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
 source,
-prelude.newModuleActivation());
+com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
@@ -70,7 +70,7 @@ prelude.newModuleActivation());
                         TOOL_ROOT.resolve("Options.protos"),
                         StandardCharsets.UTF_8);
 
-        assertTrue(options.contains("CommandLine: import(\"std:cli/CommandLine\")"));
+        assertTrue(options.contains("CommandLine: import(\"std:cli/command_line\")"));
         assertTrue(options.contains("projectArguments: (arguments) => {"));
         assertTrue(
                 options.contains(

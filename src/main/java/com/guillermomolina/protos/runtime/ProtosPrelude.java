@@ -659,11 +659,11 @@ public final class ProtosPrelude {
 
     /** The D223-A1 module key whose two standard members are the Resolver family prototypes. */
     public static final ProtosModuleKey RESOLVERS_MODULE_KEY =
-            new ProtosModuleKey("std:network/Resolvers");
+            ProtosModuleKey.module("std:network/resolvers");
 
     /**
      * Runtime-only canonical source-backed Resolver protocol prototype (D223-A1), retained as a
-     * standard member of {@code std:network/Resolvers} and omitted from public Prelude bindings.
+     * standard member of {@code std:network/resolvers} and omitted from public Prelude bindings.
      */
     public ProtosObjectValue resolverPrototypeForRuntime() {
         return resolversMember("Resolver");
@@ -809,6 +809,15 @@ public final class ProtosPrelude {
         return array;
     }
 
+    /**
+     * D242: allocates the ordinary public object of one MODULE. It delegates to the canonical
+     * {@code Object} prototype exactly like an ordinary object literal and carries no export
+     * metadata.
+     */
+    public ProtosObjectValue newPublicModuleObject() {
+        return new ProtosObjectValue(requiredOrdinaryBinding("Object"));
+    }
+
     public ProtosObjectValue newExecutionContext() {
         return new ProtosExecutionContextValue(contextPrototype);
     }
@@ -850,6 +859,34 @@ public final class ProtosPrelude {
                 this,
                 Objects.requireNonNull(actorModuleState, "actorModuleState"),
                 moduleKey,
+                Objects.requireNonNull(executionDomain, "executionDomain"));
+    }
+
+    /**
+     * D242 MODULE initializer activation. The initializer executes in {@code privateContext};
+     * lexical lookup continues through {@code publicModule} and then the frozen Prelude, and the
+     * receiver {@code this} is the public module object. Publication is ordinary slot creation on
+     * that receiver ({@code this.Name: value}); nothing is copied at completion.
+     */
+    public ProtosActivation newModuleInitializerActivation(
+            ProtosActorModuleState actorModuleState,
+            ProtosModuleKey moduleKey,
+            ProtosObjectValue privateContext,
+            ProtosObjectValue publicModule,
+            ProtosActorExecutionDomain executionDomain) {
+        Objects.requireNonNull(privateContext, "privateContext");
+        Objects.requireNonNull(publicModule, "publicModule");
+        if (privateContext == publicModule) {
+            throw new IllegalArgumentException(
+                    "MODULE private context must differ from its public object");
+        }
+        return ProtosActivation.withPreludeAndModuleState(
+                privateContext,
+                java.util.List.of(publicModule, bindings),
+                publicModule,
+                this,
+                Objects.requireNonNull(actorModuleState, "actorModuleState"),
+                Objects.requireNonNull(moduleKey, "moduleKey"),
                 Objects.requireNonNull(executionDomain, "executionDomain"));
     }
 }

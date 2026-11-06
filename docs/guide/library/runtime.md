@@ -15,7 +15,7 @@ metadata.platform
 ```
 
 The module is a single source,
-[`protos/lib/runtime.protos`](../../../protos/lib/runtime.protos). Its normative
+[`protos/lib/runtime/module.protos`](../../../protos/lib/runtime.protos). Its normative
 owner is §73 "Standard Runtime Metadata" in
 [`spec/semantics/MODULES.md`](../../../spec/semantics/MODULES.md).
 

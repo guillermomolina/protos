@@ -13,9 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Syntax: import("self:LockSyntax")
-Version: import("self:ReleaseVersion")
-Arrays: import("std:collections/Array")
+Syntax: import("./LockSyntax.protos")
+Version: import("./ReleaseVersion.protos")
+Arrays: import("std:collections/array")
 
 emptyBytes: () => {
     Encoding.UTF8.encode("")

@@ -16,8 +16,8 @@
 // D198 (I090): public Complex construction, components and standard arithmetic. A
 // helper compares Float coordinates by identity, so signed zeros and NaN are exact.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 nan: 0.0 / 0.0
 inf: 1.0 / 0.0

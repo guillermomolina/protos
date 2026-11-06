@@ -94,11 +94,11 @@ final class ProtosForeignValueFixture implements AutoCloseable {
         current =
                 prelude.newModuleActivation(
                         root.actorModuleState(),
-                        new ProtosModuleKey("entry"),
+                        ProtosModuleKey.source("entry"),
                         prelude.newExecutionContext(),
                         root.executionDomain());
         return context.executeModuleSource(
-                ProtosModuleSource.fromCharacters(new ProtosModuleKey("entry"), source), current);
+                ProtosModuleSource.fromCharacters(ProtosModuleKey.source("entry"), source), current);
     }
 
     Object eval(String source) {

@@ -121,7 +121,7 @@ final class ProtosPackagedCoreEmbeddingTest {
     @Test
     void standardModulesImportFromThePackagedCoreWithOrdinaryIdentity() throws IOException {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
-            String source = "m: import(\"std:test/Assertions\")\n0";
+            String source = "m: import(\"std:test/assertions\")\n0";
             context.eval(ProtosLanguage.ID, source);
             ProtosEmbeddedProcess process = embedded(context);
             ProtosObjectValue first = process.selectedModuleContext().orElseThrow();
@@ -135,7 +135,7 @@ final class ProtosPackagedCoreEmbeddingTest {
                     process.processForTesting()
                             .rootActorForRuntime()
                             .moduleState()
-                            .lookup(new ProtosModuleKey("std:test/Assertions"))
+                            .lookup(ProtosModuleKey.module("std:test/assertions"))
                             .isPresent(),
                     "canonical std: ModuleKey, independent of the physical Core origin");
             assertPackagedCore(context);

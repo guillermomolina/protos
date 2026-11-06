@@ -59,9 +59,9 @@ final class ProtosTestToolTool012TomlOfficialProgressGroupingTest {
     private static final String BOOL_SOURCE = "library/toml/official/suite/valid-bool.protos";
 
     private static final String PRELUDE =
-            "SuiteGraph: import(\"self:SuiteGraph\")\n"
-                    + "RepositorySuite: import(\"self:RepositorySuite\")\n"
-                    + "Arrays: import(\"std:collections/Array\")\n"
+            "SuiteGraph: import(\"./SuiteGraph.protos\")\n"
+                    + "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
+                    + "Arrays: import(\"std:collections/array\")\n"
                     + "leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)\n"
                     + "conformance: Arrays.filter(leaves, (leaf) => leaf.id == \"protos/conformance\")[0]\n";
 
@@ -294,7 +294,7 @@ final class ProtosTestToolTool012TomlOfficialProgressGroupingTest {
      */
     private static Object completed(List<String[]> keys, String source) throws Exception {
         ProtosPrelude prelude = newPrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
         List<ProtosArrayValue> elements = new ArrayList<>(keys.size());
         for (String[] key : keys) {
             elements.add(
@@ -319,7 +319,7 @@ final class ProtosTestToolTool012TomlOfficialProgressGroupingTest {
     }
 
     private static ProtosExecutionOutcome execute(String source) throws Exception {
-        return ProtosTestExecutionSupport.execute(source, newPrelude().newModuleActivation());
+        return ProtosTestExecutionSupport.execute(source, com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(newPrelude(), "test"));
     }
 
     private static ProtosPrelude newPrelude() throws Exception {

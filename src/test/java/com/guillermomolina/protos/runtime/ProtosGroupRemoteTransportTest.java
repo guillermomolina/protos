@@ -146,7 +146,7 @@ final class ProtosGroupRemoteTransportTest {
         ProtosActivation caller =
                 prelude.newModuleActivation(
                         sender.moduleState(),
-                        new ProtosModuleKey("sender"),
+                        ProtosModuleKey.source("sender"),
                         prelude.newExecutionContext(),
                         sender.executionDomain());
         return new Fixture(prelude, sender, caller);
@@ -154,7 +154,7 @@ final class ProtosGroupRemoteTransportTest {
 
     private static ProtosActor ready(ProtosPrelude prelude, ProtosObjectValue behavior) {
         ProtosActor actor = new ProtosActor(actorRefPrototype());
-        actor.bindMessageEnvironmentForRuntime(prelude, new ProtosModuleKey("target"));
+        actor.bindMessageEnvironmentForRuntime(prelude, ProtosModuleKey.source("target"));
         assertTrue(actor.completeInitialization(behavior));
         return actor;
     }

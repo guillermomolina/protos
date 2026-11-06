@@ -48,12 +48,12 @@ import java.util.Set;
  * initialization, so it never belongs to the published module surface.
  *
  * <ul>
- *   <li>{@code std:logging/LogEvent} receives {@code recognizes(candidate, prototype,
+ *   <li>{@code std:logging/log_event} receives {@code recognizes(candidate, prototype,
  *       instantPrototype)} and {@code isAttachableError(value)}. Both inspect host
  *       representation only: delegation parents, mutation state, local slot tables, and
  *       indexed/keyed state are read directly, so no slot, method, equality, hash, or other
  *       behavior of the candidate is ever invoked.
-  *   <li>{@code std:logging/TextFormatter} and {@code std:logging/JsonFormatter} each receive a
+  *   <li>{@code std:logging/text_formatter} and {@code std:logging/json_formatter} each receive a
  *       numeric facility with {@code shortestDecimal(float)}, the digits of the shortest
  *       round-tripping decimal of a finite non-zero Float magnitude, so both formatters share one
  *       Float decimal policy.
@@ -61,13 +61,13 @@ import java.util.Set;
  */
 public final class ProtosLoggingFacility {
     public static final ProtosModuleKey EVENT_MODULE_KEY =
-            new ProtosModuleKey("std:logging/LogEvent");
+            ProtosModuleKey.module("std:logging/log_event");
     public static final String EVENT_BOOTSTRAP_SLOT = "_logEventFacility";
     public static final ProtosModuleKey TEXT_MODULE_KEY =
-            new ProtosModuleKey("std:logging/TextFormatter");
+            ProtosModuleKey.module("std:logging/text_formatter");
     public static final String TEXT_BOOTSTRAP_SLOT = "_logTextFacility";
     public static final ProtosModuleKey JSON_MODULE_KEY =
-            new ProtosModuleKey("std:logging/JsonFormatter");
+            ProtosModuleKey.module("std:logging/json_formatter");
     public static final String JSON_BOOTSTRAP_SLOT = "_logJsonFacility";
 
     private static final Set<String> EVENT_SLOTS =
@@ -78,7 +78,7 @@ public final class ProtosLoggingFacility {
 
     private ProtosLoggingFacility() {}
 
-    /** Creates the frozen, stateless event-recognition facility of {@code std:logging/LogEvent}. */
+    /** Creates the frozen, stateless event-recognition facility of {@code std:logging/log_event}. */
     public static ProtosObjectValue createEventFacility() {
         ProtosObjectValue facility = new ProtosObjectValue(ProtosObjectValue.rootObject());
         facility.createLocalSlot(
@@ -93,8 +93,8 @@ public final class ProtosLoggingFacility {
     }
 
     /**
-     * Creates a frozen, stateless numeric facility for {@code std:logging/TextFormatter} or {@code
-     * std:logging/JsonFormatter}.
+     * Creates a frozen, stateless numeric facility for {@code std:logging/text_formatter} or {@code
+     * std:logging/json_formatter}.
      */
     public static ProtosObjectValue createTextFacility() {
         ProtosObjectValue facility = new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -175,7 +175,7 @@ public final class ProtosLoggingFacility {
     }
 
     /**
-     * The predicate of {@code std:datetime/Instant.recognizes}, read from host representation: the
+     * The predicate of {@code std:datetime/instant.recognizes}, read from host representation: the
      * immediate parent is the instant module, the local slots are exactly the instant state and
      * behavior slots, and {@code nanoseconds} holds an Integer.
      */

@@ -162,7 +162,7 @@ The `specifier` argument to standard `import` must be a semantic String value.
 This is valid:
 
 ```protos
-import("std:collections/Array")
+import("std:collections/array")
 ```
 
 An arbitrary object does not become a module specifier merely because it looks
@@ -294,7 +294,7 @@ This direct-file domain does **not** mean that every import is a relative path.
 Other resolver domains remain distinct:
 
 ```protos
-Std: import("std:collections/Array")
+Std: import("std:collections/array")
 ```
 
 Package execution continues to own `self:` and `dep:`. Absolute-file, `file:`,
@@ -655,8 +655,8 @@ The current Protos distribution supplies Standard Library modules through
 specifier spellings such as:
 
 ```protos
-Arrays: import("std:collections/Array")
-Sets: import("std:collections/Set")
+Arrays: import("std:collections/array")
+Sets: import("std:collections/set")
 ```
 
 Those are useful current runnable spellings.
@@ -667,7 +667,7 @@ But the important conceptual boundary is:
 import(...)
     Core ordinary facility
 
-"std:collections/Array"
+"std:collections/array"
     String interpreted by the selected Standard Library resolver
 ```
 
@@ -765,7 +765,7 @@ Direct-file local import:
 Standard Library import:
 
 - [`../../protos/benchmarks/collections/array-map.protos`](../../protos/benchmarks/collections/array-map.protos)
-  imports `std:collections/Array` and invokes the returned module's ordinary
+  imports `std:collections/array` and invokes the returned module's ordinary
   `map` slot.
 
 Package-workspace import:

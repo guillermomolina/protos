@@ -51,7 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * BUG025 closure evidence: the original, unchanged {@code parallel-execution.protos} example runs
  * through the real {@code protos debug} CLI entry and a real GraalVM DAP session under each
- * exception filter. The valid {@code ^index} inside the real {@code std:collections/Array}
+ * exception filter. The valid {@code ^index} inside the real {@code std:collections/array}
  * implementation must never surface as an exception stop. Unrelated stops are recorded with
  * their location and classification and are resumed; their handled-Error classification belongs
  * to PLAT071 and is not asserted here.

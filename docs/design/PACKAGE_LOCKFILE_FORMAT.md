@@ -1284,7 +1284,7 @@ host/JVM crypto shortcut.
 
 F2B3 publishes the canonical `protos-resolution-input-v1` byte stream defined in
 `PACKAGE_VERSION_RESOLUTION.md`, hashes it through reusable
-`std:crypto/SHA256`, lowercase-hex encodes the 32 digest bytes and compares that
+`std:crypto/sha256`, lowercase-hex encodes the 32 digest bytes and compares that
 value with the canonical lock header.
 
 The physical helper is intentionally read-only:

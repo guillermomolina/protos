@@ -17,7 +17,7 @@
 // row-major order. Elements are read with at(row, column); there is no
 // m[row, column] form.
 
-LA: import("std:math/LinearAlgebra")
+LA: import("std:math/linear_algebra")
 Vector: LA.Vector
 Matrix: LA.Matrix
 

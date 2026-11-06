@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -35,9 +36,10 @@ final class ProtosWorkspacePackageModuleResolverBoundaryTest {
     @Test
     void runtimeResolutionUsesTheSameHardMemberBoundaryAsStaticInventory()
             throws Exception {
-        Files.writeString(temporary.resolve("Main.protos"), "value: 1\n");
-        Path memberDirectory = Files.createDirectories(temporary.resolve("libs/member"));
-        Files.writeString(memberDirectory.resolve("Api.protos"), "value: 2\n");
+        Files.createDirectories(temporary.resolve("Main"));
+        Files.writeString(temporary.resolve("Main/module.protos"), "this.value: 1\n");
+        Path memberDirectory = Files.createDirectories(temporary.resolve("libs/member/Api"));
+        Files.writeString(memberDirectory.resolve("module.protos"), "this.value: 2\n");
 
         ProtosPackageExecutionPlan.PackageNode root = node("root", "");
         ProtosPackageExecutionPlan.PackageNode member =
@@ -53,18 +55,23 @@ final class ProtosWorkspacePackageModuleResolverBoundaryTest {
                 new ProtosWorkspacePackageModuleResolver(temporary, plan);
 
         assertEquals(
-                ProtosWorkspacePackageModuleKey.encode("root", "Main"),
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "root", "Main"),
                 resolver.entryModule("Main"));
         assertThrows(
                 IOException.class,
                 () -> resolver.entryModule("libs/member/Api"));
+        assertThrows(
+                IOException.class,
+                () -> resolver.resolve(
+                        "./libs/member/Api/module.protos",
+                        Optional.of(resolver.entryModule("Main"))));
         assertEquals(
-                ProtosWorkspacePackageModuleKey.encode("member-pkg", "Api"),
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "member-pkg", "Api"),
                 resolver.resolve(
                         "self:Api",
                         Optional.of(
                                 ProtosWorkspacePackageModuleKey.encode(
-                                        "member-pkg", "Api"))));
+                                        ProtosModuleKey.Kind.MODULE, "member-pkg", "Api"))));
     }
 
     private static ProtosPackageExecutionPlan.PackageNode node(

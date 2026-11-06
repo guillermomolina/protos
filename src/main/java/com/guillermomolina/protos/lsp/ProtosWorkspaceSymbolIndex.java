@@ -67,7 +67,9 @@ final class ProtosWorkspaceSymbolIndex {
         ArrayList<ProtosWorkspaceSymbolSearch.Candidate> candidates = new ArrayList<>();
         Set<SourceKey> currentSources = new HashSet<>();
         for (ProtosProjectBinding.Source source : binding.sources()) {
-            SourceKey key = new SourceKey(source.packageId(), source.logicalModule(), source.source());
+            SourceKey key = new SourceKey(
+                            source.kind(),
+                            source.packageId(), source.logicalModule(), source.source());
             currentSources.add(key);
             String sourceUri = source.source().toUri().toString();
             Optional<ProtosDocumentSnapshot> overlay = overlayByUri.apply(sourceUri);
@@ -196,8 +198,11 @@ final class ProtosWorkspaceSymbolIndex {
         }
     }
 
-    private record SourceKey(String packageId, String logicalModule, Path source) {
+    private record SourceKey(
+            ProtosProjectBinding.Source.Kind kind,
+            String packageId, String logicalModule, Path source) {
         SourceKey {
+            Objects.requireNonNull(kind, "kind");
             packageId = requireText(packageId, "packageId");
             logicalModule = requireText(logicalModule, "logicalModule");
             source = requireAbsoluteNormalized(source, "source");

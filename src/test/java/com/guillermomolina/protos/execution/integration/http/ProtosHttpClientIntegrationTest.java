@@ -58,7 +58,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * I127 (D218-B, HTTP.md §16): the public {@code std:http/Client} module.
+ * I127 (D218-B, HTTP.md §16): the public {@code std:http/client} module.
  *
  * <p>The first group runs over a native in-memory duplex in a bootstrapped Prelude, so every live
  * Task is attributable: the root Task, the one service Task, and any Task the snippet creates.
@@ -82,8 +82,8 @@ final class ProtosHttpClientIntegrationTest {
 
     private static final String HARNESS_PRELUDE =
             """
-            http: import("std:http/Client")
-            Assertions: import("std:test/Assertions")
+            http: import("std:http/client")
+            Assertions: import("std:test/assertions")
             ascii: (text) => {
                 Encoding.Latin1.encode(text)
             }
@@ -491,9 +491,9 @@ final class ProtosHttpClientIntegrationTest {
      */
     private static final String PROGRAM =
             """
-            http: import("std:http/Client")
-            IpAddress: import("std:network/IpAddresses").IpAddress
-            IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+            http: import("std:http/client")
+            IpAddress: import("std:network/ip_addresses").IpAddress
+            IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
             loopback: IpAddress(4, 2130706433)
             ascii: (text) => {
                 Encoding.Latin1.encode(text)
@@ -709,7 +709,7 @@ final class ProtosHttpClientIntegrationTest {
 
     private static final String WORKER =
             """
-            http: import("std:http/Client")
+            http: import("std:http/client")
             // Performs one in-memory exchange; mark(name) records the stage reached.
             runExchange: (mark) => {
                 response: Encoding.Latin1.encode("HTTP/1.1 200 OK\\r\\nContent-Length: 2\\r\\n\\r\\nok")
@@ -745,7 +745,7 @@ final class ProtosHttpClientIntegrationTest {
                 result: service.value()
                 mark("result")
                 sameInstance: "false"
-                if(import("std:http/Client") === http) {
+                if(import("std:http/client") === http) {
                     sameInstance = "true"
                 }
                 written: "partial"

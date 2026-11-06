@@ -1,0 +1,1261 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Canonical inert command-line specification records.
+
+// Private lexical scope of the two descriptor normalizers. They are captured
+// by `option`, `positional` and `command` below and are not module surface.
+_commandLineNormalizers: (() => {
+    /// Canonicalizes one option descriptor into a fresh frozen OptionSpec record.
+    normalizeOption: (descriptor) => {
+        required: (name) => {
+            descriptor.hasSlot(name).ifFalse(() => {
+                fail()
+            })
+            descriptor.slotValue(name)
+        }
+
+        validateString: (value) => {
+            String.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        validateNonEmptyString: (value) => {
+            validateString(value)
+            if(value == "") {
+                fail()
+            }
+            value
+        }
+
+        validateOptionalString: (value) => {
+            (value === null).ifFalse(() => {
+                validateString(value)
+            })
+            value
+        }
+
+        isAlpha: (octet) => {
+            ((octet >= 65) && (octet <= 90)) ||
+                ((octet >= 97) && (octet <= 122))
+        }
+
+        isDigit: (octet) => {
+            (octet >= 48) && (octet <= 57)
+        }
+
+        validateLongName: (value) => {
+            validateString(value)
+            source: Encoding.UTF8.encode(value)
+            if(source.size() == 0) {
+                fail()
+            }
+            isAlpha(source[0]).ifFalse(() => {
+                fail()
+            })
+            index: 1
+            while(index < source.size()) {
+                octet: source[index]
+                allowed: isAlpha(octet) || isDigit(octet) || (octet == 45)
+                allowed.ifFalse(() => {
+                    fail()
+                })
+                index = index + 1
+            }
+            value
+        }
+
+        validateShortName: (value) => {
+            validateString(value)
+            source: Encoding.UTF8.encode(value)
+            (source.size() == 1).ifFalse(() => {
+                fail()
+            })
+            (isAlpha(source[0]) || isDigit(source[0])).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        validateInteger: (value) => {
+            Integer.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        keyValue: validateNonEmptyString(required("key"))
+        longValue: required("long")
+        shortValue: required("short")
+        minValuesValue: validateInteger(required("minValues"))
+        maxValuesValue: validateInteger(required("maxValues"))
+        minOccurrencesValue: validateInteger(required("minOccurrences"))
+        maxOccurrencesValue: required("maxOccurrences")
+        valueNameValue: validateOptionalString(required("valueName"))
+        helpValue: validateOptionalString(required("help"))
+
+        (longValue === null).ifFalse(() => {
+            validateLongName(longValue)
+        })
+        (shortValue === null).ifFalse(() => {
+            validateShortName(shortValue)
+        })
+        if((longValue === null) && (shortValue === null)) {
+            fail()
+        }
+
+        validValueCardinality: ((minValuesValue == 0) && (maxValuesValue == 0)) ||
+            ((minValuesValue == 1) && (maxValuesValue == 1))
+        validValueCardinality.ifFalse(() => {
+            fail()
+        })
+
+        if(maxValuesValue == 0) {
+            (valueNameValue === null).ifFalse(() => {
+                fail()
+            })
+        }
+
+        if(maxValuesValue == 1) {
+            if(valueNameValue === null) {
+                fail()
+            }
+            validateNonEmptyString(valueNameValue)
+        }
+
+        ((minOccurrencesValue == 0) || (minOccurrencesValue == 1)).ifFalse(() => {
+            fail()
+        })
+        (maxOccurrencesValue === null).ifFalse(() => {
+            validateInteger(maxOccurrencesValue)
+            (maxOccurrencesValue == 1).ifFalse(() => {
+                fail()
+            })
+        })
+
+        canonical: {
+            kind: "option"
+            key: keyValue
+            long: longValue
+            short: shortValue
+            minValues: minValuesValue
+            maxValues: maxValuesValue
+            minOccurrences: minOccurrencesValue
+            maxOccurrences: maxOccurrencesValue
+            valueName: valueNameValue
+            help: helpValue
+        }
+
+        canonical.freeze()
+    }
+
+    /// Canonicalizes one positional descriptor into a fresh frozen PositionalSpec record.
+    normalizePositional: (descriptor) => {
+        required: (name) => {
+            descriptor.hasSlot(name).ifFalse(() => {
+                fail()
+            })
+            descriptor.slotValue(name)
+        }
+
+        validateString: (value) => {
+            String.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        validateNonEmptyString: (value) => {
+            validateString(value)
+            if(value == "") {
+                fail()
+            }
+            value
+        }
+
+        validateOptionalString: (value) => {
+            (value === null).ifFalse(() => {
+                validateString(value)
+            })
+            value
+        }
+
+        validateInteger: (value) => {
+            Integer.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        keyValue: validateNonEmptyString(required("key"))
+        minOccurrencesValue: validateInteger(required("minOccurrences"))
+        maxOccurrencesValue: required("maxOccurrences")
+        valueNameValue: validateNonEmptyString(required("valueName"))
+        helpValue: validateOptionalString(required("help"))
+
+        ((minOccurrencesValue == 0) || (minOccurrencesValue == 1)).ifFalse(() => {
+            fail()
+        })
+        (maxOccurrencesValue === null).ifFalse(() => {
+            validateInteger(maxOccurrencesValue)
+            (maxOccurrencesValue == 1).ifFalse(() => {
+                fail()
+            })
+        })
+
+        canonical: {
+            kind: "positional"
+            key: keyValue
+            minOccurrences: minOccurrencesValue
+            maxOccurrences: maxOccurrencesValue
+            valueName: valueNameValue
+            help: helpValue
+        }
+
+        canonical.freeze()
+    }
+
+    normalizers: {
+        option: normalizeOption
+        positional: normalizePositional
+    }
+    normalizers
+})()
+
+/// Canonicalizes one option, given by its nine required named parameters, into
+/// a fresh frozen OptionSpec record.
+this.option: ((normalizeOption) => {
+    // Private presence identity: D203 binds an omitted parameter without a
+    // default to null, so every required parameter defaults to this identity
+    // and is checked before any value is validated.
+    missing: {}
+
+    (
+        key: missing,
+        long: missing,
+        short: missing,
+        minValues: missing,
+        maxValues: missing,
+        minOccurrences: missing,
+        maxOccurrences: missing,
+        valueName: missing,
+        help: missing
+    ) => {
+        present: (value) => {
+            if(value === missing) {
+                fail()
+            }
+        }
+
+        present(key)
+        present(long)
+        present(short)
+        present(minValues)
+        present(maxValues)
+        present(minOccurrences)
+        present(maxOccurrences)
+        present(valueName)
+        present(help)
+
+        descriptor: {
+            key: key
+            long: long
+            short: short
+            minValues: minValues
+            maxValues: maxValues
+            minOccurrences: minOccurrences
+            maxOccurrences: maxOccurrences
+            valueName: valueName
+            help: help
+        }
+
+        normalizeOption(descriptor)
+    }
+})(_commandLineNormalizers.option)
+
+/// Canonicalizes one positional, given by its five required named parameters,
+/// into a fresh frozen PositionalSpec record.
+this.positional: ((normalizePositional) => {
+    // Private presence identity: D203 binds an omitted parameter without a
+    // default to null, so every required parameter defaults to this identity
+    // and is checked before any value is validated.
+    missing: {}
+
+    (
+        key: missing,
+        minOccurrences: missing,
+        maxOccurrences: missing,
+        valueName: missing,
+        help: missing
+    ) => {
+        present: (value) => {
+            if(value === missing) {
+                fail()
+            }
+        }
+
+        present(key)
+        present(minOccurrences)
+        present(maxOccurrences)
+        present(valueName)
+        present(help)
+
+        descriptor: {
+            key: key
+            minOccurrences: minOccurrences
+            maxOccurrences: maxOccurrences
+            valueName: valueName
+            help: help
+        }
+
+        normalizePositional(descriptor)
+    }
+})(_commandLineNormalizers.positional)
+
+/// Canonicalizes one command descriptor and its complete nested specification graph.
+this.command: ((normalizeOption, normalizePositional) => {
+    (descriptor) => {
+        validateString: (value) => {
+            String.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        validateOptionalString: (value) => {
+            (value === null).ifFalse(() => {
+                validateString(value)
+            })
+            value
+        }
+
+        isAlpha: (octet) => {
+            ((octet >= 65) && (octet <= 90)) ||
+                ((octet >= 97) && (octet <= 122))
+        }
+
+        isDigit: (octet) => {
+            (octet >= 48) && (octet <= 57)
+        }
+
+        validateCommandName: (value) => {
+            validateString(value)
+            source: Encoding.UTF8.encode(value)
+            if(source.size() == 0) {
+                fail()
+            }
+            isAlpha(source[0]).ifFalse(() => {
+                fail()
+            })
+            index: 1
+            while(index < source.size()) {
+                octet: source[index]
+                allowed: isAlpha(octet) || isDigit(octet) || (octet == 45)
+                allowed.ifFalse(() => {
+                    fail()
+                })
+                index = index + 1
+            }
+            value
+        }
+
+        validateArray: (value) => {
+            Array.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        // Active-path identities only: a descriptor leaves `visiting` when its own
+        // canonicalization completes, so completed shared descriptors are reused.
+        visiting: IdentityMap()
+
+        // Validates one command descriptor and canonicalizes its options and
+        // positionals, returning an explicit heap frame suspended before its children.
+        enterCommand: (candidate, parentFrame) => {
+            if(visiting.containsKey(candidate)) {
+                fail()
+            }
+            visiting[candidate] = true
+
+            required: (name) => {
+                candidate.hasSlot(name).ifFalse(() => {
+                    fail()
+                })
+                candidate.slotValue(name)
+            }
+
+            nameValue: validateCommandName(required("name"))
+            helpValue: validateOptionalString(required("help"))
+            optionDescriptors: validateArray(required("options"))
+            positionalDescriptors: validateArray(required("positionals"))
+            subcommandDescriptors: validateArray(required("subcommands"))
+
+            canonicalOptions: Array(...optionDescriptors)
+            optionKeys: Map()
+            longNames: Map()
+            shortNames: Map()
+
+            optionIndex: 0
+            for(entry in optionDescriptors) {
+                spec: normalizeOption(entry)
+
+                if(optionKeys.containsKey(spec.key)) {
+                    fail()
+                }
+                optionKeys[spec.key] = true
+
+                (spec.long === null).ifFalse(() => {
+                    if(longNames.containsKey(spec.long)) {
+                        fail()
+                    }
+                    longNames[spec.long] = true
+                })
+
+                (spec.short === null).ifFalse(() => {
+                    if(shortNames.containsKey(spec.short)) {
+                        fail()
+                    }
+                    shortNames[spec.short] = true
+                })
+
+                canonicalOptions[optionIndex] = spec
+                optionIndex = optionIndex + 1
+            }
+            canonicalOptions.freeze()
+
+            canonicalPositionals: Array(...positionalDescriptors)
+            positionalKeys: Map()
+            positionalIndex: 0
+            for(entry in positionalDescriptors) {
+                spec: normalizePositional(entry)
+
+                if(positionalKeys.containsKey(spec.key)) {
+                    fail()
+                }
+                positionalKeys[spec.key] = true
+
+                if(spec.maxOccurrences === null) {
+                    ((positionalIndex + 1) == positionalDescriptors.size()).ifFalse(() => {
+                        fail()
+                    })
+                }
+
+                canonicalPositionals[positionalIndex] = spec
+                positionalIndex = positionalIndex + 1
+            }
+            canonicalPositionals.freeze()
+
+            suspended: {
+                parent: parentFrame
+                candidate: candidate
+                name: nameValue
+                help: helpValue
+                options: canonicalOptions
+                positionals: canonicalPositionals
+                subcommandDescriptors: subcommandDescriptors
+                subcommands: Array(...subcommandDescriptors)
+                subcommandNames: Map()
+                childIndex: 0
+            }
+            suspended
+        }
+
+        // Completes a frame whose children are all canonicalized.
+        exitCommand: (frame) => {
+            frame.subcommands.freeze()
+
+            visiting.remove(frame.candidate)
+
+            canonical: {
+                kind: "command"
+                name: frame.name
+                help: frame.help
+                options: frame.options
+                positionals: frame.positionals
+                subcommands: frame.subcommands
+            }
+
+            canonical.freeze()
+        }
+
+        // Depth-first traversal over explicit linked frames keeps execution-stack
+        // depth independent of command depth. Each child is canonicalized completely
+        // before its parent's duplicate-name check, registration and storage.
+        frame: enterCommand(descriptor, null)
+        result: null
+        while(result === null) {
+            if(frame.childIndex < frame.subcommandDescriptors.size()) {
+                frame = enterCommand(frame.subcommandDescriptors[frame.childIndex], frame)
+            } else {
+                spec: exitCommand(frame)
+                parentFrame: frame.parent
+                if(parentFrame === null) {
+                    result = spec
+                } else {
+                    if(parentFrame.subcommandNames.containsKey(spec.name)) {
+                        fail()
+                    }
+                    parentFrame.subcommandNames[spec.name] = true
+
+                    parentFrame.subcommands[parentFrame.childIndex] = spec
+                    parentFrame.childIndex = parentFrame.childIndex + 1
+                    frame = parentFrame
+                }
+            }
+        }
+        result
+    }
+})(_commandLineNormalizers.option, _commandLineNormalizers.positional)
+
+// The normalizers are captured privately above; they are not module surface.
+context.removeSlot("_commandLineNormalizers")
+
+/// Parses a canonical CommandSpec tree into a fresh frozen lossless result.
+///
+/// Traversal follows D115 Candidate C-prime: the earliest feasible exact-child
+/// boundary, parent-minimum reservation, current-scope `--` escape and
+/// irreversible child scope transfer.
+this.parse: ((arrayBuilderFactory) => {
+    (specification, suppliedArguments) => {
+        validateArray: (value) => {
+            Array.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        validateString: (value) => {
+            String.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        specification.hasSlot("kind").ifFalse(() => {
+            fail()
+        })
+        (specification.slotValue("kind") == "command").ifFalse(() => {
+            fail()
+        })
+
+        spec: specification
+
+        validateArray(suppliedArguments)
+        for(entry in suppliedArguments) {
+            validateString(entry)
+        }
+
+        arguments: Array(...suppliedArguments)
+        arguments.freeze()
+
+        newBuilder: () => {
+            arrayBuilderFactory()
+        }
+
+        appendBuilt: (builder, value) => {
+            builder.append(value)
+        }
+
+        finishBuilder: (builder) => {
+            builder.finish()
+        }
+
+        decodeRange: (source, start, end) => {
+            buffer: Encoding.UTF8.encode("")
+            cursor: start
+            while(cursor < end) {
+                buffer.add(source[cursor])
+                cursor = cursor + 1
+            }
+            Encoding.UTF8.decode(buffer)
+        }
+
+        isAsciiLetter: (octet) => {
+            ((octet >= 65) && (octet <= 90)) ||
+                ((octet >= 97) && (octet <= 122))
+        }
+
+        isAsciiDigit: (octet) => {
+            (octet >= 48) && (octet <= 57)
+        }
+
+        isShortOctet: (octet) => {
+            isAsciiLetter(octet) || isAsciiDigit(octet)
+        }
+
+        allocatePositionals: (scopeSpec, rawPositionals) => {
+            requiredPositionals: 0
+            for(positionalSpec in scopeSpec.positionals) {
+                requiredPositionals =
+                    requiredPositionals + positionalSpec.minOccurrences
+            }
+
+            if(rawPositionals.size() < requiredPositionals) {
+                fail()
+            }
+
+            positionalBuilder: newBuilder()
+            rawIndex: 0
+            laterMinimum: requiredPositionals
+
+            for(positionalSpec in scopeSpec.positionals) {
+                laterMinimum =
+                    laterMinimum - positionalSpec.minOccurrences
+
+                remaining: rawPositionals.size() - rawIndex
+                consume: 0
+
+                if(positionalSpec.maxOccurrences === null) {
+                    consume = remaining
+                }
+
+                (positionalSpec.maxOccurrences === null).ifFalse(() => {
+                    if(positionalSpec.minOccurrences == 1) {
+                        consume = 1
+                    }
+
+                    if(positionalSpec.minOccurrences == 0) {
+                        if(remaining > laterMinimum) {
+                            consume = 1
+                        }
+                    }
+                })
+
+                if(consume < positionalSpec.minOccurrences) {
+                    fail()
+                }
+
+                consumed: 0
+                while(consumed < consume) {
+                    raw: rawPositionals[rawIndex]
+                    occurrence: {
+                        kind: "positionalOccurrence"
+                        key: positionalSpec.key
+                        value: raw.value
+                        tokenIndex: raw.tokenIndex
+                    }
+                    occurrence.freeze()
+                    appendBuilt(positionalBuilder, occurrence)
+
+                    rawIndex = rawIndex + 1
+                    consumed = consumed + 1
+                }
+            }
+
+            (rawIndex == rawPositionals.size()).ifFalse(() => {
+                fail()
+            })
+
+            result: finishBuilder(positionalBuilder)
+            result.freeze()
+        }
+
+        parseScope: null
+        parseScope = (scopeSpec, startIndex, commandTokenIndex) => {
+            scopeSpec.hasSlot("kind").ifFalse(() => {
+                fail()
+            })
+            (scopeSpec.slotValue("kind") == "command").ifFalse(() => {
+                fail()
+            })
+
+            validateArray(scopeSpec.options)
+            validateArray(scopeSpec.positionals)
+            validateArray(scopeSpec.subcommands)
+
+            longOptions: Map()
+            shortOptions: Map()
+            occurrenceCounts: Map()
+
+            for(optionSpec in scopeSpec.options) {
+                occurrenceCounts[optionSpec.key] = 0
+
+                (optionSpec.long === null).ifFalse(() => {
+                    longOptions[optionSpec.long] = optionSpec
+                })
+
+                (optionSpec.short === null).ifFalse(() => {
+                    shortOptions[optionSpec.short] = optionSpec
+                })
+            }
+
+            childSpecs: Map()
+            for(childSpec in scopeSpec.subcommands) {
+                childSpecs[childSpec.name] = childSpec
+            }
+
+            requiredPositionals: 0
+            boundedMaximumPositionals: 0
+            unboundedPositionals: false
+
+            for(positionalSpec in scopeSpec.positionals) {
+                requiredPositionals =
+                    requiredPositionals + positionalSpec.minOccurrences
+
+                if(positionalSpec.maxOccurrences === null) {
+                    unboundedPositionals = true
+                }
+
+                (positionalSpec.maxOccurrences === null).ifFalse(() => {
+                    boundedMaximumPositionals =
+                        boundedMaximumPositionals +
+                        positionalSpec.maxOccurrences
+                })
+            }
+
+            optionBuilder: newBuilder()
+            rawPositionalBuilder: newBuilder()
+            rawPositionalCount: 0
+
+            recordOption: (
+                optionSpec,
+                spelling,
+                tokenIndex,
+                value,
+                valueTokenIndex
+            ) => {
+                count: occurrenceCounts[optionSpec.key]
+
+                (optionSpec.maxOccurrences === null).ifFalse(() => {
+                    if(count >= optionSpec.maxOccurrences) {
+                        fail()
+                    }
+                })
+
+                occurrenceCounts[optionSpec.key] = count + 1
+
+                occurrence: {
+                    kind: "optionOccurrence"
+                    key: optionSpec.key
+                    spelling: spelling
+                    tokenIndex: tokenIndex
+                    value: value
+                    valueTokenIndex: valueTokenIndex
+                }
+                occurrence.freeze()
+                appendBuilt(optionBuilder, occurrence)
+            }
+
+            recordRawPositional: (value, tokenIndex) => {
+                appendBuilt(
+                    rawPositionalBuilder,
+                    {
+                        value: value
+                        tokenIndex: tokenIndex
+                    }
+                )
+                rawPositionalCount = rawPositionalCount + 1
+            }
+
+            positionalPrefixFeasible: () => {
+                feasible: rawPositionalCount >= requiredPositionals
+
+                if((feasible) && (unboundedPositionals == false)) {
+                    if(rawPositionalCount > boundedMaximumPositionals) {
+                        feasible = false
+                    }
+                }
+
+                feasible
+            }
+
+            scanIndex: startIndex
+            optionsEnabled: true
+            endOfOptionsIndex: null
+            selectedChild: null
+            selectedChildIndex: null
+
+            while(
+                (scanIndex < arguments.size()) &&
+                (selectedChild === null)
+            ) {
+                token: arguments[scanIndex]
+                source: Encoding.UTF8.encode(token)
+                advance: 1
+                handled: false
+
+                if(optionsEnabled) {
+                    if(token == "--") {
+                        endOfOptionsIndex = scanIndex
+                        optionsEnabled = false
+                        handled = true
+                    }
+
+                    handled.ifFalse(() => {
+                        optionLike: false
+                        if(source.size() > 0) {
+                            if(source[0] == 45) {
+                                optionLike = true
+                            }
+                        }
+
+                        if(optionLike) {
+                            if(source.size() == 1) {
+                                fail()
+                            }
+
+                            longForm: source[1] == 45
+
+                            if(longForm) {
+                                equalsIndex: -1
+                                cursor: 2
+                                while(cursor < source.size()) {
+                                    if(
+                                        (equalsIndex < 0) &&
+                                        (source[cursor] == 61)
+                                    ) {
+                                        equalsIndex = cursor
+                                    }
+                                    cursor = cursor + 1
+                                }
+
+                                nameEnd: source.size()
+                                if(equalsIndex >= 0) {
+                                    nameEnd = equalsIndex
+                                }
+
+                                longName: decodeRange(source, 2, nameEnd)
+                                longOptions.containsKey(longName).ifFalse(() => {
+                                    fail()
+                                })
+
+                                optionSpec: longOptions[longName]
+                                spelling: "--" + optionSpec.long
+
+                                if(equalsIndex >= 0) {
+                                    (optionSpec.maxValues == 1).ifFalse(() => {
+                                        fail()
+                                    })
+
+                                    value: decodeRange(
+                                        source,
+                                        equalsIndex + 1,
+                                        source.size()
+                                    )
+                                    recordOption(
+                                        optionSpec,
+                                        spelling,
+                                        scanIndex,
+                                        value,
+                                        scanIndex
+                                    )
+                                }
+
+                                (equalsIndex >= 0).ifFalse(() => {
+                                    if(optionSpec.maxValues == 1) {
+                                        if(
+                                            (scanIndex + 1) >= arguments.size()
+                                        ) {
+                                            fail()
+                                        }
+
+                                        recordOption(
+                                            optionSpec,
+                                            spelling,
+                                            scanIndex,
+                                            arguments[scanIndex + 1],
+                                            scanIndex + 1
+                                        )
+                                        advance = 2
+                                    }
+
+                                    (optionSpec.maxValues == 1).ifFalse(() => {
+                                        recordOption(
+                                            optionSpec,
+                                            spelling,
+                                            scanIndex,
+                                            null,
+                                            null
+                                        )
+                                    })
+                                })
+
+                                handled = true
+                            }
+
+                            longForm.ifFalse(() => {
+                                memberCount: source.size() - 1
+                                cursor: 1
+
+                                while(cursor < source.size()) {
+                                    octet: source[cursor]
+                                    isShortOctet(octet).ifFalse(() => {
+                                        fail()
+                                    })
+
+                                    shortName: decodeRange(
+                                        source,
+                                        cursor,
+                                        cursor + 1
+                                    )
+                                    shortOptions.containsKey(shortName).ifFalse(() => {
+                                        fail()
+                                    })
+
+                                    optionSpec: shortOptions[shortName]
+                                    spelling: "-" + optionSpec.short
+
+                                    if(memberCount > 1) {
+                                        (optionSpec.maxValues == 0).ifFalse(() => {
+                                            fail()
+                                        })
+                                        recordOption(
+                                            optionSpec,
+                                            spelling,
+                                            scanIndex,
+                                            null,
+                                            null
+                                        )
+                                    }
+
+                                    if(memberCount == 1) {
+                                        if(optionSpec.maxValues == 1) {
+                                            if(
+                                                (scanIndex + 1) >= arguments.size()
+                                            ) {
+                                                fail()
+                                            }
+
+                                            recordOption(
+                                                optionSpec,
+                                                spelling,
+                                                scanIndex,
+                                                arguments[scanIndex + 1],
+                                                scanIndex + 1
+                                            )
+                                            advance = 2
+                                        }
+
+                                        (optionSpec.maxValues == 1).ifFalse(() => {
+                                            recordOption(
+                                                optionSpec,
+                                                spelling,
+                                                scanIndex,
+                                                null,
+                                                null
+                                            )
+                                        })
+                                    }
+
+                                    cursor = cursor + 1
+                                }
+
+                                handled = true
+                            })
+                        }
+
+                        optionLike.ifFalse(() => {
+                            if(childSpecs.containsKey(token)) {
+                                if(positionalPrefixFeasible()) {
+                                    selectedChild = childSpecs[token]
+                                    selectedChildIndex = scanIndex
+                                    handled = true
+                                }
+                            }
+                        })
+                    })
+                }
+
+                handled.ifFalse(() => {
+                    recordRawPositional(token, scanIndex)
+                })
+
+                scanIndex = scanIndex + advance
+            }
+
+            for(optionSpec in scopeSpec.options) {
+                if(
+                    occurrenceCounts[optionSpec.key] <
+                    optionSpec.minOccurrences
+                ) {
+                    fail()
+                }
+            }
+
+            rawPositionals: finishBuilder(rawPositionalBuilder)
+            positionalOccurrences:
+                allocatePositionals(scopeSpec, rawPositionals)
+
+            optionOccurrences: finishBuilder(optionBuilder)
+            optionOccurrences.freeze()
+
+            childResult: null
+            (selectedChild === null).ifFalse(() => {
+                childResult = parseScope(
+                    selectedChild,
+                    scanIndex,
+                    selectedChildIndex
+                )
+            })
+
+            commandResult: {
+                kind: "commandResult"
+                name: scopeSpec.name
+                tokenIndex: commandTokenIndex
+                endOfOptionsIndex: endOfOptionsIndex
+                options: optionOccurrences
+                positionals: positionalOccurrences
+                subcommand: childResult
+            }
+            commandResult.freeze()
+        }
+
+        commandResult: parseScope(spec, 0, null)
+
+        result: {
+            kind: "parseResult"
+            arguments: arguments
+            command: commandResult
+        }
+        result.freeze()
+    }
+})(_commandLineArrayBuilderFactory)
+
+// The runtime-provisioned factory is captured privately above; it is not module surface.
+context.removeSlot("_commandLineArrayBuilderFactory")
+
+/// Renders canonical pure help for one exact command path.
+///
+/// D118 Candidate F-prime fixes deterministic unwrapped plain text with explicit
+/// path context and no terminal/output authority. D119 Candidate A-prime ensures
+/// every value-bearing canonical specification already carries a non-empty
+/// presentation valueName.
+this.renderHelp: (rootSpec, commandPath) => {
+    validateArray: (value) => {
+        Array.recognizes(value).ifFalse(() => {
+            fail()
+        })
+        value
+    }
+
+    validateString: (value) => {
+        String.recognizes(value).ifFalse(() => {
+            fail()
+        })
+        value
+    }
+
+    rootSpec.hasSlot("kind").ifFalse(() => {
+        fail()
+    })
+    (rootSpec.slotValue("kind") == "command").ifFalse(() => {
+        fail()
+    })
+
+    validateArray(commandPath)
+
+    selectedSpec: rootSpec
+    for(segment in commandPath) {
+        validateString(segment)
+
+        selectedChild: null
+        for(childSpec in selectedSpec.subcommands) {
+            if(
+                (selectedChild === null) &&
+                (childSpec.name == segment)
+            ) {
+                selectedChild = childSpec
+            }
+        }
+
+        if(selectedChild === null) {
+            fail()
+        }
+
+        selectedSpec = selectedChild
+    }
+
+    output: Encoding.UTF8.encode("")
+
+    appendText: (text) => {
+        source: Encoding.UTF8.encode(text)
+        index: 0
+        while(index < source.size()) {
+            output.add(source[index])
+            index = index + 1
+        }
+    }
+
+    optionUsageTerm: (optionSpec) => {
+        spelling: ""
+        (optionSpec.long === null).ifFalse(() => {
+            spelling = "--" + optionSpec.long
+        })
+        if(optionSpec.long === null) {
+            spelling = "-" + optionSpec.short
+        }
+
+        if(optionSpec.maxValues == 1) {
+            spelling = spelling + " " + optionSpec.valueName
+        }
+
+        spelling
+    }
+
+    positionalTerm: (positionalSpec) => {
+        rendered: positionalSpec.valueName
+
+        if(
+            (positionalSpec.minOccurrences == 0) &&
+            (positionalSpec.maxOccurrences == 1)
+        ) {
+            rendered = "[" + positionalSpec.valueName + "]"
+        }
+
+        if(
+            (positionalSpec.minOccurrences == 0) &&
+            (positionalSpec.maxOccurrences === null)
+        ) {
+            rendered = "[" + positionalSpec.valueName + "]..."
+        }
+
+        if(
+            (positionalSpec.minOccurrences == 1) &&
+            (positionalSpec.maxOccurrences === null)
+        ) {
+            rendered =
+                positionalSpec.valueName +
+                " [" + positionalSpec.valueName + "]..."
+        }
+
+        rendered
+    }
+
+    optionEntry: (optionSpec) => {
+        rendered: ""
+
+        (optionSpec.short === null).ifFalse(() => {
+            rendered = "-" + optionSpec.short
+        })
+
+        (optionSpec.long === null).ifFalse(() => {
+            (rendered == "").ifFalse(() => {
+                rendered = rendered + ", "
+            })
+            rendered = rendered + "--" + optionSpec.long
+        })
+
+        if(optionSpec.maxValues == 1) {
+            rendered = rendered + " " + optionSpec.valueName
+        }
+
+        if(
+            (optionSpec.minOccurrences == 1) &&
+            (optionSpec.maxOccurrences == 1)
+        ) {
+            rendered = rendered + " (required)"
+        }
+
+        if(
+            (optionSpec.minOccurrences == 0) &&
+            (optionSpec.maxOccurrences === null)
+        ) {
+            rendered = rendered + " (repeatable)"
+        }
+
+        if(
+            (optionSpec.minOccurrences == 1) &&
+            (optionSpec.maxOccurrences === null)
+        ) {
+            rendered = rendered + " (required, repeatable)"
+        }
+
+        rendered
+    }
+
+    appendDescription: (helpText) => {
+        (helpText === null).ifFalse(() => {
+            appendText("\n    ")
+            appendText(helpText)
+        })
+    }
+
+    appendText("Usage: ")
+    appendText(rootSpec.name)
+
+    for(segment in commandPath) {
+        appendText(" ")
+        appendText(segment)
+    }
+
+    hasOptionalOptions: false
+    for(optionSpec in selectedSpec.options) {
+        if(optionSpec.minOccurrences == 0) {
+            hasOptionalOptions = true
+        }
+
+        if(optionSpec.minOccurrences == 1) {
+            term: optionUsageTerm(optionSpec)
+            appendText(" ")
+            appendText(term)
+
+            if(optionSpec.maxOccurrences === null) {
+                appendText(" [")
+                appendText(term)
+                appendText("]...")
+            }
+        }
+    }
+
+    if(hasOptionalOptions) {
+        appendText(" [OPTIONS]")
+    }
+
+    for(positionalSpec in selectedSpec.positionals) {
+        appendText(" ")
+        appendText(positionalTerm(positionalSpec))
+    }
+
+    if(selectedSpec.subcommands.size() > 0) {
+        appendText(" [COMMAND]")
+    }
+
+    (selectedSpec.help === null).ifFalse(() => {
+        appendText("\n\n")
+        appendText(selectedSpec.help)
+    })
+
+    if(selectedSpec.positionals.size() > 0) {
+        appendText("\n\nArguments:")
+        for(positionalSpec in selectedSpec.positionals) {
+            appendText("\n  ")
+            appendText(positionalTerm(positionalSpec))
+            appendDescription(positionalSpec.help)
+        }
+    }
+
+    if(selectedSpec.options.size() > 0) {
+        appendText("\n\nOptions:")
+        for(optionSpec in selectedSpec.options) {
+            appendText("\n  ")
+            appendText(optionEntry(optionSpec))
+            appendDescription(optionSpec.help)
+        }
+    }
+
+    if(selectedSpec.subcommands.size() > 0) {
+        appendText("\n\nCommands:")
+        for(childSpec in selectedSpec.subcommands) {
+            appendText("\n  ")
+            appendText(childSpec.name)
+            appendDescription(childSpec.help)
+        }
+    }
+
+    Encoding.UTF8.decode(output)
+}

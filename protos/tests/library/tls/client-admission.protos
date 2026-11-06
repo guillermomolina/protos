@@ -14,13 +14,13 @@
 // the specific language governing rights and limitations under the License.
 
 // I130-B (D220–S12, TLS.md §§2, 3, 4, 6): module surface, Trust construction,
-// named-option and reference-identity admission of std:tls/Client. No TLS octet is
+// named-option and reference-identity admission of std:tls/client. No TLS octet is
 // exchanged here; every inadmissible call must leave the duplex untouched.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-tls: import("std:tls/Client")
-IpAddresses: import("std:network/IpAddresses")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+tls: import("std:tls/client")
+IpAddresses: import("std:network/ip_addresses")
 
 // Bytes from lowercase hexadecimal text.
 hexBytes: (text) => {
@@ -173,7 +173,7 @@ tests: [
         Assertions.require(tls.TlsError.parent() === Error)
     }),
     Test("repeated import answers the same Actor-local module instance", () => {
-        Assertions.require(import("std:tls/Client") === tls)
+        Assertions.require(import("std:tls/client") === tls)
     }),
     Test("Trust constructors answer fresh descriptors without slots", () => {
         first: tls.Trust.javaCacerts()

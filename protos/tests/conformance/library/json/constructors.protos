@@ -15,13 +15,13 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("array object shape order", () => {
         tool009LegacyCase: () => {
-            JSON: import("std:json/JSON")
+            JSON: import("std:json/json")
 
             one: JSON.number(1, 0)
             arrayNode: JSON.array(one, JSON.string("x"), JSON.nullValue())
@@ -60,7 +60,7 @@ tests: [
     }),
     Test("constructors basic", () => {
         tool009LegacyCase: () => {
-            JSON: import("std:json/JSON")
+            JSON: import("std:json/json")
 
             nullA: JSON.nullValue()
             nullB: JSON.nullValue()
@@ -91,7 +91,7 @@ tests: [
     }),
     Test("number exact decimal", () => {
         tool009LegacyCase: () => {
-            JSON: import("std:json/JSON")
+            JSON: import("std:json/json")
 
             a: JSON.number(123, -2)
             b: JSON.number(10, -1)

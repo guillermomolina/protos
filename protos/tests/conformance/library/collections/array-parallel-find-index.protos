@@ -15,9 +15,9 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
-Arrays: import("std:collections/Array")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Arrays: import("std:collections/array")
 
 tests: Array(
     Test("array parallel find index lowest match", () => {

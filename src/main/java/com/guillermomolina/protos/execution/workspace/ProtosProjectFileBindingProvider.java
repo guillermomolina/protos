@@ -141,6 +141,7 @@ public final class ProtosProjectFileBindingProvider implements ProtosProjectBind
         for (ProtosWorkspacePackageSourceInventory.Source source : inventory) {
             sources.add(
                     new ProtosProjectBinding.Source(
+                            ProtosProjectBinding.Source.Kind.valueOf(source.kind().name()),
                             source.packageId(), source.logicalModule(), source.source()));
         }
 

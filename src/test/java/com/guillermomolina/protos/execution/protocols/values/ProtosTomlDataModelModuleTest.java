@@ -43,7 +43,7 @@ final class ProtosTomlDataModelModuleTest {
 
         Object imported =
                 ProtosTestExecutionSupport.evaluate(
-                        "import(\"std:toml/TOML\")",
+                        "import(\"std:toml/toml\")",
                         prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
@@ -78,13 +78,13 @@ final class ProtosTomlDataModelModuleTest {
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
-                                "import(\"std:toml/TOML\")",
+                                "import(\"std:toml/toml\")",
                                 actorA));
         ProtosObjectValue moduleB =
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
-                                "import(\"std:toml/TOML\")",
+                                "import(\"std:toml/toml\")",
                                 actorB));
 
         assertNotSame(moduleA, moduleB);
@@ -97,7 +97,7 @@ final class ProtosTomlDataModelModuleTest {
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
                                 """
-                                TOML: import("std:toml/TOML")
+                                TOML: import("std:toml/toml")
                                 TOML.table(
                                     "when",
                                     TOML.offsetDateTime(

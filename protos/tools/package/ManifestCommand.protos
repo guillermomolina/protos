@@ -13,7 +13,7 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Schema: import("self:ManifestSchemaV1")
+Schema: import("./ManifestSchemaV1.protos")
 
 readText: (projectFilesystem) => {
     file: projectFilesystem.open(Path.relative().child("protos.toml")).value()

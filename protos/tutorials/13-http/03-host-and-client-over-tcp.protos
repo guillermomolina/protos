@@ -18,10 +18,10 @@
 // The standalone CLI grants no Network, so a Java Polyglot embedding with
 // socket access runs it; the program answers true when every step succeeded.
 
-Host: import("std:http/Host").Host
-Client: import("std:http/Client").Client
-IpAddress: import("std:network/IpAddresses").IpAddress
-IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+Host: import("std:http/host").Host
+Client: import("std:http/client").Client
+IpAddress: import("std:network/ip_addresses").IpAddress
+IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
 
 loopback: IpAddress(4, 2130706433)    // 127.0.0.1
 

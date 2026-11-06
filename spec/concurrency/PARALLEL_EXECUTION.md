@@ -347,7 +347,7 @@ algorithm selector, and no compatibility alias for such a selector exists.
 Invoking one through ordinary lookup on a standard Array therefore follows the
 ordinary missing-slot rules.
 
-The Standard Library module `std:collections/Array` provides parallel Array
+The Standard Library module `std:collections/array` provides parallel Array
 algorithms as ordinary module functions. They are Standard Library policy, not
 Core semantics: they are composed only from the public substrate defined by this
 document and `FUTURES_AND_TASKS.md` (`Closure.parallel(...)`, Future observation,
@@ -402,7 +402,7 @@ channel merely because work is eligible to run simultaneously.
 Consequently, a generic parallel iteration operation would have no additional
 standard publication channel beyond the per-invocation P result/failure boundary
 already available through `Closure.parallel(...)` and through result-producing
-library algorithms such as the `std:collections/Array` parallel map. Discarding
+library algorithms such as the `std:collections/array` parallel map. Discarding
 those normal results would remove information without adding a new semantic
 capability. A caller may ignore a successfully resolved result when its values
 are not needed.

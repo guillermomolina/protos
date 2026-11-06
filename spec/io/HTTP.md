@@ -5,22 +5,22 @@ Status: Draft
 Last updated: 2026-10-30
 
 This document is the primary normative owner of the Standard Library HTTP/1.1
-single-request origin-server facility `std:http/Server` selected by D215
+single-request origin-server facility `std:http/server` selected by D215
 (D215-F3–F8: Option A, A3-minimal, Q0, F3 = M1, F4 = H1, F5 = B1, F6 = L1,
 F7 = W1, F8 = S1), of the separate optional continuous-hosting facility
-`std:http/Host` selected by D216 and extended by D225-A, and of the separate
-optional single-exchange client facility `std:http/Client` selected by D218-B.
+`std:http/host` selected by D216 and extended by D225-A, and of the separate
+optional single-exchange client facility `std:http/client` selected by D218-B.
 It therefore owns three independent Standard Library facilities:
 
-- `std:http/Server` — D215, §§1–13;
-- `std:http/Host` — D216, §15, with the Worker-local handler factory of
+- `std:http/server` — D215, §§1–13;
+- `std:http/host` — D216, §15, with the Worker-local handler factory of
   D225-A in §15.13; and
-- `std:http/Client` — D218-B, §16.
+- `std:http/client` — D218-B, §16.
 
 It also owns two optional composition modules selected by D222-C:
 
-- `std:http/Router` — authority-free request routing, §17; and
-- `std:http/UrlClient` — explicit-authority one-shot URL requests, §18.
+- `std:http/router` — authority-free request routing, §17; and
+- `std:http/url_client` — explicit-authority one-shot URL requests, §18.
 
 D216 does not revise D215. D218-B revises none of D215, D216 or D217. D225-A
 adds one `Host` construction operation and revises no other D215, D216 or
@@ -42,12 +42,12 @@ those RFCs, this document governs.
 
 ## 1. Scope and governing model
 
-`std:http/Server` processes exactly one HTTP/1.1 request on a caller-supplied
+`std:http/server` processes exactly one HTTP/1.1 request on a caller-supplied
 duplex byte flow, produces exactly one final response, and retires its HTTP
 session. §§1–13 describe that single-request facility; §15 separately defines
-optional continuous hosting without changing any `std:http/Server` behavior;
+optional continuous hosting without changing any `std:http/server` behavior;
 §16 separately defines the optional single-exchange client without changing
-any `std:http/Server` or `std:http/Host` behavior.
+any `std:http/server` or `std:http/host` behavior.
 
 The single-request facility:
 
@@ -68,17 +68,17 @@ service Task of that Actor (§2.3). Admission control, connection concurrency,
 and the number of concurrently served connections are application
 responsibilities; the library defines no global connection or Task limit.
 
-A program that does not import `std:http/Server` pays no conceptual or runtime
+A program that does not import `std:http/server` pays no conceptual or runtime
 cost for this facility.
 
 ## 2. Module and entry points
 
-The explicit Standard Library module `std:http/Server` exports the members
+The explicit Standard Library module `std:http/server` exports the members
 `Server` and `HttpError`. They are reachable only through an explicit import,
 for example:
 
 ```text
-http: import("std:http/Server")
+http: import("std:http/server")
 Server: http.Server
 HttpError: http.HttpError
 ```
@@ -93,7 +93,7 @@ Server.serveOne.owning(duplex, handler, limits)  -> Future<null>
 ```
 
 The naming follows the existing borrow/own factory convention of
-`std:io/BufferedReader` and `std:io/BufferedWriter` (`IO_CORE.md` §9).
+`std:io/buffered_reader` and `std:io/buffered_writer` (`IO_CORE.md` §9).
 
 ### 2.1 Duplex admission
 
@@ -773,7 +773,7 @@ with implicit host timers or ambient host authority.
 
 ### 12.1 `HttpError`
 
-`std:http/Server.HttpError` is an ordinary prototype whose immediate
+`std:http/server.HttpError` is an ordinary prototype whose immediate
 delegation parent is `Error`. It is a module member, not a Prelude binding and
 not a Core error mechanism (`../semantics/ERRORS.md`, "Core Error Taxonomy").
 
@@ -1065,7 +1065,7 @@ contract and require separate explicit design:
 ## 15. Continuous HTTP/1.1 hosting (D216)
 
 D216 selects a distinct, opt-in Standard Library facility above the unchanged
-single-request `std:http/Server`. This section is the sole normative owner of
+single-request `std:http/server`. This section is the sole normative owner of
 its HTTP-hosting-specific public contract. Its network, Actor, Future, Task and
 resource obligations compose with `NETWORK.md`, `IO_CORE.md`, `BYTE_IO.md`,
 `../concurrency/ACTORS.md` and
@@ -1074,7 +1074,7 @@ for any of those domains.
 
 ### 15.1 Module and complete portable public surface (D216-1)
 
-The explicit module `std:http/Host` exports `Host` and `HostError`. There is no
+The explicit module `std:http/host` exports `Host` and `HostError`. There is no
 Prelude binding, ambient HTTP server, or implicit import. Its portable public
 operations are:
 
@@ -1382,7 +1382,7 @@ listener placement are not introduced.
 ### 15.12 Opt-in implementation and exclusions (D216-12)
 
 The intended Standard Library implementation is primarily Protos:
-`protos/lib/http/Host.protos` owns the public facility;
+`protos/lib/http/host/module.protos` owns the public facility;
 `protos/lib/http/internal/HostConfig.protos` validates configuration;
 `HostLifecycle.protos` coordinates readiness, shutdown and failures;
 `HostWorker.protos` owns Actor bootstrap and acceptance loops; and
@@ -1399,7 +1399,7 @@ frameworks, authentication, `TcpConnection` transfer, cross-Process
 and non-portable timer/deadline facilities. Trusted/protected ingress and
 explicit bounded admission remain prerequisites for practical deployment;
 an indefinitely slow admitted client may indefinitely occupy its quota
-and delay drain. Importing neither `std:http/Host` nor `std:http/Server`
+and delay drain. Importing neither `std:http/host` nor `std:http/server`
 creates no hosting Workers, listening authority, global state, or runtime
 cost.
 
@@ -1538,10 +1538,10 @@ where this section does not state a stricter rule.
 
 ### 16.1 Independent module and exports
 
-The explicit module `std:http/Client` exports exactly `Client` and
+The explicit module `std:http/client` exports exactly `Client` and
 `ClientError`. There is no Prelude binding and no implicit import. Importing
-`std:http/Client` does not import, initialize or require `std:http/Server` or
-`std:http/Host`, and importing either of those does not make `Client`
+`std:http/client` does not import, initialize or require `std:http/server` or
+`std:http/host`, and importing either of those does not make `Client`
 available. Each Actor that imports the module obtains its own module instance
 under `../semantics/MODULES.md`; no exchange state is shared between module
 instances or Actors.
@@ -1599,7 +1599,7 @@ not acquire a `Network` capability, resolve names, open TCP connections,
 establish TLS, interpret URLs, create Actors, or use clocks or timers. The
 application obtains the duplex, for example by an explicit
 `network.connectTcp(...)` under `NETWORK.md`, and passes the resulting
-connection, or the secure duplex delivered for it by `std:tls/Client`
+connection, or the secure duplex delivered for it by `std:tls/client`
 (`TLS.md` §12), unchanged.
 
 `exchangeOne` borrows `duplex`: it never invokes `close`, `shutdownRead` or
@@ -1945,7 +1945,7 @@ proxies and CONNECT, request-body streaming, `Expect: 100-continue`,
 `Upgrade`, HTTP/2 and HTTP/3, persistent connections, pipelining and
 connection pooling, redirects, cookies, authentication, content codings,
 retries, timers and timeouts, and exposed trailers. The implementation is
-Protos source (`protos/lib/http/Client.protos` and
+Protos source (`protos/lib/http/client/module.protos` and
 `protos/lib/http/internal/Client*.protos`) over the shared internal HTTP wire
 syntax and framing modules and the existing private asynchronous bridge; no
 host HTTP engine is involved. These organization names are not additional
@@ -2011,10 +2011,10 @@ part of the Server, the Host or the wire protocol.
 
 ### 17.1 Module and exports
 
-The explicit module `std:http/Router` exports exactly `Router`, whose only
+The explicit module `std:http/router` exports exactly `Router`, whose only
 operation is `compile`. There is no Prelude binding, no implicit import and no
 import effect: importing the module registers nothing, installs no global
-state and does not import `std:http/Server` or `std:http/Host`. Each Actor
+state and does not import `std:http/server` or `std:http/host`. Each Actor
 that imports the module obtains its own module instance under
 `../semantics/MODULES.md`. No public `RouterError` prototype exists.
 
@@ -2148,7 +2148,7 @@ The Router never reads `request.body`, acquires `Network`, `Resolver`, clock,
 credential or other authority, creates a Task or Actor, serializes data,
 adds or modifies Server-owned header fields, or alters Host provisioning. Its
 dispatch is deterministic for a given table, method and target. The
-implementation is Protos source (`protos/lib/http/Router.protos` and its
+implementation is Protos source (`protos/lib/http/router/module.protos` and its
 `protos/lib/http/internal/Route*.protos` helpers) over the shared internal
 HTTP wire syntax; these organization names are not public modules.
 
@@ -2173,13 +2173,13 @@ signals an `Error`; `GET /a/{x}` with `POST /{y}/b` compiles.
 
 D222-C selects a distinct, opt-in Standard Library module that composes the
 explicitly granted `Resolver` and `Network` capabilities (`NETWORK.md`),
-`std:tls/Client` (`TLS.md`) and `std:http/Client` (§16) to perform one request
+`std:tls/client` (`TLS.md`) and `std:http/client` (§16) to perform one request
 addressed by an absolute URL. This section is the sole normative owner of its
 public contract. It revises no rule of §§1–17, `NETWORK.md` or `TLS.md`.
 
 ### 18.1 Module, operation and data shapes
 
-The explicit module `std:http/UrlClient` exports exactly `UrlClient`, whose
+The explicit module `std:http/url_client` exports exactly `UrlClient`, whose
 only operation is:
 
 ```text
@@ -2205,7 +2205,7 @@ resolver:    null | Resolver
 trust:       null | Trust
 url:         String
 request:     { method: String, headers: Array<[String, Bytes]>, body: null | Bytes }
-limits:      null | the std:http/Client limits object (§16.12)
+limits:      null | the std:http/client limits object (§16.12)
 BufferedResponse: { status: Integer, headers: Array<[String, Bytes]>, body: Bytes }
 ```
 
@@ -2221,9 +2221,9 @@ absolute URI whose scheme is `http` or `https` (ASCII case-insensitive), with
 an authority whose host is nonempty, with no user information and no
 fragment. The host is one of:
 
-- a bracketed IPv6 literal, parsed by `std:network/IpAddresses.parse`;
+- a bracketed IPv6 literal, parsed by `std:network/ip_addresses.parse`;
   `IPvFuture` literals are rejected;
-- IPv4 dotted-decimal text, parsed by `std:network/IpAddresses.parse`; or
+- IPv4 dotted-decimal text, parsed by `std:network/ip_addresses.parse`; or
 - an ASCII host name of `.`-separated labels of letters, digits and `-`, each
   1 through 63 octets, at most 253 octets, with at most one terminal root
   dot. No percent escape is admitted. Whether each label is NR-LDH or a strict
@@ -2238,7 +2238,7 @@ empty port is rejected. The default port is 80 for `http` and 443 for
 `network` must satisfy the `connectTcp` protocol. A host name requires a
 non-null `resolver` satisfying `lookupAddresses`; a numeric host does not use
 it. `https` requires a non-null `trust`, which is passed unchanged to
-`std:tls/Client`; `http` never uses it.
+`std:tls/client`; `http` never uses it.
 
 The lower request (§16.4) is built as:
 
@@ -2254,7 +2254,7 @@ The lower request (§16.4) is built as:
 
 A caller field named `Host` (ASCII case-insensitive) makes the call
 inadmissible. Every other field, the method and the body must be admissible
-for `std:http/Client` under §16.4 and §16.5.
+for `std:http/client` under §16.4 and §16.5.
 
 ### 18.3 Admission and the service Task
 
@@ -2291,8 +2291,8 @@ failure, with identity preserved.
 ### 18.5 TLS, exchange and custody
 
 For `http`, the connection is passed to
-`std:http/Client` `Client.exchangeOne.owning(connection, request, onResponse,
-limits)`. For `https`, it is first passed to `std:tls/Client`
+`std:http/client` `Client.exchangeOne.owning(connection, request, onResponse,
+limits)`. For `https`, it is first passed to `std:tls/client`
 `Client.handshake.owning(connection, reference, trust)` with every TLS
 option defaulted, where
 `reference` is the original URL host name or the parsed `IpAddress`, never a
@@ -2329,10 +2329,10 @@ decoded body is bounded by `maxResponseBodyBytes` of the lower Client (§16.7,
 Portable behavior excludes HTTP/2 and HTTP/3, request-body streaming,
 redirects, retries, cookies, content codings, connection pooling, proxies,
 implicit or operating-system trust, and any implicit capability. Worker
-provisioning of `std:http/Host` is unaffected. The implementation is Protos
-source (`protos/lib/http/UrlClient.protos` and its
+provisioning of `std:http/host` is unaffected. The implementation is Protos
+source (`protos/lib/http/url_client/module.protos` and its
 `protos/lib/http/internal/Url*.protos` helpers) over `std:uri`,
-`std:network`, `std:tls/Client`, `std:http/Client` and the existing private
+`std:network`, `std:tls/client`, `std:http/client` and the existing private
 asynchronous bridge; no host HTTP or URL engine is involved.
 
 ### 18.8 Conformance examples

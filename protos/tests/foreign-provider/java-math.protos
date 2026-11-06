@@ -16,7 +16,7 @@
 // I085-B: the real JDK java.lang.Math through the external java: provider.
 // Run by dist/test_external_foreign_providers.py.
 
-Assertions: import("std:test/Assertions")
+Assertions: import("std:test/assertions")
 
 Math: import("java:math")
 

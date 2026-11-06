@@ -32,8 +32,9 @@ import java.util.Objects;
  * store or cache path, or custody handle. Its domain prefix is disjoint from
  * {@link ProtosWorkspacePackageModuleKey}. The codec reads no sources and holds no authority.
  *
- * <p>Layout: {@code pkg-external:v1:<kind>:<packageId>:<exact>:<method>:<algorithm>:<hex>:<module>}
- * where {@code kind} is {@code registry} or {@code git}, {@code exact} is the canonical
+ * <p>Layout: {@code pkg-external:v1:<target>:<kind>:<packageId>:<exact>:<method>:<algorithm>:<hex>:<module>}
+ * where {@code target} is the D242 target-kind tag ({@code module} or {@code source}),
+ * {@code kind} is {@code registry} or {@code git}, {@code exact} is the canonical
  * ReleaseVersion text or Git revision, and every field after the kind is unpadded base64url of its
  * UTF-8 bytes. Decoding is strict: anything that does not re-encode byte-for-byte is rejected.
  */
@@ -46,10 +47,17 @@ final class ProtosExternalPackageModuleKey {
     private ProtosExternalPackageModuleKey() {}
 
     static ProtosModuleKey encode(
-            ProtosExactExternalPackageIdentity identity, String logicalModule)
+            ProtosModuleKey.Kind targetKind,
+            ProtosExactExternalPackageIdentity identity,
+            String logicalModule)
             throws IOException {
+        Objects.requireNonNull(targetKind, "targetKind");
         Objects.requireNonNull(identity, "identity");
-        String checkedModule = ProtosPackageRuntimeNames.requireLogicalName(logicalModule);
+        if (targetKind == ProtosModuleKey.Kind.FOREIGN) {
+            throw new IOException("external package keys are source-backed");
+        }
+        String checkedModule =
+                ProtosPackageRuntimeNames.requireTargetName(targetKind, logicalModule);
 
         String kind =
                 switch (identity) {
@@ -65,7 +73,9 @@ final class ProtosExternalPackageModuleKey {
 
         ProtosPackageContentIdentity content = identity.content();
         return new ProtosModuleKey(
+                targetKind,
                 PREFIX
+                        + ProtosPackageRuntimeNames.kindTag(targetKind) + ":"
                         + kind
                         + ":" + encodeUtf8(identity.packageId())
                         + ":" + encodeUtf8(exact)
@@ -82,7 +92,11 @@ final class ProtosExternalPackageModuleKey {
             throw new IOException("module key is outside external package domain");
         }
 
-        String[] fields = canonical.substring(PREFIX.length()).split(":", -1);
+        String tag = ProtosPackageRuntimeNames.kindTag(key.kind()) + ":";
+        if (key.isForeign() || !canonical.startsWith(PREFIX + tag)) {
+            throw new IOException("invalid external package ModuleKey kind");
+        }
+        String[] fields = canonical.substring(PREFIX.length() + tag.length()).split(":", -1);
         if (fields.length != FIELD_COUNT) {
             throw new IOException("invalid external package ModuleKey");
         }
@@ -113,17 +127,17 @@ final class ProtosExternalPackageModuleKey {
         } catch (IllegalArgumentException invalid) {
             throw new IOException("invalid external package ModuleKey identity", invalid);
         }
-        ProtosPackageRuntimeNames.requireLogicalName(logicalModule);
+        ProtosPackageRuntimeNames.requireTargetName(key.kind(), logicalModule);
 
-        if (!encode(identity, logicalModule).equals(key)) {
+        if (!encode(key.kind(), identity, logicalModule).equals(key)) {
             throw new IOException("non-canonical external package ModuleKey");
         }
 
-        return new Address(identity, logicalModule);
+        return new Address(key.kind(), identity, logicalModule);
     }
 
     static boolean owns(ProtosModuleKey key) {
-        return key != null && key.canonicalId().startsWith(PREFIX);
+        return key != null && !key.isForeign() && key.canonicalId().startsWith(PREFIX);
     }
 
     private static String encodeUtf8(String value) {
@@ -145,5 +159,13 @@ final class ProtosExternalPackageModuleKey {
         }
     }
 
-    record Address(ProtosExactExternalPackageIdentity identity, String logicalModule) {}
+    record Address(
+            ProtosModuleKey.Kind kind,
+            ProtosExactExternalPackageIdentity identity,
+            String logicalModule) {
+        /** Exact package-relative resource path of this target's source. */
+        String resourcePath() {
+            return ProtosPackageRuntimeNames.resourcePath(kind, logicalModule);
+        }
+    }
 }

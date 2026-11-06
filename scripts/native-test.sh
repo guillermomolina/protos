@@ -113,7 +113,7 @@ do
     native_numeric_cases=$((native_numeric_cases + 1))
 done
 
-# I130-C2: run the existing std:tls/Client suites on the actual Native
+# I130-C2: run the existing std:tls/client suites on the actual Native
 # executable. They use fixtures and simulated duplexes: they exercise
 # admission, DER certificates, JSSE/X.509 primitive availability, ClientHello
 # generation, identity, and controlled error paths, but do not prove a

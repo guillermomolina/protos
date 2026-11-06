@@ -777,7 +777,8 @@ final class ProtosFrameArguments {
                 methodHome,
                 compactReturnHome(arguments),
                 preludeOrNull(arguments),
-                executionPlanCell.plan());
+                executionPlanCell.plan(),
+                currentClosure.definingModuleKeyOrNullForRuntime());
     }
 
     /**

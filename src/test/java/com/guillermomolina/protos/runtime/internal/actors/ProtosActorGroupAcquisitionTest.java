@@ -144,7 +144,7 @@ final class ProtosActorGroupAcquisitionTest {
     private static ProtosActivation activation(ProtosPrelude prelude, ProtosActor actor) {
         return prelude.newModuleActivation(
                 actor.moduleState(),
-                new ProtosModuleKey("group-owner"),
+                ProtosModuleKey.source("group-owner"),
                 prelude.newExecutionContext(),
                 actor.executionDomain());
     }

@@ -30,7 +30,7 @@ import java.util.List;
 /**
  * Private runtime facility of {@code std:interop} (D193, LIB021-A): the explicit foreign
  * operations that Protos source cannot express. The public API is the ordinary Protos module
- * {@code protos/lib/interop.protos}, which captures this frozen, stateless facility from its
+ * {@code protos/lib/interop/module.protos}, which captures this frozen, stateless facility from its
  * standard initial member and removes the bootstrap slot during initialization.
  *
  * <p>Every operation acts only on a raw foreign reference or attached facade the program already
@@ -47,7 +47,7 @@ import java.util.List;
  * ({@link ProtosForeignValueAdapter#canFaithfullyReadMember}).
  */
 public final class ProtosForeignInteropFacility {
-    public static final ProtosModuleKey MODULE_KEY = new ProtosModuleKey("std:interop");
+    public static final ProtosModuleKey MODULE_KEY = ProtosModuleKey.module("std:interop");
     public static final String BOOTSTRAP_SLOT = "_interopFacility";
 
     @FunctionalInterface

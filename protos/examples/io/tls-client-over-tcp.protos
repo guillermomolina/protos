@@ -24,9 +24,9 @@
 // ProtosTlsClientIntegrationTest and ProtosResolverAuthorityTest.
 // For a one-call version of this composition, see http-url-client.protos.
 
-IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
-TLS: import("std:tls/Client")
-HttpClient: import("std:http/Client").Client
+IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
+TLS: import("std:tls/client")
+HttpClient: import("std:http/client").Client
 
 // The original hostname is the TLS reference identity (and SNI) and the HTTP
 // Host value, even after we connect to a numeric address.

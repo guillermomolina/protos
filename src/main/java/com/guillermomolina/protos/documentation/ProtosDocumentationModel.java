@@ -45,7 +45,7 @@ public final class ProtosDocumentationModel {
 
     /**
      * Canonical Standard Library module lineage, for example
-     * {@code std:collections/Set}.
+     * {@code std:collections/set}.
      */
     public record StandardModuleIdentity(String name) implements ModuleLineageIdentity {
         public StandardModuleIdentity {

@@ -42,8 +42,8 @@ final class ProtosTestToolResourceCatalogCompositionTest {
     @Test
     void absenceBuildsFrozenEmptyCatalogWithoutInvokingAcquirer() throws Exception {
         String source =
-                "Options: import(\"self:Options\")\n"
-                        + "Catalog: import(\"self:ResourceCatalog\")\n"
+                "Options: import(\"./Options.protos\")\n"
+                        + "Catalog: import(\"./ResourceCatalog.protos\")\n"
                         + "arguments: Array(\"test\")\n"
                         + "path: Options.resourceCatalogPath(arguments)\n"
                         + "calls: 0\n"
@@ -78,8 +78,8 @@ final class ProtosTestToolResourceCatalogCompositionTest {
                         + "profile = \"a100\"\n";
 
         String source =
-                "Options: import(\"self:Options\")\n"
-                        + "Catalog: import(\"self:ResourceCatalog\")\n"
+                "Options: import(\"./Options.protos\")\n"
+                        + "Catalog: import(\"./ResourceCatalog.protos\")\n"
                         + "arguments: Array("
                         + "\"test\", \"--resource-catalog\", \"catalog.toml\")\n"
                         + "path: Options.resourceCatalogPath(arguments)\n"
@@ -121,8 +121,8 @@ final class ProtosTestToolResourceCatalogCompositionTest {
     @Test
     void malformedCatalogStillFailsClosedAfterAcquisitionComposition() throws Exception {
         String source =
-                "Options: import(\"self:Options\")\n"
-                        + "Catalog: import(\"self:ResourceCatalog\")\n"
+                "Options: import(\"./Options.protos\")\n"
+                        + "Catalog: import(\"./ResourceCatalog.protos\")\n"
                         + "arguments: Array("
                         + "\"test\", \"--resource-catalog\", \"bad.toml\")\n"
                         + "path: Options.resourceCatalogPath(arguments)\n"
@@ -139,7 +139,7 @@ final class ProtosTestToolResourceCatalogCompositionTest {
     void publicMainUsesOnlyTheRatifiedCompositionPath() throws Exception {
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
 
-        assertTrue(main.contains("ResourceCatalog: import(\"self:ResourceCatalog\")"));
+        assertTrue(main.contains("ResourceCatalog: import(\"./ResourceCatalog.protos\")"));
         assertTrue(main.contains("arguments: process.args()"));
         assertTrue(main.contains("jobs: Options.jobs(arguments)"));
         assertTrue(main.contains(
@@ -174,7 +174,7 @@ final class ProtosTestToolResourceCatalogCompositionTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         return com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
 source,
-prelude.newModuleActivation());
+com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 
     private static ProtosArrayValue arrayAt(ProtosArrayValue array, int index) {

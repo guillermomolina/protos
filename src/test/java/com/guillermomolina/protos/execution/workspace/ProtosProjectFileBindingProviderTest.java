@@ -70,6 +70,33 @@ final class ProtosProjectFileBindingProviderTest {
     }
 
     @Test
+    void d242BindingProviderKeepsModuleAndSourceWithTheSameLogicalName() throws Exception {
+        Files.writeString(temporary.resolve("protos.toml"), "root metadata\n");
+        Files.writeString(temporary.resolve("protos.lock"), "lock metadata\n");
+        Path exactSource = Files.writeString(temporary.resolve("items.protos"), "value: 1\n");
+        Path moduleDirectory = Files.createDirectories(temporary.resolve("items"));
+        Path initializer = Files.writeString(moduleDirectory.resolve("module.protos"), "this.value: 2\n");
+        Path helper = Files.writeString(moduleDirectory.resolve("Helper.protos"), "value: 3\n");
+        writeProject(temporary, List.of());
+
+        ProtosProjectBinding binding =
+                new ProtosProjectFileBindingProvider().acquire(temporary).orElseThrow();
+        assertEquals(3, binding.sources().size());
+        assertTrue(binding.sources().contains(
+                new ProtosProjectBinding.Source(
+                        ProtosProjectBinding.Source.Kind.MODULE,
+                        "root", "items", initializer.toRealPath())));
+        assertTrue(binding.sources().contains(
+                new ProtosProjectBinding.Source(
+                        ProtosProjectBinding.Source.Kind.SOURCE,
+                        "root", "items", exactSource.toRealPath())));
+        assertTrue(binding.sources().contains(
+                new ProtosProjectBinding.Source(
+                        ProtosProjectBinding.Source.Kind.SOURCE,
+                        "root", "items/Helper", helper.toRealPath())));
+    }
+
+    @Test
     void ordinarySourceChangesDoNotStaleProjectAuthority() throws Exception {
         Files.writeString(temporary.resolve("protos.toml"), "root metadata\n");
         Files.writeString(temporary.resolve("protos.lock"), "lock metadata\n");

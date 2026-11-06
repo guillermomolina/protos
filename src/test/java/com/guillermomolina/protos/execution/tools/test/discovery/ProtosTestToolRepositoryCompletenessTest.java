@@ -68,7 +68,7 @@ final class ProtosTestToolRepositoryCompletenessTest {
     /** Classified as source text only; never imported or executed. */
     private static final String SUITE_NATIVE_SOURCE =
             """
-            Test: import("std:test/Test")
+            Test: import("std:test/test")
 
             tests: [
                 Test("first", () => {
@@ -328,8 +328,8 @@ final class ProtosTestToolRepositoryCompletenessTest {
                         ProtosArrayValue.class,
                         ProtosTestToolRepositoryCompletenessSupport.completed(
                                 """
-                                Audit: import("self:RepositoryCorpusAudit")
-                                Arrays: import("std:collections/Array")
+                                Audit: import("./RepositoryCorpusAudit.protos")
+                                Arrays: import("std:collections/array")
                                 %sregistrations: %s
                                 result: Audit.audit(
                                     physicalSources,

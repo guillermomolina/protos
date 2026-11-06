@@ -10,7 +10,7 @@ Interop: import("std:interop")
 ```
 
 The module is a single source,
-[`protos/lib/interop.protos`](../../../protos/lib/interop.protos). Its normative
+[`protos/lib/interop/module.protos`](../../../protos/lib/interop.protos). Its normative
 owner is "Relation to explicit interoperability" in
 [`spec/semantics/VALUES_AND_COLLECTIONS.md`](../../../spec/semantics/VALUES_AND_COLLECTIONS.md).
 For the overall foreign-value model, start with

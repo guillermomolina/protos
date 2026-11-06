@@ -13,7 +13,7 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal options capture of std:tls/Client (D220–S12, TLS.md §6). This
+//! Internal options capture of std:tls/client (D220–S12, TLS.md §6). This
 //! module is an unpublished implementation artifact, not an approved Standard
 //! Library API.
 

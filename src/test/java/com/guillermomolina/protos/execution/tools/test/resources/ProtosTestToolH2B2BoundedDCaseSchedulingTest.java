@@ -58,7 +58,7 @@ final class ProtosTestToolH2B2BoundedDCaseSchedulingTest {
                             TOOL_ROOT.resolveSibling("shared"),
                             new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
             ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-            ProtosActivation activation = prelude.newModuleActivation();
+            ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
 
             try (ProtosAsyncExactExecutionFacility execution =
                             ProtosAsyncExactExecutionFacility.install(

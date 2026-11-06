@@ -1,12 +1,12 @@
-# Semantic versions: `std:semver/SemVer`
+# Semantic versions: `std:semver/sem_ver`
 
-`std:semver/SemVer` parses, formats, and compares versions under strict
+`std:semver/sem_ver` parses, formats, and compares versions under strict
 [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html). The exact
 contract is the doc comment of
-[`SemVer.protos`](../../../protos/lib/semver/SemVer.protos).
+[`SemVer.protos`](../../../protos/lib/semver/sem_ver/module.protos).
 
 ```protos
-SemVer: import("std:semver/SemVer")
+SemVer: import("std:semver/sem_ver")
 ```
 
 ## Operations

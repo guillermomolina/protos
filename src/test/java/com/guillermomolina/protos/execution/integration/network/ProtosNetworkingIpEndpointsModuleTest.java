@@ -55,7 +55,7 @@ final class ProtosNetworkingIpEndpointsModuleTest {
 
         Object imported =
                 ProtosTestExecutionSupport.evaluate(
-                        "import(\"std:network/IpEndpoints\")",
+                        "import(\"std:network/ip_endpoints\")",
                         prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
@@ -77,12 +77,12 @@ final class ProtosNetworkingIpEndpointsModuleTest {
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
-                                "import(\"std:network/IpEndpoints\")", prelude.newModuleActivation()));
+                                "import(\"std:network/ip_endpoints\")", prelude.newModuleActivation()));
         ProtosObjectValue second =
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         ProtosTestExecutionSupport.evaluate(
-                                "import(\"std:network/IpEndpoints\")", prelude.newModuleActivation()));
+                                "import(\"std:network/ip_endpoints\")", prelude.newModuleActivation()));
 
         assertNotSame(first, second);
         assertSame(
@@ -95,8 +95,8 @@ final class ProtosNetworkingIpEndpointsModuleTest {
     }
 
     private static final String FAMILIES =
-            "IpAddress: import(\"std:network/IpAddresses\").IpAddress\n"
-                    + "IpEndpoint: import(\"std:network/IpEndpoints\").IpEndpoint\n";
+            "IpAddress: import(\"std:network/ip_addresses\").IpAddress\n"
+                    + "IpEndpoint: import(\"std:network/ip_endpoints\").IpEndpoint\n";
     private static final BigInteger THIRTY_ONE = BigInteger.valueOf(31);
 
     private static ProtosPrelude prelude() throws Exception {

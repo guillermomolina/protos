@@ -142,7 +142,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
     void unknownCorpusFailsClosed() throws Exception {
         ProtosExecutionOutcome outcome =
                 execute(
-                        "Plans: import(\"self:RepositoryCorpusPlans\")\n"
+                        "Plans: import(\"./RepositoryCorpusPlans.protos\")\n"
                                 + "Plans.load(\"protos/corpus/library/unknown\")");
         assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
     }
@@ -150,8 +150,8 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
     private static void assertPlan(
             String corpusId, int count, String firstPath, String lastPath) throws Exception {
         String prefix =
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Plans: import(\"self:RepositoryCorpusPlans\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
+                        + "Plans: import(\"./RepositoryCorpusPlans.protos\")\n"
                         + "cases: Manifest.planCases(Plans.load(\""
                         + corpusId
                         + "\"))\n";
@@ -165,8 +165,8 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
 
     private static String expectation(String corpusId, int index) throws Exception {
         return completedString(
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Plans: import(\"self:RepositoryCorpusPlans\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
+                        + "Plans: import(\"./RepositoryCorpusPlans.protos\")\n"
                         + "cases: Manifest.planCases(Plans.load(\""
                         + corpusId
                         + "\"))\n"
@@ -177,8 +177,8 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
 
     private static String path(String corpusId, int index) throws Exception {
         return completedString(
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Plans: import(\"self:RepositoryCorpusPlans\")\n"
+                "Manifest: import(\"./Manifest.protos\")\n"
+                        + "Plans: import(\"./RepositoryCorpusPlans.protos\")\n"
                         + "cases: Manifest.planCases(Plans.load(\""
                         + corpusId
                         + "\"))\n"
@@ -207,6 +207,6 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
                         TOOL_ROOT.resolveSibling("shared"),
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        return ProtosTestExecutionSupport.execute(source, prelude.newModuleActivation());
+        return ProtosTestExecutionSupport.execute(source, com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
     }
 }

@@ -10,7 +10,7 @@
  */
 
 // Summarize a batch of incident events without changing the input records.
-Arrays: import("std:collections/Array")
+Arrays: import("std:collections/array")
 
 events: Array(
     {

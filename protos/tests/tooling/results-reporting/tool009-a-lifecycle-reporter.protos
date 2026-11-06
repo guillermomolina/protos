@@ -21,7 +21,7 @@
 //! existing in-flight tracking, and it must forward nothing at all when no
 //! watchdog sink is attached.
 
-Progress: import("self:Progress")
+Progress: import("./Progress.protos")
 
 observations: Array()
 

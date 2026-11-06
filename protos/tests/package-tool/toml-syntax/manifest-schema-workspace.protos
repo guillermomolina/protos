@@ -13,48 +13,48 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Assertions: import("std:test/Assertions")
-Test: import("std:test/Test")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
 
 tests: [
     Test("manifest-schema-sections-workspace-duplicate-member-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseSections("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n[workspace]\nmembers = [\"app\", \"app\"]\n")
         })
     }),
     Test("manifest-schema-sections-workspace-empty-member-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseSections("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n[workspace]\nmembers = [\"app\", \"\"]\n")
         })
     }),
     Test("manifest-schema-sections-workspace-invalid-member-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseSections("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n[workspace]\nmembers = [\"app\", 1]\n")
         })
     }),
     Test("manifest-schema-sections-workspace-members-not-array-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseSections("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n[workspace]\nmembers = \"app\"\n")
         })
     }),
     Test("manifest-schema-sections-workspace-missing-members-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseSections("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n[workspace]\n")
         })
     }),
     Test("manifest-schema-sections-workspace-not-table-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseSections("manifest-version = 1\nworkspace = []\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n")
         })
     }),
     Test("manifest-schema-sections-workspace-unknown-field-error", () => {
-        Schema: import("self:ManifestSchemaV1")
+        Schema: import("tool-source:package/ManifestSchemaV1.protos")
         Assertions.signals(Error, () => {
             Schema.parseSections("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n[workspace]\nmembers = []\nroot = \".\"\n")
         })

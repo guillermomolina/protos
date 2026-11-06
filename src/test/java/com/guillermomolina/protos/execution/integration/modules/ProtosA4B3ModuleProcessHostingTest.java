@@ -41,7 +41,7 @@ import org.junit.jupiter.api.Test;
 
 final class ProtosA4B3ModuleProcessHostingTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
-    private static final ProtosModuleKey MAIN = new ProtosModuleKey("test:Main");
+    private static final ProtosModuleKey MAIN = ProtosModuleKey.source("test:Main");
 
     @Test
     void hostedOrdinaryImportParsesResolvedModuleInsideOwningProcessContext() throws Exception {
@@ -61,7 +61,7 @@ final class ProtosA4B3ModuleProcessHostingTest {
                 ProtosExecutionOutcome outcome =
                         context.executeModuleSource(
                                 ProtosModuleSource.fromCharacters(
-                                        new ProtosModuleKey("entry"),
+                                        ProtosModuleKey.source("entry"),
                                         "import(\"m\")"),
                                 bootstrap.activation());
 
@@ -232,7 +232,7 @@ final class ProtosA4B3ModuleProcessHostingTest {
             if (key == null) {
                 throw new java.io.IOException("not found");
             }
-            return new ProtosModuleKey(key);
+            return ProtosModuleKey.source(key);
         }
 
         @Override

@@ -13,7 +13,7 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Internal lifecycle of one std:http/Host (D216, HTTP.md §§15.3, 15.7 to
+//! Internal lifecycle of one std:http/host (D216, HTTP.md §§15.3, 15.7 to
 //! 15.10). This module is an unpublished implementation artifact, not an
 //! approved Standard Library API.
 //!
@@ -41,7 +41,7 @@
 //! still aborts, stops and awaits every Worker and settles the one listener
 //! close, so no Worker, connection or listener is abandoned.
 
-HostConfig: import("std:http/internal/HostConfig")
+HostConfig: import("./HostConfig.protos")
 
 // Waits for a Future of this Actor, discarding its outcome.
 settle: (future) => {
