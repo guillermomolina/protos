@@ -62,7 +62,7 @@ abstract class ProtosExperimentalNumberMultiplyFastPathsBase extends Node {
         return result;
     }
 
-    /** The generic result: exact Integer arithmetic, else the ordinary '*' send. */
+    /** The generic result: exact Integer arithmetic, else a guest Error. */
     static Object genericMultiply(ProtosBytecodeRootNode root, VirtualFrame frame,
             Node node, Object left, Object right) {
         Object receiver = ProtosNumericValueSupport.guestValue(left);
@@ -71,9 +71,9 @@ abstract class ProtosExperimentalNumberMultiplyFastPathsBase extends Node {
                 && ProtosNumericValueSupport.isCurrentInteger(argument)) {
             return ProtosNumberFactory.multiply(node, receiver, argument);
         }
-        return ProtosFunctionCallDispatchers.sendOne(
-                root, ProtosFunctionCallDispatchers.callerReference(frame),
-                false, receiver, "*", argument);
+        // KNOWN I115 TEMPORARY SEMANTIC DIVERGENCE: no ordinary '*' send;
+        // see ProtosI115DirectNumericFallback.
+        throw ProtosI115DirectNumericFallback.unsupported(root, frame);
     }
 
 

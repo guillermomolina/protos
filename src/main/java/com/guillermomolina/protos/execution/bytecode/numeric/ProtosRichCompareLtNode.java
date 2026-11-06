@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosStandardNumberOrderingProtocol.Relation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
@@ -29,7 +30,11 @@ import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
-/** I115: direct comparison for '<' with one composable cold generic path. */
+/**
+ * I115: direct synchronous comparison for '<'. It never returns a
+ * continuation. KNOWN I115 TEMPORARY SEMANTIC DIVERGENCE: see
+ * {@link ProtosI115DirectNumericFallback}.
+ */
 @GenerateUncached
 @GenerateInline(false)
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
@@ -51,9 +56,8 @@ abstract class ProtosRichCompareLtNode extends Node {
     static Object doGeneric(
             VirtualFrame frame, Object left, Object right,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
-        return ProtosFunctionCallDispatchers.sendOneComposable(
-                root, ProtosFunctionCallDispatchers.callerReference(frame),
-                left, "<", right);
+        return ProtosI115DirectNumericFallback.compare(
+                root, frame, left, right, Relation.LESS);
     }
 
     static ProtosBytecodeRootNode rootOf(Node node) {

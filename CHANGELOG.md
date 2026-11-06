@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.53-SNAPSHOT
+
+- **I115-V72 — historical replay.**
+  - Lower numeric operands directly and plan physical inline storage before the prologue. Promote captures owned only by inline regions from CELL storage to root LOCAL storage; avoid result stores for discarded expressions and synchronous numeric operations.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** The original explicitly records that promoted inline captures appear as plain locals and do not provide the old shared activation-cell introspection. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved without repairs.
+  - No test files are added or modified by this historical commit. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 2 added, 10 modified, 0 deleted (rename detection disabled for exact path accounting). All 12 original paths retain their exact Git blobs/modes or deletion state; reconstructed parent blobs/modes also match the original parent. Only root `pom.xml` and `CHANGELOG.md` receive replay metadata edits.
+  - Original implementation: `39da87599a72cad1d75a45e09f833a3ddd820088`.
+
 ## 0.4.52-SNAPSHOT
 
 - **I115-V71 — historical replay.**
