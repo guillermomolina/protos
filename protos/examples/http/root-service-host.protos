@@ -49,16 +49,19 @@ service: () => {
                 port: 8080
             }
             listener: network.listenTcp(listenRequest).value()
-            options: {
-                workers: 2
-                maxConnections: 8
-            }
             // The initialization crosses the Actor boundary by value: a
             // communication-only GroupRef, never `network` or this behavior.
             dependencies: {
                 service: group
             }
-            host = Host.owningWithFactory(listener, "app:root-service-handler", "makeHandler", dependencies, options)
+            host = Host.owningWithFactory(
+                listener,
+                "app:root-service-handler",
+                "makeHandler",
+                dependencies,
+                workers: 2,
+                maxConnections: 8
+            )
             host.ready().value()
             null
         }

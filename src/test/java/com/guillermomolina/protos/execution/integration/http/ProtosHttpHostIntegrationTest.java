@@ -131,16 +131,18 @@ final class ProtosHttpHostIntegrationTest {
                 listener = network.listenTcp(request).value()
                 listener.localPort()
             }
-            // The options object is mutated after construction: the host keeps
-            // the configuration it captured.
+            // The named options are bound once per call: rebinding the
+            // caller's variables afterwards leaves the captured configuration.
             start: (workerCount, connectionLimit) => {
-                options: {
-                    workers: workerCount
+                host = http.Host.owning(
+                    listener,
+                    "app:site",
+                    "handle",
+                    workers: workerCount,
                     maxConnections: connectionLimit
-                }
-                host = http.Host.owning(listener, "app:site", "handle", options)
-                options.workers = 3
-                options.maxConnections = 64
+                )
+                workerCount = 3
+                connectionLimit = 64
                 host.ready().value() === host
             }
             drain: () => {
@@ -227,51 +229,63 @@ final class ProtosHttpHostIntegrationTest {
                 fresh && (kinds[0] == "startup") && (kinds[1] == "startup") && (kinds[2] == "startup")
             }
             startFailing: (binding) => {
-                host = http.Host.owning(listener, "app:site", binding, null)
+                host = http.Host.owning(listener, "app:site", binding)
                 hostFailureKinds()
             }
-            rejected: (options) => {
+            rejected: (attempt) => {
                 InvalidIOArgument.handle(
                     () => {
-                        http.Host.owning(listener, "app:site", "handle", options)
+                        attempt()
                         false
                     },
                     (error) => { error.parent() === InvalidIOArgument }
                 )
             }
-            invalidWithLiveListener: () => {
-                pending: {
-                    workers: 2
-                    maxPendingAccepts: 1
-                }
-                unknown: {
-                    workers: 1
-                    deadline: 5
-                }
-                rejected(pending) && rejected(unknown) && rejected([])
+            // D237: an unknown label is a generic association Error signalled
+            // before Host.owning runs, never an InvalidIOArgument.
+            associationRejected: (attempt) => {
+                Error.handle(
+                    () => {
+                        attempt()
+                        false
+                    },
+                    (error) => { error.parent() === Error }
+                )
             }
-            inheritedOptionsIgnored: () => {
-                base: {
-                    workers: 0
-                    maxConnections: -1
-                }
-                derived: base {}
-                host = http.Host.owning(listener, "app:site", "handle", derived)
+            invalidWithLiveListener: () => {
+                pending: rejected(() => {
+                    http.Host.owning(listener, "app:site", "handle", workers: 2, maxPendingAccepts: 1)
+                })
+                unknown: associationRejected(() => {
+                    http.Host.owning(listener, "app:site", "handle", workers: 1, deadline: 5)
+                })
+                badWorkers: rejected(() => {
+                    http.Host.owning(listener, "app:site", "handle", workers: {})
+                })
+                badLimits: rejected(() => {
+                    http.Host.owning(listener, "app:site", "handle", limits: [])
+                })
+                pending && unknown && badWorkers && badLimits
+            }
+            defaultsAfterRejection: () => {
+                host = http.Host.owning(listener, "app:site", "handle")
                 host.ready().value() === host
             }
             startPending: (workerCount, connectionLimit, pendingLimit) => {
-                options: {
-                    workers: workerCount
-                    maxConnections: connectionLimit
+                host = http.Host.owning(
+                    listener,
+                    "app:site",
+                    "handle",
+                    workers: workerCount,
+                    maxConnections: connectionLimit,
                     maxPendingAccepts: pendingLimit
-                }
-                host = http.Host.owning(listener, "app:site", "handle", options)
+                )
                 host.ready().value() === host
             }
             // HTTP.md §15.7: a shutdown while STARTING precludes RUNNING, so
             // readiness fails, while the requested shutdown itself completes.
             shutdownWhileStarting: (mode) => {
-                host = http.Host.owning(listener, "app:site", "handle", { workers: 2 })
+                host = http.Host.owning(listener, "app:site", "handle", workers: 2)
                 requested: host.shutdown(mode)
                 repeated: host.shutdown("drain")
                 notReady: http.HostError.handle(
@@ -313,7 +327,7 @@ final class ProtosHttpHostIntegrationTest {
                 fresh && (kinds[0] == kind) && (kinds[1] == kind) && (kinds[2] == kind)
             }
             startModule: (moduleSpecifier, binding) => {
-                host = http.Host.owning(listener, moduleSpecifier, binding, null)
+                host = http.Host.owning(listener, moduleSpecifier, binding)
                 hostFailureKinds()
             }
             // The constructing Actor's own app:site instance is not the
@@ -324,12 +338,12 @@ final class ProtosHttpHostIntegrationTest {
                 site.mark("creator")
                 closureRejected: InvalidIOArgument.handle(
                     () => {
-                        http.Host.owning(listener, site.handle, "handle", null)
+                        http.Host.owning(listener, site.handle, "handle")
                         false
                     },
                     (error) => { true }
                 )
-                host = http.Host.owning(listener, "app:site", "showMarker", { workers: 2 })
+                host = http.Host.owning(listener, "app:site", "showMarker", workers: 2)
                 closureRejected && (host.ready().value() === host)
             }
             // FUTURES_AND_TASKS.md §24: the hosting Tasks belong to the Task
@@ -338,7 +352,7 @@ final class ProtosHttpHostIntegrationTest {
             owner: null
             startOwned: () => {
                 owner = (() => {
-                    host = http.Host.owning(listener, "app:site", "handle", null)
+                    host = http.Host.owning(listener, "app:site", "handle")
                     host.termination().value()
                 }).future()
                 0
@@ -371,7 +385,9 @@ final class ProtosHttpHostIntegrationTest {
             }
             closedListenerRejected: () => {
                 listener.close().value()
-                rejected(null)
+                rejected(() => {
+                    http.Host.owning(listener, "app:site", "handle")
+                })
             }
             0
             """;
@@ -435,7 +451,7 @@ final class ProtosHttpHostIntegrationTest {
     @Test
     void theConnectionQuotaBoundsAdmissionAndTheCapturedConfigurationIsFixed() throws Exception {
         try (Fixture x = new Fixture()) {
-            // One Worker, maxConnections 1; the options were raised to 64 after construction.
+            // One Worker, maxConnections 1; the caller's variables were rebound to 64 after construction.
             assertTrue(x.call("start", 1, 1));
             try (Socket held = x.connect(); Socket waiting = x.connect()) {
                 send(held, post());
@@ -512,7 +528,7 @@ final class ProtosHttpHostIntegrationTest {
     void invalidConstructionTakesNoCustodyOfALiveListener() throws Exception {
         try (Fixture x = new Fixture()) {
             assertTrue(x.call("invalidWithLiveListener"));
-            assertTrue(x.call("inheritedOptionsIgnored"), "inherited option slots are not read");
+            assertTrue(x.call("defaultsAfterRejection"), "named defaults apply after rejected calls");
             assertEquals(response('1'), x.get("/"));
             assertTrue(x.call("abort"));
         }

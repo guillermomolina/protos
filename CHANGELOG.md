@@ -7,6 +7,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.447-SNAPSHOT
+
+- `I147` (#1062), `I149` (#1064), `I150` (#1065): adopt the D241-B selective named-argument migration, Protos-first, for `std:cli/CommandLine`, `std:http/Host`, `std:http/UrlClient` and `std:tls/Client`.
+  - `CommandLine.option` takes nine and `CommandLine.positional` five required named parameters; omission is detected through a private presence identity, so an explicit `null` stays a supplied value. The existing descriptor normalizers are kept unchanged in a private lexical scope and are used directly by `CommandLine.command`, whose descriptor-tree API, iterative traversal, cycle detection and depth behavior are unchanged. The single-descriptor `option`/`positional` form is no longer supported.
+  - `Host.owning` and `Host.owningWithFactory` take `workers: 1, maxConnections: 64, maxPendingAccepts: workers, limits: null` as ordinary named parameters instead of a trailing `options` object; `initialization` stays one separate payload. `HostConfig.positive32` now guards its comparisons with an explicit Integer check, so a non-Integer value is an `InvalidIOArgument`.
+  - `UrlClient.requestOne(url, request, limits, network:, resolver:, trust:)` replaces the positional `authorities` object; an omitted authority answers an already failed `InvalidIOArgument` Future, distinct from an explicit `null`. The internal TLS handshake call drops its empty options object.
+  - `Client.handshake` and `Client.handshake.owning` take `minimumVersion: "1.2", alpn: "http/1.1", maxHandshakeBytes: 1048576, maxQueuedWriteBytes: 33554432` as named parameters; an omitted `alpn` offers HTTP/1.1 and `alpn: null` disables ALPN. Unknown labels are D237 association Errors before entry.
+  - Migrate the Test Tool options, examples, tutorial, Protos and Java tests; add named-parameter coverage (omission versus `null`, unknown labels, positional/named collisions, evaluation order, dependent defaults, association Error versus failed Future).
+  - Spec: `spec/io/HTTP.md` §§15.1, 15.2, 15.13, 18 and `spec/io/TLS.md` §§2, 6. Guide: update the HTTP and TLS guides and add the `std:cli/CommandLine` guide.
+
 ## 0.3.446-SNAPSHOT
 
 - `I145-A` (#1056): implement the D239-C1 ordinary `Object.construct` protocol (#1055).

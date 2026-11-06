@@ -23,6 +23,23 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.494] - 2026-11-06
+
+### D241-B / I149, I150 — Named per-call options for Host, UrlClient and TLS
+- `io/HTTP.md`: `Host.owning` and `Host.owningWithFactory` take the named
+  parameters `workers`, `maxConnections`, `maxPendingAccepts` (defaulting to
+  the bound `workers`) and `limits` instead of a public `options` object;
+  `initialization` remains a separate payload and `limits` a reusable object.
+  `UrlClient.requestOne(url, request, limits, network:, resolver:, trust:)`
+  replaces the `authorities` object; an omitted authority is distinct from
+  `null` and answers an already failed `InvalidIOArgument` Future. D237
+  association Errors precede the domain errors; the internal TLS handshake
+  uses its defaults.
+- `io/TLS.md`: `handshake` and `handshake.owning` take the four named
+  configuration parameters with their defaults; omitted `alpn` versus
+  `alpn: null`; the public options-object rules (unknown and inherited
+  fields) are withdrawn; D237 precedence over invalid bound values.
+
 ## [0.1.493] - 2026-11-05
 
 ### D239-C1 / I145-A — Ordinary `Object.construct` protocol

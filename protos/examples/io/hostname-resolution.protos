@@ -51,7 +51,7 @@ connected: (() => {
     // the TLS reference identity (and SNI), and the HTTP Host authority:
     //
     //     Client: import("std:tls/Client").Client
-    //     secure: Client.handshake(connection, originalHostname, trust, options).value()
+    //     secure: Client.handshake(connection, originalHostname, trust).value()
     //     headers: [["Host", Encoding.Latin1.encode(originalHostname)], ...]
     //
     // `trust` must be selected explicitly, e.g. Trust.javaCacerts(). The

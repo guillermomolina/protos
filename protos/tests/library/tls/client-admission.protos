@@ -14,7 +14,7 @@
 // the specific language governing rights and limitations under the License.
 
 // I130-B (D220–S12, TLS.md §§2, 3, 4, 6): module surface, Trust construction,
-// options and reference-identity admission of std:tls/Client. No TLS octet is
+// named-option and reference-identity admission of std:tls/Client. No TLS octet is
 // exchanged here; every inadmissible call must leave the duplex untouched.
 
 Assertions: import("std:test/Assertions")
@@ -101,9 +101,9 @@ anchors: () => {
 
 // Asserts that both selectors reject the arguments with fresh
 // InvalidIOArgument Futures and no effect on the duplex.
-assertInadmissible: (duplex, serverIdentity, trust, options) => {
-    borrowed: failureOf(tls.Client.handshake(duplex, serverIdentity, trust, options))
-    owning: failureOf(tls.Client.handshake.owning(duplex, serverIdentity, trust, options))
+assertInadmissible: (duplex, serverIdentity, trust) => {
+    borrowed: failureOf(tls.Client.handshake(duplex, serverIdentity, trust))
+    owning: failureOf(tls.Client.handshake.owning(duplex, serverIdentity, trust))
     Assertions.require(borrowed.parent() === InvalidIOArgument)
     Assertions.require(owning.parent() === InvalidIOArgument)
     Assertions.require(borrowed !== owning)
@@ -111,15 +111,42 @@ assertInadmissible: (duplex, serverIdentity, trust, options) => {
 
 assertIdentityRejected: (serverIdentity) => {
     dx: quietDuplex()
-    assertInadmissible(dx, serverIdentity, anchors(), {})
+    assertInadmissible(dx, serverIdentity, anchors())
     Assertions.require(dx.effects() == 0)
 }
 
-assertOptionsRejected: (options) => {
+// Asserts that both selectors, called by call(selector, duplex) with one
+// semantically invalid named option, answer fresh InvalidIOArgument Futures
+// (never a synchronous Error) and perform no I/O.
+assertOptionsRejected: (call) => {
     dx: quietDuplex()
-    assertInadmissible(dx, "service.protos.test", anchors(), options)
+    borrowed: failureOf(call(tls.Client.handshake, dx))
+    owning: failureOf(call(tls.Client.handshake.owning, dx))
+    Assertions.require(borrowed.parent() === InvalidIOArgument)
+    Assertions.require(owning.parent() === InvalidIOArgument)
+    Assertions.require(borrowed !== owning)
     Assertions.require(dx.effects() == 0)
 }
+
+// Asserts that both selectors, called by call(selector, duplex), signal a
+// D237 association Error synchronously, before any admission, with no I/O.
+assertAssociationError: (call) => {
+    dx: quietDuplex()
+    borrowed: Assertions.signals(Error, () => { call(tls.Client.handshake, dx) })
+    owning: Assertions.signals(Error, () => { call(tls.Client.handshake.owning, dx) })
+    Assertions.require(borrowed.parent() === Error)
+    Assertions.require(owning.parent() === Error)
+    Assertions.require(dx.effects() == 0)
+}
+
+// Asserts that the named options are admitted: Trust.system() then fails
+// the admitted handshake with kind "trustUnavailable".
+assertAdmitted: (call) => {
+    failure: failureOf(call(tls.Client.handshake, quietDuplex()))
+    Assertions.require(failure.kind == "trustUnavailable")
+}
+
+identity: "service.protos.test"
 
 assertConstructorError: (certificates) => {
     Assertions.signals(Error, () => {
@@ -198,15 +225,15 @@ tests: [
         // The snapshot still admits and resolves: the handshake reaches the
         // transport and fails only on its end of input.
         dx: quietDuplex()
-        failure: failureOf(tls.Client.handshake(dx, "service.protos.test", trust, {}))
+        failure: failureOf(tls.Client.handshake(dx, "service.protos.test", trust))
         Assertions.require(failure.parent() === tls.TlsError)
         Assertions.require(failure.kind != "trustUnavailable")
         Assertions.require(dx.effects() > 0)
     }),
     Test("a descriptor-shaped object is not a trust descriptor", () => {
         dx: quietDuplex()
-        assertInadmissible(dx, "service.protos.test", {}, {})
-        assertInadmissible(dx, "service.protos.test", null, {})
+        assertInadmissible(dx, "service.protos.test", {})
+        assertInadmissible(dx, "service.protos.test", null)
         Assertions.require(dx.effects() == 0)
     }),
     Test("the duplex must provide read and write, and owning also close", () => {
@@ -218,7 +245,7 @@ tests: [
                 (() => { null }).future()
             }
         }
-        assertInadmissible(writeOnly, "service.protos.test", anchors(), {})
+        assertInadmissible(writeOnly, "service.protos.test", anchors())
         noClose: {
             read: (maxBytes) => {
                 (() => { null }).future()
@@ -228,7 +255,7 @@ tests: [
             }
         }
         // The inherited Object.close is not a Closable close.
-        failure: failureOf(tls.Client.handshake.owning(noClose, "service.protos.test", anchors(), {}))
+        failure: failureOf(tls.Client.handshake.owning(noClose, "service.protos.test", anchors()))
         Assertions.require(failure.parent() === InvalidIOArgument)
     }),
     Test("DNS references must be ASCII LDH names of at least two labels", () => {
@@ -323,7 +350,7 @@ tests: [
     }),
     Test("valid A-labels are admitted in any ASCII case with a terminal dot", () => {
         admitted: (serverIdentity) => {
-            future: tls.Client.handshake(quietDuplex(), serverIdentity, tls.Trust.system(), {})
+            future: tls.Client.handshake(quietDuplex(), serverIdentity, tls.Trust.system())
             failure: failureOf(future)
             Assertions.require(failure.parent() === tls.TlsError)
             Assertions.require(failure.kind == "trustUnavailable")
@@ -340,7 +367,7 @@ tests: [
     }),
     Test("NR-LDH names, case, a terminal dot and IpAddress values are admitted", () => {
         admitted: (serverIdentity) => {
-            future: tls.Client.handshake(quietDuplex(), serverIdentity, tls.Trust.system(), {})
+            future: tls.Client.handshake(quietDuplex(), serverIdentity, tls.Trust.system())
             failure: failureOf(future)
             // Admitted: the Task ran and failed on trust, not on admission.
             Assertions.require(failure.parent() === tls.TlsError)
@@ -354,49 +381,72 @@ tests: [
         admitted(IpAddresses.v4(127, 0, 0, 1))
         admitted(IpAddresses.parse("::1"))
     }),
-    Test("options must be an ordinary object", () => {
-        assertOptionsRejected(null)
-        assertOptionsRejected([])
-        assertOptionsRejected("options")
-    }),
-    Test("options reject unknown fields and invalid values", () => {
-        assertOptionsRejected({ minimumVersion: "1.1" })
-        assertOptionsRejected({ minimumVersion: 1.3 })
-        assertOptionsRejected({ alpn: "h2" })
-        assertOptionsRejected({ alpn: false })
-        assertOptionsRejected({ maxHandshakeBytes: 0 })
-        assertOptionsRejected({ maxHandshakeBytes: 2147483648 })
-        assertOptionsRejected({ maxQueuedWriteBytes: -1 })
-        assertOptionsRejected({ maxQueuedWriteBytes: "1" })
-        assertOptionsRejected({ timeout: 1 })
-    }),
-    Test("options reject a recognized field obtained only by delegation", () => {
-        base: {
-            minimumVersion: "1.3"
+    Test("minimumVersion admits only 1.2 and 1.3", () => {
+        assertAdmitted((selector, dx) => { selector(dx, identity, tls.Trust.system()) })
+        assertAdmitted((selector, dx) => { selector(dx, identity, tls.Trust.system(), minimumVersion: "1.2") })
+        assertAdmitted((selector, dx) => { selector(dx, identity, tls.Trust.system(), minimumVersion: "1.3") })
+        for(value in ["1.1", 1.3, null, ["1.3"]]) {
+            assertOptionsRejected((selector, dx) => { selector(dx, identity, anchors(), minimumVersion: value) })
         }
-        delegated: base {}
-        assertOptionsRejected(delegated)
+        null
     }),
-    Test("every documented option value is admitted", () => {
-        accepted: (options) => {
-            failure: failureOf(tls.Client.handshake(quietDuplex(), "service.protos.test", tls.Trust.system(), options))
-            Assertions.require(failure.kind == "trustUnavailable")
+    Test("alpn may be omitted, http/1.1 or an explicit null", () => {
+        // Omission offers "http/1.1"; an explicit null disables ALPN. Both
+        // are admitted values, distinct from an invalid one.
+        assertAdmitted((selector, dx) => { selector(dx, identity, tls.Trust.system()) })
+        assertAdmitted((selector, dx) => { selector(dx, identity, tls.Trust.system(), alpn: "http/1.1") })
+        assertAdmitted((selector, dx) => { selector(dx, identity, tls.Trust.system(), alpn: null) })
+        for(value in ["h2", false, "HTTP/1.1", ["http/1.1"]]) {
+            assertOptionsRejected((selector, dx) => { selector(dx, identity, anchors(), alpn: value) })
         }
-        accepted({})
-        accepted({ minimumVersion: "1.2" })
-        accepted({ minimumVersion: "1.3" })
-        accepted({ alpn: "http/1.1" })
-        accepted({ alpn: null })
-        bounds: {
-            maxHandshakeBytes: 1
-            maxQueuedWriteBytes: 2147483647
+        null
+    }),
+    Test("both byte limits admit 1..2147483647 Integers only", () => {
+        assertAdmitted((selector, dx) => { selector(dx, identity, tls.Trust.system(), maxHandshakeBytes: 1, maxQueuedWriteBytes: 2147483647) })
+        assertAdmitted((selector, dx) => { selector(dx, identity, tls.Trust.system(), maxHandshakeBytes: 2147483647, maxQueuedWriteBytes: 1) })
+        for(value in [0, -1, 2147483648, "1", 1.0, null]) {
+            assertOptionsRejected((selector, dx) => { selector(dx, identity, anchors(), maxHandshakeBytes: value) })
+            assertOptionsRejected((selector, dx) => { selector(dx, identity, anchors(), maxQueuedWriteBytes: value) })
         }
-        accepted(bounds)
+        null
+    }),
+    Test("every documented option is admitted together", () => {
+        assertAdmitted((selector, dx) => {
+            selector(
+                dx,
+                identity,
+                tls.Trust.system(),
+                minimumVersion: "1.3",
+                alpn: null,
+                maxHandshakeBytes: 4096,
+                maxQueuedWriteBytes: 65536
+            )
+        })
+    }),
+    Test("an unknown label or a positional and named collision is an association Error", () => {
+        assertAssociationError((selector, dx) => { selector(dx, identity, anchors(), timeout: 1) })
+        assertAssociationError((selector, dx) => { selector(dx, identity, anchors(), options: {}) })
+        assertAssociationError((selector, dx) => { selector(dx, identity, anchors(), "1.2", minimumVersion: "1.2") })
+        assertAssociationError((selector, dx) => { selector(dx, identity, trust: anchors(), duplex: dx) })
+        // The association Error wins even when a bound value is also invalid.
+        assertAssociationError((selector, dx) => { selector(dx, identity, anchors(), alpn: "h2", timeout: 1) })
+    }),
+    Test("an invalid named value is a failed Future, not an association Error", () => {
+        dx: quietDuplex()
+        future: tls.Client.handshake(dx, identity, anchors(), alpn: "h2")
+        Assertions.require(failureOf(future).parent() === InvalidIOArgument)
+        Assertions.require(dx.effects() == 0)
+    }),
+    Test("a trailing options object is not a compatible entry form", () => {
+        // A final object binds positionally to minimumVersion and is rejected
+        // as an invalid minimumVersion value.
+        assertOptionsRejected((selector, dx) => { selector(dx, identity, anchors(), {}) })
+        assertOptionsRejected((selector, dx) => { selector(dx, identity, anchors(), { minimumVersion: "1.3" }) })
     }),
     Test("invalid admission answers fresh failed Futures without effects", () => {
         dx: quietDuplex()
-        first: tls.Client.handshake(dx, "localhost", anchors(), {})
-        second: tls.Client.handshake(dx, "localhost", anchors(), {})
+        first: tls.Client.handshake(dx, "localhost", anchors())
+        second: tls.Client.handshake(dx, "localhost", anchors())
         Assertions.require(first !== second)
         Assertions.require(failureOf(first) !== failureOf(second))
         Assertions.require(dx.effects() == 0)

@@ -61,6 +61,7 @@ is not a module; import `std:datetime/Date`, `std:datetime/Instant`, and so on.
 | [Semantic versions](semver.md) | `std:semver/SemVer` | Strict Semantic Versioning 2.0.0 parsing, formatting, equality, and precedence |
 | [HTTP/1.1](http.md) | `std:http/Server`, `std:http/Host`, `std:http/Client`, `std:http/Router`, `std:http/UrlClient` | One request on a supplied duplex, continuous hosting on an owned `TcpListener`, one client exchange on a supplied duplex, authority-free route dispatch, and one URL request from explicit capabilities |
 | [Explicit networking and name resolution](networking.md) | `std:network/Resolvers` | Host-granted `resolver` lookups, choosing an `IpAddress`, and connecting to a numeric `IpEndpoint` |
+| [Command-line specifications](cli.md) | `std:cli/CommandLine` | Named-parameter options and positionals, command trees, argument parsing, and help text |
 | [TLS client](tls.md) | `std:tls/Client` | Authenticating a connected duplex with explicit trust and the original hostname |
 | [Explicit foreign operations](interop.md) | `std:interop` | `invoke`, `instantiate`, `readMember`, and `writeMember` on foreign values |
 | [Runtime metadata](runtime.md) | `std:runtime` | Four read-only String fields: `implementation`, `implementationVersion`, `engineVersion`, `platform` (no Context mode) |
@@ -125,7 +126,7 @@ distribution.
 
 Further modules exist under [`protos/lib/`](../../../protos/lib/) (for example
 `std:json`, `std:toml`, `std:csv`, `std:collections`, `std:io`, `std:crypto`,
-`std:cli`, `std:uri`, and `std:test`). Their doc comments are the current
+`std:uri`, and `std:test`). Their doc comments are the current
 reference; they have no dedicated guide yet. Collection behavior is covered in
 [chapter 05](../05-values-identity-equality-and-collections.md) and Process
 streams in [chapter 11](../11-process-io-filesystems-and-authority.md).

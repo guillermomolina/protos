@@ -227,13 +227,13 @@ final class ProtosCommandLineArrayConstructionFacilityTest {
                             name: "tool"
                             help: null
                             options: Array()
-                            positionals: Array(CommandLine.positional({
-                                key: "rest"
-                                minOccurrences: 0
-                                maxOccurrences: null
-                                valueName: "ARG"
+                            positionals: Array(CommandLine.positional(
+                                key: "rest",
+                                minOccurrences: 0,
+                                maxOccurrences: null,
+                                valueName: "ARG",
                                 help: null
-                            }))
+                            ))
                             subcommands: Array()
                         })
                         CommandLine.parse(spec, Array("a", "b", "c")).command.positionals

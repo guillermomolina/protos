@@ -38,11 +38,7 @@ port: listener.localPort()
 // 2. Hand the listener to the host. From now on the host owns it and closes
 //    it; we must not accept from or close it ourselves. Each of the two Worker
 //    Actors imports "app:hello" and calls its "handle" binding.
-options: {
-    workers: 2
-    maxConnections: 4
-}
-host: Host.owning(listener, "app:hello", "handle", options)
+host: Host.owning(listener, "app:hello", "handle", workers: 2, maxConnections: 4)
 ready: host.ready().value() === host
 
 // 3. A client exchange on a connection we acquire explicitly. The callback

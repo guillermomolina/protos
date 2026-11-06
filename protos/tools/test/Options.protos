@@ -34,78 +34,78 @@ parsePositiveInteger: (text) => {
     value
 }
 
-jobsOption: CommandLine.option({
-    key: "jobs"
-    long: "jobs"
-    short: null
-    minValues: 1
-    maxValues: 1
-    minOccurrences: 0
-    maxOccurrences: 1
-    valueName: "N"
+jobsOption: CommandLine.option(
+    key: "jobs",
+    long: "jobs",
+    short: null,
+    minValues: 1,
+    maxValues: 1,
+    minOccurrences: 0,
+    maxOccurrences: 1,
+    valueName: "N",
     help: null
-})
+)
 
-resourceCatalogOption: CommandLine.option({
-    key: "resourceCatalog"
-    long: "resource-catalog"
-    short: null
-    minValues: 1
-    maxValues: 1
-    minOccurrences: 0
-    maxOccurrences: 1
-    valueName: "PATH"
+resourceCatalogOption: CommandLine.option(
+    key: "resourceCatalog",
+    long: "resource-catalog",
+    short: null,
+    minValues: 1,
+    maxValues: 1,
+    minOccurrences: 0,
+    maxOccurrences: 1,
+    valueName: "PATH",
     help: null
-})
+)
 
-fileOption: CommandLine.option({
-    key: "file"
-    long: "file"
-    short: null
-    minValues: 1
-    maxValues: 1
-    minOccurrences: 0
-    maxOccurrences: null
-    valueName: "FILE"
+fileOption: CommandLine.option(
+    key: "file",
+    long: "file",
+    short: null,
+    minValues: 1,
+    maxValues: 1,
+    minOccurrences: 0,
+    maxOccurrences: null,
+    valueName: "FILE",
     help: null
-})
+)
 
-directoryOption: CommandLine.option({
-    key: "directory"
-    long: "directory"
-    short: null
-    minValues: 1
-    maxValues: 1
-    minOccurrences: 0
-    maxOccurrences: null
-    valueName: "DIR"
+directoryOption: CommandLine.option(
+    key: "directory",
+    long: "directory",
+    short: null,
+    minValues: 1,
+    maxValues: 1,
+    minOccurrences: 0,
+    maxOccurrences: null,
+    valueName: "DIR",
     help: null
-})
+)
 
 // D185 Case discovery listing flag and repeatable exact CaseRef selector.
-listCasesOption: CommandLine.option({
-    key: "listCases"
-    long: "list-cases"
-    short: null
-    minValues: 0
-    maxValues: 0
-    minOccurrences: 0
-    maxOccurrences: 1
-    valueName: null
+listCasesOption: CommandLine.option(
+    key: "listCases",
+    long: "list-cases",
+    short: null,
+    minValues: 0,
+    maxValues: 0,
+    minOccurrences: 0,
+    maxOccurrences: 1,
+    valueName: null,
     help: null
-})
+)
 
-caseOption: CommandLine.option({
-    key: "case"
-    long: "case"
-    short: null
-    minValues: 1
-    maxValues: 1
-    minOccurrences: 0
-    maxOccurrences: null
-    valueName: "CASE_REF"
+caseOption: CommandLine.option(
+    key: "case",
+    long: "case",
+    short: null,
+    minValues: 1,
+    maxValues: 1,
+    minOccurrences: 0,
+    maxOccurrences: null,
+    valueName: "CASE_REF",
     help: null
-})
+)
 
 commandSpec: CommandLine.command({
     name: "test"

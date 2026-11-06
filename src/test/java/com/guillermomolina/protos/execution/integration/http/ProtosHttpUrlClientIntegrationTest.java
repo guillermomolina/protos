@@ -126,11 +126,7 @@ final class ProtosHttpUrlClientIntegrationTest {
                     (() => { [IpAddresses.parse("127.0.0.1")].freeze() }).future()
                 }
             }
-            authorities: {
-                network: network
-                resolver: resolver
-                trust: tls.Trust.anchors([rootCa])
-            }
+            trust: tls.Trust.anchors([rootCa])
             get: () => {
                 request: {
                     method: "GET"
@@ -140,7 +136,7 @@ final class ProtosHttpUrlClientIntegrationTest {
                 request
             }
             requestOne: (url) => {
-                http.UrlClient.requestOne(authorities, url, get(), null)
+                http.UrlClient.requestOne(url, get(), null, network: network, resolver: resolver, trust: trust)
             }
             """;
 
@@ -221,12 +217,8 @@ final class ProtosHttpUrlClientIntegrationTest {
                 run(
                         SECURE_RESPONSE,
                         """
-                        untrusted: {
-                            network: network
-                            resolver: resolver
-                            trust: tls.Trust.anchors([untrustedCa])
-                        }
-                        failure: failureOf(http.UrlClient.requestOne(untrusted, "https://service.protos.test/", get(), null))
+                        untrusted: tls.Trust.anchors([untrustedCa])
+                        failure: failureOf(http.UrlClient.requestOne("https://service.protos.test/", get(), null, network: network, resolver: resolver, trust: untrusted))
                         Assertions.require(failure.kind == "untrustedPeer")
                         true
                         """);
@@ -242,7 +234,7 @@ final class ProtosHttpUrlClientIntegrationTest {
                         SECURE_RESPONSE,
                         """
                         before: liveTasks()
-                        invalid: http.UrlClient.requestOne(authorities, "https://u@service.protos.test/", get(), null)
+                        invalid: http.UrlClient.requestOne("https://u@service.protos.test/", get(), null, network: network, resolver: resolver, trust: trust)
                         Assertions.require(liveTasks() == before)
                         Assertions.require(failureOf(invalid).parent() === InvalidIOArgument)
                         service: requestOne("https://service.protos.test/")
@@ -494,11 +486,6 @@ final class ProtosHttpUrlClientIntegrationTest {
                 append(value)
                 text(digits)
             }
-            authorities: {
-                network: network
-                resolver: null
-                trust: null
-            }
             requestOf: (method) => {
                 request: {
                     method: method
@@ -528,16 +515,16 @@ final class ProtosHttpUrlClientIntegrationTest {
                 answer
             }
             call: (url, method) => {
-                outcomeOf(http.UrlClient.requestOne(authorities, url, requestOf(method), null))
+                outcomeOf(http.UrlClient.requestOne(url, requestOf(method), null, network: network, resolver: null, trust: null))
             }
             callLimited: (url, maxBody) => {
                 limits: {
                     maxResponseBodyBytes: maxBody
                 }
-                outcomeOf(http.UrlClient.requestOne(authorities, url, requestOf("GET"), limits))
+                outcomeOf(http.UrlClient.requestOne(url, requestOf("GET"), limits, network: network, resolver: null, trust: null))
             }
             admissionOf: (url) => {
-                future: http.UrlClient.requestOne(authorities, url, requestOf("GET"), null)
+                future: http.UrlClient.requestOne(url, requestOf("GET"), null, network: network, resolver: null, trust: null)
                 answer: "admitted"
                 Error.handle(
                     () => {
@@ -553,7 +540,7 @@ final class ProtosHttpUrlClientIntegrationTest {
                 answer
             }
             cancelWhileWaiting: (url) => {
-                service: http.UrlClient.requestOne(authorities, url, requestOf("GET"), null)
+                service: http.UrlClient.requestOne(url, requestOf("GET"), null, network: network, resolver: null, trust: null)
                 canceller: (() => {
                     service.cancel()
                     null

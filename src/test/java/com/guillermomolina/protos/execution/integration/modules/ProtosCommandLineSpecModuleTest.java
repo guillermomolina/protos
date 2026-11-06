@@ -78,9 +78,28 @@ final class ProtosCommandLineSpecModuleTest {
                             help: "Input files"
                         }
 
-                        first: CommandLine.option(optionDescriptor)
-                        second: CommandLine.option(optionDescriptor)
-                        positional: CommandLine.positional(positionalDescriptor)
+                        makeOption: () => {
+                            CommandLine.option(
+                                key: optionDescriptor.key,
+                                long: optionDescriptor.long,
+                                short: optionDescriptor.short,
+                                minValues: optionDescriptor.minValues,
+                                maxValues: optionDescriptor.maxValues,
+                                minOccurrences: optionDescriptor.minOccurrences,
+                                maxOccurrences: optionDescriptor.maxOccurrences,
+                                valueName: optionDescriptor.valueName,
+                                help: optionDescriptor.help
+                            )
+                        }
+                        first: makeOption()
+                        second: makeOption()
+                        positional: CommandLine.positional(
+                            key: positionalDescriptor.key,
+                            minOccurrences: positionalDescriptor.minOccurrences,
+                            maxOccurrences: positionalDescriptor.maxOccurrences,
+                            valueName: positionalDescriptor.valueName,
+                            help: positionalDescriptor.help
+                        )
 
                         (optionDescriptor.hasSlot("kind") === false) &&
                             (positionalDescriptor.hasSlot("kind") === false) &&
@@ -111,17 +130,17 @@ final class ProtosCommandLineSpecModuleTest {
                         evaluate(
                                 """
                                 CommandLine: import("std:cli/CommandLine")
-                                CommandLine.option({
-                                    key: "verbose"
-                                    long: "verbose"
-                                    short: "v"
-                                    minValues: 0
-                                    maxValues: 0
-                                    minOccurrences: 0
-                                    maxOccurrences: 1
-                                    valueName: null
+                                CommandLine.option(
+                                    key: "verbose",
+                                    long: "verbose",
+                                    short: "v",
+                                    minValues: 0,
+                                    maxValues: 0,
+                                    minOccurrences: 0,
+                                    maxOccurrences: 1,
+                                    valueName: null,
                                     help: null
-                                })
+                                )
                                 """));
         assertTrue(option.isFrozen());
         assertEquals("option", stringSlot(option, "kind"));
@@ -145,13 +164,13 @@ final class ProtosCommandLineSpecModuleTest {
                         evaluate(
                                 """
                                 CommandLine: import("std:cli/CommandLine")
-                                CommandLine.positional({
-                                    key: "target"
-                                    minOccurrences: 0
-                                    maxOccurrences: 1
-                                    valueName: "TARGET"
+                                CommandLine.positional(
+                                    key: "target",
+                                    minOccurrences: 0,
+                                    maxOccurrences: 1,
+                                    valueName: "TARGET",
                                     help: null
-                                })
+                                )
                                 """));
         assertTrue(positional.isFrozen());
         assertEquals("positional", stringSlot(positional, "kind"));
@@ -324,87 +343,87 @@ final class ProtosCommandLineSpecModuleTest {
     void a1RejectsMalformedNamesCardinalitiesAndDuplicateCommandMembers() throws Exception {
         assertSignals(
                 """
-                CommandLine.option({
-                    key: ""
-                    long: "jobs"
-                    short: "j"
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "",
+                    long: "jobs",
+                    short: "j",
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
                 """);
         assertSignals(
                 """
-                CommandLine.option({
-                    key: "jobs"
-                    long: "1jobs"
-                    short: "j"
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "jobs",
+                    long: "1jobs",
+                    short: "j",
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
                 """);
         assertSignals(
                 """
-                CommandLine.option({
-                    key: "jobs"
-                    long: "jobs"
-                    short: "jj"
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "jobs",
+                    long: "jobs",
+                    short: "jj",
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
                 """);
         assertSignals(
                 """
-                CommandLine.option({
-                    key: "jobs"
-                    long: null
-                    short: null
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "jobs",
+                    long: null,
+                    short: null,
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
                 """);
         assertSignals(
                 """
-                CommandLine.option({
-                    key: "jobs"
-                    long: "jobs"
-                    short: "j"
-                    minValues: 0
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "jobs",
+                    long: "jobs",
+                    short: "j",
+                    minValues: 0,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
                 """);
         assertSignals(
                 """
-                CommandLine.option({
-                    key: "jobs"
-                    long: "jobs"
-                    short: "j"
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 2
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "jobs",
+                    long: "jobs",
+                    short: "j",
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 2,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
                 """);
         assertSignals(
                 """

@@ -22,37 +22,27 @@ HostConfig: import("std:http/internal/HostConfig")
 // listener custody, Worker or I/O could exist (HTTP.md §15.2).
 handlerModule: "std:http/Server"
 
-construct: (listener, options) => {
+construct: (listener) => {
     Assertions.signals(InvalidIOArgument, () => {
-        http.Host.owning(listener, handlerModule, "Server", options)
+        http.Host.owning(listener, handlerModule, "Server")
     })
 }
 
 // HTTP.md §15.13: the factory variant validates the same structural
 // arguments, before custody, and never examines initialization first.
-constructWithFactory: (listener, factoryModule, factoryBinding, initialization, options) => {
+constructWithFactory: (listener, factoryModule, factoryBinding, initialization) => {
     Assertions.signals(InvalidIOArgument, () => {
-        http.Host.owningWithFactory(listener, factoryModule, factoryBinding, initialization, options)
+        http.Host.owningWithFactory(listener, factoryModule, factoryBinding, initialization)
     })
 }
 
-invalidOptions: [
-    { workers: 0 },
-    { workers: -1 },
-    { workers: 2147483648 },
-    { workers: "1" },
-    { workers: 1.0 },
-    { maxConnections: 0 },
-    { maxConnections: null },
-    { maxPendingAccepts: 0 },
-    { maxPendingAccepts: 65 },
-    { workers: 65 },
-    { limits: 1 },
-    { limits: { maxHeaderFields: 0 } },
-    { limits: { unknownLimit: 1 } },
-    { backlog: 1 },
-    { cpus: 1 }
-]
+// D237: an association failure is a fresh generic Error signalled before the
+// selected Closure runs, never an InvalidIOArgument.
+associationError: (action) => {
+    failure: Assertions.signals(Error, action)
+    Assertions.require(failure.parent() === Error)
+    failure
+}
 
 tests: [
     Test("module exports exactly Host and HostError", () => {
@@ -78,45 +68,141 @@ tests: [
         server: import("std:http/Server").Server
         Assertions.require(!server.hasSlot("serve"))
     }),
-    Test("invalid options signal InvalidIOArgument before the listener is examined", () => {
-        for(options in invalidOptions) {
-            construct(null, options)
+    Test("an invalid workers value signals InvalidIOArgument before the listener is examined", () => {
+        for(workers in [0, -1, 2147483648, "1", 1.0, null]) {
+            Assertions.signals(InvalidIOArgument, () => {
+                http.Host.owning(null, handlerModule, "Server", workers: workers)
+            })
         }
         null
     }),
-    Test("the ordering workers <= maxPendingAccepts <= maxConnections is required", () => {
-        tooFewPending: {
-            workers: 3
-            maxPendingAccepts: 2
+    Test("an invalid maxConnections value signals InvalidIOArgument", () => {
+        for(maxConnections in [0, -1, 2147483648, "64", null]) {
+            Assertions.signals(InvalidIOArgument, () => {
+                http.Host.owning(null, handlerModule, "Server", maxConnections: maxConnections)
+            })
         }
-        tooManyPending: {
-            maxConnections: 4
-            maxPendingAccepts: 5
-        }
-        construct(null, tooFewPending)
-        construct(null, tooManyPending)
+        null
     }),
-    Test("options must be null or an ordinary object", () => {
-        construct(null, [])
-        construct(null, 1)
-        construct(null, "workers")
-        construct(null, () => { 1 })
+    Test("an invalid maxPendingAccepts value signals InvalidIOArgument", () => {
+        for(maxPendingAccepts in [0, -1, 65, "1", null]) {
+            Assertions.signals(InvalidIOArgument, () => {
+                http.Host.owning(null, handlerModule, "Server", maxPendingAccepts: maxPendingAccepts)
+            })
+        }
+        null
+    }),
+    Test("an ordinary object as a numeric option signals InvalidIOArgument", () => {
+        Assertions.require(Integer.recognizes({}) == false)
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owning(null, handlerModule, "Server", workers: {})
+        })
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owning(null, handlerModule, "Server", maxConnections: {})
+        })
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owning(null, handlerModule, "Server", maxPendingAccepts: {})
+        })
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owningWithFactory(null, handlerModule, "Server", null, workers: {})
+        })
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owningWithFactory(null, handlerModule, "Server", null, maxConnections: {})
+        })
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owningWithFactory(null, handlerModule, "Server", null, maxPendingAccepts: {})
+        })
+    }),
+    Test("the ordering workers <= maxPendingAccepts <= maxConnections is required", () => {
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owning(null, handlerModule, "Server", workers: 3, maxPendingAccepts: 2)
+        })
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owning(null, handlerModule, "Server", maxConnections: 4, maxPendingAccepts: 5)
+        })
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owning(null, handlerModule, "Server", workers: 5, maxConnections: 4, maxPendingAccepts: 4)
+        })
+    }),
+    Test("the maxPendingAccepts default is the bound workers value", () => {
+        // workers: 65 alone defaults maxPendingAccepts to 65, which exceeds
+        // the default maxConnections of 64.
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owning(null, handlerModule, "Server", workers: 65)
+        })
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owningWithFactory(null, handlerModule, "Server", null, workers: 65)
+        })
+        // The default reads workers as bound, even when workers is supplied
+        // after maxConnections in the source.
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owning(null, handlerModule, "Server", maxConnections: 8, workers: 9)
+        })
+    }),
+    Test("an invalid limits object signals InvalidIOArgument", () => {
+        for(limits in [1, "limits", [], { maxHeaderFields: 0 }, { unknownLimit: 1 }]) {
+            Assertions.signals(InvalidIOArgument, () => {
+                http.Host.owning(null, handlerModule, "Server", limits: limits)
+            })
+        }
+        null
+    }),
+    Test("an unknown label or a positional and named collision is an association Error", () => {
+        invoked: false
+        fake: {
+            acceptCapability: () => {
+                invoked = true
+                null
+            }
+            close: () => {
+                invoked = true
+                null
+            }
+        }
+        associationError(() => {
+            http.Host.owning(fake, handlerModule, "Server", backlog: 1)
+        })
+        associationError(() => {
+            http.Host.owning(fake, handlerModule, "Server", cpus: 1)
+        })
+        associationError(() => {
+            http.Host.owning(fake, handlerModule, "Server", options: { workers: 1 })
+        })
+        associationError(() => {
+            http.Host.owning(fake, handlerModule, "Server", 1, workers: 1)
+        })
+        associationError(() => {
+            http.Host.owningWithFactory(fake, handlerModule, "Server", null, backlog: 1)
+        })
+        associationError(() => {
+            http.Host.owningWithFactory(fake, handlerModule, "Server", null, initialization: null)
+        })
+        // An association Error wins even over an invalid named value.
+        associationError(() => {
+            http.Host.owning(fake, handlerModule, "Server", workers: 0, backlog: 1)
+        })
+        Assertions.require(!invoked)
+    }),
+    Test("a trailing null is a positional workers value, not default options", () => {
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owning(null, handlerModule, "Server", null)
+        })
     }),
     Test("handler module and binding must be Strings", () => {
         Assertions.signals(InvalidIOArgument, () => {
-            http.Host.owning(null, () => { 1 }, "Server", null)
+            http.Host.owning(null, () => { 1 }, "Server")
         })
         Assertions.signals(InvalidIOArgument, () => {
-            http.Host.owning(null, handlerModule, 1, null)
+            http.Host.owning(null, handlerModule, 1)
         })
     }),
     Test("no listener is acquired implicitly", () => {
         Assertions.require(!http.hasSlot("network"))
         Assertions.require(!http.Host.hasSlot("network"))
-        construct(null, null)
-        construct({}, null)
-        construct(42, null)
-        construct("127.0.0.1:8080", null)
+        construct(null)
+        construct({})
+        construct(42)
+        construct("127.0.0.1:8080")
     }),
     Test("an ordinary object posing as a listener is never invoked", () => {
         invoked: false
@@ -130,20 +216,34 @@ tests: [
                 null
             }
         }
-        construct(fake, null)
+        construct(fake)
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owning(fake, handlerModule, "Server", workers: 0)
+        })
         Assertions.require(!invoked)
     }),
-    Test("owningWithFactory rejects invalid options before the listener is examined", () => {
-        for(options in invalidOptions) {
-            constructWithFactory(null, handlerModule, "Server", null, options)
-        }
-        null
+    Test("owningWithFactory rejects invalid named options before the listener is examined", () => {
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owningWithFactory(null, handlerModule, "Server", null, workers: 0)
+        })
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owningWithFactory(null, handlerModule, "Server", null, maxConnections: 0)
+        })
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owningWithFactory(null, handlerModule, "Server", null, maxPendingAccepts: 65)
+        })
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owningWithFactory(null, handlerModule, "Server", null, workers: 3, maxPendingAccepts: 2)
+        })
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owningWithFactory(null, handlerModule, "Server", null, limits: { maxHeaderFields: 0 })
+        })
     }),
     Test("owningWithFactory requires factory module and binding Strings", () => {
-        constructWithFactory(null, () => { 1 }, "Server", null, null)
-        constructWithFactory(null, handlerModule, 1, null, null)
-        constructWithFactory(null, null, "Server", null, null)
-        constructWithFactory(null, handlerModule, null, null, null)
+        constructWithFactory(null, () => { 1 }, "Server", null)
+        constructWithFactory(null, handlerModule, 1, null)
+        constructWithFactory(null, null, "Server", null)
+        constructWithFactory(null, handlerModule, null, null)
     }),
     Test("owningWithFactory acquires no listener implicitly and never invokes a fake one", () => {
         invoked: false
@@ -158,7 +258,7 @@ tests: [
             }
         }
         for(listener in [null, {}, 42, "127.0.0.1:8080", fake]) {
-            constructWithFactory(listener, handlerModule, "Server", null, null)
+            constructWithFactory(listener, handlerModule, "Server", null)
         }
         Assertions.require(!invoked)
     }),
@@ -169,14 +269,16 @@ tests: [
             run: () => { 1 }
             pending: (() => { 1 }).future()
         }
-        constructWithFactory(null, handlerModule, "Server", hostile, null)
-        constructWithFactory(null, handlerModule, "Server", hostile, { workers: 0 })
-        constructWithFactory(null, handlerModule, 1, hostile, null)
+        constructWithFactory(null, handlerModule, "Server", hostile)
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owningWithFactory(null, handlerModule, "Server", hostile, workers: 0)
+        })
+        constructWithFactory(null, handlerModule, 1, hostile)
         hostile.pending.value()
     }),
     Test("every rejection is a fresh InvalidIOArgument", () => {
-        first: construct(null, null)
-        second: construct(null, null)
+        first: construct(null)
+        second: construct(null)
         Assertions.require(first.parent() === InvalidIOArgument)
         Assertions.require(second.parent() === InvalidIOArgument)
         Assertions.require(first !== second)

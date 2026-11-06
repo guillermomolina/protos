@@ -15,13 +15,14 @@
 
 //! Standard Library one-shot HTTP/1.1 URL client (D222-C, HTTP.md §18).
 //!
-//! `UrlClient.requestOne(authorities, url, request, limits)` sends one request
-//! to an absolute `http` or `https` URL and answers a fresh `Future` of the
-//! buffered response `{status, headers, body}`, whose `body` is detached
-//! Bytes. `authorities` is `{network, resolver, trust}`: the explicitly
-//! granted `Network` used for the TCP connection, the explicitly granted
-//! `Resolver` used only for a host name (it may be null for a numeric host),
-//! and the explicit `std:tls/Client` trust used only for `https`. `request` is
+//! `UrlClient.requestOne(url, request, limits, network: network,
+//! resolver: resolver, trust: trust)` sends one request to an absolute `http`
+//! or `https` URL and answers a fresh `Future` of the buffered response
+//! `{status, headers, body}`, whose `body` is detached Bytes. The three
+//! required named authorities are the explicitly granted `Network` used for
+//! the TCP connection, the explicitly granted `Resolver` used only for a host
+//! name (it may be null for a numeric host), and the explicit `std:tls/Client`
+//! trust used only for `https` (it may be null for `http`). `request` is
 //! `{method, headers, body}`; the `Host` field and the origin-form target come
 //! from the URL. `limits` are the `std:http/Client` limits.
 //!
@@ -42,9 +43,34 @@ UrlClient: ((facility) => {
     // every effect. An invalid call answers an already failed Future without
     // a Task, a lookup or a connection; an admitted call creates exactly one
     // service Task.
-    requestOne: (authorities, url, request, limits) => {
-        captured: ClientLimits.capture(facility, limits)
-        valid: captured !== null
+    // Private presence identity: an omitted authority is distinct from an
+    // explicitly supplied null (D241).
+    missingAuthority: {}
+
+    requestOne: (
+        url,
+        request,
+        limits,
+        network: missingAuthority,
+        resolver: missingAuthority,
+        trust: missingAuthority
+    ) => {
+        supplied: (network !== missingAuthority) && (resolver !== missingAuthority) && (trust !== missingAuthority)
+        authorities: null
+        if(supplied) {
+            authorities = {
+                network: network
+                resolver: resolver
+                trust: trust
+            }
+        }
+
+        captured: null
+        valid: supplied
+        if(valid) {
+            captured = ClientLimits.capture(facility, limits)
+            valid = captured !== null
+        }
         prepared: null
         if(valid) {
             prepared = UrlRequest.prepare(facility, authorities, url, request)

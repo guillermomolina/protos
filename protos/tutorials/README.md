@@ -79,8 +79,9 @@ The HTTP progression follows the same rule. `01-serve-one-response.protos`
 with incremental body reads) are standalone-CLI lessons over the in-memory
 duplex of the support module `memory-duplex.protos`, whose byte-I/O and close
 contracts are checked by the standalone-CLI source `memory-duplex-contract.protos`.
-`03-host-and-client-over-tcp.protos` (`Host.owning`, Client GETs over TCP,
-ownership and drain) requires an explicitly provisioned bootstrap-local
+`03-host-and-client-over-tcp.protos` (`Host.owning` with the named options
+`workers` and `maxConnections`, Client GETs over TCP, ownership and drain)
+requires an explicitly provisioned bootstrap-local
 `network` capability and the support module `hello-handler.protos` installed as
 `app:hello`; `ProtosHttpLearningMaterialIntegrationTest` runs it in a Java
 Polyglot embedding with socket access. `04-router-dispatch.protos`

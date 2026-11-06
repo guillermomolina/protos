@@ -15,7 +15,9 @@
 
 //! Standard Library TLS client (D220–S12, TLS.md).
 //!
-//! `Client.handshake(duplex, serverIdentity, trust, options)` performs one TLS
+//! `Client.handshake(duplex, serverIdentity, trust, minimumVersion: "1.2",
+//! alpn: "http/1.1", maxHandshakeBytes: 1048576,
+//! maxQueuedWriteBytes: 33554432)` performs one TLS
 //! client handshake over a caller-supplied, already connected duplex
 //! (`ByteReadable` and `ByteWritable`) and answers a fresh `Future` of a secure
 //! duplex (`read`, `write`, `close`), delivered only after the peer chain
@@ -30,8 +32,9 @@
 //! IDNA2008 A-labels; every other reserved label and every Unicode (U-label)
 //! input is rejected, never converted. `trust`
 //! is `Trust.anchors(certificates)`, `Trust.javaCacerts()` or
-//! `Trust.system()`; `options` is an ordinary object with the optional fields
-//! `minimumVersion`, `alpn`, `maxHandshakeBytes` and `maxQueuedWriteBytes`.
+//! `Trust.system()`. The four optional named parameters configure the
+//! handshake; an explicit `alpn: null` disables ALPN, while an omitted `alpn`
+//! offers "http/1.1".
 //! There is no default trust. The facility acquires no network, name
 //! resolution, URL, clock or other ambient authority.
 
@@ -94,11 +97,41 @@ Client: ((facility) => {
     }
 
     // Performs one borrowed handshake over duplex; see the module documentation.
-    entry: (duplex, serverIdentity, trust, options) => {
+    // D241: the configuration is four named parameters with ordinary D203
+    // defaults; the private options object only feeds the existing admission.
+    entry: (
+        duplex,
+        serverIdentity,
+        trust,
+        minimumVersion: "1.2",
+        alpn: "http/1.1",
+        maxHandshakeBytes: 1048576,
+        maxQueuedWriteBytes: 33554432
+    ) => {
+        options: {
+            minimumVersion: minimumVersion
+            alpn: alpn
+            maxHandshakeBytes: maxHandshakeBytes
+            maxQueuedWriteBytes: maxQueuedWriteBytes
+        }
         admit(duplex, serverIdentity, trust, options, false)
     }
     // Performs one handshake and takes custody of duplex, closing it exactly once.
-    entry.owning: (duplex, serverIdentity, trust, options) => {
+    entry.owning: (
+        duplex,
+        serverIdentity,
+        trust,
+        minimumVersion: "1.2",
+        alpn: "http/1.1",
+        maxHandshakeBytes: 1048576,
+        maxQueuedWriteBytes: 33554432
+    ) => {
+        options: {
+            minimumVersion: minimumVersion
+            alpn: alpn
+            maxHandshakeBytes: maxHandshakeBytes
+            maxQueuedWriteBytes: maxQueuedWriteBytes
+        }
         admit(duplex, serverIdentity, trust, options, true)
     }
 

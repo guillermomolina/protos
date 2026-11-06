@@ -23,11 +23,7 @@
 UrlClient: import("std:http/UrlClient").UrlClient
 Trust: import("std:tls/Client").Trust
 
-authorities: {
-    network: network
-    resolver: resolver
-    trust: Trust.javaCacerts()
-}
+trust: Trust.javaCacerts()
 
 request: {
     method: "GET"
@@ -43,10 +39,12 @@ request: {
 // connects through Network, authenticates TLS using the original hostname,
 // and buffers the HTTP response before its callback-scoped body retires.
 response: UrlClient.requestOne(
-    authorities,
     "https://api.github.com/repos/guillermomolina/protos",
     request,
-    null
+    null,
+    network: network,
+    resolver: resolver,
+    trust: trust
 ).value()
 
 // An embedding can observe this result; the standalone CLI has no

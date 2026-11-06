@@ -118,15 +118,6 @@ resolverOf: (addressTexts) => {
     fixture
 }
 
-authoritiesOf: (network, resolver, trust) => {
-    authorities: {
-        network: network
-        resolver: resolver
-        trust: trust
-    }
-    authorities
-}
-
 get: () => {
     request: {
         method: "GET"
@@ -156,7 +147,7 @@ failureOf: (future) => {
 rejects: (url, request, limits) => {
     network: networkOf([])
     resolver: resolverOf(["192.0.2.1"])
-    future: http.UrlClient.requestOne(authoritiesOf(network, resolver, null), url, request, limits)
+    future: http.UrlClient.requestOne(url, request, limits, network: network, resolver: resolver, trust: null)
     Assertions.require(failureOf(future).parent() === InvalidIOArgument)
     Assertions.require(network.attempts().size() == 0)
     Assertions.require(resolver.names().size() == 0)
@@ -167,7 +158,7 @@ run: (url, request, responseText) => {
     dx: duplexOf(responseText)
     network: networkOf([dx])
     resolver: resolverOf(["192.0.2.1"])
-    response: http.UrlClient.requestOne(authoritiesOf(network, resolver, null), url, request, null).value()
+    response: http.UrlClient.requestOne(url, request, null, network: network, resolver: resolver, trust: null).value()
     outcome: {
         duplex: dx
         network: network
@@ -271,25 +262,55 @@ tests: [
     Test("authorities are checked before any effect", () => {
         network: networkOf([])
         resolver: resolverOf(["192.0.2.1"])
-        missing: http.UrlClient.requestOne({
-            network: network
-            resolver: resolver
-        }, "http://127.0.0.1/", get(), null)
-        Assertions.require(failureOf(missing).parent() === InvalidIOArgument)
-        noNetwork: http.UrlClient.requestOne(authoritiesOf(null, resolver, null), "http://127.0.0.1/", get(), null)
-        Assertions.require(failureOf(noNetwork).parent() === InvalidIOArgument)
+        assertRejected: (future) => {
+            Assertions.require(failureOf(future).parent() === InvalidIOArgument)
+        }
+        // Each of the three named authorities is required: an omitted
+        // authority answers a failed Future even when null would be admissible.
+        assertRejected(http.UrlClient.requestOne("http://127.0.0.1/", get(), null, resolver: resolver, trust: null))
+        assertRejected(http.UrlClient.requestOne("http://127.0.0.1/", get(), null, network: network, trust: null))
+        assertRejected(http.UrlClient.requestOne("http://127.0.0.1/", get(), null, network: network, resolver: resolver))
+        assertRejected(http.UrlClient.requestOne("http://127.0.0.1/", get(), null))
+        // Invalid domain values for each authority.
+        assertRejected(http.UrlClient.requestOne("http://127.0.0.1/", get(), null, network: null, resolver: resolver, trust: null))
+        assertRejected(http.UrlClient.requestOne("http://127.0.0.1/", get(), null, network: {}, resolver: resolver, trust: null))
+        assertRejected(http.UrlClient.requestOne("http://example.org/", get(), null, network: network, resolver: {}, trust: null))
         // A host name needs an explicit Resolver; https needs explicit trust.
-        noResolver: http.UrlClient.requestOne(authoritiesOf(network, null, null), "http://example.org/", get(), null)
-        Assertions.require(failureOf(noResolver).parent() === InvalidIOArgument)
-        noTrust: http.UrlClient.requestOne(authoritiesOf(network, resolver, null), "https://127.0.0.1/", get(), null)
-        Assertions.require(failureOf(noTrust).parent() === InvalidIOArgument)
+        assertRejected(http.UrlClient.requestOne("http://example.org/", get(), null, network: network, resolver: null, trust: null))
+        assertRejected(http.UrlClient.requestOne("https://127.0.0.1/", get(), null, network: network, resolver: resolver, trust: null))
         Assertions.require(network.attempts().size() == 0)
         Assertions.require(resolver.names().size() == 0)
     }),
+    Test("an explicit null authority is supplied, unlike an omitted one", () => {
+        // A numeric http host admits a null Resolver and a null trust when
+        // they are supplied explicitly.
+        dx: duplexOf(ok)
+        network: networkOf([dx])
+        response: http.UrlClient.requestOne("http://127.0.0.1/", get(), null, network: network, resolver: null, trust: null).value()
+        Assertions.require(response.status == 200)
+        Assertions.require(network.attempts().size() == 1)
+        omittedNetwork: networkOf([duplexOf(ok)])
+        omitted: http.UrlClient.requestOne("http://127.0.0.1/", get(), null, network: omittedNetwork, trust: null)
+        Assertions.require(failureOf(omitted).parent() === InvalidIOArgument)
+        Assertions.require(omittedNetwork.attempts().size() == 0)
+    }),
+    Test("an unknown label or a positional and named collision is an association Error", () => {
+        network: networkOf([])
+        for(action in [
+            () => { http.UrlClient.requestOne("http://127.0.0.1/", get(), null, network: network, resolver: null, trust: null, timeout: 1) },
+            () => { http.UrlClient.requestOne("http://127.0.0.1/", get(), null, authorities: {}) },
+            () => { http.UrlClient.requestOne("http://127.0.0.1/", get(), null, network, network: network, resolver: null, trust: null) },
+            () => { http.UrlClient.requestOne("http://127.0.0.1/", get(), url: "http://127.0.0.1/", network: network, resolver: null, trust: null) }
+        ]) {
+            failure: Assertions.signals(Error, action)
+            Assertions.require(failure.parent() === Error)
+        }
+        Assertions.require(network.attempts().size() == 0)
+    }),
     Test("invalid calls answer fresh failed Futures", () => {
         network: networkOf([])
-        first: http.UrlClient.requestOne(authoritiesOf(network, null, null), "ftp://x/", get(), null)
-        second: http.UrlClient.requestOne(authoritiesOf(network, null, null), "ftp://x/", get(), null)
+        first: http.UrlClient.requestOne("ftp://x/", get(), null, network: network, resolver: null, trust: null)
+        second: http.UrlClient.requestOne("ftp://x/", get(), null, network: network, resolver: null, trust: null)
         Assertions.require(first !== second)
         Assertions.require(failureOf(first) !== failureOf(second))
     }),
@@ -326,7 +347,7 @@ tests: [
         dx: duplexOf(ok)
         network: networkOf([IOError {}, dx])
         resolver: resolverOf(["192.0.2.1", "2001:db8::1", "192.0.2.3"])
-        response: http.UrlClient.requestOne(authoritiesOf(network, resolver, null), "http://example.org/", get(), null).value()
+        response: http.UrlClient.requestOne("http://example.org/", get(), null, network: network, resolver: resolver, trust: null).value()
         Assertions.require(response.status == 200)
         Assertions.require(network.attempts().size() == 2)
         Assertions.require(network.attempts()[0] == "192.0.2.1:80")
@@ -337,7 +358,7 @@ tests: [
         last: IOError {}
         network: networkOf([IOError {}, last])
         resolver: resolverOf(["192.0.2.1", "192.0.2.2"])
-        failure: failureOf(http.UrlClient.requestOne(authoritiesOf(network, resolver, null), "http://example.org/", get(), null))
+        failure: failureOf(http.UrlClient.requestOne("http://example.org/", get(), null, network: network, resolver: resolver, trust: null))
         Assertions.require(failure === last)
         Assertions.require(network.attempts().size() == 2)
     }),
@@ -360,7 +381,7 @@ tests: [
             headers: [["X", value]]
             body: null
         }
-        future: http.UrlClient.requestOne(authoritiesOf(network, null, null), "http://127.0.0.1/", request, null)
+        future: http.UrlClient.requestOne("http://127.0.0.1/", request, null, network: network, resolver: null, trust: null)
         value.add(33)
         request.headers = []
         future.value()
@@ -400,19 +421,20 @@ tests: [
     Test("a response protocol failure closes the connection once", () => {
         dx: duplexOf("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nab")
         network: networkOf([dx])
-        failure: failureOf(http.UrlClient.requestOne(authoritiesOf(network, null, null), "http://127.0.0.1/", get(), null))
+        failure: failureOf(http.UrlClient.requestOne("http://127.0.0.1/", get(), null, network: network, resolver: null, trust: null))
         Assertions.require(failure.kind == "malformedResponse")
         Assertions.require(dx.closeCount() == 1)
     }),
     Test("rejected TLS admission returns TCP custody to UrlClient", () => {
         dx: duplexOf(ok)
         network: networkOf([dx])
-        authorities: authoritiesOf(network, null, {})
         future: http.UrlClient.requestOne(
-            authorities,
             "https://127.0.0.1/",
             get(),
-            null
+            null,
+            network: network,
+            resolver: null,
+            trust: {}
         )
         failure: failureOf(future)
         Assertions.require(failure.parent() === InvalidIOArgument)
@@ -423,7 +445,7 @@ tests: [
     Test("an oversized body fails with the Client limit", () => {
         dx: duplexOf("HTTP/1.1 200 OK\r\n\r\n0123456789")
         network: networkOf([dx])
-        failure: failureOf(http.UrlClient.requestOne(authoritiesOf(network, null, null), "http://127.0.0.1/", get(), { maxResponseBodyBytes: 4 }))
+        failure: failureOf(http.UrlClient.requestOne("http://127.0.0.1/", get(), { maxResponseBodyBytes: 4 }, network: network, resolver: null, trust: null))
         Assertions.require(failure.kind == "responseLimit")
         Assertions.require(dx.closeCount() == 1)
     })

@@ -41,13 +41,15 @@ port: listener.localPort()
 serverLimits: {
     maxRequestBodyBytes: 4096
 }
-options: {
-    workers: 2
-    maxPendingAccepts: 2
-    maxConnections: 4
+host: Host.owning(
+    listener,
+    "app:echo",
+    "handle",
+    workers: 2,
+    maxPendingAccepts: 2,
+    maxConnections: 4,
     limits: serverLimits
-}
-host: Host.owning(listener, "app:echo", "handle", options)
+)
 host.ready().value()
 
 post: (text) => {

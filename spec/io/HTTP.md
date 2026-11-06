@@ -1079,9 +1079,13 @@ Prelude binding, ambient HTTP server, or implicit import. Its portable public
 operations are:
 
 ```text
-Host.owning(listener, handlerModule, handlerBinding, options) -> host
+Host.owning(listener, handlerModule, handlerBinding,
+            workers: 1, maxConnections: 64,
+            maxPendingAccepts: workers, limits: null)     -> host
 Host.owningWithFactory(listener, factoryModule, factoryBinding,
-                       initialization, options)          -> host
+                       initialization,
+                       workers: 1, maxConnections: 64,
+                       maxPendingAccepts: workers, limits: null) -> host
 host.ready()                                            -> Future<host>
 host.shutdown("drain")                                  -> Future<host>
 host.shutdown("abort")                                  -> Future<host>
@@ -1093,6 +1097,15 @@ where §15.13 says otherwise, every rule of this section stated for
 `Host.owning` applies to it, with `factoryModule` and `factoryBinding` in
 place of `handlerModule` and `handlerBinding`. `Host` has exactly these two
 construction operations.
+
+Both construction operations are ordinary source Closures (D241-B). Their
+per-call options `workers`, `maxConnections`, `maxPendingAccepts` and `limits`
+are ordinary parameters with the ordinary defaults shown above, normally
+supplied by name under the name-association rules of
+`../semantics/CALLABLES.md` (D237). Neither operation receives a public
+`options` object; a trailing object argument is an ordinary positional value
+for `workers` and is rejected as such. No keyword spread or conversion
+between an object and named arguments exists.
 
 `Host.owning` is a synchronous construction operation. The returned `host` is
 an ordinary Actor-local hosting control object with identity and the methods
@@ -1123,22 +1136,32 @@ Module identity and binding lookup obey the `Actor.spawn` bootstrap and
 module-resolution rules. An invalid module or bootstrap may fail
 asynchronously after construction.
 
-`options` is `null` or an ordinary object. Only these own slots are admitted:
+The four per-call options are these parameters:
 
-| Own slot | Default | Contract |
+| Parameter | Default | Contract |
 | --- | --- | --- |
 | `workers` | `1` | positive Integer in signed 32-bit range |
 | `maxConnections` | `64` | positive Integer in signed 32-bit range |
 | `maxPendingAccepts` | `workers` | positive Integer in signed 32-bit range |
 | `limits` | `null` | `Server.serveOne` limits object under §10 |
 
-Inherited option slots do not supply values; absent slots select defaults;
-unknown own slots are rejected. The required inequalities are
+An omitted option evaluates its default under the ordinary default rules; the
+default of `maxPendingAccepts` reads the value actually bound to `workers`,
+whether supplied or defaulted. An explicitly supplied value, including `null`,
+is validated as that value and never replaced by the default. `limits`
+remains an ordinary, reusable HTTP limits object (§10), not a group of call
+arguments. The required inequalities are
 `1 <= workers <= maxPendingAccepts <= maxConnections`. No coercion, clamping,
 auto-detected CPU count, hidden unbounded queue, or alternative backlog option
-is defined. Invalid construction arguments signal a fresh
-`InvalidIOArgument` synchronously, without acquiring listener custody,
-creating Workers or initiating I/O. Valid construction acquires custody of
+is defined.
+
+Errors are distinguished by phase. A label that names no parameter, or that
+names a parameter already supplied positionally, is a D237 argument
+association failure: a fresh generic `Error` is signalled after dispatch and
+before any default or body of the operation runs, so no option is examined and
+no custody, Worker or I/O exists. After successful association, invalid
+construction arguments signal a fresh `InvalidIOArgument` synchronously,
+without acquiring listener custody, creating Workers or initiating I/O. Valid construction acquires custody of
 the supplied listener and begins asynchronous startup. A later startup
 failure is reported by hosting Futures, not by retroactively failing
 `Host.owning`.
@@ -1383,7 +1406,8 @@ cost.
 ### 15.13 Worker-local handler factory (D225-A)
 
 `Host.owningWithFactory(listener, factoryModule, factoryBinding,
-initialization, options)` is the second construction operation of `Host`. It
+initialization, workers: 1, maxConnections: 64, maxPendingAccepts: workers,
+limits: null)` is the second construction operation of `Host`. It
 differs from `Host.owning` only in how each Worker obtains its handler.
 Everything else in §§15.1–15.12 applies unchanged, including listener
 custody, Worker count and placement, quotas and admission, connection
@@ -1392,12 +1416,14 @@ custody, `ready()`, `shutdown("drain")`, `shutdown("abort")`,
 the use of `Server.serveOne.owning` for every admitted connection.
 `Host.owning` is unaffected by this section.
 
-**Construction.** `listener`, `factoryModule`, `factoryBinding` and
-`options` are validated exactly as the corresponding arguments of
-`Host.owning` (§15.2): `factoryModule` and `factoryBinding` must be semantic
-Strings, and an invalid argument signals a fresh `InvalidIOArgument`
-synchronously, without listener custody, Workers or I/O. `initialization`
-may be any value. It is not a structural argument and is not examined before
+**Construction.** Argument association and its D237 `Error` follow §15.2.
+`listener`, `factoryModule`, `factoryBinding` and the four named options are
+validated exactly as the corresponding arguments of `Host.owning` (§15.2):
+`factoryModule` and `factoryBinding` must be semantic Strings, and an invalid
+argument signals a fresh `InvalidIOArgument` synchronously, without listener
+custody, Workers or I/O. `initialization` may be any value. It remains one
+separate payload value: it is never a group of named arguments and never
+joins the options. It is not a structural argument and is not examined before
 valid construction has acquired listener custody.
 
 **Initialization transfer.** For each Worker, `initialization` crosses into
@@ -2157,23 +2183,36 @@ The explicit module `std:http/UrlClient` exports exactly `UrlClient`, whose
 only operation is:
 
 ```text
-UrlClient.requestOne(authorities, url, request, limits) -> Future<BufferedResponse>
+UrlClient.requestOne(url, request, limits,
+                     network: network, resolver: resolver,
+                     trust: trust)          -> Future<BufferedResponse>
 ```
+
+`requestOne` is an ordinary source Closure (D241-B). `network`, `resolver` and
+`trust` are required authority parameters, normally supplied by name under the
+name-association rules of `../semantics/CALLABLES.md` (D237). Each must be
+supplied explicitly; an omitted authority is distinct from an explicitly
+supplied `null` and is never defaulted. There is no public `authorities`
+object, no keyword spread and no conversion between an object and named
+arguments.
 
 There is no Prelude binding and no import effect. Importing the module grants
 no capability.
 
 ```text
-authorities: { network, resolver: null | Resolver, trust: null | Trust }
+network:     a Network (connectTcp)
+resolver:    null | Resolver
+trust:       null | Trust
 url:         String
 request:     { method: String, headers: Array<[String, Bytes]>, body: null | Bytes }
 limits:      null | the std:http/Client limits object (§16.12)
 BufferedResponse: { status: Integer, headers: Array<[String, Bytes]>, body: Bytes }
 ```
 
-`authorities` and `request` are ordinary objects with the listed own slots;
-other own slots are ignored and inherited slots are never read. The response
-has no `version` slot.
+`request` keeps its representation: it is an ordinary HTTP message object with
+the listed own slots; other own slots are ignored and inherited slots are never
+read. `limits` remains an ordinary limits object that may be shared with
+`Client.exchangeOne`. The response has no `version` slot.
 
 ### 18.2 URL and request admission
 
@@ -2196,10 +2235,10 @@ An explicit port is 1 through 5 decimal digits with a value in 1..65535; an
 empty port is rejected. The default port is 80 for `http` and 443 for
 `https`.
 
-`authorities.network` must satisfy the `connectTcp` protocol. A host name
-requires a non-null `authorities.resolver` satisfying `lookupAddresses`; a
-numeric host does not use it. `https` requires a non-null `authorities.trust`,
-which is passed unchanged to `std:tls/Client`; `http` never uses it.
+`network` must satisfy the `connectTcp` protocol. A host name requires a
+non-null `resolver` satisfying `lookupAddresses`; a numeric host does not use
+it. `https` requires a non-null `trust`, which is passed unchanged to
+`std:tls/Client`; `http` never uses it.
 
 The lower request (§16.4) is built as:
 
@@ -2219,10 +2258,18 @@ for `std:http/Client` under §16.4 and §16.5.
 
 ### 18.3 Admission and the service Task
 
-After ordinary dispatch, `limits` (§16.12), `authorities`, `url` and `request`
-are validated and snapshotted before any effect. When validation fails, the
-returned Future is already failed with a fresh `InvalidIOArgument`; no Task is
-created, no name is looked up and no connection is opened. When it succeeds,
+Argument association precedes admission. A label that names no parameter, or
+that names a parameter already supplied positionally, is a D237 association
+failure: a fresh generic `Error` is signalled synchronously after dispatch and
+before the operation's defaults or body run; it is not converted into a failed
+Future, and no Task, lookup or connection exists.
+
+After successful association, the presence of `network`, `resolver` and
+`trust`, then `limits` (§16.12), the authorities, `url` and `request` are
+validated and snapshotted before any effect. When validation fails, including
+when an authority was omitted, the returned Future is already failed with a
+fresh `InvalidIOArgument`; no Task is created, no name is looked up and no
+connection is opened. When it succeeds,
 exactly one cooperative service Task is created as for §16.2, and its Future
 is returned. The Resolver lookup, the TCP attempts, the TLS handshake and the
 HTTP exchange keep their own documented Futures and Tasks. No automatic
@@ -2232,7 +2279,7 @@ decoding or connection pooling is performed.
 ### 18.4 Name resolution and TCP acquisition
 
 For a numeric host, the single parsed `IpAddress` is the only candidate and no
-lookup occurs. For a host name, `authorities.resolver.lookupAddresses(host)`
+lookup occurs. For a host name, `resolver.lookupAddresses(host)`
 is invoked exactly once and its ordered candidates are used. For each
 candidate in order, one `network.connectTcp(IpEndpoint(candidate, port))`
 attempt is made until the first succeeds. A failed attempt leads to the next
@@ -2246,7 +2293,8 @@ failure, with identity preserved.
 For `http`, the connection is passed to
 `std:http/Client` `Client.exchangeOne.owning(connection, request, onResponse,
 limits)`. For `https`, it is first passed to `std:tls/Client`
-`Client.handshake.owning(connection, reference, trust, {})`, where
+`Client.handshake.owning(connection, reference, trust)` with every TLS
+option defaulted, where
 `reference` is the original URL host name or the parsed `IpAddress`, never a
 resolved candidate; the delivered secure duplex is then passed to
 `Client.exchangeOne.owning`. After a TCP connection exists, no other candidate

@@ -21,13 +21,13 @@ tests: [
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
 
-            target: CommandLine.positional({
-                key: "target"
-                minOccurrences: 1
-                maxOccurrences: 1
-                valueName: "TARGET"
+            target: CommandLine.positional(
+                key: "target",
+                minOccurrences: 1,
+                maxOccurrences: 1,
+                valueName: "TARGET",
                 help: null
-            })
+            )
 
             install: CommandLine.command({
                 name: "install"
@@ -93,13 +93,13 @@ tests: [
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
 
-            tail: CommandLine.positional({
-                key: "tail"
-                minOccurrences: 0
-                maxOccurrences: null
-                valueName: "ARG"
+            tail: CommandLine.positional(
+                key: "tail",
+                minOccurrences: 0,
+                maxOccurrences: null,
+                valueName: "ARG",
                 help: null
-            })
+            )
 
             run: CommandLine.command({
                 name: "run"
@@ -137,31 +137,31 @@ tests: [
             CommandLine: import("std:cli/CommandLine")
 
             flag: (key, longName) => {
-                CommandLine.option({
-                    key: key
-                    long: longName
-                    short: null
-                    minValues: 0
-                    maxValues: 0
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: null
+                CommandLine.option(
+                    key: key,
+                    long: longName,
+                    short: null,
+                    minValues: 0,
+                    maxValues: 0,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: null,
                     help: null
-                })
+                )
             }
 
             valued: (key, longName) => {
-                CommandLine.option({
-                    key: key
-                    long: longName
-                    short: null
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: key,
+                    long: longName,
+                    short: null,
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
             }
 
             rootOnly: flag("root", "root")
@@ -225,13 +225,13 @@ tests: [
             CommandLine: import("std:cli/CommandLine")
 
             positional: (key, minimum, maximum) => {
-                CommandLine.positional({
-                    key: key
-                    minOccurrences: minimum
-                    maxOccurrences: maximum
-                    valueName: key
+                CommandLine.positional(
+                    key: key,
+                    minOccurrences: minimum,
+                    maxOccurrences: maximum,
+                    valueName: key,
                     help: null
-                })
+                )
             }
 
             leaf: (name) => {

@@ -24,8 +24,12 @@ resolution](networking.md) for where the duplex comes from, and the
 ## API
 
 ```text
-Client.handshake(duplex, serverIdentity, trust, options)        -> Future<secure duplex>
-Client.handshake.owning(duplex, serverIdentity, trust, options) -> Future<secure duplex>
+Client.handshake(duplex, serverIdentity, trust,
+                 minimumVersion: "1.2", alpn: "http/1.1",
+                 maxHandshakeBytes: 1048576,
+                 maxQueuedWriteBytes: 33554432)        -> Future<secure duplex>
+Client.handshake.owning(duplex, serverIdentity, trust,
+                        ...same named options...)      -> Future<secure duplex>
 
 Trust.anchors(certificates)
 Trust.javaCacerts()
@@ -91,9 +95,21 @@ you meant to reach, or a canonical `IpAddress`.
 
 ## Handshake options
 
-`options` is an ordinary object; every field is optional, and an unknown field,
-a field obtained only by delegation, or an invalid value makes the call
-inadmissible. Pass `{}` for the defaults.
+The handshake options are optional named arguments; omit them all for the
+defaults. An invalid value makes the call inadmissible (an already failed
+Future with `InvalidIOArgument`). A misspelled or unknown label is different:
+it signals an ordinary `Error` immediately, before the handshake call runs.
+There is no options object, and an object passed after `trust` is rejected.
+
+```protos
+secure: Client.handshake(
+    connection,
+    "service.example",
+    Trust.javaCacerts(),
+    minimumVersion: "1.3",
+    maxQueuedWriteBytes: 65536
+).value()
+```
 
 | Option | Values | Default |
 |---|---|---|
@@ -104,7 +120,8 @@ inadmissible. Pass `{}` for the defaults.
 
 By default TLS 1.3 is preferred and secure TLS 1.2 remains permitted;
 `minimumVersion: "1.3"` selects TLS 1.3 only. With the default ALPN only
-HTTP/1.1 is offered; `alpn: null` offers no ALPN.
+HTTP/1.1 is offered: leaving `alpn` out means `"http/1.1"`, while an explicit
+`alpn: null` offers no ALPN.
 
 ## Secure duplex lifecycle
 
@@ -177,7 +194,7 @@ TLS: import("std:tls/Client")
 HttpClient: import("std:http/Client").Client
 
 received: (() => {
-    secure: TLS.Client.handshake(connection, originalHostname, TLS.Trust.javaCacerts(), {}).value()
+    secure: TLS.Client.handshake(connection, originalHostname, TLS.Trust.javaCacerts()).value()
     (() => {
         HttpClient.exchangeOne(secure, request, onResponse, null).value()
     }).ensure(() => {

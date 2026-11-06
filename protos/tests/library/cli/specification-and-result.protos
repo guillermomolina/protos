@@ -22,87 +22,87 @@ tests: [
             CommandLine: import("std:cli/CommandLine")
 
             Assertions.signals(Error, () => {
-                CommandLine.option({
-                    key: ""
-                    long: "jobs"
-                    short: "j"
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "",
+                    long: "jobs",
+                    short: "j",
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {
-                CommandLine.option({
-                    key: "jobs"
-                    long: "1jobs"
-                    short: "j"
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "jobs",
+                    long: "1jobs",
+                    short: "j",
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {
-                CommandLine.option({
-                    key: "jobs"
-                    long: "jobs"
-                    short: "jj"
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "jobs",
+                    long: "jobs",
+                    short: "jj",
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {
-                CommandLine.option({
-                    key: "jobs"
-                    long: null
-                    short: null
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "jobs",
+                    long: null,
+                    short: null,
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {
-                CommandLine.option({
-                    key: "jobs"
-                    long: "jobs"
-                    short: "j"
-                    minValues: 0
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "jobs",
+                    long: "jobs",
+                    short: "j",
+                    minValues: 0,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {
-                CommandLine.option({
-                    key: "jobs"
-                    long: "jobs"
-                    short: "j"
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 2
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "jobs",
+                    long: "jobs",
+                    short: "j",
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 2,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {
@@ -403,9 +403,29 @@ tests: [
                 subcommands: Array()
             }
 
-            first: CommandLine.option(optionDescriptor)
-            second: CommandLine.option(optionDescriptor)
-            positional: CommandLine.positional(positionalDescriptor)
+            makeOption: () => {
+                CommandLine.option(
+                    key: optionDescriptor.key,
+                    long: optionDescriptor.long,
+                    short: optionDescriptor.short,
+                    minValues: optionDescriptor.minValues,
+                    maxValues: optionDescriptor.maxValues,
+                    minOccurrences: optionDescriptor.minOccurrences,
+                    maxOccurrences: optionDescriptor.maxOccurrences,
+                    valueName: optionDescriptor.valueName,
+                    help: optionDescriptor.help
+                )
+            }
+
+            first: makeOption()
+            second: makeOption()
+            positional: CommandLine.positional(
+                key: positionalDescriptor.key,
+                minOccurrences: positionalDescriptor.minOccurrences,
+                maxOccurrences: positionalDescriptor.maxOccurrences,
+                valueName: positionalDescriptor.valueName,
+                help: positionalDescriptor.help
+            )
             command: CommandLine.command({
                 name: "tool"
                 help: "Tool root"
@@ -458,6 +478,241 @@ tests: [
             true
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("specification named parameters", () => {
+        CommandLine: import("std:cli/CommandLine")
+
+        // Every one of the nine option parameters is required, even the ones
+        // that accept null: omitting any single one signals an Error.
+        Assertions.signals(Error, () => {
+            CommandLine.option(long: "jobs", short: "j", minValues: 1, maxValues: 1, minOccurrences: 0, maxOccurrences: 1, valueName: "N", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "jobs", short: "j", minValues: 1, maxValues: 1, minOccurrences: 0, maxOccurrences: 1, valueName: "N", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "jobs", long: "jobs", minValues: 1, maxValues: 1, minOccurrences: 0, maxOccurrences: 1, valueName: "N", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "jobs", long: "jobs", short: "j", maxValues: 1, minOccurrences: 0, maxOccurrences: 1, valueName: "N", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "jobs", long: "jobs", short: "j", minValues: 1, minOccurrences: 0, maxOccurrences: 1, valueName: "N", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "jobs", long: "jobs", short: "j", minValues: 1, maxValues: 1, maxOccurrences: 1, valueName: "N", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "jobs", long: "jobs", short: "j", minValues: 1, maxValues: 1, minOccurrences: 0, valueName: "N", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "jobs", long: "jobs", short: "j", minValues: 1, maxValues: 1, minOccurrences: 0, maxOccurrences: 1, help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "jobs", long: "jobs", short: "j", minValues: 1, maxValues: 1, minOccurrences: 0, maxOccurrences: 1, valueName: "N")
+        })
+
+        // Every one of the five positional parameters is required.
+        Assertions.signals(Error, () => {
+            CommandLine.positional(minOccurrences: 0, maxOccurrences: 1, valueName: "T", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.positional(key: "target", maxOccurrences: 1, valueName: "T", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.positional(key: "target", minOccurrences: 0, valueName: "T", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.positional(key: "target", minOccurrences: 0, maxOccurrences: 1, help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.positional(key: "target", minOccurrences: 0, maxOccurrences: 1, valueName: "T")
+        })
+
+        // An explicit null is a supplied value, distinct from omission.
+        flag: CommandLine.option(key: "verbose", long: "verbose", short: null, minValues: 0, maxValues: 0, minOccurrences: 0, maxOccurrences: null, valueName: null, help: null)
+        Assertions.require(flag.short === null)
+        Assertions.require(flag.maxOccurrences === null)
+        Assertions.require(flag.valueName === null)
+        Assertions.require(flag.help === null)
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "verbose", long: "verbose", minValues: 0, maxValues: 0, minOccurrences: 0, maxOccurrences: null, valueName: null, help: null)
+        })
+        rest: CommandLine.positional(key: "rest", minOccurrences: 0, maxOccurrences: null, valueName: "ARG", help: null)
+        Assertions.require(rest.maxOccurrences === null)
+        Assertions.require(rest.help === null)
+        Assertions.signals(Error, () => {
+            CommandLine.positional(key: "rest", minOccurrences: 0, valueName: "ARG", help: null)
+        })
+
+        // Supplied values are validated by the existing normalizers.
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: 1, long: "jobs", short: "j", minValues: 1, maxValues: 1, minOccurrences: 0, maxOccurrences: 1, valueName: "N", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "jobs", long: "jobs", short: "j", minValues: "1", maxValues: 1, minOccurrences: 0, maxOccurrences: 1, valueName: "N", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "jobs", long: "jobs", short: "j", minValues: 1, maxValues: 1, minOccurrences: 2, maxOccurrences: 1, valueName: "N", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "jobs", long: "jobs", short: "j", minValues: 1, maxValues: 1, minOccurrences: 0, maxOccurrences: 2, valueName: "N", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "jobs", long: "jobs", short: "j", minValues: 1, maxValues: 1, minOccurrences: 0, maxOccurrences: 1, valueName: null, help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: "jobs", long: "jobs", short: "j", minValues: 1, maxValues: 1, minOccurrences: 0, maxOccurrences: 1, valueName: "N", help: 7)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.positional(key: "target", minOccurrences: 2, maxOccurrences: 1, valueName: "T", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.positional(key: "target", minOccurrences: 0, maxOccurrences: "1", valueName: "T", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.positional(key: "target", minOccurrences: 0, maxOccurrences: 1, valueName: null, help: null)
+        })
+
+        // D237: an unknown label, or a label naming a parameter already
+        // supplied positionally, signals an Error before the body executes.
+        // The argument expressions are still evaluated first.
+        evaluated: 0
+        count: (value) => {
+            evaluated = evaluated + 1
+            value
+        }
+        Assertions.signals(Error, () => {
+            CommandLine.option(key: count("jobs"), long: "jobs", short: "j", minValues: 1, maxValues: 1, minOccurrences: 0, maxOccurrences: 1, valueName: "N", help: null, extra: count(1))
+        })
+        Assertions.require(evaluated == 2)
+        Assertions.signals(Error, () => {
+            CommandLine.positional(key: "target", minOccurrences: 0, maxOccurrences: 1, valueName: "T", help: null, kind: "positional")
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.option("jobs", key: "jobs", long: "jobs", short: "j", minValues: 1, maxValues: 1, minOccurrences: 0, maxOccurrences: 1, valueName: "N", help: null)
+        })
+        Assertions.signals(Error, () => {
+            CommandLine.positional("target", key: "target", minOccurrences: 0, maxOccurrences: 1, valueName: "T", help: null)
+        })
+
+        // Input expressions are evaluated exactly once in textual order,
+        // independently of the declared parameter order.
+        order: ""
+        trace: (name, value) => {
+            order = order + name + ";"
+            value
+        }
+        traced: CommandLine.option(
+            help: trace("help", "Workers"),
+            valueName: trace("valueName", "N"),
+            maxOccurrences: trace("maxOccurrences", 1),
+            minOccurrences: trace("minOccurrences", 0),
+            maxValues: trace("maxValues", 1),
+            minValues: trace("minValues", 1),
+            short: trace("short", "j"),
+            long: trace("long", "jobs"),
+            key: trace("key", "jobs")
+        )
+        Assertions.require(order == "help;valueName;maxOccurrences;minOccurrences;maxValues;minValues;short;long;key;")
+        Assertions.require(traced.key == "jobs")
+        Assertions.require(traced.help == "Workers")
+
+        // Each call answers an independent, frozen canonical record with
+        // exactly the canonical slots.
+        makeTarget: () => {
+            CommandLine.positional(key: "target", minOccurrences: 0, maxOccurrences: 1, valueName: "T", help: null)
+        }
+        firstTarget: makeTarget()
+        secondTarget: makeTarget()
+        Assertions.require(firstTarget !== secondTarget)
+        Assertions.require(firstTarget.kind == "positional")
+        Assertions.require(firstTarget.slotNames().size() == 6)
+        Assertions.require(traced.slotNames().size() == 10)
+        Assertions.signals(Error, () => {
+            firstTarget.key = "changed"
+        })
+        Assertions.signals(Error, () => {
+            traced.key = "changed"
+        })
+        Assertions.require(secondTarget.key == "target")
+
+        // command keeps its ordinary descriptor-tree API: shared descriptor
+        // references are reused, cycles are rejected and deep chains are
+        // traversed without execution-stack growth.
+        sharedOption: {
+            key: "force"
+            long: "force"
+            short: null
+            minValues: 0
+            maxValues: 0
+            minOccurrences: 0
+            maxOccurrences: 1
+            valueName: null
+            help: null
+        }
+        sharedChild: {
+            name: "run"
+            help: null
+            options: Array(sharedOption)
+            positionals: Array()
+            subcommands: Array()
+        }
+        sharedRoot: CommandLine.command({
+            name: "tool"
+            help: null
+            options: Array(sharedOption)
+            positionals: Array()
+            subcommands: Array(
+                sharedChild,
+                {
+                    name: "build"
+                    help: null
+                    options: Array()
+                    positionals: Array()
+                    subcommands: Array(sharedChild)
+                }
+            )
+        })
+        Assertions.require(sharedRoot.options[0].key == "force")
+        Assertions.require(sharedRoot.subcommands[0].options[0].key == "force")
+        Assertions.require(sharedRoot.subcommands[1].subcommands[0].name == "run")
+
+        Assertions.signals(Error, () => {
+            loopChildren: Array(null)
+            loop: {
+                name: "loop"
+                help: null
+                options: Array()
+                positionals: Array()
+                subcommands: loopChildren
+            }
+            loopChildren[0] = loop
+            CommandLine.command(loop)
+        })
+
+        // Test scale only: not a public maximum depth or a claimed safe bound.
+        deep: {
+            name: "leaf"
+            help: null
+            options: Array(sharedOption)
+            positionals: Array()
+            subcommands: Array()
+        }
+        level: 0
+        while(level < 4096) {
+            deep = {
+                name: "node"
+                help: null
+                options: Array(sharedOption)
+                positionals: Array()
+                subcommands: Array(deep)
+            }
+            level = level + 1
+        }
+        deepSpec: CommandLine.command(deep)
+        Assertions.require(deepSpec.name == "node")
+        Assertions.require(deepSpec.options[0].key == "force")
     }),
     Test("result model", () => {
         tool009LegacyCase: () => {
@@ -716,102 +971,102 @@ tests: [
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
 
-            flag: CommandLine.option({
-                key: "verbose"
-                long: "verbose"
-                short: "v"
-                minValues: 0
-                maxValues: 0
-                minOccurrences: 0
-                maxOccurrences: 1
-                valueName: null
+            flag: CommandLine.option(
+                key: "verbose",
+                long: "verbose",
+                short: "v",
+                minValues: 0,
+                maxValues: 0,
+                minOccurrences: 0,
+                maxOccurrences: 1,
+                valueName: null,
                 help: null
-            })
+            )
 
-            valued: CommandLine.option({
-                key: "output"
-                long: "output"
-                short: "o"
-                minValues: 1
-                maxValues: 1
-                minOccurrences: 0
-                maxOccurrences: 1
-                valueName: "file-path"
+            valued: CommandLine.option(
+                key: "output",
+                long: "output",
+                short: "o",
+                minValues: 1,
+                maxValues: 1,
+                minOccurrences: 0,
+                maxOccurrences: 1,
+                valueName: "file-path",
                 help: null
-            })
+            )
 
-            positional: CommandLine.positional({
-                key: "target"
-                minOccurrences: 1
-                maxOccurrences: 1
-                valueName: "target-name"
+            positional: CommandLine.positional(
+                key: "target",
+                minOccurrences: 1,
+                maxOccurrences: 1,
+                valueName: "target-name",
                 help: null
-            })
+            )
 
             Assertions.require(flag.valueName === null)
             Assertions.require(valued.valueName == "file-path")
             Assertions.require(positional.valueName == "target-name")
 
             Assertions.signals(Error, () => {
-                CommandLine.option({
-                    key: "broken"
-                    long: "broken"
-                    short: null
-                    minValues: 0
-                    maxValues: 0
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "broken",
+                    long: "broken",
+                    short: null,
+                    minValues: 0,
+                    maxValues: 0,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {
-                CommandLine.option({
-                    key: "broken"
-                    long: "broken"
-                    short: null
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: null
+                CommandLine.option(
+                    key: "broken",
+                    long: "broken",
+                    short: null,
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: null,
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {
-                CommandLine.option({
-                    key: "broken"
-                    long: "broken"
-                    short: null
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: ""
+                CommandLine.option(
+                    key: "broken",
+                    long: "broken",
+                    short: null,
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "",
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {
-                CommandLine.positional({
-                    key: "broken"
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: null
+                CommandLine.positional(
+                    key: "broken",
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: null,
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {
-                CommandLine.positional({
-                    key: "broken"
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: ""
+                CommandLine.positional(
+                    key: "broken",
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "",
                     help: null
-                })
+                )
             })
 
             true
@@ -881,45 +1136,45 @@ tests: [
             })
 
             Assertions.signals(Error, () => {
-                CommandLine.option({
-                    key: 7
-                    long: "jobs"
-                    short: "j"
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: 7,
+                    long: "jobs",
+                    short: "j",
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {
-                CommandLine.option({
-                    key: "jobs"
-                    long: "mañana"
-                    short: "j"
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "jobs",
+                    long: "mañana",
+                    short: "j",
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {
-                CommandLine.option({
-                    key: "jobs"
-                    long: "jobs"
-                    short: "-"
-                    minValues: 1
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "jobs",
+                    long: "jobs",
+                    short: "-",
+                    minValues: 1,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {
@@ -943,17 +1198,17 @@ tests: [
             })
 
             Assertions.signals(Error, () => {
-                CommandLine.option({
-                    key: "jobs"
-                    long: "jobs"
-                    short: "j"
-                    minValues: 1.0
-                    maxValues: 1
-                    minOccurrences: 0
-                    maxOccurrences: 1
-                    valueName: "VALUE"
+                CommandLine.option(
+                    key: "jobs",
+                    long: "jobs",
+                    short: "j",
+                    minValues: 1.0,
+                    maxValues: 1,
+                    minOccurrences: 0,
+                    maxOccurrences: 1,
+                    valueName: "VALUE",
                     help: null
-                })
+                )
             })
 
             Assertions.signals(Error, () => {

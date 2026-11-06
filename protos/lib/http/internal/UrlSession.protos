@@ -197,7 +197,7 @@ serviceBody: (facility, prepared, limits) => {
                 reference = prepared.address
             }
             tcp: owned
-            handshake: TlsClient.handshake.owning(tcp, reference, prepared.trust, {})
+            handshake: TlsClient.handshake.owning(tcp, reference, prepared.trust)
             owned = null
             duplex = awaitOwning(handshake, tcp, true)
             owned = duplex

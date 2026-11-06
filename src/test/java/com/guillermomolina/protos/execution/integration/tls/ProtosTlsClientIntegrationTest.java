@@ -117,7 +117,7 @@ final class ProtosTlsClientIntegrationTest {
                 tls.Trust.anchors([idnaRootCa])
             }
             connect: () => {
-                tls.Client.handshake(dx, "service.protos.test", trust(), {}).value()
+                tls.Client.handshake(dx, "service.protos.test", trust()).value()
             }
             readAll: (secure) => {
                 collected: ascii("")
@@ -156,7 +156,7 @@ final class ProtosTlsClientIntegrationTest {
                         server(TLS13, TLS12),
                         """
                         before: liveTasks()
-                        handshake: tls.Client.handshake(dx, "service.protos.test", trust(), {})
+                        handshake: tls.Client.handshake(dx, "service.protos.test", trust())
                         Assertions.require(liveTasks() == before + 1)
                         secure: handshake.value()
                         Assertions.require(liveTasks() == before)
@@ -203,11 +203,8 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         server(TLS12),
                         """
-                        options: {
-                            minimumVersion: "1.3"
-                        }
                         // A refusal without conclusive version evidence is general.
-                        kind: kindOf(tls.Client.handshake(dx, "service.protos.test", trust(), options))
+                        kind: kindOf(tls.Client.handshake(dx, "service.protos.test", trust(), minimumVersion: "1.3"))
                         Assertions.require(kind == "handshakeFailure")
                         true
                         """);
@@ -248,7 +245,7 @@ final class ProtosTlsClientIntegrationTest {
                         server(TLS13),
                         """
                         other: tls.Trust.anchors([untrustedCa])
-                        kind: kindOf(tls.Client.handshake(dx, "service.protos.test", other, {}))
+                        kind: kindOf(tls.Client.handshake(dx, "service.protos.test", other))
                         Assertions.require(kind == "untrustedPeer")
                         true
                         """);
@@ -289,7 +286,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         idnaServer("idna-leaf"),
                         """
-                        secure: tls.Client.handshake(dx, "XN--BCHER-KVA.Protos.Test.", idnaTrust(), {}).value()
+                        secure: tls.Client.handshake(dx, "XN--BCHER-KVA.Protos.Test.", idnaTrust()).value()
                         secure.write(ascii("idna")).value()
                         Assertions.require(dx.serverText() == "idna")
                         true
@@ -305,7 +302,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         idnaServer("idna-malformed-leaf"),
                         """
-                        tls.Client.handshake(dx, "fallback.protos.test", idnaTrust(), {}).value()
+                        tls.Client.handshake(dx, "fallback.protos.test", idnaTrust()).value()
                         true
                         """);
         eligible.assertCompleted();
@@ -314,7 +311,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         idnaServer("idna-malformed-leaf"),
                         """
-                        Assertions.require(kindOf(tls.Client.handshake(dx, "xn--bcher-kva.protos.test", idnaTrust(), {})) == "identityMismatch")
+                        Assertions.require(kindOf(tls.Client.handshake(dx, "xn--bcher-kva.protos.test", idnaTrust())) == "identityMismatch")
                         true
                         """);
         mismatch.assertCompleted();
@@ -373,7 +370,7 @@ final class ProtosTlsClientIntegrationTest {
                         """
                         before: liveTasks()
                         ["xn--zz.test", "ab--cd.test", "xn--a-0hc.test", "xn--bucher-xyd.test", "bücher.test"].each((name) => {
-                            failure: failureOf(tls.Client.handshake.owning(dx, name, trust(), {}))
+                            failure: failureOf(tls.Client.handshake.owning(dx, name, trust()))
                             Assertions.require(failure.parent() === InvalidIOArgument)
                             Assertions.require(liveTasks() == before)
                         })
@@ -391,7 +388,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         server(TLS13),
                         """
-                        kind: kindOf(tls.Client.handshake.owning(dx, "other.protos.test", trust(), {}))
+                        kind: kindOf(tls.Client.handshake.owning(dx, "other.protos.test", trust()))
                         Assertions.require(kind == "identityMismatch")
                         true
                         """);
@@ -416,10 +413,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         server(TLS13),
                         """
-                        options: {
-                            alpn: null
-                        }
-                        secure: tls.Client.handshake(dx, "service.protos.test", trust(), options).value()
+                        secure: tls.Client.handshake(dx, "service.protos.test", trust(), alpn: null).value()
                         true
                         """);
         disabled.assertCompleted();
@@ -432,7 +426,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         server((engine, offered) -> "h2", TLS13),
                         """
-                        kind: kindOf(tls.Client.handshake(dx, "service.protos.test", trust(), {}))
+                        kind: kindOf(tls.Client.handshake(dx, "service.protos.test", trust()))
                         Assertions.require(kind == "handshakeFailure")
                         true
                         """);
@@ -561,10 +555,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         server(TLS13),
                         """
-                        options: {
-                            maxQueuedWriteBytes: 10
-                        }
-                        secure: tls.Client.handshake(dx, "service.protos.test", trust(), options).value()
+                        secure: tls.Client.handshake(dx, "service.protos.test", trust(), maxQueuedWriteBytes: 10).value()
                         dx.holdWrites()
                         first: secure.write(ascii("12345678"))
                         rejected: secure.write(ascii("abcd"))
@@ -591,7 +582,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         server(TLS13),
                         """
-                        secure: tls.Client.handshake.owning(dx, "service.protos.test", trust(), {}).value()
+                        secure: tls.Client.handshake.owning(dx, "service.protos.test", trust()).value()
                         transport: IOError {}
                         dx.failWritesWith(transport)
                         Assertions.require(failureOf(secure.write(ascii("lost"))) === transport)
@@ -617,10 +608,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         server(TLS13),
                         """
-                        options: {
-                            maxQueuedWriteBytes: 3
-                        }
-                        secure: tls.Client.handshake(dx, "service.protos.test", trust(), options).value()
+                        secure: tls.Client.handshake(dx, "service.protos.test", trust(), maxQueuedWriteBytes: 3).value()
                         writes: dx.writeCount()
                         Assertions.require(failureOf(secure.write(ascii("toolong"))).parent() === IOCapacityExhausted)
                         Assertions.require(dx.writeCount() == writes)
@@ -665,7 +653,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         server(TLS13),
                         """
-                        secure: tls.Client.handshake.owning(dx, "service.protos.test", trust(), {}).value()
+                        secure: tls.Client.handshake.owning(dx, "service.protos.test", trust()).value()
                         Assertions.require(dx.closeCount() == 0)
                         first: secure.close()
                         second: secure.close()
@@ -690,7 +678,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         server(TLS13),
                         """
-                        secure: tls.Client.handshake.owning(dx, "service.protos.test", trust(), {}).value()
+                        secure: tls.Client.handshake.owning(dx, "service.protos.test", trust()).value()
                         emitError: IOError {}
                         dx.failWritesWith(emitError)
                         dx.failCloseWith(IOError {})
@@ -706,7 +694,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         server(TLS13),
                         """
-                        secure: tls.Client.handshake.owning(dx, "service.protos.test", trust(), {}).value()
+                        secure: tls.Client.handshake.owning(dx, "service.protos.test", trust()).value()
                         closeError: IOError {}
                         dx.failCloseWith(closeError)
                         Assertions.require(failureOf(secure.close()) === closeError)
@@ -753,7 +741,7 @@ final class ProtosTlsClientIntegrationTest {
                 run(
                         server(TLS13),
                         """
-                        secure: tls.Client.handshake.owning(dx, "service.protos.test", trust(), {}).value()
+                        secure: tls.Client.handshake.owning(dx, "service.protos.test", trust()).value()
                         dx.serverSend(ascii("HTTP/1.1 204 No Content\\r\\n\\r\\n"))
                         request: {
                             method: "GET"
@@ -793,7 +781,7 @@ final class ProtosTlsClientIntegrationTest {
                         serverWith(leaf, null, TLS13),
                         "future: tls.Client.handshake(dx, "
                                 + serverIdentity
-                                + ", trust(), {})\n"
+                                + ", trust())\n"
                                 + (matches
                                         ? "future.value()\n"
                                         : "Assertions.require(kindOf(future) == \"identityMismatch\")\n")
@@ -809,7 +797,7 @@ final class ProtosTlsClientIntegrationTest {
                         idnaServer("idna-leaf"),
                         "future: tls.Client.handshake(dx, "
                                 + serverIdentity
-                                + ", idnaTrust(), {})\n"
+                                + ", idnaTrust())\n"
                                 + (matches
                                         ? "future.value()\n"
                                         : "Assertions.require(kindOf(future) == \"identityMismatch\")\n")

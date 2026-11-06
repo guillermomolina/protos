@@ -15,7 +15,8 @@
 
 //! Standard Library continuous HTTP/1.1 hosting (D216, HTTP.md §15).
 //!
-//! `Host.owning(listener, handlerModule, handlerBinding, options)` takes
+//! `Host.owning(listener, handlerModule, handlerBinding, workers: 1,
+//! maxConnections: 64, maxPendingAccepts: workers, limits: null)` takes
 //! custody of a live `TcpListener` of the calling Actor and services
 //! successive TCP connections with `workers` Worker Actors of the same
 //! Process. Each Worker receives only a `TcpAcceptor` derived from the
@@ -25,7 +26,8 @@
 //! per-Worker quotas of `maxConnections` and `maxPendingAccepts`.
 //!
 //! `Host.owningWithFactory(listener, factoryModule, factoryBinding,
-//! initialization, options)` hosts exactly the same way (D225-A, HTTP.md
+//! initialization, workers: 1, maxConnections: 64, maxPendingAccepts: workers,
+//! limits: null)` hosts exactly the same way (D225-A, HTTP.md
 //! §15.13), except that each Worker builds its own handler: it receives its
 //! own Actor-boundary copy of `initialization`, resolves its own binding
 //! `factoryBinding` of `factoryModule`, and calls it exactly once with that
@@ -73,7 +75,23 @@ Host: ((facility) => {
         admitted
     }
 
-    owning: (listener, handlerModule, handlerBinding, options) => {
+    // D241: per-call options are named parameters with ordinary D203
+    // defaults; the private options object only feeds the existing admission.
+    owning: (
+        listener,
+        handlerModule,
+        handlerBinding,
+        workers: 1,
+        maxConnections: 64,
+        maxPendingAccepts: workers,
+        limits: null
+    ) => {
+        options: {
+            workers: workers
+            maxConnections: maxConnections
+            maxPendingAccepts: maxPendingAccepts
+            limits: limits
+        }
         admitted: admit(listener, handlerModule, handlerBinding, options)
         config: admitted.config
         // Only the acceptor, the handler Strings, the quotas and the
@@ -101,7 +119,22 @@ Host: ((facility) => {
     // caller-supplied TcpAcceptor, signals NonTransferableValue while the
     // Workers are created, which HostLifecycle reports as a startup failure
     // with its mandatory cleanup.
-    owningWithFactory: (listener, factoryModule, factoryBinding, initialization, options) => {
+    owningWithFactory: (
+        listener,
+        factoryModule,
+        factoryBinding,
+        initialization,
+        workers: 1,
+        maxConnections: 64,
+        maxPendingAccepts: workers,
+        limits: null
+    ) => {
+        options: {
+            workers: workers
+            maxConnections: maxConnections
+            maxPendingAccepts: maxPendingAccepts
+            limits: limits
+        }
         admitted: admit(listener, factoryModule, factoryBinding, options)
         config: admitted.config
         spawnWorker: (acceptor, connectionQuota, pendingQuota) => {

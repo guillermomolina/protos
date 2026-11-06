@@ -52,8 +52,14 @@ shared between module instances, Actors or Contexts. A program that does not
 import `std:tls/Client` pays no TLS allocation, provisioning or state.
 
 ```text
-Client.handshake(duplex, serverIdentity, trust, options) -> Future<SecureDuplex>
-Client.handshake.owning(duplex, serverIdentity, trust, options) -> Future<SecureDuplex>
+Client.handshake(duplex, serverIdentity, trust,
+                 minimumVersion: "1.2", alpn: "http/1.1",
+                 maxHandshakeBytes: 1048576,
+                 maxQueuedWriteBytes: 33554432) -> Future<SecureDuplex>
+Client.handshake.owning(duplex, serverIdentity, trust,
+                        minimumVersion: "1.2", alpn: "http/1.1",
+                        maxHandshakeBytes: 1048576,
+                        maxQueuedWriteBytes: 33554432) -> Future<SecureDuplex>
 Trust.anchors(certificates) -> trust descriptor
 Trust.javaCacerts() -> trust descriptor
 Trust.system() -> trust descriptor
@@ -62,6 +68,13 @@ Trust.system() -> trust descriptor
 `SecureDuplex` is a conceptual name for the delivered object; it is not an
 exported prototype.
 
+`handshake` and `handshake.owning` are ordinary source Closures (D241-B) with
+the same seven parameters, in the same order and with the same defaults. The
+four configuration parameters of §6 are normally supplied by name under the
+name-association rules of `../semantics/CALLABLES.md` (D237). Neither entry
+point receives a public options object; a trailing object argument is an
+ordinary positional value for `minimumVersion` and is inadmissible as such.
+
 ### 2.1 Handshake admission
 
 Each successfully dispatched `handshake` or `handshake.owning` invocation
@@ -69,8 +82,15 @@ returns a fresh standard `Future`. Failures before ordinary dispatch —
 lookup, argument evaluation, receiver outside the domain and arity — follow
 the general language rules.
 
-After ordinary dispatch, the arguments are validated before any effect. The
-returned Future is a fresh already-failed non-Task Future with a fresh
+Argument association follows ordinary dispatch and precedes admission. A label
+that names no parameter, or that names a parameter already supplied
+positionally, is a D237 association failure: a fresh generic `Error` is
+signalled synchronously before any default or body of the entry point runs.
+It takes precedence over every invalid bound value, is not converted into a
+failed Future, and leaves no Task, custody or I/O.
+
+After successful association, the bound arguments are validated before any
+effect. The returned Future is a fresh already-failed non-Task Future with a fresh
 `InvalidIOArgument` occurrence when any of the following holds:
 
 1. `duplex` does not satisfy both `ByteReadable` and `ByteWritable`;
@@ -79,12 +99,13 @@ returned Future is a fresh already-failed non-Task Future with a fresh
 3. `serverIdentity` is not an admissible reference identity (§4);
 4. `trust` is not a trust descriptor produced by `Trust` (§3); there is no
    default; or
-5. `options` is not admissible under §6.
+5. a configuration parameter has a value that is not admissible under §6.
 
 When validation fails, no Task is created, no custody of `duplex` is
 acquired, no TLS octet is produced or consumed, and `duplex` is never closed.
 
-When validation succeeds, the logical order is: the options are captured; for
+When validation succeeds, the logical order is: the effective configuration is
+captured; for
 `handshake.owning`, close responsibility for `duplex` is acquired; exactly one
 structured handshake Task is created as a child of the invoker's structured
 scope, or of the Actor-root asynchronous scope when the invoker has no
@@ -237,18 +258,21 @@ resumption and no shared TLS session cache.
 
 ## 6. Options
 
-`options` is an ordinary object whose own fields are all optional and limited
-to:
+The four configuration parameters are optional and have ordinary defaults:
 
-| Field | Values | Default |
+| Parameter | Values | Default |
 | --- | --- | --- |
 | `minimumVersion` | `"1.2"` or `"1.3"` | `"1.2"` |
 | `alpn` | `"http/1.1"` or `null` | `"http/1.1"` |
 | `maxHandshakeBytes` | Integer 1 through 2147483647 | `1048576` |
 | `maxQueuedWriteBytes` | Integer 1 through 2147483647 | `33554432` |
 
-An unknown own field, a field obtained only by delegation, or an invalid value
-makes `options` inadmissible (§2.1).
+An omitted parameter takes its default; an explicitly supplied value is
+validated as that value and never replaced by the default. In particular, an
+omitted `alpn` offers `"http/1.1"`, while an explicit `alpn: null` offers no
+ALPN (§5). An invalid bound value makes the invocation inadmissible (§2.1).
+An unknown label is not an option: it is the D237 association `Error` of
+§2.1.
 
 ## 7. Secure duplex byte I/O
 

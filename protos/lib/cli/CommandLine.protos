@@ -15,410 +15,515 @@
 
 //! Canonical inert command-line specification records.
 
-/// Canonicalizes one option descriptor into a fresh frozen OptionSpec record.
-option: (descriptor) => {
-    required: (name) => {
-        descriptor.hasSlot(name).ifFalse(() => {
-            fail()
-        })
-        descriptor.slotValue(name)
-    }
-
-    validateString: (value) => {
-        String.recognizes(value).ifFalse(() => {
-            fail()
-        })
-        value
-    }
-
-    validateNonEmptyString: (value) => {
-        validateString(value)
-        if(value == "") {
-            fail()
-        }
-        value
-    }
-
-    validateOptionalString: (value) => {
-        (value === null).ifFalse(() => {
-            validateString(value)
-        })
-        value
-    }
-
-    isAlpha: (octet) => {
-        ((octet >= 65) && (octet <= 90)) ||
-            ((octet >= 97) && (octet <= 122))
-    }
-
-    isDigit: (octet) => {
-        (octet >= 48) && (octet <= 57)
-    }
-
-    validateLongName: (value) => {
-        validateString(value)
-        source: Encoding.UTF8.encode(value)
-        if(source.size() == 0) {
-            fail()
-        }
-        isAlpha(source[0]).ifFalse(() => {
-            fail()
-        })
-        index: 1
-        while(index < source.size()) {
-            octet: source[index]
-            allowed: isAlpha(octet) || isDigit(octet) || (octet == 45)
-            allowed.ifFalse(() => {
-                fail()
-            })
-            index = index + 1
-        }
-        value
-    }
-
-    validateShortName: (value) => {
-        validateString(value)
-        source: Encoding.UTF8.encode(value)
-        (source.size() == 1).ifFalse(() => {
-            fail()
-        })
-        (isAlpha(source[0]) || isDigit(source[0])).ifFalse(() => {
-            fail()
-        })
-        value
-    }
-
-    validateInteger: (value) => {
-        Integer.recognizes(value).ifFalse(() => {
-            fail()
-        })
-        value
-    }
-
-    keyValue: validateNonEmptyString(required("key"))
-    longValue: required("long")
-    shortValue: required("short")
-    minValuesValue: validateInteger(required("minValues"))
-    maxValuesValue: validateInteger(required("maxValues"))
-    minOccurrencesValue: validateInteger(required("minOccurrences"))
-    maxOccurrencesValue: required("maxOccurrences")
-    valueNameValue: validateOptionalString(required("valueName"))
-    helpValue: validateOptionalString(required("help"))
-
-    (longValue === null).ifFalse(() => {
-        validateLongName(longValue)
-    })
-    (shortValue === null).ifFalse(() => {
-        validateShortName(shortValue)
-    })
-    if((longValue === null) && (shortValue === null)) {
-        fail()
-    }
-
-    validValueCardinality: ((minValuesValue == 0) && (maxValuesValue == 0)) ||
-        ((minValuesValue == 1) && (maxValuesValue == 1))
-    validValueCardinality.ifFalse(() => {
-        fail()
-    })
-
-    if(maxValuesValue == 0) {
-        (valueNameValue === null).ifFalse(() => {
-            fail()
-        })
-    }
-
-    if(maxValuesValue == 1) {
-        if(valueNameValue === null) {
-            fail()
-        }
-        validateNonEmptyString(valueNameValue)
-    }
-
-    ((minOccurrencesValue == 0) || (minOccurrencesValue == 1)).ifFalse(() => {
-        fail()
-    })
-    (maxOccurrencesValue === null).ifFalse(() => {
-        validateInteger(maxOccurrencesValue)
-        (maxOccurrencesValue == 1).ifFalse(() => {
-            fail()
-        })
-    })
-
-    canonical: {
-        kind: "option"
-        key: keyValue
-        long: longValue
-        short: shortValue
-        minValues: minValuesValue
-        maxValues: maxValuesValue
-        minOccurrences: minOccurrencesValue
-        maxOccurrences: maxOccurrencesValue
-        valueName: valueNameValue
-        help: helpValue
-    }
-
-    canonical.freeze()
-}
-
-/// Canonicalizes one positional descriptor into a fresh frozen PositionalSpec record.
-positional: (descriptor) => {
-    required: (name) => {
-        descriptor.hasSlot(name).ifFalse(() => {
-            fail()
-        })
-        descriptor.slotValue(name)
-    }
-
-    validateString: (value) => {
-        String.recognizes(value).ifFalse(() => {
-            fail()
-        })
-        value
-    }
-
-    validateNonEmptyString: (value) => {
-        validateString(value)
-        if(value == "") {
-            fail()
-        }
-        value
-    }
-
-    validateOptionalString: (value) => {
-        (value === null).ifFalse(() => {
-            validateString(value)
-        })
-        value
-    }
-
-    validateInteger: (value) => {
-        Integer.recognizes(value).ifFalse(() => {
-            fail()
-        })
-        value
-    }
-
-    keyValue: validateNonEmptyString(required("key"))
-    minOccurrencesValue: validateInteger(required("minOccurrences"))
-    maxOccurrencesValue: required("maxOccurrences")
-    valueNameValue: validateNonEmptyString(required("valueName"))
-    helpValue: validateOptionalString(required("help"))
-
-    ((minOccurrencesValue == 0) || (minOccurrencesValue == 1)).ifFalse(() => {
-        fail()
-    })
-    (maxOccurrencesValue === null).ifFalse(() => {
-        validateInteger(maxOccurrencesValue)
-        (maxOccurrencesValue == 1).ifFalse(() => {
-            fail()
-        })
-    })
-
-    canonical: {
-        kind: "positional"
-        key: keyValue
-        minOccurrences: minOccurrencesValue
-        maxOccurrences: maxOccurrencesValue
-        valueName: valueNameValue
-        help: helpValue
-    }
-
-    canonical.freeze()
-}
-
-/// Canonicalizes one command descriptor and its complete nested specification graph.
-command: (descriptor) => {
-    validateString: (value) => {
-        String.recognizes(value).ifFalse(() => {
-            fail()
-        })
-        value
-    }
-
-    validateOptionalString: (value) => {
-        (value === null).ifFalse(() => {
-            validateString(value)
-        })
-        value
-    }
-
-    isAlpha: (octet) => {
-        ((octet >= 65) && (octet <= 90)) ||
-            ((octet >= 97) && (octet <= 122))
-    }
-
-    isDigit: (octet) => {
-        (octet >= 48) && (octet <= 57)
-    }
-
-    validateCommandName: (value) => {
-        validateString(value)
-        source: Encoding.UTF8.encode(value)
-        if(source.size() == 0) {
-            fail()
-        }
-        isAlpha(source[0]).ifFalse(() => {
-            fail()
-        })
-        index: 1
-        while(index < source.size()) {
-            octet: source[index]
-            allowed: isAlpha(octet) || isDigit(octet) || (octet == 45)
-            allowed.ifFalse(() => {
-                fail()
-            })
-            index = index + 1
-        }
-        value
-    }
-
-    validateArray: (value) => {
-        Array.recognizes(value).ifFalse(() => {
-            fail()
-        })
-        value
-    }
-
-    // Active-path identities only: a descriptor leaves `visiting` when its own
-    // canonicalization completes, so completed shared descriptors are reused.
-    visiting: IdentityMap()
-
-    // Validates one command descriptor and canonicalizes its options and
-    // positionals, returning an explicit heap frame suspended before its children.
-    enterCommand: (candidate, parentFrame) => {
-        if(visiting.containsKey(candidate)) {
-            fail()
-        }
-        visiting[candidate] = true
-
+// Private lexical scope of the two descriptor normalizers. They are captured
+// by `option`, `positional` and `command` below and are not module surface.
+_commandLineNormalizers: (() => {
+    /// Canonicalizes one option descriptor into a fresh frozen OptionSpec record.
+    normalizeOption: (descriptor) => {
         required: (name) => {
-            candidate.hasSlot(name).ifFalse(() => {
+            descriptor.hasSlot(name).ifFalse(() => {
                 fail()
             })
-            candidate.slotValue(name)
+            descriptor.slotValue(name)
         }
 
-        nameValue: validateCommandName(required("name"))
-        helpValue: validateOptionalString(required("help"))
-        optionDescriptors: validateArray(required("options"))
-        positionalDescriptors: validateArray(required("positionals"))
-        subcommandDescriptors: validateArray(required("subcommands"))
-
-        canonicalOptions: Array(...optionDescriptors)
-        optionKeys: Map()
-        longNames: Map()
-        shortNames: Map()
-
-        optionIndex: 0
-        for(entry in optionDescriptors) {
-            spec: option(entry)
-
-            if(optionKeys.containsKey(spec.key)) {
+        validateString: (value) => {
+            String.recognizes(value).ifFalse(() => {
                 fail()
-            }
-            optionKeys[spec.key] = true
-
-            (spec.long === null).ifFalse(() => {
-                if(longNames.containsKey(spec.long)) {
-                    fail()
-                }
-                longNames[spec.long] = true
             })
-
-            (spec.short === null).ifFalse(() => {
-                if(shortNames.containsKey(spec.short)) {
-                    fail()
-                }
-                shortNames[spec.short] = true
-            })
-
-            canonicalOptions[optionIndex] = spec
-            optionIndex = optionIndex + 1
+            value
         }
-        canonicalOptions.freeze()
 
-        canonicalPositionals: Array(...positionalDescriptors)
-        positionalKeys: Map()
-        positionalIndex: 0
-        for(entry in positionalDescriptors) {
-            spec: positional(entry)
-
-            if(positionalKeys.containsKey(spec.key)) {
+        validateNonEmptyString: (value) => {
+            validateString(value)
+            if(value == "") {
                 fail()
             }
-            positionalKeys[spec.key] = true
+            value
+        }
 
-            if(spec.maxOccurrences === null) {
-                ((positionalIndex + 1) == positionalDescriptors.size()).ifFalse(() => {
+        validateOptionalString: (value) => {
+            (value === null).ifFalse(() => {
+                validateString(value)
+            })
+            value
+        }
+
+        isAlpha: (octet) => {
+            ((octet >= 65) && (octet <= 90)) ||
+                ((octet >= 97) && (octet <= 122))
+        }
+
+        isDigit: (octet) => {
+            (octet >= 48) && (octet <= 57)
+        }
+
+        validateLongName: (value) => {
+            validateString(value)
+            source: Encoding.UTF8.encode(value)
+            if(source.size() == 0) {
+                fail()
+            }
+            isAlpha(source[0]).ifFalse(() => {
+                fail()
+            })
+            index: 1
+            while(index < source.size()) {
+                octet: source[index]
+                allowed: isAlpha(octet) || isDigit(octet) || (octet == 45)
+                allowed.ifFalse(() => {
                     fail()
                 })
+                index = index + 1
             }
-
-            canonicalPositionals[positionalIndex] = spec
-            positionalIndex = positionalIndex + 1
+            value
         }
-        canonicalPositionals.freeze()
 
-        suspended: {
-            parent: parentFrame
-            candidate: candidate
-            name: nameValue
-            help: helpValue
-            options: canonicalOptions
-            positionals: canonicalPositionals
-            subcommandDescriptors: subcommandDescriptors
-            subcommands: Array(...subcommandDescriptors)
-            subcommandNames: Map()
-            childIndex: 0
+        validateShortName: (value) => {
+            validateString(value)
+            source: Encoding.UTF8.encode(value)
+            (source.size() == 1).ifFalse(() => {
+                fail()
+            })
+            (isAlpha(source[0]) || isDigit(source[0])).ifFalse(() => {
+                fail()
+            })
+            value
         }
-        suspended
-    }
 
-    // Completes a frame whose children are all canonicalized.
-    exitCommand: (frame) => {
-        frame.subcommands.freeze()
+        validateInteger: (value) => {
+            Integer.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
 
-        visiting.remove(frame.candidate)
+        keyValue: validateNonEmptyString(required("key"))
+        longValue: required("long")
+        shortValue: required("short")
+        minValuesValue: validateInteger(required("minValues"))
+        maxValuesValue: validateInteger(required("maxValues"))
+        minOccurrencesValue: validateInteger(required("minOccurrences"))
+        maxOccurrencesValue: required("maxOccurrences")
+        valueNameValue: validateOptionalString(required("valueName"))
+        helpValue: validateOptionalString(required("help"))
+
+        (longValue === null).ifFalse(() => {
+            validateLongName(longValue)
+        })
+        (shortValue === null).ifFalse(() => {
+            validateShortName(shortValue)
+        })
+        if((longValue === null) && (shortValue === null)) {
+            fail()
+        }
+
+        validValueCardinality: ((minValuesValue == 0) && (maxValuesValue == 0)) ||
+            ((minValuesValue == 1) && (maxValuesValue == 1))
+        validValueCardinality.ifFalse(() => {
+            fail()
+        })
+
+        if(maxValuesValue == 0) {
+            (valueNameValue === null).ifFalse(() => {
+                fail()
+            })
+        }
+
+        if(maxValuesValue == 1) {
+            if(valueNameValue === null) {
+                fail()
+            }
+            validateNonEmptyString(valueNameValue)
+        }
+
+        ((minOccurrencesValue == 0) || (minOccurrencesValue == 1)).ifFalse(() => {
+            fail()
+        })
+        (maxOccurrencesValue === null).ifFalse(() => {
+            validateInteger(maxOccurrencesValue)
+            (maxOccurrencesValue == 1).ifFalse(() => {
+                fail()
+            })
+        })
 
         canonical: {
-            kind: "command"
-            name: frame.name
-            help: frame.help
-            options: frame.options
-            positionals: frame.positionals
-            subcommands: frame.subcommands
+            kind: "option"
+            key: keyValue
+            long: longValue
+            short: shortValue
+            minValues: minValuesValue
+            maxValues: maxValuesValue
+            minOccurrences: minOccurrencesValue
+            maxOccurrences: maxOccurrencesValue
+            valueName: valueNameValue
+            help: helpValue
         }
 
         canonical.freeze()
     }
 
-    // Depth-first traversal over explicit linked frames keeps execution-stack
-    // depth independent of command depth. Each child is canonicalized completely
-    // before its parent's duplicate-name check, registration and storage.
-    frame: enterCommand(descriptor, null)
-    result: null
-    while(result === null) {
-        if(frame.childIndex < frame.subcommandDescriptors.size()) {
-            frame = enterCommand(frame.subcommandDescriptors[frame.childIndex], frame)
-        } else {
-            spec: exitCommand(frame)
-            parentFrame: frame.parent
-            if(parentFrame === null) {
-                result = spec
-            } else {
-                if(parentFrame.subcommandNames.containsKey(spec.name)) {
-                    fail()
-                }
-                parentFrame.subcommandNames[spec.name] = true
+    /// Canonicalizes one positional descriptor into a fresh frozen PositionalSpec record.
+    normalizePositional: (descriptor) => {
+        required: (name) => {
+            descriptor.hasSlot(name).ifFalse(() => {
+                fail()
+            })
+            descriptor.slotValue(name)
+        }
 
-                parentFrame.subcommands[parentFrame.childIndex] = spec
-                parentFrame.childIndex = parentFrame.childIndex + 1
-                frame = parentFrame
+        validateString: (value) => {
+            String.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        validateNonEmptyString: (value) => {
+            validateString(value)
+            if(value == "") {
+                fail()
+            }
+            value
+        }
+
+        validateOptionalString: (value) => {
+            (value === null).ifFalse(() => {
+                validateString(value)
+            })
+            value
+        }
+
+        validateInteger: (value) => {
+            Integer.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        keyValue: validateNonEmptyString(required("key"))
+        minOccurrencesValue: validateInteger(required("minOccurrences"))
+        maxOccurrencesValue: required("maxOccurrences")
+        valueNameValue: validateNonEmptyString(required("valueName"))
+        helpValue: validateOptionalString(required("help"))
+
+        ((minOccurrencesValue == 0) || (minOccurrencesValue == 1)).ifFalse(() => {
+            fail()
+        })
+        (maxOccurrencesValue === null).ifFalse(() => {
+            validateInteger(maxOccurrencesValue)
+            (maxOccurrencesValue == 1).ifFalse(() => {
+                fail()
+            })
+        })
+
+        canonical: {
+            kind: "positional"
+            key: keyValue
+            minOccurrences: minOccurrencesValue
+            maxOccurrences: maxOccurrencesValue
+            valueName: valueNameValue
+            help: helpValue
+        }
+
+        canonical.freeze()
+    }
+
+    normalizers: {
+        option: normalizeOption
+        positional: normalizePositional
+    }
+    normalizers
+})()
+
+/// Canonicalizes one option, given by its nine required named parameters, into
+/// a fresh frozen OptionSpec record.
+option: ((normalizeOption) => {
+    // Private presence identity: D203 binds an omitted parameter without a
+    // default to null, so every required parameter defaults to this identity
+    // and is checked before any value is validated.
+    missing: {}
+
+    (
+        key: missing,
+        long: missing,
+        short: missing,
+        minValues: missing,
+        maxValues: missing,
+        minOccurrences: missing,
+        maxOccurrences: missing,
+        valueName: missing,
+        help: missing
+    ) => {
+        present: (value) => {
+            if(value === missing) {
+                fail()
             }
         }
+
+        present(key)
+        present(long)
+        present(short)
+        present(minValues)
+        present(maxValues)
+        present(minOccurrences)
+        present(maxOccurrences)
+        present(valueName)
+        present(help)
+
+        descriptor: {
+            key: key
+            long: long
+            short: short
+            minValues: minValues
+            maxValues: maxValues
+            minOccurrences: minOccurrences
+            maxOccurrences: maxOccurrences
+            valueName: valueName
+            help: help
+        }
+
+        normalizeOption(descriptor)
     }
-    result
-}
+})(_commandLineNormalizers.option)
+
+/// Canonicalizes one positional, given by its five required named parameters,
+/// into a fresh frozen PositionalSpec record.
+positional: ((normalizePositional) => {
+    // Private presence identity: D203 binds an omitted parameter without a
+    // default to null, so every required parameter defaults to this identity
+    // and is checked before any value is validated.
+    missing: {}
+
+    (
+        key: missing,
+        minOccurrences: missing,
+        maxOccurrences: missing,
+        valueName: missing,
+        help: missing
+    ) => {
+        present: (value) => {
+            if(value === missing) {
+                fail()
+            }
+        }
+
+        present(key)
+        present(minOccurrences)
+        present(maxOccurrences)
+        present(valueName)
+        present(help)
+
+        descriptor: {
+            key: key
+            minOccurrences: minOccurrences
+            maxOccurrences: maxOccurrences
+            valueName: valueName
+            help: help
+        }
+
+        normalizePositional(descriptor)
+    }
+})(_commandLineNormalizers.positional)
+
+/// Canonicalizes one command descriptor and its complete nested specification graph.
+command: ((normalizeOption, normalizePositional) => {
+    (descriptor) => {
+        validateString: (value) => {
+            String.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        validateOptionalString: (value) => {
+            (value === null).ifFalse(() => {
+                validateString(value)
+            })
+            value
+        }
+
+        isAlpha: (octet) => {
+            ((octet >= 65) && (octet <= 90)) ||
+                ((octet >= 97) && (octet <= 122))
+        }
+
+        isDigit: (octet) => {
+            (octet >= 48) && (octet <= 57)
+        }
+
+        validateCommandName: (value) => {
+            validateString(value)
+            source: Encoding.UTF8.encode(value)
+            if(source.size() == 0) {
+                fail()
+            }
+            isAlpha(source[0]).ifFalse(() => {
+                fail()
+            })
+            index: 1
+            while(index < source.size()) {
+                octet: source[index]
+                allowed: isAlpha(octet) || isDigit(octet) || (octet == 45)
+                allowed.ifFalse(() => {
+                    fail()
+                })
+                index = index + 1
+            }
+            value
+        }
+
+        validateArray: (value) => {
+            Array.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        // Active-path identities only: a descriptor leaves `visiting` when its own
+        // canonicalization completes, so completed shared descriptors are reused.
+        visiting: IdentityMap()
+
+        // Validates one command descriptor and canonicalizes its options and
+        // positionals, returning an explicit heap frame suspended before its children.
+        enterCommand: (candidate, parentFrame) => {
+            if(visiting.containsKey(candidate)) {
+                fail()
+            }
+            visiting[candidate] = true
+
+            required: (name) => {
+                candidate.hasSlot(name).ifFalse(() => {
+                    fail()
+                })
+                candidate.slotValue(name)
+            }
+
+            nameValue: validateCommandName(required("name"))
+            helpValue: validateOptionalString(required("help"))
+            optionDescriptors: validateArray(required("options"))
+            positionalDescriptors: validateArray(required("positionals"))
+            subcommandDescriptors: validateArray(required("subcommands"))
+
+            canonicalOptions: Array(...optionDescriptors)
+            optionKeys: Map()
+            longNames: Map()
+            shortNames: Map()
+
+            optionIndex: 0
+            for(entry in optionDescriptors) {
+                spec: normalizeOption(entry)
+
+                if(optionKeys.containsKey(spec.key)) {
+                    fail()
+                }
+                optionKeys[spec.key] = true
+
+                (spec.long === null).ifFalse(() => {
+                    if(longNames.containsKey(spec.long)) {
+                        fail()
+                    }
+                    longNames[spec.long] = true
+                })
+
+                (spec.short === null).ifFalse(() => {
+                    if(shortNames.containsKey(spec.short)) {
+                        fail()
+                    }
+                    shortNames[spec.short] = true
+                })
+
+                canonicalOptions[optionIndex] = spec
+                optionIndex = optionIndex + 1
+            }
+            canonicalOptions.freeze()
+
+            canonicalPositionals: Array(...positionalDescriptors)
+            positionalKeys: Map()
+            positionalIndex: 0
+            for(entry in positionalDescriptors) {
+                spec: normalizePositional(entry)
+
+                if(positionalKeys.containsKey(spec.key)) {
+                    fail()
+                }
+                positionalKeys[spec.key] = true
+
+                if(spec.maxOccurrences === null) {
+                    ((positionalIndex + 1) == positionalDescriptors.size()).ifFalse(() => {
+                        fail()
+                    })
+                }
+
+                canonicalPositionals[positionalIndex] = spec
+                positionalIndex = positionalIndex + 1
+            }
+            canonicalPositionals.freeze()
+
+            suspended: {
+                parent: parentFrame
+                candidate: candidate
+                name: nameValue
+                help: helpValue
+                options: canonicalOptions
+                positionals: canonicalPositionals
+                subcommandDescriptors: subcommandDescriptors
+                subcommands: Array(...subcommandDescriptors)
+                subcommandNames: Map()
+                childIndex: 0
+            }
+            suspended
+        }
+
+        // Completes a frame whose children are all canonicalized.
+        exitCommand: (frame) => {
+            frame.subcommands.freeze()
+
+            visiting.remove(frame.candidate)
+
+            canonical: {
+                kind: "command"
+                name: frame.name
+                help: frame.help
+                options: frame.options
+                positionals: frame.positionals
+                subcommands: frame.subcommands
+            }
+
+            canonical.freeze()
+        }
+
+        // Depth-first traversal over explicit linked frames keeps execution-stack
+        // depth independent of command depth. Each child is canonicalized completely
+        // before its parent's duplicate-name check, registration and storage.
+        frame: enterCommand(descriptor, null)
+        result: null
+        while(result === null) {
+            if(frame.childIndex < frame.subcommandDescriptors.size()) {
+                frame = enterCommand(frame.subcommandDescriptors[frame.childIndex], frame)
+            } else {
+                spec: exitCommand(frame)
+                parentFrame: frame.parent
+                if(parentFrame === null) {
+                    result = spec
+                } else {
+                    if(parentFrame.subcommandNames.containsKey(spec.name)) {
+                        fail()
+                    }
+                    parentFrame.subcommandNames[spec.name] = true
+
+                    parentFrame.subcommands[parentFrame.childIndex] = spec
+                    parentFrame.childIndex = parentFrame.childIndex + 1
+                    frame = parentFrame
+                }
+            }
+        }
+        result
+    }
+})(_commandLineNormalizers.option, _commandLineNormalizers.positional)
+
+// The normalizers are captured privately above; they are not module surface.
+context.removeSlot("_commandLineNormalizers")
 
 /// Parses a canonical CommandSpec tree into a fresh frozen lossless result.
 ///

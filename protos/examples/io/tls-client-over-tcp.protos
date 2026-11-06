@@ -72,7 +72,7 @@ connection: network.connectTcp(IpEndpoint(addresses[0], 443)).value()
 received: (() => {
     // 3. Authenticate with explicitly selected trust. The borrowing handshake
     // never closes `connection`; we close it in the outer ensure.
-    secure: TLS.Client.handshake(connection, originalHostname, TLS.Trust.javaCacerts(), {}).value()
+    secure: TLS.Client.handshake(connection, originalHostname, TLS.Trust.javaCacerts()).value()
     (() => {
         // 4. One HTTP/1.1 exchange over the secure duplex, borrowed as well.
         HttpClient.exchangeOne(secure, request, onResponse, null).value()

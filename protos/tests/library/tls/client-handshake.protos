@@ -152,14 +152,14 @@ garbage: () => {
 tests: [
     Test("Trust.system fails with trustUnavailable before any octet", () => {
         dx: duplexOf([])
-        Assertions.require(kindOf(tls.Client.handshake(dx, service, tls.Trust.system(), {})) == "trustUnavailable")
+        Assertions.require(kindOf(tls.Client.handshake(dx, service, tls.Trust.system())) == "trustUnavailable")
         Assertions.require(dx.readCount() == 0)
         Assertions.require(dx.writeCount() == 0)
         Assertions.require(dx.closeCount() == 0)
     }),
     Test("Trust.javaCacerts never falls back: unavailable material writes nothing", () => {
         dx: duplexOf([garbage()])
-        kind: kindOf(tls.Client.handshake(dx, service, tls.Trust.javaCacerts(), {}))
+        kind: kindOf(tls.Client.handshake(dx, service, tls.Trust.javaCacerts()))
         // Usable cacerts reach the peer and fail on its garbage; unusable
         // cacerts fail closed before the ClientHello.
         if(kind == "trustUnavailable") {
@@ -171,20 +171,20 @@ tests: [
         }
     }),
     Test("an admitted handshake answers a fresh Future each time", () => {
-        first: tls.Client.handshake(duplexOf([]), service, tls.Trust.system(), {})
-        second: tls.Client.handshake(duplexOf([]), service, tls.Trust.system(), {})
+        first: tls.Client.handshake(duplexOf([]), service, tls.Trust.system())
+        second: tls.Client.handshake(duplexOf([]), service, tls.Trust.system())
         Assertions.require(first !== second)
         Assertions.require(failureOf(first) !== failureOf(second))
     }),
     Test("non-TLS peer octets are a general handshake failure", () => {
         dx: duplexOf([garbage()])
-        Assertions.require(kindOf(tls.Client.handshake(dx, service, anchors(), {})) == "handshakeFailure")
+        Assertions.require(kindOf(tls.Client.handshake(dx, service, anchors())) == "handshakeFailure")
         Assertions.require(dx.writeCount() >= 1)
         Assertions.require(dx.closeCount() == 0)
     }),
     Test("end of transport input during the handshake is truncated, not null", () => {
         dx: duplexOf([])
-        Assertions.require(kindOf(tls.Client.handshake(dx, service, anchors(), {})) == "truncated")
+        Assertions.require(kindOf(tls.Client.handshake(dx, service, anchors())) == "truncated")
         Assertions.require(dx.readCount() >= 1)
         Assertions.require(dx.closeCount() == 0)
     }),
@@ -192,46 +192,40 @@ tests: [
         dx: duplexOf([])
         transport: IOError {}
         dx.failReadsWith(transport)
-        failure: failureOf(tls.Client.handshake(dx, service, anchors(), {}))
+        failure: failureOf(tls.Client.handshake(dx, service, anchors()))
         Assertions.require(failure === transport)
     }),
     Test("maxHandshakeBytes bounds handshake octets before they are written", () => {
         dx: duplexOf([])
-        bounds: {
-            maxHandshakeBytes: 1
-        }
-        Assertions.require(kindOf(tls.Client.handshake(dx, service, anchors(), bounds)) == "limit")
+        Assertions.require(kindOf(tls.Client.handshake(dx, service, anchors(), maxHandshakeBytes: 1)) == "limit")
         Assertions.require(dx.writeCount() == 0)
     }),
     Test("maxHandshakeBytes also bounds received handshake octets", () => {
         dx: duplexOf([])
-        sent: tls.Client.handshake(dx, service, anchors(), {})
+        sent: tls.Client.handshake(dx, service, anchors())
         failureOf(sent)
-        bounds: {
-            maxHandshakeBytes: dx.writtenBytes() + 1
-        }
         dy: duplexOf([garbage()])
-        Assertions.require(kindOf(tls.Client.handshake(dy, service, anchors(), bounds)) == "limit")
+        Assertions.require(kindOf(tls.Client.handshake(dy, service, anchors(), maxHandshakeBytes: dx.writtenBytes() + 1)) == "limit")
         Assertions.require(dy.writeCount() == 1)
     }),
     Test("an owning handshake closes the duplex exactly once on failure", () => {
         failing: duplexOf([garbage()])
-        Assertions.require(kindOf(tls.Client.handshake.owning(failing, service, anchors(), {})) == "handshakeFailure")
+        Assertions.require(kindOf(tls.Client.handshake.owning(failing, service, anchors())) == "handshakeFailure")
         Assertions.require(failing.closeCount() == 1)
         untrusted: duplexOf([])
-        Assertions.require(kindOf(tls.Client.handshake.owning(untrusted, service, tls.Trust.system(), {})) == "trustUnavailable")
+        Assertions.require(kindOf(tls.Client.handshake.owning(untrusted, service, tls.Trust.system())) == "trustUnavailable")
         Assertions.require(untrusted.closeCount() == 1)
         Assertions.require(untrusted.writeCount() == 0)
     }),
     Test("a borrowed handshake never closes the duplex", () => {
         dx: duplexOf([garbage()])
-        failureOf(tls.Client.handshake(dx, service, anchors(), {}))
-        failureOf(tls.Client.handshake(duplexOf([]), service, tls.Trust.system(), {}))
+        failureOf(tls.Client.handshake(dx, service, anchors()))
+        failureOf(tls.Client.handshake(duplexOf([]), service, tls.Trust.system()))
         Assertions.require(dx.closeCount() == 0)
     }),
     Test("cancelling an owning handshake before it starts closes the duplex once", () => {
         dx: duplexOf([])
-        future: tls.Client.handshake.owning(dx, service, anchors(), {})
+        future: tls.Client.handshake.owning(dx, service, anchors())
         future.cancel()
         Assertions.require(cancelledOf(future))
         Assertions.require(dx.closeCount() == 1)
@@ -239,7 +233,7 @@ tests: [
     }),
     Test("cancelling a borrowed handshake leaves the duplex open", () => {
         dx: duplexOf([])
-        future: tls.Client.handshake(dx, service, anchors(), {})
+        future: tls.Client.handshake(dx, service, anchors())
         future.cancel()
         Assertions.require(cancelledOf(future))
         Assertions.require(dx.closeCount() == 0)
@@ -248,14 +242,14 @@ tests: [
         closeError: IOError {}
         failing: duplexOf([garbage()])
         failing.failCloseWith(closeError)
-        failure: failureOf(tls.Client.handshake.owning(failing, service, anchors(), {}))
+        failure: failureOf(tls.Client.handshake.owning(failing, service, anchors()))
         Assertions.require(failure !== closeError)
         Assertions.require(failure.parent() === tls.TlsError)
         Assertions.require(failure.kind == "handshakeFailure")
         Assertions.require(failing.closeCount() == 1)
         untrusted: duplexOf([])
         untrusted.failCloseWith(closeError)
-        trustFailure: failureOf(tls.Client.handshake.owning(untrusted, service, tls.Trust.system(), {}))
+        trustFailure: failureOf(tls.Client.handshake.owning(untrusted, service, tls.Trust.system()))
         Assertions.require(trustFailure.kind == "trustUnavailable")
         Assertions.require(untrusted.closeCount() == 1)
     }),
@@ -264,14 +258,14 @@ tests: [
         dx: duplexOf([])
         dx.failReadsWith(transport)
         dx.failCloseWith(IOError {})
-        Assertions.require(failureOf(tls.Client.handshake.owning(dx, service, anchors(), {})) === transport)
+        Assertions.require(failureOf(tls.Client.handshake.owning(dx, service, anchors())) === transport)
         Assertions.require(dx.closeCount() == 1)
     }),
     Test("a cancelled owning handshake whose close fails fails with the close Error", () => {
         closeError: IOError {}
         dx: duplexOf([])
         dx.failCloseWith(closeError)
-        future: tls.Client.handshake.owning(dx, service, anchors(), {})
+        future: tls.Client.handshake.owning(dx, service, anchors())
         future.cancel()
         // Not Cancelled: the cleanup Error supersedes the cancellation unwind.
         Assertions.require(failureOf(future) === closeError)
@@ -279,16 +273,16 @@ tests: [
     }),
     Test("a record header advertising an oversized fragment is a limit failure", () => {
         dx: duplexOf([hexBytes("1603034801")])
-        Assertions.require(kindOf(tls.Client.handshake(dx, service, anchors(), {})) == "limit")
+        Assertions.require(kindOf(tls.Client.handshake(dx, service, anchors())) == "limit")
         Assertions.require(dx.closeCount() == 0)
     }),
     Test("an oversized record header split across reads is a limit failure", () => {
         dx: duplexOf([hexBytes("16"), hexBytes("03034801")])
-        Assertions.require(kindOf(tls.Client.handshake(dx, service, anchors(), {})) == "limit")
+        Assertions.require(kindOf(tls.Client.handshake(dx, service, anchors())) == "limit")
     }),
     Test("an owning handshake keeps the limit kind and closes the duplex once", () => {
         dx: duplexOf([hexBytes("1603034801")])
-        Assertions.require(kindOf(tls.Client.handshake.owning(dx, service, anchors(), {})) == "limit")
+        Assertions.require(kindOf(tls.Client.handshake.owning(dx, service, anchors())) == "limit")
         Assertions.require(dx.closeCount() == 1)
     }),
     Test("the record-limit fact maps to limit in both phases", () => {
@@ -301,8 +295,8 @@ tests: [
         Assertions.require(handshaking !== established)
     }),
     Test("every failure is a fresh TlsError occurrence with an own kind", () => {
-        first: failureOf(tls.Client.handshake(duplexOf([]), service, anchors(), {}))
-        second: failureOf(tls.Client.handshake(duplexOf([]), service, anchors(), {}))
+        first: failureOf(tls.Client.handshake(duplexOf([]), service, anchors()))
+        second: failureOf(tls.Client.handshake(duplexOf([]), service, anchors()))
         Assertions.require(first !== second)
         Assertions.require(first.kind == second.kind)
         Assertions.require(!tls.TlsError.hasSlot("kind"))

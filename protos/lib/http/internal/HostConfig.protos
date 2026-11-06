@@ -25,7 +25,11 @@ maxSigned32: 2147483647
 optionNames: ["workers", "maxConnections", "maxPendingAccepts", "limits"]
 
 positive32: (value) => {
-    Integer.recognizes(value) && (value > 0) && (value <= maxSigned32)
+    valid: false
+    if(Integer.recognizes(value)) {
+        valid = (value > 0) && (value <= maxSigned32)
+    }
+    valid
 }
 
 /// Validates options (null or an ordinary object with only the admitted own

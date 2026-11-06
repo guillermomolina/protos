@@ -245,25 +245,42 @@ the request body and holds no authority.
 ## UrlClient: one request to a URL
 
 ```text
-UrlClient.requestOne(authorities, url, request, limits) -> Future<{status, headers, body}>
+UrlClient.requestOne(url, request, limits,
+                     network: network, resolver: resolver, trust: trust)
+    -> Future<{status, headers, body}>
 ```
 
 ```protos
-urls: import("std:http/UrlClient")
+UrlClient: import("std:http/UrlClient").UrlClient
 Trust: import("std:tls/Client").Trust
 
-authorities: {
-    network: network            // bootstrap-local grant
-    resolver: resolver          // bootstrap-local grant; may be null for numeric hosts
-    trust: Trust.javaCacerts()  // explicit; used only for https
+// network and resolver are bootstrap-local grants; resolver may be null for
+// numeric hosts. trust is explicit and used only for https.
+trust: Trust.javaCacerts()
+clientLimits: {
+    maxResponseBodyBytes: 1048576
 }
 request: {
     method: "GET"
     headers: [["Accept", Encoding.Latin1.encode("application/json")]]
     body: null
 }
-response: urls.UrlClient.requestOne(authorities, "https://example.org/a?b=1", request, null).value()
+response: UrlClient.requestOne(
+    "https://example.org/",
+    request,
+    clientLimits,
+    network: network,
+    resolver: resolver,
+    trust: trust
+).value()
 ```
+
+The three authorities are required named arguments: each must be passed, even
+when `null` is allowed. Omitting one answers an already-failed Future with
+`InvalidIOArgument`; an unknown label signals an ordinary `Error` immediately,
+before the call starts. `request` stays an ordinary HTTP message object and
+`clientLimits` an ordinary limits object you may share with
+`Client.exchangeOne`.
 
 The URL is parsed by `std:uri`; it must be absolute `http` or `https`, without
 user information or fragment. The URL host becomes the `Host` field (with an
@@ -334,9 +351,13 @@ No extra Task is created per read or per chunk.
 ## Host: continuous hosting with Workers
 
 ```text
-Host.owning(listener, handlerModule, handlerBinding, options) -> host
+Host.owning(listener, handlerModule, handlerBinding,
+            workers: 1, maxConnections: 64,
+            maxPendingAccepts: workers, limits: null)     -> host
 Host.owningWithFactory(listener, factoryModule, factoryBinding,
-                       initialization, options)          -> host
+                       initialization,
+                       workers: 1, maxConnections: 64,
+                       maxPendingAccepts: workers, limits: null) -> host
 host.ready()              -> Future<host>
 host.shutdown("drain")    -> Future<host>
 host.shutdown("abort")    -> Future<host>
@@ -346,11 +367,18 @@ host.termination()        -> Future<host>
 ```protos
 Host: import("std:http/Host").Host
 
-options: {
-    workers: 2
-    maxConnections: 4
+serverLimits: {
+    maxRequestBodyBytes: 4096
 }
-host: Host.owning(listener, "app:hello", "handle", options)
+host: Host.owning(
+    listener,
+    "app:handler",
+    "handle",
+    workers: 2,
+    maxConnections: 16,
+    maxPendingAccepts: 4,
+    limits: serverLimits
+)
 host.ready().value()
 // ... serve ...
 host.shutdown("drain").value()
@@ -396,7 +424,7 @@ host: Host.owningWithFactory(
     "app:site-handler",
     "make",
     { projects: projectsService },
-    { workers: 4 }
+    workers: 4
 )
 host.ready().value()
 ```
@@ -418,9 +446,10 @@ a Resolver, a listener, a connection, or a `TcpAcceptor` is rejected exactly
 as at any Actor boundary. Like a failing factory, a non-callable result, or a
 missing module or binding, a rejected `initialization` is not a construction
 error; it fails `ready()` with a `HostError` of kind `"startup"`, and the host
-still closes the listener. Invalid `listener`, `options`, or non-String module
-and binding arguments signal `InvalidIOArgument` synchronously, as for
-`Host.owning`.
+still closes the listener. Invalid `listener`, option values, or non-String
+module and binding arguments signal `InvalidIOArgument` synchronously, as for
+`Host.owning`. `initialization` is one payload value, separate from the named
+options.
 
 The host does not own the service Actors you reference. Shutting a host down
 does not stop them. A service that stops makes only the requests that use it
@@ -450,7 +479,7 @@ service: () => {
         start: (self) => {
             // listenRequest: a loopback listen request, as in the Host example above.
             listener: network.listenTcp(listenRequest).value()
-            host = Host.owningWithFactory(listener, "app:handler", "make", { service: self }, { workers: 4 })
+            host = Host.owningWithFactory(listener, "app:handler", "make", { service: self }, workers: 4)
             host.ready().value()
             null
         }
@@ -505,22 +534,32 @@ The host closes it exactly once on every path.
 Each Worker accepts by itself and serves each accepted connection with
 `Server.serveOne.owning`.
 
-**Options are bounds, not hints.** `options` is `null` or an object with only
-these own slots:
+**Options are bounds, not hints.** The per-call options are named parameters
+with ordinary defaults; omit one to use its default:
 
-| Slot | Default | Meaning |
+| Parameter | Default | Meaning |
 |---|---|---|
 | `workers` | `1` | Worker Actors to start |
 | `maxConnections` | `64` | accepted connections not yet fully retired |
 | `maxPendingAccepts` | `workers` | outstanding `accept` operations |
 | `limits` | `null` | the `serveOne` limits used for every session |
 
+The `maxPendingAccepts` default is the `workers` value of the same call.
 `1 <= workers <= maxPendingAccepts <= maxConnections` must hold. Quotas are
 split between Workers up front. At capacity a Worker stops accepting; it never
 accepts a connection just to answer 503. Invalid arguments signal a fresh
 `InvalidIOArgument` *synchronously* from `Host.owning`, before custody is
 taken. This differs from `serveOne` and `exchangeOne`, which report invalid
-arguments through an already-failed Future.
+arguments through an already-failed Future. A misspelled or unknown option
+label is not an `InvalidIOArgument`: it signals an ordinary `Error` before
+`Host.owning` runs.
+
+**Per-call options are named; policies and data stay objects.** Options that
+configure one call (`workers`, `maxConnections`, `maxPendingAccepts`, the TLS
+handshake options and the UrlClient authorities) are passed as named
+arguments. HTTP limits policies, requests, responses, routes and the factory
+`initialization` remain ordinary objects that you can build once and reuse.
+There is no way to pass a whole object as a set of named arguments.
 
 **Lifecycle.**
 

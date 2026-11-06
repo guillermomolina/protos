@@ -31,27 +31,27 @@ tests: [
                 valueName,
                 help
             ) => {
-                CommandLine.option({
-                    key: key
-                    long: longName
-                    short: shortName
-                    minValues: minValues
-                    maxValues: minValues
-                    minOccurrences: minOccurrences
-                    maxOccurrences: maxOccurrences
-                    valueName: valueName
+                CommandLine.option(
+                    key: key,
+                    long: longName,
+                    short: shortName,
+                    minValues: minValues,
+                    maxValues: minValues,
+                    minOccurrences: minOccurrences,
+                    maxOccurrences: maxOccurrences,
+                    valueName: valueName,
                     help: help
-                })
+                )
             }
 
             positional: (key, minimum, maximum, valueName, help) => {
-                CommandLine.positional({
-                    key: key
-                    minOccurrences: minimum
-                    maxOccurrences: maximum
-                    valueName: valueName
+                CommandLine.positional(
+                    key: key,
+                    minOccurrences: minimum,
+                    maxOccurrences: maximum,
+                    valueName: valueName,
                     help: help
-                })
+                )
             }
 
             build: CommandLine.command({
@@ -123,13 +123,13 @@ tests: [
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
 
-            target: CommandLine.positional({
-                key: "target"
-                minOccurrences: 1
-                maxOccurrences: null
-                valueName: "target-name"
+            target: CommandLine.positional(
+                key: "target",
+                minOccurrences: 1,
+                maxOccurrences: null,
+                valueName: "target-name",
                 help: "Target to install"
-            })
+            )
 
             deep: CommandLine.command({
                 name: "deep"
