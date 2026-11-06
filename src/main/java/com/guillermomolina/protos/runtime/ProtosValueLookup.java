@@ -140,14 +140,14 @@ public final class ProtosValueLookup {
     }
 
     /**
-     * I115-H8 EXPERIMENTAL: select an existing local slot once, during
+     * I115: select an existing local attribute slot once, during
      * specialization. The selected SlotCell remains the authoritative
      * storage location. No alternate object store is introduced.
      *
      * Only exact ordinary objects are admitted; other representations
      * retain the generic path.
      */
-    public static GuardedSlotSelection experimentalWritableSelection(
+    public static GuardedSlotSelection writableAttributeSelection(
             Object receiver, String name) {
         CompilerAsserts.neverPartOfCompilation();
         if (receiver == null
@@ -166,25 +166,25 @@ public final class ProtosValueLookup {
     }
 
     /**
-     * I115-H8 EXPERIMENTAL: write the selected physical location.
+     * I115: write the selected physical attribute location.
      * No nominal lookup, writable-state guard, or guest Integer
      * projection occurs at this site.
      */
-    public static Object experimentalWriteSelected(
+    public static Object writeSelectedAttribute(
             GuardedSlotSelection selection,
             String name,
             Object value) {
-        selection.home().experimentalAssignSelectedLocation(
+        selection.home().assignSelectedAttributeLocation(
                 name, selection.location(), value);
         return value;
     }
 
-    public static Object experimentalWriteSelected(
+    public static Object writeSelectedAttribute(
             GuardedSlotSelection selection,
             String name,
             Object value,
             DynamicObject.PutNode putNode) {
-        selection.home().experimentalAssignSelectedLocation(
+        selection.home().assignSelectedAttributeLocation(
                 name, selection.location(), value, putNode);
         return value;
     }
@@ -194,7 +194,7 @@ public final class ProtosValueLookup {
      * physical location. Selection is read-only: integer storage
      * representation is established by the first PutNode.
      */
-    public static GuardedSlotSelection experimentalPrimitiveReadableSelection(
+    public static GuardedSlotSelection readableAttributeSelection(
             Object receiver, String name, ProtosPrelude prelude) {
         return lookupGuardedSlotSelection(receiver, name, prelude);
     }

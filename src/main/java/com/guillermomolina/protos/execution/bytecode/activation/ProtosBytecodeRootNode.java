@@ -998,19 +998,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     // ---- Slot creation/assignment, members, identity, intrinsics -------------------
 
     @Operation
-    public static final class RequireObjectMutationTarget {
-        @Specialization
-        public static ProtosObjectValue perform(ProtosActivation activation, Object target) {
-            // I091: a large Integer is a frozen object physically but an immutable Integer value.
-            if (target instanceof ProtosObjectValue object
-                    && !ProtosNumericValueSupport.isCurrentNumber(target)) {
-                return object;
-            }
-            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
-        }
-    }
-
-    @Operation
     public static final class CreateCurrentLocalSlot {
         @Specialization
         public static Object perform(ProtosActivation activation, String name, Object value) {
@@ -1055,31 +1042,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     /**
      * I113: a local slot mutation selected by the builder-fixed
-     * {@link ProtosSlotMutation}: creation or assignment on an explicit object
-     * target, or assignment through a resolved generic write target.
+     * {@link ProtosSlotMutation}: assignment through a resolved
+     * lexical write target only. Explicit object attributes use
+     * SetAttribute and CreateAttribute instead.
      */
     @Operation
     @ConstantOperand(type = ProtosSlotMutation.class, name = "mutation")
     public static final class MutateLocalSlot {
-        @Specialization
-        public static Object objectTarget(
-                ProtosSlotMutation mutation,
-                ProtosActivation activation,
-                ProtosObjectValue target,
-                String name,
-                Object value) {
-            try {
-                if (mutation == ProtosSlotMutation.CREATE) {
-                    target.createLocalSlot(name, value);
-                } else {
-                    target.assignLocalSlot(name, value);
-                }
-            } catch (IllegalStateException invalidMutation) {
-                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
-            }
-            return value;
-        }
-
         /** {@link ProtosSlotMutation#ASSIGN_RESOLVED}. */
         @Specialization
         public static Object resolvedTarget(
@@ -1094,21 +1063,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115-H8 EXPERIMENTAL: GraalPy-shaped SetAttribute.
+     * I115: direct physical attribute assignment.
      *
-     * The common specialization caches one receiver and its existing
-     * physical SlotCell. The slow path handles unsupported representations
-     * and errors. This deliberately relaxes frozen-state checking and
-     * permits an internal Integer carrier to inhabit the selected slot.
+     * Operand order follows GraalPy StoreVisitor: value, then receiver.
+     * The instruction returns void; expression-result preservation belongs
+     * to the lowerer, not to the physical attribute write.
+     *
+     * KNOWN I115 SEMANTIC DIVERGENCE: the selected-slot fast path
+     * bypasses historical frozen-state admission and preserves internal
+     * numeric carriers until semantic reconciliation.
      */
     @Operation
     @ConstantOperand(type = String.class, name = "name")
-    public static final class ExperimentalSetAttribute {
-        /*
-         * I115-H10-A: signed-64 primitive SetAttribute.
-         * Uses the same authoritative DynamicObject storage as
-         * GetAttribute, without any 32-bit narrowing.
-         */
+    public static final class SetAttribute {
         @Specialization(
                 guards = {
                     "receiver == cachedReceiver",
@@ -1116,17 +1083,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 },
                 assumptions = "cachedSelection.stability()",
                 limit = "3")
-        public static long directLong(
+        public static void directLong(
                 String name,
-                Object receiver,
                 long value,
+                Object receiver,
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("writableSelection(receiver, name)")
                         ProtosValueLookup.GuardedSlotSelection cachedSelection,
                 @Cached DynamicObject.PutNode putNode) {
-            ProtosValueLookup.experimentalWriteSelected(
+            ProtosValueLookup.writeSelectedAttribute(
                     cachedSelection, name, value, putNode);
-            return value;
         }
 
         @Specialization(
@@ -1137,34 +1103,32 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 assumptions = "cachedSelection.stability()",
                 replaces = "directLong",
                 limit = "3")
-        public static Object direct(
+        public static void direct(
                 String name,
-                Object receiver,
                 Object value,
+                Object receiver,
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("writableSelection(receiver, name)")
                         ProtosValueLookup.GuardedSlotSelection cachedSelection,
                 @Cached DynamicObject.PutNode putNode) {
-            return ProtosValueLookup.experimentalWriteSelected(
+            ProtosValueLookup.writeSelectedAttribute(
                     cachedSelection, name, value, putNode);
         }
 
         @Specialization(replaces = "direct")
-        public static Object generic(
+        public static void generic(
                 String name,
-                Object receiver,
                 Object value,
+                Object receiver,
                 @Bind VirtualFrame frame) {
             if (receiver instanceof ProtosObjectValue object
                     && !ProtosNumericValueSupport.isCurrentNumber(receiver)) {
                 try {
-                    // Non-admitted receivers keep their ordinary guest
-                    // value representation and mutation checks.
                     object.assignLocalSlot(
                             name, ProtosNumericValueSupport.guestValue(value));
-                    return value;
+                    return;
                 } catch (IllegalStateException invalidMutation) {
-                    // The exact activation is needed on an error only.
+                    // Resolve the activation only on the error path.
                 }
             }
             throw new ProtosSignalException(
@@ -1175,8 +1139,40 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static ProtosValueLookup.GuardedSlotSelection writableSelection(
                 Object receiver, String name) {
-            return ProtosValueLookup.experimentalWritableSelection(
+            return ProtosValueLookup.writableAttributeSelection(
                     receiver, name);
+        }
+    }
+
+    /**
+     * I115: explicit creation of a local attribute on a receiver.
+     *
+     * The creation is not an assignment: duplicate local slots must fail.
+     * The existing ProtosObjectValue remains the physical slot authority.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "name")
+    public static final class CreateAttribute {
+        @Specialization
+        public static void perform(
+                String name,
+                Object value,
+                Object receiver,
+                @Bind VirtualFrame frame) {
+            if (receiver instanceof ProtosObjectValue object
+                    && !ProtosNumericValueSupport.isCurrentNumber(receiver)) {
+                try {
+                    object.createLocalSlot(
+                            name, ProtosNumericValueSupport.guestValue(value));
+                    return;
+                } catch (IllegalStateException invalidMutation) {
+                    // Resolve the activation only on the error path.
+                }
+            }
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(
+                            ProtosFrameArguments.activation(
+                                    frame.getArguments())));
         }
     }
 
@@ -1193,12 +1189,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
 
     /**
-     * I115-H10-A: signed-64 GetAttribute with Object fallback.
+     * I115: signed-64 GetAttribute with Object fallback.
      * Uses the same authoritative Shape location as SetAttribute.
      */
     @Operation
     @ConstantOperand(type = String.class, name = "name")
-    public static final class ExperimentalGetAttribute {
+    public static final class GetAttribute {
         @Specialization(
                 guards = {
                     "receiver == cachedReceiver",
@@ -1251,34 +1247,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     cachedGetter.get(cachedLookup.storage()));
         }
 
-        @Specialization(replaces = {"doLong", "doObjectCached"})
-        public static Object doGeneric(
-                String name,
-                Object receiver,
-                @Bind VirtualFrame frame) {
-            return ReadMemberAtRoot.perform(name, receiver, frame);
-        }
-
-        static ProtosValueLookup.GuardedSlotSelection createGuardedLookup(
-                Object receiver, String name, Object[] arguments) {
-            return ProtosValueLookup.experimentalPrimitiveReadableSelection(
-                    receiver, name, ProtosFrameArguments.preludeOrNull(arguments));
-        }
-    }
-
-    /**
-     * PERF037-B root-level {@link ReadMember}: the lowerer emits it whenever
-     * the current activation is the root's own (frame argument 0). The PIC
-     * tiers are those of {@link ReadMember}, but neither selection nor a
-     * successful read observes the activation: selection takes the prelude
-     * the invocation's activation has or would have, and a valid hit loads
-     * the selected binding's stable location. Only an absent member or an
-     * unsupported representation materializes the exact activation, from
-     * which its Error is raised.
-     */
-    @Operation
-    @ConstantOperand(type = String.class, name = "name")
-    public static final class ReadMemberAtRoot {
         @Specialization(
                 guards = {
                     "cachedLookup != null",
@@ -1300,11 +1268,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     cachedLookup.parentSelection());
         }
 
-        /**
-         * PERF037: no method-binding branch in the common data-member
-         * path. Truffle invalidates this specialization before a selected
-         * slot can transition from data to Closure.
-         */
         @Specialization(
                 guards = {
                     "cachedLookup != null",
@@ -1324,101 +1287,36 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     receiver, cachedLookup, node, closureExtraction);
         }
 
-        /**
-         * PERF037: no method-binding branch in the common data-member
-         * path. Truffle invalidates this specialization before a selected
-         * slot can transition from data to Closure.
-         */
-        /*
-         * I115: primitive-long GetAttribute. Read the current
-         * selected location on each execution; never cache
-         * the value itself. A change of representation falls
-         * back to the existing object specialization.
-         */
-        @Specialization(
-                guards = {
-                    "receiver == cachedReceiver",
-                    "cachedLookup != null",
-                    "cachedLookup.nonClosureContinuity() != null",
-                    "selectedLong(cachedLookup)"
-                },
-                assumptions = {
-                    "cachedLookup.stability()",
-                    "cachedLookup.nonClosureContinuity()"
-                },
-                limit = "3")
-        public static long guardedExactReceiverLong(
-                String name,
-                Object receiver,
-                @Bind VirtualFrame frame,
-                @Cached("receiver") Object cachedReceiver,
-                @Cached("createGuardedLookup(receiver, name, frame.getArguments())")
-                        ProtosValueLookup.GuardedSlotSelection cachedLookup) {
-            return ((Long) cachedLookup.currentValue()).longValue();
-        }
-
-        @Specialization(
-                guards = {
-                    "receiver == cachedReceiver",
-                    "cachedLookup != null",
-                    "cachedLookup.nonClosureContinuity() != null"
-                },
-                assumptions = {
-                    "cachedLookup.stability()",
-                    "cachedLookup.nonClosureContinuity()"
-                },
-                replaces = "guardedExactReceiverLong",
-                limit = "3")
-        public static Object guardedExactReceiverPlain(
-                String name,
-                Object receiver,
-                @Bind VirtualFrame frame,
-                @Cached("receiver") Object cachedReceiver,
-                @Cached("createGuardedLookup(receiver, name, frame.getArguments())")
-                        ProtosValueLookup.GuardedSlotSelection cachedLookup) {
-            return ProtosValueLookup.guardedPlainSlotValue(cachedLookup);
-        }
-
-        @Specialization(
-                guards = {
-                    "receiver == cachedReceiver",
-                    "cachedLookup != null"
-                },
-                assumptions = "cachedLookup.stability()",
-                limit = "3")
-        public static Object guardedExactReceiver(
-                String name,
-                Object receiver,
-                @Bind VirtualFrame frame,
-                @Cached("receiver") Object cachedReceiver,
-                @Cached("createGuardedLookup(receiver, name, frame.getArguments())")
-                        ProtosValueLookup.GuardedSlotSelection cachedLookup,
-                @Bind Node node,
-                @Cached InlinedBranchProfile closureExtraction) {
-            return ProtosValueLookup.materializeGuardedMemberRead(
-                    receiver, cachedLookup, node, closureExtraction);
-        }
-
-        @Specialization(replaces = {"guardedSharedInheritedPlain", "guardedSharedInherited", "guardedExactReceiverPlain", "guardedExactReceiver"})
-        public static Object perform(
+        @Specialization(replaces = {
+                "doLong",
+                "doObjectCached",
+                "guardedSharedInheritedPlain",
+                "guardedSharedInherited"
+        })
+        public static Object doGeneric(
                 String name,
                 Object receiver,
                 @Bind VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
-            Object value =
-                    ReadMember.readMemberOrNull(
-                            receiver, name, ProtosFrameArguments.preludeOrNull(arguments));
+            Object value = ReadMember.readMemberOrNull(
+                    receiver,
+                    name,
+                    ProtosFrameArguments.preludeOrNull(arguments));
             if (value != null) {
                 return value;
             }
             return ReadMember.performForActivation(
-                    ProtosFrameArguments.activation(arguments), receiver, name);
+                    ProtosFrameArguments.activation(arguments),
+                    receiver,
+                    name);
         }
 
-        static ProtosValueLookup.SharedInheritedSlotSelection createSharedInheritedLookup(
-                Object receiver, String name, Object[] arguments) {
+        static ProtosValueLookup.SharedInheritedSlotSelection
+                createSharedInheritedLookup(
+                        Object receiver, String name, Object[] arguments) {
             return ReadMember.createSharedInheritedLookupForPrelude(
-                    receiver, name, ProtosFrameArguments.preludeOrNull(arguments));
+                    receiver, name,
+                    ProtosFrameArguments.preludeOrNull(arguments));
         }
 
         static boolean matchesSharedInheritedLookup(
@@ -1429,15 +1327,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     receiver, name, cachedLookup);
         }
 
-        @NonIdempotent
-        static boolean selectedLong(
-                ProtosValueLookup.GuardedSlotSelection selection) {
-            return selection.currentValue() instanceof Long;
-        }
-
         static ProtosValueLookup.GuardedSlotSelection createGuardedLookup(
                 Object receiver, String name, Object[] arguments) {
-            return ReadMember.createGuardedLookupForPrelude(
+            return ProtosValueLookup.readableAttributeSelection(
                     receiver, name, ProtosFrameArguments.preludeOrNull(arguments));
         }
     }

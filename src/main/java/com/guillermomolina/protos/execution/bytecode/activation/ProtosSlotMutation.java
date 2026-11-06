@@ -17,12 +17,13 @@
 
 package com.guillermomolina.protos.execution;
 
-/** I113: the local slot mutation of a {@code MutateLocalSlot} instruction. */
+/**
+ * I115: mutation kind for resolved lexical destinations only.
+ *
+ * Ordinary explicit object attributes are handled by the dedicated
+ * SetAttribute and CreateAttribute Bytecode DSL operations.
+ */
 public enum ProtosSlotMutation {
-    /** Creates a local slot of an explicit object target. */
-    CREATE,
-    /** Assigns a local slot of an explicit object target. */
-    ASSIGN,
     /** Assigns through a resolved generic lexical write target. */
     ASSIGN_RESOLVED
 }
