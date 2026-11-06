@@ -46,9 +46,9 @@ import com.oracle.truffle.api.strings.TruffleString;
  * I115 (GraalPy {@code GetMethod}), proxied as the {@code GetMethod}
  * operation: the selection half of every ordinary send. The receiver was
  * evaluated once by the caller bytecode; the selector is a constant operand.
- * The result is always a {@link ProtosBoundMethod} carrying the selected
- * Closure, the original receiver and the methodHome, except for a D188
- * foreign member, whose read value is returned to be invoked as a callable.
+ * Ordinary selection returns a {@link ProtosBoundMethod} carrying the
+ * selected Closure, receiver and methodHome. Direct cached selection returns
+ * the raw Closure; D188 foreign member selection returns its read callable.
  * Nothing is prepared or executed here.
  *
  * <p>{@link #doCached} is the selection cache (at most three entries),
@@ -66,9 +66,12 @@ import com.oracle.truffle.api.strings.TruffleString;
 @GenerateInline(false)
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = true)
 @ConstantOperand(type = TruffleString.class, name = "selector")
+@ConstantOperand(type = boolean.class, name = "direct")
 abstract class ProtosExperimentalGetMethodNode extends Node {
 
-    abstract Object execute(VirtualFrame frame, TruffleString selector, Object receiver);
+    abstract Object execute(
+            VirtualFrame frame, TruffleString selector,
+            boolean direct, Object receiver);
 
     @Specialization(
             excludeForUncached = true,
@@ -83,15 +86,21 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
     static Object doCached(
             VirtualFrame frame,
             TruffleString selector,
+            boolean direct,
             Object receiver,
             @Cached("receiver") Object cachedReceiver,
             @Cached("selectOrNull(receiver, selector)")
                     GuardedSlotSelection cachedSelection,
             @Cached com.oracle.truffle.api.object.DynamicObject.GetNode getNode) {
+        ProtosClosureValue selected =
+                (ProtosClosureValue) cachedSelection.currentValue(getNode);
+        if (direct) {
+            // I115 divergence: the receiver travels separately; the
+            // inherited method's exact original methodHome is not retained.
+            return selected;
+        }
         return new ProtosBoundMethod(
-                (ProtosClosureValue) cachedSelection.currentValue(getNode),
-                receiver,
-                cachedSelection.home());
+                selected, receiver, cachedSelection.home());
     }
 
     @Specialization(replaces = "doCached")
@@ -99,6 +108,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
     static Object doGeneric(
             VirtualFrame frame,
             TruffleString selector,
+            boolean direct,
             Object receiver,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
         Object caller = ProtosFunctionCallDispatchers.callerReference(frame);

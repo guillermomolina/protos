@@ -26,14 +26,12 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
-import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
-import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Fallback;
@@ -57,8 +55,9 @@ import com.oracle.truffle.api.nodes.RootNode;
  * a B5 argument array whose receiver/methodHome slots ({@code [1]}, {@code
  * [2]}) and positional arguments ({@code [5..]}) were written by the call
  * operation; the dispatcher writes the Closure ({@code [0]}), the caller
- * reference ({@code [3]}) and the ReturnHome ({@code [4]}). That array is the
- * callee frame's arguments: no intermediate array exists.
+ * reference ({@code [3]}) and a null return-home slot ({@code [4]})
+ * on direct and indirect calls. That array is the callee frame's
+ * arguments: no intermediate array exists.
  *
  * <ul>
  *   <li>{@code functionCall}: a source Closure, selected by representation
@@ -73,10 +72,9 @@ import com.oracle.truffle.api.nodes.RootNode;
  *       selected by ordinary lookup and invoked as a method on the object.
  * </ul>
  *
- * <p>The invoke nodes own no ReturnHome: the callee root captures a
- * non-local return aimed at its own home and closes it when the activation
- * terminates (TruffleRuby RubyMethodRootNode). A transfer leaving the callee
- * is unbridged so it keeps unwinding through the caller root.
+ * <p>I115 divergence: direct and indirect invocations do not prepare
+ * historical ReturnHome metadata, translate terminal suspension transport,
+ * or project numeric carriers before the actual consumer boundary.
  */
 final class ProtosFunctionCallDispatchers {
     private ProtosFunctionCallDispatchers() {}
@@ -349,36 +347,6 @@ final class ProtosFunctionCallDispatchers {
             return ProtosFunctionCallDispatchers.calleeRootOrNull(rootNode);
         }
 
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // @NonIdempotent
-        // static RootNode functionRootOrNull(
-        //         ProtosClosureValue closure,
-        //         ProtosLanguageContext enteredContext) {
-        //     /*
-        //      * I115: like GraalPy PFunction.getCode().getRootNode(), read
-        //      * the prepared root directly when it already belongs to the
-        //      * entered Context. Preserve the general resolution path for
-        //      * deferred plans and Context-local projections.
-        //      */
-        //     if (closure != null
-        //             && enteredContext != null
-        //             && closure.nativeBody().isEmpty()
-        //             && closure.definition() != null) {
-        //         ProtosClosureExecutionPlan prepared =
-        //                 closure.preparedExecutionPlanOrNullForRuntime();
-        //         if (prepared != null
-        //                 && !closure.requiresContextLocalExecutionProjectionForRuntime()
-        //                 && prepared.language().orElse(null)
-        //                         == enteredContext.languageForRuntime()) {
-        //             return prepared.bytecodeActivationTargetForComposition()
-        //                     .getRootNode();
-        //         }
-        //     }
-
-        //     RootCallTarget target = ProtosClosureCallPreparation.functionCallTarget(
-        //             closure, enteredContext);
-        //     return target == null ? null : target.getRootNode();
-        // }
     }
 
     /**
@@ -539,6 +507,11 @@ final class ProtosFunctionCallDispatchers {
                 Object callerReference,
                 ProtosBytecodeRootNode root);
 
+        /*
+         * I115 divergence: the historical non-local ReturnHome and
+         * terminal suspension transport are absent from this direct path.
+         * Numeric carriers remain raw until their real consumer boundary.
+         */
         @Specialization
         static Object invoke(
                 VirtualFrame frame,
@@ -550,27 +523,9 @@ final class ProtosFunctionCallDispatchers {
                 Object[] arguments,
                 Object callerReference,
                 ProtosBytecodeRootNode root) {
-            // The caller's result contract precedes the callee's header completion.
-            boolean acceptsCarrier = ProtosFrameArguments.acceptsPrimitiveResult(arguments);
-            prepareArguments(callee, closure, arguments, callerReference, root);
-            Object outcome;
-            try {
-                outcome = callNode.call(arguments);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                // Bytecode DSL bridge: the owning root captures its own return.
-                throw bridged.transfer();
-            }
-            /*
-             * GraalPy FunctionDirectInvokeNode returns the direct-call
-             * outcome. Protos needs terminal suspension transport only
-             * when the effective callee body may suspend. The existing
-             * whole-root proof includes defaults and effective-body
-             * transformations; an unproven callee keeps the general path.
-             */
-            Object completedOutcome = callee != null && callee.provablyNonSuspendingBody()
-                    ? outcome
-                    : completed(frame, inliningTarget, terminal, outcome);
-            return projectForCaller(completedOutcome, acceptsCarrier);
+            ProtosFrameArguments.completeDispatchedHeader(
+                    arguments, closure, callerReference, null);
+            return callNode.call(arguments);
         }
     }
 
@@ -591,6 +546,10 @@ final class ProtosFunctionCallDispatchers {
                 Object callerReference,
                 ProtosBytecodeRootNode root);
 
+        /*
+         * The indirect source path has the same raw-result contract as
+         * direct invocation, without a ReturnHome or result projection.
+         */
         @Specialization
         static Object invoke(
                 VirtualFrame frame,
@@ -603,75 +562,21 @@ final class ProtosFunctionCallDispatchers {
                 Object callerReference,
                 ProtosBytecodeRootNode root,
                 @Cached(inline = false) IndirectCallNode callNode) {
-            boolean acceptsCarrier = ProtosFrameArguments.acceptsPrimitiveResult(arguments);
-            prepareArguments(callee, closure, arguments, callerReference, root);
-            Object outcome;
-            try {
-                outcome = callNode.call(target, arguments);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
-            return projectForCaller(
-                    completed(frame, inliningTarget, terminal, outcome), acceptsCarrier);
+            ProtosFrameArguments.completeDispatchedHeader(
+                    arguments, closure, callerReference, null);
+            return callNode.call(target, arguments);
         }
     }
 
     /*
-     * The header slots the dispatcher owns (GraalPy PArguments.setFunctionObject
-     * and CallContext.prepareCall): the Closure, the caller reference as is
-     * unless the callee registered NEEDS_CALLER_PRELUDE, and the exact
-     * ReturnHome: a captured home by identity, the shared marker when the
-     * plan proves the home unobservable, otherwise a fresh home this
-     * invocation's root owns.
-     */
-    private static void prepareArguments(
-            ProtosBytecodeRootNode callee,
-            ProtosClosureValue closure,
-            Object[] arguments,
-            Object callerReference,
-            ProtosBytecodeRootNode root) {
-        Object caller =
-                callee == null
-                        ? callerReference
-                        : callerArgument(root, callee, closure, callerReference);
-        // The callee's return-home proof is fixed by the lowering. For a
-        // direct call it is a PE constant; unresolved call targets retain
-        // the general return-home semantics.
-        ProtosReturnHome returnHome =
-                callee != null && callee.returnHomeProvenUnobservable()
-                        ? null
-                        : closure.invocationReturnHomeForRuntime();
-        ProtosFrameArguments.completeDispatchedHeader(arguments, closure, caller, returnHome);
-    }
-
-    /*
-     * Call-site result projection. As in GraalPy, the callee epilogue always
-     * returns its value unchanged. Only a caller without an admitted primitive
-     * carrier contract materializes an ordinary completed numeric result.
-     * Suspended outcomes retain their continuation transport unchanged.
+     * Host-side guest-value projection only. Internal source invocations
+     * return their exact results to the consuming Bytecode DSL operation.
      */
     private static Object projectForCaller(Object outcome, boolean acceptsCarrier) {
         if (acceptsCarrier || ProtosTailCallContinuation.isSuspended(outcome)) {
             return outcome;
         }
         return ProtosNumericValueSupport.guestValue(outcome);
-    }
-
-    /*
-     * Terminal suspended outcomes are deferred by the dispatcher; the
-     * non-terminal result stays available to the composing caller.
-     */
-    private static Object completed(
-            VirtualFrame frame, Node inliningTarget, boolean terminal, Object outcome) {
-        if (terminal && ProtosTailCallContinuation.isSuspended(outcome)) {
-            BytecodeNode bytecodeNode =
-                    frame == null ? null : BytecodeNode.get(inliningTarget);
-            return ProtosTailCallContinuation.deferDirect(
-                    outcome,
-                    bytecodeNode,
-                    bytecodeNode == null ? -1 : bytecodeNode.getBytecodeIndex(frame));
-        }
-        return outcome;
     }
 
     /*
@@ -870,25 +775,6 @@ final class ProtosFunctionCallDispatchers {
             return activation.preludeOrNullForRuntime();
         }
         return ProtosFrameArguments.preludeOrNull((Object[]) caller);
-    }
-
-    /**
-     * I115 (GraalPy CallContext.prepareCall): the B5 caller slot passed to
-     * {@code callee}: the reference unchanged unless the callee requested the
-     * caller prelude, which then travels in a ProtosCallerFrameReference.
-     */
-    static Object callerArgument(
-            ProtosBytecodeRootNode root,
-            ProtosBytecodeRootNode callee,
-            ProtosClosureValue closure,
-            Object caller) {
-        if (!callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE)
-                || !(caller instanceof Object[] callerArguments)
-                || closure.preludeOrNullForRuntime() != null) {
-            return caller;
-        }
-        return ProtosFrameArguments.callerFrameReference(
-                callerArguments, admittedCallerPrelude(root, caller));
     }
 
     static ProtosNativeClosureBody nativeBody(ProtosClosureValue closure) {

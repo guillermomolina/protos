@@ -18,42 +18,94 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
+import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.ForceQuickening;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
+import com.oracle.truffle.api.dsl.Idempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * I115 (GraalPy {@code Call*Method}): the {@code CallBinaryMethod} operation, a call
- * of an evaluated callable with 2 positional arguments. The callable is a source Closure, a
- * native Closure, a {@link ProtosBoundMethod} produced by {@code GetMethod}
- * (its receiver is not counted among the arguments) or any other object.
+ * I115 GraalPy-shaped fixed-arity call operation.
  *
- * <p>The B5 frame-argument array is built once here and becomes the callee
- * frame's arguments. A source function goes straight to the shared
- * function PIC; a bound source method writes its receiver and methodHome
- * and uses the same PIC; every other callable takes {@link
- * ProtosFunctionCallDispatchers.CallNode}. No call is prepared.
+ * Ordinary CALL2 receives two positional arguments. Immediate SEND1
+ * receives an independently transported receiver and one positional
+ * argument. Both use the existing B5 frame layout and dispatcher family.
  */
 @GenerateUncached
 @GenerateInline(false)
 @ConstantOperand(type = boolean.class, name = "terminal")
+@ConstantOperand(type = boolean.class, name = "methodSend")
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = true)
 abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
 
-    abstract Object execute(VirtualFrame frame, boolean terminal, Object callable, Object a0, Object a1);
+    abstract Object execute(
+            VirtualFrame frame,
+            boolean terminal,
+            boolean methodSend,
+            Object callable,
+            Object a0,
+            Object a1);
 
-    @Specialization(guards = "isSourceFunction(callable)")
+    @ForceQuickening
+    @Specialization(
+            guards = {
+                    "methodSend",
+                    "isSourceFunction(callable)",
+                    "isSingleContext()",
+                    "callable == cachedCallable",
+                    "cachedTarget != null"
+            },
+            assumptions = "cachedCodeStable",
+            excludeForUncached = true,
+            limit = "3")
+    static Object callDirectSourceSend(
+            VirtualFrame frame,
+            boolean terminal,
+            boolean methodSend,
+            ProtosClosureValue callable,
+            Object receiver,
+            Object a0,
+            @Bind("$node") Node inliningTarget,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached(value = "callable", weak = true)
+                    ProtosClosureValue cachedCallable,
+            @Cached("cachedCallable.codeStableAssumptionForRuntime()")
+                    Assumption cachedCodeStable,
+            @Cached("singleContextTargetOrNull(cachedCallable, root)")
+                    RootCallTarget cachedTarget,
+            @Cached("createDirectCallNodeOrNull(cachedTarget)")
+                    DirectCallNode callNode,
+            @Cached(
+                    value = "calleeRootOrNull(cachedTarget)",
+                    adopt = false)
+                    ProtosBytecodeRootNode cachedCallee,
+            @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke) {
+        Object[] arguments = ProtosFrameArguments.dispatchedCall1(
+                null, receiver, receiverHomeOrNull(receiver),
+                null, null, a0);
+        return invoke.execute(
+                frame, inliningTarget, terminal, callNode, cachedCallee,
+                callable, arguments,
+                ProtosFunctionCallDispatchers.callerReference(frame), root);
+    }
+
+    @Specialization(guards = {"!methodSend", "isSourceFunction(callable)"})
     static Object callFunction(
             VirtualFrame frame,
             boolean terminal,
+            boolean methodSend,
             ProtosClosureValue callable,
             Object a0,
             Object a1,
@@ -63,15 +115,21 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
         return call.execute(
                 frame, inliningTarget, terminal, callable,
                 ProtosFrameArguments.dispatchedCall2(
-                null, ProtosFrameArguments.functionCallMarker(), null, null, null, a0, a1),
+                        null, ProtosFrameArguments.functionCallMarker(),
+                        null, null, null, a0, a1),
                 ProtosFunctionCallDispatchers.callerReference(frame), root,
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
     }
 
-    @Specialization(guards = "isSourceFunction(method.callable())")
+    @Specialization(
+            guards = {
+                    "!methodSend",
+                    "isSourceFunction(method.callable())"
+            })
     static Object callBoundMethod(
             VirtualFrame frame,
             boolean terminal,
+            boolean methodSend,
             ProtosBoundMethod method,
             Object a0,
             Object a1,
@@ -79,20 +137,23 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall2(
-                null, ProtosFrameArguments.functionCallMarker(), null, null, null, a0, a1);
-        ProtosFrameArguments.bindMethod(arguments, method.receiver(), method.methodHome());
+                null, ProtosFrameArguments.functionCallMarker(),
+                null, null, null, a0, a1);
+        ProtosFrameArguments.bindMethod(
+                arguments, method.receiver(), method.methodHome());
         return call.execute(
                 frame, inliningTarget, terminal, method.callable(), arguments,
                 ProtosFunctionCallDispatchers.callerReference(frame), root,
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
     }
 
-    /* Builtins, bound builtins and generic callables: GraalPy CallNode. */
-    @Specialization(guards = "!isSourceCallable(callable)")
+    @Specialization(
+            guards = {"!methodSend", "!isSourceCallable(callable)"})
     @InliningCutoff
     static Object call(
             VirtualFrame frame,
             boolean terminal,
+            boolean methodSend,
             Object callable,
             Object a0,
             Object a1,
@@ -101,8 +162,72 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
         return call.execute(
                 frame, terminal, callable,
                 ProtosFrameArguments.dispatchedCall2(
-                null, ProtosFrameArguments.functionCallMarker(), null, null, null, a0, a1),
+                        null, ProtosFrameArguments.functionCallMarker(),
+                        null, null, null, a0, a1),
                 ProtosFunctionCallDispatchers.callerReference(frame), root);
+    }
+
+    /*
+     * Generic SEND1 covers polymorphic selection, cached-PIC misses,
+     * native methods and selected bound methods. Its B5 suffix still
+     * contains exactly one supplied positional argument.
+     */
+    @Specialization(
+            guards = "methodSend",
+            replaces = "callDirectSourceSend")
+    @InliningCutoff
+    static Object callGenericSend(
+            VirtualFrame frame,
+            boolean terminal,
+            boolean methodSend,
+            Object callable,
+            Object receiver,
+            Object a0,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached ProtosFunctionCallDispatchers.CallNode call) {
+        Object[] arguments = ProtosFrameArguments.dispatchedCall1(
+                null, receiver, receiverHomeOrNull(receiver),
+                null, null, a0);
+
+        if (callable instanceof ProtosBoundMethod method) {
+            ProtosFrameArguments.bindMethod(
+                    arguments, method.receiver(), method.methodHome());
+        }
+
+        return call.execute(
+                frame, terminal, callable, arguments,
+                ProtosFunctionCallDispatchers.callerReference(frame), root);
+    }
+
+    /*
+     * Local DSL expression entry points shared with the unary source PIC.
+     * They retain its admission and target-selection contract.
+     */
+    @Idempotent
+    static boolean isSingleContext() {
+        return ProtosCallUnaryMethodNode.isSingleContext();
+    }
+
+    static RootCallTarget singleContextTargetOrNull(
+            ProtosClosureValue callable,
+            ProtosBytecodeRootNode root) {
+        return ProtosCallUnaryMethodNode.singleContextTargetOrNull(
+                callable, root);
+    }
+
+    static DirectCallNode createDirectCallNodeOrNull(
+            RootCallTarget target) {
+        return ProtosCallUnaryMethodNode.createDirectCallNodeOrNull(
+                target);
+    }
+
+    static ProtosBytecodeRootNode calleeRootOrNull(
+            RootCallTarget target) {
+        return ProtosCallUnaryMethodNode.calleeRootOrNull(target);
+    }
+
+    static ProtosObjectValue receiverHomeOrNull(Object receiver) {
+        return receiver instanceof ProtosObjectValue object ? object : null;
     }
 
     static boolean isSourceFunction(ProtosClosureValue callable) {
@@ -117,6 +242,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
     }
 
     static ProtosBytecodeRootNode rootOf(Node node) {
-        return (ProtosBytecodeRootNode) BytecodeNode.get(node).getBytecodeRootNode();
+        return (ProtosBytecodeRootNode)
+                BytecodeNode.get(node).getBytecodeRootNode();
     }
 }
