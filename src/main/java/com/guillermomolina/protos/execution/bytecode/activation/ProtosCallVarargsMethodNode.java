@@ -63,7 +63,7 @@ abstract class ProtosCallVarargsMethodNode extends Node {
                 frame, inliningTarget, terminal, callable,
                 ProtosFrameArguments.dispatchedCallN(
                 null, ProtosFrameArguments.functionCallMarker(), null, null, null, supplied),
-                ProtosFunctionCallDispatchers.callerReference(frame), root,
+                null, root,
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
     }
 
@@ -81,7 +81,7 @@ abstract class ProtosCallVarargsMethodNode extends Node {
         ProtosFrameArguments.bindMethod(arguments, method.receiver(), method.methodHome());
         return call.execute(
                 frame, inliningTarget, terminal, method.callable(), arguments,
-                ProtosFunctionCallDispatchers.callerReference(frame), root,
+                null, root,
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
     }
 
@@ -99,7 +99,7 @@ abstract class ProtosCallVarargsMethodNode extends Node {
                 frame, terminal, callable,
                 ProtosFrameArguments.dispatchedCallN(
                 null, ProtosFrameArguments.functionCallMarker(), null, null, null, supplied),
-                ProtosFunctionCallDispatchers.callerReference(frame), root);
+                null, root);
     }
 
     static boolean isSourceFunction(ProtosClosureValue callable) {

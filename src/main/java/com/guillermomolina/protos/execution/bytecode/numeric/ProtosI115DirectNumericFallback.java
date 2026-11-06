@@ -43,20 +43,21 @@ final class ProtosI115DirectNumericFallback {
     /** The canonical Boolean of {@code relation} for any two operands, cold. */
     static Object compare(ProtosBytecodeRootNode root, VirtualFrame frame,
             Object left, Object right, Relation relation) {
-        return compareCold(
+        Object result = compareCold(
                 ProtosNumericValueSupport.guestValue(left),
                 ProtosNumericValueSupport.guestValue(right),
-                relation,
-                root,
-                ProtosFunctionCallDispatchers.callerReference(frame));
+                relation);
+        if (result == null) {
+            throw unsupported(root, frame);
+        }
+        return result;
     }
 
     @TruffleBoundary
-    private static Object compareCold(Object left, Object right, Relation relation,
-            ProtosBytecodeRootNode root, Object caller) {
+    private static Object compareCold(Object left, Object right, Relation relation) {
         if (!ProtosNumericValueSupport.isCurrentRealNumber(left)
                 || !ProtosNumericValueSupport.isCurrentRealNumber(right)) {
-            throw unsupported(root, caller);
+            return null;
         }
         return ProtosBooleanValue.of(
                 relation.holds(ProtosStandardNumberOrderingProtocol.compare(left, right)));
@@ -64,7 +65,9 @@ final class ProtosI115DirectNumericFallback {
 
     /** Signals the guest Error of an unsupported numeric operand pair. */
     static ProtosSignalException unsupported(ProtosBytecodeRootNode root, VirtualFrame frame) {
-        return unsupported(root, ProtosFunctionCallDispatchers.callerReference(frame));
+        root.requestCallerNeed(
+                ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
+        return unsupported(root, ProtosFrameArguments.activation(frame));
     }
 
     @TruffleBoundary

@@ -67,7 +67,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                     "callable == cachedCallable",
                     "cachedTarget != null"
             },
-            assumptions = "cachedCodeStable",
+            assumptions = {"cachedCodeStable", "cachedCallerNeedsStable"},
             excludeForUncached = true,
             limit = "3")
     static Object callDirectSourceSend(
@@ -91,14 +91,15 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                     value = "calleeRootOrNull(cachedTarget)",
                     adopt = false)
                     ProtosBytecodeRootNode cachedCallee,
+            @Cached("cachedCallee.callerNeedsStability()")
+                    Assumption cachedCallerNeedsStable,
             @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, receiver, receiverHomeOrNull(receiver),
                 null, null, a0);
         return invoke.execute(
-                frame, inliningTarget, terminal, callNode, cachedCallee,
-                callable, arguments,
-                ProtosFunctionCallDispatchers.callerReference(frame), root);
+                frame, inliningTarget, callNode, cachedCallee,
+                callable, arguments, null);
     }
 
     @Specialization(guards = {"!methodSend", "isSourceFunction(callable)"})
@@ -117,7 +118,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                 ProtosFrameArguments.dispatchedCall2(
                         null, ProtosFrameArguments.functionCallMarker(),
                         null, null, null, a0, a1),
-                ProtosFunctionCallDispatchers.callerReference(frame), root,
+                null, root,
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
     }
 
@@ -143,7 +144,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                 arguments, method.receiver(), method.methodHome());
         return call.execute(
                 frame, inliningTarget, terminal, method.callable(), arguments,
-                ProtosFunctionCallDispatchers.callerReference(frame), root,
+                null, root,
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
     }
 
@@ -164,7 +165,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                 ProtosFrameArguments.dispatchedCall2(
                         null, ProtosFrameArguments.functionCallMarker(),
                         null, null, null, a0, a1),
-                ProtosFunctionCallDispatchers.callerReference(frame), root);
+                null, root);
     }
 
     /*
@@ -196,7 +197,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
 
         return call.execute(
                 frame, terminal, callable, arguments,
-                ProtosFunctionCallDispatchers.callerReference(frame), root);
+                null, root);
     }
 
     /*

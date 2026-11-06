@@ -30,86 +30,20 @@ import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.frame.Frame;
 import java.util.List;
 import java.util.Objects;
 
 final class ProtosFrameArguments {
-    /*
-     * PLAT060-B5 universal ordinary Closure-call ABI (I102).
-     *
-     * Captured lexical state and executable identity remain owned by the
-     * Closure. Caller-owned module/domain/control provenance is referenced,
-     * rather than copied into another rich per-call aggregate. Every ordinary
-     * Closure call into a CallTarget carries this
-     * one fixed five-slot header followed by the supplied positional values:
-     *
-     *   [0] the invoked ProtosClosureValue, or the exact published
-     *       ProtosActivation of this invocation
-     *   [1] receiver (immediate method call) | DIRECT_CLOSURE_CALL
-     *   [2] methodHome (immediate method call) | explicit ProtosTask or null
-     *   [3] exact caller while unpublished; after publication, the
-     *       retained exact caller or null for an already-rich entry.
-     *       I115-B: only the admitted terminal direct Call1
-     *       (the shared dispatcher) may instead store the
-     *       caller's own B5 frame-argument array (a deferred caller);
-     *       PERF038-I extends the same deferred caller to the admitted
-     *       terminal immediate method Send1 (InvokeMethodOneTail); every
-     *       reader that needs the exact caller resolves it through
-     *       resolveExactCaller, which publishes that invocation's single
-     *       activation into the caller's argument 0.
-     *       I115 (GraalPy PFrame.Reference): when the callee root requested
-     *       caller information (NEEDS_CALLER_PRELUDE), the same admitted
-     *       calls store a ProtosCallerFrameReference instead: the caller's
-     *       B5 array plus the requested information. Every reader of this
-     *       slot accepts the four forms (activation, B5 array, reference,
-     *       and null in published state) through deferredCallerOrNull.
-     *   [4] the exact ProtosReturnHome of the invocation, including the
-     *       unobservable and primitive-accepting markers
-     *   [5...] supplied positional arguments
-     *
-     * Slots 1 and 2 are a tagged union inside this single layout, not layout
-     * variants. A direct Closure call (PERF025) takes its receiver and method
-     * home from the Closure's captures, exactly as
-     * ProtosActivation.forClosureInvocation does; its task slot carries an
-     * explicit owning Task for a Task-owned entry, and null means the callee
-     * inherits the caller's Task or dynamic-control state.
-     *
-     * Publication replaces only argument 0 by the materialized activation;
-     * the length, the offsets and every other slot stay unchanged. Arity,
-     * Task, ReturnHome, method reception, host debugging and
-     * materialization never change any offset.
-     *
-     * I115 (GraalPy PArguments / PFrame.Reference): four provenances of a
-     * header are distinguished.
-     *   - Admitted call header: the frame arguments of a running Closure
-     *     root, built by one of this class's constructors (an internal
-     *     producer) and entered through a validated carrier or an admitted
-     *     direct call. Argument 0 is the invoked Closure or, once published,
-     *     the activation.
-     *   - Admitted deferred header: an admitted call header stored by an
-     *     admitted terminal call as its callee's caller reference (slot 3).
-     *   - Published header: argument 0 holds the published activation; every
-     *     provenance field is then read from that activation.
-     *   - Arbitrary representation: any other Object[] (tests, host input).
-     *     Only isDeferredCallerCandidate/hasValidKindSlots and the general
-     *     accessors (resolveExactCaller, preludeOrNull) accept it.
-     * The admitted accessors (resolveAdmittedCaller, admittedPreludeOrNull,
-     * callerPreludeOrNull, admittedCompactTask) read slots 0-4 directly with
-     * plain type tests and no structural validation; a shape they do not
-     * admit continues through the general, validating algorithm, which keeps
-     * cycle and malformed-header detection (the Prelude recovery through the
-     * recoverCallerPreludeOrNull boundary, the others after a
-     * deoptimization). compactTask is the general, validating Task accessor;
-     * admittedCompactTask is its counterpart for admitted B5 headers.
-     *
-     * I115 (GraalPy ExecutionContext.CallContext): the admitted Prelude read
-     * no longer walks caller headers. It answers from the own header, from a
-     * caller activation, or from a reference's transported prelude; an
-     * untransported inherited prelude is recovered by the general walker,
-     * and the reading root registers NEEDS_CALLER_PRELUDE so that later
-     * calls transport it.
+    /* I115 single B5 ordinary-call ABI:
+     * [0] invoked Closure or published activation
+     * [1] receiver or direct-call marker
+     * [2] method home or explicit Task
+     * [3] null, caller Prelude or caller Activation, by callee need
+     * [4] return home
+     * [5...] supplied positional arguments
+     * No B5 argument array or wrapper is retained by another invocation.
+     * Publication of this invocation replaces only its own slot 0.
      */
     private static final int CLOSURE_INDEX = 0;
     private static final int RECEIVER_INDEX = 1;
@@ -332,14 +266,16 @@ final class ProtosFrameArguments {
             Object callerReference,
             Object supplied0) {
         Objects.requireNonNull(closure, "closure");
-        if (!(callerReference instanceof ProtosActivation)
-                && deferredCallerOrNull(callerReference) == null) {
+        if (callerReference != null
+                && !(callerReference instanceof ProtosActivation)
+                && !(callerReference instanceof ProtosPrelude)) {
             throw new IllegalArgumentException(
-                    "Invalid direct Closure-call caller reference");
+                    "Invalid direct Closure-call caller payload");
         }
         return compactAdmittedTerminalClosureCallOneNoHome(
                 closure, callerReference, supplied0);
     }
+
 
     /**
      * I115-D: trusted B5+ construction for the already admitted
@@ -587,67 +523,19 @@ final class ProtosFrameArguments {
         if (callerReference instanceof ProtosActivation activation) {
             return activation;
         }
-        /*
-         * I115: a ProtosCallerFrameReference resolves through its header, so
-         * the header is validated and published exactly as a raw one.
-         */
-        Object[] callerArguments = deferredCallerOrNull(callerReference);
-        if (callerArguments != null && isDeferredCallerCandidate(callerArguments)) {
-            if (callerArguments[CLOSURE_INDEX] instanceof ProtosActivation published) {
-                return published;
-            }
-            return publishDeferredCaller(callerArguments);
-        }
         throw new IllegalStateException(
-                "Invalid compact source-call caller frame argument");
+                "I115: exact caller activation was not transported");
     }
 
-    /**
-     * I115: {@link #resolveExactCaller} for a caller reference whose
-     * provenance an admitted terminal call already established (the running
-     * root's own published activation or admitted call header, as the
-     * terminal Call1/Send1 caller references carry it). A published activation is
-     * returned by identity without any validation; a still-compact header is
-     * published through {@link #publishDeferredCaller}, the single
-     * materialization mechanism, which validates the unpublished chain and
-     * produces exactly one activation per invocation. A {@link
-     * ProtosCallerFrameReference} resolves through its header. Any other
-     * shape takes the general {@link #resolveExactCaller}.
-     */
+
+
     static ProtosActivation resolveAdmittedCaller(Object callerReference) {
-        if (callerReference instanceof ProtosActivation activation) {
-            return activation;
-        }
-        Object[] callerArguments = deferredCallerOrNull(callerReference);
-        if (callerArguments != null && callerArguments.length >= HEADER_LENGTH) {
-            Object first = callerArguments[CLOSURE_INDEX];
-            if (first instanceof ProtosActivation published) {
-                return published;
-            }
-            if (first instanceof ProtosClosureValue) {
-                return publishDeferredCaller(callerArguments);
-            }
-        }
-        CompilerDirectives.transferToInterpreter();
         return resolveExactCaller(callerReference);
     }
 
-    /*
-     * I115: the B5 header a caller slot designates, directly (a deferred
-     * caller) or through a ProtosCallerFrameReference, else null (an
-     * activation, null, or any other value). Every reader that follows a
-     * caller chain unwraps through here, so a reference never bypasses the
-     * validation applied to the header it designates.
-     */
-    private static Object[] deferredCallerOrNull(Object callerSlot) {
-        if (callerSlot instanceof Object[] header) {
-            return header;
-        }
-        if (callerSlot instanceof ProtosCallerFrameReference reference) {
-            return reference.callerArguments();
-        }
-        return null;
-    }
+
+
+
 
     /**
      * I115: a caller reference transporting the effective {@code prelude} of
@@ -655,10 +543,7 @@ final class ProtosFrameArguments {
      * callerArguments}. Stored in its callee's slot 3 only when the callee
      * root requested the caller prelude.
      */
-    static ProtosCallerFrameReference callerFrameReference(
-            Object[] callerArguments, ProtosPrelude prelude) {
-        return ProtosCallerFrameReference.withPrelude(callerArguments, prelude);
-    }
+
 
     /*
      * I115-B: the caller slot of {@code arguments}, resolved. A deferred
@@ -666,57 +551,14 @@ final class ProtosFrameArguments {
      * would be a self-reference and is rejected.
      */
     private static ProtosActivation resolveCallerSlot(Object[] arguments) {
-        Object caller = arguments[CALLER_INDEX];
-        if (deferredCallerOrNull(caller) == arguments) {
-            throw new IllegalStateException(
-                    "Invalid self-referential compact source-call caller");
-        }
-        return resolveExactCaller(caller);
+        return resolveExactCaller(arguments[CALLER_INDEX]);
     }
 
-    /*
-     * I115-B: structural check of one B5 header used as a deferred caller,
-     * published or compact, without materializing anything or following the
-     * chain. Every slot is checked against the forms this class's
-     * constructors write:
-     *   [0] the published activation, or the invoked Closure;
-     *   [1]/[2] the direct-call marker with an explicit Task or null, or a
-     *       non-null receiver with its method home;
-     *   [3] compact: an activation, another array or a
-     *       ProtosCallerFrameReference to another array (never itself);
-     *       published: additionally null (publishedInvocation);
-     *   [4] a ProtosReturnHome (including the primitive-result marker).
-     * Cycles through other arrays are detected by the chain walkers.
-     */
-    private static boolean isDeferredCallerCandidate(Object[] callerArguments) {
-        if (callerArguments.length < HEADER_LENGTH
-                || (callerArguments[RETURN_HOME_INDEX] != null
-                        && !(callerArguments[RETURN_HOME_INDEX] instanceof ProtosReturnHome))
-                || !hasValidKindSlots(callerArguments)) {
-            return false;
-        }
-        Object first = callerArguments[CLOSURE_INDEX];
-        Object callersCaller = callerArguments[CALLER_INDEX];
-        Object[] callersHeader = deferredCallerOrNull(callersCaller);
-        if (callersHeader == callerArguments) {
-            return false;
-        }
-        boolean validCaller =
-                callersCaller instanceof ProtosActivation || callersHeader != null;
-        if (first instanceof ProtosActivation) {
-            return callersCaller == null || validCaller;
-        }
-        return first instanceof ProtosClosureValue && validCaller;
-    }
 
-    private static boolean hasValidKindSlots(Object[] arguments) {
-        Object kind = arguments[RECEIVER_INDEX];
-        Object homeOrTask = arguments[METHOD_HOME_INDEX];
-        if (kind == DIRECT_CLOSURE_CALL) {
-            return homeOrTask == null || homeOrTask instanceof ProtosTask;
-        }
-        return kind != null && homeOrTask instanceof ProtosObjectValue;
-    }
+
+
+
+
 
     /*
      * I115-B: publishes the activation of a still-compact deferred caller. The
@@ -728,52 +570,10 @@ final class ProtosFrameArguments {
      * materialized at most once: its argument 0 is replaced by the published
      * activation, which every later resolution returns.
      */
-    @TruffleBoundary
-    private static ProtosActivation publishDeferredCaller(Object[] callerArguments) {
-        java.util.ArrayDeque<Object[]> pending = new java.util.ArrayDeque<>();
-        java.util.Set<Object[]> visited =
-                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-        Object[] current = callerArguments;
-        while (!(current[CLOSURE_INDEX] instanceof ProtosActivation)) {
-            if (!isDeferredCallerCandidate(current) || !visited.add(current)) {
-                throw new IllegalStateException(
-                        "Invalid or cyclic compact source-call caller chain");
-            }
-            pending.push(current);
-            Object[] next = deferredCallerOrNull(current[CALLER_INDEX]);
-            if (next == null) {
-                break;
-            }
-            if (!isDeferredCallerCandidate(next)) {
-                throw new IllegalStateException(
-                        "Invalid or cyclic compact source-call caller chain");
-            }
-            current = next;
-        }
-        ProtosActivation published = null;
-        while (!pending.isEmpty()) {
-            published = materializeCompactActivation(pending.pop());
-        }
-        return published != null
-                ? published
-                : (ProtosActivation) callerArguments[CLOSURE_INDEX];
-    }
 
-    /*
-     * I115-B: cycle detection for the allocation-free chain walkers
-     * (generalCallerPreludeOrNull, compactTask, admittedCompactTask). Each
-     * walker keeps a trailing cursor that starts at the walk's origin and
-     * follows the same caller slots, through caller references, at half
-     * speed (Floyd); a cycle of any length makes the leading cursor meet
-     * it, while a finite chain ends at an activation or a published header
-     * first. The trivial valid path costs one reference comparison per step.
-     */
-    private static void requireAcyclic(Object[] lead, Object[] slow) {
-        if (lead == slow) {
-            throw new IllegalStateException(
-                    "Cyclic compact source-call caller chain");
-        }
-    }
+
+
+
 
     /**
      * PERF038-H: final zero-argument method frame for a guarded
@@ -1112,24 +912,15 @@ final class ProtosFrameArguments {
                 .capturedLexicalEnvironmentForRuntime();
     }
 
-    /**
-     * PERF037-B: the prelude of the invocation's activation, without
-     * materializing it: the published activation's, or for a compact call
-     * the Closure's own prelude, else the caller's, exactly as
-     * materialization chooses it.
-     *
-     * <p>I115: the general accessor for arbitrary representations; every
-     * deferred link is validated by {@link #generalCallerPreludeOrNull}.
-     * Admitted headers use {@link #admittedPreludeOrNull}.
-     */
+
     static ProtosPrelude preludeOrNull(Object[] arguments) {
-        if (arguments.length > CLOSURE_INDEX
-                && arguments[CLOSURE_INDEX] instanceof ProtosActivation activation) {
-            return activation.preludeOrNullForRuntime();
+        if (hasPublishedActivation(arguments)) {
+            return publishedActivation(arguments).preludeOrNullForRuntime();
         }
         ProtosPrelude own = compactClosure(arguments).preludeOrNullForRuntime();
-        return own != null ? own : generalCallerPreludeOrNull(arguments);
+        return own != null ? own : callerPreludeOrNull(arguments);
     }
+
 
     /**
      * I115: {@link #preludeOrNull} of an admitted call header (the running
@@ -1153,50 +944,27 @@ final class ProtosFrameArguments {
         return preludeOrNull(arguments);
     }
 
-    /**
-     * I115 (GraalPy ExecutionContext.CallContext): whether reading the
-     * prelude of the admitted call header {@code arguments} would have to
-     * recover an inherited prelude that its caller did not transport: the
-     * invocation is unpublished, its Closure has no own prelude, and its
-     * caller slot is neither an activation nor a reference transporting the
-     * prelude. The reading root then registers
-     * {@code ProtosBytecodeRootNode#NEEDS_CALLER_PRELUDE}, so that its
-     * callers transport the prelude from then on; the read itself still
-     * answers exactly, through {@link #recoverCallerPreludeOrNull}.
-     */
+
     static boolean inheritsUntransportedCallerPrelude(Object[] arguments) {
         return arguments.length >= HEADER_LENGTH
                 && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue closure
                 && closure.preludeOrNullForRuntime() == null
-                && !(arguments[CALLER_INDEX] instanceof ProtosActivation)
-                && !(arguments[CALLER_INDEX] instanceof ProtosCallerFrameReference);
+                && arguments[CALLER_INDEX] == null;
     }
 
-    /*
-     * I115 (GraalPy ReadFrameNode / PFrame.Reference): the prelude of this
-     * call's caller, read from the caller slot without resolving,
-     * materializing or walking it:
-     *   1. a caller activation answers with its prelude;
-     *   2. a ProtosCallerFrameReference answers with its transported prelude
-     *      (the caller's effective prelude, possibly null);
-     *   3. a raw deferred header did not transport the prelude, because the
-     *      callee root had not requested it when the call was prepared: the
-     *      cold recoverCallerPreludeOrNull answers through the validating
-     *      general walker.
-     * No fixed-depth walk remains on this path (the W2 three-link unrolling
-     * is retired). Used exclusively by the admitted accessors; arbitrary
-     * representations take generalCallerPreludeOrNull.
-     */
+
+
     private static ProtosPrelude callerPreludeOrNull(Object[] arguments) {
         Object caller = arguments[CALLER_INDEX];
+        if (caller instanceof ProtosPrelude prelude) {
+            return prelude;
+        }
         if (caller instanceof ProtosActivation activation) {
             return activation.preludeOrNullForRuntime();
         }
-        if (caller instanceof ProtosCallerFrameReference reference) {
-            return reference.transportedPrelude();
-        }
-        return recoverCallerPreludeOrNull(arguments);
+        return null;
     }
+
 
     /*
      * I115: recovery of an inherited prelude that was not transported (the
@@ -1207,53 +975,10 @@ final class ProtosFrameArguments {
      * transfer to the interpreter, so a producer that never transports does
      * not invalidate compiled code repeatedly.
      */
-    @TruffleBoundary
-    private static ProtosPrelude recoverCallerPreludeOrNull(Object[] arguments) {
-        return generalCallerPreludeOrNull(arguments);
-    }
 
-    /*
-     * I115-B: the general prelude walker over an arbitrary representation.
-     * A deferred caller's activation would take exactly preludeOrNull of its
-     * own frame arguments, so a chain of deferred callers is followed
-     * iteratively until a published activation or a Closure with its own
-     * prelude answers; every link is validated. I115: a
-     * ProtosCallerFrameReference is unwrapped to its header and followed
-     * through that header's real provenance; its transported prelude is an
-     * optimization of the admitted read only and never ends this walk, so
-     * structural validation and cycle detection cover the whole chain.
-     */
-    private static ProtosPrelude generalCallerPreludeOrNull(Object[] arguments) {
-        Object caller = arguments[CALLER_INDEX];
-        Object[] slow = arguments;
-        boolean advanceSlow = false;
-        Object[] deferred;
-        while ((deferred = deferredCallerOrNull(caller)) != null) {
-            requireAcyclic(deferred, slow);
-            if (!isDeferredCallerCandidate(deferred)) {
-                throw new IllegalStateException(
-                        "Invalid compact source-call caller frame argument");
-            }
-            Object first = deferred[CLOSURE_INDEX];
-            if (first instanceof ProtosActivation published) {
-                return published.preludeOrNullForRuntime();
-            }
-            ProtosPrelude own = ((ProtosClosureValue) first).preludeOrNullForRuntime();
-            if (own != null) {
-                return own;
-            }
-            if (advanceSlow) {
-                slow = deferredCallerOrNull(slow[CALLER_INDEX]);
-            }
-            advanceSlow = !advanceSlow;
-            caller = deferred[CALLER_INDEX];
-        }
-        if (!(caller instanceof ProtosActivation activation)) {
-            throw new IllegalStateException(
-                    "Invalid compact source-call caller frame argument");
-        }
-        return activation.preludeOrNullForRuntime();
-    }
+
+
+
 
     /**
      * Supplied positional argument count of a B5 call, before or after
@@ -1389,7 +1114,7 @@ final class ProtosFrameArguments {
         if (!inheritsAll) {
             return null;
         }
-        return callerIfPreludeInherited(arguments, false);
+        return callerIfPreludeInherited(arguments);
     }
 
     /**
@@ -1403,17 +1128,19 @@ final class ProtosFrameArguments {
      * general, validating walk decides.
      */
     private static ProtosActivation callerIfPreludeInherited(
-            Object[] arguments, boolean admitted) {
-        ProtosPrelude own =
-                ((ProtosClosureValue) arguments[CLOSURE_INDEX]).preludeOrNullForRuntime();
-        if (own != null
-                && own != (admitted
-                        ? callerPreludeOrNull(arguments)
-                        : generalCallerPreludeOrNull(arguments))) {
+            Object[] arguments) {
+        Object caller = arguments[CALLER_INDEX];
+        if (!(caller instanceof ProtosActivation activation)) {
             return null;
         }
-        return resolveCallerSlot(arguments);
+        ProtosPrelude own =
+                ((ProtosClosureValue) arguments[CLOSURE_INDEX])
+                        .preludeOrNullForRuntime();
+        return own == null || own == activation.preludeOrNullForRuntime()
+                ? activation
+                : null;
     }
+
 
     /**
      * PERF038-D: exactly {@link #compactInheritedProvenanceCaller} for the
@@ -1428,7 +1155,7 @@ final class ProtosFrameArguments {
                 && arguments[TASK_INDEX] != null) {
             return null;
         }
-        return callerIfPreludeInherited(arguments, true);
+        return callerIfPreludeInherited(arguments);
     }
 
     /**
@@ -1526,89 +1253,46 @@ final class ProtosFrameArguments {
      * link is validated; this is the contract for arbitrary representations.
      */
     static ProtosTask compactTask(Object[] arguments) {
-        Object[] current = arguments;
-        Object[] slow = arguments;
-        boolean advanceSlow = false;
-        while (true) {
-            if (current.length > 0
-                    && current[CLOSURE_INDEX] instanceof ProtosActivation materialized) {
-                return materialized.task().orElse(null);
-            }
-            ProtosTask explicit = explicitDirectTask(current);
-            if (explicit != null) {
-                return explicit;
-            }
-            Object caller = current[CALLER_INDEX];
-            if (caller instanceof ProtosActivation activation) {
-                return activation.task().orElse(null);
-            }
-            // I115: a caller reference is followed through its header.
-            Object[] deferred = deferredCallerOrNull(caller);
-            if (deferred == null || !isDeferredCallerCandidate(deferred)) {
-                throw new IllegalStateException(
-                        "Invalid compact source-call caller frame argument");
-            }
-            requireAcyclic(deferred, slow);
-            if (advanceSlow) {
-                slow = deferredCallerOrNull(slow[CALLER_INDEX]);
-            }
-            advanceSlow = !advanceSlow;
-            current = deferred;
+        if (hasPublishedActivation(arguments)) {
+            return publishedActivation(arguments).task().orElse(null);
         }
+        requireCompactCall(arguments);
+        ProtosTask explicit = explicitDirectTask(arguments);
+        if (explicit != null) {
+            return explicit;
+        }
+        Object caller = arguments[CALLER_INDEX];
+        return caller instanceof ProtosActivation activation
+                ? activation.task().orElse(null)
+                : null;
     }
 
-    /**
-     * I115: {@link #compactTask} of an admitted call header (the frame
-     * arguments an internal producer built and an admitted carrier entered).
-     * The walk reads only slots 0-3 of each link: a published activation
-     * answers with its Task; a direct-call header with an explicit Task
-     * answers with it; otherwise the caller answers, an activation directly
-     * and a deferred header (raw or through a caller reference, which
-     * carries no Task) by the next step. No validator runs and nothing
-     * is allocated; requireAcyclic keeps cycle detection. A link no internal
-     * producer writes deoptimizes and the general {@link #compactTask}
-     * decides (and rejects it).
-     */
+
+
     static ProtosTask admittedCompactTask(Object[] arguments) {
-        Object[] current = arguments;
-        Object[] slow = arguments;
-        boolean advanceSlow = false;
-        while (current.length >= HEADER_LENGTH) {
-            Object first = current[CLOSURE_INDEX];
-            if (first instanceof ProtosActivation materialized) {
-                return materialized.task().orElse(null);
-            }
-            if (!(first instanceof ProtosClosureValue)) {
-                break;
-            }
-            if (current[RECEIVER_INDEX] == DIRECT_CLOSURE_CALL
-                    && current[TASK_INDEX] instanceof ProtosTask explicit) {
-                return explicit;
-            }
-            Object caller = current[CALLER_INDEX];
-            if (caller instanceof ProtosActivation activation) {
+        if (arguments.length >= HEADER_LENGTH) {
+            Object first = arguments[CLOSURE_INDEX];
+            if (first instanceof ProtosActivation activation) {
                 return activation.task().orElse(null);
             }
-            Object[] deferred = deferredCallerOrNull(caller);
-            if (deferred == null) {
-                break;
+            if (first instanceof ProtosClosureValue) {
+                if (arguments[RECEIVER_INDEX] == DIRECT_CLOSURE_CALL
+                        && arguments[TASK_INDEX] instanceof ProtosTask explicit) {
+                    return explicit;
+                }
+                Object caller = arguments[CALLER_INDEX];
+                return caller instanceof ProtosActivation activation
+                        ? activation.task().orElse(null)
+                        : null;
             }
-            requireAcyclic(deferred, slow);
-            if (advanceSlow) {
-                slow = deferredCallerOrNull(slow[CALLER_INDEX]);
-            }
-            advanceSlow = !advanceSlow;
-            current = deferred;
         }
-        return unadmittedCompactTask(arguments);
-    }
-
-    /* I115: a link the admitted Task walk does not admit; see admittedCompactTask. */
-    @InliningCutoff
-    private static ProtosTask unadmittedCompactTask(Object[] arguments) {
         CompilerDirectives.transferToInterpreter();
         return compactTask(arguments);
     }
+
+
+    /* I115: a link the admitted Task walk does not admit; see admittedCompactTask. */
+
 
     /** The explicit owning Task of a direct Closure call, or {@code null}. */
     private static ProtosTask explicitDirectTask(Object[] arguments) {
@@ -1648,20 +1332,15 @@ final class ProtosFrameArguments {
         return arguments != null
                 && arguments.length >= HEADER_LENGTH
                 && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue
-                && isCallerSlot(arguments, arguments[CALLER_INDEX])
+                && (arguments[CALLER_INDEX] == null
+                        || arguments[CALLER_INDEX] instanceof ProtosPrelude
+                        || arguments[CALLER_INDEX] instanceof ProtosActivation)
                 && (arguments[RETURN_HOME_INDEX] == null
                         || arguments[RETURN_HOME_INDEX] instanceof ProtosReturnHome);
     }
 
-    private static boolean isCallerSlot(Object[] arguments, Object caller) {
-        if (caller instanceof ProtosActivation) {
-            return true;
-        }
-        Object[] deferred = deferredCallerOrNull(caller);
-        return deferred != null
-                && deferred != arguments
-                && isDeferredCallerCandidate(deferred);
-    }
+
+
 
     private static void requireCompactCall(Object[] arguments) {
         if (!isCompactCall(arguments)) {

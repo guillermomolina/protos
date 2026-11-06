@@ -89,8 +89,8 @@ final class ProtosFunctionCallDispatchers {
          * @param terminal whether a suspended result is returned in a terminal transport
          * @param callable the evaluated callable
          * @param arguments the B5 array described in the class comment
-         * @param callerReference the caller's published activation or its own
-         *     frame arguments (see {@link #callerReference})
+         * @param callerReference optional explicit host/native caller;
+         *     source call sites supply null
          * @param root the calling Bytecode root, or {@code null} for a host-side call
          */
         abstract Object execute(
@@ -128,7 +128,10 @@ final class ProtosFunctionCallDispatchers {
                 @Cached BuiltinFunctionCachedCallNode cachedCall) {
             return cachedCall.execute(
                     frame, inliningTarget, terminal, callable, arguments,
-                    callerReference, currentContext(inliningTarget));
+                    frame == null
+                            ? callerReference
+                            : ProtosFrameArguments.activation(frame),
+                    currentContext(inliningTarget));
         }
 
         @Specialization(guards = {"isBuiltin(callable)", "!isFunctionCall(arguments)"})
@@ -143,7 +146,10 @@ final class ProtosFunctionCallDispatchers {
                 @Cached BuiltinMethodCachedCallNode cachedCall) {
             return cachedCall.execute(
                     frame, inliningTarget, terminal, callable, arguments,
-                    callerReference, currentContext(inliningTarget));
+                    frame == null
+                            ? callerReference
+                            : ProtosFrameArguments.activation(frame),
+                    currentContext(inliningTarget));
         }
 
         @Specialization
@@ -175,7 +181,12 @@ final class ProtosFunctionCallDispatchers {
                 ProtosBytecodeRootNode root,
                 @Cached(inline = false) CallNode selectedCall) {
             Object receiver = ProtosNumericValueSupport.guestValue(callable);
-            ProtosSlotLookupResult selected = selectCall(receiver, callerReference, root);
+            ProtosSlotLookupResult selected = selectCall(
+                    receiver,
+                    frame == null
+                            ? callerReference
+                            : ProtosFrameArguments.activation(frame),
+                    root);
             ProtosFrameArguments.bindMethod(
                     arguments, receiver, (ProtosObjectValue) selected.home());
             return selectedCall.execute(
@@ -220,7 +231,8 @@ final class ProtosFunctionCallDispatchers {
                 },
                 assumptions = {
                     "cachedCodeStable",
-                    "cachedProjectionStable"
+                    "cachedProjectionStable",
+                    "cachedCallerNeedsStable"
                 },
                 limit = "3")
         static Object callFunctionCached(
@@ -244,10 +256,12 @@ final class ProtosFunctionCallDispatchers {
                 @Cached("createDirectCallNodeOrNull(cachedTarget)") DirectCallNode callNode,
                 @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
                         ProtosBytecodeRootNode cachedCallee,
+                @Cached("cachedCallee.callerNeedsStability()")
+                        Assumption cachedCallerNeedsStable,
                 @Cached FunctionDirectInvokeNode invoke) {
             return invoke.execute(
-                    frame, inliningTarget, terminal, callNode, cachedCallee,
-                    closure, arguments, callerReference, root);
+                    frame, inliningTarget, callNode, cachedCallee,
+                    closure, arguments, callerReference);
         }
 
         /*
@@ -268,6 +282,7 @@ final class ProtosFunctionCallDispatchers {
                     "cachedTarget != null",
                     "currentPlan.bytecodeActivationTargetForComposition() == cachedTarget"
                 },
+                assumptions = "cachedCallerNeedsStable",
                 limit = "3",
                 replaces = "callFunctionCached")
         static Object callFunctionCachedCt(
@@ -287,10 +302,12 @@ final class ProtosFunctionCallDispatchers {
                 @Cached("createDirectCallNodeOrNull(cachedTarget)") DirectCallNode callNode,
                 @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
                         ProtosBytecodeRootNode cachedCallee,
+                @Cached("cachedCallee.callerNeedsStability()")
+                        Assumption cachedCallerNeedsStable,
                 @Cached FunctionDirectInvokeNode invoke) {
             return invoke.execute(
-                    frame, inliningTarget, terminal, callNode, cachedCallee,
-                    closure, arguments, callerReference, root);
+                    frame, inliningTarget, callNode, cachedCallee,
+                    closure, arguments, callerReference);
         }
 
         /* Last resort: different effective targets beyond the secondary PIC. */
@@ -314,9 +331,9 @@ final class ProtosFunctionCallDispatchers {
                         "source function without an effective CallTarget");
             }
             return invoke.execute(
-                    frame, inliningTarget, terminal, target,
+                    frame, inliningTarget, target,
                     calleeRootOrNull(target.getRootNode()),
-                    closure, arguments, callerReference, root);
+                    closure, arguments, callerReference);
         }
 
         static boolean samePreparedPlanLanguage(
@@ -387,8 +404,8 @@ final class ProtosFunctionCallDispatchers {
                         DirectCallNode callNode,
                 @Cached FunctionDirectInvokeNode invoke) {
             return invoke.execute(
-                    frame, inliningTarget, terminal, callNode, null,
-                    closure, arguments, callerReference, null);
+                    frame, inliningTarget, callNode, null,
+                    closure, arguments, callerReference);
         }
 
         @Specialization(replaces = "callBuiltinCached")
@@ -404,9 +421,9 @@ final class ProtosFunctionCallDispatchers {
                 ProtosLanguageContext enteredContext,
                 @Cached FunctionIndirectInvokeNode invoke) {
             return invoke.execute(
-                    frame, inliningTarget, terminal,
+                    frame, inliningTarget,
                     builtinCallTarget(nativeBody(closure), enteredContext), null,
-                    closure, arguments, callerReference, null);
+                    closure, arguments, callerReference);
         }
 
         static ProtosNativeClosureBody nativeBody(ProtosClosureValue closure) {
@@ -458,8 +475,8 @@ final class ProtosFunctionCallDispatchers {
                         DirectCallNode callNode,
                 @Cached FunctionDirectInvokeNode invoke) {
             return invoke.execute(
-                    frame, inliningTarget, terminal, callNode, null,
-                    closure, arguments, callerReference, null);
+                    frame, inliningTarget, callNode, null,
+                    closure, arguments, callerReference);
         }
 
         @Specialization(replaces = "callBuiltinMethodCached")
@@ -475,9 +492,9 @@ final class ProtosFunctionCallDispatchers {
                 ProtosLanguageContext enteredContext,
                 @Cached FunctionIndirectInvokeNode invoke) {
             return invoke.execute(
-                    frame, inliningTarget, terminal,
+                    frame, inliningTarget,
                     builtinCallTarget(nativeBody(closure), enteredContext), null,
-                    closure, arguments, callerReference, null);
+                    closure, arguments, callerReference);
         }
 
         static ProtosNativeClosureBody nativeBody(ProtosClosureValue closure) {
@@ -490,6 +507,36 @@ final class ProtosFunctionCallDispatchers {
         }
     }
 
+    /**
+     * I115: select only the caller state requested by the effective
+     * callee root. The ordinary source-call case transports null.
+     *
+     * Host and native entries retain their explicit caller when there
+     * is no source frame or no source Bytecode root.
+     */
+    private static Object prepareCallerForCallee(
+            VirtualFrame frame,
+            ProtosBytecodeRootNode callee,
+            Object explicitCaller) {
+
+        if (frame == null || callee == null) {
+            return explicitCaller;
+        }
+
+        if (callee.hasCallerNeed(
+                ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION)) {
+            return ProtosFrameArguments.activation(frame);
+        }
+
+        if (callee.hasCallerNeed(
+                ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE)) {
+            return ProtosFrameArguments.admittedPreludeOrNull(
+                    frame.getArguments());
+        }
+
+        return null;
+    }
+
     /** GraalPy {@code CallDispatchers.FunctionDirectInvokeNode}. */
     @GenerateInline
     @GenerateCached(false)
@@ -499,32 +546,29 @@ final class ProtosFunctionCallDispatchers {
         abstract Object execute(
                 VirtualFrame frame,
                 Node inliningTarget,
-                boolean terminal,
                 DirectCallNode callNode,
                 ProtosBytecodeRootNode callee,
                 ProtosClosureValue closure,
                 Object[] arguments,
-                Object callerReference,
-                ProtosBytecodeRootNode root);
+                Object explicitCaller);
 
-        /*
-         * I115 divergence: the historical non-local ReturnHome and
-         * terminal suspension transport are absent from this direct path.
-         * Numeric carriers remain raw until their real consumer boundary.
-         */
         @Specialization
         static Object invoke(
                 VirtualFrame frame,
                 Node inliningTarget,
-                boolean terminal,
                 DirectCallNode callNode,
                 ProtosBytecodeRootNode callee,
                 ProtosClosureValue closure,
                 Object[] arguments,
-                Object callerReference,
-                ProtosBytecodeRootNode root) {
+                Object explicitCaller) {
+
+            Object transportedCaller =
+                    prepareCallerForCallee(
+                            frame, callee, explicitCaller);
+
             ProtosFrameArguments.completeDispatchedHeader(
-                    arguments, closure, callerReference, null);
+                    arguments, closure, transportedCaller, null);
+
             return callNode.call(arguments);
         }
     }
@@ -538,32 +582,30 @@ final class ProtosFunctionCallDispatchers {
         abstract Object execute(
                 VirtualFrame frame,
                 Node inliningTarget,
-                boolean terminal,
                 RootCallTarget target,
                 ProtosBytecodeRootNode callee,
                 ProtosClosureValue closure,
                 Object[] arguments,
-                Object callerReference,
-                ProtosBytecodeRootNode root);
+                Object explicitCaller);
 
-        /*
-         * The indirect source path has the same raw-result contract as
-         * direct invocation, without a ReturnHome or result projection.
-         */
         @Specialization
         static Object invoke(
                 VirtualFrame frame,
                 Node inliningTarget,
-                boolean terminal,
                 RootCallTarget target,
                 ProtosBytecodeRootNode callee,
                 ProtosClosureValue closure,
                 Object[] arguments,
-                Object callerReference,
-                ProtosBytecodeRootNode root,
+                Object explicitCaller,
                 @Cached(inline = false) IndirectCallNode callNode) {
+
+            Object transportedCaller =
+                    prepareCallerForCallee(
+                            frame, callee, explicitCaller);
+
             ProtosFrameArguments.completeDispatchedHeader(
-                    arguments, closure, callerReference, null);
+                    arguments, closure, transportedCaller, null);
+
             return callNode.call(target, arguments);
         }
     }
@@ -730,13 +772,7 @@ final class ProtosFunctionCallDispatchers {
      * This root's own caller reference: the published activation, or the
      * still-compact frame arguments.
      */
-    @NonIdempotent
-    static Object callerReference(VirtualFrame frame) {
-        Object[] arguments = frame.getArguments();
-        return ProtosFrameArguments.hasPublishedActivation(arguments)
-                ? ProtosFrameArguments.publishedActivation(arguments)
-                : arguments;
-    }
+
 
     /**
      * I115 (GraalPy CalleeContext / ReadFrameNode): the exact activation a
@@ -748,10 +784,15 @@ final class ProtosFunctionCallDispatchers {
             return activation;
         }
         if (root != null) {
-            root.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
+            root.requestCallerNeed(
+                    ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
+        }
+        if (caller instanceof Object[] currentFrameArguments) {
+            return ProtosFrameArguments.activation(currentFrameArguments);
         }
         return ProtosFrameArguments.resolveAdmittedCaller(caller);
     }
+
 
     /**
      * I115: the prelude of a caller reference by the admitted B5 accessors,
@@ -759,23 +800,38 @@ final class ProtosFunctionCallDispatchers {
      * registers {@code root}'s NEEDS_CALLER_PRELUDE once.
      */
     static ProtosPrelude admittedCallerPrelude(ProtosBytecodeRootNode root, Object caller) {
+        if (caller instanceof ProtosPrelude prelude) {
+            return prelude;
+        }
         if (caller instanceof ProtosActivation activation) {
             return activation.preludeOrNullForRuntime();
         }
-        Object[] arguments = (Object[]) caller;
-        if (root != null && ProtosFrameArguments.inheritsUntransportedCallerPrelude(arguments)) {
-            root.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE);
+        if (caller instanceof Object[] currentFrameArguments) {
+            if (root != null
+                    && ProtosFrameArguments.inheritsUntransportedCallerPrelude(
+                            currentFrameArguments)) {
+                root.requestCallerNeed(
+                        ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE);
+            }
+            return ProtosFrameArguments.admittedPreludeOrNull(currentFrameArguments);
         }
-        return ProtosFrameArguments.admittedPreludeOrNull(arguments);
+        return null;
     }
+
 
     /** The prelude a caller reference denotes, without publishing anything. */
     static ProtosPrelude callerPrelude(Object caller) {
+        if (caller instanceof ProtosPrelude prelude) {
+            return prelude;
+        }
         if (caller instanceof ProtosActivation activation) {
             return activation.preludeOrNullForRuntime();
         }
-        return ProtosFrameArguments.preludeOrNull((Object[]) caller);
+        return caller instanceof Object[] currentFrameArguments
+                ? ProtosFrameArguments.preludeOrNull(currentFrameArguments)
+                : null;
     }
+
 
     static ProtosNativeClosureBody nativeBody(ProtosClosureValue closure) {
         return closure.nativeBody().orElseThrow();

@@ -111,7 +111,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             boolean direct,
             Object receiver,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
-        Object caller = ProtosFunctionCallDispatchers.callerReference(frame);
+        Object caller = frame.getArguments();
         return select(
                 ProtosNumericValueSupport.guestValue(receiver),
                 selector.toJavaStringUncached(),
