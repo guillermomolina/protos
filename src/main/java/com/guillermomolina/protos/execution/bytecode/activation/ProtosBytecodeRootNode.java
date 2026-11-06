@@ -66,6 +66,7 @@ import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.bytecode.ContinuationRootNode;
 import com.oracle.truffle.api.bytecode.EpilogExceptional;
@@ -89,6 +90,7 @@ import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.nodes.DirectCallNode;
+import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.UnexpectedResultException;
@@ -801,6 +803,35 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         public static Object perform(int index, @Bind VirtualFrame frame) {
             return ProtosFrameArguments.compactSuppliedArgumentOrNull(frame.getArguments(), index);
+        }
+    }
+
+
+    /**
+     * I115 experimental grouped positional parameter initialization.
+     *
+     * The supplied B5 argument suffix is copied directly into the
+     * consecutively allocated parameter locals. Missing arguments
+     * retain the canonical Protos null value. No activation or
+     * lexical context is materialized by this operation.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = LocalRangeAccessor.class)
+    public static final class CopySuppliedArguments {
+        @Specialization
+        @ExplodeLoop
+        public static void perform(
+                VirtualFrame frame,
+                LocalRangeAccessor locals,
+                @Bind BytecodeNode bytecodeNode) {
+            for (int index = 0; index < locals.getLength(); index++) {
+                locals.setObject(
+                        bytecodeNode,
+                        frame,
+                        index,
+                        ProtosFrameArguments.compactSuppliedArgumentOrNull(
+                                frame.getArguments(), index));
+            }
         }
     }
 
