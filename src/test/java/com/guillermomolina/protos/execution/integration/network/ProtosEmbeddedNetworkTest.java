@@ -84,13 +84,93 @@ final class ProtosEmbeddedNetworkTest {
                 (inbound.size() == 1) && (inbound.at(0) == 6) && (eof == null) && (connection.remoteEndpoint().port == port)
             }
             openListener: () => {
-                request: {
-                    ipVersion: 4
-                    address: loopback
-                    port: null
-                }
-                listener = network.listenTcp(request).value()
+                listener = network.listenTcp(ipVersion: 4, address: loopback, port: null).value()
                 listener.localPort()
+            }
+            // D241-B: a listen attempt answers its closed listener's port, -1 for an
+            // InvalidIOArgument Future and -2 for any other Error, such as a D237 association
+            // Error raised before the source body runs.
+            listenOutcome: (attempt) => {
+                Error.handle(
+                    () => {
+                        InvalidIOArgument.handle(
+                            () => {
+                                opened: attempt().value()
+                                port: opened.localPort()
+                                opened.close().value()
+                                port
+                            },
+                            (error) => { 0 - 1 }
+                        )
+                    },
+                    (error) => { 0 - 2 }
+                )
+            }
+            listenProbes: {
+                reordered: () => { network.listenTcp(port: null, address: loopback, ipVersion: 4) }
+                positional: () => { network.listenTcp(4, loopback, null) }
+                mixed: () => { network.listenTcp(4, port: null, address: null) }
+                omitVersion: () => { network.listenTcp(address: null, port: null) }
+                omitAddress: () => { network.listenTcp(ipVersion: 4, port: null) }
+                omitPort: () => { network.listenTcp(ipVersion: 4, address: null) }
+                omitAll: () => { network.listenTcp() }
+                nullVersion: () => { network.listenTcp(ipVersion: null, address: null, port: null) }
+                unknownLabel: () => { network.listenTcp(ipVersion: 4, address: null, port: null, backlog: 5) }
+                collision: () => { network.listenTcp(4, ipVersion: 4, address: null, port: null) }
+                surplusPositional: () => { network.listenTcp(4, null, null, 5) }
+                badVersion: () => { network.listenTcp(ipVersion: 5, address: null, port: null) }
+                wrongVersionAddress: () => { network.listenTcp(ipVersion: 6, address: loopback, port: null) }
+                portZero: () => { network.listenTcp(ipVersion: 4, address: null, port: 0) }
+                portNegative: () => { network.listenTcp(ipVersion: 4, address: null, port: 0 - 1) }
+                portTooLarge: () => { network.listenTcp(ipVersion: 4, address: null, port: 65536) }
+                portString: () => { network.listenTcp(ipVersion: 4, address: null, port: "80") }
+                portFloat: () => { network.listenTcp(ipVersion: 4, address: null, port: 80.0) }
+                addressString: () => { network.listenTcp(ipVersion: 4, address: "127.0.0.1", port: null) }
+                delegatingChild: () => {
+                    child: network {}
+                    child.listenTcp(ipVersion: 4, address: null, port: null)
+                }
+                // CALLABLES.md §11 (D013): extraction binds the original receiver, and
+                // Object.call activates a Closure with its bound receiver.
+                extracted: () => {
+                    extractedListen: network.listenTcp
+                    extractedListen.call(port: null, ipVersion: 4, address: null)
+                }
+                extractedDirect: () => {
+                    extractedListen: network.listenTcp
+                    extractedListen(ipVersion: 4, address: loopback, port: null)
+                }
+                extractedOmission: () => {
+                    extractedListen: network.listenTcp
+                    extractedListen.call(ipVersion: 4, address: null)
+                }
+                extractedUnknownLabel: () => {
+                    extractedListen: network.listenTcp
+                    extractedListen.call(ipVersion: 4, address: null, port: null, backlog: 1)
+                }
+                extractedFromChild: () => {
+                    child: network {}
+                    extractedListen: child.listenTcp
+                    extractedListen.call(ipVersion: 4, address: null, port: null)
+                }
+            }
+            listenProbe: (name) => {
+                listenOutcome(listenProbes.slotValue(name))
+            }
+            // A user Closure selected in place of listenTcp associates the names to itself.
+            shadowedListen: () => {
+                shadow: network {
+                    listenTcp: (port: 0, ipVersion: 0, address: 0) => {
+                        (ipVersion * 100) + port
+                    }
+                }
+                shadow.listenTcp(ipVersion: 4, port: 2)
+            }
+            // Failed invocations never share one Future.
+            distinctFailedFutures: () => {
+                first: network.listenTcp(ipVersion: 5, address: null, port: null)
+                second: network.listenTcp(ipVersion: 5, address: null, port: null)
+                first !== second
             }
             acceptOne: () => {
                 before = before + 1
@@ -346,6 +426,46 @@ final class ProtosEmbeddedNetworkTest {
         assertTrue(custody.isClosedForTesting(), "Context close retires the custody");
         assertNull(custody.pollerForTesting());
         assertEquals(0, custody.activationCountForTesting(), "no poller was started to be closed");
+    }
+
+    @Test
+    void listenTcpAssociatesNamedArgumentsWithoutBackendIoOnFailure() {
+        ProtosEmbeddedNetworkCustody custody;
+        try (Context context = socketsOnly()) {
+            context.eval(ProtosLanguage.ID, PROGRAM);
+            custody = custody(context);
+            Value probe = member(context, "listenProbe");
+            for (String name :
+                    new String[] {
+                        "omitVersion", "omitAddress", "omitPort", "omitAll", "nullVersion",
+                        "badVersion", "wrongVersionAddress", "portZero", "portNegative",
+                        "portTooLarge", "portString", "portFloat", "addressString",
+                        "delegatingChild"
+                    }) {
+                assertEquals(-1, probe.execute(name).asInt(), name + " is InvalidIOArgument");
+            }
+            for (String name : new String[] {"unknownLabel", "collision"}) {
+                assertEquals(-2, probe.execute(name).asInt(), name + " is a D237 Error");
+            }
+            assertTrue(member(context, "distinctFailedFutures").execute().asBoolean());
+            assertNull(custody.pollerForTesting(), "no backend I/O for rejected listens");
+            assertEquals(402, member(context, "shadowedListen").execute().asInt());
+            assertNull(custody.pollerForTesting(), "a shadowing Closure performs no I/O");
+
+            // Extraction (D013) keeps the authorized receiver: association, binding and
+            // authority are distinguished by outcome (-2 D237 Error, -1 InvalidIOArgument).
+            assertEquals(-2, probe.execute("extractedUnknownLabel").asInt(), "association Error");
+            assertEquals(-1, probe.execute("extractedOmission").asInt(), "omission is a value failure");
+            assertEquals(-1, probe.execute("extractedFromChild").asInt(), "a child receiver has no authority");
+            assertNull(custody.pollerForTesting(), "rejected extracted listens perform no I/O");
+            assertTrue(probe.execute("extracted").asInt() > 0, "Object.call keeps the bound Network");
+            assertTrue(probe.execute("extractedDirect").asInt() > 0, "direct call keeps the bound Network");
+
+            // CALLABLES.md: surplus positional values are evaluated and ignored, never an Error.
+            for (String name : new String[] {"reordered", "positional", "mixed", "surplusPositional"}) {
+                assertTrue(probe.execute(name).asInt() > 0, name + " selects and closes a listener");
+            }
+        }
     }
 
     @Test

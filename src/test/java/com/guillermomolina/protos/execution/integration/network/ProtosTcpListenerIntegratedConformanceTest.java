@@ -208,7 +208,15 @@ final class ProtosTcpListenerIntegratedConformanceTest {
     }
 
     private static ProtosFutureValue listen(Fixture x, ProtosObjectValue request) {
-        return future(x.network, "listenTcp", List.of(request), x.activation);
+        // D241-B: listenTcp receives the record's three values as its three arguments.
+        return future(
+                x.network,
+                "listenTcp",
+                List.of(
+                        request.readLocalSlot("ipVersion").orElseThrow(),
+                        request.readLocalSlot("address").orElseThrow(),
+                        request.readLocalSlot("port").orElseThrow()),
+                x.activation);
     }
 
     private static ProtosFutureValue accept(

@@ -140,15 +140,19 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
         assertIoError(x, replace);
         assertIoError(x, remove);
 
-        ProtosObjectValue writeOptions = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        writeOptions.createLocalSlot("read", ProtosBooleanValue.FALSE);
-        writeOptions.createLocalSlot("write", ProtosBooleanValue.TRUE);
+        // D241-B: open(path, read: false, write: true) on a read-only captured backend.
         ProtosFutureValue writeOpen =
                 invoke(
                         x,
                         captured,
                         "open",
-                        List.of(path(x.prelude, "leaf"), writeOptions));
+                        List.of(
+                                path(x.prelude, "leaf"),
+                                ProtosBooleanValue.FALSE,
+                                ProtosBooleanValue.TRUE,
+                                ProtosBooleanValue.FALSE,
+                                ProtosBooleanValue.FALSE,
+                                ProtosBooleanValue.FALSE));
         assertIoError(x, writeOpen);
         assertEquals(0, capturedBackend.openCalls.get());
 

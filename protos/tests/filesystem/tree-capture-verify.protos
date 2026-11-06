@@ -81,11 +81,7 @@ first.each((entry) => {
 (readText(captured, childPath) == "nested-before").ifFalse(() => { ok = false })
 
 ioFails(() => captured.open(linkPath).value()).ifFalse(() => { ok = false })
-writeOptions: {
-    read: false
-    write: true
-}
-writeFailed: ioFails(() => captured.open(stablePath, writeOptions).value())
+writeFailed: ioFails(() => captured.open(stablePath, read: false, write: true).value())
 writeFailed.ifFalse(() => { ok = false })
 replaceFailed: ioFails(() => captured.replace(stablePath, rootPath.child("replacement.txt")).value())
 replaceFailed.ifFalse(() => { ok = false })

@@ -23,6 +23,26 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.495] - 2026-11-06
+
+### D241-B / I148 — Named open options and required listen parameters
+- `io/FILESYSTEM.md` §18.0: the public surface is
+  `filesystem.open(path, read: true, write: false, create: false,
+  createNew: false, truncate: false)`; the five options are optional D237
+  parameters with exactly those defaults, also bindable positionally after
+  `path`. The public options object and its local/inherited slot rules are
+  withdrawn; the bound tuple is captured once before any namespace or backend
+  operation. Unknown labels and positional/named collisions are D237
+  association Errors before entry; surplus positional values follow ordinary
+  Closure binding; correctly bound non-Boolean values and invalid combinations
+  answer a failed `InvalidIOArgument` Future.
+- `io/NETWORK.md` §§5, 7: `network.listenTcp(ipVersion:, address:, port:)`
+  takes three required parameters with no defaults; explicit `null` for
+  `address` or `port` is a value, distinct from omission. The public
+  `localRequest` object is withdrawn; association Errors precede entry, while
+  omitted or invalid values answer a failed `InvalidIOArgument` Future with no
+  backend effect.
+
 ## [0.1.494] - 2026-11-06
 
 ### D241-B / I149, I150 — Named per-call options for Host, UrlClient and TLS

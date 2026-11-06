@@ -106,34 +106,32 @@ final class ProtosEmbeddedFilesystemTest {
             }
             at: (name) => { Path.relative().child(name) }
             inside: (directory, name) => { Path.relative().child(directory).child(name) }
-            writeOptions: {
-                read: false
-                write: true
-                create: true
-                truncate: true
-            }
-            readCreateOptions: {
-                read: true
-                create: true
-            }
-            createNewOptions: {
-                read: false
-                write: true
-                createNew: true
-            }
-            truncateOptions: {
-                read: false
-                write: true
-                truncate: true
-            }
-            readWriteOptions: {
-                read: true
-                write: true
+            // D241-B: the open options are named parameters of filesystem.open.
+            openWrite: (path) => { filesystem.open(path, read: false, write: true, create: true, truncate: true) }
+            openReadCreate: (path) => { filesystem.open(path, create: true, read: true) }
+            openCreateNew: (path) => { filesystem.open(path, read: false, write: true, createNew: true) }
+            openTruncate: (path) => { filesystem.open(path, truncate: true, write: true, read: false) }
+            openReadWrite: (path) => { filesystem.open(path, read: true, write: true) }
+            associationFails: (work) => {
+                failed: false
+                Error.handle(() => {
+                    InvalidIOArgument.handle(() => {
+                        work()
+                        null
+                    }, (error) => {
+                        null
+                    })
+                    null
+                }, (error) => {
+                    failed = true
+                    null
+                })
+                failed
             }
             held: null
             trivial: () => { 1 }
             writeText: (name, text) => {
-                file: filesystem.open(at(name), writeOptions).value()
+                file: openWrite(at(name)).value()
                 file.write(Encoding.Latin1.encode(text)).value()
                 file.close().value()
                 0
@@ -148,19 +146,19 @@ final class ProtosEmbeddedFilesystemTest {
             readInside: (directory, name) => { readFile(filesystem.open(inside(directory, name)).value()) }
             openFails: (name) => { ioFails(() => filesystem.open(at(name)).value()) }
             openInsideFails: (directory, name) => { ioFails(() => filesystem.open(inside(directory, name)).value()) }
-            writeFails: (name) => { ioFails(() => filesystem.open(at(name), writeOptions).value()) }
+            writeFails: (name) => { ioFails(() => openWrite(at(name)).value()) }
             createNew: (name) => {
-                filesystem.open(at(name), createNewOptions).value().close().value()
+                openCreateNew(at(name)).value().close().value()
                 0
             }
-            createNewFails: (name) => { ioFails(() => filesystem.open(at(name), createNewOptions).value()) }
-            readCreate: (name) => { readFile(filesystem.open(at(name), readCreateOptions).value()) }
+            createNewFails: (name) => { ioFails(() => openCreateNew(at(name)).value()) }
+            readCreate: (name) => { readFile(openReadCreate(at(name)).value()) }
             truncateFile: (name) => {
-                filesystem.open(at(name), truncateOptions).value().close().value()
+                openTruncate(at(name)).value().close().value()
                 0
             }
             positioned: (name) => {
-                file: filesystem.open(at(name), readWriteOptions).value()
+                file: openReadWrite(at(name)).value()
                 file.seek(4).value()
                 file.write(Encoding.Latin1.encode("Z")).value()
                 position: file.position().value()
@@ -205,14 +203,84 @@ final class ProtosEmbeddedFilesystemTest {
             entriesFails: (name) => { ioFails(() => filesystem.entries(at(name)).value()) }
             invalidOpen: () => { invalidFails(() => filesystem.open("plain.txt").value()) }
             invalidOptions: () => {
+                invalidFails(() => filesystem.open(at("plain.txt"), read: false, truncate: true).value())
+            }
+            invalidOptionCombinations: () => {
+                target: at("plain.txt")
+                invalidFails(() => filesystem.open(target, read: false).value()) &&
+                    invalidFails(() => filesystem.open(target, write: true, create: true, createNew: true).value()) &&
+                    invalidFails(() => filesystem.open(target, truncate: true).value()) &&
+                    invalidFails(() => filesystem.open(target, read: false, write: false, truncate: true).value())
+            }
+            nonBooleanOptions: () => {
+                target: at("plain.txt")
+                invalidFails(() => filesystem.open(target, read: 1).value()) &&
+                    invalidFails(() => filesystem.open(target, write: null).value()) &&
+                    invalidFails(() => filesystem.open(target, create: "true").value()) &&
+                    invalidFails(() => filesystem.open(target, createNew: {}).value()) &&
+                    invalidFails(() => filesystem.open(target, truncate: 0).value())
+            }
+            associationErrors: () => {
+                target: at("plain.txt")
+                associationFails(() => filesystem.open(target, append: true)) &&
+                    associationFails(() => filesystem.open(target, write: true, mode: "w")) &&
+                    associationFails(() => filesystem.open(target, true, read: true))
+            }
+            namedRead: (name) => { readFile(filesystem.open(at(name), read: true).value()) }
+            // An association Error is a generic Error and the call answers no Future: the flag
+            // set only if the call returned normally stays false. This observes the caller, not
+            // whether the open body began; the absence of Filesystem effects is checked by Java.
+            returned: false
+            unknownLabelIsErrorWithoutFuture: () => {
+                returned = false
+                failed: associationFails(() => {
+                    filesystem.open(at("plain.txt"), reed: true)
+                    returned = true
+                })
+                failed && !returned
+            }
+            collisionIsErrorWithoutFuture: () => {
+                returned = false
+                failed: associationFails(() => {
+                    filesystem.open(at("plain.txt"), true, read: true)
+                    returned = true
+                })
+                failed && !returned
+            }
+            objectReadIsInvalid: () => {
+                invalidFails(() => filesystem.open(at("plain.txt"), read: {}).value())
+            }
+            savedOpenCall: (name) => {
+                saved: filesystem.open
+                readFile(saved.call(at(name), read: true, write: false).value())
+            }
+            legacyOptionsObject: () => {
                 options: {
-                    read: false
-                    truncate: true
+                    read: true
                 }
                 invalidFails(() => filesystem.open(at("plain.txt"), options).value())
             }
+            distinctFailures: () => {
+                first: filesystem.open(at("plain.txt"), read: false)
+                second: filesystem.open(at("plain.txt"), read: false)
+                first !== second
+            }
+            delegatedOpenFails: () => {
+                child: filesystem {}
+                invalidFails(() => child.open(at("plain.txt")).value())
+            }
+            shadowedOpen: () => {
+                shadow: filesystem {
+                    open: (truncate: 0, path: 0, read: 0) => { (read * 10) + truncate }
+                }
+                shadow.open(read: 4, truncate: 2)
+            }
+            positionalAndReorderedRead: (name) => {
+                readFile(filesystem.open(at(name), true, false, false, false, false).value()) ==
+                    readFile(filesystem.open(at(name), truncate: false, create: false, read: true).value())
+            }
             cancelledCreate: (name) => {
-                future: filesystem.open(at(name), createNewOptions)
+                future: openCreateNew(at(name))
                 future.cancel()
                 outcome: 0
                 Cancelled.handle(() => {
@@ -353,6 +421,14 @@ final class ProtosEmbeddedFilesystemTest {
             assertEquals("hello", call(context, "readText", "plain.txt").asString());
             call(context, "writeText", "written.txt", "fresh");
             assertEquals("fresh", text(temporary.resolve("written.txt")));
+            // D241-B: positional and reordered named options bind to the same source open.
+            assertTrue(check(context, "positionalAndReorderedRead", "plain.txt"));
+            assertEquals("hello", call(context, "namedRead", "plain.txt").asString());
+            // Object.call on an extracted open keeps its bound, authorized receiver.
+            assertEquals("hello", call(context, "savedOpenCall", "plain.txt").asString());
+            assertEquals("hello", text(temporary.resolve("plain.txt")));
+            // A user Closure selected in place of open associates the names to itself.
+            assertEquals(42, call(context, "shadowedOpen").asInt());
             assertFalse(
                     embedded(context).actorCarrierSubstrateInitializedForTesting(),
                     "Filesystem needs no guest thread or Actor carrier");
@@ -529,6 +605,18 @@ final class ProtosEmbeddedFilesystemTest {
                     "a separator inside one component is not reinterpreted as two names");
             assertTrue(check(context, "invalidOpen"));
             assertTrue(check(context, "invalidOptions"));
+            // D241-B: bound-but-invalid options are InvalidIOArgument Futures; unknown labels,
+            // and collisions are D237 Errors before the open Closure runs (surplus positional
+            // values are ignored by ordinary Closure binding, CALLABLES.md).
+            assertTrue(check(context, "invalidOptionCombinations"));
+            assertTrue(check(context, "nonBooleanOptions"));
+            assertTrue(check(context, "associationErrors"));
+            assertTrue(check(context, "legacyOptionsObject"));
+            assertTrue(check(context, "unknownLabelIsErrorWithoutFuture"));
+            assertTrue(check(context, "collisionIsErrorWithoutFuture"));
+            assertTrue(check(context, "objectReadIsInvalid"));
+            assertTrue(check(context, "distinctFailures"));
+            assertTrue(check(context, "delegatedOpenFails"));
             assertEquals("unchanged", text(temporary.resolve("plain.txt")));
             assertEquals(0, custody(context).acquisitionCountForTesting());
         }

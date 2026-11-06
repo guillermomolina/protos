@@ -268,14 +268,21 @@ firewall DSL. Hosts may provision already-restricted capabilities. Ordinary
 Protos encapsulation may expose a narrower application mechanism around a
 broader capability without granting the wrapped capability itself.
 
-The initial TCP acquisition operations are conceptually:
+The initial TCP acquisition operations are:
 
 ```text
-network.connectTcp(endpoint)     -> Future<TcpConnection>
-network.listenTcp(localRequest)  -> Future<TcpListener>
+network.connectTcp(endpoint)
+    -> Future<TcpConnection>
+network.listenTcp(ipVersion: version, address: addressOrNull, port: portOrNull)
+    -> Future<TcpListener>
 ```
 
-After successful ordinary dispatch, argument/request semantic invalidity follows
+`ipVersion`, `address`, and `port` are required parameters with no defaults
+(§7). `address` and `port` admit an explicitly supplied `null`; an omitted
+parameter is an absence, not `null`. For example,
+`network.listenTcp(ipVersion: 4, address: null, port: null)` supplies all three.
+
+After successful ordinary dispatch and argument association, argument semantic invalidity follows
 the existing Future-returning I/O validation rule: the operation result is a
 failed Future and no backend network effect attributable to that invalid request
 occurs.
@@ -309,8 +316,9 @@ No late resource may be abandoned merely because the Future already terminalized
 
 ## 7. TCP local-listen request
 
-`listenTcp(localRequest)` accepts an ordinary Protos object whose relevant local
-slots are exactly:
+`listenTcp(ipVersion: …, address: …, port: …)` (D241-B) takes exactly three
+parameters, which are ordinary D237 parameters and may be supplied by name in
+any order or positionally in this order:
 
 ```text
 ipVersion   // exactly Integer 4 or Integer 6
@@ -318,9 +326,24 @@ address     // matching-version IpAddress or canonical null
 port        // Integer 1..65535 or canonical null
 ```
 
-All three slots are required and extra local slots make the request invalid.
-Delegated slots do not supply these option fields. `address` when non-null must
-match `ipVersion`. `address: null` means that the request supplies no single
+All three parameters are required, even though `address` and `port` admit
+`null`: an explicitly supplied `null` is a value, never an absence. There is no
+public request object; an implementation may internally assemble an admission
+record from the three associated values, but that record is not the API.
+
+Failures are separated as follows:
+
+- an incorrect D237 association — an unknown label or a positional/named
+  collision for the same parameter — is the ordinary generic association Error
+  raised before the operation body is entered; it produces no Future (surplus
+  positional values follow ordinary Closure binding in `CALLABLES.md`: they are
+  evaluated and ignored);
+- a correctly associated call in which any of the three parameters was omitted,
+  or in which a supplied value is invalid, answers a failed
+  `Future<InvalidIOArgument>`.
+
+In neither case does any backend network effect attributable to the call occur.
+`address` when non-null must match `ipVersion`. `address: null` means that the request supplies no single
 local-address constraint beyond the requested IP version and the authority of
 the supplied Network. `port: null` requests selection of an available non-zero
 local port.

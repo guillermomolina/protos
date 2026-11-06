@@ -27,12 +27,11 @@ loopback: IpAddress(4, 2130706433)    // 127.0.0.1
 
 // 1. Acquire a listener with our own Network authority; port null selects a
 //    free port.
-listenRequest: {
-    ipVersion: 4
-    address: loopback
+listener: network.listenTcp(
+    ipVersion: 4,
+    address: loopback,
     port: null
-}
-listener: network.listenTcp(listenRequest).value()
+).value()
 port: listener.localPort()
 
 // 2. Hand the listener to the host. From now on the host owns it and closes

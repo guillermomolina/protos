@@ -110,17 +110,8 @@ class ProtosStandardFilesystemProtocolTest {
     @Test
     void writableOpenMaterializesPositionedFileWithZeroInitialLogicalPosition() throws Exception {
         Fixture x = fixture();
-        ProtosObjectValue options = ordinaryOptions();
-        options.createLocalSlot("read", ProtosBooleanValue.FALSE);
-        options.createLocalSlot("write", ProtosBooleanValue.TRUE);
-
         ProtosFutureValue future =
-                (ProtosFutureValue)
-                        ProtosInvocation.invokeMessage(
-                                x.filesystem,
-                                "open",
-                                List.of(path(x.prelude, "log.bin"), options),
-                                x.activation);
+                open(x, path(x.prelude, "log.bin"), FALSE, TRUE, FALSE, FALSE, FALSE);
 
         Invocation invocation = x.backend.invocations.remove();
         assertFalse(invocation.options.readAccess());
@@ -145,51 +136,178 @@ class ProtosStandardFilesystemProtocolTest {
         assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(position.resolvedValue().orElseThrow()));
     }
 
+    // D241-B: the five options are ordinary parameters; there is no options object and no
+    // append option. D237 association Errors (unknown or colliding labels) need real Protos
+    // source and are covered by ProtosEmbeddedFilesystemTest; these Java-side invocations are
+    // positional only and check defaults, bound values, validation and Futures.
     @Test
-    void appendIsNotAStandardOpenOption() throws Exception {
+    void retiredOptionsObjectIsNotACompatibleApi() throws Exception {
         Fixture x = fixture();
-        for (ProtosBooleanValue value : List.of(ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE)) {
-            ProtosObjectValue options = ordinaryOptions();
-            options.createLocalSlot("write", ProtosBooleanValue.TRUE);
-            options.createLocalSlot("append", value);
-            ProtosFutureValue future =
-                    (ProtosFutureValue)
-                            ProtosInvocation.invokeMessage(
-                                    x.filesystem,
-                                    "open",
-                                    List.of(path(x.prelude, "log.bin"), options),
-                                    x.activation);
-            assertInvalid(x, future);
+        ProtosObjectValue legacy = ordinaryOptions();
+        legacy.createLocalSlot("read", TRUE);
+        // A positional options object now binds the read parameter and is not a Boolean.
+        assertInvalid(x, open(x, path(x.prelude, "a"), legacy));
+        assertTrue(x.backend.invocations.isEmpty());
+    }
+
+    @Test
+    void omittedOptionsMaterializeTheDefaultsExactly() throws Exception {
+        Fixture x = fixture();
+        open(x, path(x.prelude, "a"));
+        open(x, path(x.prelude, "b"), TRUE, FALSE, FALSE, FALSE, FALSE);
+        ProtosFilesystemOpenOptions omitted = x.backend.invocations.remove().options;
+        ProtosFilesystemOpenOptions explicit = x.backend.invocations.remove().options;
+        for (ProtosFilesystemOpenOptions options : List.of(omitted, explicit)) {
+            assertTrue(options.readAccess());
+            assertFalse(options.writeAccess());
+            assertEquals(ProtosFilesystemOpenOptions.Creation.EXISTING, options.creation());
+            assertFalse(options.truncateInitialContent());
+        }
+    }
+
+    @Test
+    void creationAndTruncateOptionsAreCapturedOnceBeforeTheBackend() throws Exception {
+        Fixture x = fixture();
+        open(x, path(x.prelude, "c"), FALSE, TRUE, TRUE, FALSE, FALSE);
+        open(x, path(x.prelude, "n"), TRUE, TRUE, FALSE, TRUE, FALSE);
+        open(x, path(x.prelude, "t"), FALSE, TRUE, FALSE, FALSE, TRUE);
+        open(x, path(x.prelude, "w"), FALSE, TRUE, TRUE, FALSE, TRUE);
+
+        ProtosFilesystemOpenOptions create = x.backend.invocations.remove().options;
+        assertEquals(ProtosFilesystemOpenOptions.Creation.CREATE, create.creation());
+        assertFalse(create.readAccess());
+        assertTrue(create.writeAccess());
+        assertFalse(create.truncateInitialContent());
+        ProtosFilesystemOpenOptions createNew = x.backend.invocations.remove().options;
+        assertEquals(ProtosFilesystemOpenOptions.Creation.CREATE_NEW, createNew.creation());
+        assertTrue(createNew.readAccess());
+        ProtosFilesystemOpenOptions truncate = x.backend.invocations.remove().options;
+        assertEquals(ProtosFilesystemOpenOptions.Creation.EXISTING, truncate.creation());
+        assertTrue(truncate.truncateInitialContent());
+        ProtosFilesystemOpenOptions writer = x.backend.invocations.remove().options;
+        assertEquals(ProtosFilesystemOpenOptions.Creation.CREATE, writer.creation());
+        assertTrue(writer.truncateInitialContent());
+        assertTrue(x.backend.invocations.isEmpty());
+    }
+
+    @Test
+    void invalidOptionCombinationsFailBeforeBackendAuthority() throws Exception {
+        Fixture x = fixture();
+        // No access.
+        assertInvalid(x, open(x, path(x.prelude, "a"), FALSE, FALSE, FALSE, FALSE, FALSE));
+        // create and createNew together.
+        assertInvalid(x, open(x, path(x.prelude, "b"), TRUE, TRUE, TRUE, TRUE, FALSE));
+        // truncate without write.
+        assertInvalid(x, open(x, path(x.prelude, "c"), TRUE, FALSE, FALSE, FALSE, TRUE));
+        assertInvalid(x, open(x, path(x.prelude, "d"), TRUE, FALSE, TRUE, FALSE, TRUE));
+        // A non-Path target.
+        assertInvalid(x, open(x, new ProtosStringValue("e")));
+        assertTrue(x.backend.invocations.isEmpty());
+    }
+
+    @Test
+    void optionValuesMustBeExactBooleans() throws Exception {
+        Fixture x = fixture();
+        List<Object> nonBooleans =
+                List.of(
+                        ProtosNumericValueSupport.integer(1),
+                        ProtosNullValue.INSTANCE,
+                        new ProtosStringValue("true"),
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()),
+                        new ProtosBytesValue(new ProtosObjectValue(ProtosObjectValue.rootObject())));
+        for (int index = 0; index < 5; index++) {
+            for (Object value : nonBooleans) {
+                // Every other option is a valid read-only selection.
+                Object[] options = {TRUE, FALSE, FALSE, FALSE, FALSE};
+                options[index] = value;
+                Object[] arguments = new Object[6];
+                arguments[0] = path(x.prelude, "o");
+                System.arraycopy(options, 0, arguments, 1, 5);
+                assertInvalid(x, open(x, arguments));
+            }
         }
         assertTrue(x.backend.invocations.isEmpty());
     }
 
     @Test
-    void invalidAndSpecializedOptionsFailBeforeBackendAuthority() throws Exception {
+    void failedOpensAnswerIndependentFutures() throws Exception {
         Fixture x = fixture();
+        ProtosFutureValue first = open(x, path(x.prelude, "a"), FALSE, FALSE, FALSE, FALSE, FALSE);
+        ProtosFutureValue second = open(x, path(x.prelude, "a"), FALSE, FALSE, FALSE, FALSE, FALSE);
+        assertNotSame(first, second);
+        assertNotSame(first.failedError().orElseThrow(), second.failedError().orElseThrow());
+        assertTrue(x.backend.invocations.isEmpty());
+    }
 
-        ProtosObjectValue noAccess = ordinaryOptions();
-        noAccess.createLocalSlot("read", ProtosBooleanValue.FALSE);
-        ProtosFutureValue invalid =
+    @Test
+    void sourceOpenIsBoundPerCapabilityAndExposesNoBridge() throws Exception {
+        Fixture x = fixture();
+        ProtosClosureValue open =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        x.filesystem.readLocalSlot("open").orElseThrow());
+        assertNotNull(open.definition());
+        assertTrue(open.executionPlan().isPresent());
+        assertTrue(open.nativeBody().isEmpty());
+        assertNotSame(x.prelude.filesystemOpenMethodForRuntime(), open);
+        for (String hidden :
+                List.of("_openNative", "_bridge", "options", "close", "captureTree",
+                        "_coreFilesystemOpenBridge", "_coreFilesystemOpenMethod")) {
+            assertFalse(x.filesystem.hasLocalSlot(hidden), hidden);
+            assertTrue(x.prelude.bindings().readLocalSlot(hidden).isEmpty(), hidden);
+        }
+        ProtosFilesystemValue filesystem = (ProtosFilesystemValue) x.filesystem;
+        assertNotNull(filesystem.openFlowForRuntime());
+        assertThrows(
+                IllegalStateException.class,
+                () -> filesystem.bindOpenFlowForRuntime(filesystem.openFlowForRuntime()));
+
+        // A second capability binds the same source method to its own flow only.
+        Fixture other = fixture();
+        assertNotSame(
+                filesystem.openFlowForRuntime(),
+                ((ProtosFilesystemValue) other.filesystem).openFlowForRuntime());
+    }
+
+    @Test
+    void ordinaryDelegatingObjectCannotUseTheCapabilityFlow() throws Exception {
+        Fixture x = fixture();
+        ProtosObjectValue child = new ProtosObjectValue(x.filesystem);
+        ProtosFutureValue future =
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
-                                x.filesystem,
-                                "open",
-                                List.of(path(x.prelude, "a"), noAccess),
-                                x.activation);
-        assertInvalid(x, invalid);
+                                child, "open", List.of(path(x.prelude, "a")), x.activation);
+        assertInvalid(x, future);
+        assertTrue(x.backend.invocations.isEmpty());
+    }
 
-        ProtosBytesValue specialized =
-                new ProtosBytesValue(new ProtosObjectValue(ProtosObjectValue.rootObject()));
-        ProtosFutureValue nonOrdinary =
+    @Test
+    void openBridgeRejectsNonCapabilityReceiversWithoutBackendEffects() throws Exception {
+        Fixture x = fixture();
+        ProtosObjectValue bridge = ProtosStandardFilesystemProtocol.createOpenBridge();
+        assertTrue(bridge.isFrozen());
+        assertEquals(Set.of("open"), bridge.localSlotsSnapshot().keySet());
+        ProtosObjectValue options = ordinaryOptions();
+        List<Object> nonCapabilities =
+                List.of(
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()),
+                        new ProtosObjectValue(x.filesystem),
+                        new ProtosFilesystemValue());
+        for (Object receiver : nonCapabilities) {
+            ProtosFutureValue future =
+                    (ProtosFutureValue)
+                            ProtosInvocation.invokeMessage(
+                                    bridge,
+                                    "open",
+                                    List.of(receiver, path(x.prelude, "a"), options),
+                                    x.activation);
+            assertInvalid(x, future);
+        }
+        assertInvalid(
+                x,
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
-                                x.filesystem,
-                                "open",
-                                List.of(path(x.prelude, "b"), specialized),
-                                x.activation);
-        assertInvalid(x, nonOrdinary);
-
+                                bridge, "open", List.of(x.filesystem), x.activation));
         assertTrue(x.backend.invocations.isEmpty());
     }
 
@@ -365,6 +483,17 @@ class ProtosStandardFilesystemProtocolTest {
         assertSame(
                 x.prelude.bindings().readLocalSlot("InvalidIOArgument").orElseThrow(),
                 future.failedError().orElseThrow().parent().orElseThrow());
+    }
+
+    private static final ProtosBooleanValue TRUE = ProtosBooleanValue.TRUE;
+    private static final ProtosBooleanValue FALSE = ProtosBooleanValue.FALSE;
+
+    /** D241-B: positional open(path, read, write, create, createNew, truncate). */
+    private static ProtosFutureValue open(Fixture x, Object... arguments) {
+        return assertInstanceOf(
+                ProtosFutureValue.class,
+                ProtosInvocation.invokeMessage(
+                        x.filesystem, "open", List.of(arguments), x.activation));
     }
 
     private static ProtosObjectValue ordinaryOptions() {

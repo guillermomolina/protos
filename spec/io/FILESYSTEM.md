@@ -12,10 +12,11 @@ The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.m
 
 `File` means an already-open file resource. `Path` represents a filesystem path value. `Filesystem` represents authority over a filesystem namespace.
 
-The fundamental open operation is conceptually:
+The fundamental open operation is:
 
 ```text
-filesystem.open(path, options) -> Future<File>
+filesystem.open(path, read: true, write: false, create: false, createNew: false, truncate: false)
+    -> Future<File>
 ```
 
 Core v0.1 does not use opaque mode strings such as `"r"`, `"w"`, `"a"`, or `"r+"` as its normative semantic model.
@@ -42,22 +43,22 @@ Core v0.1 defines no append open option, append mode, or other write-placement d
 
 ### 18.0 Public open surface
 
-The portable call forms are `filesystem.open(path)` and `filesystem.open(path, options)`. The one-argument form means read access, existing target, and preserved content.
+The portable public surface is the single D241-B signature `filesystem.open(path, read: true, write: false, create: false, createNew: false, truncate: false)`. `path` is the first parameter. The five option parameters `read`, `write`, `create`, `createNew`, and `truncate` are all optional, with exactly those defaults; they are ordinary D237 parameters and may also be bound positionally after `path`. `filesystem.open(path)` therefore means read access, existing target, and preserved content. There is no public options object: a value supplied positionally in the second position binds `read`, and is subject to the Boolean rule below like any other value.
 
-`options` is an ordinary Protos object. Its standard option slots are exactly `read`, `write`, `create`, `createNew`, and `truncate`. Only local slots owned by that object participate; delegated slots are ignored. Each present standard slot must contain exactly canonical `true` or `false`. Missing slots default to `false`, except `read`, which defaults to `true`. Any other local slot makes the options invalid. The options object need not have a special prototype and need not be frozen or closed. Explicit `null` and non-object-domain values are invalid options.
+Argument association follows D237. An unknown label or a positional/named collision for the same parameter is the ordinary generic association Error raised before `open` is entered; it produces no Future and performs no filesystem work. Surplus positional values follow ordinary Closure parameter binding (`CALLABLES.md`): they are evaluated and ignored.
 
-The tuple is: access from `read`/`write`; creation is `createNew` when true, otherwise `create` when true, otherwise `existing`; initial content is `truncate` when true, otherwise `preserve`. `create` plus `createNew` is invalid, in addition to the combination rules below.
+Each correctly bound option value must be exactly canonical `true` or `false`. A non-Boolean value (for example `1`, `null`, a String, or an object) is invalid. The tuple is: access from `read`/`write`; creation is `createNew` when true, otherwise `create` when true, otherwise `existing`; initial content is `truncate` when true, otherwise `preserve`. `create` plus `createNew` is invalid, in addition to the combination rules below.
 
-After ordinary argument evaluation, `open` reads these local slots and snapshots their Boolean/default values exactly once during invocation. No getter/callback protocol is invoked. Later mutation cannot affect the captured configuration. An Error while evaluating the expression supplying `options` propagates before `open` is invoked.
+After argument association, `open` captures the five bound Boolean values as one internal tuple exactly once during invocation, before any namespace or backend operation. No getter/callback protocol is invoked. An Error while evaluating an argument expression propagates before `open` is invoked.
 
-After successful dispatch, an invalid Path-domain argument, invalid options-domain value, invalid/unknown option slot, or invalid captured combination fails the returned Future with a fresh `InvalidIOArgument` under `IO_CORE.md`, before namespace/backend effects.
+After successful association, an invalid Path-domain argument, a non-Boolean option value, or an invalid captured combination fails the returned Future with a fresh `InvalidIOArgument` under `IO_CORE.md`, before namespace/backend effects.
 
 
-`filesystem.open(path, options)` captures the complete semantic open configuration at invocation time, before the operation may remain pending, wait for another operation, or begin host/backend I/O. The captured configuration consists of the access, creation, and initial-content choices defined above.
+`filesystem.open` captures the complete semantic open configuration at invocation time, before the operation may remain pending, wait for another operation, or begin host/backend I/O. The captured configuration consists of the access, creation, and initial-content choices defined above.
 
-Later mutation of an ordinary object, collection, builder, or other library value that was used to express `options` cannot change the configuration of an already-invoked open. Each open invocation captures its own configuration independently.
+Later mutation of an ordinary object, collection, builder, or other library value that was used to compute the option arguments cannot change the configuration of an already-invoked open. Each open invocation captures its own configuration independently.
 
-This is a semantic value capture, not a requirement to eagerly copy a particular public options object. An implementation or standard library may use immutable option values, builders, compact flags, copy-on-write state, or another representation. It must not impose a hidden caller-visible borrow/freeze/"do not mutate until the Future completes" rule merely to keep an open's configuration stable.
+This is a semantic value capture, not a requirement to materialize a particular internal configuration object. An implementation or standard library may use immutable option values, builders, compact flags, copy-on-write state, or another representation. It must not impose a hidden caller-visible borrow/freeze/"do not mutate until the Future completes" rule merely to keep an open's configuration stable.
 
 Capturing the configuration does not itself commit any filesystem effect and does not by itself prevent cancellation. The ordinary open commitment rules below still determine when creation, truncation, or File-result custody makes cancellation impossible.
 
@@ -195,7 +196,7 @@ Writes invoked on the same receiver still preserve their required invocation ord
 
 ### 18.4 File resource identity and capabilities by mode
 
-A successful `filesystem.open(path, options)` binds the returned `File` to the concrete filesystem resource selected by that open operation. The `Path` used to open it is not a continuing lookup instruction and is not the identity of the returned `File`.
+A successful `filesystem.open` binds the returned `File` to the concrete filesystem resource selected by that open operation. The `Path` used to open it is not a continuing lookup instruction and is not the identity of the returned `File`.
 
 After successful open, subsequent namespace changes do not retarget the `File`. Renaming, removing, replacing, relinking, or otherwise changing the directory entry used to reach an already-open resource does not make that `File` begin referring to the newly named or newly created resource. Operations on the `File` continue to apply to the resource selected by the successful open, subject to that resource's own backend semantics and to independently authorized changes to that resource's contents.
 
@@ -250,7 +251,7 @@ A raw File is not required to expose `Flushable`.
 
 ### 18.5 Open commitment, cancellation, and resource custody
 
-`filesystem.open(path, options)` follows the general I/O commitment rule, but its commitment boundary depends on which requested open effects are observable.
+`filesystem.open` follows the general I/O commitment rule, but its commitment boundary depends on which requested open effects are observable.
 
 An open may resolve to `cancelled` only while both of the following remain true:
 

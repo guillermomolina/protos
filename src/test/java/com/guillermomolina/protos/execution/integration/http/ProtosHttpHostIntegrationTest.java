@@ -123,12 +123,11 @@ final class ProtosHttpHostIntegrationTest {
             listener: null
             host: null
             openListener: () => {
-                request: {
-                    ipVersion: 4
-                    address: loopback
+                listener = network.listenTcp(
+                    ipVersion: 4,
+                    address: loopback,
                     port: null
-                }
-                listener = network.listenTcp(request).value()
+                ).value()
                 listener.localPort()
             }
             // The named options are bound once per call: rebinding the

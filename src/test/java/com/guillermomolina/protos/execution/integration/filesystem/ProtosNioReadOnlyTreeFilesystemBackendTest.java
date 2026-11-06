@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -71,6 +72,53 @@ final class ProtosNioReadOnlyTreeFilesystemBackendTest {
             assertEquals(
                     "42",
                     assertInstanceOf(ProtosStringValue.class, outcome.value()).value());
+        }
+    }
+
+    // D241-B: named write/create/truncate options never widen a read-only tree authority.
+    @Test
+    void namedWriteOptionsNeverGainWriteAuthorityOnAReadOnlyTree() throws Exception {
+        Files.writeString(authorityRoot.resolve("kept.txt"), "kept", StandardCharsets.UTF_8);
+        try (ProtosNioReadOnlyTreeFilesystemBackend backend =
+                new ProtosNioReadOnlyTreeFilesystemBackend(authorityRoot)) {
+            assumeTrue(
+                    backend.secureConfinementAvailable(),
+                    "host provider has no SecureDirectoryStream");
+
+            Fixture fixture = fixture(backend);
+            String source =
+                    "target: Path.relative().child(\"kept.txt\")\n"
+                            + "fails: (work) => {\n"
+                            + "    failed: false\n"
+                            + "    IOError.handle(() => { work()\n null }, (error) => {\n"
+                            + "        failed = true\n"
+                            + "        null\n"
+                            + "    })\n"
+                            + "    failed\n"
+                            + "}\n"
+                            + "fails(() => filesystem.open(target, write: true).value()) && "
+                            + "fails(() => filesystem.open(target, read: false, write: true, "
+                            + "create: true, truncate: true).value()) && "
+                            + "fails(() => filesystem.open(Path.relative().child(\"new.txt\"), "
+                            + "write: true, createNew: true).value())";
+
+            ProtosExecutionOutcome outcome =
+                    execute(
+                            "nio-read-only-tree-named-write.protos",
+                            source,
+                            fixture.activation());
+
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    outcome.state(),
+                    () -> "named write execution failed: " + outcome.error());
+            assertSame(
+                    com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE,
+                    outcome.value());
+            assertEquals(
+                    "kept",
+                    Files.readString(authorityRoot.resolve("kept.txt"), StandardCharsets.UTF_8));
+            assertFalse(Files.exists(authorityRoot.resolve("new.txt")));
         }
     }
 

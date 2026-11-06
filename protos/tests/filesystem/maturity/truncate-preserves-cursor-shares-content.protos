@@ -16,11 +16,7 @@
  */
 
 path: Path.relative().child("truncate.bin")
-options: {
-    read: true
-    write: true
-}
-file: filesystem.open(path, options).value()
+file: filesystem.open(path, read: true, write: true).value()
 file.seek(5).value()
 truncateResult: file.truncate(2).value()
 position: file.position().value()

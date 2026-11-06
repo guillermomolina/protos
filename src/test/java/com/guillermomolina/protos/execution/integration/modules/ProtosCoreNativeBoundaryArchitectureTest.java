@@ -29,6 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -53,10 +54,13 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/protocols/values/ProtosStandardMapProtocol.java", 9),
                     Map.entry("execution/protocols/values/ProtosStandardHashSupport.java", 3),
                     Map.entry("execution/protocols/io/ProtosStandardFileProtocol.java", 10),
-                    Map.entry("execution/protocols/io/ProtosStandardFilesystemProtocol.java", 1),
+                    // D241-B: per-capability replace/remove/entries plus the private open bridge;
+                    // the public open is source-backed.
+                    Map.entry("execution/protocols/io/ProtosStandardFilesystemProtocol.java", 2),
                     Map.entry("execution/protocols/io/ProtosStandardPathProtocol.java", 3),
                     Map.entry("execution/protocols/io/ProtosStandardIpAddressProtocol.java", 1),
                     Map.entry("execution/protocols/io/ProtosStandardIpEndpointProtocol.java", 1),
+                    // D241-B: public connectTcp plus the private listen bridge; listenTcp is source.
                     Map.entry("execution/protocols/io/ProtosStandardNetworkProtocol.java", 2),
                     Map.entry("execution/protocols/io/ProtosStandardTcpConnectionProtocol.java", 7),
                     Map.entry("execution/protocols/io/ProtosStandardTcpAcceptorProtocol.java", 1),
@@ -188,7 +192,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(39, actualCore.size());
-        assertEquals(146, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(147, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -200,6 +204,17 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertTrue(
                 prelude.bindings().readLocalSlot("Filesystem").isEmpty(),
                 "Filesystem authority must remain host-provisioned, not a Core-prelude binding");
+        // D241-B: the private source method and both bridges are never public bindings.
+        for (String privateName :
+                List.of(
+                        "_coreFilesystemOpenMethod",
+                        "_coreFilesystemOpenBridge",
+                        "_coreNetworkListenBridge",
+                        "_coreNetworkListenMissing")) {
+            assertTrue(
+                    prelude.bindings().readLocalSlot(privateName).isEmpty(),
+                    privateName + " must not be a Prelude binding");
+        }
         assertTrue(
                 prelude.bindings().readLocalSlot("Environment").isEmpty(),
                 "Environment is outside the required Core prelude");
@@ -393,10 +408,34 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertSourceBacked(ipEndpointPrototype, "construct");
         assertSourceBacked(ipEndpointPrototype, "==");
         assertSourceBacked(ipEndpointPrototype, "hash");
-        assertNativeSelectors(
-                "Network",
-                prelude.networkPrototype(),
-                Set.of("connectTcp", "listenTcp"));
+        // D241-B: connectTcp is the only published native Network selector; listenTcp is a
+        // source Closure that reaches a private bridge, which is not a public native selector.
+        assertNativeSelectors("Network", prelude.networkPrototype(), Set.of("connectTcp"));
+        assertEquals(
+                Set.of("connectTcp", "listenTcp"),
+                prelude.networkPrototype().localSlotsSnapshot().keySet(),
+                "unexpected standard Network prototype surface");
+        assertTrue(
+                prelude.networkPrototype().parent().orElse(null) == ProtosObjectValue.rootObject(),
+                "standard Network prototype must delegate directly to Object");
+        assertSourceBacked(prelude.networkPrototype(), "listenTcp");
+        ProtosObjectValue filesystem =
+                ProtosStandardFilesystemProtocol.createCapability(
+                        prelude.bytesPrototypeForRuntime(),
+                        prelude.newModuleActivation(),
+                        (path, options, completion) -> {
+                            completion.failed();
+                            return () -> {};
+                        });
+        assertEquals(
+                Set.of("open", "replace", "remove", "entries"),
+                filesystem.localSlotsSnapshot().keySet(),
+                "unexpected host-provisioned Filesystem surface");
+        assertTrue(
+                filesystem.parent().orElse(null) == ProtosObjectValue.rootObject(),
+                "a Filesystem capability must delegate directly to Object");
+        assertNativeSelectors("Filesystem", filesystem, Set.of("replace", "remove", "entries"));
+        assertSourceBacked(filesystem, "open");
         assertNativeSelectors(
                 "TcpListener",
                 prelude.tcpListenerPrototypeForRuntime(),

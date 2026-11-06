@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.runtime.io;
 
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import java.util.Objects;
 
 /**
  * Runtime representation marker for one host-provisioned Filesystem authority capability.
@@ -28,7 +29,31 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
  * carries that authority.
  */
 public final class ProtosFilesystemValue extends ProtosObjectValue {
+    /*
+     * D241-B: the open flow of this one capability. It is bound exactly once while the host
+     * constructs the capability, before guest code can reach it, and is consulted only by the
+     * private Core open bridge. It is never a Protos slot and never shared through a registry.
+     */
+    private ProtosFilesystemOpenFlow openFlow;
+
     public ProtosFilesystemValue() {
         super(ProtosObjectValue.rootObject());
+    }
+
+    /**
+     * Runtime-only, one-time binding of this capability's open flow during capability
+     * construction. A second binding is rejected: an existing capability's flow is never replaced.
+     */
+    public synchronized void bindOpenFlowForRuntime(ProtosFilesystemOpenFlow flow) {
+        Objects.requireNonNull(flow, "flow");
+        if (openFlow != null) {
+            throw new IllegalStateException("Filesystem open flow is already bound");
+        }
+        openFlow = flow;
+    }
+
+    /** Runtime-only read of the bound open flow; {@code null} when none was installed. */
+    public synchronized ProtosFilesystemOpenFlow openFlowForRuntime() {
+        return openFlow;
     }
 }

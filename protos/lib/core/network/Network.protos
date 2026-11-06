@@ -13,4 +13,44 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Network: {}
+// D047/D241-B (NETWORK.md §§5, 7): the standard Network prototype. Its
+// listenTcp selector is source-backed; connectTcp is the native method the
+// runtime installs during Core bootstrap.
+//
+// This source only declares; it invokes nothing while Core bootstraps. The
+// presence identity _coreNetworkListenMissing and the private listen bridge
+// _coreNetworkListenBridge are bootstrap-local anchors that listenTcp resolves
+// lexically when it runs. Like _corePathKernel and _coreResolverBridge they
+// stay in the unpublished Core bootstrap context and are never Prelude
+// bindings, module members or slots of Network.
+//
+// All three parameters are required. D237 rejects unknown labels and
+// positional/named collisions before the body runs; an omitted parameter is
+// detected by strict identity with the presence identity before any value is
+// interpreted, and then the bridge answers a failed Future<InvalidIOArgument>
+// without backend effects. A supplied null address or port is a value, never
+// an absence. Type checks, canonical address recognition, port bounds,
+// authority and listener acquisition all remain in the bridge.
+
+// Private presence identity: D203 binds an omitted parameter without a default
+// to null, so every required parameter defaults to this identity.
+_coreNetworkListenMissing: {}
+
+Network: {
+    listenTcp: (
+        ipVersion: _coreNetworkListenMissing,
+        address: _coreNetworkListenMissing,
+        port: _coreNetworkListenMissing
+    ) => {
+        missing: _coreNetworkListenMissing
+        request: null
+        if((ipVersion !== missing) && (address !== missing) && (port !== missing)) {
+            request = {
+                ipVersion: ipVersion
+                address: address
+                port: port
+            }
+        }
+        _coreNetworkListenBridge.listen(this, request)
+    }
+}

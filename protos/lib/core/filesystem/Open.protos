@@ -1,0 +1,46 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// D241-B (FILESYSTEM.md §18.0): the single source implementation of the
+// public Filesystem open selector. The runtime binds this Closure as the local
+// "open" slot of every host-provisioned Filesystem capability; it is never a
+// Prelude binding, module member or slot of any shared prototype.
+//
+// The five options are ordinary D237 parameters with the D241-B defaults, so
+// unknown labels and positional/named collisions fail before this body runs.
+// The literal built below is an internal adaptation value, not the retired
+// public options object: the private bridge, reached through the unpublished
+// bootstrap anchor _coreFilesystemOpenBridge, admits only a genuine Filesystem
+// capability whose Actor-local open flow was installed by the host, and the
+// existing open flow captures and validates the option tuple exactly once
+// before any namespace or backend operation.
+//
+// This source only declares; it opens nothing while Core bootstraps.
+_coreFilesystemOpenMethod: (
+    path,
+    read: true,
+    write: false,
+    create: false,
+    createNew: false,
+    truncate: false
+) => {
+    _coreFilesystemOpenBridge.open(this, path, {
+        read: read
+        write: write
+        create: create
+        createNew: createNew
+        truncate: truncate
+    })
+}

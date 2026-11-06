@@ -41,6 +41,9 @@ import java.util.Objects;
 public final class ProtosStandardNetworkProtocol {
     private static final Set<String> LISTEN_REQUEST_SLOTS = Set.of("ipVersion", "address", "port");
 
+    /** Private bootstrap-local anchor of the Core Network listen bridge (D241-B). */
+    public static final String LISTEN_BRIDGE_SLOT = "_coreNetworkListenBridge";
+
     private ProtosStandardNetworkProtocol() {}
 
     public static void install(ProtosObjectValue prototype) {
@@ -49,19 +52,49 @@ public final class ProtosStandardNetworkProtocol {
             throw new IllegalArgumentException(
                     "standard Network prototype must delegate directly to Object");
         }
-        if (!prototype.isOpen() || !prototype.localSlotsSnapshot().isEmpty()) {
+        Map<String, Object> slots = prototype.localSlotsSnapshot();
+        if (!prototype.isOpen() || !slots.keySet().equals(Set.of("listenTcp"))) {
             throw new IllegalStateException(
-                    "standard Network prototype must be fresh and open");
+                    "standard Network prototype must be open and declare only source listenTcp");
+        }
+        // D241-B: listenTcp is the source-backed Closure declared by Network.protos.
+        if (!(slots.get("listenTcp") instanceof ProtosClosureValue listen)
+                || listen.definition() == null
+                || listen.executionPlan().isEmpty()
+                || listen.nativeBody().isPresent()) {
+            throw new IllegalStateException(
+                    "standard Network.listenTcp must be a source-backed Closure");
         }
 
         prototype.createLocalSlot(
                 "connectTcp",
                 ProtosClosureValue.nativeClosure(
                         ProtosStandardNetworkProtocol::connectTcp));
-        prototype.createLocalSlot(
-                "listenTcp",
+    }
+
+    /**
+     * Creates the frozen private Core Network listen bridge (D241-B).
+     *
+     * <p>The bridge is a bootstrap-local lexical anchor of the source-backed {@code listenTcp},
+     * never a Prelude binding, module member or Network slot. Its single internal operation
+     * {@code listen(receiver, request)} applies the complete listen admission to the explicit
+     * authority receiver; a {@code null} request denotes an inadmissible call and answers a failed
+     * Future of InvalidIOArgument without backend effects.
+     */
+    public static ProtosObjectValue createListenBridge() {
+        ProtosObjectValue bridge = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        bridge.createLocalSlot(
+                "listen",
                 ProtosClosureValue.nativeClosure(
-                        ProtosStandardNetworkProtocol::listenTcp));
+                        (activation, supplied) -> {
+                            if (activation.receiver() != bridge || supplied.size() != 2) {
+                                return failedFuture(
+                                        activation,
+                                        ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
+                            }
+                            return listenTcp(activation, supplied.get(0), supplied.get(1));
+                        }));
+        return bridge.freeze();
     }
 
     private static ProtosFutureValue connectTcp(
@@ -148,13 +181,12 @@ public final class ProtosStandardNetworkProtocol {
     }
 
     private static ProtosFutureValue listenTcp(
-            ProtosActivation activation, List<?> supplied) {
+            ProtosActivation activation, Object receiverCandidate, Object requestCandidate) {
         ProtosPrelude prelude = activation.prelude().orElseThrow();
         ProtosObjectValue prototype = prelude.networkPrototype();
-        if (supplied.size() != 1
-                || !(activation.receiver() instanceof ProtosNetworkCapabilityValue network)
+        if (!(receiverCandidate instanceof ProtosNetworkCapabilityValue network)
                 || network.representedDelegationParent(prelude) != prototype
-                || !(supplied.get(0) instanceof ProtosObjectValue request)) {
+                || !(requestCandidate instanceof ProtosObjectValue request)) {
             return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
 

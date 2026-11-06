@@ -72,7 +72,10 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "import.protos",
                     "prelude.protos",
                     // D235-B1-F: one paired owner of Range and InvertedRange.
-                    "Range.protos");
+                    "Range.protos",
+                    // D241-B / I148: the private source Filesystem open method; it owns no
+                    // prototype and is bound per host-provisioned capability.
+                    "filesystem/Open.protos");
 
     private static final Set<String> NETWORK_SOURCE_NAMES =
             Set.of(

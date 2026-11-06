@@ -113,13 +113,13 @@ writeAllBytes: (filesystem, path, bytes) => {
         file: null
 
         (() => {
-            options: {
-                read: false
-                write: true
-                create: true
+            openFuture = filesystem.open(
+                path,
+                read: false,
+                write: true,
+                create: true,
                 truncate: true
-            }
-            openFuture = filesystem.open(path, options)
+            )
             file = openFuture.value()
 
             offset: 0

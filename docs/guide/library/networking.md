@@ -13,7 +13,7 @@ Protos networking is a set of separate values, each with one job:
 
 | Value | What it is | Where it comes from |
 |---|---|---|
-| `network` | Live authority for TCP: `connectTcp` and `listenTcp` | A bootstrap-local host grant |
+| `network` | Live authority for TCP: `connectTcp(endpoint)` and `listenTcp(ipVersion:, address:, port:)` | A bootstrap-local host grant |
 | `resolver` | Live authority to turn a hostname into addresses | A separate bootstrap-local host grant |
 | `IpAddress` | A transferable, immutable address value | `std:network/IpAddresses`, or a Resolver result |
 | `IpEndpoint` | A numeric address plus a port | `std:network/IpEndpoints` |

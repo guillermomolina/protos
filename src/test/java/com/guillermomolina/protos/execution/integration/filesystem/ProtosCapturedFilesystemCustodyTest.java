@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -75,6 +76,32 @@ final class ProtosCapturedFilesystemCustodyTest {
                     Set.of("open", "replace", "remove", "entries"),
                     toolView.localSlotsSnapshot().keySet());
             assertFalse(applicationView.hasLocalSlot("captureTree"));
+            // D241-B: each captured view binds the source open to its own Actor-local flow.
+            for (ProtosFilesystemValue view : List.of(toolView, applicationView)) {
+                com.guillermomolina.protos.runtime.ProtosClosureValue open =
+                        assertInstanceOf(
+                                com.guillermomolina.protos.runtime.ProtosClosureValue.class,
+                                view.readLocalSlot("open").orElseThrow());
+                assertTrue(open.nativeBody().isEmpty(), "captured open is source-backed");
+                assertTrue(open.definition() != null, "captured open keeps its definition");
+            }
+            assertNotSame(toolView.openFlowForRuntime(), applicationView.openFlowForRuntime());
+            ProtosFutureValue writeOpen =
+                    (ProtosFutureValue)
+                            ProtosInvocation.invokeMessage(
+                                    toolView,
+                                    "open",
+                                    List.of(
+                                            path(toolPrelude, "Payload.protos"),
+                                            com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE,
+                                            com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE,
+                                            com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE,
+                                            com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE,
+                                            com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE),
+                                    toolActivation);
+            assertTrue(
+                    writeOpen.state() != ProtosFutureValue.State.RESOLVED,
+                    "a captured view never gains write authority");
             assertEquals("before", readText(toolView, toolPrelude, toolActivation, "Payload.protos"));
             assertEquals(
                     "before",

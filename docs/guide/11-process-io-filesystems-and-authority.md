@@ -890,11 +890,17 @@ fileFuture: filesystem.open(path)
 file: fileFuture.value()
 ```
 
-or:
+or, with named options (D241-B):
 
 ```text
-filesystem.open(path, options) -> Future<File>
+filesystem.open(path, read: true, write: false, create: false, createNew: false, truncate: false)
+    -> Future<File>
 ```
+
+Every option is an optional named parameter with exactly the defaults shown;
+there is no options object. An unknown label or a positional/named collision is
+an ordinary call Error before `open` runs; a correctly bound but invalid value
+or combination answers a failed `Future<InvalidIOArgument>`.
 
 The default one-argument form means:
 
@@ -1434,17 +1440,17 @@ The helpers always close the File they open.
 ### Filesystem: explicit open, write, and close
 
 The same effect through the File capability, with the open options spelled out
-and the File closed by `ensure`:
+as named arguments and the File closed by `ensure`:
 
 ```protos
 path: Path.relative().child("data.bin")
-options: {
-    read: false
-    write: true
-    create: true
+file: filesystem.open(
+    path,
+    read: false,
+    write: true,
+    create: true,
     truncate: true
-}
-file: filesystem.open(path, options).value()
+).value()
 
 (() => {
     file.write(Encoding.UTF8.encode("hello")).value()
@@ -1453,7 +1459,7 @@ file: filesystem.open(path, options).value()
 }
 ```
 
-Without an options argument, `filesystem.open(path)` opens an existing file for
+Without option arguments, `filesystem.open(path)` opens an existing file for
 reading.
 
 ### Filesystem: listing and namespace mutation
@@ -1486,16 +1492,16 @@ reply: connection.read(4096).value()    // Bytes, or null at EOF
 connection.close().value()
 ```
 
-A listener uses an ordinary request object with exactly the `ipVersion`,
-`address`, and `port` slots; `port: null` selects a free port:
+A listener takes three required arguments, `ipVersion`, `address`, and `port`;
+`address: null` and `port: null` are supplied values, and `port: null` selects a
+free port. Omitting any of the three answers a failed `Future<InvalidIOArgument>`:
 
 ```protos
-request: {
-    ipVersion: 4
-    address: loopback
+listener: network.listenTcp(
+    ipVersion: 4,
+    address: loopback,
     port: null
-}
-listener: network.listenTcp(request).value()
+).value()
 listener.localPort()
 accepted: listener.accept().value()
 ```
@@ -1654,8 +1660,8 @@ same.
 29. Filesystem carries namespace authority; Path does not.
 30. `filesystem.open(path)` defaults to read/existing/preserve/positioned and
     returns a Future for a stable selected File capability.
-31. Open options are snapshotted explicit dimensions, not opaque host mode
-    strings.
+31. Open options are named parameters captured once as explicit dimensions,
+    not opaque host mode strings.
 32. Independent opens are not implicitly serialized merely by same Filesystem,
     Path, or Actor source order.
 33. A File exposes only the read/write/seek/size/truncate/sync capabilities its

@@ -98,11 +98,10 @@ final class ProtosNioNetworkProvisioningTest {
                         future(
                                 network,
                                 "listenTcp",
-                                List.of(
-                                        listenRequest(
+                                listenArguments(
                                                 integer(4),
                                                 ProtosNullValue.INSTANCE,
-                                                ProtosNullValue.INSTANCE)),
+                                                ProtosNullValue.INSTANCE),
                                 activation);
                 awaitTerminal(listening);
                 assertEquals(ProtosFutureValue.State.RESOLVED, listening.state());
@@ -163,11 +162,10 @@ final class ProtosNioNetworkProvisioningTest {
                     future(
                             network,
                             "listenTcp",
-                            List.of(
-                                    listenRequest(
+                            listenArguments(
                                             integer(4),
                                             ProtosNullValue.INSTANCE,
-                                            ProtosNullValue.INSTANCE)),
+                                            ProtosNullValue.INSTANCE),
                             activation);
             awaitTerminal(listening);
             ProtosTcpListenerValue listener =
@@ -353,7 +351,7 @@ final class ProtosNioNetworkProvisioningTest {
                 future(
                         network,
                         "listenTcp",
-                        List.of(listenRequest(integer(4), ProtosNullValue.INSTANCE, ProtosNullValue.INSTANCE)),
+                        listenArguments(integer(4), ProtosNullValue.INSTANCE, ProtosNullValue.INSTANCE),
                         activation);
         awaitTerminal(listening);
         assertEquals(ProtosFutureValue.State.RESOLVED, listening.state());
@@ -476,12 +474,9 @@ final class ProtosNioNetworkProvisioningTest {
         };
     }
 
-    private static ProtosObjectValue listenRequest(Object version, Object address, Object port) {
-        ProtosObjectValue request = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        request.createLocalSlot("ipVersion", version);
-        request.createLocalSlot("address", address);
-        request.createLocalSlot("port", port);
-        return request;
+    private static List<Object> listenArguments(Object version, Object address, Object port) {
+        // D241-B: listenTcp takes three required positional/named arguments.
+        return List.of(version, address, port);
     }
 
     private static ProtosObjectValue ipv4LoopbackEndpoint(

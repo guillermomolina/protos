@@ -210,6 +210,113 @@ class ProtosAPlusExecutionProjectionTest {
         }
     }
 
+    // D241-B / I148: the private source Filesystem open method uses the same per-Context
+    // projection as the shared root Closures; its per-capability binding keeps that requirement.
+    @Test
+    void privateFilesystemOpenMethodProjectsPerProcessContext() throws Exception {
+        ProtosPrelude firstPrelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosPrelude secondPrelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        for (ProtosPrelude prelude : List.of(firstPrelude, secondPrelude)) {
+            ProtosClosureValue method = prelude.filesystemOpenMethodForRuntime();
+            assertTrue(method.definition() != null);
+            assertTrue(method.executionPlan().isPresent());
+            assertTrue(method.nativeBody().isEmpty());
+            assertTrue(method.requiresContextLocalExecutionProjectionForRuntime());
+            ProtosObjectValue filesystem = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            assertTrue(
+                    method.bindMethod(filesystem, filesystem)
+                            .requiresContextLocalExecutionProjectionForRuntime());
+        }
+        ProtosClosureExecutionPlan firstTemplate =
+                firstPrelude.filesystemOpenMethodForRuntime().executionPlan().orElseThrow();
+        ProtosClosureExecutionPlan secondTemplate =
+                secondPrelude.filesystemOpenMethodForRuntime().executionPlan().orElseThrow();
+        ProtosProcessRuntime firstProcess =
+                new ProtosProcessRuntime(firstPrelude.actorRefPrototypeForRuntime());
+        ProtosProcessRuntime secondProcess =
+                new ProtosProcessRuntime(secondPrelude.actorRefPrototypeForRuntime());
+
+        try (ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open()) {
+            try {
+                ProtosPolyglotProcessContext firstContext = host(host, firstProcess);
+                ProtosPolyglotProcessContext secondContext = host(host, secondProcess);
+                ProtosLanguageContext firstLanguageContext =
+                        firstContext.currentLanguageContextForTesting();
+                ProtosLanguageContext secondLanguageContext =
+                        secondContext.currentLanguageContextForTesting();
+                assertNotSame(firstLanguageContext, secondLanguageContext);
+
+                assertInvalidOpen(
+                        firstPrelude, firstContext.callForRuntime(() -> invokeOpen(firstPrelude)));
+                assertInvalidOpen(
+                        secondPrelude,
+                        secondContext.callForRuntime(() -> invokeOpen(secondPrelude)));
+
+                // Each Context already owns the projection of its own open template: looking it up
+                // again is a hit that adds no projection, and the two projections are distinct
+                // Context-owned plans, neither being the shared template.
+                ProtosClosureExecutionPlan firstProjection =
+                        projectedPlan(firstLanguageContext, firstPrelude, firstTemplate);
+                ProtosClosureExecutionPlan secondProjection =
+                        projectedPlan(secondLanguageContext, secondPrelude, secondTemplate);
+                assertNotSame(firstProjection, secondProjection);
+                assertNotSame(firstTemplate, firstProjection);
+                assertNotSame(secondTemplate, secondProjection);
+                assertSame(
+                        firstTemplate,
+                        firstPrelude.filesystemOpenMethodForRuntime().executionPlan().orElseThrow());
+                assertSame(
+                        secondTemplate,
+                        secondPrelude.filesystemOpenMethodForRuntime().executionPlan().orElseThrow());
+            } finally {
+                terminate(firstProcess);
+                terminate(secondProcess);
+            }
+        }
+    }
+
+    private static ProtosClosureExecutionPlan projectedPlan(
+            ProtosLanguageContext languageContext,
+            ProtosPrelude prelude,
+            ProtosClosureExecutionPlan template) {
+        int before = languageContext.projectedBytecodeExecutionPlanCountForTesting();
+        ProtosClosureExecutionPlan projection =
+                languageContext.bytecodeExecutionPlanForDefinition(
+                        prelude.filesystemOpenMethodForRuntime().definition(), template);
+        assertEquals(
+                before,
+                languageContext.projectedBytecodeExecutionPlanCountForTesting(),
+                "the open template was projected by the invocation itself");
+        return projection;
+    }
+
+    /* An open admitted by the signature that fails on a non-Path value before any backend use. */
+    private static Object invokeOpen(ProtosPrelude prelude) {
+        assertTrue(ProtosPolyglotExecutionContext.hasEnteredContextForRuntime());
+        ProtosActivation caller = prelude.newModuleActivation();
+        ProtosObjectValue filesystem =
+                ProtosStandardFilesystemProtocol.createCapability(
+                        prelude.bytesPrototypeForRuntime(),
+                        caller,
+                        (path, options, completion) -> {
+                            throw new AssertionError("backend reached for an invalid Path");
+                        });
+        return ProtosInvocation.invokeMessage(
+                filesystem,
+                "open",
+                List.of(new ProtosObjectValue(ProtosObjectValue.rootObject())),
+                caller);
+    }
+
+    private static void assertInvalidOpen(ProtosPrelude prelude, Object result) {
+        com.guillermomolina.protos.runtime.ProtosFutureValue future =
+                assertInstanceOf(com.guillermomolina.protos.runtime.ProtosFutureValue.class, result);
+        assertEquals(com.guillermomolina.protos.runtime.ProtosFutureValue.State.FAILED, future.state());
+        assertSame(
+                prelude.bindings().readLocalSlot("InvalidIOArgument").orElseThrow(),
+                future.failedError().orElseThrow().parent().orElseThrow());
+    }
+
     private static ProtosObjectValue blockingEqualityReceiver(
             CountDownLatch bothInEquality, CountDownLatch releaseEquality) {
         ProtosObjectValue receiver = new ProtosObjectValue(ProtosObjectValue.rootObject());

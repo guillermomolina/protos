@@ -194,6 +194,12 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("network/IpEndpoint.protos"))
                 .call(bootstrapActivation);
+        // D241-B: the frozen private listen bridge is a bootstrap-local anchor captured by the
+        // source-backed Network.listenTcp; like _coreResolverBridge it stays in this unpublished
+        // bootstrap context and is never a Prelude binding, module member or Network slot.
+        bootstrapContext.createLocalSlot(
+                ProtosStandardNetworkProtocol.LISTEN_BRIDGE_SLOT,
+                ProtosStandardNetworkProtocol.createListenBridge());
         sourceLoader
                 .load(coreDirectory.resolve("network/Network.protos"))
                 .call(bootstrapActivation);
@@ -242,6 +248,8 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("Bytes.protos"))
                 .call(bootstrapActivation);
+        ProtosClosureValue filesystemOpenMethod =
+                loadFilesystemOpenMethod(coreDirectory, bootstrapContext, bootstrapActivation);
 
         Object contextBinding =
                 bootstrapContext
@@ -576,7 +584,45 @@ public final class ProtosCoreBootstrap {
                         invertedRangePrototype),
                 semanticTransferFamilies,
                 lazyStandardModuleMembers(),
-                tcpAcceptorPrototype);
+                tcpAcceptorPrototype,
+                filesystemOpenMethod);
+    }
+
+    /*
+     * D241-B: declares the single source implementation of the public Filesystem open selector.
+     * The private bridge stays in the unpublished bootstrap context as its lexical anchor (like
+     * _corePathKernel and _coreResolverBridge); the method itself is captured privately for the
+     * Prelude and removed from the context. Nothing is opened and the Closure is not executed.
+     */
+    private ProtosClosureValue loadFilesystemOpenMethod(
+            Path coreDirectory,
+            ProtosObjectValue bootstrapContext,
+            ProtosActivation bootstrapActivation)
+            throws IOException {
+        String methodSlot = "_coreFilesystemOpenMethod";
+        bootstrapContext.createLocalSlot(
+                ProtosStandardFilesystemProtocol.OPEN_BRIDGE_SLOT,
+                ProtosStandardFilesystemProtocol.createOpenBridge());
+        sourceLoader
+                .load(coreDirectory.resolve("filesystem/Open.protos"))
+                .call(bootstrapActivation);
+        Object value =
+                bootstrapContext
+                        .readLocalSlot(methodSlot)
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Core Filesystem open method is missing"));
+        if (!(value instanceof ProtosClosureValue method)
+                || method.definition() == null
+                || method.executionPlan().isEmpty()
+                || method.nativeBody().isPresent()) {
+            throw new IllegalStateException("Core Filesystem open method is not source-backed");
+        }
+        method.requireContextLocalExecutionProjectionForRuntime();
+        bootstrapContext.removeLocalSlot(methodSlot);
+        method.freeze();
+        return method;
     }
 
     /**

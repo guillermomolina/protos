@@ -67,11 +67,16 @@ class ProtosFilesystemIntegratedConformanceTest {
     void committedCreateEffectDefeatsCancellationAndLaterFailureRemainsIoError()
             throws Exception {
         Fixture x = fixture();
-        ProtosObjectValue options = ordinaryOptions();
-        options.createLocalSlot("write", ProtosBooleanValue.TRUE);
-        options.createLocalSlot("create", ProtosBooleanValue.TRUE);
-
-        ProtosFutureValue future = open(x, path(x.prelude, "created.bin"), options);
+        // D241-B: open(path, read: true, write: true, create: true).
+        ProtosFutureValue future =
+                open(
+                        x,
+                        path(x.prelude, "created.bin"),
+                        ProtosBooleanValue.TRUE,
+                        ProtosBooleanValue.TRUE,
+                        ProtosBooleanValue.TRUE,
+                        ProtosBooleanValue.FALSE,
+                        ProtosBooleanValue.FALSE);
         Invocation invocation = x.backend.invocations.remove();
 
         assertTrue(invocation.completion.commitPortableEffect());
@@ -230,11 +235,21 @@ class ProtosFilesystemIntegratedConformanceTest {
                         x.filesystem, "open", List.of(path), x.activation);
     }
 
+    /** D241-B: positional open(path, read, write, create, createNew, truncate). */
     private static ProtosFutureValue open(
-            Fixture x, ProtosPathValue path, ProtosObjectValue options) {
+            Fixture x,
+            ProtosPathValue path,
+            Object read,
+            Object write,
+            Object create,
+            Object createNew,
+            Object truncate) {
         return (ProtosFutureValue)
                 ProtosInvocation.invokeMessage(
-                        x.filesystem, "open", List.of(path, options), x.activation);
+                        x.filesystem,
+                        "open",
+                        List.of(path, read, write, create, createNew, truncate),
+                        x.activation);
     }
 
     private static ProtosFileFlow.Capabilities readOnlyCapabilities() {
@@ -242,9 +257,6 @@ class ProtosFilesystemIntegratedConformanceTest {
                 true, false, false, false, false, false);
     }
 
-    private static ProtosObjectValue ordinaryOptions() {
-        return new ProtosObjectValue(ProtosObjectValue.rootObject());
-    }
 
     private static ProtosPathValue path(ProtosPrelude prelude, String name) {
         return new ProtosPathValue(

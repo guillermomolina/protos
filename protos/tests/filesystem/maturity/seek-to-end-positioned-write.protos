@@ -16,11 +16,7 @@
  */
 
 path: Path.relative().child("end.bin")
-options: {
-    read: true
-    write: true
-}
-file: filesystem.open(path, options).value()
+file: filesystem.open(path, read: true, write: true).value()
 endPosition: file.seekToEnd().value()
 file.write(Encoding.Latin1.encode("D")).value()
 positionAfterWrite: file.position().value()

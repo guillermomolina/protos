@@ -44,6 +44,7 @@ public final class ProtosPrelude {
     private final ProtosObjectValue runtimeTcpAcceptorPrototype;
     private final ProtosObjectValue runtimeIpAddressPrototype;
     private final ProtosObjectValue runtimeIpEndpointPrototype;
+    private final ProtosClosureValue runtimeFilesystemOpenMethod;
     private final Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers;
     private final Set<ProtosObjectValue> standardModuleMemberIdentities;
     private final Map<
@@ -233,6 +234,49 @@ public final class ProtosPrelude {
             Map<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>>
                     lazyStandardModuleMembers,
             ProtosObjectValue runtimeTcpAcceptorPrototype) {
+        this(
+                bindings,
+                contextPrototype,
+                runtimeBytesPrototype,
+                runtimeActorRefPrototype,
+                runtimeTcpConnectionPrototype,
+                runtimeTcpListenerPrototype,
+                runtimeIpAddressPrototype,
+                runtimeIpEndpointPrototype,
+                standardModuleMembers,
+                semanticTransferFamilies,
+                lazyStandardModuleMembers,
+                runtimeTcpAcceptorPrototype,
+                null);
+    }
+
+    /**
+     * Creates a Prelude that additionally retains the runtime-only source-backed Filesystem open
+     * method (D241-B, I148). The method is omitted from public Prelude bindings, standard module
+     * members and transfer families; it holds no Filesystem authority and is bound per capability.
+     */
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype,
+            ProtosObjectValue runtimeBytesPrototype,
+            ProtosObjectValue runtimeActorRefPrototype,
+            ProtosObjectValue runtimeTcpConnectionPrototype,
+            ProtosObjectValue runtimeTcpListenerPrototype,
+            ProtosObjectValue runtimeIpAddressPrototype,
+            ProtosObjectValue runtimeIpEndpointPrototype,
+            Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers,
+            List<ProtosSemanticTransferFamily> semanticTransferFamilies,
+            Map<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>>
+                    lazyStandardModuleMembers,
+            ProtosObjectValue runtimeTcpAcceptorPrototype,
+            ProtosClosureValue runtimeFilesystemOpenMethod) {
+        if (runtimeFilesystemOpenMethod != null
+                && (runtimeFilesystemOpenMethod.definition() == null
+                        || runtimeFilesystemOpenMethod.nativeBody().isPresent())) {
+            throw new IllegalArgumentException(
+                    "runtime Filesystem open method must be a source-backed Closure");
+        }
+        this.runtimeFilesystemOpenMethod = runtimeFilesystemOpenMethod;
         this.semanticTransferFamilies = copySemanticTransferFamilies(semanticTransferFamilies);
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.contextPrototype =
@@ -585,6 +629,18 @@ public final class ProtosPrelude {
     /** Nullable-safe identity test used only by isolation transfer machinery. */
     public boolean isTcpListenerPrototypeForRuntime(Object candidate) {
         return runtimeTcpListenerPrototype != null && candidate == runtimeTcpListenerPrototype;
+    }
+
+    /**
+     * Runtime-only source-backed Filesystem open method (D241-B) omitted from public Prelude
+     * bindings. Each host-provisioned Filesystem binds it as its own {@code open} slot.
+     */
+    public ProtosClosureValue filesystemOpenMethodForRuntime() {
+        if (runtimeFilesystemOpenMethod == null) {
+            throw new IllegalStateException(
+                    "this prelude does not retain the source-backed Filesystem open method");
+        }
+        return runtimeFilesystemOpenMethod;
     }
 
     /** Runtime-only exact TcpAcceptor protocol prototype omitted from public Prelude bindings. */

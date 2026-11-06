@@ -62,11 +62,10 @@ final class ProtosNetworkingFoundationFinalConformanceTest {
                                     future(
                                             network,
                                             "listenTcp",
-                                            List.of(
-                                                    listenRequest(
+                                            listenArguments(
                                                             integer(4),
                                                             ProtosNullValue.INSTANCE,
-                                                            ProtosNullValue.INSTANCE)),
+                                                            ProtosNullValue.INSTANCE),
                                             activation));
             int port = listener.localPortForRuntime();
 
@@ -176,13 +175,9 @@ final class ProtosNetworkingFoundationFinalConformanceTest {
         return future;
     }
 
-    private static ProtosObjectValue listenRequest(
-            Object ipVersion, Object address, Object port) {
-        ProtosObjectValue request = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        request.createLocalSlot("ipVersion", ipVersion);
-        request.createLocalSlot("address", address);
-        request.createLocalSlot("port", port);
-        return request;
+    private static List<Object> listenArguments(Object ipVersion, Object address, Object port) {
+        // D241-B: listenTcp takes three required positional/named arguments.
+        return List.of(ipVersion, address, port);
     }
 
     private static ProtosObjectValue ipv4LoopbackEndpoint(

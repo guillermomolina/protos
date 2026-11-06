@@ -185,14 +185,19 @@ final class ProtosNioTcpListenerBackendTest {
 
     private static ProtosFutureValue listenFuture(
             Fixture x, int version, ProtosObjectValue address, BigInteger port) {
-        ProtosObjectValue request = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        request.createLocalSlot("ipVersion", integer(version));
-        request.createLocalSlot("address", address == null ? ProtosNullValue.INSTANCE : address);
-        request.createLocalSlot("port", port == null ? ProtosNullValue.INSTANCE : com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(port, x.prelude));
+        // D241-B: ipVersion, address and port are three required arguments.
+        Object addressArgument = address == null ? ProtosNullValue.INSTANCE : address;
+        Object portArgument =
+                port == null
+                        ? ProtosNullValue.INSTANCE
+                        : com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(port, x.prelude);
         return assertInstanceOf(
                 ProtosFutureValue.class,
                 ProtosInvocation.invokeMessage(
-                        x.network, "listenTcp", List.of(request), x.activation));
+                        x.network,
+                        "listenTcp",
+                        List.of(integer(version), addressArgument, portArgument),
+                        x.activation));
     }
 
     private static ProtosFutureValue accept(

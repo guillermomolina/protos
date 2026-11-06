@@ -27,12 +27,11 @@ IpAddress: import("std:network/IpAddresses").IpAddress
 IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
 
 loopback: IpAddress(4, 2130706433)    // 127.0.0.1
-listenRequest: {
-    ipVersion: 4
-    address: loopback
+listener: network.listenTcp(
+    ipVersion: 4,
+    address: loopback,
     port: null
-}
-listener: network.listenTcp(listenRequest).value()
+).value()
 port: listener.localPort()
 
 // Every bound is explicit and fixed; 1 <= workers <= maxPendingAccepts <=

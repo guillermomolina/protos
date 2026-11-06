@@ -79,12 +79,11 @@ IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
 loopback: IpAddress(4, 2130706433)    // 127.0.0.1
 connection: network.connectTcp(IpEndpoint(loopback, 8080)).value()
 
-listenRequest: {
-    ipVersion: 4
-    address: loopback
+listener: network.listenTcp(
+    ipVersion: 4,
+    address: loopback,
     port: null                        // any free port; see listener.localPort()
-}
-listener: network.listenTcp(listenRequest).value()
+).value()
 ```
 
 ## Bytes, not Strings
@@ -477,8 +476,8 @@ service: () => {
     Actor.current().send("start", Actor.group(Actor.current()))
     behavior: {
         start: (self) => {
-            // listenRequest: a loopback listen request, as in the Host example above.
-            listener: network.listenTcp(listenRequest).value()
+            // A loopback listener, as in the Host example above.
+            listener: network.listenTcp(ipVersion: 4, address: loopback, port: null).value()
             host = Host.owningWithFactory(listener, "app:handler", "make", { service: self }, workers: 4)
             host.ready().value()
             null

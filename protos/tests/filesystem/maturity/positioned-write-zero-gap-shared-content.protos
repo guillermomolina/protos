@@ -16,11 +16,7 @@
  */
 
 path: Path.relative().child("gap.bin")
-options: {
-    read: true
-    write: true
-}
-writer: filesystem.open(path, options).value()
+writer: filesystem.open(path, read: true, write: true).value()
 writer.seek(4).value()
 writeResult: writer.write(Encoding.Latin1.encode("Z")).value()
 position: writer.position().value()

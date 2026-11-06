@@ -131,8 +131,10 @@ public final class ProtosStandardFilesystemProtocol {
         }
     }
 
+    /** Private bootstrap-local anchor of the Core Filesystem open bridge (D241-B). */
+    public static final String OPEN_BRIDGE_SLOT = "_coreFilesystemOpenBridge";
+
     private enum Operation {
-        OPEN,
         REPLACE,
         REMOVE,
         ENTRIES
@@ -213,19 +215,23 @@ public final class ProtosStandardFilesystemProtocol {
                         backend::entries,
                         entries -> materializeEntries(constructionActivation, entries));
 
-        filesystem.createLocalSlot(
-                "open",
-                operationClosure(
-                        filesystem,
-                        flow,
-                        namespaceMutationFlow,
-                        treeObservationFlow,
-                        Operation.OPEN));
+        // D241-B: the public open is the Prelude-retained source Closure bound to this one
+        // capability; the private Core bridge reaches this capability's own flow only.
+        ProtosClosureValue openMethod =
+                constructionActivation
+                        .prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalArgumentException(
+                                                "Filesystem capability construction requires a Core prelude"))
+                        .filesystemOpenMethodForRuntime();
+        filesystem.bindOpenFlowForRuntime(flow);
+
+        filesystem.createLocalSlot("open", openMethod.bindMethod(filesystem, filesystem));
         filesystem.createLocalSlot(
                 "replace",
                 operationClosure(
                         filesystem,
-                        flow,
                         namespaceMutationFlow,
                         treeObservationFlow,
                         Operation.REPLACE));
@@ -233,7 +239,6 @@ public final class ProtosStandardFilesystemProtocol {
                 "remove",
                 operationClosure(
                         filesystem,
-                        flow,
                         namespaceMutationFlow,
                         treeObservationFlow,
                         Operation.REMOVE));
@@ -241,7 +246,6 @@ public final class ProtosStandardFilesystemProtocol {
                 "entries",
                 operationClosure(
                         filesystem,
-                        flow,
                         namespaceMutationFlow,
                         treeObservationFlow,
                         Operation.ENTRIES));
@@ -266,9 +270,38 @@ public final class ProtosStandardFilesystemProtocol {
                         readOnlyCapturedBackend(capturedBackend));
     }
 
+    /**
+     * Creates the frozen private Core Filesystem open bridge (D241-B).
+     *
+     * <p>The bridge is a bootstrap-local lexical anchor of the source-backed {@code open} method,
+     * never a Prelude binding, module member or capability slot. Its single internal operation
+     * {@code open(receiver, path, options)} admits only a genuine host-provisioned Filesystem
+     * capability whose open flow was installed, and delegates to that capability's own flow, which
+     * keeps its Actor-domain check and remains the single validator of the internal option tuple.
+     * Knowing the bridge or copying the method therefore confers no Filesystem authority.
+     */
+    public static ProtosObjectValue createOpenBridge() {
+        ProtosObjectValue bridge = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        bridge.createLocalSlot(
+                "open",
+                ProtosClosureValue.nativeClosure(
+                        (activation, arguments) -> {
+                            if (activation.receiver() != bridge
+                                    || arguments.size() != 3
+                                    || !(arguments.get(0) instanceof ProtosFilesystemValue filesystem)) {
+                                return invalid(activation);
+                            }
+                            ProtosFilesystemOpenFlow openFlow = filesystem.openFlowForRuntime();
+                            if (openFlow == null) {
+                                return invalid(activation);
+                            }
+                            return openFlow.open(activation, arguments.get(1), arguments.get(2));
+                        }));
+        return bridge.freeze();
+    }
+
     private static ProtosClosureValue operationClosure(
             ProtosObjectValue filesystem,
-            ProtosFilesystemOpenFlow openFlow,
             ProtosFilesystemNamespaceMutationFlow namespaceMutationFlow,
             ProtosFilesystemTreeObservationFlow treeObservationFlow,
             Operation operation) {
@@ -278,16 +311,6 @@ public final class ProtosStandardFilesystemProtocol {
                         return invalid(activation);
                     }
                     return switch (operation) {
-                        case OPEN -> {
-                            if (arguments.size() == 1) {
-                                yield openFlow.open(activation, arguments.get(0));
-                            }
-                            if (arguments.size() == 2) {
-                                yield openFlow.open(
-                                        activation, arguments.get(0), arguments.get(1));
-                            }
-                            yield invalid(activation);
-                        }
                         case REPLACE ->
                                 arguments.size() == 2
                                         ? namespaceMutationFlow.replace(

@@ -57,12 +57,11 @@ onResponse: (response) => {
     result
 }
 
-listenRequest: {
-    ipVersion: 4
-    address: loopback
+listener: network.listenTcp(
+    ipVersion: 4,
+    address: loopback,
     port: null
-}
-listener: network.listenTcp(listenRequest).value()
+).value()
 
 // --- The origin: accept one connection and serve one request on it.
 origin: (() => {

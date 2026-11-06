@@ -27,7 +27,6 @@ final class ProtosNetworkListenAcquisitionTest {
         byte[] readback = invocation.request.addressConstraint();
         readback[0] = 0;
         assertArrayEquals(new byte[] {127, 0, 0, 1}, invocation.request.addressConstraint());
-        request.createLocalSlot("afterDispatch",integer(1));
         assertEquals(51000, invocation.request.portConstraint());
         RecordingListenerBackend listenerBackend=new RecordingListenerBackend(); AtomicInteger release=new AtomicInteger();
         invocation.completion.succeeded(new Object(),51000,listenerBackend,release::incrementAndGet);
@@ -51,14 +50,12 @@ final class ProtosNetworkListenAcquisitionTest {
         assertEquals(54000,listener.localPortForRuntime());
     }
 
-    @Test void invalidShapeVersionAddressOrPortFailsBeforeBackendEffect() throws Exception {
-        Fixture x=fixture();
-        ProtosObjectValue extra=request(integer(4),ProtosNullValue.INSTANCE,integer(51000)); extra.createLocalSlot("backlog",integer(5));
-        assertFailedAs(listen(x,extra),x.prelude,"InvalidIOArgument");
-        ProtosObjectValue parent=request(integer(4),ProtosNullValue.INSTANCE,integer(51000)); ProtosObjectValue delegated=new ProtosObjectValue(parent);
-        assertFailedAs(listen(x,delegated),x.prelude,"InvalidIOArgument");
-        ProtosObjectValue missing=new ProtosObjectValue(ProtosObjectValue.rootObject()); missing.createLocalSlot("ipVersion",integer(4)); missing.createLocalSlot("address",ProtosNullValue.INSTANCE);
-        assertFailedAs(listen(x,missing),x.prelude,"InvalidIOArgument");
+    // D241-B: there is no public request object any more. An omitted required argument is an
+    // InvalidIOArgument Future that never reaches the backend.
+    @Test void omittedArgumentsVersionAddressOrPortFailBeforeBackendEffect() throws Exception {
+        Fixture x=fixture(); Object nul=ProtosNullValue.INSTANCE;
+        assertFailedAs(future(x.network,"listenTcp",List.of(integer(4),nul),x.activation),x.prelude,"InvalidIOArgument");
+        assertFailedAs(future(x.network,"listenTcp",List.of(integer(4)),x.activation),x.prelude,"InvalidIOArgument");
         assertFailedAs(listen(x,request(integer(5),ProtosNullValue.INSTANCE,integer(51000))),x.prelude,"InvalidIOArgument");
         assertFailedAs(listen(x,request(integer(4),ipAddress(x,6,BigInteger.ONE),integer(51000))),x.prelude,"InvalidIOArgument");
         assertFailedAs(listen(x,request(integer(4),ProtosNullValue.INSTANCE,integer(0))),x.prelude,"InvalidIOArgument");
@@ -66,11 +63,13 @@ final class ProtosNetworkListenAcquisitionTest {
     }
 
     // I091: bounded fields admit only exact Integers in their domain; nothing truncates into it.
+    // D241-B: listenTcp is a source Closure, so a raw host java.lang.Long is no longer an
+    // observable argument value; only genuine Protos values are probed here.
     @Test void numericFieldsOutsideTheirExactDomainFailBeforeBackendEffect() throws Exception {
         Fixture x=fixture(); Object nul=ProtosNullValue.INSTANCE;
         Object twoTo64Plus4=com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(4)), x.prelude);
         Object twoTo64Plus80=com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(80)), x.prelude);
-        Object[] badVersions={integer(-1),integer((1L<<32)+4),twoTo64Plus4,new ProtosFloatValue(4.0d),Long.valueOf(4L),nul};
+        Object[] badVersions={integer(-1),integer((1L<<32)+4),twoTo64Plus4,new ProtosFloatValue(4.0d),nul};
         for(Object version:badVersions) assertFailedAs(listen(x,request(version,nul,nul)),x.prelude,"InvalidIOArgument");
         Object[] badPorts={integer(-1),integer(65536),integer((1L<<32)+80),twoTo64Plus80,new ProtosFloatValue(80.0d),new ProtosStringValue("80")};
         for(Object port:badPorts) assertFailedAs(listen(x,request(integer(6),nul,port)),x.prelude,"InvalidIOArgument");
@@ -94,13 +93,13 @@ final class ProtosNetworkListenAcquisitionTest {
         Fixture x=fixture();
         assertFailedAs(future(x.network,"listenTcp",List.of(),x.activation),x.prelude,"InvalidIOArgument");
         ProtosObjectValue child=new ProtosObjectValue(x.prelude.networkPrototype());
-        assertFailedAs(future(child,"listenTcp",List.of(request(integer(4),ProtosNullValue.INSTANCE,integer(51000))),x.activation),x.prelude,"InvalidIOArgument");
+        assertFailedAs(future(child,"listenTcp",arguments(request(integer(4),ProtosNullValue.INSTANCE,integer(51000))),x.activation),x.prelude,"InvalidIOArgument");
         assertEquals(0,x.backend.invocations.size());
     }
 
     @Test void nonListenAuthorityTargetFailsPortablyWithoutSelectingBackend() throws Exception {
         ProtosPrelude p=core(); ProtosActivation a=p.newModuleActivation(); ProtosNetworkCapabilityValue network=new ProtosNetworkCapabilityValue(p,new Object());
-        assertFailedAs(future(network,"listenTcp",List.of(request(integer(4),ProtosNullValue.INSTANCE,integer(51000))),a),p,"IOError");
+        assertFailedAs(future(network,"listenTcp",arguments(request(integer(4),ProtosNullValue.INSTANCE,integer(51000))),a),p,"IOError");
     }
 
     @Test void precommitCancellationAndDuplicateOrLateListenersReleaseCustody() throws Exception {
@@ -160,7 +159,7 @@ final class ProtosNetworkListenAcquisitionTest {
         ProtosPrelude p=core(); ProtosActivation a=p.newModuleActivation(); AtomicInteger cancels=new AtomicInteger();
         ProtosNetworkListenFlow.Backend backend=(request,completion)->{ a.executionDomain().actorTerminated(); return cancels::incrementAndGet; };
         ProtosNetworkCapabilityValue network=new ProtosNetworkCapabilityValue(p,backend);
-        ProtosFutureValue f=future(network,"listenTcp",List.of(request(integer(4),ProtosNullValue.INSTANCE,integer(51000))),a);
+        ProtosFutureValue f=future(network,"listenTcp",arguments(request(integer(4),ProtosNullValue.INSTANCE,integer(51000))),a);
         assertEquals(ProtosFutureValue.State.CANCELLED,f.state()); assertEquals(1,cancels.get());
     }
 
@@ -179,12 +178,14 @@ final class ProtosNetworkListenAcquisitionTest {
         assertTrue(mismatch.domain().dispatchOne());
         assertFailedAs(mismatch,x.prelude,"IOError"); assertEquals(1,release2.get());
         ProtosNetworkListenFlow.Backend throwing=(request,completion)->{ throw new IllegalStateException("backend boom"); };
-        ProtosNetworkCapabilityValue network=new ProtosNetworkCapabilityValue(x.prelude,throwing); assertFailedAs(future(network,"listenTcp",List.of(req),x.activation),x.prelude,"IOError");
+        ProtosNetworkCapabilityValue network=new ProtosNetworkCapabilityValue(x.prelude,throwing); assertFailedAs(future(network,"listenTcp",arguments(req),x.activation),x.prelude,"IOError");
     }
 
     private static Fixture fixture() throws Exception { ProtosPrelude p=core(); ProtosActivation a=p.newModuleActivation(); RecordingNetworkBackend b=new RecordingNetworkBackend(); return new Fixture(p,a,b,new ProtosNetworkCapabilityValue(p,b)); }
     private static ProtosPrelude core() throws Exception { return new ProtosCoreBootstrap().bootstrap(CORE); }
-    private static ProtosFutureValue listen(Fixture x,ProtosObjectValue r){ return future(x.network,"listenTcp",List.of(r),x.activation); }
+    // D241-B: test requests stay as value records here; listenTcp receives their three values.
+    private static ProtosFutureValue listen(Fixture x,ProtosObjectValue r){ return future(x.network,"listenTcp",arguments(r),x.activation); }
+    private static List<Object> arguments(ProtosObjectValue r){ return List.of(r.readLocalSlot("ipVersion").orElseThrow(),r.readLocalSlot("address").orElseThrow(),r.readLocalSlot("port").orElseThrow()); }
     private static ProtosFutureValue future(Object receiver,String selector,List<?> args,ProtosActivation a){ return assertInstanceOf(ProtosFutureValue.class,ProtosInvocation.invokeMessage(receiver,selector,args,a)); }
     private static ProtosObjectValue request(Object version,Object address,Object port){ ProtosObjectValue r=new ProtosObjectValue(ProtosObjectValue.rootObject()); r.createLocalSlot("ipVersion",version); r.createLocalSlot("address",address); r.createLocalSlot("port",port); return r; }
     private static ProtosObjectValue ipAddress(Fixture x,int version,long bits){ return ipAddress(x,version,BigInteger.valueOf(bits)); }

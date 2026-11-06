@@ -164,12 +164,11 @@ final class ProtosHttpHostFactoryFixtureSources {
                         phase: "listen"
                         Error.handle(
                             () => {
-                                request: {
-                                    ipVersion: 4
-                                    address: loopback
+                                listener: network.listenTcp(
+                                    ipVersion: 4,
+                                    address: loopback,
                                     port: null
-                                }
-                                listener: network.listenTcp(request).value()
+                                ).value()
                                 dependencies: {
                                     service: group
                                 }
@@ -489,12 +488,11 @@ final class ProtosHttpHostFactoryFixtureSources {
             }
 
             listen: () => {
-                request: {
-                    ipVersion: 4
-                    address: loopback
+                network.listenTcp(
+                    ipVersion: 4,
+                    address: loopback,
                     port: null
-                }
-                network.listenTcp(request).value()
+                ).value()
             }
             openListener: () => {
                 listener = listen()

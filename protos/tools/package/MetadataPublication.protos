@@ -18,13 +18,12 @@ publish: (projectFilesystem, stagingName, targetName, content) => {
     targetPath: Path.relative().child(targetName)
     bytes: Encoding.UTF8.encode(content)
 
-    options: {
-        read: false
-        write: true
+    stagingFile: projectFilesystem.open(
+        stagingPath,
+        read: false,
+        write: true,
         createNew: true
-    }
-
-    stagingFile: projectFilesystem.open(stagingPath, options).value()
+    ).value()
     stagingFile.write(bytes).value()
     stagingFile.close().value()
     projectFilesystem.replace(stagingPath, targetPath).value()

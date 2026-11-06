@@ -7,6 +7,15 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.448-SNAPSHOT
+
+- `I148`: adopt D241-B source-backed `Filesystem.open` and `Network.listenTcp`.
+  - `filesystem.open(path, read: true, write: false, create: false, createNew: false, truncate: false)` is one private Core source Closure (`core/filesystem/Open.protos`) retained by the Prelude and bound per host-provisioned capability with `bindMethod`; it reaches the capability's own `ProtosFilesystemOpenFlow` through a frozen private bridge that admits only a genuine Filesystem with an installed flow. The public native `open` and the public options object are retired; `ProtosFilesystemOpenOptions.capture` stays the single validator. Captured read-only Filesystems keep the same four slots and gain no write authority.
+  - `network.listenTcp(ipVersion:, address:, port:)` is a source Closure on the Network prototype with three required parameters; omission is detected through a private bootstrap-local presence identity, so an explicit `null` address or port stays a supplied value. A private listen bridge applies the unchanged admission (authority, version, canonical address, port bounds) before any backend effect; `connectTcp` stays native. The public request object is retired.
+  - Neither bridge nor the private method is a Prelude binding, module member or capability slot; the audited Core native count becomes 147.
+  - Migrate `std:io/Files`, the Package Tool metadata publication, Protos tests, examples, the HTTP tutorial and Java tests; add coverage for named and positional binding, defaults, Boolean exactness, invalid combinations, unknown labels and collisions (D237 Error versus failed Future), extracted methods through `Object.call`, delegation without authority, read-only escalation, no backend I/O on failure, and per-Context projection of the private method.
+  - Spec: `spec/io/FILESYSTEM.md` §18.0 and `spec/io/NETWORK.md` §§5, 7. Guide: update the Filesystem/authority, HTTP and networking guides.
+
 ## 0.3.447-SNAPSHOT
 
 - `I147` (#1062), `I149` (#1064), `I150` (#1065): adopt the D241-B selective named-argument migration, Protos-first, for `std:cli/CommandLine`, `std:http/Host`, `std:http/UrlClient` and `std:tls/Client`.

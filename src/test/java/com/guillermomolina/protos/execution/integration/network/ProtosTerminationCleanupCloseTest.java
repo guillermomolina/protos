@@ -209,12 +209,11 @@ final class ProtosTerminationCleanupCloseTest {
             listener: null
             holder: null
             open: () => {
-                request: {
-                    ipVersion: 4
-                    address: IpAddress(4, 2130706433)
+                listener = network.listenTcp(
+                    ipVersion: 4,
+                    address: IpAddress(4, 2130706433),
                     port: null
-                }
-                listener = network.listenTcp(request).value()
+                ).value()
                 holder = Actor.spawn("app:holder", "start", listener.acceptCapability())
                 listener.localPort()
             }
