@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.58-SNAPSHOT
+
+- **I115-V77 — historical replay.**
+  - Replace recursive retention of caller B5 arrays with demand-driven null/Prelude/Activation caller transport. Invalidate incoming PICs when callee caller needs grow; publish only the current invocation header.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** Demand-driven caller state does not independently establish context identity, ReturnHome, Task ownership or suspension equivalence. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved without repairs.
+  - No test files are added or modified by this historical commit. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 0 added, 11 modified, 1 deleted (rename detection disabled for exact path accounting). All 12 original paths retain their exact Git blobs/modes or deletion state; reconstructed parent blobs/modes also match the original parent. Only root `pom.xml` and `CHANGELOG.md` receive replay metadata edits.
+  - Original implementation: `2362d6889261a39b34d140bb8fb4f2be91499a0a`.
+
 ## 0.4.57-SNAPSHOT
 
 - **I115-V76 — historical replay.**

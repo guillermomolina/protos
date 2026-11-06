@@ -62,7 +62,7 @@ abstract class ProtosCallNilaryMethodNode extends Node {
                 frame, inliningTarget, terminal, callable,
                 ProtosFrameArguments.dispatchedCall0(
                 null, ProtosFrameArguments.functionCallMarker(), null, null, null),
-                ProtosFunctionCallDispatchers.callerReference(frame), root,
+                null, root,
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
     }
 
@@ -79,7 +79,7 @@ abstract class ProtosCallNilaryMethodNode extends Node {
         ProtosFrameArguments.bindMethod(arguments, method.receiver(), method.methodHome());
         return call.execute(
                 frame, inliningTarget, terminal, method.callable(), arguments,
-                ProtosFunctionCallDispatchers.callerReference(frame), root,
+                null, root,
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
     }
 
@@ -96,7 +96,7 @@ abstract class ProtosCallNilaryMethodNode extends Node {
                 frame, terminal, callable,
                 ProtosFrameArguments.dispatchedCall0(
                 null, ProtosFrameArguments.functionCallMarker(), null, null, null),
-                ProtosFunctionCallDispatchers.callerReference(frame), root);
+                null, root);
     }
 
     static boolean isSourceFunction(ProtosClosureValue callable) {

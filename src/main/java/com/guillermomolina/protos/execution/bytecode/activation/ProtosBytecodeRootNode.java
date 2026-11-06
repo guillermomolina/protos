@@ -391,38 +391,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     /* PERF038-C: set once, when the first guest exception crosses this root. */
     @CompilationFinal private transient boolean guestExceptionCrossed;
 
-    /*
-     * I115 (GraalPy IndirectCallData.CallerFlagsAssumptionSet): what this
-     * physical root has needed from its own caller reference. Until a need
-     * is registered, every site that would satisfy it is compiled as a
-     * deoptimization instead of the work (for NEEDS_EXACT_ACTIVATION, the
-     * publication of a still-compact activation and of its deferred caller
-     * chain behind the publishDeferredCaller boundary). The first execution
-     * that needs it invalidates that code, registers the need monotonically
-     * and replaces the stability Assumption, so the site converges after
-     * one invalidation per need. The state belongs to this root only; it is
-     * never shared with other roots or Contexts.
-     *
-     * NEEDS_CALLER_PRELUDE (GraalPy CallerFlags / CallContext): this root
-     * reads an inherited prelude through its caller slot. It is registered
-     * where such a read finds the prelude untransported
-     * (ProtosFrameArguments#inheritsUntransportedCallerPrelude) and
-     * consulted by the producers that enter this root with a deferred
-     * caller (ProtosFunctionCallDispatchers): from then on they
-     * pass a ProtosCallerFrameReference carrying the caller's prelude, and
-     * a producer whose callee has not requested it prepares nothing. The
-     * producer reads the need from its cached callee root, so the
-     * stability Assumption is the dependency that recompiles it.
-     *
-     * I115 EXPERIMENTAL: it is also requested when an experimental numeric
-     * result needs the large-Integer prototype of the Prelude (a signed-64
-     * overflow, or a generic Integer route) in a root entered through a
-     * reduced layout that did not carry it. The producers of the reduced
-     * layouts consult it the
-     * same way and transport the Prelude only from then on; the first such
-     * read recovers it cold (experimentalRecoveredPrelude).
-     *
-     * Only needs with a request point and a consumer at HEAD are defined.
+    /* I115 demand-driven caller transport. An effective callee root
+     * requests an optional direct caller payload (null, Prelude or
+     * Activation), and its Assumption invalidates incoming PICs whenever
+     * the monotonic needs change. No ancestral B5 array is retained.
      */
     static final int NEEDS_EXACT_ACTIVATION = 1;
     static final int NEEDS_CALLER_PRELUDE = 2;
@@ -2894,8 +2866,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root) {
+            root.requestCallerNeed(NEEDS_EXACT_ACTIVATION);
             return ProtosExperimentalGetMethodNode.selectSuper(
-                    selector, root, ProtosFunctionCallDispatchers.callerReference(frame));
+                    selector, root, ProtosFrameArguments.activation(frame));
         }
     }
 
