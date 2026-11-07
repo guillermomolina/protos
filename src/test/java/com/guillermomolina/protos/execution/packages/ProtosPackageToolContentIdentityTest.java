@@ -53,18 +53,67 @@ import org.junit.jupiter.api.io.TempDir;
  */
 final class ProtosPackageToolContentIdentityTest extends ProtosPackageToolProtosTestSupport {
     @Test
+    void contentIdentityRejectsLegacyOnlyAndCoexistingManifests() throws Exception {
+        Path oldOnly = contentIdentityRoot("old-only");
+        writeContentIdentityFile(oldOnly, "protos.toml", new byte[0]);
+        assertContentIdentityRejectsTree(oldOnly);
+
+        Path both = contentIdentityRoot("both");
+        writeContentIdentityFile(both, "package.toml", new byte[0]);
+        writeContentIdentityFile(both, "protos.toml", new byte[0]);
+        assertContentIdentityRejectsTree(both);
+    }
+
+    @Test
+    void contentIdentityRejectsNonRegularManifestAndLegacyLink() throws Exception {
+        Path directory = contentIdentityRoot("manifest-directory");
+        Files.createDirectory(directory.resolve("package.toml"));
+        assertContentIdentityRejectsTree(directory);
+
+        Path manifestLink = contentIdentityRoot("manifest-link");
+        writeContentIdentityFile(
+                manifestLink, "actual.toml", new byte[0]);
+
+        boolean rootLinkCreated = false;
+        try {
+            Files.createSymbolicLink(
+                    manifestLink.resolve("package.toml"),
+                    Path.of("actual.toml"));
+            rootLinkCreated = true;
+        } catch (UnsupportedOperationException | IOException
+                | SecurityException unavailable) {
+            // The host cannot construct the root-link vector.
+        }
+
+        if (rootLinkCreated) {
+            assertContentIdentityRejectsTree(manifestLink);
+        }
+
+        Path legacyLink = contentIdentityRoot("legacy-link");
+        writeContentIdentityFile(legacyLink, "package.toml", new byte[0]);
+        try {
+            Files.createSymbolicLink(
+                    legacyLink.resolve("protos.toml"),
+                    Path.of("package.toml"));
+        } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
+            assumeTrue(false, "host cannot create the legacy symbolic-link vector");
+        }
+        assertContentIdentityRejectsTree(legacyLink);
+    }
+
+    @Test
     void contentIdentityProductionCanonicalizerRejectsInvalidLogicalTrees() throws Exception {
         Path missingManifest = contentIdentityRoot("missing-manifest");
         writeContentIdentityFile(missingManifest, "Main.protos", asciiBytes("x"));
         assertContentIdentityRejectsTree(missingManifest);
 
         Path invalidCharacter = contentIdentityRoot("invalid-character");
-        writeContentIdentityFile(invalidCharacter, "protos.toml", new byte[0]);
+        writeContentIdentityFile(invalidCharacter, "package.toml", new byte[0]);
         writeContentIdentityFile(invalidCharacter, "bad name", asciiBytes("x"));
         assertContentIdentityRejectsTree(invalidCharacter);
 
         Path reservedName = contentIdentityRoot("reserved-name");
-        writeContentIdentityFile(reservedName, "protos.toml", new byte[0]);
+        writeContentIdentityFile(reservedName, "package.toml", new byte[0]);
         writeContentIdentityFile(reservedName, "CON.txt", asciiBytes("x"));
         assertContentIdentityRejectsTree(reservedName);
     }
@@ -73,7 +122,7 @@ final class ProtosPackageToolContentIdentityTest extends ProtosPackageToolProtos
     void contentIdentityProductionCanonicalizerRejectsSiblingCaseFoldCollision()
             throws Exception {
         Path root = contentIdentityRoot("case-collision");
-        writeContentIdentityFile(root, "protos.toml", new byte[0]);
+        writeContentIdentityFile(root, "package.toml", new byte[0]);
         Path upper = root.resolve("Parser.protos");
         Path lower = root.resolve("parser.protos");
         Files.write(upper, asciiBytes("a"));
@@ -89,10 +138,10 @@ final class ProtosPackageToolContentIdentityTest extends ProtosPackageToolProtos
     void contentIdentityProductionCanonicalizerRejectsCapturedLinkWithoutFollowingIt()
             throws Exception {
         Path root = contentIdentityRoot("link");
-        writeContentIdentityFile(root, "protos.toml", asciiBytes("x"));
+        writeContentIdentityFile(root, "package.toml", asciiBytes("x"));
 
         try {
-            Files.createSymbolicLink(root.resolve("alias"), Path.of("protos.toml"));
+            Files.createSymbolicLink(root.resolve("alias"), Path.of("package.toml"));
         } catch (UnsupportedOperationException | IOException | SecurityException unsupported) {
             assumeTrue(false, "host filesystem cannot materialize the symbolic-link vector");
         }
@@ -104,17 +153,27 @@ final class ProtosPackageToolContentIdentityTest extends ProtosPackageToolProtos
     void contentIdentityVerifierRejectsUnsupportedOrMalformedRecordedIdentity()
             throws Exception {
         Path root = contentIdentityRoot("unsupported");
-        writeContentIdentityFile(root, "protos.toml", new byte[0]);
+        writeContentIdentityFile(root, "package.toml", new byte[0]);
 
         String valid =
-                "beb503347f64442d909b4848e69333a72f4d049d7f5b37c32f453f409641ef04";
+                "7b84ceb16a689651d3de513f3aa9552554736735971ef9720a7818daff93c764";
 
         assertContentIdentityRejectsExpected(root, "future-package-tree-v2", "sha256", valid);
-        assertContentIdentityRejectsExpected(root, "protos-package-tree-v1", "sha512", valid);
-        assertContentIdentityRejectsExpected(root, "protos-package-tree-v1", "sha256", "00");
         assertContentIdentityRejectsExpected(
                 root,
                 "protos-package-tree-v1",
+                "sha256",
+                "beb503347f64442d909b4848e69333a72f4d049d7f5b37c32f453f409641ef04");
+        assertContentIdentityRejectsExpected(
+                root,
+                "protos-package-tree-v2",
+                "sha256",
+                "beb503347f64442d909b4848e69333a72f4d049d7f5b37c32f453f409641ef04");
+        assertContentIdentityRejectsExpected(root, "protos-package-tree-v2", "sha512", valid);
+        assertContentIdentityRejectsExpected(root, "protos-package-tree-v2", "sha256", "00");
+        assertContentIdentityRejectsExpected(
+                root,
+                "protos-package-tree-v2",
                 "sha256",
                 valid.substring(0, 63) + "A");
     }
@@ -122,7 +181,7 @@ final class ProtosPackageToolContentIdentityTest extends ProtosPackageToolProtos
     @Test
     void contentIdentityRecordShapeSurvivesSuspendingContentRead() throws Exception {
         Path root = contentIdentityRoot("record-shape");
-        writeContentIdentityFile(root, "protos.toml", new byte[0]);
+        writeContentIdentityFile(root, "package.toml", new byte[0]);
 
         ProtosExecutionOutcome outcome =
                 executeContentIdentity(
@@ -138,22 +197,22 @@ final class ProtosPackageToolContentIdentityTest extends ProtosPackageToolProtos
 
     @Test
     void contentIdentityFrozenVectorsDigestAndVerifyHostCapturedCustody() throws Exception {
-        // D171: the V1 vector trees reach ContentIdentity only as host-captured read-only
+        // D171: the v2 vector trees reach ContentIdentity only as host-captured read-only
         // Filesystem custody (PLAT012), never through a guest capture selector.
         Map<String, String> vectors =
                 Map.of(
                         "minimal",
-                        "beb503347f64442d909b4848e69333a72f4d049d7f5b37c32f453f409641ef04",
+                        "7b84ceb16a689651d3de513f3aa9552554736735971ef9720a7818daff93c764",
                         "ordering",
-                        "a4e71028b12d648a10729e5dedf947d8bfbff1e6c8e1b95bb04ac170f5682e67",
+                        "f401793adfe18d9ffb00747b47a6581c7184dddc62cd5665a24fb6d217a4a9cb",
                         "binary",
-                        "2de3f9f78fb1355348861e08cb549919d10e4b50f8965f3fc933eac72fff8870",
+                        "2291f7d8a6bccceceec105ce20ebdf17f2d76a3b82ff869f5a82fbddd29049e0",
                         "varuint-boundaries",
-                        "4ae0bad7f7915a5e6db1ad4bb29ee71351fcf812b562b41da34f99b8fd4b8f02",
+                        "6a63f12d9befb69810f8b8e84a7ef878a06bc1b67b35447f149cc3946cb7a0a0",
                         "exact-case-upper",
-                        "9afaaf7e2a250fd11b83d12e63cf7e18527c95820d03bff6895e57a51600e450",
+                        "b56cbd69fb745176b1d76856445dc232c57f2693c8a4db9fc9c757ad63da2383",
                         "exact-case-lower",
-                        "ff22975888d65d4dd9563bd09ca67190c02473bdead0c536faf101cd66f72ec2");
+                        "157416a3c715142ac09ee3d7238badba2ce2a5546ffb5819886a218a5697c719");
         for (Map.Entry<String, String> vector : vectors.entrySet()) {
             ProtosExecutionOutcome outcome =
                     executeContentIdentity(

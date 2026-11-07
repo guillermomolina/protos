@@ -37,7 +37,7 @@ Error.handle(() => {
     ok: outLines.size() == 0
     (errLines.size() == 1).ifFalse(() => { ok = false })
     if(errLines.size() == 1) {
-        (errLines[0] == "protos.toml: invalid TOML/schema v1").ifFalse(() => { ok = false })
+        (errLines[0] == "package.toml: invalid TOML/schema v1").ifFalse(() => { ok = false })
     }
     ok
 })

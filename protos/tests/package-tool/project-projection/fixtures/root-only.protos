@@ -27,7 +27,7 @@ tests: [
         expected:
             "project-format 1\n" +
             "resolution-input protos-resolution-input-v1 sha256:7041a8afff9ffd0879673557d5c88e47b5fa7f577b369165679d8899f382f579\n" +
-            "metadata-content protos-project-metadata-v1 sha256:73134514d0f4869230bdf9a7528ab695ce126d4381e49bcce791ed5d4271c953\n\n" +
+            "metadata-content protos-project-metadata-v1 sha256:f59e12289eceb97dd47d73088a03a3e3a673a5afb09e1747e2e9b9ee06d0b88d\n\n" +
             "root workspace \"root\"\n"
 
         ok: model.projectFormat == 1

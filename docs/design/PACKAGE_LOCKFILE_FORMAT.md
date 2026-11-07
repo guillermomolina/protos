@@ -1,5 +1,11 @@
 # Protos Package Lockfile Format Audit
 
+**D242/I152:** The physical lockfile remains `protos.lock`, its
+lock-format-1 graph grammar remains unchanged, and the resolution-input method
+remains `protos-resolution-input-v1`. Current external package content records
+must use `protos-package-tree-v2 sha256:<digest>` over a package payload
+requiring `package.toml`. The former v1 content method is unsupported.
+
 Status: exploratory architecture; non-normative
 
 Related design:
@@ -33,7 +39,7 @@ for:
 - no requirement for hand editing.
 
 The lockfile is not the human package manifest and should not inherit a format
-merely because `protos.toml` uses TOML.
+merely because `package.toml` uses TOML.
 
 ## Selected direction: canonical textual lockfile
 
@@ -375,7 +381,7 @@ tree canonicalizer itself.
 The current conceptual spelling remains, for example:
 
 ```text
-protos-package-tree-v1 sha256:<lowercase-hex>
+protos-package-tree-v2 sha256:<lowercase-hex>
 ```
 
 Lock-format 1 does not infer a bare hash algorithm or reinterpret an old method
@@ -395,7 +401,7 @@ registry-node-record =
 Example:
 
 ```text
-registry-node registry "<PackageId>" "1.4.2" locator "community/parser" authority "protos-public" content protos-package-tree-v1 sha256:<digest>
+registry-node registry "<PackageId>" "1.4.2" locator "community/parser" authority "protos-public" content protos-package-tree-v2 sha256:<digest>
 ```
 
 Semantics:
@@ -425,7 +431,7 @@ git-node-record =
 Example:
 
 ```text
-git-node git "<PackageId>" "<exact-revision>" fetch "https://example.invalid/repo.git" content protos-package-tree-v1 sha256:<digest>
+git-node git "<PackageId>" "<exact-revision>" fetch "https://example.invalid/repo.git" content protos-package-tree-v2 sha256:<digest>
 ```
 
 Semantics:
@@ -541,8 +547,8 @@ resolution-input protos-resolution-input-v1 sha256:<digest>
 
 root workspace "<root-PackageId>"
 workspace-member "parser" workspace "<workspace-parser-PackageId>"
-registry-node registry "<json-PackageId>" "2.3.1" locator "community/json" authority "protos-public" content protos-package-tree-v1 sha256:<digest>
-git-node git "<util-PackageId>" "0123456789abcdef" fetch "https://example.invalid/util.git" content protos-package-tree-v1 sha256:<digest>
+registry-node registry "<json-PackageId>" "2.3.1" locator "community/json" authority "protos-public" content protos-package-tree-v2 sha256:<digest>
+git-node git "<util-PackageId>" "0123456789abcdef" fetch "https://example.invalid/util.git" content protos-package-tree-v2 sha256:<digest>
 dependency workspace "<root-PackageId>" alias "json" target registry "<json-PackageId>" "2.3.1"
 dependency workspace "<root-PackageId>" alias "util" target git "<util-PackageId>" "0123456789abcdef"
 ```
@@ -602,7 +608,7 @@ This keeps "how this graph was selected" distinct from "how this file is encoded
 The lock records the semantic resolution-input digest defined by
 `PACKAGE_VERSION_RESOLUTION.md`.
 
-It must not hash raw `protos.toml` bytes.
+It must not hash raw `package.toml` bytes.
 
 The digest covers canonical resolver-affecting manifest/workspace data and ignores
 comments, formatting, readme text, mirrors, credentials, timestamps, and other
@@ -853,7 +859,7 @@ ArtifactDigest and leave transport alternatives to registry/store metadata.
 Initial rule:
 
 ```text
-protos.toml  -> commit
+package.toml  -> commit
 protos.lock  -> commit
 ```
 
@@ -1242,7 +1248,7 @@ resolution-root semantic input can be constructed.
 
 In particular:
 
-- raw `protos.toml` bytes are never a valid substitute;
+- raw `package.toml` bytes are never a valid substitute;
 - canonical `protos.lock` bytes are the resolver **output** and are not the
   stale-input digest source;
 - D2 dependency constraints must contribute normalized semantic constraint data,

@@ -255,6 +255,10 @@ collectRecords: (capturedFilesystem) => {
 
             if(frame.prefix == "") {
                 if(name == "protos.toml") {
+                    fail()
+                }
+
+                if(name == "package.toml") {
                     (kind == "regular").ifFalse(() => {
                         fail()
                     })
@@ -267,7 +271,7 @@ collectRecords: (capturedFilesystem) => {
                 recognized = true
 
                 if(frame.prefix == "") {
-                    if(name == "protos.toml") {
+                    if(name == "package.toml") {
                         rootManifest = true
                     }
                 }
@@ -328,7 +332,7 @@ canonicalStream: (capturedFilesystem) => {
     stream: emptyBytes()
     appendBytes(
         stream,
-        Encoding.UTF8.encode("protos-package-tree-v1")
+        Encoding.UTF8.encode("protos-package-tree-v2")
     )
     stream.add(0)
 
@@ -348,7 +352,7 @@ digest: (capturedFilesystem) => {
     digestBytes: SHA256.digest(canonicalStream(capturedFilesystem))
 
     {
-        method: "protos-package-tree-v1"
+        method: "protos-package-tree-v2"
         algorithm: "sha256"
         hex: lowerHex(digestBytes)
     }
@@ -367,7 +371,7 @@ validateExpected: (expected) => {
     })
     hexBytes: Encoding.UTF8.encode(hex)
 
-    (method == "protos-package-tree-v1").ifFalse(() => {
+    (method == "protos-package-tree-v2").ifFalse(() => {
         fail()
     })
     (algorithm == "sha256").ifFalse(() => {

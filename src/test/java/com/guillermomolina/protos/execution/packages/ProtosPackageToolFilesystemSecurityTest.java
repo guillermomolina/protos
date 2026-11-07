@@ -55,13 +55,13 @@ final class ProtosPackageToolFilesystemSecurityTest extends ProtosPackageToolPro
     @Test
     void readOnlyMetadataBackendAllowsOnlyConfiguredProjectMetadata() throws Exception {
         Files.writeString(
-                projectRoot.resolve("protos.toml"), "x", StandardCharsets.UTF_8);
+                projectRoot.resolve("package.toml"), "x", StandardCharsets.UTF_8);
         Files.writeString(
                 projectRoot.resolve("secret.txt"), "secret", StandardCharsets.UTF_8);
 
         try (ProtosNioReadOnlyFilesystemBackend backend =
                 new ProtosNioReadOnlyFilesystemBackend(
-                        projectRoot, Set.of("protos.toml", "protos.lock"))) {
+                        projectRoot, Set.of("package.toml", "protos.lock"))) {
             assumeTrue(
                     backend.secureConfinementAvailable(),
                     "host provider has no SecureDirectoryStream");
@@ -93,21 +93,21 @@ final class ProtosPackageToolFilesystemSecurityTest extends ProtosPackageToolPro
         try {
             Files.writeString(outside, "outside", StandardCharsets.UTF_8);
             try {
-                Files.createSymbolicLink(projectRoot.resolve("protos.toml"), outside);
+                Files.createSymbolicLink(projectRoot.resolve("package.toml"), outside);
             } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
                 assumeTrue(false, "host cannot create the symlink confinement fixture");
             }
 
             try (ProtosNioReadOnlyFilesystemBackend backend =
                     new ProtosNioReadOnlyFilesystemBackend(
-                            projectRoot, Set.of("protos.toml"))) {
+                            projectRoot, Set.of("package.toml"))) {
                 assumeTrue(
                         backend.secureConfinementAvailable(),
                         "host provider has no SecureDirectoryStream");
 
                 ProtosExecutionOutcome outcome =
                         execute(
-                                "filesystem.open(Path.relative().child(\"protos.toml\")).value()",
+                                "filesystem.open(Path.relative().child(\"package.toml\")).value()",
                                 readOnlyMetadataActivation(backend));
                 assertExpected(
                         outcome,
@@ -123,14 +123,14 @@ final class ProtosPackageToolFilesystemSecurityTest extends ProtosPackageToolPro
     void readOnlyMetadataBackendFailsClosedWithoutSecureProvider() throws Exception {
         try (ProtosNioReadOnlyFilesystemBackend backend =
                 new ProtosNioReadOnlyFilesystemBackend(
-                        projectRoot, Set.of("protos.toml"))) {
+                        projectRoot, Set.of("package.toml"))) {
             if (backend.secureConfinementAvailable()) {
                 return;
             }
 
             ProtosExecutionOutcome outcome =
                     execute(
-                            "filesystem.open(Path.relative().child(\"protos.toml\")).value()",
+                            "filesystem.open(Path.relative().child(\"package.toml\")).value()",
                             readOnlyMetadataActivation(backend));
             assertExpected(
                     outcome,

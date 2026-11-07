@@ -3,7 +3,7 @@ resolver-version 1
 resolution-input protos-resolution-input-v1 sha256:6f2526d30fdc07e44c319bdb194eb0e7fafadcd61768eb36fc13917abf2fc2c5
 
 root workspace "root"
-registry-node registry "external-a" "1.0.0" locator "pkg" authority "public" content protos-package-tree-v1 sha256:321166e317376cd0bcab7dcd950f6a88624e0b1c431c075713f046040e91196b
-registry-node registry "external-b" "2.1.0" locator "pkg-b" authority "public" content protos-package-tree-v1 sha256:9f7a40f88c9c231748feb4ed242a4ebe9ec5f06cb732afd4e80706fd160a8ac0
+registry-node registry "external-a" "1.0.0" locator "pkg" authority "public" content protos-package-tree-v2 sha256:64e9bb226d0e5503dc47039c72d863d23f6ea6b1c63ef760a7b9d8cf60bf1632
+registry-node registry "external-b" "2.1.0" locator "pkg-b" authority "public" content protos-package-tree-v2 sha256:3f63720edac546db28e1d2deb6004beae649094c65c9353640306ff466e43111
 dependency workspace "root" alias "reg" target registry "external-a" "1.0.0"
 dependency registry "external-a" "1.0.0" alias "depreg" target registry "external-b" "2.1.0"

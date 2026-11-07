@@ -60,11 +60,11 @@ public final class ProtosCli {
     private static final Set<String> SUBCOMMANDS =
             Set.of("language-server", "debug", "run", "package", "test", "format", "lint");
     private static final Set<String> PACKAGE_METADATA_FILES =
-            Set.of("protos.toml", "protos.lock");
+            Set.of("package.toml", "protos.lock");
     private static final Set<String> PACKAGE_METADATA_STAGING_FILES =
-            Set.of(".protos.toml.stage", ".protos.lock.stage");
+            Set.of(".package.toml.stage", ".protos.lock.stage");
     private static final Set<String> PACKAGE_METADATA_MUTABLE_FILES =
-            Set.of("protos.toml", "protos.lock", ".protos.toml.stage", ".protos.lock.stage");
+            Set.of("package.toml", "protos.lock", ".package.toml.stage", ".protos.lock.stage");
 
     private final ExactPackageMaterializationProviderFactory
             exactPackageMaterializationProviderFactory;
@@ -929,19 +929,45 @@ public final class ProtosCli {
         }
     }
 
+    static boolean rejectLegacyPackageManifest(
+            Path projectDirectory, PrintStream err) throws IOException {
+        Objects.requireNonNull(projectDirectory, "projectDirectory");
+        Objects.requireNonNull(err, "err");
+
+        // Observe the exact final entry without following symbolic links.
+        try {
+            Files.readAttributes(
+                    projectDirectory.resolve("protos.toml"),
+                    java.nio.file.attribute.BasicFileAttributes.class,
+                    LinkOption.NOFOLLOW_LINKS);
+        } catch (NoSuchFileException absent) {
+            return false;
+        }
+
+        err.println(
+                "protos package: protos.toml is forbidden; use package.toml");
+        return true;
+    }
+
     private int runBundledPackageTool(
             String[] args,
             InputStream in,
             PrintStream out,
             PrintStream err)
             throws Exception {
+        Path projectDirectory = Path.of("").toAbsolutePath().normalize();
+
+        if (rejectLegacyPackageManifest(projectDirectory, err)) {
+            return 1;
+        }
+
         String entryModuleName =
                 args.length == 2 && args[1].equals("manifest")
                         ? "ManifestMain"
                         : "Main";
         try (ProtosNioConfinedFilesystemBackend filesystemBackend =
                 new ProtosNioConfinedFilesystemBackend(
-                        Path.of("").toAbsolutePath().normalize(),
+                        projectDirectory,
                         PACKAGE_METADATA_FILES,
                         PACKAGE_METADATA_STAGING_FILES,
                         PACKAGE_METADATA_MUTABLE_FILES)) {

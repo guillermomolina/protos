@@ -47,7 +47,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 final class ProtosExternalPackageResourceScopeTest {
-    private static final String METHOD = "protos-package-tree-v1";
+    private static final String METHOD = "protos-package-tree-v2";
     private static final String ALGORITHM = "sha256";
     private static final String A_HEX = "aa".repeat(32);
     private static final String B_HEX = "bb".repeat(32);
@@ -64,7 +64,7 @@ final class ProtosExternalPackageResourceScopeTest {
         Path source = temporaryRoot.resolve("source");
         Files.createDirectories(source.resolve("src/nested"));
         Files.write(source.resolve("src/nested/Data.bin"), BINARY);
-        Files.writeString(source.resolve("protos.toml"), "manifest", StandardCharsets.UTF_8);
+        Files.writeString(source.resolve("package.toml"), "manifest", StandardCharsets.UTF_8);
         assumeSecureConfinement(source);
 
         try (ProtosCapturedFilesystemCustody custody =
@@ -85,7 +85,7 @@ final class ProtosExternalPackageResourceScopeTest {
             assertArrayEquals(BINARY, custody.readResource(name));
             assertArrayEquals(
                     "manifest".getBytes(StandardCharsets.UTF_8),
-                    custody.readResource(ProtosPackageResourceName.parse("protos.toml")));
+                    custody.readResource(ProtosPackageResourceName.parse("package.toml")));
         }
     }
 

@@ -1,5 +1,11 @@
 # Protos Package Identity and Versioning Audit
 
+**D242/I152 current state:** `ContentIdentity` uses method
+`protos-package-tree-v2` with a required regular root `package.toml` and
+no legacy `protos.toml` root entry. The original frozen v1 method is historical
+and rejected by the current verifier. SHA-256 remains the digest algorithm;
+`protos.lock` remains the physical lockfile.
+
 Status: exploratory architecture; non-normative
 Related design: `docs/design/PACKAGE_DISTRIBUTION.md`
 Related manifest audit: `docs/design/PACKAGE_MANIFEST_FORMAT.md`
@@ -335,7 +341,7 @@ Conceptually it must include a versioned canonicalization method plus an
 algorithm-tagged digest, for example structurally:
 
 ```text
-method:    protos-package-tree-v1
+method:    protos-package-tree-v2
 algorithm: sha256
 digest:    ...
 ```
@@ -344,7 +350,7 @@ digest:    ...
 `docs/design/PACKAGE_CONTENT_IDENTITY.md` plus
 `docs/design/PACKAGE_CONTENT_IDENTITY_VECTORS.md`.
 
-The initial method is exactly `protos-package-tree-v1`: E1A's already-materialized
+The original method was `protos-package-tree-v1` (historical): E1A's already-materialized
 portable regular-file payload, E1B's domain-separated tagged/length-framed stream,
 and the separately persisted initial `sha256` digest algorithm. E1C publishes
 fixed positive/negative vectors and exact expected digests.

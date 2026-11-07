@@ -104,8 +104,8 @@ navigation authority.
 Workspace symbols, definition, and references work only for documents that
 belong to a **Protos project** whose root is
 exactly one of the editor's workspace folders. The server checks that root for
-`protos.toml`, `protos.lock`, and the generated `protos.project` metadata, and
-it reads nothing outside it. It does not search parent or child directories.
+`package.toml`, `protos.lock`, and the generated `protos.project` metadata, and
+it reads nothing outside it. Exact legacy `protos.toml` entries in the root or declared member are rejected, including symlinks and coexistence. It does not search parent or child directories.
 
 For a loose file, a file outside the workspace folder, or a folder without that
 project metadata, these requests return empty results. Diagnostics, formatting,

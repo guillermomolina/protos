@@ -14,4 +14,4 @@
 // the specific language governing rights and limitations under the License.
 
 MetadataPublication: import("tool-source:package/MetadataPublication.protos")
-MetadataPublication.discard(filesystem, ".protos.toml.stage") === filesystem
+MetadataPublication.discard(filesystem, ".package.toml.stage") === filesystem

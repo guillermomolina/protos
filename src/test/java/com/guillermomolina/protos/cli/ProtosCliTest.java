@@ -27,6 +27,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 final class ProtosCliTest {
     private R run(String... args) {
@@ -274,6 +275,45 @@ final class ProtosCliTest {
             Files.deleteIfExists(root);
             Files.deleteIfExists(outside);
         }
+    }
+
+    @Test
+    void packageHostRejectsLegacyManifestBeforeProvisioning(@TempDir Path base)
+            throws Exception {
+        Path project = Files.createDirectory(base.resolve("project"));
+        Path legacy = project.resolve("protos.toml");
+        Path current = project.resolve("package.toml");
+
+        ByteArrayOutputStream errors = new ByteArrayOutputStream();
+
+        try (PrintStream err = new PrintStream(errors)) {
+            assertFalse(ProtosCli.rejectLegacyPackageManifest(project, err));
+
+            Files.writeString(legacy, "legacy");
+            assertTrue(ProtosCli.rejectLegacyPackageManifest(project, err));
+
+            Files.writeString(current, "current");
+            assertTrue(ProtosCli.rejectLegacyPackageManifest(project, err));
+
+            Files.delete(legacy);
+            assertFalse(ProtosCli.rejectLegacyPackageManifest(project, err));
+
+            Files.createDirectory(legacy);
+            assertTrue(ProtosCli.rejectLegacyPackageManifest(project, err));
+            Files.delete(legacy);
+
+            try {
+                Files.createSymbolicLink(legacy, Path.of("package.toml"));
+                assertTrue(ProtosCli.rejectLegacyPackageManifest(project, err));
+            } catch (UnsupportedOperationException | IOException
+                    | SecurityException unavailable) {
+                // Regular-entry cases were asserted independently.
+            }
+        }
+
+        assertTrue(
+                errors.toString(StandardCharsets.UTF_8).contains(
+                        "protos.toml is forbidden; use package.toml"));
     }
 
     @Test

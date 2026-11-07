@@ -26,7 +26,7 @@ record: records[0]
 Assertions.require(record.hasSlot("pathBytes"))
 Assertions.require(record.hasSlot("content"))
 
-Assertions.require(record.pathBytes.size() == 11)
+Assertions.require(record.pathBytes.size() == 12)
 Assertions.require(record.content.size() == 0)
 
 true

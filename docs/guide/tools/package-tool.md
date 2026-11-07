@@ -1,5 +1,11 @@
 # Package Tool
 
+**D242/I152:** The current manifest is `package.toml` (TOML 1.0,
+`manifest-version = 1`). An exact root `protos.toml` entry is forbidden,
+even if `package.toml` also exists; symlinks are rejected without following.
+The bundled tool operates through the same confined Filesystem and performs
+no fallback to the old filename.
+
 The Package Tool (`TOOL001`) is the bundled Tool behind `protos package`. Its
 policy is ordinary Protos code under
 [`protos/tools/package/`](../../../protos/tools/package/), loaded directly from
@@ -15,7 +21,7 @@ commands.
 
 | Command | Status |
 |---|---|
-| `protos package manifest` | Implemented: validates `protos.toml` in the current directory |
+| `protos package manifest` | Implemented: validates `package.toml` in the current directory |
 | `protos run <entry>` | Implemented: runs a root-package entry; uses the Package Tool's planning internally ([CLI guide](cli.md#protos-run)) |
 | Any other `protos package ...` invocation | Prints a bootstrap banner; performs no package operation |
 | `init`, `add`, `install`, `update`, `lock`, `fetch`, `publish`, `build` | Not implemented |
@@ -33,7 +39,7 @@ protos package manifest
 
 The command:
 
-1. opens exactly `protos.toml` in the current directory;
+1. opens exactly `package.toml` in the current directory;
 2. decodes it as UTF-8;
 3. parses it as TOML 1.0 and validates manifest schema version 1;
 4. reports the result without modifying any file.
@@ -53,7 +59,7 @@ version = "1.0.0"
 
 ```text
 $ protos package manifest
-protos.toml: valid schema v1
+package.toml: valid schema v1
 ```
 
 ### Schema v1 in brief
@@ -65,7 +71,7 @@ protos.toml: valid schema v1
 | `[package]` `version` | yes | Release version String, `MAJOR.MINOR.PATCH[-PRERELEASE]` |
 | `[package]` `locator` | no | Human-facing locator String, for example `"community/parser"` |
 | `[compatibility]` `language` | when the table is present | Non-empty String; no constraint grammar is defined yet |
-| `[exports]` | no | Export name to package-internal logical module name |
+| `[exports]` | no | Public logical module to internal module directory containing `module.protos` |
 | `[dependencies]` | no | Registry, Git, or path dependency entries |
 | `[workspace]` `members` | no | Workspace member package roots |
 
@@ -79,9 +85,10 @@ public operation yet.
 
 | Situation | stdout | stderr | Status |
 |---|---|---|---|
-| Valid manifest | `protos.toml: valid schema v1` | — | `0` |
-| Missing file or not valid UTF-8 | — | `protos.toml: cannot read as UTF-8`, then `Package tool error: ...` | `1` |
-| Invalid TOML or schema | — | `protos.toml: invalid TOML/schema v1`, then `Package tool error: ...` | `1` |
+| Valid manifest | `package.toml: valid schema v1` | — | `0` |
+| Missing file or not valid UTF-8 | — | `package.toml: cannot read as UTF-8`, then `Package tool error: ...` | `1` |
+| Invalid TOML or schema | — | `package.toml: invalid TOML/schema v1`, then `Package tool error: ...` | `1` |
+| Legacy `protos.toml` entry, alone or alongside `package.toml` | — | `protos package: protos.toml is forbidden; use package.toml` | `1` |
 | Driver/bootstrap failure | — | `Package tool runtime error: ...` | `1` |
 
 The second stderr line is the guest Error report from the driver. The
@@ -90,7 +97,7 @@ validator does not yet say *which* field or line is wrong.
 ## Authority
 
 The Tool receives a filesystem capability confined to the current directory
-and to the metadata files `protos.toml` and `protos.lock` (and their staging
+and to the metadata files `package.toml` and `protos.lock` (and their staging
 files). It has no network capability and cannot read the rest of your project.
 
 ## Native and portable JVM

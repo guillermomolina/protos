@@ -47,14 +47,14 @@ final class ProtosExactExternalRequirementsPreflightTest {
     private static final Path CASES =
             Path.of("protos", "tests", "package-tool", "execution-plan", "cases");
 
-    private static final String METHOD = "protos-package-tree-v1";
+    private static final String METHOD = "protos-package-tree-v2";
     private static final String ALGORITHM = "sha256";
     private static final String A_HEX =
-            "5c2e8af458daf38c3e42ee3a68a928aa5ad2701166a59e6cabfb38645efe6f1a";
+            "899675849d2033fff2cfd0fc6552d598082c29bf96be634a37dcf8c6e607fec3";
     private static final String B_HEX =
-            "9f7a40f88c9c231748feb4ed242a4ebe9ec5f06cb732afd4e80706fd160a8ac0";
+            "3f63720edac546db28e1d2deb6004beae649094c65c9353640306ff466e43111";
     private static final String C_HEX =
-            "5876918795e50c16907ac40404b99e391fecb4302c02debbf246d4cfa1199222";
+            "b4afdae34039fe30e255fd3b1b69fbbc5089fd6ca90b252bd86fd8ea19cac67a";
 
     // Same root manifest (and therefore resolution-input header) as the f2e3b-transitive case.
     private static final String ROOT_MANIFEST =
@@ -279,7 +279,7 @@ final class ProtosExactExternalRequirementsPreflightTest {
 
     private Path createProject(String name, String manifest, String lock) throws Exception {
         Path project = Files.createDirectories(temporaryRoot.resolve(name));
-        Files.writeString(project.resolve("protos.toml"), manifest, StandardCharsets.UTF_8);
+        Files.writeString(project.resolve("package.toml"), manifest, StandardCharsets.UTF_8);
         Files.writeString(project.resolve("protos.lock"), lock, StandardCharsets.UTF_8);
         assumeSecureConfinement(project);
         return project;

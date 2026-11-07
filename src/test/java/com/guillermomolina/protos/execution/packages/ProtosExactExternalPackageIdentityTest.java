@@ -26,9 +26,9 @@ import org.junit.jupiter.api.Test;
 
 final class ProtosExactExternalPackageIdentityTest {
     private static final ProtosPackageContentIdentity CONTENT =
-            new ProtosPackageContentIdentity("protos-package-tree-v1", "sha256", "aa");
+            new ProtosPackageContentIdentity("protos-package-tree-v2", "sha256", "aa");
     private static final ProtosPackageContentIdentity OTHER_CONTENT =
-            new ProtosPackageContentIdentity("protos-package-tree-v1", "sha256", "bb");
+            new ProtosPackageContentIdentity("protos-package-tree-v2", "sha256", "bb");
 
     @Test
     void equalityRequiresTheCompleteExactIdentity() {
@@ -52,7 +52,7 @@ final class ProtosExactExternalPackageIdentityTest {
                 registry(
                         "pkg",
                         "1.0.0",
-                        new ProtosPackageContentIdentity("protos-package-tree-v1", "sha512", "aa")));
+                        new ProtosPackageContentIdentity("protos-package-tree-v2", "sha512", "aa")));
     }
 
     @Test

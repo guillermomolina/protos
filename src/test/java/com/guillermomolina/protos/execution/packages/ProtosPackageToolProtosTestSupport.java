@@ -59,11 +59,11 @@ abstract class ProtosPackageToolProtosTestSupport {
     protected static final Path TOOL_ROOT = Path.of("protos", "tools", "package");
     protected static final Path TEST_ROOT = Path.of("protos", "tests", "package-tool");
 
-    protected static final Set<String> READABLE = Set.of("protos.toml", "protos.lock");
+    protected static final Set<String> READABLE = Set.of("package.toml", "protos.lock");
     protected static final Set<String> WRITABLE =
-            Set.of(".protos.toml.stage", ".protos.lock.stage");
+            Set.of(".package.toml.stage", ".protos.lock.stage");
     protected static final Set<String> MUTABLE =
-            Set.of("protos.toml", "protos.lock", ".protos.toml.stage", ".protos.lock.stage");
+            Set.of("package.toml", "protos.lock", ".package.toml.stage", ".protos.lock.stage");
 
     protected static final String CANONICAL_LOCK =
             "lock-format 1\n"
@@ -71,7 +71,7 @@ abstract class ProtosPackageToolProtosTestSupport {
                     + "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n"
                     + "\n"
                     + "root workspace \"root\"\n"
-                    + "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n"
+                    + "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v2 sha256:aaaa\n"
                     + "dependency workspace \"root\" alias \"dep\" target registry \"pkg\" \"1.0.0\"\n";
 
     protected static final String NONCANONICAL_LOCK =
@@ -80,7 +80,7 @@ abstract class ProtosPackageToolProtosTestSupport {
                     + "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n"
                     + "\n"
                     + "dependency workspace \"root\" alias \"dep\" target registry \"pkg\" \"1.0.0\"\n"
-                    + "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n"
+                    + "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v2 sha256:aaaa\n"
                     + "root workspace \"root\"\n";
 
 

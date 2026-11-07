@@ -1212,7 +1212,7 @@ tool-specific I/O universe.
 For example:
 
 - [`../../protos/tools/package/ManifestCommand.protos`](../../protos/tools/package/ManifestCommand.protos)
-  opens `protos.toml` through an explicitly supplied confined Filesystem and
+  opens `package.toml` through an explicitly supplied confined Filesystem and
   wraps the resulting File in an owning UTF-8 TextReader;
 - [`../../protos/tools/package/MetadataPublication.protos`](../../protos/tools/package/MetadataPublication.protos)
   uses explicit open/write/close plus Filesystem replacement for metadata

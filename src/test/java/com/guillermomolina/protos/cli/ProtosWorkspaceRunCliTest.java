@@ -57,7 +57,7 @@ final class ProtosWorkspaceRunCliTest {
     private static final Path APPLICATION =
             Path.of("src", "test", "resources", "workspace-package-cli-run");
 
-    private static final String CONTENT_METHOD = "protos-package-tree-v1";
+    private static final String CONTENT_METHOD = "protos-package-tree-v2";
     private static final String CONTENT_ALGORITHM = "sha256";
     private static final String ROOT_MANIFEST =
             "manifest-version = 1\n"
@@ -332,7 +332,7 @@ final class ProtosWorkspaceRunCliTest {
         Path external = Files.createDirectories(root.resolve("external-source"));
 
         Files.writeString(
-                external.resolve("protos.toml"),
+                external.resolve("package.toml"),
                 EXTERNAL_MANIFEST,
                 StandardCharsets.UTF_8);
         Files.createDirectories(external.resolve("Api"));
@@ -344,14 +344,14 @@ final class ProtosWorkspaceRunCliTest {
         ProtosPackageContentIdentity content =
                 contentIdentity(
                         Map.of(
-                                "protos.toml", EXTERNAL_MANIFEST,
+                                "package.toml", EXTERNAL_MANIFEST,
                                 "Api/module.protos", EXTERNAL_API));
         ProtosExactExternalPackageIdentity.Registry identity =
                 new ProtosExactExternalPackageIdentity.Registry(
                         "external-a", "1.0.0", content);
 
         Files.writeString(
-                project.resolve("protos.toml"),
+                project.resolve("package.toml"),
                 ROOT_MANIFEST,
                 StandardCharsets.UTF_8);
         Files.writeString(
@@ -389,7 +389,7 @@ final class ProtosWorkspaceRunCliTest {
     }
 
     /**
-     * Independent small-tree oracle for the frozen protos-package-tree-v1 framing used by this
+     * Independent small-tree oracle for the frozen protos-package-tree-v2 framing used by this
      * CLI integration fixture. The production verifier remains bundled Protos/F2E2.
      */
     private static ProtosPackageContentIdentity contentIdentity(
@@ -397,7 +397,7 @@ final class ProtosWorkspaceRunCliTest {
         TreeMap<String, String> ordered = new TreeMap<>(files);
         ByteArrayOutputStream canonical = new ByteArrayOutputStream();
         canonical.writeBytes(
-                "protos-package-tree-v1\0"
+                "protos-package-tree-v2\0"
                         .getBytes(StandardCharsets.US_ASCII));
 
         for (Map.Entry<String, String> entry : ordered.entrySet()) {

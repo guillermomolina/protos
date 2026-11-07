@@ -46,7 +46,8 @@ import java.util.Set;
 /** D089 generation-1 {@code protos.project} provider for exact local candidate roots. */
 public final class ProtosProjectFileBindingProvider implements ProtosProjectBindingProvider {
     private static final String PROJECT_FILE = "protos.project";
-    private static final String ROOT_MANIFEST = "protos.toml";
+    private static final String ROOT_MANIFEST = "package.toml";
+    private static final String LEGACY_MANIFEST = "protos.toml";
     private static final String LOCK_FILE = "protos.lock";
     private static final String RESOLUTION_METHOD = "protos-resolution-input-v1";
     private static final String METADATA_METHOD = "protos-project-metadata-v1";
@@ -70,6 +71,8 @@ public final class ProtosProjectFileBindingProvider implements ProtosProjectBind
             throw new IOException("ProjectBinding candidate root is not a directory");
         }
 
+        requireNoLegacyManifest(realRoot);
+
         StableFile projectFile = stableExactFile(realRoot, PROJECT_FILE);
         ProjectDocument document = ProjectDocument.parse(projectFile.bytes());
 
@@ -88,6 +91,7 @@ public final class ProtosProjectFileBindingProvider implements ProtosProjectBind
             Path memberRoot =
                     ProtosWorkspaceMemberLocationTraversal.requireConfinedMemberDirectory(
                             realRoot, member.location());
+            requireNoLegacyManifest(memberRoot);
             StableFile memberManifest = stableExactFile(memberRoot, ROOT_MANIFEST);
             metadataFiles.add(memberManifest);
             appendMetadataRecord(
@@ -173,6 +177,20 @@ public final class ProtosProjectFileBindingProvider implements ProtosProjectBind
                             Map.of()));
         }
         return new ProtosPackageExecutionPlan(1, root, packages, List.of());
+    }
+
+    private static void requireNoLegacyManifest(Path directory) throws IOException {
+        try {
+            Files.readAttributes(
+                    directory.resolve(LEGACY_MANIFEST),
+                    BasicFileAttributes.class,
+                    LinkOption.NOFOLLOW_LINKS);
+        } catch (java.nio.file.NoSuchFileException absent) {
+            return;
+        }
+
+        throw new IOException(
+                "ProjectBinding protos.toml is forbidden; use package.toml");
     }
 
     private static StableFile stableExactFile(Path directory, String expectedName)

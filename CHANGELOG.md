@@ -7,6 +7,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.450-SNAPSHOT
+
+- `I152` (#1067): implement the D242 breaking replacement of `protos.toml` with `package.toml`.
+  - Require the exact `package.toml` manifest at package roots and workspace members; reject legacy-only manifests, coexistence and forbidden filesystem entries without compatibility fallback.
+  - Rebaseline canonical package ContentIdentity to `protos-package-tree-v2`, including the new domain separator, root-manifest validation and independent SHA-256 conformance vectors.
+  - Update project metadata source records for `package.toml` while retaining `protos-project-metadata-v1`, `protos-resolution-input-v1`, `protos.lock` and `protos.project`.
+  - Align Package Tool commands, CLI confinement and preflight, workspace project binding, external package verification, execution plans, fixtures and regression tests.
+  - Update package design documentation and user guides for the current manifest and logical module directory export contract.
+  - Validate the completed implementation with focal Java and Protos tests, followed by `make test` and `make check`.
+
 ## 0.3.449-SNAPSHOT
 
 - `I151`: implement D242 MODULE/SOURCE separation across the Protos module system.

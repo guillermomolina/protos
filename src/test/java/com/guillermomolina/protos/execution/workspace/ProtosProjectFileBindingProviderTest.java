@@ -40,10 +40,57 @@ final class ProtosProjectFileBindingProviderTest {
     @TempDir Path temporary;
 
     @Test
+    void oldOnlyAndCoexistingRootManifestsFailClosed() throws Exception {
+        Files.writeString(temporary.resolve("package.toml"), "root metadata\n");
+        Files.writeString(temporary.resolve("protos.lock"), "lock metadata\n");
+        writeProject(temporary, List.of());
+
+        ProtosProjectFileBindingProvider provider =
+                new ProtosProjectFileBindingProvider();
+        assertTrue(provider.acquire(temporary).isPresent());
+
+        Files.writeString(temporary.resolve("protos.toml"), "legacy\n");
+        assertTrue(provider.acquire(temporary).isEmpty());
+
+        Files.delete(temporary.resolve("package.toml"));
+        assertTrue(provider.acquire(temporary).isEmpty());
+    }
+
+    @Test
+    void legacyMemberAndRootSymlinksFailClosed() throws Exception {
+        Path member = Files.createDirectories(temporary.resolve("libs/member"));
+        Files.writeString(temporary.resolve("package.toml"), "root metadata\n");
+        Files.writeString(member.resolve("package.toml"), "member metadata\n");
+        Files.writeString(temporary.resolve("protos.lock"), "lock metadata\n");
+        writeProject(temporary, List.of(new Member("libs/member", "member")));
+
+        ProtosProjectFileBindingProvider provider =
+                new ProtosProjectFileBindingProvider();
+        assertTrue(provider.acquire(temporary).isPresent());
+
+        Files.writeString(member.resolve("protos.toml"), "legacy\n");
+        assertTrue(provider.acquire(temporary).isEmpty());
+        Files.delete(member.resolve("protos.toml"));
+
+        try {
+            Files.createSymbolicLink(
+                    member.resolve("protos.toml"), Path.of("package.toml"));
+            assertTrue(provider.acquire(temporary).isEmpty());
+            Files.delete(member.resolve("protos.toml"));
+
+            Files.createSymbolicLink(
+                    temporary.resolve("protos.toml"), Path.of("package.toml"));
+            assertTrue(provider.acquire(temporary).isEmpty());
+        } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
+            // Regular legacy member rejection was asserted independently above.
+        }
+    }
+
+    @Test
     void validExactCandidateProducesBindingAndCurrentBoundedSourceInventory() throws Exception {
         Path member = Files.createDirectories(temporary.resolve("libs/member"));
-        Files.writeString(temporary.resolve("protos.toml"), "root metadata\n");
-        Files.writeString(member.resolve("protos.toml"), "member metadata\n");
+        Files.writeString(temporary.resolve("package.toml"), "root metadata\n");
+        Files.writeString(member.resolve("package.toml"), "member metadata\n");
         Files.writeString(temporary.resolve("protos.lock"), "lock metadata\n");
         Path rootSource = Files.writeString(temporary.resolve("Main.protos"), "true\n");
         Path memberSource = Files.writeString(member.resolve("Api.protos"), "true\n");
@@ -71,7 +118,7 @@ final class ProtosProjectFileBindingProviderTest {
 
     @Test
     void d242BindingProviderKeepsModuleAndSourceWithTheSameLogicalName() throws Exception {
-        Files.writeString(temporary.resolve("protos.toml"), "root metadata\n");
+        Files.writeString(temporary.resolve("package.toml"), "root metadata\n");
         Files.writeString(temporary.resolve("protos.lock"), "lock metadata\n");
         Path exactSource = Files.writeString(temporary.resolve("items.protos"), "value: 1\n");
         Path moduleDirectory = Files.createDirectories(temporary.resolve("items"));
@@ -98,7 +145,7 @@ final class ProtosProjectFileBindingProviderTest {
 
     @Test
     void ordinarySourceChangesDoNotStaleProjectAuthority() throws Exception {
-        Files.writeString(temporary.resolve("protos.toml"), "root metadata\n");
+        Files.writeString(temporary.resolve("package.toml"), "root metadata\n");
         Files.writeString(temporary.resolve("protos.lock"), "lock metadata\n");
         writeProject(temporary, List.of());
         ProtosProjectFileBindingProvider provider = new ProtosProjectFileBindingProvider();
@@ -113,7 +160,7 @@ final class ProtosProjectFileBindingProviderTest {
 
     @Test
     void changedMetadataFailsClosedWithoutGuestRefresh() throws Exception {
-        Files.writeString(temporary.resolve("protos.toml"), "root metadata\n");
+        Files.writeString(temporary.resolve("package.toml"), "root metadata\n");
         Files.writeString(temporary.resolve("protos.lock"), "lock metadata\n");
         writeProject(temporary, List.of());
         ProtosProjectFileBindingProvider provider = new ProtosProjectFileBindingProvider();
@@ -125,7 +172,7 @@ final class ProtosProjectFileBindingProviderTest {
 
     @Test
     void missingMalformedAndNoncanonicalAuthorityFailClosed() throws Exception {
-        Files.writeString(temporary.resolve("protos.toml"), "root metadata\n");
+        Files.writeString(temporary.resolve("package.toml"), "root metadata\n");
         Files.writeString(temporary.resolve("protos.lock"), "lock metadata\n");
         ProtosProjectFileBindingProvider provider = new ProtosProjectFileBindingProvider();
 
@@ -146,7 +193,7 @@ final class ProtosProjectFileBindingProviderTest {
 
     @Test
     void candidateRootIsExactAndNeverDiscoveredFromChild() throws Exception {
-        Files.writeString(temporary.resolve("protos.toml"), "root metadata\n");
+        Files.writeString(temporary.resolve("package.toml"), "root metadata\n");
         Files.writeString(temporary.resolve("protos.lock"), "lock metadata\n");
         writeProject(temporary, List.of());
         Path child = Files.createDirectory(temporary.resolve("child"));
@@ -159,8 +206,8 @@ final class ProtosProjectFileBindingProviderTest {
     @Test
     void wrongCaseMemberLocationAndAuthoritySymlinkFailClosed() throws Exception {
         Path member = Files.createDirectories(temporary.resolve("libs/member"));
-        Files.writeString(temporary.resolve("protos.toml"), "root metadata\n");
-        Files.writeString(member.resolve("protos.toml"), "member metadata\n");
+        Files.writeString(temporary.resolve("package.toml"), "root metadata\n");
+        Files.writeString(member.resolve("package.toml"), "member metadata\n");
         Files.writeString(temporary.resolve("protos.lock"), "lock metadata\n");
         writeProject(temporary, List.of(new Member("libs/member", "member")));
         Files.move(temporary.resolve("libs"), temporary.resolve("Libs"));
@@ -202,14 +249,14 @@ final class ProtosProjectFileBindingProviderTest {
     private static String metadataDigest(Path root, List<Member> members) throws Exception {
         MessageDigest digest = sha256();
         digest.update("protos-project-metadata-v1\n".getBytes(StandardCharsets.US_ASCII));
-        append(digest, "protos.toml", Files.readAllBytes(root.resolve("protos.toml")));
+        append(digest, "package.toml", Files.readAllBytes(root.resolve("package.toml")));
         ArrayList<Member> ordered = new ArrayList<>(members);
         ordered.sort((left, right) -> left.location().compareTo(right.location()));
         for (Member member : ordered) {
             append(
                     digest,
-                    member.location() + "/protos.toml",
-                    Files.readAllBytes(root.resolve(member.location()).resolve("protos.toml")));
+                    member.location() + "/package.toml",
+                    Files.readAllBytes(root.resolve(member.location()).resolve("package.toml")));
         }
         append(digest, "protos.lock", Files.readAllBytes(root.resolve("protos.lock")));
         return HexFormat.of().formatHex(digest.digest());

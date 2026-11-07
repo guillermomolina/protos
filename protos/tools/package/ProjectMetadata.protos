@@ -90,12 +90,12 @@ canonicalStream: (projectTreeFilesystem, members) => {
     rootManifestContent:
         readBytes(
             projectTreeFilesystem,
-            Path.relative().child("protos.toml")
+            Root.rootManifestPath()
         )
-    appendRecord(stream, "protos.toml", rootManifestContent)
+    appendRecord(stream, "package.toml", rootManifestContent)
 
     for(member in canonicalMembers) {
-        pathText: member.location + "/protos.toml"
+        pathText: member.location + "/package.toml"
         memberManifestContent:
             readBytes(
                 projectTreeFilesystem,

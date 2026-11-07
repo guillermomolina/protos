@@ -1,5 +1,11 @@
 # Filesystem Tree Observation and Captured-Tree Capability
 
+**D242/I152:** The current package tree verifier uses
+`protos-package-tree-v2` and exact root `package.toml`, not the historical
+`protos-package-tree-v1` domain discussed below. All Filesystem requirements
+for observable entry types, no-follow confinement, and stable byte custody
+continue to apply.
+
 Status: **RATIFIED by explicit user re-evaluation; D046/specification revision 0.1.384 fully implemented and closed by I024**
 Nature: non-normative design rationale for the normative `spec/io/FILESYSTEM.md`
 Owner: B009 / D046
@@ -39,7 +45,7 @@ approval and remain as already specified.
 
 ## Problem that D046 solves
 
-The closed `protos-package-tree-v1` ContentIdentity contract requires a verifier
+The original `protos-package-tree-v1` ContentIdentity contract required a verifier
 to observe exact child names, regular/directory/link/special entry distinction,
 regular-file bytes, and directory structure, then execute only the content that
 was actually verified.

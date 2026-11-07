@@ -13,7 +13,7 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-file: filesystem.open(Path.relative().child("protos.toml")).value()
+file: filesystem.open(Path.relative().child("package.toml")).value()
 reader: TextReader.owning(file, Encoding.UTF8)
 chunk: reader.readText().value()
 reader.close().value()

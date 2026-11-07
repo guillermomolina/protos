@@ -56,12 +56,12 @@ def create_project(base):
     manifest = b"root metadata\n"
     lock = b"lock metadata\n"
 
-    (root / "protos.toml").write_bytes(manifest)
+    (root / "package.toml").write_bytes(manifest)
     (root / "protos.lock").write_bytes(lock)
 
     digest = hashlib.sha256()
     digest.update(b"protos-project-metadata-v1\n")
-    append_metadata_record(digest, "protos.toml", manifest)
+    append_metadata_record(digest, "package.toml", manifest)
     append_metadata_record(digest, "protos.lock", lock)
 
     resolution = "0123456789abcdef" * 4

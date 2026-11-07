@@ -16,7 +16,7 @@
 Schema: import("./ManifestSchemaV1.protos")
 
 readText: (projectFilesystem) => {
-    file: projectFilesystem.open(Path.relative().child("protos.toml")).value()
+    file: projectFilesystem.open(Path.relative().child("package.toml")).value()
     reader: TextReader.owning(file, Encoding.UTF8)
     text: ""
 
@@ -49,7 +49,7 @@ run: (projectFilesystem, stdoutWriter, stderrWriter) => {
     Error.handle(() => {
         text = readText(projectFilesystem)
     }, (error) => {
-        stderrWriter.writeLine("protos.toml: cannot read as UTF-8").value()
+        stderrWriter.writeLine("package.toml: cannot read as UTF-8").value()
         error.signal()
     })
 
@@ -57,10 +57,10 @@ run: (projectFilesystem, stdoutWriter, stderrWriter) => {
     Error.handle(() => {
         model = Schema.parse(text)
     }, (error) => {
-        stderrWriter.writeLine("protos.toml: invalid TOML/schema v1").value()
+        stderrWriter.writeLine("package.toml: invalid TOML/schema v1").value()
         error.signal()
     })
 
-    stdoutWriter.writeLine("protos.toml: valid schema v1").value()
+    stdoutWriter.writeLine("package.toml: valid schema v1").value()
     model
 }

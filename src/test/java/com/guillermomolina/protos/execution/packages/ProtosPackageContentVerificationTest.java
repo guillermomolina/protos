@@ -32,12 +32,12 @@ final class ProtosPackageContentVerificationTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "package");
-    private static final String METHOD = "protos-package-tree-v1";
+    private static final String METHOD = "protos-package-tree-v2";
     private static final String ALGORITHM = "sha256";
     private static final String V1_HEX =
-            "beb503347f64442d909b4848e69333a72f4d049d7f5b37c32f453f409641ef04";
+            "7b84ceb16a689651d3de513f3aa9552554736735971ef9720a7818daff93c764";
     private static final String V3_HEX =
-            "2de3f9f78fb1355348861e08cb549919d10e4b50f8965f3fc933eac72fff8870";
+            "2291f7d8a6bccceceec105ce20ebdf17f2d76a3b82ff869f5a82fbddd29049e0";
 
     @TempDir Path temporaryRoot;
 
@@ -66,7 +66,7 @@ final class ProtosPackageContentVerificationTest {
             Files.delete(selectedRoot.resolve("Main.protos"));
             Files.delete(selectedRoot.resolve("assets/data.bin"));
             Files.delete(selectedRoot.resolve("assets"));
-            Files.delete(selectedRoot.resolve("protos.toml"));
+            Files.delete(selectedRoot.resolve("package.toml"));
             Files.writeString(
                     selectedRoot.resolve("after-only.protos"),
                     "later",
@@ -132,6 +132,16 @@ final class ProtosPackageContentVerificationTest {
         Path methodRoot = createMinimal("method");
         assumeSecureConfinement(methodRoot);
         assertRejected(methodRoot, "future-package-tree-v2", ALGORITHM, V1_HEX);
+        assertRejected(
+                methodRoot,
+                "protos-package-tree-v1",
+                ALGORITHM,
+                "beb503347f64442d909b4848e69333a72f4d049d7f5b37c32f453f409641ef04");
+        assertRejected(
+                methodRoot,
+                METHOD,
+                ALGORITHM,
+                "beb503347f64442d909b4848e69333a72f4d049d7f5b37c32f453f409641ef04");
 
         Path algorithmRoot = createMinimal("algorithm");
         assertRejected(algorithmRoot, METHOD, "sha512", V1_HEX);
@@ -160,7 +170,7 @@ final class ProtosPackageContentVerificationTest {
 
     private Path createMinimal(String name) throws Exception {
         Path root = Files.createDirectories(temporaryRoot.resolve(name));
-        Files.write(root.resolve("protos.toml"), new byte[0]);
+        Files.write(root.resolve("package.toml"), new byte[0]);
         return root;
     }
 
@@ -175,7 +185,7 @@ final class ProtosPackageContentVerificationTest {
                 assets.resolve("data.bin"),
                 new byte[] {0, 1, 2, (byte) 0xff, 0x7f, (byte) 0x80});
         Files.writeString(
-                root.resolve("protos.toml"),
+                root.resolve("package.toml"),
                 "id = \"pkg\"\n",
                 StandardCharsets.US_ASCII);
         return root;

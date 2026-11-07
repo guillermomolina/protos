@@ -494,8 +494,8 @@ directly:
 bin/protos -e 'print("Hello, Protos!")'
 ```
 
-A workspace whose current directory contains the selected `protos.toml` and
-canonical non-stale `protos.lock` can execute an explicit root-package logical
+A workspace whose current directory contains the selected `package.toml` and
+canonical non-stale `protos.lock` (with no legacy `protos.toml` entry) can execute an explicit root-package logical
 module through the package-backed resolver:
 
 ```sh

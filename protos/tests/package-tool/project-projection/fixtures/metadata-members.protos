@@ -37,7 +37,7 @@ tests: [
 
         ok: digest.method == "protos-project-metadata-v1"
         (digest.algorithm == "sha256").ifFalse(() => { ok = false })
-        (digest.hex == "dde95b306f57fc6ac4c85e36d09fc07f1c07fb4472c62dff9874fd6e2b58b434").ifFalse(() => {
+        (digest.hex == "d7e4771132fb598af01ca23b2894a4898ca795e54bd9d71ab47788eba630b024").ifFalse(() => {
             ok = false
         })
         Assertions.require(ok)

@@ -36,10 +36,10 @@ tests: [
             "root workspace \"root\"\n" +
             "workspace-member \"libs/a\" workspace \"wa\"\n" +
             "workspace-member \"libs/b\" workspace \"wb\"\n" +
-            "registry-node registry \"pkg\" \"1.2.0\" locator \"pkg/one\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
-            "registry-node registry \"pkg\" \"1.10.0\" locator \"pkg/two\" authority \"public\" content protos-package-tree-v1 sha256:bbbb\n" +
-            "git-node git \"git-a\" \"aaa\" fetch \"https://example.invalid/a.git\" content protos-package-tree-v1 sha256:cccc\n" +
-            "git-node git \"git-b\" \"bbb\" fetch \"https://example.invalid/b.git\" content protos-package-tree-v1 sha256:dddd\n" +
+            "registry-node registry \"pkg\" \"1.2.0\" locator \"pkg/one\" authority \"public\" content protos-package-tree-v2 sha256:aaaa\n" +
+            "registry-node registry \"pkg\" \"1.10.0\" locator \"pkg/two\" authority \"public\" content protos-package-tree-v2 sha256:bbbb\n" +
+            "git-node git \"git-a\" \"aaa\" fetch \"https://example.invalid/a.git\" content protos-package-tree-v2 sha256:cccc\n" +
+            "git-node git \"git-b\" \"bbb\" fetch \"https://example.invalid/b.git\" content protos-package-tree-v2 sha256:dddd\n" +
             "dependency workspace \"root\" alias \"a\" target registry \"pkg\" \"1.2.0\"\n" +
             "dependency workspace \"root\" alias \"b\" target registry \"pkg\" \"1.10.0\"\n" +
             "dependency registry \"pkg\" \"1.2.0\" alias \"g\" target git \"git-a\" \"aaa\"\n"
@@ -53,7 +53,7 @@ tests: [
             "resolver-version 1\n" +
             "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
             "dependency workspace \"root\" alias \"dep\" target registry \"pkg\" \"1.0.0\"\n" +
-            "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v2 sha256:aaaa\n" +
             "workspace-member \"libs/a\" workspace \"wa\"\n" +
             "root workspace \"root\"\n"
         expected:
@@ -62,7 +62,7 @@ tests: [
             "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
             "root workspace \"root\"\n" +
             "workspace-member \"libs/a\" workspace \"wa\"\n" +
-            "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v2 sha256:aaaa\n" +
             "dependency workspace \"root\" alias \"dep\" target registry \"pkg\" \"1.0.0\"\n"
         model: Lock.parseStructural(source)
         Assertions.require(Lock.write(model) == expected)
@@ -74,15 +74,15 @@ tests: [
             "resolver-version 1\n" +
             "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
             "root workspace \"root\"\n" +
-            "registry-node registry \"pkg\" \"1.10.0\" locator \"ten\" authority \"public\" content protos-package-tree-v1 sha256:bbbb\n" +
-            "registry-node registry \"pkg\" \"1.2.0\" locator \"two\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n"
+            "registry-node registry \"pkg\" \"1.10.0\" locator \"ten\" authority \"public\" content protos-package-tree-v2 sha256:bbbb\n" +
+            "registry-node registry \"pkg\" \"1.2.0\" locator \"two\" authority \"public\" content protos-package-tree-v2 sha256:aaaa\n"
         expected:
             "lock-format 1\n" +
             "resolver-version 1\n" +
             "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
             "root workspace \"root\"\n" +
-            "registry-node registry \"pkg\" \"1.2.0\" locator \"two\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
-            "registry-node registry \"pkg\" \"1.10.0\" locator \"ten\" authority \"public\" content protos-package-tree-v1 sha256:bbbb\n"
+            "registry-node registry \"pkg\" \"1.2.0\" locator \"two\" authority \"public\" content protos-package-tree-v2 sha256:aaaa\n" +
+            "registry-node registry \"pkg\" \"1.10.0\" locator \"ten\" authority \"public\" content protos-package-tree-v2 sha256:bbbb\n"
         Assertions.require(Lock.write(Lock.parseStructural(source)) == expected)
     }),
     Test("writer-workspace-order", () => {
@@ -110,15 +110,15 @@ tests: [
             "resolver-version 1\n" +
             "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
             "root workspace \"root\"\n" +
-            "git-node git \"pkg\" \"bbb\" fetch \"https://example.invalid/b\" content protos-package-tree-v1 sha256:bbbb\n" +
-            "git-node git \"pkg\" \"aaa\" fetch \"https://example.invalid/a\" content protos-package-tree-v1 sha256:aaaa\n"
+            "git-node git \"pkg\" \"bbb\" fetch \"https://example.invalid/b\" content protos-package-tree-v2 sha256:bbbb\n" +
+            "git-node git \"pkg\" \"aaa\" fetch \"https://example.invalid/a\" content protos-package-tree-v2 sha256:aaaa\n"
         expected:
             "lock-format 1\n" +
             "resolver-version 1\n" +
             "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
             "root workspace \"root\"\n" +
-            "git-node git \"pkg\" \"aaa\" fetch \"https://example.invalid/a\" content protos-package-tree-v1 sha256:aaaa\n" +
-            "git-node git \"pkg\" \"bbb\" fetch \"https://example.invalid/b\" content protos-package-tree-v1 sha256:bbbb\n"
+            "git-node git \"pkg\" \"aaa\" fetch \"https://example.invalid/a\" content protos-package-tree-v2 sha256:aaaa\n" +
+            "git-node git \"pkg\" \"bbb\" fetch \"https://example.invalid/b\" content protos-package-tree-v2 sha256:bbbb\n"
         Assertions.require(Lock.write(Lock.parseStructural(source)) == expected)
     }),
     Test("writer-dependency-total-order", () => {
@@ -128,8 +128,8 @@ tests: [
             "resolver-version 1\n" +
             "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
             "root workspace \"root\"\n" +
-            "registry-node registry \"r\" \"1.0.0\" locator \"r\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
-            "git-node git \"g\" \"abc\" fetch \"https://example.invalid/g\" content protos-package-tree-v1 sha256:bbbb\n" +
+            "registry-node registry \"r\" \"1.0.0\" locator \"r\" authority \"public\" content protos-package-tree-v2 sha256:aaaa\n" +
+            "git-node git \"g\" \"abc\" fetch \"https://example.invalid/g\" content protos-package-tree-v2 sha256:bbbb\n" +
             "dependency registry \"r\" \"1.0.0\" alias \"z\" target git \"g\" \"abc\"\n" +
             "dependency workspace \"root\" alias \"z\" target git \"g\" \"abc\"\n" +
             "dependency workspace \"root\" alias \"a\" target registry \"r\" \"1.0.0\"\n"
@@ -138,8 +138,8 @@ tests: [
             "resolver-version 1\n" +
             "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
             "root workspace \"root\"\n" +
-            "registry-node registry \"r\" \"1.0.0\" locator \"r\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
-            "git-node git \"g\" \"abc\" fetch \"https://example.invalid/g\" content protos-package-tree-v1 sha256:bbbb\n" +
+            "registry-node registry \"r\" \"1.0.0\" locator \"r\" authority \"public\" content protos-package-tree-v2 sha256:aaaa\n" +
+            "git-node git \"g\" \"abc\" fetch \"https://example.invalid/g\" content protos-package-tree-v2 sha256:bbbb\n" +
             "dependency workspace \"root\" alias \"a\" target registry \"r\" \"1.0.0\"\n" +
             "dependency workspace \"root\" alias \"z\" target git \"g\" \"abc\"\n" +
             "dependency registry \"r\" \"1.0.0\" alias \"z\" target git \"g\" \"abc\"\n"

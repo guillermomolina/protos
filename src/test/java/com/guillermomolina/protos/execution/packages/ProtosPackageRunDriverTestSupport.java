@@ -62,7 +62,7 @@ abstract class ProtosPackageRunDriverTestSupport {
     static final Path WORKSPACE_CASE =
             Path.of("protos", "tests", "package-tool", "execution-plan", "cases", "workspace");
 
-    static final String METHOD = "protos-package-tree-v1";
+    static final String METHOD = "protos-package-tree-v2";
     static final String ALGORITHM = "sha256";
 
     // Same root manifest (and therefore resolution-input header) as the f2e3b-transitive case.
@@ -198,7 +198,7 @@ abstract class ProtosPackageRunDriverTestSupport {
                         + "target registry \"external-c\" \"1.0.0\"\n";
 
         Path project = Files.createDirectories(temporaryRoot.resolve(name).resolve("project"));
-        Files.writeString(project.resolve("protos.toml"), ROOT_MANIFEST, StandardCharsets.UTF_8);
+        Files.writeString(project.resolve("package.toml"), ROOT_MANIFEST, StandardCharsets.UTF_8);
         Files.writeString(project.resolve("protos.lock"), lock, StandardCharsets.UTF_8);
         Files.createDirectories(project.resolve("Main"));
         Files.writeString(project.resolve("Main/module.protos"), ROOT_MAIN, StandardCharsets.UTF_8);
@@ -365,7 +365,7 @@ abstract class ProtosPackageRunDriverTestSupport {
     static void assertOpen(List<ProtosCapturedFilesystemCustody> custodies)
             throws IOException {
         for (ProtosCapturedFilesystemCustody custody : custodies) {
-            custody.readResource(ProtosPackageResourceName.parse("protos.toml"));
+            custody.readResource(ProtosPackageResourceName.parse("package.toml"));
         }
     }
 
@@ -375,13 +375,13 @@ abstract class ProtosPackageRunDriverTestSupport {
         for (ProtosCapturedFilesystemCustody custody : custodies) {
             assertThrows(
                     IllegalStateException.class,
-                    () -> custody.readResource(ProtosPackageResourceName.parse("protos.toml")));
+                    () -> custody.readResource(ProtosPackageResourceName.parse("package.toml")));
         }
     }
 
     static Path tree(Path root, String manifest, String api) throws Exception {
         Files.createDirectories(root);
-        Files.writeString(root.resolve("protos.toml"), manifest, StandardCharsets.UTF_8);
+        Files.writeString(root.resolve("package.toml"), manifest, StandardCharsets.UTF_8);
         // D242: [exports] Api = "Api" names the logical module directory Api/.
         Files.createDirectories(root.resolve("Api"));
         Files.writeString(root.resolve("Api/module.protos"), api, StandardCharsets.UTF_8);

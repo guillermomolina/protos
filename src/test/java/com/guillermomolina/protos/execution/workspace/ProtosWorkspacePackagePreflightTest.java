@@ -56,7 +56,7 @@ final class ProtosWorkspacePackagePreflightTest {
             throws Exception {
         Path project = CASES.resolve("workspace");
         assumeSecureConfinement(project);
-        byte[] manifestBefore = Files.readAllBytes(project.resolve("protos.toml"));
+        byte[] manifestBefore = Files.readAllBytes(project.resolve("package.toml"));
         byte[] lockBefore = Files.readAllBytes(project.resolve("protos.lock"));
         AtomicReference<ProtosProcessRuntime> observed = new AtomicReference<>();
 
@@ -73,7 +73,7 @@ final class ProtosWorkspacePackagePreflightTest {
         assertEquals(2, plan.packages().size());
         assertEquals(2, plan.dependencies().size());
         assertEquals("internal/Thing", plan.packages().get(1).exports().get("Public"));
-        assertArrayEquals(manifestBefore, Files.readAllBytes(project.resolve("protos.toml")));
+        assertArrayEquals(manifestBefore, Files.readAllBytes(project.resolve("package.toml")));
         assertArrayEquals(lockBefore, Files.readAllBytes(project.resolve("protos.lock")));
 
         ProtosProcessRuntime process = observed.get();

@@ -1,5 +1,11 @@
 # Protos Package Manifest Schema v1
 
+**D242 / I152:** The schema remains v1 (`manifest-version = 1`) and TOML
+1.0 remains the encoding. The only recognized physical manifest is
+`package.toml`. A root or workspace member that contains an exact
+`protos.toml` entry fails preflight; coexistence is not permitted. Export
+targets refer to logical module directories with `module.protos`.
+
 Status: package-tool implementation contract; non-normative with respect to Core language semantics
 
 Related design:
@@ -12,7 +18,7 @@ Related design:
 
 ## Purpose
 
-`PACKAGE_MANIFEST_FORMAT.md` selected `protos.toml`, TOML 1.0, strict schema
+`PACKAGE_MANIFEST_FORMAT.md` originally selected `protos.toml` (now superseded by `package.toml` under D242), TOML 1.0, strict schema
 versioning, and rejection of unknown package fields, but intentionally left exact
 field names and table layout unfrozen.
 
@@ -259,8 +265,9 @@ An empty `[compatibility]` table is invalid.
 
 Optional.
 
-`exports` is a table whose keys are package-public export names and whose values
-are package-internal logical module names.
+`exports` is a table whose keys are package-public logical module names and
+whose values are package-internal logical module directory names. Each target
+directory contains `module.protos`; the value is not an individual source file.
 
 Example:
 
@@ -667,7 +674,7 @@ to represent this data.
 
 The published package-tool manifest Slice 3 provides a read-only command that:
 
-1. opens exactly `protos.toml` through its already-provisioned project-read
+1. opens exactly `package.toml` through its already-provisioned project-read
    Filesystem capability;
 2. decodes it as UTF-8 through ordinary Core text I/O;
 3. parses TOML 1.0;
@@ -691,7 +698,7 @@ This remains independent of B006.
 The structural schema defined here is implemented and closed by
 `TOOL001-C5`. `TOOL001-C6` composes that closed parser with the already
 provisioned confined Filesystem as `protos package manifest`: exactly
-`protos.toml` is read, UTF-8 text is consumed to EOF, `ManifestSchemaV1.parse`
+`package.toml` is read, UTF-8 text is consumed to EOF, `ManifestSchemaV1.parse`
 constructs/validates the ordinary model, and Protos-owned diagnostics distinguish
 read/decoding failure from TOML/schema failure.
 
@@ -731,7 +738,7 @@ publication remain later networking/registry work.
 Schema v1 is read-only compatible.
 
 `protos add`, `remove`, `resolve`, or any operation that must safely replace
-`protos.toml` or `protos.lock` remains implementation-gated by I021/B006 closure.
+`package.toml` or `protos.lock` remains implementation-gated by I021/B006 closure.
 D041 now defines the required general Filesystem namespace replacement/removal
 semantics, but mutation must wait until that general capability is faithfully
 implemented and provisioned to the bundled package tool.
@@ -798,7 +805,7 @@ interpretation used by the resolution-input model:
 - member declarations are canonical `/`-separated root-relative normal-component
   paths with no empty, `.` or `..` component;
 - each member names exactly one package manifest at
-  `<root>/<member>/protos.toml`;
+  `<root>/<member>/package.toml`;
 - root/member PackageIds are unique;
 - member manifests do not recursively expand their own `[workspace]` while
   consumed under an enclosing root;

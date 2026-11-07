@@ -123,18 +123,32 @@ canonicalMemberLocation: (text) => {
     joinComponents(splitPath(text, false))
 }
 
-memberManifestPath: (location) => {
+memberDirectoryPath: (location) => {
     path: Path.relative()
 
     for(component in splitPath(location, false)) {
         path = path.child(component)
     }
 
-    path.child("protos.toml")
+    path
+}
+
+memberManifestPath: (location) => {
+    memberDirectoryPath(location).child("package.toml")
 }
 
 rootManifestPath: () => {
-    Path.relative().child("protos.toml")
+    Path.relative().child("package.toml")
+}
+
+rejectLegacyManifest: (projectTreeFilesystem, directory) => {
+    for(entry in projectTreeFilesystem.entries(directory).value()) {
+        if(entry.name == "protos.toml") {
+            fail()
+        }
+    }
+
+    null
 }
 
 baseLocationComponents: (declaringLocation) => {
@@ -310,6 +324,8 @@ projectManifest: (
 }
 
 assembleState: (projectTreeFilesystem) => {
+    rejectLegacyManifest(projectTreeFilesystem, Path.relative())
+
     rootManifest:
         Schema.parse(
             readTextAt(projectTreeFilesystem, rootManifestPath())
@@ -336,6 +352,11 @@ assembleState: (projectTreeFilesystem) => {
                 fail()
             }
             seenLocations[location] = true
+
+            rejectLegacyManifest(
+                projectTreeFilesystem,
+                memberDirectoryPath(location)
+            )
 
             memberManifest:
                 Schema.parse(

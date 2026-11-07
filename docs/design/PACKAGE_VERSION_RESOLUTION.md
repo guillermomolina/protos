@@ -1,5 +1,10 @@
 # Protos Package Version Resolution Audit
 
+**D242/I152:** Root and workspace member manifests have the exact
+filename `package.toml`; any exact legacy `protos.toml` entry is invalid.
+The semantic resolver input and its framing identifier
+`protos-resolution-input-v1` are unchanged. `protos.lock` is not renamed.
+
 Status: exploratory architecture; non-normative
 Related distribution design: `docs/design/PACKAGE_DISTRIBUTION.md`
 Related manifest audit: `docs/design/PACKAGE_MANIFEST_FORMAT.md`
@@ -467,7 +472,7 @@ that library itself is the root.
 
 ## Lockfile consistency without hashing formatting
 
-Normal execution needs a reliable way to detect whether `protos.toml` resolution
+Normal execution needs a reliable way to detect whether `package.toml` resolution
 inputs still correspond to `protos.lock`.
 
 Do not hash the raw TOML bytes for this purpose. Comments, whitespace, or an
@@ -982,7 +987,7 @@ alternate spelling.
 The physical member manifest is exactly:
 
 ```text
-<resolution-root>/<member-path>/protos.toml
+<resolution-root>/<member-path>/package.toml
 ```
 
 under the resolution-root Filesystem authority.
@@ -998,7 +1003,7 @@ It must reject:
 - duplicate canonical member paths;
 - duplicate PackageIds across root and members;
 - a member path that cannot be read as one package root with a valid
-  schema-v1 `protos.toml`;
+  schema-v1 `package.toml`;
 - a member read that escapes the resolution-root Filesystem confinement.
 
 The member's `package.id` is the workspace-node identity recorded by
@@ -1295,12 +1300,12 @@ semantic `ResolutionRootV1` consumed by closed F2B.
 
 `self:ResolutionRoot.assemble(projectTreeFilesystem)` now:
 
-1. reads exactly root `protos.toml`;
+1. reads exactly root `package.toml`;
 2. parses it through closed `ManifestSchemaV1`;
 3. interprets only the root manifest's `workspace.members`;
 4. validates each member declaration as the F2B2 canonical `/`-separated
    root-relative location;
-5. reads exactly `<member-location>/protos.toml` through the supplied confined
+5. reads exactly `<member-location>/package.toml` through the supplied confined
    read-only tree Filesystem;
 6. rejects duplicate root/member PackageIds;
 7. parses package ReleaseVersions and registry DependencyConstraints through D1/D2;

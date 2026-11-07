@@ -33,7 +33,7 @@ tests: [
                         version: Version.parse("1.0.0")
                     }
                     content: {
-                        method: "protos-package-tree-v1"
+                        method: "protos-package-tree-v2"
                         algorithm: "sha256"
                         hex: "1111111111111111111111111111111111111111111111111111111111111111"
                     }
@@ -62,7 +62,7 @@ tests: [
         (externalPackage.ref.kind == "registry").ifFalse(() => { ok = false })
         (externalPackage.ref.packageId == "external-id").ifFalse(() => { ok = false })
         (externalPackage.ref.version.text == "1.0.0").ifFalse(() => { ok = false })
-        (externalPackage.content.method == "protos-package-tree-v1").ifFalse(() => { ok = false })
+        (externalPackage.content.method == "protos-package-tree-v2").ifFalse(() => { ok = false })
         (externalPackage.content.algorithm == "sha256").ifFalse(() => { ok = false })
         (externalPackage.content.hex == "1111111111111111111111111111111111111111111111111111111111111111").ifFalse(() => { ok = false })
         (externalPackage.exports["Public"] == "internal/Thing").ifFalse(() => { ok = false })
@@ -91,7 +91,7 @@ tests: [
                             version: Version.parse("1.0.0")
                         }
                         content: {
-                            method: "protos-package-tree-v1"
+                            method: "protos-package-tree-v2"
                             algorithm: "sha256"
                             hex: "2222222222222222222222222222222222222222222222222222222222222222"
                         }

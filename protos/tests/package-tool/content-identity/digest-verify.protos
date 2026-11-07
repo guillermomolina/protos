@@ -17,7 +17,7 @@ Identity: import("tool-source:package/ContentIdentity.protos")
 
 captured: filesystem
 expected: {
-    method: "protos-package-tree-v1"
+    method: "protos-package-tree-v2"
     algorithm: "sha256"
     hex: expectedHex
 }

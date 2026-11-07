@@ -16,6 +16,6 @@
 MetadataPublication: import("tool-source:package/MetadataPublication.protos")
 MetadataPublication.publish(
     filesystem,
-    ".protos.toml.stage",
-    "protos.toml",
+    ".package.toml.stage",
+    "package.toml",
     "new metadata\n") === filesystem

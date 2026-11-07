@@ -33,14 +33,14 @@ final class ProtosExternalPackageModuleKeyTest {
     private static final String PREFIX = "pkg-external:v1:module:";
     private static final ProtosPackageContentIdentity CONTENT =
             new ProtosPackageContentIdentity(
-                    "protos-package-tree-v1",
+                    "protos-package-tree-v2",
                     "sha256",
-                    "5c2e8af458daf38c3e42ee3a68a928aa5ad2701166a59e6cabfb38645efe6f1a");
+                    "899675849d2033fff2cfd0fc6552d598082c29bf96be634a37dcf8c6e607fec3");
     private static final ProtosPackageContentIdentity OTHER_CONTENT =
             new ProtosPackageContentIdentity(
-                    "protos-package-tree-v1",
+                    "protos-package-tree-v2",
                     "sha256",
-                    "9f7a40f88c9c231748feb4ed242a4ebe9ec5f06cb732afd4e80706fd160a8ac0");
+                    "3f63720edac546db28e1d2deb6004beae649094c65c9353640306ff466e43111");
 
     private static final ProtosExactExternalPackageIdentity REGISTRY =
             new ProtosExactExternalPackageIdentity.Registry("Scope/Ä:pkg", "1.0.0-rc.1", CONTENT);

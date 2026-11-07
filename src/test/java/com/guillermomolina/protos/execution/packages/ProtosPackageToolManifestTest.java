@@ -55,7 +55,7 @@ final class ProtosPackageToolManifestTest extends ProtosPackageToolProtosTestSup
     @Test
     void manifestCommandReadsValidManifest() throws Exception {
         Files.writeString(
-                projectRoot.resolve("protos.toml"),
+                projectRoot.resolve("package.toml"),
                 "manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n",
                 StandardCharsets.UTF_8);
         assertConfinedTrue("manifest-command/valid-minimal.protos");
@@ -64,10 +64,20 @@ final class ProtosPackageToolManifestTest extends ProtosPackageToolProtosTestSup
     @Test
     void manifestCommandReportsInvalidSchema() throws Exception {
         Files.writeString(
-                projectRoot.resolve("protos.toml"),
+                projectRoot.resolve("package.toml"),
                 "manifest-version = 1\n[package]\nid = \"pkg\"\n",
                 StandardCharsets.UTF_8);
         assertConfinedTrue("manifest-command/invalid-schema-diagnostic.protos");
+    }
+
+    @Test
+    void manifestCommandDoesNotReadOldOnlyManifest() throws Exception {
+        Files.writeString(
+                projectRoot.resolve("protos.toml"),
+                "manifest-version = 1\n[package]\nid = \"old\"\nversion = \"1.0.0\"\n",
+                StandardCharsets.UTF_8);
+
+        assertConfinedTrue("manifest-command/missing-manifest-diagnostic.protos");
     }
 
     @Test
@@ -77,7 +87,7 @@ final class ProtosPackageToolManifestTest extends ProtosPackageToolProtosTestSup
 
     @Test
     void manifestCommandReportsInvalidUtf8() throws Exception {
-        Files.write(projectRoot.resolve("protos.toml"), new byte[] {(byte) 0xc3, 0x28});
+        Files.write(projectRoot.resolve("package.toml"), new byte[] {(byte) 0xc3, 0x28});
         assertConfinedTrue("manifest-command/invalid-utf8-diagnostic.protos");
     }
 
@@ -94,7 +104,7 @@ final class ProtosPackageToolManifestTest extends ProtosPackageToolProtosTestSup
 
         assertTrue(source.getBytes(StandardCharsets.UTF_8).length > 8192);
         Files.writeString(
-                projectRoot.resolve("protos.toml"),
+                projectRoot.resolve("package.toml"),
                 source,
                 StandardCharsets.UTF_8);
         assertConfinedTrue("manifest-command/multichunk-read.protos");

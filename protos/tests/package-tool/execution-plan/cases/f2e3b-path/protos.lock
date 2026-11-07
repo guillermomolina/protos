@@ -3,5 +3,5 @@ resolver-version 1
 resolution-input protos-resolution-input-v1 sha256:6f2526d30fdc07e44c319bdb194eb0e7fafadcd61768eb36fc13917abf2fc2c5
 
 root workspace "root"
-registry-node registry "external-a" "1.0.0" locator "pkg" authority "public" content protos-package-tree-v1 sha256:5aea41a89ab809f5037151f85712d8f4b8cb8fbf3da7dc8af2cd312d410c95cc
+registry-node registry "external-a" "1.0.0" locator "pkg" authority "public" content protos-package-tree-v2 sha256:bd5044b581ca51fde8abdce156c39314482dbd26ce75920601a5c4f9b31e81ea
 dependency workspace "root" alias "reg" target registry "external-a" "1.0.0"

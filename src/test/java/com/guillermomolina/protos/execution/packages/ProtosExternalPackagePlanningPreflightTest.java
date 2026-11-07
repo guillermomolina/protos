@@ -32,14 +32,14 @@ final class ProtosExternalPackagePlanningPreflightTest {
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "package");
 
-    private static final String METHOD = "protos-package-tree-v1";
+    private static final String METHOD = "protos-package-tree-v2";
     private static final String ALGORITHM = "sha256";
     private static final String A_HEX =
-            "5c2e8af458daf38c3e42ee3a68a928aa5ad2701166a59e6cabfb38645efe6f1a";
+            "899675849d2033fff2cfd0fc6552d598082c29bf96be634a37dcf8c6e607fec3";
     private static final String B_HEX =
-            "9f7a40f88c9c231748feb4ed242a4ebe9ec5f06cb732afd4e80706fd160a8ac0";
+            "3f63720edac546db28e1d2deb6004beae649094c65c9353640306ff466e43111";
     private static final String C_HEX =
-            "5876918795e50c16907ac40404b99e391fecb4302c02debbf246d4cfa1199222";
+            "b4afdae34039fe30e255fd3b1b69fbbc5089fd6ca90b252bd86fd8ea19cac67a";
 
     private static final String ROOT_MANIFEST =
             "manifest-version = 1\n"
@@ -191,13 +191,13 @@ final class ProtosExternalPackagePlanningPreflightTest {
                         new String(
                                 scope.readResource(
                                         fixture.inputs().get(0).identity(),
-                                        ProtosPackageResourceName.parse("protos.toml")),
+                                        ProtosPackageResourceName.parse("package.toml")),
                                 StandardCharsets.UTF_8));
             }
             assertThrows(
                     IllegalStateException.class,
                     () -> fixture.aCustody.readResource(
-                            ProtosPackageResourceName.parse("protos.toml")));
+                            ProtosPackageResourceName.parse("package.toml")));
         }
     }
 
@@ -233,7 +233,7 @@ final class ProtosExternalPackagePlanningPreflightTest {
     private FailureFixture createFailureFixture() throws Exception {
         Path base = Files.createDirectories(temporaryRoot.resolve("failure"));
         Path project = Files.createDirectories(base.resolve("project"));
-        Files.writeString(project.resolve("protos.toml"), ROOT_MANIFEST, StandardCharsets.UTF_8);
+        Files.writeString(project.resolve("package.toml"), ROOT_MANIFEST, StandardCharsets.UTF_8);
         Files.writeString(project.resolve("protos.lock"), LOCK, StandardCharsets.UTF_8);
 
         Path a = createExternal(base.resolve("a"), A_MANIFEST);
@@ -257,7 +257,7 @@ final class ProtosExternalPackagePlanningPreflightTest {
     private Fixture createFixture(String name) throws Exception {
         Path base = Files.createDirectories(temporaryRoot.resolve(name));
         Path project = Files.createDirectories(base.resolve("project"));
-        Files.writeString(project.resolve("protos.toml"), ROOT_MANIFEST, StandardCharsets.UTF_8);
+        Files.writeString(project.resolve("package.toml"), ROOT_MANIFEST, StandardCharsets.UTF_8);
         Files.writeString(project.resolve("protos.lock"), LOCK, StandardCharsets.UTF_8);
 
         Path a = createExternal(base.resolve("a"), A_MANIFEST);
@@ -311,7 +311,7 @@ final class ProtosExternalPackagePlanningPreflightTest {
 
     private static Path createExternal(Path root, String manifest) throws Exception {
         Files.createDirectories(root);
-        Files.writeString(root.resolve("protos.toml"), manifest, StandardCharsets.UTF_8);
+        Files.writeString(root.resolve("package.toml"), manifest, StandardCharsets.UTF_8);
         return root;
     }
 
@@ -403,7 +403,7 @@ final class ProtosExternalPackagePlanningPreflightTest {
         }
 
         private void deleteOriginalSource() throws Exception {
-            Files.delete(aRoot.resolve("protos.toml"));
+            Files.delete(aRoot.resolve("package.toml"));
             Files.delete(aRoot);
         }
 
@@ -450,11 +450,11 @@ final class ProtosExternalPackagePlanningPreflightTest {
         }
 
         private void deleteOriginalSources() throws Exception {
-            Files.delete(aRoot.resolve("protos.toml"));
+            Files.delete(aRoot.resolve("package.toml"));
             Files.delete(aRoot);
-            Files.delete(bRoot.resolve("protos.toml"));
+            Files.delete(bRoot.resolve("package.toml"));
             Files.delete(bRoot);
-            Files.delete(cRoot.resolve("protos.toml"));
+            Files.delete(cRoot.resolve("package.toml"));
             Files.delete(cRoot);
         }
 

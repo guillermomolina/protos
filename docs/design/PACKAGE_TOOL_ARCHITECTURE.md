@@ -1,5 +1,13 @@
 # Protos Package Tool Architecture Audit
 
+**D242/I152:** The current Package Tool reads the single exact
+physical `package.toml` manifest, with restricted Filesystem authority for
+`package.toml` and `protos.lock` plus `.package.toml.stage` and
+`.protos.lock.stage`. The host rejects an exact `protos.toml` entry before
+provisioning the tool; there is no dual-manifest mode. `protos.project`
+retains its filename and metadata method `protos-project-metadata-v1`, but
+its logical record paths now contain `package.toml`.
+
 Status: selected architecture; non-normative; implementation tracked by TOOL001
 
 Related package-system design:
@@ -230,7 +238,7 @@ wherever schema v1 does not assign it meaning.
 Bootstrap: Package Tool depends on the Standard Library installed with the
 runtime, never on project package resolution. Bundled-tool resolution delegates
 `std:` to the selected Standard Library resolver without consulting
-`protos.toml`, `protos.lock`, package stores, or ambient module paths.
+`package.toml`, `protos.lock`, package stores, or ambient module paths.
 
 ### Semantic Versioning core
 
@@ -574,7 +582,7 @@ The current `ProtosCli` passes `null` as the standalone default Filesystem.
 Repository search found `ProtosStandardFilesystemProtocol.createCapability(...)`
 used by conformance/tests, but not by the production launcher.
 
-Therefore a real Protos package tool cannot yet simply open `protos.toml` through
+Therefore a real Protos package tool cannot yet simply open `package.toml` through
 the current production CLI.
 
 This is an implementation prerequisite, not a reason to move manifest parsing
@@ -598,7 +606,7 @@ primitive. A separate type query would recreate the check-then-act race that the
 Filesystem confinement contract is designed to exclude.
 
 The resulting D042 contract is the minimum semantic namespace machinery needed
-for a Protos-written package tool to stage a complete `protos.toml` or
+for a Protos-written package tool to stage a complete `package.toml` or
 `protos.lock`, publish it without a partial-target window, and clean abandoned
 staging entries. Package policy still uses ordinary files; the broader
 namespace-entry selection rule exists so the general capability can be
@@ -666,7 +674,7 @@ Published reality now includes:
 - complete manifest schema-v1 structural validation and ordinary ManifestV1
   construction in bundled Protos source;
 - `protos package manifest`, mechanically selected by the host as exact bundled
-  `ManifestMain`, which reads exactly `protos.toml`, consumes UTF-8 text to EOF,
+  `ManifestMain`, which reads exactly `package.toml`, consumes UTF-8 text to EOF,
   invokes the schema-v1 parser and owns its user-facing diagnostics in Protos;
 - preservation of the historical bare `Main` entry for `protos package`.
 
@@ -829,7 +837,7 @@ This mode:
 
 - never invokes fresh version selection;
 - never modifies `protos.lock`;
-- never rewrites `protos.toml`;
+- never rewrites `package.toml`;
 - never selects a newer package;
 - should not need network when all locked artifacts are already available;
 - fails if required exact content is unavailable in offline/read-only mode.
@@ -1062,7 +1070,7 @@ still missing.
 
 Established invariant:
 
-> The bundled tool can read `protos.toml` and atomically/safely produce the
+> The bundled tool can read `package.toml` and atomically/safely produce the
 > metadata files supported by the current general Filesystem contract.
 
 If the current Filesystem contract cannot provide an operation required for safe

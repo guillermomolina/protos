@@ -35,6 +35,6 @@ ok: model.package.id == "pkg"
 (model.package.version == "1.0.0").ifFalse(() => { ok = false })
 (model.dependencies.size() == 0).ifFalse(() => { ok = false })
 (outLines.size() == 1).ifFalse(() => { ok = false })
-(outLines[0] == "protos.toml: valid schema v1").ifFalse(() => { ok = false })
+(outLines[0] == "package.toml: valid schema v1").ifFalse(() => { ok = false })
 (errLines.size() == 0).ifFalse(() => { ok = false })
 ok

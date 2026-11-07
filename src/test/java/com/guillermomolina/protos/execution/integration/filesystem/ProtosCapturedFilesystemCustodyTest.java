@@ -42,7 +42,7 @@ final class ProtosCapturedFilesystemCustodyTest {
     @Test
     void selectedRootIsCapturedOnceAndRematerializedAcrossActorDomains() throws Exception {
         Files.writeString(
-                selectedRoot.resolve("protos.toml"),
+                selectedRoot.resolve("package.toml"),
                 "manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n",
                 StandardCharsets.UTF_8);
         Path payload = selectedRoot.resolve("Payload.protos");

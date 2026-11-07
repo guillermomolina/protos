@@ -41,7 +41,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 final class ProtosPackageExecutionPlanV2ModuleResolverTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
-    private static final String METHOD = "protos-package-tree-v1";
+    private static final String METHOD = "protos-package-tree-v2";
     private static final String ALGORITHM = "sha256";
     private static final String A_HEX = "aa".repeat(32);
     private static final String B_HEX = "bb".repeat(32);

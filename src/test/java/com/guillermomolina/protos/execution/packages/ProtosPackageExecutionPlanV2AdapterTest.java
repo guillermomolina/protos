@@ -44,7 +44,7 @@ import org.junit.jupiter.api.io.TempDir;
 final class ProtosPackageExecutionPlanV2AdapterTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final String HEX =
-            "5c2e8af458daf38c3e42ee3a68a928aa5ad2701166a59e6cabfb38645efe6f1a";
+            "899675849d2033fff2cfd0fc6552d598082c29bf96be634a37dcf8c6e607fec3";
 
     // Mirrors the published buildV2FromVerifiedCaptures shape. The same ContentIdentity is
     // deliberately shared by three distinct exact external NodeRefs of one PackageId.
@@ -57,7 +57,7 @@ final class ProtosPackageExecutionPlanV2AdapterTest {
             }
             contentOf: () => {
                 {
-                    method: "protos-package-tree-v1"
+                    method: "protos-package-tree-v2"
                     algorithm: "sha256"
                     hex: "%HEX%"
                 }
@@ -496,7 +496,7 @@ final class ProtosPackageExecutionPlanV2AdapterTest {
     }
 
     private static ProtosPackageContentIdentity content() {
-        return new ProtosPackageContentIdentity("protos-package-tree-v1", "sha256", HEX);
+        return new ProtosPackageContentIdentity("protos-package-tree-v2", "sha256", HEX);
     }
 
     private static ProtosPackageExecutionPlanV2.ExternalPackage external(

@@ -119,15 +119,15 @@ final class ProtosPackageToolMetadataPersistenceTest extends ProtosPackageToolPr
 
     @Test
     void metadataPublicationReplacesManifestTarget() throws Exception {
-        Files.writeString(projectRoot.resolve("protos.toml"), "old\n", StandardCharsets.UTF_8);
+        Files.writeString(projectRoot.resolve("package.toml"), "old\n", StandardCharsets.UTF_8);
         assertConfinedTrue("metadata-publication/publish-replaces-target.protos");
 
         assertEquals(
                 "new metadata\n",
-                Files.readString(projectRoot.resolve("protos.toml"), StandardCharsets.UTF_8));
+                Files.readString(projectRoot.resolve("package.toml"), StandardCharsets.UTF_8));
         assertTrue(
                 Files.notExists(
-                        projectRoot.resolve(".protos.toml.stage"), LinkOption.NOFOLLOW_LINKS));
+                        projectRoot.resolve(".package.toml.stage"), LinkOption.NOFOLLOW_LINKS));
     }
 
     @Test
@@ -145,9 +145,9 @@ final class ProtosPackageToolMetadataPersistenceTest extends ProtosPackageToolPr
 
     @Test
     void metadataPublicationStageCollisionPreservesTarget() throws Exception {
-        Files.writeString(projectRoot.resolve("protos.toml"), "old\n", StandardCharsets.UTF_8);
+        Files.writeString(projectRoot.resolve("package.toml"), "old\n", StandardCharsets.UTF_8);
         Files.writeString(
-                projectRoot.resolve(".protos.toml.stage"), "stale\n", StandardCharsets.UTF_8);
+                projectRoot.resolve(".package.toml.stage"), "stale\n", StandardCharsets.UTF_8);
 
         try (Fixture fixture = confinedFixture(projectRoot)) {
             assertIoErrorOutcome(
@@ -161,17 +161,17 @@ final class ProtosPackageToolMetadataPersistenceTest extends ProtosPackageToolPr
 
         assertEquals(
                 "old\n",
-                Files.readString(projectRoot.resolve("protos.toml"), StandardCharsets.UTF_8));
+                Files.readString(projectRoot.resolve("package.toml"), StandardCharsets.UTF_8));
         assertEquals(
                 "stale\n",
                 Files.readString(
-                        projectRoot.resolve(".protos.toml.stage"), StandardCharsets.UTF_8));
+                        projectRoot.resolve(".package.toml.stage"), StandardCharsets.UTF_8));
     }
 
     @Test
     void metadataPublicationExplicitDiscardRemovesStage() throws Exception {
         Files.writeString(
-                projectRoot.resolve(".protos.toml.stage"),
+                projectRoot.resolve(".package.toml.stage"),
                 "abandoned\n",
                 StandardCharsets.UTF_8);
 
@@ -179,21 +179,21 @@ final class ProtosPackageToolMetadataPersistenceTest extends ProtosPackageToolPr
 
         assertTrue(
                 Files.notExists(
-                        projectRoot.resolve(".protos.toml.stage"), LinkOption.NOFOLLOW_LINKS));
+                        projectRoot.resolve(".package.toml.stage"), LinkOption.NOFOLLOW_LINKS));
     }
 
     @Test
     void metadataPublicationInvalidContentCreatesNoStage() throws Exception {
-        Files.writeString(projectRoot.resolve("protos.toml"), "old\n", StandardCharsets.UTF_8);
+        Files.writeString(projectRoot.resolve("package.toml"), "old\n", StandardCharsets.UTF_8);
 
         assertConfinedFailed("metadata-publication/invalid-content-has-no-stage.protos");
 
         assertFalse(
                 Files.exists(
-                        projectRoot.resolve(".protos.toml.stage"), LinkOption.NOFOLLOW_LINKS));
+                        projectRoot.resolve(".package.toml.stage"), LinkOption.NOFOLLOW_LINKS));
         assertEquals(
                 "old\n",
-                Files.readString(projectRoot.resolve("protos.toml"), StandardCharsets.UTF_8));
+                Files.readString(projectRoot.resolve("package.toml"), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -216,12 +216,31 @@ final class ProtosPackageToolMetadataPersistenceTest extends ProtosPackageToolPr
         assertEquals(
                 "staged but forbidden\n",
                 Files.readString(
-                        projectRoot.resolve(".protos.toml.stage"), StandardCharsets.UTF_8));
+                        projectRoot.resolve(".package.toml.stage"), StandardCharsets.UTF_8));
     }
 
 
 
 
 
+
+    @Test
+    void metadataPublicationRejectsLegacyStagingName() throws Exception {
+        Files.writeString(
+                projectRoot.resolve("package.toml"),
+                "old\n",
+                StandardCharsets.UTF_8);
+
+        assertConfinedFailed("metadata-publication/forbidden-legacy-stage.protos");
+
+        assertEquals(
+                "old\n",
+                Files.readString(
+                        projectRoot.resolve("package.toml"),
+                        StandardCharsets.UTF_8));
+        assertFalse(Files.exists(
+                projectRoot.resolve(".protos.toml.stage"),
+                LinkOption.NOFOLLOW_LINKS));
+    }
 
 }

@@ -3,7 +3,7 @@ resolver-version 1
 resolution-input protos-resolution-input-v1 sha256:6f2526d30fdc07e44c319bdb194eb0e7fafadcd61768eb36fc13917abf2fc2c5
 
 root workspace "root"
-registry-node registry "external-a" "1.0.0" locator "pkg" authority "public" content protos-package-tree-v1 sha256:2d13bc5e3f2afd7a1ed2ca72a53a49f14a9b69ea744e7dcb0fb618d12fff25a3
-git-node git "external-c" "abc123" fetch "https://example.invalid/c.git" content protos-package-tree-v1 sha256:5876918795e50c16907ac40404b99e391fecb4302c02debbf246d4cfa1199222
+registry-node registry "external-a" "1.0.0" locator "pkg" authority "public" content protos-package-tree-v2 sha256:b978b10a46c08c198ed629558eec5e83b0f86ca90e465cffb0beb6bd401c63ac
+git-node git "external-c" "abc123" fetch "https://example.invalid/c.git" content protos-package-tree-v2 sha256:b4afdae34039fe30e255fd3b1b69fbbc5089fd6ca90b252bd86fd8ea19cac67a
 dependency workspace "root" alias "reg" target registry "external-a" "1.0.0"
 dependency registry "external-a" "1.0.0" alias "depgit" target git "external-c" "abc123"

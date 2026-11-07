@@ -1,5 +1,11 @@
 # Protos Package and Library Distribution Design
 
+**D242/I152:** `package.toml` is the exclusive physical package
+manifest filename; old `protos.toml` entries are rejected, not migrated.
+`protos.lock` and `protos.project` retain their filenames. This exploratory
+design's original TOML examples are historical and may not reflect the
+complete implemented schema.
+
 Status: exploratory architecture; non-normative
 
 This document explores what a Protos library is as a distribution concept and
@@ -145,12 +151,12 @@ variable in the initial package model.
 
 ### Repository-controlled manifest
 
-A package root should contain a human-edited manifest. `protos.toml` is the
-current recommended exploratory filename because package tooling must be able to
+A package root should contain a human-edited manifest. `package.toml` is the
+current ratified filename because package tooling must be able to
 read it before Protos library code is running and TOML is already a familiar,
 non-executable manifest format.
 
-Illustrative shape only:
+Historical illustrative shape only (not the current schema-v1 example):
 
 ```toml
 [package]
@@ -782,7 +788,7 @@ STANDARD LIBRARY
     shipped with the Protos toolchain; absolute std: identities
 
 PROJECT DEPENDENCIES
-    declared in protos.toml
+    declared in package.toml
     exactly resolved in protos.lock
 
 PACKAGE STORE

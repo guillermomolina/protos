@@ -1,6 +1,6 @@
-# Protos Package ContentIdentity — canonical logical tree v1
+# Protos Package ContentIdentity — current v2 and historical v1
 
-Status: **CLOSED — TOOL001-F2E1A/B/C canonical ContentIdentity v1 contract**
+Status: **CURRENT — D242/I152 ContentIdentity v2**, retaining the TOOL001-F2E1A/B/C v1 historical audit
 Nature: non-normative Package Tool/package-artifact design
 Owning work: `TOOL001-F2E1`
 
@@ -9,6 +9,39 @@ Related records:
 - `docs/design/PACKAGE_LOCKFILE_FORMAT.md`
 - `docs/design/PACKAGE_DISTRIBUTION.md`
 - [`docs/project/work/TOOL001/TOOL001_F2E_EXTERNAL_MATERIALIZATION.md`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/TOOL001/TOOL001_F2E_EXTERNAL_MATERIALIZATION.md)
+
+## Current executable domain — D242 / I152
+
+Current ContentIdentity uses method `protos-package-tree-v2` and the
+`sha256` digest algorithm. The stream prefix is the ASCII bytes of
+`protos-package-tree-v2` followed by a NUL byte. The root must contain an
+exact regular `package.toml` entry and must **not** contain an exact
+`protos.toml` entry of any type. Old-only, dual-manifest, symlink and
+non-regular manifest roots are rejected, never normalized or followed.
+
+The canonical stream has the unchanged FILE-record framing:
+
+```text
+MAGIC = ASCII("protos-package-tree-v2") 00
+FILE  = 01 varuint(path length) path bytes varuint(content length) exact bytes
+END   = 00
+```
+
+All valid regular files contribute their exact canonical paths and bytes;
+records use unsigned lexicographic path order, without directory records.
+The v1 path restrictions, case-collision policy, special-entry rejection,
+metadata-only equivalences, and SHA-256 digest rules remain otherwise
+unchanged. Verification is exact: the v1 method and all old digests are
+rejected, not migrated or reinterpreted. The current fixed vectors are in
+`PACKAGE_CONTENT_IDENTITY_VECTORS.md`.
+
+**Historical boundary:** Everything following this section preserves the
+original F2E1 v1 design, its old manifest filename, and its canonicalization
+examples as historical evidence. It is **not** a supported compatibility
+reader or the current executable domain. The original reference values
+remain available in Git history.
+
+## Original TOOL001-F2E1 v1 audit (historical)
 
 ## Purpose
 

@@ -16,6 +16,6 @@
 MetadataPublication: import("tool-source:package/MetadataPublication.protos")
 MetadataPublication.publish(
     filesystem,
-    ".protos.toml.stage",
+    ".package.toml.stage",
     "secret.txt",
     "staged but forbidden\n")

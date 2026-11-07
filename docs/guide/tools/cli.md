@@ -152,7 +152,7 @@ takes no value and grants nothing else.
 ### `protos run`
 
 `protos run <entry>` executes an entry of the root package of the Protos
-project in the current directory (a directory with a `protos.toml` manifest).
+project in the current directory (a directory with a `package.toml` manifest and no legacy `protos.toml` entry).
 Neither `run` nor `<entry>` appears in `process.args()`. The application gets
 no network capability from the CLI.
 

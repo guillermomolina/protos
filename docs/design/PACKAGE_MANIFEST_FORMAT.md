@@ -1,5 +1,14 @@
 # Protos Package Manifest Format Audit
 
+**D242 / I152 current contract:** Only the exact regular-file manifest
+`package.toml` is accepted at the resolution root and every declared workspace
+member. `protos.toml` is not a fallback: its presence as a file, directory, or
+symbolic link is forbidden, including alongside `package.toml`.
+
+The historical `protos.toml` selection below is preserved as design history,
+not as current package-tool behavior. Manifest encoding remains TOML 1.0 and
+`manifest-version = 1`. `protos.lock` and `protos.project` retain their names.
+
 Status: exploratory architecture; non-normative
 Related design: `docs/design/PACKAGE_DISTRIBUTION.md`
 
@@ -143,7 +152,7 @@ If a future build system needs computation, that should be an explicit build
 mechanism with declared inputs, outputs, capabilities, and reproducibility rules,
 not a reason to make dependency metadata executable.
 
-## Selected exploratory direction
+## Selected exploratory direction (historical, superseded by D242)
 
 Use:
 
@@ -351,7 +360,7 @@ packages. Therefore manifest parsing is toolchain bootstrap functionality.
 
 Manifest parsing must not require project package resolution; that would create
 a package-resolution cycle. A Standard Library module installed with the
-toolchain does not create that cycle: Package Tool now parses `protos.toml`
+toolchain does not create that cycle: Package Tool now parses `package.toml`
 with `std:toml/toml` selecting TOML 1.0 (D087 as amended, I079). The format
 itself admits any strategy that preserves this boundary, for example:
 
@@ -482,7 +491,7 @@ The following remain deliberately replaceable:
 - TOML 1.0 itself in a future explicitly versioned package-format generation;
 - the host parser/library used by any implementation.
 
-## Recommendation before implementation
+## Recommendation before implementation (historical, superseded by D242)
 
 The package-system implementation audit should proceed under this working rule:
 

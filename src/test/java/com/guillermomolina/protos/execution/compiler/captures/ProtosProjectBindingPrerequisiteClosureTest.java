@@ -64,12 +64,12 @@ final class ProtosProjectBindingPrerequisiteClosureTest {
     @Test
     void duplicateCanonicalPhysicalMemberRootFailsClosedThroughProvider() throws Exception {
         Path root = Files.createDirectories(temporary.resolve("aliased"));
-        Files.writeString(root.resolve("protos.toml"), "root metadata\n");
+        Files.writeString(root.resolve("package.toml"), "root metadata\n");
         Files.writeString(root.resolve("protos.lock"), "lock metadata\n");
         Files.writeString(root.resolve("Main.protos"), "true\n");
         Path members = Files.createDirectories(root.resolve("members"));
         Path physical = Files.createDirectory(members.resolve("a"));
-        Files.writeString(physical.resolve("protos.toml"), "member metadata\n");
+        Files.writeString(physical.resolve("package.toml"), "member metadata\n");
         Files.writeString(physical.resolve("Api.protos"), "true\n");
         try {
             Files.createSymbolicLink(members.resolve("b"), Path.of("a"));
@@ -92,7 +92,7 @@ final class ProtosProjectBindingPrerequisiteClosureTest {
 
         Path rootManifest = createProject(temporary.resolve("root-manifest"), "true\n", List.of());
         assertTrue(provider.acquire(rootManifest).isPresent());
-        Files.writeString(rootManifest.resolve("protos.toml"), "changed root metadata\n");
+        Files.writeString(rootManifest.resolve("package.toml"), "changed root metadata\n");
         assertTrue(provider.acquire(rootManifest).isEmpty());
 
         Path memberManifest =
@@ -102,7 +102,7 @@ final class ProtosProjectBindingPrerequisiteClosureTest {
                         List.of(new Member("libs/member", "member")));
         assertTrue(provider.acquire(memberManifest).isPresent());
         Files.writeString(
-                memberManifest.resolve("libs/member/protos.toml"),
+                memberManifest.resolve("libs/member/package.toml"),
                 "changed member metadata\n");
         assertTrue(provider.acquire(memberManifest).isEmpty());
 
@@ -152,12 +152,12 @@ final class ProtosProjectBindingPrerequisiteClosureTest {
     private static Path createProject(Path root, String mainSource, List<Member> members)
             throws Exception {
         Files.createDirectories(root);
-        Files.writeString(root.resolve("protos.toml"), "root metadata\n");
+        Files.writeString(root.resolve("package.toml"), "root metadata\n");
         Files.writeString(root.resolve("protos.lock"), "lock metadata\n");
         Files.writeString(root.resolve("Main.protos"), mainSource);
         for (Member member : members) {
             Path memberRoot = Files.createDirectories(root.resolve(member.location()));
-            Files.writeString(memberRoot.resolve("protos.toml"), "member metadata\n");
+            Files.writeString(memberRoot.resolve("package.toml"), "member metadata\n");
             Files.writeString(memberRoot.resolve("Api.protos"), "true\n");
         }
         writeProject(root, members);
@@ -190,14 +190,14 @@ final class ProtosProjectBindingPrerequisiteClosureTest {
     private static String metadataDigest(Path root, List<Member> members) throws Exception {
         MessageDigest digest = sha256();
         digest.update("protos-project-metadata-v1\n".getBytes(StandardCharsets.US_ASCII));
-        append(digest, "protos.toml", Files.readAllBytes(root.resolve("protos.toml")));
+        append(digest, "package.toml", Files.readAllBytes(root.resolve("package.toml")));
         ArrayList<Member> ordered = new ArrayList<>(members);
         ordered.sort((left, right) -> left.location().compareTo(right.location()));
         for (Member member : ordered) {
             append(
                     digest,
-                    member.location() + "/protos.toml",
-                    Files.readAllBytes(root.resolve(member.location()).resolve("protos.toml")));
+                    member.location() + "/package.toml",
+                    Files.readAllBytes(root.resolve(member.location()).resolve("package.toml")));
         }
         append(digest, "protos.lock", Files.readAllBytes(root.resolve("protos.lock")));
         return HexFormat.of().formatHex(digest.digest());
