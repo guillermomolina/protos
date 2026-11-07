@@ -258,6 +258,127 @@ public final class ProtosWorkspacePackageApplicationExecution {
     }
 
 
+    /**
+     * Executes the exported RootActor MODULE service binding. Unlike
+     * executeEntry, this method never closes a READY service merely because
+     * bootstrap returned. The borrowed resolver, runtime host and any external
+     * package custody must remain alive until Process termination.
+     *
+     * @return true for normal service termination, false for a failed
+     *     bootstrap or fatal RootActor failure
+     */
+    static boolean executeServiceEntry(
+            Path coreRoot,
+            ProtosModuleResolver resolver,
+            ProtosModuleKey entryKey,
+            ApplicationAuthority authority,
+            NetworkGrant networkGrant,
+            String serviceBinding,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        Objects.requireNonNull(resolver, "resolver");
+        Objects.requireNonNull(entryKey, "entryKey");
+        Objects.requireNonNull(authority, "authority");
+        Objects.requireNonNull(networkGrant, "networkGrant");
+        Objects.requireNonNull(serviceBinding, "serviceBinding");
+        Objects.requireNonNull(processObserver, "processObserver");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
+
+        if (!entryKey.isModule()) {
+            throw new IOException("RootActor package service requires a MODULE entry");
+        }
+
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(coreRoot, resolver);
+        ProtosEncodingValue stdinEncoding =
+                requireEncoding(prelude, authority.stdinEncodingBinding());
+        ProtosEncodingValue stdoutEncoding =
+                requireEncoding(prelude, authority.stdoutEncodingBinding());
+        ProtosEncodingValue stderrEncoding =
+                requireEncoding(prelude, authority.stderrEncodingBinding());
+
+        ProtosNetworkCapabilityValue network =
+                switch (networkGrant) {
+                    case NONE -> null;
+                    case HOST_NETWORK -> runtimeHost.provisionHostNetwork(prelude);
+                };
+
+        ProtosStandaloneProcessBootstrap.Result bootstrap =
+                ProtosStandaloneProcessBootstrap.create(
+                        prelude,
+                        authority.applicationArguments(),
+                        authority.environmentNameDomain(),
+                        authority.environmentEntries(),
+                        authority.stdinBackend(),
+                        authority.stdoutBackend(),
+                        authority.stderrBackend(),
+                        stdinEncoding,
+                        stdoutEncoding,
+                        stderrEncoding,
+                        null,
+                        network);
+
+        ProtosProcessRuntime process = bootstrap.process();
+        ProtosPolyglotProcessContext processContext = null;
+
+        try {
+            processContext =
+                    runtimeHost.hostProcess(
+                            process,
+                            InputStream.nullInputStream(),
+                            OutputStream.nullOutputStream(),
+                            OutputStream.nullOutputStream());
+            processObserver.accept(process);
+
+            // The D225-B1 bootstrap performs exact MODULE-local public
+            // binding lookup and installs the behavior at RootActor READY.
+            boolean ready =
+                    ProtosStandaloneHostedExecution.bootstrapRootActorService(
+                            bootstrap, entryKey, serviceBinding);
+            if (!ready) {
+                return false;
+            }
+
+            // The service may end by graceful RootActor self-stop without
+            // requesting Process termination. Its owner closes the Process
+            // in finally, before external package custody can be released.
+            process.awaitRootActorTerminationForRuntime();
+            return !process.failedFromRootForRuntime();
+        } catch (IOException failure) {
+            throw failure;
+        } catch (RuntimeException failure) {
+            throw new IOException("package RootActor service Process failed", failure);
+        } finally {
+            process.requestTerminationForRuntime();
+            process.awaitTerminationForRuntime();
+            if (processContext != null) {
+                processContext.awaitTerminalDispositionForRuntime();
+            }
+        }
+    }
+
+    static boolean executeService(
+            Request request,
+            NetworkGrant networkGrant,
+            String serviceBinding,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        ProtosWorkspacePackageModuleResolver resolver =
+                new ProtosWorkspacePackageModuleResolver(
+                        request.projectRoot(),
+                        request.plan(),
+                        request.standardLibraryResolver());
+        return executeServiceEntry(
+                request.coreRoot(),
+                resolver,
+                resolver.entryModule(request.entryLogicalModule()),
+                request.authority(),
+                networkGrant,
+                serviceBinding,
+                ignored -> {},
+                runtimeHost);
+    }
+
     private static ProtosEncodingValue requireEncoding(
             ProtosPrelude prelude, String exactBinding) throws IOException {
         if (exactBinding == null) {

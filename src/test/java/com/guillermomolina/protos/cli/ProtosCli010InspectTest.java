@@ -235,8 +235,8 @@ final class ProtosCli010InspectTest {
     void helpDocumentsInspectOptionScopeAndModule() {
         R help = run("--help");
         assertEquals(0, help.c);
-        assertTrue(help.o.contains("protos [--inspect] <file> [args...]"), help.o);
-        assertTrue(help.o.contains("protos [--inspect] -e <source> [args...]"), help.o);
+        assertTrue(help.o.contains("protos [--inspect] [--allow-network] [--service=<binding>] <file> [args...]"), help.o);
+        assertTrue(help.o.contains("protos [--inspect] [--allow-network] -e <source> [args...]"), help.o);
         assertTrue(help.o.contains("protos [--inspect]\n"), help.o);
         assertTrue(help.o.contains("--inspect (before <file>, -e, or REPL)"), help.o);
         assertTrue(help.o.contains("std:inspect"), help.o);

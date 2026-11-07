@@ -18,6 +18,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
 import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,7 +30,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * D225-B1 explicitly opted-in hosted RootActor message service: one live standalone Protos Process
@@ -148,6 +151,43 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
             ResolverGrant resolverGrant,
             Map<String, String> applicationModules)
             throws IOException {
+        return openWithHost(
+                coreRoot,
+                sourceFile,
+                bootstrapBinding,
+                applicationArguments,
+                in,
+                out,
+                err,
+                networkGrant,
+                resolverGrant,
+                applicationModules,
+                ProtosPolyglotRuntimeHost::open,
+                (activation, process) -> {});
+    }
+
+    /**
+     * Host-configurable D225-B1 entry. The factory creates the owning RuntimeHost;
+     * the hook installs host-selected CLI facilities after Process binding and
+     * before any RootActor service source executes. Neither operation grants
+     * guest authority beyond the explicitly supplied bootstrap grants.
+     */
+    public static ProtosRootActorServiceSession openWithHost(
+            Path coreRoot,
+            Path sourceFile,
+            String bootstrapBinding,
+            List<String> applicationArguments,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            Map<String, String> applicationModules,
+            Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory,
+            BiConsumer<ProtosActivation, ProtosProcessRuntime> bootstrapHook)
+            throws IOException {
+        Objects.requireNonNull(runtimeHostFactory, "runtimeHostFactory");
+        Objects.requireNonNull(bootstrapHook, "bootstrapHook");
         Map<String, String> catalog =
                 ProtosApplicationModuleResolver.authorizedCatalog(applicationModules);
         Objects.requireNonNull(coreRoot, "coreRoot");
@@ -173,7 +213,9 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
         ProtosPolyglotRuntimeHost runtimeHost = null;
         try {
             // Grants are provisioned on the host that will host this Process, from its Prelude.
-            runtimeHost = ProtosPolyglotRuntimeHost.open();
+            runtimeHost =
+                    Objects.requireNonNull(
+                            runtimeHostFactory.get(), "runtimeHostFactory returned null");
             ProtosStandaloneProcessBootstrap.Result bootstrap =
                     ProtosStandaloneHostedExecution.bootstrapProcess(
                             coreRoot,
@@ -190,6 +232,7 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
             ProtosPolyglotProcessContext processContext =
                     ProtosStandaloneHostedExecution.bindProcess(
                             bootstrap, runtimeHost, in, out, err);
+            bootstrapHook.accept(bootstrap.activation(), process);
             if (!ProtosStandaloneHostedExecution.bootstrapRootActorService(
                     bootstrap, resolver.entryModule(), bootstrapBinding)) {
                 throw new InitializationFailedException(bootstrapBinding);
@@ -215,6 +258,11 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
         }
     }
 
+    /** Whether an unhandled fatal RootActor failure ended this Process. */
+    public boolean failedFromRoot() {
+        return process.failedFromRootForRuntime();
+    }
+
     /** True once the Process has terminated, whether by {@link #close()} or by itself. */
     public boolean isTerminated() {
         return process.lifecycleState() == ProtosProcessRuntime.LifecycleState.TERMINATED;
@@ -227,6 +275,15 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
      */
     public void awaitTermination() {
         process.awaitTerminationForRuntime();
+    }
+
+    /**
+     * Wait until the service RootActor has terminated, including a graceful
+     * Actor.current().stop(). Does not by itself stop the Process or close
+     * host resources; the session owner still calls close().
+     */
+    public void awaitRootActorTermination() {
+        process.awaitRootActorTerminationForRuntime();
     }
 
     /**

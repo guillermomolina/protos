@@ -14,7 +14,7 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-package com.guillermomolina.protos.cli;
+package com.guillermomolina.protos.cli.contracts;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -85,9 +85,9 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         assertFalse(source.contains("private static Source sourceFromPath("));
         assertFalse(source.contains(".uri(exact.toUri())"));
 
-        // I065: application, debug and bundled-Tool sessions share one Network-capable hosting
-        // seam, but no current CLI route selects Network; both seam callers pass NONE.
-        assertFalse(source.contains("HOST_NETWORK"));
+        // D247: applications explicitly select HOST_NETWORK, while the separate
+        // bundled-Tool session route continues to select NONE.
+        assertTrue(source.contains("NetworkGrant.HOST_NETWORK"));
         assertTrue(
                 source.matches(
                         "(?s).*private Session createSession\\(.*?NetworkGrant networkGrant\\).*"));
@@ -96,7 +96,9 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
                         "(?s).*private Session createDebugSession\\("
                                 + ".*?NetworkGrant networkGrant\\).*"));
         assertEquals(
-                2, source.split("NetworkGrant\\.NONE\\)", -1).length - 1, "NONE seam callers");
+                1,
+                source.split("NetworkGrant\\.NONE\\)", -1).length - 1,
+                "bundled-Tool NONE seam caller");
         assertEquals(
                 2,
                 source.split("bootstrapProcess\\(", -1).length - 1,

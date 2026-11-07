@@ -98,7 +98,8 @@ final class ProtosWorkspaceRunCliTest {
 
         Result help = runPublic("--help");
         assertEquals(0, help.code());
-        assertTrue(help.stdout().contains("protos run <entry> [args...]"));
+        assertTrue(help.stdout().contains(
+                "protos run [--allow-network] [--service=<binding>] <entry> [args...]"));
         assertTrue(help.stdout().contains("current directory"));
         assertTrue(help.stdout().contains("neither 'run' nor <entry>"));
     }
@@ -284,6 +285,127 @@ final class ProtosWorkspaceRunCliTest {
         assertEquals(1, hostCode);
         assertTrue(hostText.startsWith("protos run: missing entry"), hostText);
         assertFalse(hostText.contains("Internal error"), hostText);
+    }
+
+    @Test
+    void exportedModuleServicePreservesArgumentsAndTerminatesNormally()
+            throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+
+        Files.writeString(
+                project.resolve("Main/module.protos"),
+                """
+                this.service: () => {
+                    behavior: {
+                        finish: () => {
+                            writer: TextWriter(
+                                process.stdout(),
+                                process.stdoutEncoding()
+                            )
+                            writer.writeLine(process.args().at(0)).value()
+                            Actor.current().stop()
+                            null
+                        }
+                    }
+                    Actor.current().send("finish")
+                    behavior
+                }
+                """,
+                StandardCharsets.UTF_8);
+
+        Result result = runWorkspaceService(
+                new ProtosCli(),
+                project,
+                "Main",
+                "service",
+                "module-argument");
+
+        assertEquals(0, result.code(), result.stderr());
+        assertEquals("module-argument\n", result.stdout());
+    }
+
+    @Test
+    void privateModuleBindingCannotBeSelectedAsService()
+            throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+
+        Files.writeString(
+                project.resolve("Main/module.protos"),
+                "service: () => { {} }\n",
+                StandardCharsets.UTF_8);
+
+        Result result = runWorkspaceService(
+                new ProtosCli(), project, "Main", "service");
+
+        assertEquals(1, result.code());
+        assertTrue(result.stderr().contains("RootActor"), result.stderr());
+    }
+
+    @Test
+    void mixedPackageServiceKeepsExternalCustodyUntilLateMessageImport()
+            throws Exception {
+        MixedProject mixed = materializeMixedProject("i154-mixed-service");
+        ProtosLocalExactPackageMaterializationProvider provider =
+                new ProtosLocalExactPackageMaterializationProvider(
+                        temp.resolve("i154-mixed-service-store"));
+
+        Path selectedRoot = provider.locationFor(mixed.identity());
+        copyTree(mixed.externalSource(), selectedRoot);
+        assumeSecureConfinement(selectedRoot);
+
+        Files.writeString(
+                mixed.project().resolve("Main/module.protos"),
+                """
+                this.service: () => {
+                    behavior: {
+                        finish: () => {
+                            api: import("dep:reg/Api")
+                            writer: TextWriter(
+                                process.stdout(),
+                                process.stdoutEncoding()
+                            )
+                            writer.writeLine(api.value).value()
+                            Actor.current().stop()
+                            null
+                        }
+                    }
+                    Actor.current().send("finish")
+                    behavior
+                }
+                """,
+                StandardCharsets.UTF_8);
+
+        Result result = runWorkspaceService(
+                new ProtosCli(ignored -> provider),
+                mixed.project(),
+                "Main",
+                "service");
+
+        assertEquals(0, result.code(), result.stderr());
+        assertEquals("external-module\n", result.stdout());
+    }
+
+    private Result runWorkspaceService(
+            ProtosCli cli,
+            Path project,
+            String entry,
+            String binding,
+            String... args) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+
+        int code = cli.runWorkspaceApplication(
+                project,
+                entry,
+                List.of(args),
+                InputStream.nullInputStream(),
+                new PrintStream(out),
+                new PrintStream(err),
+                binding);
+
+        return result(code, out, err);
     }
 
     private Result runPublic(String... args) {

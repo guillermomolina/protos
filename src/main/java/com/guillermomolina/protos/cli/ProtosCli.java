@@ -19,7 +19,11 @@ package com.guillermomolina.protos.cli;
 import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
 import com.guillermomolina.protos.analysis.ProtosStaticMemberCompletionSite;
 import com.guillermomolina.protos.execution.*;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
 import com.guillermomolina.protos.lsp.ProtosLanguageServerMain;
+import com.guillermomolina.protos.lexer.ProtosLexer;
+import com.guillermomolina.protos.lexer.TokenOccurrence;
+import com.guillermomolina.protos.lexer.TokenType;
 import com.guillermomolina.protos.parser.ParseError;
 import com.guillermomolina.protos.runtime.*;
 import com.guillermomolina.protos.runtime.diagnostics.ProtosDiagnosticTrace;
@@ -82,6 +86,9 @@ public final class ProtosCli {
      */
     private boolean inspectionAuthorized = false;
 
+    /** Explicit D247 host Network grant for this application invocation only. */
+    private boolean networkAuthorized = false;
+
     public ProtosCli() {
         this(ProtosLocalExactPackageMaterializationProvider::forDistributionRoot);
     }
@@ -114,6 +121,12 @@ public final class ProtosCli {
 
     public int run(String[] args, InputStream in, PrintStream out, PrintStream err) {
         if (args.length > 0 && args[0].equals("lint")) {
+            if (Arrays.stream(args).anyMatch(
+                    value -> value.equals("--allow-network")
+                            || value.equals("--service")
+                            || value.startsWith("--service="))) {
+                return usage(err, "application permissions and service mode are not available to bundled Tools");
+            }
             // D195 lint is purely static: it runs on the calling thread without the guest
             // carrier, Polyglot Context, or Process that guest-executing commands need.
             try {
@@ -152,14 +165,44 @@ public final class ProtosCli {
     private int dispatchCommand(String[] args, InputStream in, PrintStream out, PrintStream err) {
         foreignProviderPaths = List.of();
         inspectionAuthorized = false;
+        networkAuthorized = false;
         try {
             List<Path> providerPaths = new ArrayList<>();
             boolean providerPathsRequested = false;
             boolean inspect = false;
+            boolean allowNetwork = false;
+            String requestedService = null;
             int first = 0;
             while (first < args.length
                     && (args[first].equals("--foreign-provider-path")
-                            || args[first].equals("--inspect"))) {
+                            || args[first].equals("--inspect")
+                            || args[first].equals("--allow-network")
+                            || args[first].equals("--service")
+                            || args[first].startsWith("--service="))) {
+                if (args[first].equals("--service")
+                        || args[first].startsWith("--service=")) {
+                    if (requestedService != null) {
+                        return usage(err, "--service may be given only once");
+                    }
+                    if (args[first].equals("--service")) {
+                        return usage(err, "--service requires =<binding>");
+                    }
+                    requestedService =
+                            args[first].substring("--service=".length());
+                    if (!validServiceBinding(requestedService)) {
+                        return usage(err, "invalid --service binding");
+                    }
+                    first++;
+                    continue;
+                }
+                if (args[first].equals("--allow-network")) {
+                    if (allowNetwork) {
+                        return usage(err, "--allow-network may be given only once");
+                    }
+                    allowNetwork = true;
+                    first++;
+                    continue;
+                }
                 if (args[first].equals("--inspect")) {
                     if (inspect) {
                         return usage(err, "--inspect may be given only once");
@@ -188,7 +231,8 @@ public final class ProtosCli {
             }
             if (first > 0) {
                 args = Arrays.copyOfRange(args, first, args.length);
-                if (args.length > 0
+                if ((inspect || providerPathsRequested)
+                        && args.length > 0
                         && !args[0].equals("-e")
                         && (args[0].startsWith("-") || SUBCOMMANDS.contains(args[0]))) {
                     return usage(
@@ -203,7 +247,38 @@ public final class ProtosCli {
             }
             foreignProviderPaths = List.copyOf(providerPaths);
             inspectionAuthorized = inspect;
-            if (args.length == 0) return repl(in, out, err);
+            networkAuthorized = allowNetwork;
+
+            if (args.length > 0
+                    && SUBCOMMANDS.contains(args[0])
+                    && !args[0].equals("debug")
+                    && !args[0].equals("run")
+                    && (allowNetwork
+                            || requestedService != null
+                            || Arrays.stream(args).anyMatch(
+                                    value -> value.equals("--allow-network")
+                                            || value.equals("--service")
+                                            || value.startsWith("--service=")))) {
+                return usage(
+                        err,
+                        "application permissions and service mode are not available to bundled Tools");
+            }
+
+            if ((allowNetwork || requestedService != null)
+                    && args.length > 0
+                    && (args[0].equals("--help")
+                            || args[0].equals("-h")
+                            || args[0].equals("--version")
+                            || args[0].equals("-v"))) {
+                return usage(err, "application options require application execution");
+            }
+
+            if (args.length == 0) {
+                if (requestedService != null) {
+                    return usage(err, "--service requires a source file");
+                }
+                return repl(in, out, err);
+            }
             if (args.length == 1 && (args[0].equals("--help") || args[0].equals("-h"))) {
                 help(out);
                 return 0;
@@ -223,28 +298,64 @@ public final class ProtosCli {
                 ProtosLanguageServerMain.run(in, out);
                 return 0;
             }
-            if (args[0].equals("debug")) {
-                if (args.length < 2) {
-                    return usage(err, "debug requires a source file");
+            if (args[0].equals("debug") || args[0].equals("run")) {
+                int entry = 1;
+                while (entry < args.length
+                        && (args[entry].equals("--allow-network")
+                                || args[entry].equals("--service")
+                                || args[entry].startsWith("--service="))) {
+                    if (args[entry].equals("--allow-network")) {
+                        if (allowNetwork) {
+                            return usage(err, "--allow-network may be given only once");
+                        }
+                        allowNetwork = true;
+                    } else {
+                        if (requestedService != null) {
+                            return usage(err, "--service may be given only once");
+                        }
+                        if (args[entry].equals("--service")) {
+                            return usage(err, "--service requires =<binding>");
+                        }
+                        requestedService =
+                                args[entry].substring("--service=".length());
+                        if (!validServiceBinding(requestedService)) {
+                            return usage(err, "invalid --service binding");
+                        }
+                    }
+                    entry++;
                 }
-                return debugFile(
-                        args[1],
-                        applicationArguments(args, 2),
-                        in,
-                        out,
-                        err);
-            }
-            if (args[0].equals("run")) {
-                if (args.length < 2) {
-                    return usage(err, "run requires a root-package logical entry");
+
+                if (entry >= args.length) {
+                    return usage(
+                            err,
+                            args[0].equals("debug")
+                                    ? "debug requires a source file"
+                                    : "run requires a root-package logical entry");
+                }
+                if (args[entry].startsWith("-")) {
+                    return usage(err, "unknown option: " + args[entry]);
+                }
+
+                networkAuthorized = allowNetwork;
+                if (args[0].equals("debug")) {
+                    if (requestedService != null) {
+                        return usage(err, "--service is not supported by debug");
+                    }
+                    return debugFile(
+                            args[entry],
+                            applicationArguments(args, entry + 1),
+                            in,
+                            out,
+                            err);
                 }
                 return runWorkspaceApplication(
                         Path.of("").toAbsolutePath().normalize(),
-                        args[1],
-                        applicationArguments(args, 2),
+                        args[entry],
+                        applicationArguments(args, entry + 1),
                         in,
                         out,
-                        err);
+                        err,
+                        requestedService);
             }
             if (args[0].equals("package")) {
                 return runBundledPackageTool(args, in, out, err);
@@ -259,6 +370,9 @@ public final class ProtosCli {
                 return formatDocument(args.length == 2 ? args[1] : null, in, out, err);
             }
             if (args[0].equals("-e")) {
+                if (requestedService != null) {
+                    return usage(err, "--service is not supported by -e");
+                }
                 if (args.length < 2) return usage(err, "-e requires a source argument");
                 return evalOneShot(
                         sourceFromCharacters(args[1], "<eval>"),
@@ -272,6 +386,15 @@ public final class ProtosCli {
             }
 
             Path sourcePath = Path.of(args[0]).toAbsolutePath().normalize();
+            if (requestedService != null) {
+                return evalFileService(
+                        sourcePath,
+                        requestedService,
+                        applicationArguments(args, 1),
+                        in,
+                        out,
+                        err);
+            }
             String src;
             try {
                 src = Files.readString(sourcePath, StandardCharsets.UTF_8);
@@ -292,6 +415,61 @@ public final class ProtosCli {
                     err);
         } catch (Throwable e) {
             return internalError(err, e);
+        }
+    }
+
+    private static boolean validServiceBinding(String name) {
+        try {
+            List<TokenOccurrence> tokens =
+                    new ProtosLexer(name).tokenizeOccurrences();
+            return tokens.size() == 2
+                    && tokens.get(0).token().type() == TokenType.IDENTIFIER
+                    && tokens.get(0).span().startOffset() == 0
+                    && tokens.get(0).span().endOffset() == name.length()
+                    && tokens.get(1).token().type() == TokenType.EOF;
+        } catch (ProtosLexer.LexicalError invalid) {
+            return false;
+        }
+    }
+
+    private int evalFileService(
+            Path sourcePath,
+            String binding,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err)
+            throws IOException {
+        try (ProtosRootActorServiceSession service =
+                ProtosRootActorServiceSession.openWithHost(
+                        core(),
+                        sourcePath,
+                        binding,
+                        applicationArguments,
+                        in,
+                        out,
+                        err,
+                        applicationNetworkGrant(),
+                        ResolverGrant.NONE,
+                        Map.of(),
+                        this::openApplicationRuntimeHost,
+                        (activation, process) ->
+                                ProtosCliPrintFacility.install(
+                                        activation, process, renderer))) {
+            // D225-B1: READY is not termination and does not establish HTTP
+            // listener readiness. The owning session remains alive.
+            service.awaitRootActorTermination();
+            if (service.failedFromRoot()) {
+                err.println("Error: RootActor service terminated with an unhandled failure");
+                return 1;
+            }
+            return 0;
+        } catch (ProtosRootActorServiceSession.InitializationFailedException failure) {
+            err.println("Error: " + failure.getMessage());
+            return 1;
+        } catch (IOException failure) {
+            err.println("protos service: " + failure.getMessage());
+            return 1;
         }
     }
 
@@ -438,7 +616,7 @@ public final class ProtosCli {
                         in,
                         out,
                         err,
-                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE);
+                        applicationNetworkGrant());
         ProtosCliPrintFacility.install(
                 session.activation(), session.process(), renderer);
         return session;
@@ -451,6 +629,19 @@ public final class ProtosCli {
             InputStream in,
             PrintStream out,
             PrintStream err) {
+        return runWorkspaceApplication(
+                projectRoot, entryLogicalModule, applicationArguments,
+                in, out, err, null);
+    }
+
+    int runWorkspaceApplication(
+            Path projectRoot,
+            String entryLogicalModule,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err,
+            String serviceBinding) {
         try {
             Path core = core();
             Path distributionRoot = core.getParent().getParent();
@@ -472,7 +663,25 @@ public final class ProtosCli {
                             "UTF8");
             ProtosExactPackageMaterializationProvider provider =
                     exactPackageMaterializationProviderFactory.create(distributionRoot);
-            ProtosExecutionOutcome outcome = ProtosPackageRunDriver.execute(request, provider);
+            if (serviceBinding != null) {
+                boolean normal =
+                        ProtosPackageRunDriver.executeService(
+                                request,
+                                provider,
+                                applicationNetworkGrant(),
+                                serviceBinding);
+                if (!normal) {
+                    err.println(
+                            "Error: RootActor package service failed during bootstrap "
+                                    + "or terminated with an unhandled failure");
+                    return 1;
+                }
+                return 0;
+            }
+
+            ProtosExecutionOutcome outcome =
+                    ProtosPackageRunDriver.execute(
+                            request, provider, applicationNetworkGrant());
 
             return workspaceOutcomeExitCode(outcome, err);
         } catch (IOException failure) {
@@ -1231,13 +1440,14 @@ public final class ProtosCli {
                                 characters,
                                 new ProtosStandardLibraryModuleResolver(core.getParent()));
                 Session session =
-                        session(
+                        createSession(
                                 core,
                                 resolver,
                                 applicationArguments,
                                 in,
                                 out,
-                                err)) {
+                                err,
+                                applicationNetworkGrant())) {
             ProtosCliPrintFacility.install(
                     session.activation(), session.process(), renderer);
             return evalCanonicalDirectFile(resolver, session, err);
@@ -1402,6 +1612,12 @@ public final class ProtosCli {
         return line.equals(REPL_QUIT_COMMAND) || line.equals(REPL_EXIT_COMMAND);
     }
 
+    private ProtosWorkspacePackageApplicationExecution.NetworkGrant applicationNetworkGrant() {
+        return networkAuthorized
+                ? ProtosWorkspacePackageApplicationExecution.NetworkGrant.HOST_NETWORK
+                : ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE;
+    }
+
     /*
      * Kept for existing REPL reflection/conformance tests. Production entry paths use the
      * argument/stream-aware overload below.
@@ -1422,13 +1638,14 @@ public final class ProtosCli {
             throws IOException {
         Path core = core();
         Session session =
-                session(
+                createSession(
                         core,
                         new ProtosStandardLibraryModuleResolver(core.getParent()),
                         applicationArguments,
                         in,
                         out,
-                        err);
+                        err,
+                        applicationNetworkGrant());
         ProtosCliPrintFacility.install(session.activation(), session.process(), renderer);
         return session;
     }
@@ -1452,9 +1669,9 @@ public final class ProtosCli {
     }
 
     /**
-     * Hosting seam shared by direct-file, {@code -e}, REPL and bundled-Tool sessions. Every current
-     * caller selects {@code NONE}; selecting Network for an application is reserved to a future
-     * owning CLI policy and must never reach bundled Tool sessions. The RuntimeHost opens first
+     * Hosting seam shared by application and bundled-Tool sessions. Only explicitly
+     * authorized application invocations select HOST_NETWORK; bundled Tools retain NONE.
+     * The RuntimeHost opens first
      * so a granted Network is provisioned on the host of this Process from its exact Prelude.
      */
     private Session createSession(
@@ -1466,25 +1683,7 @@ public final class ProtosCli {
             PrintStream err,
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant)
             throws IOException {
-        // Only file, -e, and REPL sessions can carry explicitly authorized provider paths or
-        // explicit std:inspect authorization (CLI010).
-        ProtosPolyglotRuntimeHost runtimeHost;
-        if (!inspectionAuthorized) {
-            runtimeHost =
-                    foreignProviderPaths.isEmpty()
-                            ? ProtosPolyglotRuntimeHost.open()
-                            : ProtosPolyglotRuntimeHost.openWithForeignProviders(
-                                    ProtosForeignProviderConfiguration.trustedInProcess(
-                                            foreignProviderPaths));
-        } else {
-            runtimeHost =
-                    foreignProviderPaths.isEmpty()
-                            ? ProtosPolyglotRuntimeHost.openWithInspection()
-                            : ProtosPolyglotRuntimeHost.openWithForeignProviders(
-                                    ProtosForeignProviderConfiguration.trustedInProcess(
-                                            foreignProviderPaths),
-                                    true);
-        }
+        ProtosPolyglotRuntimeHost runtimeHost = openApplicationRuntimeHost();
         ProtosStandaloneProcessBootstrap.Result bootstrap;
         boolean bootstrapped = false;
         try {
@@ -1508,8 +1707,34 @@ public final class ProtosCli {
     }
 
     /**
+     * Opens the application RuntimeHost with exactly the independently selected
+     * inspection and foreign-provider permissions. Service and ordinary file
+     * execution share this policy; bundled Tools do not select these flags.
+     */
+    private ProtosPolyglotRuntimeHost openApplicationRuntimeHost() {
+        ProtosPolyglotRuntimeHost runtimeHost;
+        if (!inspectionAuthorized) {
+            runtimeHost =
+                    foreignProviderPaths.isEmpty()
+                            ? ProtosPolyglotRuntimeHost.open()
+                            : ProtosPolyglotRuntimeHost.openWithForeignProviders(
+                                    ProtosForeignProviderConfiguration.trustedInProcess(
+                                            foreignProviderPaths));
+        } else {
+            runtimeHost =
+                    foreignProviderPaths.isEmpty()
+                            ? ProtosPolyglotRuntimeHost.openWithInspection()
+                            : ProtosPolyglotRuntimeHost.openWithForeignProviders(
+                                    ProtosForeignProviderConfiguration.trustedInProcess(
+                                            foreignProviderPaths),
+                                    true);
+        }
+        return runtimeHost;
+    }
+
+    /**
      * Debug counterpart of {@link #createSession}: the debug RuntimeHost opens first, the Process
-     * is bootstrapped against it under {@code networkGrant} (currently always {@code NONE}), and
+     * is bootstrapped against it under the explicitly selected {@code networkGrant}, and
      * readiness is published only once that bootstrap succeeded.
      */
     private Session createDebugSession(
@@ -1716,11 +1941,11 @@ public final class ProtosCli {
     private static void help(PrintStream out) {
         out.println(
                 "Usage:\n"
-                        + "  protos [--inspect] <file> [args...]\n"
-                        + "  protos [--inspect] -e <source> [args...]\n"
-                        + "  protos debug <file> [args...]\n"
+                        + "  protos [--inspect] [--allow-network] [--service=<binding>] <file> [args...]\n"
+                        + "  protos [--inspect] [--allow-network] -e <source> [args...]\n"
+                        + "  protos debug [--allow-network] <file> [args...]\n"
                         + "  protos language-server\n"
-                        + "  protos run <entry> [args...]\n"
+                        + "  protos run [--allow-network] [--service=<binding>] <entry> [args...]\n"
                         + "  protos package [args...]\n"
                         + "  protos test [--jobs N] [args...]\n"
                         + "  protos format [<file>]\n"
@@ -1730,6 +1955,8 @@ public final class ProtosCli {
                         + "  -e <source> [args...]\n"
                         + "  --foreign-provider-path <paths> (before <file>, -e, or REPL)\n"
                         + "  --inspect (before <file>, -e, or REPL)\n"
+                        + "  --allow-network (application RootActor only; no DNS or filesystem)\n"
+                        + "  --service=<binding> (direct SOURCE message-service entry)\n"
                         + "  -h, --help\n"
                         + "  -v, --version\n\n"
                         + "Workspace run executes the explicit root-package logical <entry> "

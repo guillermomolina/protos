@@ -12,9 +12,11 @@
 // A RootActor message service (D225-B1, ACTORS.md §32).
 //
 // Start it through the explicit RootActor service entry with the bootstrap
-// binding "service", for example from Java:
+// binding "service", for example:
 //
-//     ProtosRootActorServiceSession.open(coreRoot, path, "service", ...)
+//     protos --service=service protos/examples/actors/root-message-service.protos
+//
+// A Java embedder may instead use ProtosRootActorServiceSession.open(...).
 //
 // Ordinary `protos <file>` evaluation is a direct entry: it runs the top level
 // below and never invokes `service`.

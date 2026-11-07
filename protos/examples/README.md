@@ -114,16 +114,16 @@ with the
 [`04-control-flow/04-contextual-for.protos`](../tutorials/04-control-flow/04-contextual-for.protos)
 tutorial.
 
-The standalone CLI grants no `network`. The two `io/` examples marked "requires
-`network`" therefore contain no `print(...)` call and are not run by the CLI
-regression suite; they end with a Boolean verdict and are executed by
-`ProtosHttpLearningMaterialIntegrationTest` in a Java Polyglot embedding with
-socket access, which also installs `http-echo-handler.protos` as `app:echo`.
-The two "RootActor service entry" examples are started through the explicit
-`ProtosRootActorServiceSession` Java entry with their `service` bootstrap
-binding; `protos <file>` would only evaluate their top level. The HTTP one also
-supplies `root-service-handler.protos` through that session's application
-module catalog.
+The standalone CLI does not grant `network` by default; D247-C adds an
+explicit `--allow-network` opt-in for TCP. The existing `io/` examples marked
+"requires `network`" have no `print(...)` call and are not run by the ordinary
+print-example sweep; they are also exercised by
+`ProtosHttpLearningMaterialIntegrationTest` with a Java Polyglot socket grant.
+The RootActor message service in `actors/root-message-service.protos` can now
+be launched as `protos --service=service protos/examples/actors/root-message-service.protos`.
+The HTTP `root-service-host.protos` example still uses the separate Java host
+application catalog to provide `app:root-service-handler`. Ordinary file entry
+without `--service` still only evaluates its top level.
 See the [HTTP guide](../../docs/guide/library/http.md).
 
 Execution modes at a glance:

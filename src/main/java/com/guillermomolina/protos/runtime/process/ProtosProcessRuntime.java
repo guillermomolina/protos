@@ -671,6 +671,38 @@ public final class ProtosProcessRuntime {
         beginTermination(failure);
     }
 
+    /**
+     * Host-only terminal classification. No guest capability or failure object
+     * is exposed; the failure remains owned by the Process runtime.
+     */
+    public synchronized boolean failedFromRootForRuntime() {
+        return rootFailureCause != null;
+    }
+
+    /**
+     * Wait for the RootActor's terminal cutover without implying that an ordinary
+     * graceful Actor stop is itself a Process termination request.
+     *
+     * Intended for hosts running an explicitly selected RootActor service.
+     * Interruptions preserve the existing awaitTerminationForRuntime policy.
+     */
+    public void awaitRootActorTerminationForRuntime() {
+        boolean interrupted = false;
+        synchronized (this) {
+            while (rootActor.lifecycleState() != ProtosActor.LifecycleState.TERMINATED
+                    && lifecycle != LifecycleState.TERMINATED) {
+                try {
+                    wait();
+                } catch (InterruptedException ignored) {
+                    interrupted = true;
+                }
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     /** Authoritative local Process termination request; this is not an OS-process operation. */
     public boolean requestTerminationForRuntime() {
         return beginTermination(null);
@@ -728,6 +760,11 @@ public final class ProtosProcessRuntime {
         synchronized (this) {
             if (!liveActors.remove(actor)) {
                 return;
+            }
+            // A RootActor service may stop gracefully while its Process is
+            // still RUNNING. Wake hosting code without changing Process policy.
+            if (actor == rootActor) {
+                notifyAll();
             }
             if (lifecycle == LifecycleState.TERMINATING && liveActors.isEmpty()) {
                 lifecycle = LifecycleState.TERMINATED;

@@ -96,9 +96,12 @@ Network, connection, HTTP or TLS resource.
 
 ## Authority and Actors
 
-- The standalone CLI (`protos file.protos`, `protos -e`, the REPL) grants
-  neither `network` nor `resolver`, and no flag grants them. A Java host grants
-  them; see [Embedding Protos in a Java application](../embedding/java.md).
+- The standalone CLI grants neither `network` nor `resolver` by default.
+  `--allow-network` grants only initial RootActor host TCP authority for
+  direct-file, `-e`, REPL, `run` and `debug` application execution. There is
+  no CLI Resolver grant: DNS remains a separately granted host capability.
+  See [CLI network and service options](../tools/cli.md#network-authority-and-rootactor-service-mode-d247-c--i154)
+  and [Embedding Protos in Java](../embedding/java.md).
 - Imported modules do not inherit those bootstrap-local slots. Pass the
   capabilities as arguments, as `std:http/url_client` expects.
 - Live `network` and `resolver` capabilities are not transferable Actor

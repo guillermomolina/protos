@@ -83,6 +83,47 @@ public final class ProtosWorkspaceRunDriver {
         }
     }
 
+    /** D247: a workspace-only RootActor service, retaining its RuntimeHost. */
+    public static boolean executeService(
+            Request request,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            String serviceBinding)
+            throws IOException {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(networkGrant, "networkGrant");
+        Objects.requireNonNull(serviceBinding, "serviceBinding");
+
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            ProtosPackageExecutionPlan plan =
+                    ProtosWorkspacePackagePreflight.build(
+                            request.coreRoot(),
+                            request.packageToolRoot(),
+                            request.projectRoot(),
+                            request.standardLibraryResolver(),
+                            runtimeHost);
+
+            ProtosWorkspacePackageApplicationExecution.Request application =
+                    new ProtosWorkspacePackageApplicationExecution.Request(
+                            request.coreRoot(),
+                            request.projectRoot(),
+                            plan,
+                            request.standardLibraryResolver(),
+                            request.entryLogicalModule(),
+                            request.applicationArguments(),
+                            request.environmentNameDomain(),
+                            request.environmentEntries(),
+                            request.stdinBackend(),
+                            request.stdoutBackend(),
+                            request.stderrBackend(),
+                            request.stdinEncodingBinding(),
+                            request.stdoutEncodingBinding(),
+                            request.stderrEncodingBinding());
+
+            return ProtosWorkspacePackageApplicationExecution.executeService(
+                    application, networkGrant, serviceBinding, runtimeHost);
+        }
+    }
+
     static ProtosExecutionOutcome execute(
             Request request,
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,

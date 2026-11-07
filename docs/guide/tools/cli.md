@@ -12,11 +12,11 @@ The dispatch code is
 
 | Command | What it does | Guide |
 |---|---|---|
-| `protos [--inspect] <file> [args...]` | Runs one source file | below |
-| `protos [--inspect] -e <source> [args...]` | Runs one source String | below |
-| `protos [--inspect]` | Starts the interactive REPL | below |
-| `protos run <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
-| `protos debug <file> [args...]` | Runs one file under the Debug Adapter Protocol | below |
+| `protos [--inspect] [--allow-network] [--service=<binding>] <file> [args...]` | Runs one source file | below |
+| `protos [--inspect] [--allow-network] -e <source> [args...]` | Runs one source String | below |
+| `protos [--inspect] [--allow-network]` | Starts the interactive REPL | below |
+| `protos run [--allow-network] [--service=<binding>] <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
+| `protos debug [--allow-network] <file> [args...]` | Runs one file under the Debug Adapter Protocol | below |
 | `protos format [<file>]` | Prints the canonical formatting of one document | below |
 | `protos lint [--output text\|json] [--fail-on-warning] [<file>]` | Reports parser errors and lint warnings without running code | below |
 | `protos language-server` | Starts the Language Server Protocol service on stdin/stdout | [Language server](language-server.md) |
@@ -49,6 +49,47 @@ protos -e 'print(process.args().size())' a b c
 The interactive REPL supports line editing, history and TAB completion.
 `:help` lists the REPL commands; `:quit`, `:exit` or Ctrl-D exits.
 Ctrl-C cancels the current input.
+
+### Network authority and RootActor service mode (D247-C / I154)
+
+`--allow-network` and `--service=<binding>` are independent options.
+`--allow-network` provisions host TCP access only through the initial
+RootActor module's bootstrap-local `network` binding. The default is absent.
+It does **not** grant a DNS `resolver`, `filesystem`, foreign/native access,
+authority to imported modules or child Actors, or permissions to bundled Tools.
+It is not a per-host or per-port restriction.
+
+`--service=<binding>` opts into D225-B1 RootActor message-service bootstrap
+instead of one-shot evaluation. For a direct SOURCE file it selects an own
+SOURCE-local binding such as `service: ...`. For `protos run` it selects an
+exported own MODULE binding such as `this.service: ...`, not a private binding.
+The bootstrap installs the returned behavior at RootActor READY, which is
+**not** evidence that a TCP listener or HTTP Host is ready. The application
+must signal listener readiness separately (or await `Host.ready()`).
+
+```sh
+protos --allow-network server.protos
+protos --allow-network -e 'print(network === network)'
+protos --allow-network
+protos debug --allow-network server.protos
+protos --service=service source-service.protos
+protos --allow-network --service=service source-service.protos
+protos run --allow-network --service=service Server
+```
+
+Options must precede the direct file or `-e` source, or follow `run`/`debug`
+before their entry. `--service` applies only to direct SOURCE files and `run`,
+not `-e`, REPL or `debug`. Neither option applies to bundled Tools or the
+Language Server. Duplicated, invalid and unsupported selections exit with
+usage status `2`. Arguments after the entry remain literal `process.args()`
+values, including arguments that resemble CLI options.
+
+A service remains alive until its Process terminates, keeping the owning
+Context, RuntimeHost and any package resource scope valid throughout Actor
+message turns. Service mode itself grants no authority. `Host.owning` owns its
+listener and Workers, not the RootActor service. No automatic graceful HTTP
+drain is promised on SIGINT, SIGTERM or OS-forced termination: a program must
+explicitly request `Host.shutdown("drain")` when graceful draining is required.
 
 ### TAB completion in the REPL
 
@@ -159,12 +200,13 @@ existing `protos.lock` (no public lock-generation command exists). Run it from
 the actual package root rather than the repository root; see the
 [package-exports tutorial](../../../protos/tutorials/08-language-interactions/06-package-exports/package.toml)
 and [Package Tool](package-tool.md).
-Neither `run` nor `<entry>` appears in `process.args()`. The application gets
-no network capability from the CLI.
+Neither `run` nor `<entry>` appears in `process.args()`. The default has no
+Network authority; only explicit `--allow-network` grants initial RootActor TCP
+authority. `--service=<binding>` selects the long-lived RootActor service entry.
 
 ### `protos debug`
 
-`protos debug <file>` runs one file through the standard Debug Adapter Protocol
+`protos debug [--allow-network] <file>` runs one file through the standard Debug Adapter Protocol
 debugger. Before guest execution it writes exactly one `PROTOS_DEBUG_READY`
 JSON record to standard output; afterwards guest output travels over DAP. It is
 intended to be launched by an editor integration rather than by hand.
@@ -275,6 +317,7 @@ protos lint --fail-on-warning src/main.protos
 | Commands on this page | All available | All available |
 | `--foreign-provider-path` | Not available: no dynamic plugin loading | Available |
 | `--inspect` | Available | Available |
+| `--allow-network`, `--service` | Available | Available |
 | Java embedding | Not available | Available through the standard Polyglot API ([guide](../embedding/java.md)) |
 
 Download and installation are described in [Try Protos](../00-try-protos.md).

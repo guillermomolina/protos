@@ -7,6 +7,15 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.451-SNAPSHOT
+
+- `I154` (#1076): implement D247-C explicit CLI Network authority and RootActor message-service entry for JVM and Native.
+  - Add opt-in `--allow-network` to SOURCE files, `-e`, REPL, `debug` and logical package MODULE `run`; preserve default-deny Network policy, without implicitly granting Resolver, Filesystem or bundled-Tool authority.
+  - Add `--service=<binding>` for SOURCE and MODULE application entries, using the existing RootActor service bootstrap, READY cutover and Actor message dispatch rather than creating a second service runtime.
+  - Preserve process-scoped authority and resource custody for direct-file, workspace and external-package execution; distinguish graceful RootActor termination from fatal RootActor failure, and release the hosted Process on service completion.
+  - Add CLI option, authority, service lifecycle and package-run regression tests, plus a real loopback SOURCE HTTP smoke test for both JVM and Native executables.
+  - Update the CLI, process-authority, networking and HTTP guides and the RootActor service example. Validate with focal tests, full `make test`, `make check`, and JVM/Native HTTP smoke tests.
+
 ## 0.3.450-SNAPSHOT
 
 - `I152` (#1067): implement the D242 breaking replacement of `protos.toml` with `package.toml`.

@@ -1297,19 +1297,20 @@ authority.
 ## What each launcher grants
 
 The bootstrap-local slots an initial module receives depend on who starts the
-Process. At the current revision and in the 0.3.312 release:
+Process. For the D247-C CLI interface (older releases do not provide these options):
 
 | Launcher | `process` | `filesystem` | `network` | `resolver` |
 |---|---|---|---|---|
-| `protos file.protos`, `protos -e`, REPL | Bound | Not bound | Not bound | Not bound |
-| `protos run <entry>` | Bound | Not bound | Not bound | Not bound |
+| `protos file.protos`, `protos -e`, REPL | Bound | Not bound | Only with `--allow-network` | Not bound |
+| `protos run <entry>` | Bound | Not bound | Only with `--allow-network` | Not bound |
 | Java Polyglot embedding (portable JVM only) | Bound | Only when the Context allows file access | Only when the Context allows socket access | Not bound |
 | Bundled Tools | Bound | Only confined capabilities that the Tool's launcher contract grants | Not bound | Not bound |
 | A Java host using `ProtosPolyglotRuntimeHost.provisionHostResolver` explicitly | Bound | As selected | As selected | Bound |
 | `ProtosRootActorServiceSession.open` (RootActor message-service entry) | Bound | Not bound | Only with `NetworkGrant.HOST_NETWORK` | Only with `ResolverGrant.HOST_RESOLVER` |
 
-The Native and portable JVM command lines grant the same authority. There is no
-command-line option that grants a Filesystem or a Network to an application.
+The Native and portable JVM command lines use the same explicit CLI authority
+contract. `--allow-network` grants initial host TCP authority only. There is no
+CLI option granting Filesystem or Resolver authority.
 When a slot is not bound, the name is simply absent from the initial module;
 referencing it fails like any other unbound name.
 
@@ -1327,6 +1328,21 @@ Its initial module receives exactly the bootstrap-local slots an ordinary
 initial module would receive under the same host grants: always `process`, and
 `network` or `resolver` only when the host grants each one. The two grants are
 independent, and choosing the service entry grants nothing by itself.
+
+On the standalone CLI, `--service=<binding>` explicitly selects this entry
+for SOURCE files and exported root-package MODULE bindings, independent of
+`--allow-network`. No `Host` import or exported name automatically opts into
+service mode. A service keeps its Process and package-resource scope alive
+until its termination; RootActor READY is distinct from HTTP `Host.ready()`.
+The CLI does not promise an implicit graceful HTTP drain on SIGINT or SIGTERM.
+
+On the standalone CLI, `--service=<binding>` explicitly selects the D225-B1
+RootActor service entry for SOURCE files or exported root-package MODULE
+bindings. This is independent of `--allow-network`: merely importing a Host or
+exporting a service name never selects the mode or grants TCP access. The CLI
+owns the Process and any external package custody until Process termination.
+RootActor READY is distinct from HTTP `Host.ready()`; no implicit graceful HTTP
+drain is guaranteed on SIGINT or SIGTERM.
 
 The slots stay RootActor-local for the whole life of the service. Its behavior
 methods can use them because they close over the initial module, but nothing

@@ -136,6 +136,102 @@ public final class ProtosPackageRunDriver {
         }
     }
 
+    /**
+     * D247: a long-lived root-package MODULE service. External materialization
+     * remains borrowed by its resolver until the application Process has
+     * terminated and its Context has reached terminal disposition.
+     */
+    public static boolean executeService(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            String serviceBinding)
+            throws IOException {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(provider, "provider");
+        Objects.requireNonNull(networkGrant, "networkGrant");
+        Objects.requireNonNull(serviceBinding, "serviceBinding");
+
+        List<ProtosExactExternalPackageIdentity> requirements =
+                ProtosExactExternalRequirementsPreflight.derive(
+                        request.coreRoot(),
+                        request.packageToolRoot(),
+                        request.projectRoot(),
+                        request.standardLibraryResolver());
+
+        if (requirements.isEmpty()) {
+            return ProtosWorkspaceRunDriver.executeService(
+                    request, networkGrant, serviceBinding);
+        }
+
+        Stages stages = PRODUCTION_STAGES;
+        ProtosPackageExecutionPlanV2 plan;
+        ProtosExternalPackageResourceScope scope;
+        List<ProtosCapturedFilesystemCustody> owned =
+                new ArrayList<>(requirements.size());
+
+        try {
+            List<ProtosExternalPackagePlanningPreflight.VerifiedExternalPackage>
+                    verified = new ArrayList<>(requirements.size());
+
+            for (ProtosExactExternalPackageIdentity identity : requirements) {
+                Path selectedRoot = provider.select(identity);
+                if (selectedRoot == null) {
+                    throw new IOException(
+                            "no materialization selected for exact external package");
+                }
+
+                ProtosCapturedFilesystemCustody custody =
+                        stages.verify(request, identity, selectedRoot);
+                owned.add(custody);
+                verified.add(
+                        ProtosExternalPackagePlanningPreflight.VerifiedExternalPackage
+                                .fromIdentity(identity, custody));
+            }
+
+            plan = stages.detach(
+                    stages.plan(request, verified), request.projectRoot());
+            scope = stages.reconcile(plan, verified);
+        } catch (Throwable failure) {
+            closeAll(owned, failure);
+            throw failure;
+        }
+
+        try (scope) {
+            ProtosPackageExecutionPlanV2ModuleResolver resolver =
+                    new ProtosPackageExecutionPlanV2ModuleResolver(
+                            request.projectRoot(),
+                            plan,
+                            scope,
+                            request.standardLibraryResolver());
+
+            ProtosModuleKey entryKey =
+                    resolver.entryModule(request.entryLogicalModule());
+
+            try (ProtosPolyglotRuntimeHost runtimeHost =
+                    ProtosPolyglotRuntimeHost.open()) {
+                return ProtosWorkspacePackageApplicationExecution.executeServiceEntry(
+                        request.coreRoot(),
+                        resolver,
+                        entryKey,
+                        new ProtosWorkspacePackageApplicationExecution.ApplicationAuthority(
+                                request.applicationArguments(),
+                                request.environmentNameDomain(),
+                                request.environmentEntries(),
+                                request.stdinBackend(),
+                                request.stdoutBackend(),
+                                request.stderrBackend(),
+                                request.stdinEncodingBinding(),
+                                request.stdoutEncodingBinding(),
+                                request.stderrEncodingBinding()),
+                        networkGrant,
+                        serviceBinding,
+                        stages::applicationProcessHosted,
+                        runtimeHost);
+            }
+        }
+    }
+
     private static ProtosExecutionOutcome executeApplication(
             ProtosWorkspaceRunDriver.Request request,
             ProtosPackageExecutionPlanV2 plan,

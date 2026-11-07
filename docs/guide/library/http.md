@@ -56,10 +56,10 @@ works, so both run under the standalone CLI over an in-memory duplex. The
 tutorials do this.
 
 Real TCP needs the bootstrap-local `network` capability. The standalone CLI
-(`protos file.protos`, `protos run`, `protos -e`, and the REPL) does **not**
-bind it, and no command-line flag grants it. Today a program obtains it only as
-the initial module of a Java Polyglot embedding whose Context allows socket
-access. See
+supports an explicit `--allow-network` flag for the initial RootActor, including
+`protos run` and the REPL, while the default still grants nothing. A Java
+Polyglot host may separately grant socket access. Neither mode grants Resolver
+implicitly. See
 [What each launcher grants](../11-process-io-filesystems-and-authority.md#what-each-launcher-grants)
 and [Embedding Protos in a Java application](../embedding/java.md#authority-and-thread-policy).
 
@@ -456,9 +456,9 @@ fail, each as an ordinary handler failure. Several hosts may share one
 service. Creating a service with outbound `network` or Resolver authority is
 your program's business; `Host` provides no mechanism for it.
 
-**The RootActor as the application service (D225-B1).** When a Java host
-starts your program through the explicit RootActor message-service entry
-(`ProtosRootActorServiceSession`, see [Actors, ActorRefs, and Actor
+**The RootActor as the application service (D225-B1).** When the CLI explicitly
+selects `--service=<binding>` or a Java host uses
+`ProtosRootActorServiceSession` (see [Actors, ActorRefs, and Actor
 Groups](../10-actors-actorrefs-and-groups.md#the-rootactor-has-two-entry-modes)),
 the RootActor itself can be the service the Workers call. Pass the Workers a
 single-member GroupRef to it, which lets them `request` and `send` but not
