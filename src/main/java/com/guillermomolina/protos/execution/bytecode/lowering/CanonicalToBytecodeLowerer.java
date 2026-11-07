@@ -1075,8 +1075,32 @@ final class CanonicalToBytecodeLowerer {
 
             boolean closureTerminal =
                     last instanceof CanonicalClosure;
+            boolean numericTerminal =
+                    last instanceof CanonicalSend numericSend
+                            && primitiveNumericSendCandidate(numericSend)
+                            && !requiresContinuationScratch(numericSend)
+                            && (i115DirectUnaryOperand(numericSend.receiver())
+                                    || i115DirectUnaryCall(numericSend.receiver()))
+                            && (i115DirectUnaryOperand(numericSend.arguments().get(0))
+                                    || i115DirectUnaryCall(numericSend.arguments().get(0)));
+            boolean emptyControlTerminal = isI115EliminableControl(last);
 
-            if (scalarTerminal || directTerminal || closureTerminal) {
+            if (numericTerminal || emptyControlTerminal) {
+                if (expressions.size() > 1) {
+                    emitDiscardedPrefix(
+                            builder, expressions.subList(0, expressions.size() - 1));
+                }
+                builder.beginReturn();
+                beginStatement(builder, last);
+                if (emptyControlTerminal) {
+                    builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                } else {
+                    emitDirectNumericSendValue(
+                            builder, (CanonicalSend) last, null, null, null, true);
+                }
+                endStatement(builder);
+                builder.endReturn();
+            } else if (scalarTerminal || directTerminal || closureTerminal) {
                 /*
                  * PERF037-E: previous statements retain their established
                  * lowering. Only the terminal value bypasses sequenceResult.
@@ -2638,9 +2662,12 @@ final class CanonicalToBytecodeLowerer {
                 scratch == null ? null : scratch.childResult();
         BytecodeLocal resumeValue =
                 scratch == null ? null : scratch.resumeValue();
-        DiscardSink sink = new DiscardSink();
+        DiscardSink sink = null;
 
         for (CanonicalExpression expression : expressions) {
+            if (isI115EliminableControl(expression)) {
+                continue;
+            }
             boolean directDiscard =
                     isDirectTerminalValue(expression)
                             && !requiresComposedInvocation(expression)
@@ -2678,6 +2705,9 @@ final class CanonicalToBytecodeLowerer {
                  * lazily created discard sink, never a staged result.
                  */
                 beginStatement(builder, expression);
+                if (sink == null && classifyI115StaticControl(expression) == null) {
+                    sink = new DiscardSink();
+                }
                 emitExpressionStatement(
                         builder, expression, sink, preparedCall, childResult, resumeValue);
                 endStatement(builder);
@@ -3259,11 +3289,22 @@ final class CanonicalToBytecodeLowerer {
             case CanonicalIntrinsic ignored -> false;
             // Materialization only; the body runs in the Closure's own root.
             case CanonicalClosure ignored -> false;
-            case CanonicalSend send ->
-                    !i115DirectUnaryCall(send)
-                            && (!primitiveNumericSendCandidate(send)
-                                    || requiresContinuationScratch(send.receiver())
-                                    || requiresContinuationScratch(send.arguments().get(0)));
+            case CanonicalSend send -> {
+                I115StaticControl staticControl = classifyI115StaticControl(send);
+                if (staticControl != null) {
+                    if (staticControl.eliminable()) {
+                        yield false;
+                    }
+                    CanonicalClosure callback = (CanonicalClosure)
+                            send.arguments().get(staticControl.selectedPosition() - 1);
+                    yield callback.body().expressions().stream()
+                            .anyMatch(this::requiresContinuationScratch);
+                }
+                yield !i115DirectUnaryCall(send)
+                        && (!primitiveNumericSendCandidate(send)
+                                || requiresContinuationScratch(send.receiver())
+                                || requiresContinuationScratch(send.arguments().get(0)));
+            }
             case CanonicalCreate create ->
                     create.target().map(this::requiresContinuationScratch)
                                     .orElse(false)
@@ -3460,6 +3501,12 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (isI115EliminableControl(expression)) {
+            builder.beginStoreLocal(target);
+            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+            builder.endStoreLocal();
+            return;
+        }
         if (i115DirectUnaryCall(expression)) {
             builder.beginStoreLocal(target);
             emitI115DirectUnaryValue(builder, expression, false);
@@ -5380,7 +5427,8 @@ final class CanonicalToBytecodeLowerer {
      *   <li>A pending result is composed: {@code IsResultKind(CONTINUATION)
      *       -> Yield -> ResumeDispatchedContinuation}.
      * </ol>
-     * The call is wrapped once in {@link StandardTags.CallTag}.
+     * Dynamic dispatch keeps its {@link StandardTags.CallTag}; statically
+     * eliminated or selected controls do not create a synthetic call tag.
      */
     private void emitDispatchedInvocation(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -5412,6 +5460,27 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
 
+        I115Control control =
+                shape == InvocationShape.SEND ? I115Control.of(selector, arguments) : null;
+        I115StaticControl staticControl =
+                classifyI115StaticControl(control, receiver, arguments);
+        if (staticControl != null) {
+            CanonicalSend discarded = discardedControlStatement;
+            boolean matchesDiscarded =
+                    discarded != null
+                            && discarded.receiver() == receiver
+                            && discarded.arguments() == arguments;
+            if (matchesDiscarded) {
+                discardedControlStatement = null;
+            }
+            boolean valueUsed = result != null && !matchesDiscarded;
+            emitI115Control(
+                    builder, control, receiver, arguments, valueUsed,
+                    result, scratch, childResult, resumeValue,
+                    stager, primitiveCarrierResult);
+            return;
+        }
+
         if (result == null || scratch == null || childResult == null || resumeValue == null) {
             throw new AssertionError("Bytecode invocation result/scratch locals were not allocated");
         }
@@ -5427,8 +5496,6 @@ final class CanonicalToBytecodeLowerer {
             builder.endTag(StandardTags.CallTag.class);
             return;
         }
-        I115Control control =
-                shape == InvocationShape.SEND ? I115Control.of(selector, arguments) : null;
         if (control != null) {
             CanonicalSend discarded = discardedControlStatement;
             discardedControlStatement = null;
@@ -5552,6 +5619,83 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
+    /** A statically decidable control; zero means that no callback executes. */
+    private record I115StaticControl(I115Control control, int selectedPosition) {
+        boolean eliminable() {
+            return selectedPosition == 0;
+        }
+    }
+
+    private static Boolean i115LiteralClosureBoolean(CanonicalExpression expression) {
+        if (!(expression instanceof CanonicalClosure closure)
+                || !closure.parameters().isEmpty()
+                || closure.body().expressions().size() != 1) {
+            return null;
+        }
+        return canonicalBooleanLiteral(closure.body().expressions().get(0));
+    }
+
+    private I115StaticControl classifyI115StaticControl(
+            I115Control control,
+            CanonicalExpression receiver,
+            java.util.List<CanonicalExpression> arguments) {
+        if (control == null) {
+            return null;
+        }
+
+        if (control.phase == I115Control.Phase.PRE_TEST) {
+            Boolean condition = i115LiteralClosureBoolean(receiver);
+            if (condition != null && condition != control.polarity
+                    && arguments.get(0) instanceof CanonicalClosure) {
+                return new I115StaticControl(control, 0);
+            }
+            return null;
+        }
+
+        if (control.phase != I115Control.Phase.CONDITIONAL) {
+            return null;
+        }
+
+        Boolean condition = canonicalBooleanLiteral(receiver);
+        if (condition == null) {
+            return null;
+        }
+
+        int selected = control.arity == 2
+                ? (condition ? 1 : 2)
+                : (condition == control.polarity ? 1 : 0);
+
+        if (selected == 0) {
+            return arguments.get(0) instanceof CanonicalClosure
+                    ? new I115StaticControl(control, 0) : null;
+        }
+
+        // Unselected arguments must also be literals: otherwise their
+        // evaluation could have effects before the selected callback.
+        for (CanonicalExpression argument : arguments) {
+            if (!(argument instanceof CanonicalClosure)) {
+                return null;
+            }
+        }
+
+        return i115AdmitsInlineClosure(arguments.get(selected - 1))
+                ? new I115StaticControl(control, selected) : null;
+    }
+
+    private I115StaticControl classifyI115StaticControl(CanonicalExpression expression) {
+        if (!(expression instanceof CanonicalSend send)) {
+            return null;
+        }
+        return classifyI115StaticControl(
+                I115Control.of(send.message(), send.arguments()),
+                send.receiver(), send.arguments());
+    }
+
+    private boolean isI115EliminableControl(CanonicalExpression expression) {
+        I115StaticControl control = classifyI115StaticControl(expression);
+        return control != null && control.eliminable();
+    }
+
     /**
      * I115: the control send whose value its enclosing sequence discards, or
      * {@code null}. Set only around the emission of that statement and
@@ -5572,6 +5716,9 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (isI115EliminableControl(expression)) {
+            return;
+        }
         CanonicalSend saved = discardedControlStatement;
         discardedControlStatement =
                 expression instanceof CanonicalSend send ? send : null;
@@ -5614,6 +5761,10 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
+        if (isI115EliminableControl(expression)) {
+            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+            return;
+        }
         if (i115DirectUnaryCall(expression)) {
             emitI115DirectUnaryValue(builder, expression, primitiveCarrierResult);
             return;
@@ -5642,12 +5793,10 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: executes {@code expression} for its effects only. A simple or
-     * direct numeric expression is discarded with {@code DiscardValue}; a
-     * creation or assignment is emitted with a {@code null} result, so it
-     * performs only its mutation; any other composed expression keeps its
-     * invocation (and therefore every observable effect) and writes at most
-     * the lazily created discard sink.
+     * I115: emit an expression for its effects only. Static controls can
+     * disappear entirely or execute the selected inline callback directly.
+     * Direct numeric values are discarded; mutations keep no result;
+     * remaining composed invocations use a lazily created discard sink.
      */
     private void emitExpressionStatement(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -5656,6 +5805,18 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        I115StaticControl staticControl = classifyI115StaticControl(expression);
+        if (staticControl != null) {
+            if (!staticControl.eliminable()) {
+                CanonicalSend send = (CanonicalSend) expression;
+                emitI115Control(
+                        builder, staticControl.control(),
+                        send.receiver(), send.arguments(),
+                        false, null, scratch, childResult, resumeValue,
+                        this::emitBodyExpressionToLocal, false);
+            }
+            return;
+        }
         if (i115DirectUnaryCall(expression)) {
             builder.beginDiscardValue();
             emitI115DirectUnaryValue(builder, expression, false);
@@ -5793,15 +5954,22 @@ final class CanonicalToBytecodeLowerer {
                 }
                 return;
             }
-            DiscardSink sink = new DiscardSink();
+            DiscardSink sink = null;
             if (mode == InlineBodyResult.STACK) {
                 builder.beginBlock();
             }
             for (int index = 0; index < expressions.size(); index++) {
                 CanonicalExpression expression = expressions.get(index);
                 boolean last = index == expressions.size() - 1;
+                if ((!last || mode == InlineBodyResult.DISCARD)
+                        && isI115EliminableControl(expression)) {
+                    continue;
+                }
                 beginStatement(builder, expression);
                 if (!last || mode == InlineBodyResult.DISCARD) {
+                    if (sink == null && classifyI115StaticControl(expression) == null) {
+                        sink = new DiscardSink();
+                    }
                     emitExpressionStatement(
                             builder, expression, sink, scratch, childResult, resumeValue);
                 } else if (mode == InlineBodyResult.STACK) {
@@ -5840,15 +6008,12 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the single lowering of the seven control selectors. The receiver
-     * and the arguments are evaluated once, left to right, before any
-     * decision; an admitted callback literal has no evaluation effect and is
-     * not materialized. A canonical Boolean literal receiver of a
-     * conditional is emitted as the constant decision; any other condition
-     * goes through {@code CanonicalControlCondition}. A selected callback
-     * runs through {@link #emitI115ControlCallback}: inline under the I095
-     * proof, otherwise as an ordinary nilary Closure call; the control
-     * selector itself is never sent.
+     * I115: lower the seven control selectors. Static literal conditions
+     * with a selected inline callback execute it directly; known-empty
+     * controls generate only canonical null when consumed. The remaining
+     * controls stage dynamic operands in source order and use structured
+     * control flow, including {@code CanonicalControlCondition} where needed.
+     * The selector itself is never sent.
      */
     private void emitI115Control(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -5862,6 +6027,42 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue,
             OperandStager stager,
             boolean primitiveCarrierResult) {
+        I115StaticControl staticControl =
+                classifyI115StaticControl(control, receiver, arguments);
+        if (staticControl != null) {
+            if (staticControl.eliminable()) {
+                if (valueUsed) {
+                    builder.beginStoreLocal(result);
+                    builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                    builder.endStoreLocal();
+                }
+                return;
+            }
+
+            java.util.List<CanonicalExpression> directOperands =
+                    new java.util.ArrayList<>(arguments.size() + 1);
+            directOperands.add(receiver);
+            directOperands.addAll(arguments);
+
+            java.util.List<BytecodeLocal> noLocals =
+                    new java.util.ArrayList<>(
+                            java.util.Collections.nCopies(directOperands.size(), null));
+            java.util.List<Boolean> inline =
+                    new java.util.ArrayList<>(
+                            java.util.Collections.nCopies(directOperands.size(), false));
+            inline.set(staticControl.selectedPosition(), true);
+
+            builder.beginBlock();
+            emitI115Conditional(
+                    builder, control,
+                    new I115ControlOperands(
+                            directOperands, noLocals, inline,
+                            scratch, childResult, resumeValue),
+                    staticControl, valueUsed, result, primitiveCarrierResult);
+            builder.endBlock();
+            return;
+        }
+
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
         java.util.List<CanonicalExpression> operands = new java.util.ArrayList<>(arguments.size() + 1);
@@ -5902,7 +6103,9 @@ final class CanonicalToBytecodeLowerer {
         if (control.loop()) {
             emitI115Loop(builder, control, staging, valueUsed, result, primitiveCarrierResult);
         } else {
-            emitI115Conditional(builder, control, staging, valueUsed, result, primitiveCarrierResult);
+            emitI115Conditional(
+                    builder, control, staging, null,
+                    valueUsed, result, primitiveCarrierResult);
         }
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
@@ -5918,19 +6121,37 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue) {}
 
     /**
-     * ifTrue, ifFalse, ifTrueIfFalse. A consumed value is a {@code
-     * Conditional} whose selected branch yields the callback's exact result
-     * and whose unselected one-callback branch yields canonical null. A
-     * discarded value is an {@code IfThen} (one callback) or {@code
-     * IfThenElse} (two), with no artificial null and no else branch.
+     * ifTrue, ifFalse, ifTrueIfFalse. Static admitted controls directly
+     * execute their selected callback without a condition or unused branch.
+     * Dynamic consumed controls use {@code Conditional}; discarded ones use
+     * {@code IfThen} or {@code IfThenElse}.
      */
     private void emitI115Conditional(
             ProtosBytecodeRootNodeGen.Builder builder,
             I115Control control,
             I115ControlOperands staging,
+            I115StaticControl staticControl,
             boolean valueUsed,
             BytecodeLocal result,
             boolean primitiveCarrierResult) {
+        if (staticControl != null) {
+            if (staticControl.eliminable()) {
+                if (valueUsed) {
+                    builder.beginStoreLocal(result);
+                    builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                    builder.endStoreLocal();
+                }
+            } else if (valueUsed) {
+                emitI115ControlCallback(
+                        builder, staging, staticControl.selectedPosition(),
+                        result, primitiveCarrierResult);
+            } else {
+                emitI115ControlCallbackStatement(
+                        builder, staging, staticControl.selectedPosition());
+            }
+            return;
+        }
+
         boolean twoCallbacks = control.arity == 2;
         if (valueUsed) {
             builder.beginStoreLocal(result);
@@ -5981,9 +6202,9 @@ final class CanonicalToBytecodeLowerer {
 
     /**
      * whileTrue, whileFalse (pre-test) and untilTrue, untilFalse
-     * (post-test) as one Bytecode DSL {@code While}. Its condition is one
-     * {@code CanonicalControlCondition} consuming the condition callback's
-     * value directly from the stack. Pre-test: the While body invokes the
+     * (post-test) as one Bytecode DSL {@code While}. Literal inline
+     * conditions feed the loop's continue Boolean directly; dynamic ones
+     * use {@code CanonicalControlCondition}. Pre-test: the While body invokes the
      * body callback. Post-test: the While condition is a block running the
      * body, then the condition, so the body precedes every condition
      * including the first; the While body is empty.
@@ -6012,9 +6233,19 @@ final class CanonicalToBytecodeLowerer {
             emitI115LoopBody(builder, staging, control.bodyPosition,
                     valueUsed ? result : null, primitiveCarrierResult);
         }
-        builder.beginCanonicalControlCondition(control.polarity);
-        emitI115ControlCallbackValue(builder, staging, control.conditionPosition, false);
-        builder.endCanonicalControlCondition();
+        Boolean knownCondition = staging.inline().get(control.conditionPosition)
+                ? i115LiteralClosureBoolean(
+                        staging.operands().get(control.conditionPosition))
+                : null;
+
+        if (knownCondition != null) {
+            builder.emitLoadConstant(knownCondition == control.polarity);
+        } else {
+            builder.beginCanonicalControlCondition(control.polarity);
+            emitI115ControlCallbackValue(
+                    builder, staging, control.conditionPosition, false);
+            builder.endCanonicalControlCondition();
+        }
         builder.endBlock();
         builder.beginBlock();
         if (!postTest) {
@@ -6975,7 +7206,6 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        builder.beginTag(StandardTags.CallTag.class);
         switch (send.message()) {
             case "+" -> builder.beginNumberAdd();
             case "-" -> builder.beginNumberSubtract();
@@ -7002,7 +7232,6 @@ final class CanonicalToBytecodeLowerer {
             case ">=" -> builder.endRichCompareGe();
             default -> throw new AssertionError("not a direct numeric selector");
         }
-        builder.endTag(StandardTags.CallTag.class);
     }
 
     private void emitComposedSend(
