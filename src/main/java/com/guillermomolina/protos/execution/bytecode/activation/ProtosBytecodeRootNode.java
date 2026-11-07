@@ -217,29 +217,52 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * I115 cold Tier-1 diagnostic: reject compilation of a semantic source root
-     * until its first interpreted invocation returns normally. A loop can reach
-     * the compilation threshold before its first run exits, leaving the return
-     * and exit edges unprofiled. Do not change JIT thresholds or the Bytecode
-     * DSL generated interpreter to investigate this.
+     * I115 cold/Tier-1 DIAGNOSTIC, not a production gate. A root that begins
+     * in UNCACHED may finish after transitioning to CACHED. That return is not
+     * evidence that it has executed the *entire* entry-to-return path in CACHED.
      *
-     * This is a reversible experiment. A root that never returns will not
-     * become compilable with this policy; it is NOT a production fix.
-     * Volatile gives the compiler thread visibility without assuming it is
-     * the same thread as the guest interpreter.
+     * For the non-recursive benchmark `run` roots, a later interpreter prolog
+     * observed in CACHED followed by an interpreted return establishes the
+     * experimental readiness condition. This root-wide marker is deliberately
+     * not a per-invocation or concurrency-safe production protocol.
      */
-    private transient volatile boolean firstInterpretedReturnObserved;
+    private transient volatile boolean sawInterpretedCachedProlog;
+    private transient volatile boolean sawReturnAfterCachedProlog;
 
     @Override
     protected boolean prepareForCompilation(
             boolean rootCompilation, int compilationTier, boolean lastTier) {
-        return !semanticActivationRoot || firstInterpretedReturnObserved;
+        boolean ready = !semanticActivationRoot || sawReturnAfterCachedProlog;
+        if (rootCompilation && semanticActivationRoot
+                && Boolean.getBoolean("protos.i115.traceColdGate")) {
+            System.err.println("[i115-cold-gate] PREPARE " + this
+                    + " tier=" + compilationTier
+                    + " cachedProlog=" + sawInterpretedCachedProlog
+                    + " cachedReturn=" + sawReturnAfterCachedProlog
+                    + " decision=" + (ready ? "ALLOW" : "DENY"));
+        }
+        return ready;
     }
 
-    private void observeFirstInterpretedReturn() {
-        // The entire probe is removed from Truffle-compiled machine code.
-        if (CompilerDirectives.inInterpreter() && !firstInterpretedReturnObserved) {
-            firstInterpretedReturnObserved = true;
+    private void observeInterpretedCachedProlog(BytecodeNode node) {
+        if (CompilerDirectives.inInterpreter()
+                && node.getTier() == com.oracle.truffle.api.bytecode.BytecodeTier.CACHED
+                && !sawInterpretedCachedProlog) {
+            sawInterpretedCachedProlog = true;
+            if (Boolean.getBoolean("protos.i115.traceColdGate")) {
+                System.err.println("[i115-cold-gate] CACHED_ENTER " + this);
+            }
+        }
+    }
+
+    private void observeInterpretedReturnAfterCachedProlog() {
+        if (CompilerDirectives.inInterpreter()
+                && sawInterpretedCachedProlog
+                && !sawReturnAfterCachedProlog) {
+            sawReturnAfterCachedProlog = true;
+            if (Boolean.getBoolean("protos.i115.traceColdGate")) {
+                System.err.println("[i115-cold-gate] CACHED_RETURN " + this);
+            }
         }
     }
 
@@ -680,7 +703,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Prolog(storeBytecodeIndex = false)
     public static final class EnterRoot {
         @Specialization
-        public static void perform() {
+        public static void perform(
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecodeNode) {
+            root.observeInterpretedCachedProlog(bytecodeNode);
         }
     }
 
@@ -701,7 +727,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 root.traceOrProfileReturn(frame, bytecodeNode, value);
             }
             // I115 cold Tier-1 diagnostic: finish profiling before first compilation.
-            root.observeFirstInterpretedReturn();
+            root.observeInterpretedReturnAfterCachedProlog();
             // I115: the definitive completion of this activation closes its own home.
             // PRUIBA DE I115, en algún momento esto volverá a funcionar
             // closeOwnedReturnHome(frame, value);
