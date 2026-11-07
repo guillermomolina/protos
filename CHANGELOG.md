@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.59-SNAPSHOT
+
+- **I115-V78 — historical replay.**
+  - Add a reversible cold Tier-1 diagnostic that delays semantic-root compilation until the first interpreted normal return, without changing JIT thresholds or generated interpreters.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** The original marks this as a diagnostic, not a production fix: a root that never returns cannot become compilable under this probe. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved without repairs.
+  - No test files are added or modified by this historical commit. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 0 added, 1 modified, 0 deleted (rename detection disabled for exact path accounting). All 1 original paths retain their exact Git blobs/modes or deletion state; reconstructed parent blobs/modes also match the original parent. Only root `pom.xml` and `CHANGELOG.md` receive replay metadata edits.
+  - Original implementation: `2cf2e603bc6512bab4fb22b4bf5b6bab3dc72110`.
+
 ## 0.4.58-SNAPSHOT
 
 - **I115-V77 — historical replay.**

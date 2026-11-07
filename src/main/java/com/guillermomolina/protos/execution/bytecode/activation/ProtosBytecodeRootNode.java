@@ -216,6 +216,33 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return semanticActivationRoot;
     }
 
+    /*
+     * I115 cold Tier-1 diagnostic: reject compilation of a semantic source root
+     * until its first interpreted invocation returns normally. A loop can reach
+     * the compilation threshold before its first run exits, leaving the return
+     * and exit edges unprofiled. Do not change JIT thresholds or the Bytecode
+     * DSL generated interpreter to investigate this.
+     *
+     * This is a reversible experiment. A root that never returns will not
+     * become compilable with this policy; it is NOT a production fix.
+     * Volatile gives the compiler thread visibility without assuming it is
+     * the same thread as the guest interpreter.
+     */
+    private transient volatile boolean firstInterpretedReturnObserved;
+
+    @Override
+    protected boolean prepareForCompilation(
+            boolean rootCompilation, int compilationTier, boolean lastTier) {
+        return !semanticActivationRoot || firstInterpretedReturnObserved;
+    }
+
+    private void observeFirstInterpretedReturn() {
+        // The entire probe is removed from Truffle-compiled machine code.
+        if (CompilerDirectives.inInterpreter() && !firstInterpretedReturnObserved) {
+            firstInterpretedReturnObserved = true;
+        }
+    }
+
     /**
      * I115-H4-B EXPERIMENTAL (GraalPy needsTraceAndProfileInstrumentation):
      * whether the internal trace probe is enabled. The JVM-start value of
@@ -673,6 +700,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             if (root.needsTraceAndProfileInstrumentation()) {
                 root.traceOrProfileReturn(frame, bytecodeNode, value);
             }
+            // I115 cold Tier-1 diagnostic: finish profiling before first compilation.
+            root.observeFirstInterpretedReturn();
             // I115: the definitive completion of this activation closes its own home.
             // PRUIBA DE I115, en algún momento esto volverá a funcionar
             // closeOwnedReturnHome(frame, value);
