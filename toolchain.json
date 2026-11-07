@@ -1,7 +1,7 @@
 {
   "schema": "protos-toolchain-v2",
   "java": {
-    "bytecode_release": 21
+    "bytecode_release": 25
   },
   "graalvm": {
     "distribution": "graalvm-community",

@@ -80,13 +80,13 @@ done
 
 # A language home distinguishable from the packaged Core by one extra module.
 cp -R "$toolchain/protos/lib" "$home/protos/lib"
-mkdir -p "$home/protos/lib/plat054probe"
-printf 'origin: "marker"\n' >"$home/protos/lib/plat054probe/Marker.protos"
+mkdir -p "$home/protos/lib/plat054probe/marker"
+printf 'this.origin: "marker"\n' >"$home/protos/lib/plat054probe/marker/module.protos"
 # Only the copied JARs and the separate home remain; the toolchain tree is gone.
 rm -rf "$extract"
 
 classpath=$jar:$embed/runtime/*
-"$javac_bin" -cp "$classpath" -d "$classes" "$ROOT/dist/Plat054EmbeddingProbe.java" ||
+"$javac_bin" --release 25 -cp "$classpath" -d "$classes" "$ROOT/dist/Plat054EmbeddingProbe.java" ||
     fail "probe compilation failed"
 
 run_probe() {

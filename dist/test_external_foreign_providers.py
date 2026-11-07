@@ -49,6 +49,7 @@ TIMEOUT = 120
 
 PASS, FAIL, UNSUPPORTED = "PASS", "FAIL", "UNSUPPORTED"
 RESULT_KEYS = (
+    "PROTOS_CLASSFILE_BASELINE",
     "EXTERNAL_JAR_COMPILE",
     "PORTABLE_JVM_LAUNCH",
     "PROTOS_OPAQUE_PROVIDER",
@@ -117,6 +118,12 @@ def java_major(command: list[str]) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def classfile_major(bytecode: bytes) -> int:
+    if len(bytecode) < 8 or bytecode[:4] != bytes.fromhex("CAFEBABE"):
+        raise ValueError("invalid Java classfile header")
+    return int.from_bytes(bytecode[6:8], "big")
+
+
 def locate_archive(explicit: str | None) -> Path:
     if explicit:
         archive = Path(explicit).resolve()
@@ -173,9 +180,34 @@ def build_plugin(runner: Runner, name: str, release: int, protos_jar: Path, out:
     if completed.returncode != 0:
         runner.record("EXTERNAL_JAR_COMPILE", FAIL, f"{name}: javac exit {completed.returncode}")
         return None
+    compiled_classes = sorted(classes.rglob("*.class"))
+    if not compiled_classes:
+        runner.record("EXTERNAL_JAR_COMPILE", FAIL, f"{name}: no classfiles")
+        return None
+
+    expected_major = release + 44
+    for compiled in compiled_classes:
+        try:
+            actual_major = classfile_major(compiled.read_bytes())
+        except ValueError as failure:
+            runner.record(
+                "EXTERNAL_JAR_COMPILE",
+                FAIL,
+                f"{name}: {compiled.name}: {failure}",
+            )
+            return None
+        if actual_major != expected_major:
+            runner.record(
+                "EXTERNAL_JAR_COMPILE",
+                FAIL,
+                f"{name}: {compiled.name}: expected classfile "
+                f"{expected_major}, found {actual_major}",
+            )
+            return None
+
     jar = out / f"{name}-provider.jar"
     with zipfile.ZipFile(jar, "w", zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(classes.rglob("*.class")):
+        for path in compiled_classes:
             zf.write(path, path.relative_to(classes).as_posix())
         zf.write(source_root / SERVICE, SERVICE)
     runner.record("EXTERNAL_JAR_COMPILE", PASS)
@@ -298,6 +330,25 @@ def main() -> int:
     before = snapshot(install)
     plugins = work / "plugins"
     plugins.mkdir()
+
+    try:
+        with zipfile.ZipFile(protos_jar) as packaged:
+            product_major = classfile_major(
+                packaged.read(
+                    "com/guillermomolina/protos/cli/ProtosCli.class"
+                )
+            )
+        runner.record(
+            "PROTOS_CLASSFILE_BASELINE",
+            PASS if product_major == 69 else FAIL,
+            f"Protos CLI classfile major={product_major}, expected=69",
+        )
+    except (OSError, KeyError, ValueError, zipfile.BadZipFile) as failure:
+        runner.record(
+            "PROTOS_CLASSFILE_BASELINE",
+            FAIL,
+            f"Protos classfile inspection failed: {failure}",
+        )
 
     javac = java_major([runner.tool("javac"), "--version"])
     java = java_major([runner.tool("java"), "-version"])

@@ -57,7 +57,10 @@ make test-protos-foreign
 ```
 
 **By hand**, against an extracted portable distribution `$PROTOS`, from the
-repository root:
+repository root, with the selected JDK 25 on `PATH` (or as `JAVA_HOME`):
+`--release 21` deliberately produces a Java 21 provider JAR (classfile
+major 65) that is loaded by the **Java 25** Protos runtime (major 69).
+It does not permit running Protos itself on Java 21.
 
 ```sh
 mkdir -p /tmp/java-provider/classes

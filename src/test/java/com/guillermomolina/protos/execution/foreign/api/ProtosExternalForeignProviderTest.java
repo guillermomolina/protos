@@ -108,6 +108,33 @@ class ProtosExternalForeignProviderTest {
     }
 
     @Test
+    void java21ProviderBytecodeLoadsOnJava25Runtime() throws Exception {
+        assertEquals(25, Runtime.version().feature());
+
+        try (InputStream spiClass =
+                ProtosForeignProviderPlugin.class.getResourceAsStream(
+                        "ProtosForeignProviderPlugin.class")) {
+            assertTrue(spiClass != null);
+            assertEquals(69, classFileMajor(spiClass.readNBytes(8)));
+        }
+
+        try (java.util.jar.JarFile plugin =
+                new java.util.jar.JarFile(invented.toFile())) {
+            JarEntry entry = plugin.getJarEntry("invented/Invented.class");
+            assertTrue(entry != null);
+            try (InputStream compiled = plugin.getInputStream(entry)) {
+                assertEquals(65, classFileMajor(compiled.readNBytes(8)));
+            }
+        }
+
+        try (Fixture fixture = new Fixture(invented)) {
+            assertEquals(
+                    "42",
+                    integer(fixture.eval(DEMO + "lib.double(21)")));
+        }
+    }
+
+    @Test
     void withoutTheExternalJarTheSchemeDoesNotExist() throws Exception {
         try (Fixture fixture = new Fixture(ProtosPolyglotRuntimeHost.open())) {
             assertSame(
@@ -530,6 +557,16 @@ class ProtosExternalForeignProviderTest {
             }
         }
         return jar;
+    }
+
+    private static int classFileMajor(byte[] header) {
+        assertEquals(8, header.length);
+        assertEquals(0xCA, Byte.toUnsignedInt(header[0]));
+        assertEquals(0xFE, Byte.toUnsignedInt(header[1]));
+        assertEquals(0xBA, Byte.toUnsignedInt(header[2]));
+        assertEquals(0xBE, Byte.toUnsignedInt(header[3]));
+        return (Byte.toUnsignedInt(header[6]) << 8)
+                | Byte.toUnsignedInt(header[7]);
     }
 
     private static int counter(Fixture fixture, String className, String field) throws Exception {

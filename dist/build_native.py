@@ -144,6 +144,8 @@ def toolchain(root: Path) -> dict[str, object]:
     try:
         data = json.loads((root / "toolchain.json").read_text(encoding="utf-8"))
         graal = data["graalvm"]
+        bytecode_release = int(data["java"]["bytecode_release"])
+        jdk_feature = int(graal["jdk_feature"])
         release = str(graal["release"])
         jdk_version = str(graal["jdk_version"])
         components = str(data["graal_components"]["version"])
@@ -152,6 +154,11 @@ def toolchain(root: Path) -> dict[str, object]:
 
     if release != components:
         fail("GraalVM and Graal component versions are not aligned")
+    if bytecode_release < 25 or bytecode_release != jdk_feature:
+        fail(
+            "PLAT073 requires a Java 25+ bytecode baseline aligned "
+            "with the selected Native Image JDK"
+        )
     if str(graal.get("distribution")) != "graalvm-community":
         fail("unexpected canonical GraalVM distribution")
     if not jdk_version:
@@ -381,6 +388,7 @@ def verify_archive(
     source_metadata: dict[str, str],
     observation: dict[str, str],
     build_march: str,
+    expected_bytecode_release: int,
 ) -> None:
     prefix = root_name + "/"
     required = {
@@ -447,6 +455,7 @@ def verify_archive(
             f"distribution_format={DIST_FORMAT}",
             f"artifact_kind={source_metadata['artifact_kind']}",
             f"native_runtime_kind={NATIVE_RUNTIME_KIND}",
+            f"java_bytecode_release={expected_bytecode_release}",
             "external_java_required=false",
             f"target_os={PUBLIC_NATIVE_TARGET_OS}",
             f"target_arch={PUBLIC_NATIVE_TARGET_ARCH}",
@@ -618,6 +627,7 @@ def build(args: argparse.Namespace) -> Path:
         f"distribution_format={DIST_FORMAT}",
         f"artifact_kind={source_metadata['artifact_kind']}",
         f"native_runtime_kind={NATIVE_RUNTIME_KIND}",
+        f"java_bytecode_release={contract['java']['bytecode_release']}",
         "external_java_required=false",
         f"graalvm_release={graal['release']}",
         f"native_image_version={graal['release']}",
@@ -703,6 +713,9 @@ def build(args: argparse.Namespace) -> Path:
         source_metadata=source_metadata,
         observation=observation,
         build_march=build_march,
+        expected_bytecode_release=int(
+            contract["java"]["bytecode_release"]
+        ),
     )
 
     outer_digest = sha256(archive_path)

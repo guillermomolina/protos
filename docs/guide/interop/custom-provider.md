@@ -28,8 +28,14 @@ release containing it is implied.
 ## Prerequisites
 
 - An extracted Protos portable JVM distribution (`$PROTOS`).
-- A JDK to compile the provider. The repository harness compiles fixtures with
-  `javac --release 21` against `$PROTOS/lib/protos.jar` only.
+- The exact JDK 25 toolchain selected by the Protos distribution to compile
+  against its Java 25 `lib/protos.jar` (classfile major 69). The supported
+  runtime remains the release-pinned GraalVM Community/JDK 25, not Java 21.
+- A provider may deliberately use `javac --release 21` **with the JDK 25
+  compiler** to produce Java 21 classfiles (major 65), provided its own
+  source uses only Java 21 APIs. The repository harness keeps this case as
+  a binary-compatibility test. It does **not** make the Protos runtime
+  executable on Java 21; FFM providers need Java 22+ APIs.
 
 ## The contract in one table
 
@@ -166,6 +172,11 @@ example.demo.DemoProvider
 ```
 
 ## Build and register
+
+The command below intentionally generates a Java 21 provider JAR using
+`javac` from the supported JDK 25. It verifies that an older provider
+bytecode target can link to the current public SPI on the Java 25 host.
+It does not lower the required Protos runtime version.
 
 ```sh
 mkdir -p classes/META-INF/services

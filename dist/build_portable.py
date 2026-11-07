@@ -18,6 +18,8 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import io
+import json
 import os
 from pathlib import Path, PurePosixPath
 import shutil
@@ -71,6 +73,46 @@ def project_version(root: Path) -> tuple[str, str]:
     if not truffle:
         fail("pom.xml graalvm.version is missing")
     return version, truffle
+
+
+
+def selected_bytecode_release(root: Path) -> int:
+    try:
+        contract = json.loads(
+            (root / "toolchain.json").read_text(encoding="utf-8")
+        )
+        release = int(contract["java"]["bytecode_release"])
+    except (OSError, KeyError, TypeError, ValueError) as failure:
+        fail(f"invalid Java bytecode contract: {failure}")
+
+    if release < 25:
+        fail("PLAT073 requires Java 25 bytecode or newer")
+    return release
+
+
+def verify_protos_classfile(
+    jar_bytes: bytes,
+    expected_release: int,
+) -> None:
+    class_name = "com/guillermomolina/protos/cli/ProtosCli.class"
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(jar_bytes)) as jar:
+            bytecode = jar.read(class_name)
+    except (KeyError, zipfile.BadZipFile) as failure:
+        fail(f"cannot inspect packaged Protos class: {failure}")
+
+    if len(bytecode) < 8 or bytecode[:4] != bytes.fromhex("CAFEBABE"):
+        fail(f"invalid Java classfile: {class_name}")
+
+    actual_major = int.from_bytes(bytecode[6:8], "big")
+    expected_major = expected_release + 44
+
+    if actual_major != expected_major:
+        fail(
+            f"Protos classfile major {actual_major} does not match "
+            f"Java {expected_release} (expected {expected_major})"
+        )
 
 
 def copy_tree(source: Path, target: Path) -> None:
@@ -172,6 +214,7 @@ def verify_archive(
     source_revision: str,
     source_dirty: bool,
     source_metadata: dict[str, str],
+    expected_bytecode_release: int,
 ) -> None:
     if not archive_path.is_file():
         fail(f"archive was not created: {archive_path}")
@@ -204,6 +247,11 @@ def verify_archive(
         missing = sorted(required - name_set)
         if missing:
             fail("archive is missing required entries: " + ", ".join(missing))
+
+        verify_protos_classfile(
+            archive.read(f"{root_name}/lib/protos.jar"),
+            expected_bytecode_release,
+        )
 
         runtime_prefix = f"{root_name}/lib/runtime/"
         runtime_names = sorted(
@@ -252,6 +300,7 @@ def verify_archive(
         runtime = archive.read(f"{root_name}/RUNTIME.txt").decode("utf-8")
         for needle in [
             f"distribution_format={DIST_FORMAT}",
+            f"java_bytecode_release={expected_bytecode_release}",
             f"java_feature={SUPPORTED_JAVA_FEATURE}",
             f"java_version={SUPPORTED_JAVA_VERSION}",
             f"java_vendor_contains={SUPPORTED_VENDOR_TOKEN}",
@@ -311,6 +360,10 @@ def build(args: argparse.Namespace) -> Path:
     project_jar = root / "target" / f"protos-{version}.jar"
     if not project_jar.is_file():
         fail(f"shaded project jar not found: {project_jar}")
+
+    bytecode_release = selected_bytecode_release(root)
+    verify_protos_classfile(project_jar.read_bytes(), bytecode_release)
+    print(f"DIST_CLASSFILE_MAJOR: {bytecode_release + 44}")
 
     output_root = root / "target" / "distributions"
     bundle = output_root / f"protos-{version}"
@@ -397,6 +450,7 @@ def build(args: argparse.Namespace) -> Path:
         "\n".join(
             [
                 f"distribution_format={DIST_FORMAT}",
+                f"java_bytecode_release={bytecode_release}",
                 f"java_feature={SUPPORTED_JAVA_FEATURE}",
                 f"java_version={SUPPORTED_JAVA_VERSION}",
                 f"java_vendor_contains={SUPPORTED_VENDOR_TOKEN}",
@@ -447,6 +501,7 @@ def build(args: argparse.Namespace) -> Path:
         source_revision=source_revision,
         source_dirty=source_dirty,
         source_metadata=source_metadata,
+        expected_bytecode_release=bytecode_release,
     )
     print(f"DIST_ARCHIVE: {archive_path}")
     print("DIST_ARTIFACT_KIND: " + source_metadata["artifact_kind"])

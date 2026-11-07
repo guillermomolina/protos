@@ -313,6 +313,7 @@ protos lint --fail-on-warning src/main.protos
 | | Native Linux x86_64 | Portable JVM |
 |---|---|---|
 | Requirements | Linux x86_64, dynamic glibc 2.39 or newer; no JDK | GraalVM 25.5.5.0.3 (JDK 25.0.5.0.3) |
+| PLAT073-C implementation bytecode | AOT Native executable; no installed JDK or Java classfiles required | Java 25 classfile major 69; Java 21 runtime unsupported |
 | Guest execution | Interpreter-only; guest JIT disabled (PLAT045) | Optimizing runtime with guest JIT |
 | Commands on this page | All available | All available |
 | `--foreign-provider-path` | Not available: no dynamic plugin loading | Available |

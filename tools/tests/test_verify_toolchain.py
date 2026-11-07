@@ -25,7 +25,7 @@ from pathlib import Path
 
 TOOLCHAIN = {
     "schema": "protos-toolchain-v2",
-    "java": {"bytecode_release": 21},
+    "java": {"bytecode_release": 25},
     "graalvm": {
         "distribution": "graalvm-community",
         "release": "25.5.5.0.3",
@@ -145,7 +145,7 @@ def make_fixture(
         )
 
     pom = """<project xmlns="http://maven.apache.org/POM/4.0.0">
-<properties><maven.compiler.release>21</maven.compiler.release><graalvm.version>%s</graalvm.version></properties>
+<properties><maven.compiler.release>25</maven.compiler.release><graalvm.version>%s</graalvm.version></properties>
 %s
 <build><plugins>
 <plugin><artifactId>maven-shade-plugin</artifactId><configuration>
@@ -239,8 +239,13 @@ actual_version=25.0.5.0.3
     )
     write(
         root / "dist" / "smoke" / "smoke_optimizing_runtime.sh",
-        "EXPECTED_FEATURE=%s\nEXPECTED_JAVA_VERSION=%s\nEXPECTED_TRUFFLE_VERSION=%s\n"
-        % (feature, java_version, dist_components),
+        "EXPECTED_BYTECODE_RELEASE=%s\nEXPECTED_FEATURE=%s\nEXPECTED_JAVA_VERSION=%s\nEXPECTED_TRUFFLE_VERSION=%s\n"
+        % (
+            TOOLCHAIN["java"]["bytecode_release"],
+            feature,
+            java_version,
+            dist_components,
+        ),
     )
     write(root / "bin" / "protos", launcher)
 
@@ -366,6 +371,57 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
             result,
         )
 
+        # PLAT073: a Java 21 project contract is no longer accepted.
+        root = tmp / "java21-contract-rejected"
+        make_fixture(root)
+        old_contract = json.loads(json.dumps(TOOLCHAIN))
+        old_contract["java"]["bytecode_release"] = 21
+        write(
+            root / "toolchain.json",
+            json.dumps(old_contract, indent=2) + "\n",
+        )
+        result = run(verifier, root, "contract")
+        require(
+            result.returncode == 2,
+            "Java 21 toolchain contract was accepted",
+            result,
+        )
+        require(
+            "PLAT073 requires Java 25" in result.stderr,
+            "PLAT073 rejection reason is missing",
+            result,
+        )
+
+        # Maven must not silently compile Protos for the older target.
+        root = tmp / "java21-pom-rejected"
+        make_fixture(root)
+        pom_path = root / "pom.xml"
+        pom_text = pom_path.read_text(encoding="utf-8")
+        current = "<maven.compiler.release>25</maven.compiler.release>"
+        require(
+            pom_text.count(current) == 1,
+            "Java 25 Maven fixture is missing",
+        )
+        write(
+            pom_path,
+            pom_text.replace(
+                current,
+                "<maven.compiler.release>21</maven.compiler.release>",
+                1,
+            ),
+        )
+        result = run(verifier, root, "check", "development")
+        require(
+            result.returncode == 1,
+            "Java 21 Maven compiler drift was accepted",
+            result,
+        )
+        require(
+            "pom.bytecode" in result.stdout,
+            "Maven bytecode drift was not reported",
+            result,
+        )
+
         root = tmp / "development-drift"
         make_fixture(root, development_drift=True)
         result = run(verifier, root, "check", "development")
@@ -381,6 +437,36 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
                 "development drift did not identify %s" % binding,
                 result,
             )
+
+        # PLAT073: the portable smoke must follow the same bytecode floor.
+        root = tmp / "java21-smoke-drift"
+        make_fixture(root)
+        smoke_path = root / "dist" / "smoke" / "smoke_optimizing_runtime.sh"
+        smoke_text = smoke_path.read_text(encoding="utf-8")
+        expected = "EXPECTED_BYTECODE_RELEASE=25"
+        require(
+            smoke_text.count(expected) == 1,
+            "Java 25 smoke fixture is missing",
+        )
+        write(
+            smoke_path,
+            smoke_text.replace(
+                expected,
+                "EXPECTED_BYTECODE_RELEASE=21",
+                1,
+            ),
+        )
+        result = run(verifier, root, "check")
+        require(
+            result.returncode == 1,
+            "Java 21 portable smoke metadata was accepted",
+            result,
+        )
+        require(
+            "dist.smoke.java_bytecode" in result.stdout,
+            "Portable bytecode drift was not identified",
+            result,
+        )
 
         root = tmp / "ci-command-drift"
         make_fixture(root, ci_command_drift=True)

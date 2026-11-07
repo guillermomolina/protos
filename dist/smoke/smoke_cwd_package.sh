@@ -87,7 +87,7 @@ if [ "$runtime_matches" -eq 1 ]; then
     runtime_mode=supported
 else
     # B3 owns relocation/CWD only. On a different validation JDK, do not load the
-    # bundle's optimizer jars, because their exact JDK22 contract is B4 evidence.
+    # bundle's optimizer jars, because their exact selected-JDK contract is B4 evidence.
     # Mutate only this disposable extracted copy after B2 has verified the archive.
     export PROTOS_ALLOW_UNSUPPORTED_RUNTIME=1
     runtime_dir=$toolchain/lib/runtime
@@ -141,7 +141,7 @@ if [ "$runtime_mode" = fallback-isolated ]; then
         fail "unsupported-host smoke did not report the explicit runtime override"
 fi
 
-cat > "$project/protos.toml" <<'EOF'
+cat > "$project/package.toml" <<'EOF'
 manifest-version = 1
 [package]
 id = "dist001-b3-smoke"
@@ -153,16 +153,16 @@ run_project_command \
     "$project/manifest.stderr" \
     "$launcher" package manifest
 
-grep -Fx 'protos.toml: valid schema v1' "$project/manifest.stdout" >/dev/null || {
+grep -Fx 'package.toml: valid schema v1' "$project/manifest.stdout" >/dev/null || {
     echo "--- manifest stdout ---" >&2
     cat "$project/manifest.stdout" >&2 || true
     echo "--- manifest stderr ---" >&2
     cat "$project/manifest.stderr" >&2 || true
-    fail "Package Tool did not validate caller-CWD protos.toml"
+    fail "Package Tool did not validate caller-CWD package.toml"
 }
 
 [ -f "$project/cwd-smoke.protos" ] || fail "caller source disappeared"
-[ -f "$project/protos.toml" ] || fail "caller manifest disappeared"
+[ -f "$project/package.toml" ] || fail "caller manifest disappeared"
 
 echo "DIST_OUTSIDE_CHECKOUT_CHECK: PASS"
 echo "DIST_B3_RUNTIME_ISOLATION_CHECK: PASS mode=$runtime_mode"

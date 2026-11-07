@@ -21,6 +21,7 @@ fail() {
 }
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+EXPECTED_BYTECODE_RELEASE=25
 EXPECTED_FEATURE=25
 EXPECTED_JAVA_VERSION=25.0.5.0.3
 EXPECTED_TRUFFLE_VERSION=25.5.5.0.3
@@ -84,9 +85,12 @@ esac
 runtime_meta=$toolchain/RUNTIME.txt
 [ -f "$runtime_meta" ] || fail "extracted RUNTIME.txt is missing"
 
+meta_bytecode=$(sed -n 's/^java_bytecode_release=//p' "$runtime_meta")
 meta_feature=$(sed -n 's/^java_feature=//p' "$runtime_meta")
 meta_truffle=$(sed -n 's/^truffle_runtime_version=//p' "$runtime_meta")
 meta_runtime=$(sed -n 's/^optimizing_runtime=//p' "$runtime_meta")
+[ "$meta_bytecode" = "$EXPECTED_BYTECODE_RELEASE" ] ||
+    fail "RUNTIME.txt java_bytecode_release drift: ${meta_bytecode:-missing}"
 [ "$meta_feature" = "$EXPECTED_FEATURE" ] ||
     fail "RUNTIME.txt java_feature drift: ${meta_feature:-missing}"
 [ "$meta_truffle" = "$EXPECTED_TRUFFLE_VERSION" ] ||
@@ -174,6 +178,7 @@ actual_runtime=$(tail -n 1 "$probe_out" | tr -d '\r')
 
 echo "DIST_B4B_OUTSIDE_CHECKOUT_CHECK: PASS"
 echo "DIST_SELECTED_JDK_CHECK: PASS java.version=$java_version"
+echo "DIST_BYTECODE_BASELINE_CHECK: PASS release=$meta_bytecode"
 echo "DIST_SELECTED_RUNTIME_GATE_CHECK: PASS"
 echo "DIST_OPTIMIZER_JAR_INTACT_CHECK: PASS version=$EXPECTED_TRUFFLE_VERSION"
 echo "DIST_TRUFFLE_COMPILER_CHECK: PASS version=$EXPECTED_TRUFFLE_VERSION"

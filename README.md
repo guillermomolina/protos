@@ -15,6 +15,9 @@
 > Native prerelease and installs it locally without Java, GraalVM, or Maven.
 > The separately published portable JVM artifact remains available for
 > compatibility and Java embedding; it is never an installer fallback.
+> From the DIST022 / PLAT073-C implementation onward, new JVM artifacts
+> use Java 25 classfiles (major 69) and the exact release-pinned GraalVM/JDK
+> 25 runtime. Earlier published releases retain their own contracts.
 >
 > **[Try Protos →](docs/guide/00-try-protos.md)** ·
 > **[Published releases →](https://github.com/guillermomolina/protos/releases)**

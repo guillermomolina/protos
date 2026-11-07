@@ -287,6 +287,10 @@ def load_contract(root):
 
     if graal.get("distribution") != "graalvm-community":
         raise ToolchainError("primary runtime distribution must be graalvm-community")
+    if bytecode < 25:
+        raise ToolchainError(
+            "PLAT073 requires Java 25 or newer source/bytecode baseline"
+        )
     if bytecode > feature:
         raise ToolchainError("bytecode target cannot exceed selected JDK feature")
     if not jdk_version.startswith(str(feature) + "."):
@@ -676,6 +680,15 @@ def audit_bindings(root, contract):
     ))
 
     smoke = read_text(root / "dist" / "smoke" / "smoke_optimizing_runtime.sh")
+    rows.append((
+        "dist.smoke.java_bytecode",
+        bytecode,
+        first_match(
+            smoke,
+            r"^EXPECTED_BYTECODE_RELEASE=([0-9]+)",
+            "EXPECTED_BYTECODE_RELEASE",
+        ),
+    ))
     rows.append((
         "dist.smoke.java_feature",
         feature,

@@ -316,6 +316,11 @@ Download its portable ZIP and adjacent `.sha256` file, verify the digest with
 `sha256sum -c`, extract the ZIP, and retain the distribution layout. Obtain the
 exact required GraalVM/JDK identity from that release's manifest and extracted
 `RUNTIME.txt`; do not assume any generic Java 21+ or arbitrary JVM works.
+New DIST022/PLAT073-C portable artifacts additionally declare
+`java_bytecode_release=25` (Java classfile major 69). They require the
+selected exact GraalVM Community 25.5.5.0.3 / JDK 25.0.5.0.3, not a
+Java 21 runtime or an arbitrary Java 25 implementation. Check older
+published artifacts against their own manifests, not this new baseline.
 
 The portable launcher uses `$PROTOS_JAVA` when present, otherwise
 `$JAVA_HOME/bin/java`, otherwise `java` on `PATH`. Configure the supported

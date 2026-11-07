@@ -39,7 +39,7 @@ import org.graalvm.polyglot.Value;
  * </ul>
  */
 public final class Plat054EmbeddingProbe {
-    private static final String MARKER_IMPORT = "m: import(\"std:plat054probe/Marker\")\nm.origin";
+    private static final String MARKER_IMPORT = "m: import(\"std:plat054probe/marker\")\nm.origin";
 
     private Plat054EmbeddingProbe() {}
 
@@ -70,10 +70,10 @@ public final class Plat054EmbeddingProbe {
             require(!bindings.hasMember("filesystem"), "default Filesystem authority granted");
             require(!bindings.hasMember("network"), "default Network authority granted");
 
-            context.eval("protos", "a: import(\"std:test/Assertions\")\n0");
+            context.eval("protos", "a: import(\"std:test/assertions\")\n0");
             require(
                     context.getBindings("protos").hasMember("a"),
-                    "std:test/Assertions not imported");
+                    "std:test/assertions not imported");
             try {
                 context.eval("protos", MARKER_IMPORT);
                 fail("home-only marker module resolved from the packaged Core");

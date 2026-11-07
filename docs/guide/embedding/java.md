@@ -34,7 +34,11 @@ relying on it, check the release notes of the distribution you actually use.
 
 ## Prerequisites
 
-- A JDK able to run the Protos portable JVM distribution.
+- The exact supported GraalVM Community 25.5.5.0.3 / JDK 25.0.5.0.3
+  required by the current PLAT073-C/DIST022 portable runtime. Protos
+  implementation classes target Java 25 (classfile major 69); a Java 21
+  runtime cannot load them. Older releases keep their published runtime
+  contracts; do not infer support for any arbitrary JDK 25 distribution.
 - The class path entries of that distribution: `lib/protos.jar` and every JAR
   in `lib/runtime/`. These supply the Protos language and the GraalVM Polyglot
   and Truffle runtime.

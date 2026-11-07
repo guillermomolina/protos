@@ -7,6 +7,15 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.453-SNAPSHOT
+
+- `DIST022` (#1085, PLAT073-C): raise the Protos Java source and bytecode baseline from Java 21 to Java 25 (classfile major 69).
+  - Align `toolchain.json`, Maven compiler release, toolchain verification, regression fixtures and distribution metadata with Java 25, while preserving the exact GraalVM Community `25.5.5.0.3` and JDK `25.0.5.0.3` runtime pins.
+  - Verify the shaded JVM artifact and portable ZIP classfile baseline; retain compatibility tests for Java 21-targeted external provider JARs running on Java 25, alongside Java 25 FFM providers.
+  - Validate the rebuilt Native Image, Linux x86_64/glibc distribution and offline Native installation, including rejection of invalid installation prefixes; preserve the PLAT045 interpreter-only Native runtime policy.
+  - Update portable distribution smoke fixtures for the D242/I152 `package.toml` and MODULE/SOURCE contracts, and refresh Java embedding, CLI, toolchain and foreign-provider documentation.
+  - Validate with focal toolchain and provider tests, complete portable distribution validation (3,684 Protos cases), Native CLI regressions, Native installation, full `make test` and `make check`.
+
 ## 0.3.452-SNAPSHOT
 
 - `BUG035` (#1081): fix standard `Bytes` transfer across Actor and Group boundaries.
