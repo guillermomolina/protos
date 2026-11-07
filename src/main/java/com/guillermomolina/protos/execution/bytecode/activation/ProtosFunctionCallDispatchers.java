@@ -195,11 +195,11 @@ final class ProtosFunctionCallDispatchers {
 
         /* Classification only: a source body, whatever the state of its plan. */
         static boolean isSourceFunction(ProtosClosureValue callable) {
-            return callable.nativeBody().isEmpty() && callable.definition() != null;
+            return !callable.hasNativeBody() && callable.definition() != null;
         }
 
         static boolean isBuiltin(ProtosClosureValue callable) {
-            return callable.nativeBody().isPresent();
+            return callable.hasNativeBody();
         }
 
         static boolean isFunctionCall(Object[] arguments) {

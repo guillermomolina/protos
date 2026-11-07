@@ -507,6 +507,11 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return this;
     }
 
+    /** Allocation-free native/source classification for Truffle dispatch. */
+    public boolean hasNativeBody() {
+        return nativeBody != null;
+    }
+
     public java.util.Optional<ProtosNativeClosureBody> nativeBody() {
         return java.util.Optional.ofNullable(nativeBody);
     }

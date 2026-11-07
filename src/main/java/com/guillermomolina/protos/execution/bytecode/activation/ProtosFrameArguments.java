@@ -551,7 +551,11 @@ final class ProtosFrameArguments {
      * would be a self-reference and is rejected.
      */
     private static ProtosActivation resolveCallerSlot(Object[] arguments) {
-        return resolveExactCaller(arguments[CALLER_INDEX]);
+        Object callerReference = arguments[CALLER_INDEX];
+        if (callerReference == null) {
+            return ProtosReadCallerFrameNode.resolve(arguments);
+        }
+        return resolveExactCaller(callerReference);
     }
 
 
