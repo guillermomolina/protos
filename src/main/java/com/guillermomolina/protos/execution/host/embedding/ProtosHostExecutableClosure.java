@@ -244,7 +244,13 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                             null),
                     receiver.caller,
                     null);
-            return hostResult(receiver, outcome);
+            /*
+             * I115 experimental zero-argument fast path:
+             * return the exact guest outcome without the general
+             * host Integer normalization. This keeps the Long
+             * carrier unchanged when return speculation is disabled.
+             */
+            return outcome;
         }
 
         /*
