@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosStandardNumberOrderingProtocol.Relation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.OperationProxy;
@@ -42,13 +41,13 @@ abstract class ProtosRichCompareLeNode extends Node {
     abstract Object execute(VirtualFrame frame, Object left, Object right);
 
     @Specialization
-    static Object doLL(long left, long right) {
-        return ProtosBooleanValue.of(left <= right);
+    static boolean doLL(long left, long right) {
+        return left <= right;
     }
 
     @Specialization
-    static Object doDD(double left, double right) {
-        return ProtosBooleanValue.of(left <= right);
+    static boolean doDD(double left, double right) {
+        return left <= right;
     }
 
     @Fallback
