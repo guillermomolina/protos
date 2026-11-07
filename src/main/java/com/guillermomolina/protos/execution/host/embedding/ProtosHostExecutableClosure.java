@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
@@ -186,6 +187,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
     @ExportMessage
     static final class Execute {
         @Specialization(guards = "receiver.target == null")
+        @InliningCutoff
         static Object generic(
                 ProtosHostExecutableClosure receiver,
                 Object[] arguments,
@@ -216,7 +218,45 @@ final class ProtosHostExecutableClosure implements TruffleObject {
          * (GraalPy CallNode). The callee root owns its ReturnHome; a pending
          * outcome is driven by the host-entry suspension driver.
          */
-        @Specialization(guards = "receiver.target != null")
+        /*
+         * I115: GraalPy PExecuteNode / CallDispatchers-inspired
+         * zero-argument source entry. The benchmark surface supplies
+         * no host arguments, so no conversion or host-entry protocol
+         * is required for this experimental call path.
+         */
+        @Specialization(guards = {
+                "receiver.target != null",
+                "arguments.length == 0"
+        })
+        static Object sourceZero(
+                ProtosHostExecutableClosure receiver,
+                Object[] arguments,
+                @Cached ProtosFunctionCallDispatchers.CallNode callNode) {
+            Object outcome = callNode.execute(
+                    null,
+                    false,
+                    receiver.closure,
+                    ProtosFrameArguments.dispatchedCall0(
+                            null,
+                            ProtosFrameArguments.functionCallMarker(),
+                            null,
+                            null,
+                            null),
+                    receiver.caller,
+                    null);
+            return hostResult(receiver, outcome);
+        }
+
+        /*
+         * GraalPy-style cold fallback: retain the nonzero-argument
+         * implementation without expanding it into the ordinary
+         * zero-argument host call.
+         */
+        @Specialization(guards = {
+                "receiver.target != null",
+                "arguments.length != 0"
+        })
+        @InliningCutoff
         static Object source(
                 ProtosHostExecutableClosure receiver,
                 Object[] arguments,

@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.63-SNAPSHOT
+
+- **I115-V82 — historical replay.**
+  - Add cold caller recovery through a Truffle stack walk, register the effective callee caller need and reuse demand-driven B5 transport on later calls. Reduce eager prologue state and simplify host dispatch.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** Caller recovery and lean host entry do not prove equivalence across suspension, cancellation, Futures or Actor transfer. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved without repairs.
+  - No test files are added or modified by this historical commit. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 1 added, 5 modified, 0 deleted (rename detection disabled for exact path accounting). All 6 original paths retain their exact Git blobs/modes or deletion state; reconstructed parent blobs/modes also match the original parent. Only root `pom.xml` and `CHANGELOG.md` receive replay metadata edits.
+  - Original implementation: `c7ea10ee1d838b9c58f401e60480bbebf6d7f552`.
+
 ## 0.4.62-SNAPSHOT
 
 - **I115-V81 — historical replay.**
