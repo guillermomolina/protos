@@ -25,7 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
-import com.guillermomolina.protos.runtime.ProtosValueLookup.GuardedSlotSelection;
+import com.guillermomolina.protos.runtime.ProtosValueLookup.StructuralSelection;
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
@@ -52,9 +52,10 @@ import com.oracle.truffle.api.strings.TruffleString;
  * Nothing is prepared or executed here.
  *
  * <p>{@link #doCached} is the selection cache (at most three entries),
- * guarded by receiver identity and the selection's stability assumption; it
- * reads the current value of the cached slot location, so a reassignment is
- * observed and a removal or recreation invalidates the entry. A cached slot
+ * guarded by receiver identity and a structural selection whose observed
+ * {@code Shape}s must still match along the delegation chain; it reads the
+ * current value of the selected property, so a reassignment is observed and
+ * a structural change (removal, recreation, shadowing) misses the entry. A cached slot
  * that no longer holds a Closure falls to {@link #doGeneric}, which performs
  * the complete lookup and raises its Errors.
  *
@@ -78,9 +79,9 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             guards = {
                 "receiver == cachedReceiver",
                 "cachedSelection != null",
-                "isClosure(cachedSelection.currentValue(getNode))"
+                "cachedSelection.isValid()",
+                "isClosure(cachedSelection.read())"
             },
-            assumptions = "cachedSelection.stability()",
             limit = "3")
     @ForceQuickening
     static Object doCached(
@@ -90,10 +91,9 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             Object receiver,
             @Cached("receiver") Object cachedReceiver,
             @Cached("selectOrNull(receiver, selector)")
-                    GuardedSlotSelection cachedSelection,
-            @Cached com.oracle.truffle.api.object.DynamicObject.GetNode getNode) {
+                    StructuralSelection cachedSelection) {
         ProtosClosureValue selected =
-                (ProtosClosureValue) cachedSelection.currentValue(getNode);
+                (ProtosClosureValue) cachedSelection.read();
         if (direct) {
             // I115 divergence: the receiver travels separately; the
             // inherited method's exact original methodHome is not retained.
@@ -123,18 +123,14 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
         return value instanceof ProtosClosureValue;
     }
 
-    /* Installation only: the guarded physical selection without a prelude, or null. */
+    /* Installation only: the structural selection from an exact ordinary receiver, or null. */
     @TruffleBoundary
-    static GuardedSlotSelection selectOrNull(Object receiver, TruffleString selector) {
-        if (!(receiver instanceof ProtosObjectValue)) {
+    static StructuralSelection selectOrNull(Object receiver, TruffleString selector) {
+        if (!ProtosValueLookup.isOrdinaryObject(receiver)) {
             return null;
         }
-        try {
-            return ProtosValueLookup.lookupGuardedSlotSelection(
-                    receiver, selector.toJavaStringUncached(), null);
-        } catch (UnsupportedOperationException unsupportedRepresentation) {
-            return null;
-        }
+        return ProtosValueLookup.selectStructural(
+                receiver, selector.toJavaStringUncached().intern());
     }
 
     /**

@@ -3150,7 +3150,7 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalMember member) {
-            builder.beginGetAttribute(member.name());
+            builder.beginGetAttribute(attributeName(member.name()));
             emitI115DirectUnaryOperand(builder, member.receiver(), false);
             builder.endGetAttribute();
             return;
@@ -3618,7 +3618,7 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalMember member) {
             if (isDirectAttributeReadReceiver(member.receiver())) {
                 builder.beginStoreLocal(target);
-                builder.beginGetAttribute(member.name());
+                builder.beginGetAttribute(attributeName(member.name()));
                 emitDirectAttributeReadReceiver(
                         builder, member.receiver(),
                         preparedCall, childResult, resumeValue);
@@ -3634,7 +3634,7 @@ final class CanonicalToBytecodeLowerer {
                     preparedCall, childResult, resumeValue);
 
             builder.beginStoreLocal(target);
-            builder.beginGetAttribute(member.name());
+            builder.beginGetAttribute(attributeName(member.name()));
             builder.emitLoadLocal(receiverValue);
             builder.endGetAttribute();
             builder.endStoreLocal();
@@ -3797,7 +3797,7 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalMember member) {
             if (isDirectAttributeReadReceiver(member.receiver())) {
                 builder.beginStoreLocal(target);
-                builder.beginGetAttribute(member.name());
+                builder.beginGetAttribute(attributeName(member.name()));
                 emitDirectAttributeReadReceiver(
                         builder, member.receiver(),
                         preparedCall, childResult, resumeValue);
@@ -3813,7 +3813,7 @@ final class CanonicalToBytecodeLowerer {
                     preparedCall, childResult, resumeValue);
 
             builder.beginStoreLocal(target);
-            builder.beginGetAttribute(member.name());
+            builder.beginGetAttribute(attributeName(member.name()));
             builder.emitLoadLocal(receiverValue);
             builder.endGetAttribute();
             builder.endStoreLocal();
@@ -4507,9 +4507,9 @@ final class CanonicalToBytecodeLowerer {
         }
 
         if (creation) {
-            builder.beginCreateAttribute(name);
+            builder.beginCreateAttribute(attributeName(name));
         } else {
-            builder.beginSetAttribute(name);
+            builder.beginSetAttribute(attributeName(name));
         }
 
         if (stageRhs) {
@@ -6832,7 +6832,7 @@ final class CanonicalToBytecodeLowerer {
             if (member.receiver() instanceof CanonicalClosure closure) {
                 ProtosClosureExecutionPlanCell plan =
                         bytecodeClosurePlan(builder, closure);
-                builder.beginGetAttribute(member.name());
+                builder.beginGetAttribute(attributeName(member.name()));
                 emitClosureCapture(builder, closure, plan);
                 builder.endGetAttribute();
                 return;
@@ -6845,13 +6845,13 @@ final class CanonicalToBytecodeLowerer {
                 emitExpression(builder, member.receiver());
                 builder.endStoreLocal();
 
-                builder.beginGetAttribute(member.name());
+                builder.beginGetAttribute(attributeName(member.name()));
                 builder.emitLoadLocal(completedReceiver);
                 builder.endGetAttribute();
                 return;
             }
 
-            builder.beginGetAttribute(member.name());
+            builder.beginGetAttribute(attributeName(member.name()));
             emitExpression(builder, member.receiver());
             builder.endGetAttribute();
             return;
@@ -7851,5 +7851,14 @@ final class CanonicalToBytecodeLowerer {
             case FALSE -> ProtosBooleanValue.FALSE;
             case NULL -> ProtosNullValue.INSTANCE;
         };
+    }
+
+    /*
+     * I115: attribute names reach DynamicObject property nodes, whose caches
+     * compare keys by identity; canonicalize them once, at bytecode build
+     * time, never per access.
+     */
+    private static String attributeName(String name) {
+        return name.intern();
     }
 }

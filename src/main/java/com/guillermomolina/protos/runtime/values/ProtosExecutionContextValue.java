@@ -42,15 +42,16 @@ package com.guillermomolina.protos.runtime;
  * statically admitted lexical binding. Each execution context therefore
  * installs its own {@link ProtosLexicalBindingAuthority} once, at
  * construction, through the {@code ProtosObjectValue} authority-attachment
- * constructor, rather than relying on the base class's inherited default. In
- * this slice the installed authority is still the same map-backed storage
- * ordinary objects use, so no runtime lexical behavior changes; a later slice
- * may install a Truffle Bytecode DSL frame-backed authority here instead
- * without any caller of the local-slot operations below changing.
+ * constructor, rather than relying on the base class's inherited default:
+ * an independent durable authority with private storage, later replaceable
+ * by a Truffle Bytecode DSL frame-backed authority. A context inherits the
+ * {@code DynamicObject} representation of ordinary objects only to share the
+ * object hierarchy; its bindings are never stored in its own {@code Shape},
+ * so structural attribute caches never admit it.
  */
 public final class ProtosExecutionContextValue extends ProtosObjectValue {
     public ProtosExecutionContextValue(Object parent) {
-        super(parent);
+        super(parent, ProtosLexicalBindingAuthority.newMapBackedForRuntime());
     }
 
     /**
@@ -68,10 +69,11 @@ public final class ProtosExecutionContextValue extends ProtosObjectValue {
      * PLAT036 Candidate D, Slice 3 backend-private hook: a genuine {@code
      * ROOT}/{@code CLOSURE} Bytecode lowering unit calls this exactly once, as
      * its own first executed operation, to replace the context's default
-     * map-backed authority with one backed by that unit's own Truffle Bytecode
-     * DSL frame/local layout. Bindings established before root execution are
-     * migrated during the authority handoff, preserving their insertion order
-     * and values without exposing two simultaneous authorities.
+     * independent authority with one backed by that unit's own Truffle
+     * Bytecode DSL frame/local layout. Bindings established before root
+     * execution are migrated during the authority handoff, preserving their
+     * insertion order and values; the previous authority then stops being a
+     * data source, and nothing is copied into this object's own properties.
      */
     public void installFrameLexicalBindingAuthority(ProtosLexicalBindingAuthority frameBackedAuthority) {
         replaceLexicalBindingAuthorityPreservingBindings(frameBackedAuthority);

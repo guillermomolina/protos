@@ -18,428 +18,192 @@
 package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
-import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import com.oracle.truffle.api.Truffle;
-import com.oracle.truffle.api.object.DynamicObject;
+import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.object.PropertyGetter;
-import com.oracle.truffle.api.nodes.Node;
-import com.oracle.truffle.api.profiles.InlinedBranchProfile;
+import com.oracle.truffle.api.object.Property;
+import com.oracle.truffle.api.object.Shape;
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
  * Ordinary slot lookup across runtime representations whose semantic delegation
- * parent is supplied by the source-backed Core prelude.
+ * parent is supplied by the source-backed Core prelude, plus the structural
+ * ({@code Shape}-based) property selection used by specialized attribute
+ * reads.
  */
 public final class ProtosValueLookup {
     private ProtosValueLookup() {}
 
     /**
-     * A D013 selection protected by one dependency shared by every visited
-     * ordinary object, including nearer objects where the selector is absent.
-     * Checking stability never traverses the delegation chain.
-     */
-    public record GuardedLookup(
-            ProtosSlotLookupResult selected,
-            Assumption stability) {}
-
-    /**
-     * PERF025-H3A shared inherited selection. The exact direct parent is the
-     * shareable semantic anchor; the guarded lookup starts at that parent, so
-     * sibling receivers are not registered as dependencies. Each actual
-     * receiver separately proves local absence of the selector on every hit.
-     */
-    public record SharedInheritedLookup(
-            Object exactParent,
-            GuardedLookup parentLookup) {
-        public SharedInheritedLookup {
-            Objects.requireNonNull(exactParent, "exactParent");
-            Objects.requireNonNull(parentLookup, "parentLookup");
-        }
-
-        public ProtosSlotLookupResult selected() {
-            return parentLookup.selected();
-        }
-
-        public Assumption stability() {
-            return parentLookup.stability();
-        }
-    }
-
-
-    /**
-     * A guarded choice of slot owner. Its value is deliberately not cached.
-     * The same owner remains usable across successful local-slot assignments.
+     * A structural selection of an ordinary property along a delegation
+     * chain, following GraalPy {@code ReadAttributeFromObjectNode.readDirect}
+     * with Protos prototype delegation in place of an MRO.
      *
-     * <p>PERF037-B: {@code location} is the selected binding's stable
-     * physical location in {@code home}'s single authority, so a valid hit
-     * loads the current value without a nominal lookup. Assignments write
-     * through it; every mutation that could detach it (removal, recreation)
-     * invalidates {@code stability} first.
+     * <p>It records the ordinary objects examined from the lookup origin up to
+     * and including the real slot owner ({@link #home()}), the {@code Shape}
+     * observed for each of them, and a {@link PropertyGetter} for the
+     * selected property in the owner's {@code Shape}. It never records the
+     * property value: every read loads the owner's current physical location.
+     *
+     * <p>Delegation parents are immutable, so the selection stays exact while
+     * every examined object still has its observed {@code Shape}: a nearer
+     * shadowing property, a removal, or any other structural change of an
+     * examined object is a {@code Shape} transition that makes
+     * {@link #isValid()} fail, forcing respecialization or the generic path.
      */
-    public record GuardedSlotSelection(
-            ProtosObjectValue home,
-            ProtosMapBackedLexicalBindingAuthority.SlotCell location,
-            Assumption stability,
-            Assumption nonClosureContinuity) {
-        public GuardedSlotSelection {
-            Objects.requireNonNull(home, "home");
-            Objects.requireNonNull(location, "location");
-            Objects.requireNonNull(stability, "stability");
+    public static final class StructuralSelection {
+        @CompilationFinal(dimensions = 1)
+        private final ProtosObjectValue[] chain;
+        @CompilationFinal(dimensions = 1)
+        private final Shape[] shapes;
+        private final PropertyGetter getter;
+
+        private StructuralSelection(
+                ProtosObjectValue[] chain,
+                Shape[] shapes,
+                PropertyGetter getter) {
+            this.chain = chain;
+            this.shapes = shapes;
+            this.getter = getter;
+        }
+
+        /** The object the lookup started at. */
+        public ProtosObjectValue origin() {
+            return chain[0];
+        }
+
+        /** The real owner of the selected slot. */
+        public ProtosObjectValue home() {
+            return chain[chain.length - 1];
         }
 
         /**
-         * I115-H7 EXPERIMENTAL: the current value of the selected physical
-         * location, read without a nominal lookup. Valid only while
-         * {@link #stability()} is valid; assignments through the same
-         * location stay visible because the value is never copied.
+         * Whether every examined object, identified by its exact identity
+         * (never by Shape alone), still has its observed Shape. Two chains
+         * with equal Shapes but different objects never share a selection,
+         * so {@link #home()} is always the real owner.
          */
-        public Object currentValue() {
-            return location.value();
-        }
-
-        public Object currentValue(DynamicObject.GetNode getNode) {
-            return location.value(getNode);
-        }
-
-        public DynamicObject storage() {
-            return location.storage();
-        }
-
-        public Object propertyKey() {
-            return location.key();
-        }
-
-        public PropertyGetter propertyGetter() {
-            return location.getter();
-        }
-    }
-
-    /**
-     * An inherited selection shared by receivers with an identical parent.
-     * Each receiver still proves that it does not shadow the selected name.
-     */
-    public record SharedInheritedSlotSelection(
-            Object exactParent,
-            GuardedSlotSelection parentSelection) {
-        public SharedInheritedSlotSelection {
-            Objects.requireNonNull(exactParent, "exactParent");
-            Objects.requireNonNull(parentSelection, "parentSelection");
-        }
-
-        public Assumption stability() {
-            return parentSelection.stability();
-        }
-
-        public Assumption nonClosureContinuity() {
-            return parentSelection.nonClosureContinuity();
-        }
-    }
-
-    /**
-     * I115: select an existing local attribute slot once, during
-     * specialization. The selected SlotCell remains the authoritative
-     * storage location. No alternate object store is introduced.
-     *
-     * Only exact ordinary objects are admitted; other representations
-     * retain the generic path.
-     */
-    public static GuardedSlotSelection writableAttributeSelection(
-            Object receiver, String name) {
-        CompilerAsserts.neverPartOfCompilation();
-        if (receiver == null
-                || receiver.getClass() != ProtosObjectValue.class) {
-            return null;
-        }
-        ProtosObjectValue object = (ProtosObjectValue) receiver;
-        if (!object.hasLocalSlot(name)) {
-            return null;
-        }
-        GuardedSlotSelection selection =
-                lookupGuardedSlotSelection(receiver, name, null);
-        return selection != null && selection.home() == object
-                ? selection
-                : null;
-    }
-
-    /**
-     * I115: write the selected physical attribute location.
-     * No nominal lookup, writable-state guard, or guest Integer
-     * projection occurs at this site.
-     */
-    public static Object writeSelectedAttribute(
-            GuardedSlotSelection selection,
-            String name,
-            Object value) {
-        selection.home().assignSelectedAttributeLocation(
-                name, selection.location(), value);
-        return value;
-    }
-
-    public static Object writeSelectedAttribute(
-            GuardedSlotSelection selection,
-            String name,
-            Object value,
-            DynamicObject.PutNode putNode) {
-        selection.home().assignSelectedAttributeLocation(
-                name, selection.location(), value, putNode);
-        return value;
-    }
-
-    /**
-     * I115-H10-A: GetAttribute and SetAttribute share the selected
-     * physical location. Selection is read-only: integer storage
-     * representation is established by the first PutNode.
-     */
-    public static GuardedSlotSelection readableAttributeSelection(
-            Object receiver, String name, ProtosPrelude prelude) {
-        return lookupGuardedSlotSelection(receiver, name, prelude);
-    }
-
-    public static GuardedSlotSelection lookupGuardedSlotSelection(
-            Object receiver,
-            String name,
-            ProtosPrelude prelude) {
-        CompilerAsserts.neverPartOfCompilation();
-        Assumption stability =
-                Truffle.getRuntime().createAssumption("Protos slot selection");
-        Optional<ProtosSlotLookupResult> selected =
-                lookup(receiver, name, prelude, stability, false, true);
-        if (selected.isEmpty() || !stability.isValid()) {
-            stability.invalidate();
-            return null;
-        }
-        ProtosObjectValue home = selected.orElseThrow().home();
-        ProtosMapBackedLexicalBindingAuthority.SlotCell location =
-                home.slotCellForGuardedRead(name);
-        if (location == null) {
-            stability.invalidate();
-            return null;
-        }
-        return new GuardedSlotSelection(
-                home,
-                location,
-                stability,
-                location.nonClosureContinuityForGuardedRead());
-    }
-
-    public static SharedInheritedSlotSelection lookupGuardedSharedInheritedSlotSelection(
-            Object receiver,
-            String name,
-            ProtosPrelude prelude) {
-        CompilerAsserts.neverPartOfCompilation();
-        Objects.requireNonNull(name, "name");
-        if (receiver == null || receiver.getClass() != ProtosObjectValue.class) {
-            return null;
-        }
-
-        ProtosObjectValue ordinary = (ProtosObjectValue) receiver;
-        if (ordinary.hasLocalSlot(name)) {
-            return null;
-        }
-
-        Object parent = ordinary.directParentForGuardedLookup();
-        if (parent == null) {
-            return null;
-        }
-
-        try {
-            GuardedSlotSelection selected =
-                    lookupGuardedSlotSelection(parent, name, prelude);
-            return selected == null
-                    ? null
-                    : new SharedInheritedSlotSelection(parent, selected);
-        } catch (UnsupportedOperationException unsupportedRepresentation) {
-            return null;
-        }
-    }
-
-    public static boolean matchesGuardedSharedInheritedSlotSelection(
-            Object receiver,
-            String name,
-            SharedInheritedSlotSelection cached) {
-        Objects.requireNonNull(name, "name");
-        Objects.requireNonNull(cached, "cached");
-        if (receiver == null || receiver.getClass() != ProtosObjectValue.class) {
-            return false;
-        }
-        ProtosObjectValue ordinary = (ProtosObjectValue) receiver;
-        return ordinary.directParentForGuardedLookup() == cached.exactParent()
-                && !ordinary.hasLocalSlot(name);
-    }
-
-    /**
-     * Establishes a cache entry using the same lookup implementation as the
-     * generic path. This is specialization-time work, never valid-hit work.
-     *
-     * <p>Attribute-specific assumption invalidation follows the established
-     * Truffle runtime pattern used by GraalPy's MRO attribute caches.
-     * Protos parents are immutable; selector mutations are the dependencies
-     * for admitted ordinary chains. Represented values and subclass storage
-     * remain unsupported here and use generic lookup.
-     *
-     * @return a protected selection, or null when absent or unsupported
-     */
-    public static GuardedLookup lookupGuarded(
-            Object receiver,
-            String name,
-            ProtosPrelude prelude) {
-        CompilerAsserts.neverPartOfCompilation();
-        Assumption stability =
-                Truffle.getRuntime().createAssumption("Protos selected slot");
-        Optional<ProtosSlotLookupResult> selected =
-                lookup(receiver, name, prelude, stability);
-        if (selected.isEmpty() || !stability.isValid()) {
-            stability.invalidate();
-            return null;
-        }
-        return new GuardedLookup(selected.orElseThrow(), stability);
-    }
-
-    /**
-     * I114: the guarded D013 selection of {@code call} starting at the root
-     * Object. The returned stability is registered on the root through the
-     * ordinary selector dependencies, so any create/assign/remove/recreate of
-     * the root's {@code call} invalidates it. Used only to establish or
-     * rebuild the canonical {@code Object.call} certificate.
-     *
-     * @return a protected selection, or null when absent
-     */
-    public static GuardedLookup lookupGuardedCanonicalRootCall() {
-        return lookupGuarded(ProtosObjectValue.rootObject(), "call", null);
-    }
-
-    /**
-     * Establishes a shared inherited-member selection for an exact ordinary
-     * receiver. The receiver itself must not own {@code name}; lookup and D013
-     * dependency registration begin at its exact direct parent.
-     *
-     * <p>This deliberately shares only inherited selection. Own-slot reads stay
-     * on the exact-receiver PIC because ordinary slot storage is still
-     * String-keyed LinkedHashMap storage rather than a shared ordinal layout.
-     *
-     * @return a shared inherited selection, or null when the shape is not
-     *         safely admitted
-     */
-    public static SharedInheritedLookup lookupGuardedSharedInherited(
-            Object receiver,
-            String name,
-            ProtosPrelude prelude) {
-        CompilerAsserts.neverPartOfCompilation();
-        Objects.requireNonNull(name, "name");
-
-        if (receiver == null || receiver.getClass() != ProtosObjectValue.class) {
-            return null;
-        }
-
-        ProtosObjectValue ordinary = (ProtosObjectValue) receiver;
-        if (ordinary.hasLocalSlot(name)) {
-            return null;
-        }
-
-        Object parent = ordinary.directParentForGuardedLookup();
-        if (parent == null) {
-            return null;
-        }
-
-        try {
-            GuardedLookup parentLookup =
-                    lookupGuarded(parent, name, prelude);
-            if (parentLookup == null) {
-                return null;
+        @ExplodeLoop
+        public boolean isValid() {
+            for (int index = 0; index < chain.length; index++) {
+                if (!shapes[index].check(chain[index])) {
+                    return false;
+                }
             }
-            return new SharedInheritedLookup(parent, parentLookup);
-        } catch (UnsupportedOperationException unsupportedRepresentation) {
-            return null;
+            return true;
+        }
+
+        /** The current value of the selected property. Requires {@link #isValid()}. */
+        public Object read() {
+            return getter.get(home());
         }
     }
 
     /**
-     * Valid-hit guard for {@link #lookupGuardedSharedInherited}. The exact
-     * parent identity is immutable; local selector absence is intentionally
-     * checked per receiver so one sibling's shadowing does not invalidate the
-     * shared parent-chain selection for every other sibling.
+     * Whether {@code receiver} is an exact ordinary object, the only
+     * representation admitted by structural attribute specializations.
      */
-    public static boolean matchesGuardedSharedInherited(
-            Object receiver,
-            String name,
-            SharedInheritedLookup cachedLookup) {
-        Objects.requireNonNull(name, "name");
-        Objects.requireNonNull(cachedLookup, "cachedLookup");
-
-        if (receiver == null || receiver.getClass() != ProtosObjectValue.class) {
-            return false;
-        }
-
-        ProtosObjectValue ordinary = (ProtosObjectValue) receiver;
-        return ordinary.directParentForGuardedLookup()
-                        == cachedLookup.exactParent()
-                && !ordinary.hasLocalSlot(name);
+    public static boolean isOrdinaryObject(Object receiver) {
+        return receiver != null && receiver.getClass() == ProtosObjectValue.class;
     }
 
     /**
-     * Returns whether {@code receiver} is one of the two canonical Boolean
-     * identities, the only represented values admitted by
-     * {@link #lookupGuardedCanonicalBoolean}.
+     * GraalPy {@code PythonUtils.getPropertyGetterWithFinalAssumption}: the
+     * getter of {@code name} in {@code shape}, or {@code null} when absent.
+     * Obtaining the location's final assumption lets compiled reads of a
+     * constant receiver fold while the location is never rewritten; the value
+     * itself is never cached. Specialization-time only.
      */
-    public static boolean isCanonicalBoolean(Object receiver) {
-        return receiver == ProtosBooleanValue.TRUE || receiver == ProtosBooleanValue.FALSE;
-    }
-
-    /**
-     * Guarded D013 selection for a canonical {@code true}/{@code false}
-     * receiver. Canonical Booleans are represented values with no local slots
-     * whose delegation parent is fixed by their representation to the root
-     * Object, so the only mutable selection dependencies are the ordinary
-     * objects visited from that parent. This runs the same lookup loop as
-     * {@link #lookupGuarded}; only the receiver's own represented step is
-     * exempt from invalidation. Any other receiver, including any other
-     * represented value, is unsupported here and generic lookup remains
-     * authoritative.
-     *
-     * @return a protected selection, or null when absent or unsupported
-     */
-    public static GuardedLookup lookupGuardedCanonicalBoolean(
-            Object receiver,
-            String name,
-            ProtosPrelude prelude) {
+    public static PropertyGetter propertyGetterWithFinalAssumption(Shape shape, String name) {
         CompilerAsserts.neverPartOfCompilation();
-        if (!isCanonicalBoolean(receiver)
-                || delegationParent(receiver, prelude).orElse(null)
-                        != ProtosObjectValue.rootObject()) {
-            return null;
+        PropertyGetter getter = shape.makePropertyGetter(name);
+        if (getter != null) {
+            Property property = shape.getProperty(name);
+            if (property != null) {
+                property.getLocation().getFinalAssumption();
+            }
         }
-        Assumption stability =
-                Truffle.getRuntime().createAssumption("Protos selected Boolean slot");
-        Optional<ProtosSlotLookupResult> selected =
-                lookup(receiver, name, prelude, stability, true);
-        if (selected.isEmpty() || !stability.isValid()) {
-            stability.invalidate();
-            return null;
-        }
-        return new GuardedLookup(selected.orElseThrow(), stability);
+        return getter;
+    }
+
+    /** Whether {@code shape} describes a local property {@code name}. */
+    public static boolean hasProperty(Shape shape, String name) {
+        return shape.getProperty(name) != null;
     }
 
     /**
-     * Returns whether {@code receiver} belongs to the semantic Integer
-     * representation family, the only represented values admitted by
-     * {@link #lookupGuardedInteger}. Membership is by representation, not by
-     * value or identity: every {@link Long} is an immutable
-     * carrier with no local slots whose delegation parent is fixed by its
-     * representation contract to the owning prelude's SmallInteger prototype
-     * (D197-C), which delegates to the common Integer prototype.
+     * Selects {@code name} structurally starting at {@code origin}, or returns
+     * {@code null} when it is absent or some examined object does not store
+     * its slots in its own {@code Shape}. Specialization-time only.
      */
-    public static boolean isInteger(Object receiver) {
-        /*
-         * I091: a large Integer is a FROZEN slotless ordinary object whose parent is its minting
-         * Prelude's BigInteger prototype. It is never observed outside that Prelude (every
-         * cross-domain path rematerializes it), so its own lookup step is as fixed as the
-         * represented step of a signed-64 Integer.
-         */
-        return ProtosNumericValueSupport.isCurrentInteger(receiver);
+    @TruffleBoundary
+    public static StructuralSelection selectStructural(Object origin, String name) {
+        Objects.requireNonNull(name, "name");
+        ArrayList<ProtosObjectValue> chain = new ArrayList<>();
+        ArrayList<Shape> shapes = new ArrayList<>();
+        Object current = origin;
+        while (current instanceof ProtosObjectValue object
+                && object.usesObjectStorageForRuntime()) {
+            Shape shape = object.getShape();
+            chain.add(object);
+            shapes.add(shape);
+            if (hasProperty(shape, name)) {
+                PropertyGetter getter = propertyGetterWithFinalAssumption(shape, name);
+                if (getter == null) {
+                    return null;
+                }
+                return new StructuralSelection(
+                        chain.toArray(ProtosObjectValue[]::new),
+                        shapes.toArray(Shape[]::new),
+                        getter);
+            }
+            current = object.directParentForGuardedLookup();
+        }
+        return null;
+    }
+
+    /**
+     * The structural selection of an inherited {@code name} for an exact
+     * ordinary receiver that does not own it, starting at the receiver's
+     * direct parent so it can be shared by every receiver with that parent.
+     * Specialization-time only.
+     */
+    @TruffleBoundary
+    public static StructuralSelection selectInheritedStructural(Object receiver, String name) {
+        if (!isOrdinaryObject(receiver)) {
+            return null;
+        }
+        ProtosObjectValue ordinary = (ProtosObjectValue) receiver;
+        if (hasProperty(ordinary.getShape(), name)) {
+            return null;
+        }
+        return selectStructural(ordinary.directParentForGuardedLookup(), name);
+    }
+
+    /**
+     * Whether {@code receiver}'s immutable direct parent is the origin of the
+     * shared inherited {@code selection}.
+     */
+    public static boolean hasSelectionParent(
+            ProtosObjectValue receiver, StructuralSelection selection) {
+        return receiver.directParentForGuardedLookup() == selection.origin();
+    }
+
+    /**
+     * Fresh member extraction of a structurally read value: a Closure is bound
+     * to the original receiver and the real slot owner on every read; any
+     * other value is returned as stored.
+     */
+    public static Object extractMember(Object receiver, ProtosObjectValue home, Object value) {
+        if (value instanceof ProtosClosureValue closure) {
+            return closure.bindMethod(receiver, home);
+        }
+        return value;
     }
 
     /**
@@ -454,116 +218,22 @@ public final class ProtosValueLookup {
                 || value instanceof ProtosRepresentedValue;
     }
 
-    /**
-     * Guarded D013 selection for a semantic Integer receiver. The receiver's
-     * immediate parent must be exactly the prelude's prototype of its concrete
-     * D197-C family (SmallInteger for a signed-64 value, BigInteger otherwise);
-     * the lookup then continues ordinarily through Integer, Number and the root
-     * Object. This runs the same lookup loop as {@link #lookupGuarded}; only the
-     * receiver's own represented step is exempt from invalidation.
-     *
-     * <p>Callers share one selection across every Integer receiver evaluated
-     * against the same prelude, whatever its concrete family. That is sound
-     * only when the selection does not depend on the family: both concrete
-     * prototypes must be frozen and neither may define {@code name} locally,
-     * so the lookup from either family reaches the same slot with the same
-     * home. A family-local slot (for example {@code recognizes}) is therefore
-     * unsupported here and generic lookup remains authoritative, as it does for
-     * any other receiver, including any other represented value.
-     *
-     * @return a protected selection, or null when absent or unsupported
-     */
-    public static GuardedLookup lookupGuardedInteger(
-            Object receiver,
-            String name,
-            ProtosPrelude prelude) {
-        CompilerAsserts.neverPartOfCompilation();
-        if (!isInteger(receiver) || prelude == null) {
-            return null;
-        }
-        ProtosObjectValue smallIntegerPrototype = prelude.smallIntegerPrototype();
-        ProtosObjectValue bigIntegerPrototype = prelude.bigIntegerPrototype();
-        ProtosObjectValue expectedParent =
-                ProtosNumericValueSupport.isLargeInteger(receiver)
-                        ? bigIntegerPrototype
-                        : smallIntegerPrototype;
-        if (delegationParent(receiver, prelude).orElse(null) != expectedParent
-                || !isFamilyIndependent(smallIntegerPrototype, name)
-                || !isFamilyIndependent(bigIntegerPrototype, name)) {
-            return null;
-        }
-        Assumption stability =
-                Truffle.getRuntime().createAssumption("Protos selected Integer slot");
-        Optional<ProtosSlotLookupResult> selected =
-                lookup(receiver, name, prelude, stability, true);
-        if (selected.isEmpty() || !stability.isValid()) {
-            stability.invalidate();
-            return null;
-        }
-        return new GuardedLookup(selected.orElseThrow(), stability);
-    }
-
-    private static boolean isFamilyIndependent(
-            ProtosObjectValue concreteIntegerPrototype, String name) {
-        return concreteIntegerPrototype.isFrozen()
-                && !concreteIntegerPrototype.hasLocalSlot(name);
-    }
-
     public static Optional<ProtosSlotLookupResult> lookup(
             Object receiver,
             String name,
             ProtosPrelude prelude) {
-        return lookup(receiver, name, prelude, null);
-    }
-
-    private static Optional<ProtosSlotLookupResult> lookup(
-            Object receiver,
-            String name,
-            ProtosPrelude prelude,
-            Assumption stability) {
-        return lookup(receiver, name, prelude, stability, false);
-    }
-
-    private static Optional<ProtosSlotLookupResult> lookup(
-            Object receiver,
-            String name,
-            ProtosPrelude prelude,
-            Assumption stability,
-            // Set only by a family-specific guarded entry point that has already
-            // proven the receiver's own represented step is fixed.
-            boolean admitRepresentedReceiverStep) {
-        return lookup(
-                receiver, name, prelude, stability,
-                admitRepresentedReceiverStep, false);
-    }
-
-    private static Optional<ProtosSlotLookupResult> lookup(
-            Object receiver,
-            String name,
-            ProtosPrelude prelude,
-            Assumption stability,
-            boolean admitRepresentedReceiverStep,
-            boolean selectionOnly) {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(name, "name");
 
         if (receiver instanceof ProtosForeignProjectedReceiver foreign) {
-            if (stability != null) {
-                // D188 projections and foreign-member fallback are never D013 selections:
-                // guarded callers must stay on the generic path and must not enter foreign code.
-                stability.invalidate();
-                return Optional.empty();
-            }
             return lookupForeign(foreign, name, prelude);
         }
-        return lookupOrdinaryChain(
-                receiver, name, prelude, stability,
-                admitRepresentedReceiverStep, selectionOnly);
+        return lookupOrdinaryChain(receiver, name, prelude);
     }
 
     /**
      * Ordinary slot lookup through the immutable delegation chain starting at {@code origin},
-     * without the D188 receiver projection. Only foreign projections use this entry point, to
+     * without the D188 receiver projection. Foreign projections use this entry point to
      * consult the ordinary Protos-facing chain of a foreign receiver before any foreign fallback.
      */
     public static Optional<ProtosSlotLookupResult> lookupOrdinaryChain(
@@ -572,45 +242,15 @@ public final class ProtosValueLookup {
             ProtosPrelude prelude) {
         Objects.requireNonNull(origin, "origin");
         Objects.requireNonNull(name, "name");
-        return lookupOrdinaryChain(origin, name, prelude, null, false, false);
-    }
-
-    @TruffleBoundary
-    private static Optional<ProtosSlotLookupResult> lookupForeign(
-            ProtosForeignProjectedReceiver foreign,
-            String name,
-            ProtosPrelude prelude) {
-        return foreign.lookupForeignMemberForRuntime(name, prelude);
-    }
-
-    private static Optional<ProtosSlotLookupResult> lookupOrdinaryChain(
-            Object receiver,
-            String name,
-            ProtosPrelude prelude,
-            Assumption stability,
-            boolean admitRepresentedReceiverStep,
-            boolean selectionOnly) {
-        Object current = receiver;
+        Object current = origin;
         while (true) {
             if (current instanceof ProtosObjectValue ordinary) {
-                if (stability != null
-                        && !(admitRepresentedReceiverStep
-                                && current == receiver
-                                && ProtosNumericValueSupport.isLargeInteger(current))
-                        && !(selectionOnly
-                                ? ordinary.trackSlotSelectionDependency(name, stability)
-                                : ordinary.trackLookupDependency(name, stability))) {
-                    stability.invalidate();
-                }
                 Optional<Object> local = ordinary.readLocalSlot(name);
                 if (local.isPresent()) {
                     // TEST009-AC: local is present here, so orElse(null) yields its non-null
                     // value without a PE-visible NoSuchElementException path.
                     return Optional.of(new ProtosSlotLookupResult(local.orElse(null), ordinary));
                 }
-            } else if (stability != null
-                    && !(admitRepresentedReceiverStep && current == receiver)) {
-                stability.invalidate();
             }
 
             Optional<Object> parent = delegationParent(current, prelude);
@@ -619,6 +259,14 @@ public final class ProtosValueLookup {
             }
             current = parent.orElseThrow();
         }
+    }
+
+    @TruffleBoundary
+    private static Optional<ProtosSlotLookupResult> lookupForeign(
+            ProtosForeignProjectedReceiver foreign,
+            String name,
+            ProtosPrelude prelude) {
+        return foreign.lookupForeignMemberForRuntime(name, prelude);
     }
 
     /**
@@ -686,71 +334,10 @@ public final class ProtosValueLookup {
         return Optional.of(materializeMemberRead(receiver, result.orElseThrow()));
     }
 
-
-    /**
-     * Reads the current value at a selection-protected home. The Assumption
-     * guards the name resolution, so this neither traverses delegation nor
-     * looks the name up again: the value is loaded from the selection's
-     * stable location. Closure extraction remains fresh and binds the
-     * original receiver; {@code closureExtraction} keeps that branch out of
-     * compiled code until a selected slot actually holds a Closure.
-     */
-    /**
-     * PERF037: fast path for a selected ordinary data slot.
-     *
-     * Callers must hold both the selection stability assumption and
-     * its non-Closure continuity assumption as Truffle specialization
-     * assumptions. The stored value is never cached; assignments
-     * remain visible through the selected physical location.
-     *
-     * A data-to-Closure assignment invalidates the latter assumption
-     * before publishing the new value, forcing specialization
-     * transfer to the general fresh-extraction path.
-     */
-    public static Object guardedPlainSlotValue(
-            GuardedSlotSelection selection) {
-        return selection.location().value();
-    }
-
-    public static Object materializeGuardedMemberRead(
-            Object receiver,
-            GuardedSlotSelection selection,
-            Node node,
-            InlinedBranchProfile closureExtraction) {
-        Assumption nonClosure = selection.nonClosureContinuity();
-        if (nonClosure != null && nonClosure.isValid()) {
-            /*
-             * The selected cell is still the authoritative value source.
-             * Only the value's non-Closure representation is protected;
-             * writes of other data values remain observable immediately.
-             */
-            return selection.location().value();
-        }
-
-        Object value = selection.location().value();
-        if (value instanceof ProtosClosureValue closure) {
-            closureExtraction.enter(node);
-            return closure.bindMethod(receiver, selection.home());
-        }
-        return value;
-    }
-
-    public static Object materializeGuardedMemberRead(
-            Object receiver,
-            SharedInheritedSlotSelection selection,
-            Node node,
-            InlinedBranchProfile closureExtraction) {
-        return materializeGuardedMemberRead(
-                receiver, selection.parentSelection(), node, closureExtraction);
-    }
-
+    /** Generic semantic member extraction of a completed lookup. */
     public static Object materializeMemberRead(
             Object receiver,
             ProtosSlotLookupResult result) {
-        Object value = result.value();
-        if (value instanceof ProtosClosureValue closure) {
-            return closure.bindMethod(receiver, result.home());
-        }
-        return value;
+        return extractMember(receiver, result.home(), result.value());
     }
 }

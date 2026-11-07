@@ -17,13 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
-// PRUIBA DE I115, en algún momento esto volverá a funcionar
-// Signed-64 semantic Integers use Long directly, not ProtosIntegerValue.
-
-import com.oracle.truffle.api.Assumption;
-import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.object.DynamicObject;
-import com.oracle.truffle.api.object.PropertyGetter;
 import com.oracle.truffle.api.object.Shape;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -32,188 +26,89 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Default {@link ProtosLexicalBindingAuthority}: an ordinary insertion-ordered
- * map owned exclusively by this authority instance. This is the same physical
- * storage every {@code ProtosObjectValue} local slot used before the PLAT036
- * authority seam existed; it is installed both for ordinary objects and, for
- * now, for execution contexts, so no observable behavior changes in this
- * slice.
+ * {@link ProtosLexicalBindingAuthority} adapter over the properties of one
+ * Truffle {@link DynamicObject}: the property set of that object is the
+ * single physical store of the bindings, and no value is copied elsewhere.
  *
- * <p>PERF037-B stable locations: a binding a guarded member-read PIC has
- * selected may be promoted in place to a {@link SlotCell}, the binding's
- * physical value location. The cell is still the single authoritative store
- * of that binding (the map entry holds the cell instead of the value); it
- * is never exposed outside this authority's read surface, which always
- * unwraps it. Assignment writes through the cell, so the PIC observes the
- * current value without a nominal lookup; removal drops the cell together
- * with its map entry, and a recreated binding starts uncelled, so a stale
- * cell can be reached only through a selection that the owning object has
- * already invalidated. Bindings no PIC selects never pay for a cell.
- */
-/**
- * I115 experimental Shape-backed authoritative local-slot storage.
+ * <p>Two storage forms share the same operations:
+ * <ul>
+ *   <li>the object authority, whose storage is the owning
+ *       {@link ProtosObjectValue} itself (the ordinary slot representation,
+ *       following SimpleLanguage {@code SLObject} and GraalPy
+ *       {@code PythonAbstractObject}); and</li>
+ *   <li>the independent durable authority, whose storage is a private
+ *       {@link Store}, used only by owners whose bindings are not ordinary
+ *       object properties (for example an execution context before or
+ *       instead of frame-backed storage).</li>
+ * </ul>
  *
- * The ordered LinkedHashMap is ONLY an index of the names plus optional PIC
- * cells; no guest value is duplicated there. All values live in one
- * DynamicObject, with identical physical locations for generic read/write,
- * guarded read, and experimental GetAttribute/SetAttribute.
+ * <p>Property keys are canonical interned {@code String}s, because cached
+ * {@code DynamicObject} nodes compare keys by identity.
  */
 final class ProtosMapBackedLexicalBindingAuthority
         implements ProtosLexicalBindingAuthority {
-    private static final Shape INITIAL_SHAPE = Shape.newBuilder().build();
+    private static final Shape STORE_INITIAL_SHAPE = Shape.newBuilder().build();
 
+    /** Independent storage of a durable authority not backed by an object. */
     static final class Store extends DynamicObject {
         Store() {
-            super(INITIAL_SHAPE);
+            super(STORE_INITIAL_SHAPE);
         }
     }
 
-    /*
-     * I115-H10-A: the physical store uses a Java long for every
-     * ordinary signed-64 Protos Integer. A Java Integer carrier
-     * from an older experimental operation is widened, never
-     * truncated. Other guest values keep their object storage.
-     */
-    private static Object toStorageValue(Object value) {
-        if (value instanceof Long integer) {
-            return Long.valueOf(integer.longValue());
-        }
-        if (value instanceof Integer integer) {
-            return Long.valueOf(integer.longValue());
-        }
-        return value;
+    private final DynamicObject storage;
+
+    /** The object authority: {@code owner} is its own physical storage. */
+    ProtosMapBackedLexicalBindingAuthority(ProtosObjectValue owner) {
+        this.storage = Objects.requireNonNull(owner, "owner");
     }
 
-    /*
-     * The guest-facing authority never exposes an internal long.
-     * The stored location, not this projected guest value, is the
-     * single authoritative source of the binding.
-     */
-    private static Object toGuestValue(Object value) {
-        return value instanceof Long integer
-                ? ProtosNumericValueSupport.integer(integer.longValue())
-                : value;
+    /** An independent durable authority with its own private storage. */
+    ProtosMapBackedLexicalBindingAuthority() {
+        this.storage = new Store();
     }
 
-    static final class SlotCell {
-        private final Store store;
-        private final String key;
-        private Assumption nonClosureContinuity;
-
-        SlotCell(Store store, String key) {
-            this.store = Objects.requireNonNull(store);
-            this.key = Objects.requireNonNull(key);
-        }
-
-        Object value() {
-            return toGuestValue(
-                    DynamicObject.GetNode.getUncached()
-                            .execute(store, key, null));
-        }
-
-        Object value(DynamicObject.GetNode getNode) {
-            return toGuestValue(getNode.execute(store, key, null));
-        }
-
-        Store storage() {
-            return store;
-        }
-
-        String key() {
-            return key;
-        }
-
-        PropertyGetter getter() {
-            return store.getShape().makePropertyGetter(key);
-        }
-
-        Assumption nonClosureContinuityForGuardedRead() {
-            if (value() instanceof ProtosClosureValue) {
-                return null;
-            }
-            Assumption token = nonClosureContinuity;
-            if (token == null) {
-                token = Truffle.getRuntime().createAssumption(
-                        "Protos selected slot stays non-Closure");
-                nonClosureContinuity = token;
-            }
-            return token.isValid() ? token : null;
-        }
-
-        void replace(Object replacement) {
-            replace(replacement, DynamicObject.PutNode.getUncached());
-        }
-
-        void replace(Object replacement, DynamicObject.PutNode put) {
-            Assumption token = nonClosureContinuity;
-            if (token != null && replacement instanceof ProtosClosureValue) {
-                token.invalidate();
-            }
-            put.execute(store, key, toStorageValue(replacement));
-        }
-
+    /** The single physical storage of this authority's bindings. */
+    DynamicObject storage() {
+        return storage;
     }
 
-    /* A name index, NOT a second value store. Null = unselected PIC location. */
-    private LinkedHashMap<String, SlotCell> bindings;
-    /*
-     * I115-H10-C: retain the same authoritative Store and shared
-     * Shape tree. Truffle is allowed to preserve generalized
-     * property locations across removal and recreation.
-     */
-    private final Store store = new Store();
-    private boolean localCallPresent;
-
-    SlotCell slotCellFor(String name) {
-        Objects.requireNonNull(name, "name");
-        if (bindings == null || !bindings.containsKey(name)) {
-            return null;
-        }
-        SlotCell selected = bindings.get(name);
-        if (selected == null) {
-            selected = new SlotCell(store, name.intern());
-            bindings.put(name, selected);
-        }
-        return selected;
+    /** Whether {@code candidate} is this authority's physical storage. */
+    boolean isStoredIn(DynamicObject candidate) {
+        return storage == candidate;
     }
 
-    boolean hasLocalCallBindingForRuntime() {
-        return localCallPresent;
+    private static String key(String name) {
+        return Objects.requireNonNull(name, "name").intern();
     }
 
     @Override
     public boolean containsBinding(String name) {
-        Objects.requireNonNull(name, "name");
-        return bindings != null && bindings.containsKey(name);
+        return DynamicObject.ContainsKeyNode.getUncached()
+                .execute(storage, key(name));
     }
 
     @Override
     public Optional<Object> readBinding(String name) {
-        Objects.requireNonNull(name, "name");
-        if (!containsBinding(name)) {
-            return Optional.empty();
-        }
-        // DynamicObject property keys compare by identity. Canonicalize keys.
-        return Optional.of(toGuestValue(
-                DynamicObject.GetNode.getUncached()
-                        .execute(store, name.intern(), null)));
+        return Optional.ofNullable(DynamicObject.GetNode.getUncached()
+                .execute(storage, key(name), null));
     }
 
     @Override
     public boolean isEmpty() {
-        return bindings == null || bindings.isEmpty();
+        return storage.getShape().getPropertyCount() == 0;
     }
 
     @Override
     public Map<String, Object> bindingsSnapshot() {
-        if (bindings == null) {
+        Object[] keys = DynamicObject.GetKeyArrayNode.getUncached().execute(storage);
+        if (keys.length == 0) {
             return Collections.emptyMap();
         }
+        DynamicObject.GetNode get = DynamicObject.GetNode.getUncached();
         LinkedHashMap<String, Object> snapshot = new LinkedHashMap<>();
-        for (String name : bindings.keySet()) {
-            snapshot.put(name, toGuestValue(
-                    DynamicObject.GetNode.getUncached()
-                            .execute(store, name.intern(), null)));
+        for (Object key : keys) {
+            snapshot.put((String) key, get.execute(storage, key, null));
         }
         return Collections.unmodifiableMap(snapshot);
     }
@@ -251,54 +146,25 @@ final class ProtosMapBackedLexicalBindingAuthority
             java.util.ArrayList<Object> values) {
         Objects.requireNonNull(names, "names");
         Objects.requireNonNull(values, "values");
-        if (bindings != null) {
-            for (String name : bindings.keySet()) {
-                names.add(name);
-                values.add(toGuestValue(
-                        DynamicObject.GetNode.getUncached()
-                                .execute(store, name.intern(), null)));
-            }
+        DynamicObject.GetNode get = DynamicObject.GetNode.getUncached();
+        for (Object key : DynamicObject.GetKeyArrayNode.getUncached().execute(storage)) {
+            names.add((String) key);
+            values.add(get.execute(storage, key, null));
         }
     }
 
     @Override
     public void putBinding(String name, Object value) {
-        Objects.requireNonNull(name, "name");
         Objects.requireNonNull(value, "value");
-        if (bindings == null) {
-            bindings = new LinkedHashMap<>();
-        }
-        if (!bindings.containsKey(name)) {
-            bindings.put(name, null);
-        }
-        SlotCell cell = bindings.get(name);
-        if (cell != null) {
-            cell.replace(value);
-        } else {
-            DynamicObject.PutNode.getUncached().execute(
-                    store, name.intern(), toStorageValue(value));
-        }
-        if ("call".equals(name)) {
-            localCallPresent = true;
-        }
+        DynamicObject.PutNode.getUncached().execute(storage, key(name), value);
     }
 
     @Override
     public Object removeBinding(String name) {
-        Objects.requireNonNull(name, "name");
-        if (!containsBinding(name)) {
-            return null;
-        }
-        Object previous = toGuestValue(
-                DynamicObject.GetNode.getUncached()
-                        .execute(store, name.intern(), null));
-        DynamicObject.RemoveKeyNode.getUncached().execute(store, name.intern());
-        bindings.remove(name);
-        if ("call".equals(name)) {
-            localCallPresent = false;
-        }
-        if (bindings.isEmpty()) {
-            bindings = null;
+        String key = key(name);
+        Object previous = DynamicObject.GetNode.getUncached().execute(storage, key, null);
+        if (previous != null) {
+            DynamicObject.RemoveKeyNode.getUncached().execute(storage, key);
         }
         return previous;
     }

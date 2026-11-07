@@ -34,6 +34,9 @@ import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.object.DynamicObject;
+import com.oracle.truffle.api.object.Property;
+import com.oracle.truffle.api.object.Shape;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -73,69 +76,55 @@ public final class ProtosStandardObjectProtocol {
     }
 
     /**
-     * I114 backend-private proof that the D013 selection of {@code call}
-     * starting at the root Object is exactly {@link #STANDARD_CALL} homed at
-     * the root. It holds only the selection's stability; the semantic value
-     * stays in the root slot.
+     * I114/I115 structural selection of canonical {@code Object.call} on the
+     * root Object, following GraalPy: the root's observed {@code Shape}
+     * protects the structure the property was selected in (removal,
+     * recreation and any other structural change are {@code Shape}
+     * transitions), and the final assumption of the property's
+     * {@link com.oracle.truffle.api.object.Location} protects its value
+     * against rewrites. A consumer must check both; when either fails it
+     * takes the generic path. No value is held here.
      */
-    private record CanonicalRootCallCertificate(Assumption stability) {}
-
-    /**
-     * Last published certificate, or null. Lazily established on first use,
-     * never during bootstrap. An invalidated certificate is not a permanent
-     * veto: the next query rebuilds it once canonical {@code Object.call} is
-     * selected again.
-     */
-    private static volatile CanonicalRootCallCertificate canonicalRootCall;
+    public record CanonicalRootCallSelection(Shape rootShape, Assumption callLocationFinal) {
+        /** Whether the root still has the observed Shape and the call location was not rewritten. */
+        public boolean isValid() {
+            return rootShape.check(ProtosObjectValue.rootObject())
+                    && callLocationFinal.isValid();
+        }
+    }
 
     /**
      * I114: whether the root Object's inherited {@code call} selection is
-     * still canonical {@code Object.call}. A receiver's local {@code call}
+     * currently canonical {@code Object.call}. A receiver's local {@code call}
      * slot always takes precedence and must be checked by the caller.
      */
     public static boolean isCanonicalRootCallSelectionForRuntime() {
-        return canonicalRootCallAssumptionOrNullForRuntime() != null;
+        return canonicalRootCallSelectionOrNullForRuntime() != null;
     }
 
     /**
-     * I115-A: the stability of the canonical root {@code Object.call}
-     * certificate, or null when the D013 selection of {@code call} starting at
-     * the root Object is not exactly {@link #STANDARD_CALL} homed at the root.
-     *
-     * <p>A returned assumption is valid at return time and is invalidated by
-     * any create/assign/remove/recreate of the root's {@code call}; it is
-     * never an already invalidated one. While it remains valid, repeated
-     * queries return the same instance without rebuilding the certificate,
-     * so a specialization may capture it once and declare it as a guarding
-     * assumption. The valid-certificate check is one volatile read plus an
-     * assumption check; rebuilding runs out of partial evaluation.
+     * The current canonical {@code Object.call} selection of the root Object,
+     * or {@code null} when the root's {@code call} property is absent, is not
+     * exactly {@link #STANDARD_CALL}, or its location's final assumption is
+     * already invalid. A location rewritten once may stay non-final forever;
+     * that is not retried here, and callers then use generic selection.
+     * Specialization-time only.
      */
-    public static Assumption canonicalRootCallAssumptionOrNullForRuntime() {
-        CanonicalRootCallCertificate certificate = canonicalRootCall;
-        if (certificate != null && certificate.stability().isValid()) {
-            return certificate.stability();
-        }
-        return rebuildCanonicalRootCallCertificate();
-    }
-
     @TruffleBoundary
-    private static synchronized Assumption rebuildCanonicalRootCallCertificate() {
-        CanonicalRootCallCertificate current = canonicalRootCall;
-        if (current != null && current.stability().isValid()) {
-            return current.stability();
-        }
-        ProtosValueLookup.GuardedLookup selection =
-                ProtosValueLookup.lookupGuardedCanonicalRootCall();
-        if (selection == null) {
+    public static CanonicalRootCallSelection canonicalRootCallSelectionOrNullForRuntime() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        Shape shape = root.getShape();
+        Property call = shape.getProperty("call");
+        if (call == null
+                || DynamicObject.GetNode.getUncached().execute(root, "call", null)
+                        != STANDARD_CALL) {
             return null;
         }
-        if (selection.selected().value() != STANDARD_CALL
-                || selection.selected().home() != ProtosObjectValue.rootObject()) {
-            selection.stability().invalidate();
+        Assumption callLocationFinal = call.getLocation().getFinalAssumption();
+        if (!callLocationFinal.isValid()) {
             return null;
         }
-        canonicalRootCall = new CanonicalRootCallCertificate(selection.stability());
-        return selection.stability();
+        return new CanonicalRootCallSelection(shape, callLocationFinal);
     }
 
     static boolean isStandardCallImplementation(

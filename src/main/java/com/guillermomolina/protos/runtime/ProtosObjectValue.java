@@ -18,25 +18,33 @@
 package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
-import com.oracle.truffle.api.Assumption;
-import com.oracle.truffle.api.object.DynamicObject;
-import com.oracle.truffle.api.Truffle;
-import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
+import com.oracle.truffle.api.object.DynamicObject;
+import com.oracle.truffle.api.object.Shape;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.WeakHashMap;
 
+/**
+ * An ordinary Protos object. It is a Truffle {@link DynamicObject} (following
+ * SimpleLanguage {@code SLObject} and GraalPy {@code PythonAbstractObject}):
+ * once established, its ordinary local slots are the object's own
+ * properties, described by its {@link Shape}. The delegation {@code parent}
+ * is a separate semantic field, not part of the {@code Shape}.
+ *
+ * <p>Subclasses with independent lexical storage (execution contexts) inherit
+ * the {@code DynamicObject} representation only to share the object
+ * hierarchy; their bindings are never also stored in their {@code Shape}.
+ */
 @ExportLibrary(InteropLibrary.class)
-public class ProtosObjectValue implements TruffleObject {
+public class ProtosObjectValue extends DynamicObject implements TruffleObject {
     public enum MutationState {
         OPEN,
         CLOSED,
@@ -46,8 +54,8 @@ public class ProtosObjectValue implements TruffleObject {
     /**
      * Shared representation for an ordinary object that has never established
      * a local binding. It is immutable implementation state: the owning object
-     * promotes to a private map-backed authority before its first binding is
-     * created.
+     * materializes its object authority (backed by itself) before its first
+     * binding is created.
      */
     private enum EmptyLexicalBindingAuthority
             implements ProtosLexicalBindingAuthority {
@@ -113,6 +121,14 @@ public class ProtosObjectValue implements TruffleObject {
     private static final ProtosLexicalBindingAuthority EMPTY_LEXICAL_BINDINGS =
             EmptyLexicalBindingAuthority.INSTANCE;
 
+    /**
+     * Root of the shared {@code Shape} tree of every ordinary object. Property
+     * assumptions let compiled code depend on the absence of a property.
+     * Declared before {@link #ROOT} so the root object can use it.
+     */
+    private static final Shape INITIAL_SHAPE =
+            Shape.newBuilder().propertyAssumptions(true).build();
+
     private static final ProtosObjectValue ROOT = new ProtosObjectValue();
 
     private final Object parent;
@@ -136,21 +152,8 @@ public class ProtosObjectValue implements TruffleObject {
     private ProtosLexicalBindingAuthority lexicalBindingAuthority;
     private MutationState mutationState = MutationState.OPEN;
 
-    /*
-     * Allocated only when mutable ordinary slots participate in a guarded
-     * lookup. One lookup assumption can depend on several objects, but a
-     * mutation invalidates only dependencies for its exact selector.
-     * Weak keys prevent objects from retaining abandoned specializations.
-     */
-    private Map<String, WeakHashMap<Assumption, Boolean>> lookupDependencies;
-
-    /*
-     * Selection-only PICs depend on the slot's home, not its current value.
-     * Allocated lazily and invalidated only by resolution-changing mutations.
-     */
-    private Map<String, WeakHashMap<Assumption, Boolean>> slotSelectionDependencies;
-
     private ProtosObjectValue() {
+        super(INITIAL_SHAPE);
         this.parent = null;
         this.lexicalBindingAuthority = EMPTY_LEXICAL_BINDINGS;
     }
@@ -163,10 +166,11 @@ public class ProtosObjectValue implements TruffleObject {
      * Installs an explicit lexical-binding authority for this object. Reserved
      * for subclasses that need their own authority attachment (for example
      * {@link ProtosExecutionContextValue}); ordinary objects use the shared
-     * empty authority until their first local binding and then promote to a
-     * private map-backed authority.
+     * empty authority until their first local binding and then materialize
+     * their object authority, backed by the object itself.
      */
     protected ProtosObjectValue(Object parent, ProtosLexicalBindingAuthority lexicalBindingAuthority) {
+        super(INITIAL_SHAPE);
         this.parent = Objects.requireNonNull(parent, "parent");
         this.lexicalBindingAuthority = Objects.requireNonNull(lexicalBindingAuthority, "lexicalBindingAuthority");
     }
@@ -222,95 +226,6 @@ public class ProtosObjectValue implements TruffleObject {
         return this;
     }
 
-    /**
-     * Registers a lookup dependency for this object's local selector.
-     *
-     * <p>Only the exact ordinary representation is admitted here. Subclasses
-     * may have frame-backed bindings or override lookup/mutation, so they
-     * remain on authoritative lookup until their mutation surfaces are
-     * explicitly covered. Frozen ordinary objects need no mutable registry.
-     *
-     * <p>Mutable objects follow their existing execution-domain ownership;
-     * this registry introduces neither shared guest state nor a global lock.
-     * The boundary encloses dependency bookkeeping only, never guest lookup,
-     * mutation, or execution. The hot guard checks the Assumption directly.
-     */
-    @TruffleBoundary
-    final boolean trackLookupDependency(String name, Assumption dependency) {
-        Objects.requireNonNull(name, "name");
-        Objects.requireNonNull(dependency, "dependency");
-        if (getClass() != ProtosObjectValue.class) {
-            return false;
-        }
-        if (isFrozen()) {
-            return true;
-        }
-        if (lookupDependencies == null) {
-            lookupDependencies = new LinkedHashMap<>();
-        }
-        WeakHashMap<Assumption, Boolean> dependencies =
-                lookupDependencies.get(name);
-        if (dependencies == null) {
-            dependencies = new WeakHashMap<>();
-            lookupDependencies.put(name, dependencies);
-        }
-        dependencies.put(dependency, Boolean.TRUE);
-        return true;
-    }
-
-    /**
-     * Registers a dependency on the chosen slot owner, not on the slot value.
-     * The exact-class and frozen-object admission rules match value lookups.
-     */
-    @TruffleBoundary
-    final boolean trackSlotSelectionDependency(String name, Assumption dependency) {
-        Objects.requireNonNull(name, "name");
-        Objects.requireNonNull(dependency, "dependency");
-        if (getClass() != ProtosObjectValue.class
-                && !(getClass() == ProtosClosureValue.class && "call".equals(name))) {
-            return false;
-        }
-        if (isFrozen()) {
-            return true;
-        }
-        if (slotSelectionDependencies == null) {
-            slotSelectionDependencies = new LinkedHashMap<>();
-        }
-        WeakHashMap<Assumption, Boolean> dependencies =
-                slotSelectionDependencies.get(name);
-        if (dependencies == null) {
-            dependencies = new WeakHashMap<>();
-            slotSelectionDependencies.put(name, dependencies);
-        }
-        dependencies.put(dependency, Boolean.TRUE);
-        return true;
-    }
-
-    private void invalidateValueLookupDependencies(String name) {
-        if (lookupDependencies != null) {
-            invalidateTrackedLookupDependencies(lookupDependencies, name);
-        }
-    }
-
-    private void invalidateLookupDependencies(String name) {
-        invalidateValueLookupDependencies(name);
-        if (slotSelectionDependencies != null) {
-            invalidateTrackedLookupDependencies(slotSelectionDependencies, name);
-        }
-    }
-
-    @TruffleBoundary
-    private static void invalidateTrackedLookupDependencies(
-            Map<String, WeakHashMap<Assumption, Boolean>> registry,
-            String name) {
-        WeakHashMap<Assumption, Boolean> dependencies = registry.remove(name);
-        if (dependencies != null) {
-            for (Assumption dependency : dependencies.keySet()) {
-                dependency.invalidate();
-            }
-        }
-    }
-
     public boolean hasLocalSlot(String name) {
         Objects.requireNonNull(name, "name");
         return authorityContains(lexicalBindingAuthority, name);
@@ -319,13 +234,8 @@ public class ProtosObjectValue implements TruffleObject {
     /**
      * I114: whether this object owns a local {@code call} slot, answered from
      * the single binding authority without reading the value, traversing
-     * parents, or allocating. It therefore observes every authorized mutation
-     * of that authority (create, assign, remove, recreate, composition, copy,
-     * binding, and authority replacement).
-     *
-     * <p>I115-A: the ordinary map-backed authority answers from its own
-     * derived presence bit, maintained by the same put/remove operations
-     * that mutate its map, so no object-level copy can diverge from it. Any
+     * parents, or allocating. When the object is its own storage this is the
+     * real presence of the {@code call} property in its {@code Shape}; any
      * other authority (for example a frame-backed one) keeps the
      * authoritative {@code contains} query.
      */
@@ -334,10 +244,25 @@ public class ProtosObjectValue implements TruffleObject {
         if (authority == EMPTY_LEXICAL_BINDINGS) {
             return false;
         }
-        if (authority instanceof ProtosMapBackedLexicalBindingAuthority mapBacked) {
-            return mapBacked.hasLocalCallBindingForRuntime();
+        if (isObjectAuthority(authority)) {
+            return DynamicObject.ContainsKeyNode.getUncached().execute(this, "call");
         }
         return ProtosLexicalBindingAuthorityCalls.contains(authority, "call");
+    }
+
+    /**
+     * Whether this object's ordinary slots are, or will be once established,
+     * its own {@code DynamicObject} properties. Only then does its
+     * {@code Shape} describe its slots.
+     */
+    public final boolean usesObjectStorageForRuntime() {
+        ProtosLexicalBindingAuthority authority = lexicalBindingAuthority;
+        return authority == EMPTY_LEXICAL_BINDINGS || isObjectAuthority(authority);
+    }
+
+    private boolean isObjectAuthority(ProtosLexicalBindingAuthority authority) {
+        return authority instanceof ProtosMapBackedLexicalBindingAuthority mapBacked
+                && mapBacked.isStoredIn(this);
     }
 
     public Optional<Object> readLocalSlot(String name) {
@@ -345,34 +270,6 @@ public class ProtosObjectValue implements TruffleObject {
         return authorityRead(lexicalBindingAuthority, name);
     }
 
-
-    /**
-     * Lazily certifies the absence of a local call slot on this
-     * exact Closure instance.
-     *
-     * The selector dependency is registered only when requested
-     * by a PIC. Mutations invalidate it before publication.
-     * Different Closure instances never share this certificate.
-     */
-    @TruffleBoundary
-    public final Assumption localCallAbsentSelectionAssumptionOrNullForRuntime() {
-        if (getClass() != ProtosClosureValue.class
-                || hasLocalCallSlotForRuntime()) {
-            return null;
-        }
-
-        Assumption stability = Truffle.getRuntime()
-                .createAssumption("Protos Closure local call absent");
-
-        if (!trackSlotSelectionDependency("call", stability)
-                || hasLocalCallSlotForRuntime()
-                || !stability.isValid()) {
-            stability.invalidate();
-            return null;
-        }
-
-        return stability;
-    }
 
     public Map<String, Object> localSlotsSnapshot() {
         return lexicalBindingAuthority == EMPTY_LEXICAL_BINDINGS
@@ -449,24 +346,6 @@ public class ProtosObjectValue implements TruffleObject {
     }
 
     /**
-     * PERF037-B: the stable physical location of the existing local binding
-     * {@code name}, for a guarded member-read PIC, or {@code null} when this
-     * object is not the exact ordinary representation or does not hold
-     * {@code name}. Requested only at specialization time, so ordinary
-     * objects that no PIC reads never promote a binding to a cell.
-     */
-    @TruffleBoundary
-    final ProtosMapBackedLexicalBindingAuthority.SlotCell slotCellForGuardedRead(String name) {
-        Objects.requireNonNull(name, "name");
-        if (getClass() != ProtosObjectValue.class
-                || !(lexicalBindingAuthority
-                        instanceof ProtosMapBackedLexicalBindingAuthority mapBacked)) {
-            return null;
-        }
-        return mapBacked.slotCellFor(name);
-    }
-
-    /**
      * Backend-private subclass hook for execution machinery that must operate
      * on this object's single lexical-binding authority without introducing a
      * second semantic store.
@@ -484,14 +363,15 @@ public class ProtosObjectValue implements TruffleObject {
     }
 
     /**
-     * Returns the current writable authority, promoting the shared immutable
-     * empty representation exactly when the first ordinary local binding is
-     * about to be established.
+     * Returns the current writable authority, materializing the object
+     * authority (whose storage is this object itself) exactly when the first
+     * ordinary local binding is about to be established. Owners with their
+     * own installed authority keep it.
      */
     private ProtosLexicalBindingAuthority writableLexicalBindingAuthority() {
         if (lexicalBindingAuthority == EMPTY_LEXICAL_BINDINGS) {
             lexicalBindingAuthority =
-                    new ProtosMapBackedLexicalBindingAuthority();
+                    new ProtosMapBackedLexicalBindingAuthority(this);
         }
         return lexicalBindingAuthority;
     }
@@ -592,7 +472,6 @@ public class ProtosObjectValue implements TruffleObject {
         }
 
         for (int index = 0; index < contributionNames.size(); index++) {
-            invalidateLookupDependencies(contributionNames.get(index));
             ProtosLexicalBindingAuthorityCalls.put(
                     writableLexicalBindingAuthority(),
                     contributionNames.get(index),
@@ -653,7 +532,6 @@ public class ProtosObjectValue implements TruffleObject {
             throw new IllegalStateException("local slot already exists: " + name);
         }
 
-        invalidateLookupDependencies(name);
         ProtosLexicalBindingAuthorityCalls.put(
                 writableLexicalBindingAuthority(), name, value);
     }
@@ -669,37 +547,7 @@ public class ProtosObjectValue implements TruffleObject {
             throw new IllegalStateException("local slot does not exist: " + name);
         }
 
-        invalidateValueLookupDependencies(name);
         ProtosLexicalBindingAuthorityCalls.put(lexicalBindingAuthority, name, value);
-    }
-
-    /**
-     * I115: direct write of a previously selected,
-     * stable local SlotCell.
-     *
-     * The caller's Truffle assumption protects the selected location
-     * against remove/recreate. Value-lookup dependencies are invalidated,
-     * while frozen-state admission and guest numeric normalization are
-     * intentionally bypassed.
-     * KNOWN I115 SEMANTIC DIVERGENCE: the fast physical attribute
-     * write bypasses historical frozen-state checks and preserves
-     * internal numeric carriers pending semantic reconciliation.
-     */
-    final void assignSelectedAttributeLocation(
-            String name,
-            ProtosMapBackedLexicalBindingAuthority.SlotCell location,
-            Object value) {
-        invalidateValueLookupDependencies(name);
-        location.replace(value);
-    }
-
-    final void assignSelectedAttributeLocation(
-            String name,
-            ProtosMapBackedLexicalBindingAuthority.SlotCell location,
-            Object value,
-            DynamicObject.PutNode putNode) {
-        invalidateValueLookupDependencies(name);
-        location.replace(value, putNode);
     }
 
     public Object removeLocalSlot(String name) {
@@ -715,7 +563,6 @@ public class ProtosObjectValue implements TruffleObject {
             throw new IllegalStateException("local slot does not exist: " + name);
         }
 
-        invalidateLookupDependencies(name);
         Object removed =
                 ProtosLexicalBindingAuthorityCalls.remove(lexicalBindingAuthority, name);
         return removed;
@@ -763,37 +610,45 @@ public class ProtosObjectValue implements TruffleObject {
     }
 
     @ExportMessage
-    Object getMembers(@SuppressWarnings("unused") boolean includeInternal)
+    Object getMembers(
+            @SuppressWarnings("unused") boolean includeInternal,
+            @Cached DynamicObject.GetKeyArrayNode getKeyArray)
             throws UnsupportedMessageException {
         if (!supportsInteropObjectMembers()) {
             throw UnsupportedMessageException.create();
         }
-        java.util.ArrayList<String> names = new java.util.ArrayList<>();
-        java.util.ArrayList<Object> ignoredValues = new java.util.ArrayList<>();
-        appendLocalBindingsTo(names, ignoredValues);
+        Object[] keys = getKeyArray.execute(this);
+        java.util.ArrayList<String> names = new java.util.ArrayList<>(keys.length);
+        for (Object key : keys) {
+            names.add((String) key);
+        }
         return new ProtosInteropMemberNames(names);
     }
 
     @ExportMessage
-    boolean isMemberReadable(String member) {
-        if (!supportsInteropObjectMembers()) {
+    boolean isMemberReadable(
+            String member,
+            @Cached DynamicObject.ContainsKeyNode containsKey,
+            @Cached @Cached.Shared("getMember") DynamicObject.GetNode getMember) {
+        if (!supportsInteropObjectMembers() || !containsKey.execute(this, member)) {
             return false;
         }
-        Optional<Object> value = readLocalSlot(member);
-        return value.isPresent() && InteropLibrary.isValidValue(value.get());
+        return InteropLibrary.isValidValue(getMember.execute(this, member, null));
     }
 
     @ExportMessage
-    Object readMember(String member)
+    Object readMember(
+            String member,
+            @Cached @Cached.Shared("getMember") DynamicObject.GetNode getMember)
             throws UnknownIdentifierException, UnsupportedMessageException {
         if (!supportsInteropObjectMembers()) {
             throw UnsupportedMessageException.create();
         }
-        Optional<Object> value = readLocalSlot(member);
-        if (value.isEmpty() || !InteropLibrary.isValidValue(value.get())) {
+        Object value = getMember.execute(this, member, null);
+        if (value == null || !InteropLibrary.isValidValue(value)) {
             throw UnknownIdentifierException.create(member);
         }
-        return value.get();
+        return value;
     }
 
     @ExportMessage

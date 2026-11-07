@@ -26,8 +26,8 @@ import java.util.Objects;
  * stable physical location of one NAME binding in a module execution
  * context, resolved once when a ReadGlobal or WriteGlobal site specializes.
  *
- * <p>It is only an address: the module context, its single map-backed store
- * and the binding's interned key. No value is copied here, so every legal
+ * <p>It is only an address: the module context, the single storage of its
+ * independent durable authority and the binding's interned key. No value is copied here, so every legal
  * assignment stays observable. The store instance is fixed for the lifetime
  * of the context (I115 installs no other authority), so the address stays
  * valid across removal and recreation of the binding: a removed binding reads
@@ -61,10 +61,9 @@ public final class ProtosModuleBindingLocation {
                         instanceof ProtosMapBackedLexicalBindingAuthority mapBacked)) {
             return null;
         }
-        ProtosMapBackedLexicalBindingAuthority.SlotCell cell = mapBacked.slotCellFor(name);
-        return cell == null
-                ? null
-                : new ProtosModuleBindingLocation(context, cell.storage(), cell.key());
+        return mapBacked.containsBinding(name)
+                ? new ProtosModuleBindingLocation(context, mapBacked.storage(), name.intern())
+                : null;
     }
 
     /** The current guest value of the binding, or {@code null} when it is absent. */
@@ -84,9 +83,8 @@ public final class ProtosModuleBindingLocation {
      * Assigns {@code value} to the binding at this fixed location through
      * the context's authoritative assignment, so the stored representation
      * (an internal {@code long} for a signed-64 Integer), the frozen-context
-     * rule, the slot-presence rule and the invalidation of value-lookup
-     * dependencies are exactly those of every other assignment of the
-     * binding. No other store or owner is consulted and the name is never
+     * rule and the slot-presence rule are exactly those of every other
+     * assignment of the binding. No other store or owner is consulted and the name is never
      * resolved again: when the binding was removed, or the context frozen,
      * after this location was selected (for example by the right-hand side
      * of the assignment), the assignment fails instead of being redirected or

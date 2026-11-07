@@ -34,6 +34,15 @@ import java.util.Optional;
  * {@code ProtosObjectValue}'s local-slot operations changing and without ever
  * creating a second authoritative copy of the same binding value.
  *
+ * <p>Two families of authority exist. An object authority stores the
+ * bindings as the Truffle {@code DynamicObject} properties of the owning
+ * {@code ProtosObjectValue} itself; it is the ordinary slot representation
+ * and the only one whose {@code Shape} describes the bindings. An
+ * independent authority (a durable private store from
+ * {@link #newMapBackedForRuntime()}, or a frame-backed authority) keeps the
+ * bindings outside the owner's {@code Shape}; structural attribute caches
+ * must therefore never rely on the owner's {@code Shape} for it.
+ *
  * <p>This is an internal implementation seam, not a Protos language concept:
  * it must never be exposed to guest code, and it must not leak Truffle types
  * across the boundary.
@@ -99,10 +108,11 @@ public interface ProtosLexicalBindingAuthority {
     default void retireInstallation() {}
 
     /**
-     * Backend-private factory of a fresh, empty, durable authority with the
-     * ordinary insertion-ordered map storage. Execution backends use it when
-     * bindings held in ephemeral execution state must move to a store that
-     * outlives that state, without exposing the concrete implementation.
+     * Backend-private factory of a fresh, empty, durable independent
+     * authority with its own private storage. Execution contexts and
+     * backends use it when bindings must live in a store that is neither an
+     * ordinary object's own properties nor ephemeral execution state. It is
+     * never the storage of an ordinary object's slots.
      */
     static ProtosLexicalBindingAuthority newMapBackedForRuntime() {
         return new ProtosMapBackedLexicalBindingAuthority();
