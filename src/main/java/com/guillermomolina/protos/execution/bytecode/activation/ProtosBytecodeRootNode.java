@@ -35,6 +35,8 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosIoOperation;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedArgumentVector;
 import com.guillermomolina.protos.execution.ProtosPreparedCalls.StructuredNativeInvocation;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedBooleanCall;
@@ -199,6 +201,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @CompilationFinal private transient boolean semanticActivationRoot;
 
     final void markSemanticActivationRoot() {
+        // Install the private per-invocation marker before the root can run.
+        // Auxiliary slots do not change the source-call argument ABI.
+        this.cachedEntryFrameSlot = getFrameDescriptor().findOrAddAuxiliarySlot(
+                CACHED_ENTRY_FRAME_SLOT_KEY);
         this.semanticActivationRoot = true;
     }
 
@@ -207,52 +213,76 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * I115 cold/Tier-1 DIAGNOSTIC, not a production gate. A root that begins
-     * in UNCACHED may finish after transitioning to CACHED. That return is not
-     * evidence that it has executed the *entire* entry-to-return path in CACHED.
+     * I115: a root that switches UNCACHED -> CACHED during its first execution
+     * may hit the Tier-1 compilation threshold before it has profiled a complete
+     * CACHED entry-to-return path. Defer that initial compilation once a little
+     * longer, without altering any Truffle compilation threshold.
      *
-     * For the non-recursive benchmark `run` roots, a later interpreter prolog
-     * observed in CACHED followed by an interpreted return establishes the
-     * experimental readiness condition. This root-wide marker is deliberately
-     * not a per-invocation or concurrency-safe production protocol.
+     * A root-wide pair of "seen entry"/"seen return" flags is NOT sufficient:
+     * recursion, concurrent calls and resumptions can mix different frames.
+     * The auxiliary frame slot below is an invocation-local CACHED-entry token.
+     * Only a normally completed *same frame* establishes readiness. Updates
+     * happen in interpreted code; a volatile publication lets compiler threads
+     * observe the result without locks shared with guest execution.
+     *
+     * A non-returning or continually throwing root must not be made permanently
+     * ineligible for root compilation or inlining. The bounded elapsed-time
+     * escape applies exclusively to compiler preparation, not guest execution.
+     * It never counts prepareForCompilation calls: Truffle may invoke that hook
+     * repeatedly or concurrently during the very same compilation attempt.
      */
-    private transient volatile boolean sawInterpretedCachedProlog;
-    private transient volatile boolean sawReturnAfterCachedProlog;
+    private static final String CACHED_ENTRY_FRAME_SLOT_KEY = "protos:i115:cached-entry";
+    private static final long MAX_COLD_PROFILE_DEFERRAL_NANOS =
+            TimeUnit.MILLISECONDS.toNanos(100);
+    private static final long NO_COMPILATION_DEFERRAL = Long.MIN_VALUE;
+    private static final AtomicLongFieldUpdater<ProtosBytecodeRootNode> DEFERRAL_START =
+            AtomicLongFieldUpdater.newUpdater(
+                    ProtosBytecodeRootNode.class, "coldProfileDeferralStartNanos");
+
+    @CompilationFinal private transient int cachedEntryFrameSlot = -1;
+    private transient volatile boolean cachedInvocationCompleted;
+    private transient volatile long coldProfileDeferralStartNanos = NO_COMPILATION_DEFERRAL;
 
     @Override
     protected boolean prepareForCompilation(
             boolean rootCompilation, int compilationTier, boolean lastTier) {
-        boolean ready = !semanticActivationRoot || sawReturnAfterCachedProlog;
-        if (rootCompilation && semanticActivationRoot
-                && Boolean.getBoolean("protos.i115.traceColdGate")) {
-            System.err.println("[i115-cold-gate] PREPARE " + this
-                    + " tier=" + compilationTier
-                    + " cachedProlog=" + sawInterpretedCachedProlog
-                    + " cachedReturn=" + sawReturnAfterCachedProlog
-                    + " decision=" + (ready ? "ALLOW" : "DENY"));
+        if (!semanticActivationRoot || cachedInvocationCompleted) {
+            return true;
         }
-        return ready;
+
+        // This hook can run on several compiler threads for the same target.
+        // A time window, not a number of hook calls, bounds the deferral.
+        long now = System.nanoTime();
+        long started = coldProfileDeferralStartNanos;
+        if (started == NO_COMPILATION_DEFERRAL) {
+            if (DEFERRAL_START.compareAndSet(this, NO_COMPILATION_DEFERRAL, now)) {
+                return false;
+            }
+            started = coldProfileDeferralStartNanos;
+        }
+        return cachedInvocationCompleted
+                || now - started >= MAX_COLD_PROFILE_DEFERRAL_NANOS;
     }
 
-    private void observeInterpretedCachedProlog(BytecodeNode node) {
+    private void observeCachedEntry(VirtualFrame frame, BytecodeNode node) {
         if (CompilerDirectives.inInterpreter()
-                && node.getTier() == com.oracle.truffle.api.bytecode.BytecodeTier.CACHED
-                && !sawInterpretedCachedProlog) {
-            sawInterpretedCachedProlog = true;
-            if (Boolean.getBoolean("protos.i115.traceColdGate")) {
-                System.err.println("[i115-cold-gate] CACHED_ENTER " + this);
-            }
+                && semanticActivationRoot
+                && !cachedInvocationCompleted) {
+            // Always overwrite: this invocation may start in UNCACHED even if
+            // another invocation of the same root has already entered CACHED.
+            frame.setAuxiliarySlot(cachedEntryFrameSlot,
+                    node.getTier() == com.oracle.truffle.api.bytecode.BytecodeTier.CACHED
+                            ? Boolean.TRUE : Boolean.FALSE);
         }
     }
 
-    private void observeInterpretedReturnAfterCachedProlog() {
+    private void observeCachedCompletion(VirtualFrame frame, Object value) {
         if (CompilerDirectives.inInterpreter()
-                && sawInterpretedCachedProlog
-                && !sawReturnAfterCachedProlog) {
-            sawReturnAfterCachedProlog = true;
-            if (Boolean.getBoolean("protos.i115.traceColdGate")) {
-                System.err.println("[i115-cold-gate] CACHED_RETURN " + this);
-            }
+                && semanticActivationRoot
+                && !cachedInvocationCompleted
+                && frame.getAuxiliarySlot(cachedEntryFrameSlot) == Boolean.TRUE
+                && !ProtosTailCallContinuation.isSuspended(value)) {
+            cachedInvocationCompleted = true;
         }
     }
 
@@ -694,9 +724,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class EnterRoot {
         @Specialization
         public static void perform(
+                @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecodeNode) {
-            root.observeInterpretedCachedProlog(bytecodeNode);
+            root.observeCachedEntry(frame, bytecodeNode);
         }
     }
 
@@ -717,7 +748,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 root.traceOrProfileReturn(frame, bytecodeNode, value);
             }
             // I115 cold Tier-1 diagnostic: finish profiling before first compilation.
-            root.observeInterpretedReturnAfterCachedProlog();
+            root.observeCachedCompletion(frame, value);
             // I115: the definitive completion of this activation closes its own home.
             // PRUIBA DE I115, en algún momento esto volverá a funcionar
             // closeOwnedReturnHome(frame, value);
