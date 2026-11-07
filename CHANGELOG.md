@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.67-SNAPSHOT
+
+- **I115-V86 — historical replay.**
+  - Cache hasProperty(cachedShape, name) as propertyPresent in the SetAttribute direct specialization and use that cached Boolean as its guard.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** The inherited direct-write frozen-state divergence remains; caching property presence does not resolve it. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved without repairs.
+  - No test files are added or modified by this historical commit. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 0 added, 1 modified, 0 deleted (rename detection disabled for exact path accounting). All 1 original paths retain their exact Git blobs/modes or deletion state; reconstructed parent blobs/modes also match the original parent. Only root `pom.xml` and `CHANGELOG.md` receive replay metadata edits.
+  - Original implementation: `5cbb8395ff056ecb14ab7a1a5be2049821a4d9c6`.
+
 ## 0.4.66-SNAPSHOT
 
 - **I115-V85 — historical replay.**

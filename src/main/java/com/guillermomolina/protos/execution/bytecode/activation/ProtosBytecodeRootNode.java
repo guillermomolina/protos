@@ -1100,7 +1100,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 guards = {
                     "isOrdinaryObject(receiver)",
                     "cachedShape.check(receiver)",
-                    "hasProperty(cachedShape, name)"
+                    "propertyPresent"
                 },
                 limit = "3")
         public static void direct(
@@ -1108,6 +1108,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object value,
                 ProtosObjectValue receiver,
                 @Cached("receiver.getShape()") Shape cachedShape,
+                @Cached("hasProperty(cachedShape, name)") boolean propertyPresent,
                 @Cached DynamicObject.PutNode putNode) {
             putNode.execute(receiver, name, value);
         }
