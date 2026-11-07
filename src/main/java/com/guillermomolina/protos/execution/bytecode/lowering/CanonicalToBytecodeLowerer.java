@@ -7197,7 +7197,8 @@ final class CanonicalToBytecodeLowerer {
     /**
      * I115: one synchronous numeric operation ({@code Number*} or
      * {@code RichCompare*}) with both operands emitted directly, receiver
-     * first. Comparisons yield a guest Boolean; arithmetic may yield a
+     * first. Specialized comparisons yield a primitive boolean carrier;
+     * generic comparisons retain their guest Boolean result. Arithmetic may yield a
      * {@code long}/{@code double} carrier. Never a continuation.
      */
     private void emitDirectNumericOperation(

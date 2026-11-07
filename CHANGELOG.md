@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.64-SNAPSHOT
+
+- **I115-V83 — historical replay.**
+  - Allow boolean/long/double boxing elimination and carry specialized relational results as primitive booleans into control decisions; generic comparisons retain their guest Boolean results.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** The original identifies the primitive Boolean as an experimental internal carrier; guest identity, projection and numeric dispatch remain separate acceptance concerns. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved without repairs.
+  - No test files are added or modified by this historical commit. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 0 added, 6 modified, 0 deleted (rename detection disabled for exact path accounting). All 6 original paths retain their exact Git blobs/modes or deletion state; reconstructed parent blobs/modes also match the original parent. Only root `pom.xml` and `CHANGELOG.md` receive replay metadata edits.
+  - Original implementation: `88cc861113a85f5ee760f96341bad831cc011899`.
+
 ## 0.4.63-SNAPSHOT
 
 - **I115-V82 — historical replay.**

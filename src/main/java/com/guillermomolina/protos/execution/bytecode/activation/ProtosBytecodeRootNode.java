@@ -138,7 +138,7 @@ import com.oracle.truffle.api.source.Source;
  * I115-H4-B EXPERIMENTAL (GraalPy PBytecodeDSLRootNode configuration):
  * default automatic RootTag/RootBodyTag tagging, no block scoping,
  * serialization, the bytecode index stored in the frame, an uncached
- * threshold of 4 and int-only boxing elimination. NOT PORTABLE: Materialized
+ * threshold of 4 and boolean/long/double boxing elimination. NOT PORTABLE: Materialized
  * local accesses stay enabled; illegalLocalException/Factory are not
  * configured, so uninitialized locals keep their existing behavior; the
  * root extends RootNode, not a PRootNode. With serialization enabled, every
@@ -158,7 +158,7 @@ import com.oracle.truffle.api.source.Source;
         defaultUncachedThreshold = "4",
         enableTailCallHandlers = true,
         enableUncachedInterpreter = true,
-        boxingEliminationTypes = {int.class, long.class, double.class, boolean.class},
+        boxingEliminationTypes = {boolean.class, long.class, double.class},
         sourceContentSupplier = "loadSourceContent",
         tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class,
         /*
@@ -2723,6 +2723,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     @ConstantOperand(type = boolean.class, name = "polarity")
     public static final class CanonicalControlCondition {
+        /*
+         * I115: primitive relational results flow directly into
+         * control decisions without ProtosBooleanValue.of().
+         * This is an experimental internal boolean carrier.
+         */
+        @Specialization
+        public static boolean doPrimitive(boolean polarity, boolean value) {
+            return value == polarity;
+        }
+
         @Specialization
         public static boolean doBoolean(boolean polarity, ProtosBooleanValue value) {
             return value.value() == polarity;
