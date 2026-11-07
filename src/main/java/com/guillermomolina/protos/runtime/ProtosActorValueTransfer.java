@@ -574,6 +574,7 @@ public final class ProtosActorValueTransfer {
         private boolean isSharedStandardObject(ProtosObjectValue object) {
             if (object == ProtosObjectValue.rootObject()
                     || object == prelude.bindings()
+                    || prelude.isBytesPrototypeForRuntime(object)
                     || prelude.isTcpConnectionPrototypeForRuntime(object)
                     || prelude.isTcpListenerPrototypeForRuntime(object)
                     || prelude.isTcpAcceptorPrototypeForRuntime(object)

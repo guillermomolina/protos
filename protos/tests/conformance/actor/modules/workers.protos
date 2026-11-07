@@ -6,7 +6,13 @@
  * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
  * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
  * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE.
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
  */
 
 echo: () => {
@@ -15,6 +21,41 @@ echo: () => {
         readValue: (box) => { box.value }
         current: () => { Actor.current() }
         currentStable: () => { Actor.current() === Actor.current() }
+        // BUG035: observes a String plus standard Bytes request payload and
+        // mutates only the received Bytes copy.
+        inspectBytes: (method, target) => {
+            receivedMethod: method
+            decodedTarget: Encoding.Latin1.decode(target)
+            octetCount: target.size()
+            target.atPut(0, 95)
+            changedTarget: Encoding.Latin1.decode(target)
+            {
+                method: receivedMethod
+                decoded: decodedTarget
+                size: octetCount
+                changed: changedTarget
+            }
+        }
+        replyBytes: () => { Encoding.Latin1.encode("actor-reply") }
+        replyHttp: () => {
+            payload: Encoding.Latin1.encode("body-ok")
+            headerValue: Encoding.Latin1.encode("application/json")
+            {
+                status: 200
+                headers: [["content-type", headerValue]]
+                body: payload
+                bodyAlias: payload
+            }
+        }
+        inspectAliases: (first, second) => { first === second }
+    }
+}
+
+// BUG035: Bytes transferred as an Actor.spawn initialization argument.
+bytesHolder: (initialBytes) => {
+    held: initialBytes
+    {
+        readBytes: () => { held }
     }
 }
 

@@ -273,8 +273,16 @@ final class ProtosActorValueTransferTest {
 
     @Test
     void bytesSnapshotOwnsIndependentIndexedAndLocalState() throws Exception {
-        ProtosActivation source = core().newModuleActivation();
-        ProtosBytesValue bytes = new ProtosBytesValue(ProtosObjectValue.rootObject());
+        ProtosPrelude prelude = core();
+        // BUG035: both the historical ordinary-root parent and the canonical Bytes prototype.
+        assertBytesSnapshotOwnsIndependentState(prelude, ProtosObjectValue.rootObject());
+        assertBytesSnapshotOwnsIndependentState(prelude, prelude.bytesPrototypeForRuntime());
+    }
+
+    private static void assertBytesSnapshotOwnsIndependentState(
+            ProtosPrelude prelude, ProtosObjectValue parent) {
+        ProtosActivation source = prelude.newModuleActivation();
+        ProtosBytesValue bytes = new ProtosBytesValue(parent);
         bytes.indexedAdd(new ProtosIntegerValue(1L));
         bytes.indexedAdd(new ProtosIntegerValue(2L));
         ProtosObjectValue metadata = new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -289,6 +297,7 @@ final class ProtosActorValueTransferTest {
         assertNotSame(bytes, copied);
         assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(copied.indexedAt(0)));
         assertNotSame(metadata, copied.readLocalSlot("metadata").orElseThrow());
+        assertSame(parent, copied.parent().orElseThrow());
     }
 
     @Test
@@ -631,6 +640,270 @@ final class ProtosActorValueTransferTest {
         assertTrue(ProtosObjectValue.rootObject().isFrozen());
         assertTrue(prelude.arrayPrototype().isFrozen());
         assertTrue(prelude.bindings().isFrozen());
+
+        // BUG035: the canonical hidden Bytes prototype is an exact shared standard anchor.
+        ProtosObjectValue bytesPrototype = prelude.bytesPrototypeForRuntime();
+        assertTrue(bytesPrototype.isFrozen());
+        assertSame(bytesPrototype, ProtosActorValueTransfer.snapshotValue(bytesPrototype, source));
+        assertTrue(prelude.isBytesPrototypeForRuntime(bytesPrototype));
+        assertFalse(prelude.isBytesPrototypeForRuntime(new ProtosObjectValue(bytesPrototype)));
+        assertFalse(prelude.isBytesPrototypeForRuntime(new ProtosBytesValue(bytesPrototype)));
+        assertFalse(prelude.isBytesPrototypeForRuntime(core().bytesPrototypeForRuntime()));
+        assertFalse(prelude.isBytesPrototypeForRuntime(null));
+    }
+
+    @Test
+    void reducedPreludeWithoutRuntimeBytesPrototypeRecognizesNoBytesAnchor() throws Exception {
+        ProtosObjectValue contextPrototype = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
+        bindings.createLocalSlot("Context", contextPrototype);
+        bindings.createLocalSlot("Error", new ProtosObjectValue(ProtosObjectValue.rootObject()));
+        bindings.createLocalSlot("Array", new ProtosObjectValue(ProtosObjectValue.rootObject()));
+        bindings.freeze();
+        ProtosPrelude reduced = new ProtosPrelude(bindings, contextPrototype);
+
+        assertFalse(reduced.isBytesPrototypeForRuntime(null));
+        assertFalse(reduced.isBytesPrototypeForRuntime(ProtosObjectValue.rootObject()));
+        assertFalse(reduced.isBytesPrototypeForRuntime(core().bytesPrototypeForRuntime()));
+        assertThrows(IllegalStateException.class, reduced::bytesPrototypeForRuntime);
+    }
+
+    @Test
+    void canonicalStandardBytesArgumentVectorCopiesInstanceAndSharesPrototype() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        ProtosStringValue method = new ProtosStringValue("GET");
+        ProtosBytesValue target = latin1(prelude, "/api/articles");
+
+        List<Object> result =
+                ProtosActorValueTransfer.snapshotArguments(List.of(method, target, target), source);
+
+        assertFalse(ProtosActorValueTransfer.requiresMaterialization(result));
+        assertEquals(3, result.size());
+        assertTrue(ProtosIdentity.identical(method, result.get(0)));
+        ProtosBytesValue copied = assertInstanceOf(ProtosBytesValue.class, result.get(1));
+        assertSame(copied, result.get(2));
+        assertNotSame(target, copied);
+        assertSame(prelude.bytesPrototypeForRuntime(), copied.parent().orElseThrow());
+        assertEquals("/api/articles", text(copied));
+        assertEquals(13, copied.indexedSize());
+
+        target.indexedPut(0, new ProtosIntegerValue(95));
+        assertEquals("/api/articles", text(copied));
+        copied.indexedPut(1, new ProtosIntegerValue(65));
+        assertEquals("_api/articles", text(target));
+        assertEquals("/Api/articles", text(copied));
+
+        // Standard byte behavior is reached through the preserved canonical parent.
+        ProtosActivation destination = prelude.newModuleActivation();
+        assertEquals("13", decimal(ProtosInvocation.invokeMessage(copied, "size", List.of(), destination)));
+        ProtosInvocation.invokeMessage(
+                copied, "atPut", List.of(new ProtosIntegerValue(0), new ProtosIntegerValue(33)), destination);
+        ProtosInvocation.invokeMessage(copied, "add", List.of(new ProtosIntegerValue(63)), destination);
+        assertEquals("!Api/articles?", text(copied));
+        assertEquals("_api/articles", text(target));
+    }
+
+    @Test
+    void nestedHttpShapedReplyGraphKeepsShapeAliasesAndIndependentBytes() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation worker = prelude.newModuleActivation();
+        ProtosBytesValue contentType = latin1(prelude, "application/json");
+        ProtosBytesValue cache = latin1(prelude, "no-store");
+        ProtosBytesValue body = latin1(prelude, "body-ok");
+        ProtosObjectValue response = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        response.createLocalSlot("status", new ProtosIntegerValue(200));
+        response.createLocalSlot(
+                "headers",
+                prelude.newArray(
+                        List.of(
+                                prelude.newArray(List.of(new ProtosStringValue("content-type"), contentType)),
+                                prelude.newArray(List.of(new ProtosStringValue("cache-control"), cache)))));
+        response.createLocalSlot("body", body);
+        response.createLocalSlot("bodyAlias", body);
+
+        ProtosObjectValue copied =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        ProtosActorValueTransfer.snapshotValue(response, worker));
+
+        assertNotSame(response, copied);
+        assertEquals("200", decimal(copied.readLocalSlot("status").orElseThrow()));
+        ProtosArrayValue headers =
+                assertInstanceOf(ProtosArrayValue.class, copied.readLocalSlot("headers").orElseThrow());
+        assertEquals(2, headers.indexedSize());
+        ProtosBytesValue copiedContentType =
+                assertInstanceOf(
+                        ProtosBytesValue.class,
+                        assertInstanceOf(ProtosArrayValue.class, headers.indexedAt(0)).indexedAt(1));
+        ProtosBytesValue copiedCache =
+                assertInstanceOf(
+                        ProtosBytesValue.class,
+                        assertInstanceOf(ProtosArrayValue.class, headers.indexedAt(1)).indexedAt(1));
+        ProtosBytesValue copiedBody =
+                assertInstanceOf(ProtosBytesValue.class, copied.readLocalSlot("body").orElseThrow());
+        assertSame(copiedBody, copied.readLocalSlot("bodyAlias").orElseThrow());
+        for (ProtosBytesValue each : List.of(copiedContentType, copiedCache, copiedBody)) {
+            assertSame(prelude.bytesPrototypeForRuntime(), each.parent().orElseThrow());
+        }
+        assertNotSame(contentType, copiedContentType);
+        assertNotSame(cache, copiedCache);
+        assertNotSame(body, copiedBody);
+        assertNotSame(copiedContentType, copiedCache);
+        assertNotSame(copiedContentType, copiedBody);
+        assertEquals("application/json", text(copiedContentType));
+        assertEquals("no-store", text(copiedCache));
+        assertEquals("body-ok", text(copiedBody));
+
+        copiedContentType.indexedPut(0, new ProtosIntegerValue(65));
+        copiedBody.indexedPut(0, new ProtosIntegerValue(66));
+        assertEquals("Application/json", text(copiedContentType));
+        assertEquals("Body-ok", text(copiedBody));
+        assertEquals("no-store", text(copiedCache));
+        assertEquals("application/json", text(contentType));
+        assertEquals("body-ok", text(body));
+        assertEquals("no-store", text(cache));
+    }
+
+    @Test
+    void ordinaryStandardBytesReplyResolvesRequesterFuture() throws Exception {
+        ProtosPrelude workerPrelude = core();
+        ProtosPrelude requesterPrelude = core();
+        ProtosActivation requester = requesterPrelude.newModuleActivation();
+        ProtosBytesValue reply = latin1(workerPrelude, "actor-reply");
+        Object replySnapshot =
+                ProtosActorValueTransfer.snapshotValue(reply, workerPrelude.newModuleActivation());
+        ProtosFutureValue future =
+                new ProtosFutureValue(requesterPrelude.futurePrototype(), requester.executionDomain());
+
+        ProtosActorValueTransfer.resolveRequesterFuture(future, replySnapshot, requester);
+        while (requester.executionDomain().dispatchOne()) {
+            // Drain any requester-domain completion.
+        }
+
+        assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
+        assertTrue(future.failedError().isEmpty());
+        ProtosBytesValue delivered =
+                assertInstanceOf(ProtosBytesValue.class, future.resolvedValue().orElseThrow());
+        assertNotSame(reply, delivered);
+        assertEquals("actor-reply", text(delivered));
+    }
+
+    @Test
+    void standardBytesCyclesAliasesAndDelegationArePreserved() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        ProtosObjectValue bytesPrototype = prelude.bytesPrototypeForRuntime();
+        int prototypeSlots = bytesPrototype.localSlotsSnapshot().size();
+        ProtosBytesValue bytes = latin1(prelude, "cycle");
+        ProtosObjectValue holder = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        bytes.createLocalSlot("holder", holder);
+        holder.createLocalSlot("bytes", bytes);
+        ProtosArrayValue array = prelude.newArray(List.of(bytes, holder, bytes));
+
+        ProtosArrayValue copied =
+                assertInstanceOf(ProtosArrayValue.class, ProtosActorValueTransfer.snapshotValue(array, source));
+        ProtosBytesValue copiedBytes = assertInstanceOf(ProtosBytesValue.class, copied.indexedAt(0));
+        ProtosObjectValue copiedHolder = assertInstanceOf(ProtosObjectValue.class, copied.indexedAt(1));
+
+        assertNotSame(array, copied);
+        assertNotSame(bytes, copiedBytes);
+        assertNotSame(holder, copiedHolder);
+        assertSame(copiedBytes, copied.indexedAt(2));
+        assertSame(copiedHolder, copiedBytes.readLocalSlot("holder").orElseThrow());
+        assertSame(copiedBytes, copiedHolder.readLocalSlot("bytes").orElseThrow());
+        assertSame(bytesPrototype, copiedBytes.parent().orElseThrow());
+        assertEquals("cycle", text(copiedBytes));
+        assertTrue(bytesPrototype.isFrozen());
+        assertEquals(prototypeSlots, bytesPrototype.localSlotsSnapshot().size());
+        assertSame(holder, bytes.readLocalSlot("holder").orElseThrow());
+
+        ProtosActivation destination = prelude.newModuleActivation();
+        ProtosBytesValue closed = latin1(prelude, "ab");
+        closed.close();
+        ProtosBytesValue copiedClosed =
+                assertInstanceOf(ProtosBytesValue.class, ProtosActorValueTransfer.snapshotValue(closed, source));
+        assertNotSame(closed, copiedClosed);
+        assertTrue(copiedClosed.isClosed());
+        assertSame(bytesPrototype, copiedClosed.parent().orElseThrow());
+        ProtosInvocation.invokeMessage(
+                copiedClosed, "atPut", List.of(new ProtosIntegerValue(0), new ProtosIntegerValue(65)), destination);
+        assertEquals("Ab", text(copiedClosed));
+        assertEquals("ab", text(closed));
+        assertThrows(
+                ProtosSignalException.class,
+                () -> ProtosInvocation.invokeMessage(
+                        copiedClosed, "add", List.of(new ProtosIntegerValue(1)), destination));
+
+        ProtosBytesValue frozen = latin1(prelude, "cd");
+        frozen.freeze();
+        ProtosBytesValue copiedFrozen =
+                assertInstanceOf(ProtosBytesValue.class, ProtosActorValueTransfer.snapshotValue(frozen, source));
+        assertNotSame(frozen, copiedFrozen);
+        assertTrue(copiedFrozen.isFrozen());
+        assertSame(bytesPrototype, copiedFrozen.parent().orElseThrow());
+        assertEquals("cd", text(copiedFrozen));
+        assertThrows(
+                ProtosSignalException.class,
+                () -> ProtosInvocation.invokeMessage(
+                        copiedFrozen,
+                        "atPut",
+                        List.of(new ProtosIntegerValue(0), new ProtosIntegerValue(65)),
+                        destination));
+        assertThrows(
+                ProtosSignalException.class,
+                () -> ProtosInvocation.invokeMessage(
+                        copiedFrozen, "add", List.of(new ProtosIntegerValue(1)), destination));
+    }
+
+    @Test
+    void standardBytesReachingNonTransferableStateStillFailsAtomically() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        ProtosObjectValue bytesPrototype = prelude.bytesPrototypeForRuntime();
+
+        // Standard Bytes with a Closure-valued local slot.
+        ProtosBytesValue hooked = latin1(prelude, "/hook");
+        ProtosClosureValue hook = closure();
+        hooked.createLocalSlot("hook", hook);
+        assertNonTransferable(source, () -> ProtosActorValueTransfer.snapshotValue(hooked, source));
+        assertBytesUnchanged(hooked, "/hook", bytesPrototype);
+        assertSame(hook, hooked.readLocalSlot("hook").orElseThrow());
+
+        // An ordinary container with valid Bytes and a reachable Closure.
+        ProtosBytesValue valid = latin1(prelude, "/valid");
+        ProtosObjectValue container = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        container.createLocalSlot("bytes", valid);
+        container.createLocalSlot("hook", closure());
+        assertNonTransferable(source, () -> ProtosActorValueTransfer.snapshotValue(container, source));
+        assertSame(valid, container.readLocalSlot("bytes").orElseThrow());
+        assertBytesUnchanged(valid, "/valid", bytesPrototype);
+        assertTrue(container.isOpen());
+
+        // A user prototype delegating to the canonical Bytes prototype but owning a Closure.
+        ProtosObjectValue customParent = new ProtosObjectValue(bytesPrototype);
+        customParent.createLocalSlot("hook", closure());
+        ProtosBytesValue custom = new ProtosBytesValue(customParent);
+        custom.indexedAdd(new ProtosIntegerValue(1));
+        assertFalse(prelude.isBytesPrototypeForRuntime(customParent));
+        assertNonTransferable(source, () -> ProtosActorValueTransfer.snapshotValue(custom, source));
+        assertSame(customParent, custom.parent().orElseThrow());
+        assertEquals(1, custom.indexedSize());
+        assertTrue(custom.isOpen());
+
+        // Earlier valid Bytes arguments followed by a non-transferable argument.
+        ProtosBytesValue first = latin1(prelude, "/first");
+        assertNonTransferable(
+                source,
+                () -> ProtosActorValueTransfer.snapshotArguments(List.of(first, first, closure()), source));
+        assertBytesUnchanged(first, "/first", bytesPrototype);
+
+        // A different Prelude's hidden Bytes prototype is not this Prelude's anchor.
+        ProtosPrelude other = core();
+        ProtosBytesValue foreign = latin1(other, "/foreign");
+        assertFalse(prelude.isBytesPrototypeForRuntime(other.bytesPrototypeForRuntime()));
+        assertNonTransferable(source, () -> ProtosActorValueTransfer.snapshotValue(foreign, source));
+        assertBytesUnchanged(foreign, "/foreign", other.bytesPrototypeForRuntime());
     }
 
     @Test
@@ -1243,6 +1516,37 @@ final class ProtosActorValueTransferTest {
         assertTrue(member.isFrozen());
         assertTrue(prelude.isStandardModuleMemberForRuntime(member));
         return member;
+    }
+
+    private static ProtosBytesValue latin1(ProtosPrelude prelude, String text) {
+        ProtosBytesValue bytes = new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
+        for (int index = 0; index < text.length(); index++) {
+            bytes.indexedAdd(new ProtosIntegerValue(text.charAt(index)));
+        }
+        return bytes;
+    }
+
+    private static String text(ProtosBytesValue bytes) {
+        StringBuilder text = new StringBuilder();
+        for (int index = 0; index < bytes.indexedSize(); index++) {
+            text.append((char) Integer.parseInt(decimal(bytes.indexedAt(index))));
+        }
+        return text.toString();
+    }
+
+    private static String decimal(Object integer) {
+        return ProtosNumericValueSupport.integerDecimalText(integer);
+    }
+
+    private static ProtosClosureValue closure() {
+        return ProtosClosureValue.nativeClosure((activation, arguments) -> ProtosNullValue.INSTANCE);
+    }
+
+    private static void assertBytesUnchanged(
+            ProtosBytesValue bytes, String expected, ProtosObjectValue parent) {
+        assertEquals(expected, text(bytes));
+        assertSame(parent, bytes.parent().orElseThrow());
+        assertTrue(bytes.isOpen());
     }
 
     private static ProtosPrelude core() throws Exception {

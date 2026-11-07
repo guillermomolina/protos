@@ -1,0 +1,180 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+// BUG035: standard Bytes values transfer through ActorRef request, send,
+// reply, and Actor.spawn as independent copies whose delegation parent is the
+// shared canonical frozen Bytes prototype.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+
+tests: [
+    Test("string only request control", () => {
+        worker: Actor.spawn("workers", "echo")
+        reply: worker.request("echo", "GET").value()
+        worker.stop()
+        Assertions.require(reply == "GET")
+    }),
+    Test("bytes only request and echo reply", () => {
+        worker: Actor.spawn("workers", "echo")
+        source: Encoding.Latin1.encode("/api/articles")
+        copy: worker.request("echo", source).value()
+        worker.stop()
+        Assertions.require(
+            (copy !== source) &&
+                (copy.size() == 13) &&
+                (copy[0] == 47) &&
+                (Encoding.Latin1.decode(copy) == "/api/articles"))
+    }),
+    Test("method string and bytes target request", () => {
+        worker: Actor.spawn("workers", "echo")
+        target: Encoding.Latin1.encode("/api/articles")
+        result: worker.request("inspectBytes", "GET", target).value()
+        worker.stop()
+        Assertions.require(
+            (result.method == "GET") &&
+                (result.decoded == "/api/articles") &&
+                (result.size == 13) &&
+                (result.changed == "_api/articles"))
+    }),
+    Test("receiver mutation leaves caller bytes untouched", () => {
+        worker: Actor.spawn("workers", "echo")
+        target: Encoding.Latin1.encode("/api/articles")
+        result: worker.request("inspectBytes", "GET", target).value()
+        worker.stop()
+        Assertions.require(
+            (result.changed == "_api/articles") &&
+                (target[0] == 47) &&
+                (Encoding.Latin1.decode(target) == "/api/articles"))
+    }),
+    Test("fresh remote bytes reply keeps standard behavior", () => {
+        worker: Actor.spawn("workers", "echo")
+        reply: worker.request("replyBytes").value()
+        worker.stop()
+        ok: true
+        (reply.size() == 11).ifFalse(() => { ok = false })
+        (reply[0] == 97).ifFalse(() => { ok = false })
+        reply.atPut(0, 65)
+        reply.add(33)
+        (reply.size() == 12).ifFalse(() => { ok = false })
+        (reply[11] == 33).ifFalse(() => { ok = false })
+        (Encoding.Latin1.decode(reply) == "Actor-reply!").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    }),
+    Test("nested http shaped reply", () => {
+        worker: Actor.spawn("workers", "echo")
+        response: worker.request("replyHttp").value()
+        worker.stop()
+        ok: true
+        (response.status == 200).ifFalse(() => { ok = false })
+        (response.headers.size() == 1).ifFalse(() => { ok = false })
+        (response.headers[0][0] == "content-type").ifFalse(() => { ok = false })
+        header: response.headers[0][1]
+        (Encoding.Latin1.decode(header) == "application/json").ifFalse(() => { ok = false })
+        (response.body === response.bodyAlias).ifFalse(() => { ok = false })
+        (response.body !== header).ifFalse(() => { ok = false })
+        response.body.atPut(0, 66)
+        header.atPut(0, 65)
+        (Encoding.Latin1.decode(response.bodyAlias) == "Body-ok").ifFalse(() => { ok = false })
+        (Encoding.Latin1.decode(header) == "Application/json").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    }),
+    Test("repeated bytes references across arguments", () => {
+        worker: Actor.spawn("workers", "echo")
+        shared: Encoding.Latin1.encode("/api/articles")
+        twin: Encoding.Latin1.encode("/api/articles")
+        same: worker.request("inspectAliases", shared, shared).value()
+        distinct: worker.request("inspectAliases", shared, twin).value()
+        worker.stop()
+        Assertions.require((same === true) && (distinct === false))
+    }),
+    Test("bytes through send then request", () => {
+        worker: Actor.spawn("workers", "mailbox")
+        source: Encoding.Latin1.encode("/api/articles")
+        worker.send("set", source)
+        source.atPut(0, 95)
+        stored: worker.request("get").value()
+        worker.stop()
+        Assertions.require(
+            (stored !== source) &&
+                (Encoding.Latin1.decode(stored) == "/api/articles") &&
+                (Encoding.Latin1.decode(source) == "_api/articles"))
+    }),
+    Test("bytes as spawn initialization argument", () => {
+        source: Encoding.Latin1.encode("/api/articles")
+        worker: Actor.spawn("workers", "bytesHolder", source)
+        source.atPut(0, 95)
+        held: worker.request("readBytes").value()
+        worker.stop()
+        Assertions.require(
+            (held !== source) &&
+                (held.size() == 13) &&
+                (Encoding.Latin1.decode(held) == "/api/articles"))
+    }),
+    Test("reachable closure remains non transferable", () => {
+        worker: Actor.spawn("workers", "echo")
+        valid: Encoding.Latin1.encode("/api/articles")
+        holder: {
+            target: valid
+            hook: () => { 1 }
+        }
+        Assertions.signals(NonTransferableValue, () => {
+            worker.request("echo", holder)
+        })
+        tagged: Encoding.Latin1.encode("/api/articles")
+        tagged.hook: () => { 2 }
+        Assertions.signals(NonTransferableValue, () => {
+            worker.request("echo", tagged)
+        })
+        Assertions.signals(NonTransferableValue, () => {
+            worker.request("inspectAliases", valid, tagged)
+        })
+        worker.stop()
+        Assertions.require(
+            (holder.target === valid) &&
+                (Encoding.Latin1.decode(valid) == "/api/articles") &&
+                (Encoding.Latin1.decode(tagged) == "/api/articles") &&
+                (tagged.hook() == 2))
+    }),
+    Test("request snapshot taken at invocation time", () => {
+        worker: Actor.spawn("workers", "echo")
+        source: Encoding.Latin1.encode("/api/articles")
+        reply: worker.request("echo", source)
+        source.atPut(0, 95)
+        source.add(33)
+        copy: reply.value()
+        worker.stop()
+        Assertions.require(
+            (Encoding.Latin1.decode(copy) == "/api/articles") &&
+                (Encoding.Latin1.decode(source) == "_api/articles!"))
+    }),
+    Test("empty bytes transfer stays open", () => {
+        worker: Actor.spawn("workers", "echo")
+        source: Encoding.Latin1.encode("")
+        copy: worker.request("echo", source).value()
+        worker.stop()
+        ok: true
+        (copy !== source).ifFalse(() => { ok = false })
+        (copy.size() == 0).ifFalse(() => { ok = false })
+        copy.add(7)
+        (copy.size() == 1).ifFalse(() => { ok = false })
+        (copy[0] == 7).ifFalse(() => { ok = false })
+        (source.size() == 0).ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

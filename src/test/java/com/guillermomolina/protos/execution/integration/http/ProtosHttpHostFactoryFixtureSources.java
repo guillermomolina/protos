@@ -503,10 +503,10 @@ final class ProtosHttpHostFactoryFixtureSources {
                 otherListener.localPort()
             }
             // A fresh initialization: nested ordinary data with one alias, the
-            // creator's ActorRef and the application service's ActorRef. It
-            // holds no standard Bytes: an ordinary Actor request currently
-            // rejects those with NonTransferableValue whatever the receiver,
-            // which is outside HTTP.md §15.13.
+            // creator's ActorRef and the application service's ActorRef. The
+            // fixture deliberately uses ordinary nested data with ActorRefs;
+            // standard Bytes transfer is covered independently by the BUG035
+            // Actor/Group regressions.
             initialization: () => {
                 shared: {
                     tag: "shared"

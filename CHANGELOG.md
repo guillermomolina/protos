@@ -7,6 +7,13 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.452-SNAPSHOT
+
+- `BUG035` (#1081): fix standard `Bytes` transfer across Actor and Group boundaries.
+  - Recognize the canonical frozen hidden `Bytes` prototype as an exact shared standard anchor during Actor value transfer, so `send`, `request`, replies and `Actor.spawn` arguments carrying `Bytes` no longer fail with `NonTransferableValue`.
+  - Keep copying every `Bytes` instance with its octets, local slots, aliases, cycles and open/closed/frozen state; Closure-bearing graphs, custom parents and other non-transferable values are still rejected atomically.
+  - Add Java transfer regressions and Actor/Group `bytes-transfer` conformance suites; validate with focal tests, `make test-protos` and `make test`.
+
 ## 0.3.451-SNAPSHOT
 
 - `I154` (#1076): implement D247-C explicit CLI Network authority and RootActor message-service entry for JVM and Native.

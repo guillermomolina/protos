@@ -2,3 +2,4 @@
 acquisition-identity-and-transfer.protos	suite-native	-
 request-routing.protos	suite-native	-
 stopped-and-surface.protos	suite-native	-
+bytes-transfer.protos	suite-native	-

@@ -4,3 +4,4 @@ spawn.protos	suite-native	-
 request-order-and-state.protos	suite-native	-
 lifecycle-and-transfer.protos	suite-native	-
 range-identity-and-transfer.protos	suite-native	-
+bytes-transfer.protos	suite-native	-

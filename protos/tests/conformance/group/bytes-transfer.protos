@@ -1,0 +1,143 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+// BUG035: standard Bytes values transfer through a one-member GroupRef as
+// independent copies sharing the canonical frozen Bytes prototype.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+
+tests: [
+    Test("string only group request", () => {
+        worker: Actor.spawn("workers", "echo")
+        group: Actor.group(worker)
+        reply: group.request("echo", "GET").value()
+        worker.stop()
+        Assertions.require(reply == "GET")
+    }),
+    Test("bytes only group request", () => {
+        worker: Actor.spawn("workers", "echo")
+        group: Actor.group(worker)
+        source: Encoding.Latin1.encode("/api/articles")
+        copy: group.request("echo", source).value()
+        worker.stop()
+        Assertions.require(
+            (copy !== source) &&
+                (copy.size() == 13) &&
+                (Encoding.Latin1.decode(copy) == "/api/articles"))
+    }),
+    Test("method string and bytes target group request", () => {
+        worker: Actor.spawn("workers", "echo")
+        group: Actor.group(worker)
+        target: Encoding.Latin1.encode("/api/articles")
+        result: group.request("inspectBytes", "GET", target).value()
+        worker.stop()
+        Assertions.require(
+            (result.method == "GET") &&
+                (result.decoded == "/api/articles") &&
+                (result.size == 13) &&
+                (result.changed == "_api/articles"))
+    }),
+    Test("bytes reply created by group member", () => {
+        worker: Actor.spawn("workers", "echo")
+        group: Actor.group(worker)
+        reply: group.request("replyBytes").value()
+        worker.stop()
+        ok: true
+        (reply.size() == 11).ifFalse(() => { ok = false })
+        reply.atPut(0, 71)
+        reply.add(33)
+        (Encoding.Latin1.decode(reply) == "Group-reply!").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    }),
+    Test("nested http shaped group reply", () => {
+        worker: Actor.spawn("workers", "echo")
+        group: Actor.group(worker)
+        response: group.request("replyHttp").value()
+        worker.stop()
+        ok: true
+        (response.status == 200).ifFalse(() => { ok = false })
+        (response.headers[0][0] == "content-type").ifFalse(() => { ok = false })
+        header: response.headers[0][1]
+        (response.body === response.bodyAlias).ifFalse(() => { ok = false })
+        (response.body !== header).ifFalse(() => { ok = false })
+        response.body.atPut(0, 66)
+        (Encoding.Latin1.decode(response.bodyAlias) == "Body-ok").ifFalse(() => { ok = false })
+        (Encoding.Latin1.decode(header) == "application/json").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    }),
+    Test("repeated aliases within one group argument vector", () => {
+        worker: Actor.spawn("workers", "echo")
+        group: Actor.group(worker)
+        shared: Encoding.Latin1.encode("/api/articles")
+        twin: Encoding.Latin1.encode("/api/articles")
+        same: group.request("inspectAliases", shared, shared).value()
+        distinct: group.request("inspectAliases", shared, twin).value()
+        worker.stop()
+        Assertions.require((same === true) && (distinct === false))
+    }),
+    Test("group destination mutation isolation", () => {
+        worker: Actor.spawn("workers", "echo")
+        group: Actor.group(worker)
+        target: Encoding.Latin1.encode("/api/articles")
+        result: group.request("inspectBytes", "GET", target).value()
+        worker.stop()
+        Assertions.require(
+            (result.changed == "_api/articles") &&
+                (Encoding.Latin1.decode(target) == "/api/articles"))
+    }),
+    // Group routing does not guarantee send-to-request ordering, and
+    // SendOperation exposes no acceptance observation. The send path is
+    // checked for synchronous transfer validation; a separate completed
+    // store request verifies snapshot isolation.
+    Test("group send validates bytes and request store preserves snapshot", () => {
+        worker: Actor.spawn("workers", "echo")
+        group: Actor.group(worker)
+        source: Encoding.Latin1.encode("/api/articles")
+        operation: group.send("echo", source)
+        tagged: Encoding.Latin1.encode("/api/articles")
+        tagged.hook: () => { 1 }
+        Assertions.signals(NonTransferableValue, () => {
+            group.send("store", tagged)
+        })
+        group.request("store", source).value()
+        source.atPut(0, 95)
+        stored: group.request("load").value()
+        worker.stop()
+        Assertions.require(
+            (operation !== null) &&
+                (stored !== source) &&
+                (Encoding.Latin1.decode(stored) == "/api/articles"))
+    }),
+    Test("group rejects closure bearing graph", () => {
+        worker: Actor.spawn("workers", "echo")
+        group: Actor.group(worker)
+        valid: Encoding.Latin1.encode("/api/articles")
+        holder: {
+            target: valid
+            hook: () => { 1 }
+        }
+        Assertions.signals(NonTransferableValue, () => {
+            group.request("echo", holder)
+        })
+        worker.stop()
+        Assertions.require(
+            (holder.target === valid) &&
+                (Encoding.Latin1.decode(valid) == "/api/articles"))
+    })
+]
+tests.freeze()

@@ -594,6 +594,11 @@ public final class ProtosPrelude {
         return runtimeBytesPrototype;
     }
 
+    /** Nullable-safe identity test used only by isolation transfer machinery. */
+    public boolean isBytesPrototypeForRuntime(Object candidate) {
+        return runtimeBytesPrototype != null && candidate == runtimeBytesPrototype;
+    }
+
     /** Runtime-only exact source-backed ActorRef prototype omitted from public prelude bindings. */
     public ProtosObjectValue actorRefPrototypeForRuntime() {
         if (runtimeActorRefPrototype == null) {
