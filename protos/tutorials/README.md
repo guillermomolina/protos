@@ -5,6 +5,10 @@ This directory teaches Protos progressively. Tutorial source files use the canon
 The tutorials are explanatory, non-normative material. If an example conflicts with the normative specification under `spec/`, the specification wins.
 
 Print-dependent tutorial programs are maintained as executable standalone-CLI sources. The CLI regression suite discovers every `.protos` file in this tree containing `print(` and executes it unchanged, including Future/Actor lessons that require RootActor task suspension and resumption.
+Package lesson `08-language-interactions/06-package-exports/` instead uses
+`protos run Main` from its directory; its `module.protos` files are **not**
+standalone CLI entries and deliberately contain no `print(` call. They are
+covered by the DOC020 package learning-material integration test.
 
 Start with the numbered directories in order. Each source file focuses on one language mechanism and is intentionally small.
 
@@ -49,6 +53,20 @@ teaches D237 names in any order, MIX-C positional indices, spread, explicit
 `null`, and grouped slot creation. Both run with the standalone CLI and need
 no extra host authority. The [Closure guide](../../docs/guide/03-closures-methods-and-receivers.md#named-arguments-and-name-aware-calls-d237)
 explains the corresponding dynamic binding and error boundaries.
+
+The MODULE/SOURCE progression is
+[`04-source-full-context.protos`](08-language-interactions/04-source-full-context.protos)
+(SOURCE import and complete top-level context),
+[`05-public-module-object.protos`](08-language-interactions/05-public-module-object.protos)
+(actual Standard Library MODULE and public-value identity), followed by the
+[`06-package-exports` project](08-language-interactions/06-package-exports/package.toml)
+(explicit publication, private initializer capture and `package.toml`).
+The first two run with `bin/protos <file>` from the product root. For the third,
+change to its package directory and invoke
+`/path/to/protos/bin/protos package manifest` followed by
+`/path/to/protos/bin/protos run Main` (or use `protos` if it is on `PATH`).
+The package project includes its matching `protos.lock`; the public CLI has no
+lock-generation subcommand. See the [module guide](../../docs/guide/06-modules-and-imports.md).
 
 Current progression:
 

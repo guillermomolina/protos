@@ -94,6 +94,36 @@ public operation yet.
 The second stderr line is the guest Error report from the driver. The
 validator does not yet say *which* field or line is wrong.
 
+## Runnable learning projects
+
+The [MODULE/SOURCE guide](../06-modules-and-imports.md) explains the public
+object/private initializer boundary, and these checked-in projects include both
+a manifest and matching `protos.lock`:
+
+- [Module-exports tutorial](../../../protos/tutorials/08-language-interactions/06-package-exports/package.toml)
+  (one root package, `self:` and private SOURCE helper);
+- [pricing example](../../../protos/examples/modules/public-module-pricing/package.toml)
+  (a reusable MODULE with an encapsulated discount rule);
+- [invoice workspace example](../../../protos/examples/modules/package-invoice/package.toml)
+  (root and workspace-member manifests, explicit `[exports]`, authorized
+  `dep:rates/Rates`, negative private-path/source-access cases).
+
+From **each project's root directory** use the current build's executable:
+
+```sh
+/path/to/protos/bin/protos package manifest
+/path/to/protos/bin/protos run Main
+```
+
+The standalone `bin/protos <file>` launcher instead selects a SOURCE entry and
+does **not** provide the package resolver. A valid manifest alone is
+insufficient for `run`: preflight also loads a consistent `protos.lock`, and
+there is no public command to generate one. `protos.project` retains its
+filename. The current package content-identity method is
+`protos-package-tree-v2`; neither `protos-resolution-input-v1` nor
+`protos-project-metadata-v1` changed its method name. Behavior described here
+is for source HEAD, not necessarily older published releases.
+
 ## Authority
 
 The Tool receives a filesystem capability confined to the current directory

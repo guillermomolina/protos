@@ -10,150 +10,106 @@ rather than creating parallel language subsystems. Modules follow that rule too.
 
 The central idea is:
 
-> A module is an ordinary Actor-local execution context with a canonical loader
-> identity, and `import(...)` is an ordinary eager operation that returns that
-> context object.
+> One `import(String)` loads either a **SOURCE** (the entire source execution
+> context) or a **MODULE** (a distinct public object). The resolver selects the
+> target kind; the spelling of a prefix alone does not define it.
 
-There is no separate global-variable universe, namespace wrapper, static import
-declaration, export table, or second object model for modules.
+## SOURCE: its top-level context is importable
 
-## Top-level bindings are module-context slots
-
-Every module executes inside a `moduleContext`.
-
-A top-level binding:
+An explicitly authorized SOURCE file, such as `prices.protos`, executes in an
+ordinary `moduleContext`. Its bare top-level bindings are slots of that context:
 
 ```protos
-version: "0.1"
-
-describe: () => {
-    "Protos " + version
-}
+// prices.protos
+base: 40
+privateByConvention: 2
+quote: () => { base + privateByConvention }
 ```
-
-creates local slots on that module context:
-
-```text
-moduleContext
-├── version
-└── describe
-```
-
-This is the same slot mechanism used by other execution contexts.
-
-Closures created while the module executes capture the module context through
-ordinary lexical capture. There is no separate rule for "global" variables.
-
-## Each module gets its own context
-
-Two different modules do not implicitly share mutable module-level state.
-
-If module `counter` contains:
 
 ```protos
-value: 0
-
-next: () => {
-    value = value + 1
-    value
-}
+// main.protos, in the same directory
+Prices: import("./prices.protos")
+print(Prices.quote())
+print(Prices.privateByConvention)
 ```
 
-then `value` belongs to that module instance's own context.
+Running `bin/protos <path-to-main.protos>` returns the SOURCE's **complete**
+context on import. Nothing named `privateByConvention` is automatically hidden;
+SOURCE has no export boundary. Closures capture the SOURCE context through the
+ordinary lexical rules. The actual runnable fixture is
+[`04-source-full-context.protos`](../../protos/tutorials/08-language-interactions/04-source-full-context.protos)
+with its [neighboring source](../../protos/tutorials/08-language-interactions/04-source-full-context/pricing.protos).
 
-Another module can observe the state only by obtaining that module instance and
-accessing its slots.
+## MODULE: an explicit public object and private context
 
-## `import(...)` is an ordinary call
-
-Protos does not add dedicated import-declaration grammar.
-
-You write:
+A logical MODULE is a directory with a **mandatory** `module.protos` initializer.
+When a resolver selects that directory as MODULE, the initializer executes in a
+private context (`context`) while its receiver (`this`) is a **different public
+module object**. The public object delegates to ordinary `Object` and its own
+slots are the published interface.
 
 ```protos
-math: import("some-module")
+// Prices/module.protos — executed by a MODULE-aware host, such as protos run
+Rules: import("./Rules.protos")
+secretDiscount: 3
+this.quote: (subtotal) => { subtotal + Rules.fee - secretDiscount }
+this.boundaryDistinct: context !== this
 ```
-
-and `import(...)` returns a module instance.
-
-That result is just another Protos object value from the caller's point of view,
-so cross-module access uses ordinary member lookup:
 
 ```protos
-math.sin(x)
-math.constants
+// Prices/Rules.protos — ordinary SOURCE inside the same package
+fee: 7
 ```
-
-There is no syntax such as:
-
-```text
-import x from "..."
-export x
-```
-
-in Core v0.1.
-
-## There is no separate export mechanism
-
-A module instance is the module's own `moduleContext`.
-
-Therefore a top-level binding is directly observable as a slot of the imported
-module instance:
 
 ```protos
-settings: {
-    mode: "safe"
-}
-
-run: () => {
-    ...
-}
+// Main/module.protos — MODULE entry in the same package
+Prices: import("self:Prices")
+result: Prices.quote(40)  // 44
 ```
 
-After importing that module:
+`Rules` and `secretDiscount` are private **initializer** bindings. `this.quote`
+and `this.boundaryDistinct` create public **own slots immediately**; there is no
+`export` keyword, export table, implicit top-level publication, namespace proxy,
+hoisting, or completion-time export copy. `context !== this` is true during
+MODULE initialization. The initializer's final expression does not replace the
+public object. An exported Closure captures the initializer's lexical state,
+including private bindings, through normal capture. Publication does not copy
+or reparent an exported object or Closure. Read a published prototype from the
+module first (`Range: module.Range`), then call `Range(...)`; a direct
+`module.Range(...)` is instead an ordinary message send to `module`.
+
+The example above belongs to the runnable
+[`06-package-exports` tutorial project](../../protos/tutorials/08-language-interactions/06-package-exports/package.toml)
+and must be launched from **its project directory** with `protos run Main`,
+not by running `Main/module.protos` as a standalone source.
+
+## Visibility and lexical lookup
+
+Inside the MODULE initializer, unqualified lookup searches its private
+initializer context, then the public module object's **own slots**, then the
+frozen prelude. The ordinary object delegation chain is **not** a lexical lookup
+chain. Outside the MODULE, `module.quote` uses ordinary member lookup on the
+public object. `module.secretDiscount` has no such public own slot, so absent
+another ordinary matching delegated slot it signals `Error`. Do not mistake this
+boundary for deep privacy: a public method can deliberately return a reference
+to another object or Closure; reachability still follows ordinary object rules.
+The public module object and its initializer context are two distinct objects,
+not a new special `Module` class or a private namespace attached by magic.
+
+## Ordinary import, no declarations
+
+`import(specifier)` remains a normal eager call, not dedicated import grammar:
 
 ```protos
-m: import("...")
-m.settings
-m.run()
+Prices: import("self:Prices")
 ```
 
-uses ordinary slot/member lookup.
-
-Core does not build a second export table, namespace object, proxy, or copy.
-
-This makes module boundaries explicit but also means that a top-level helper
-binding is not automatically private merely because the programmer did not
-write an export declaration: no such declaration exists.
-
-## Keep implementation-private state below the module surface
-
-If state should not be a top-level module slot, put it inside another lexical
-scope and expose only the intended object or Closure.
-
-For example:
-
-```protos
-counter: (() => {
-    value: 0
-
-    ({
-        next: () => {
-            value = value + 1
-            value
-        }
-    })
-})()
-```
-
-Here `counter` is a module-level slot, while `value` belongs to the invoked
-Closure's lexical context and is reached by the returned `next` Closure through
-ordinary capture.
-
-The useful mental rule is:
-
-> Top-level means module-visible. Lexically nested state remains governed by
-> ordinary lexical reachability.
+The import result is an ordinary object, so `Prices.quote(40)` is ordinary
+member access/invocation. The prefixes `std:`, `self:` and `dep:` are domain and
+authority choices of the host resolver, **not** a rule that all prefixed imports
+must be MODULEs or all local files must be SOURCEs. The resolved, authorized
+**target kind** determines MODULE versus SOURCE. For this reason do not invent
+an import declaration or copy JavaScript `export` syntax into Protos.
 
 ## Import accepts exactly a semantic String
 
@@ -350,26 +306,15 @@ The cache is keyed by the canonical identity, not by the original spelling.
 So "same import String" is not the definition of module identity. The resolved
 `ModuleKey` is.
 
-## A module instance is an ordinary identity-bearing object
+## Module instance identity belongs to the resolved target kind
 
-The module instance is the actual module context object.
-
-Within one Actor, repeated imports of the same canonical `ModuleKey` return the
-same active cached module instance:
-
-```protos
-a: import("foo")
-b: import("foo")
-
-a === b
-```
-
-is true while they refer to that same active cached instance.
-
-There is no wrapper object whose identity differs from the module context.
-
-This also means that ordinary member reads observe the module's actual current
-slot state.
+Within one Actor, repeated imports of one canonical `ModuleKey` return the same
+active object (`a === b`). The key includes the resolved target **kind**: the
+MODULE public object and a SOURCE execution context never become the same
+cached object even if the MODULE publishes a value read from that SOURCE.
+Published values retain their **own** identities; for instance, `Ranges.Range`
+can be identical to the frozen Prelude `Range` while `Ranges !== Ranges.Range`.
+There is no wrapper or namespace proxy for either source-backed kind.
 
 ## Module instances are Actor-local
 
@@ -421,21 +366,12 @@ lazy-import rule.
 
 ## Cache before execute
 
-When a canonical module is absent from an Actor's cache, the conceptual order is:
-
-```text
-1. create module instance / moduleContext
-2. cache it as INITIALIZING
-3. execute the module body
-4. mark it READY on success
-```
-
-The important invariant is:
-
-> The new module is cached before its body executes.
-
-This is what makes cyclic imports possible without recursively creating an
-unbounded sequence of new module objects.
+The Actor creates the result and caches it as `INITIALIZING` **before** executing
+its source. For a SOURCE the result is its context; for a MODULE it is the
+public object, with a separate private initializer context. Successful
+initialization marks the **same object** `READY`, without a replacement or a
+second export pass. This is why recursive imports can observe the current
+partial result rather than loading it twice.
 
 ## Cyclic imports are valid
 
@@ -464,33 +400,15 @@ The second import of A returns the already-existing `INITIALIZING` A instance.
 
 It does not create A again.
 
-## A partially initialized module is the real module
+## A partially initialized import is the real instance
 
-During a cycle, another module can observe a module before its body has finished.
-
-If A executes:
-
-```protos
-x: 10
-b: import("b")
-y: 20
-```
-
-and B imports A during that `import("b")`, B receives the real current A module
-instance.
-
-At that moment:
-
-```text
-A.x    exists
-A.y    does not exist yet
-```
-
-There is no module-specific temporal dead zone, no predeclared future slot, and
-no hidden "uninitialized binding" value.
-
-Trying to read a not-yet-created slot follows the ordinary missing-slot Error
-rules.
+A recursive import returns the actual `INITIALIZING` instance immediately. If a
+SOURCE has executed `x: 10` but not `y: 20`, the recursive importer can read
+`x` but not `y`. For a MODULE only `this.x: 10` becomes visible; a bare `x: 10`
+remains in the private initializer context. `this.y` does not exist until its
+slot-creation expression runs. Reading an absent member follows ordinary
+missing-slot `Error`, not a special temporal-dead-zone rule. There is no hidden
+module-specific waiting or predeclaration.
 
 ## Recursive import does not wait for READY
 
@@ -588,7 +506,9 @@ host-specific.
 
 ## The initial module follows the same context model
 
-The program entry module also executes in an Actor-local module context.
+The program entry executes in an Actor-local context. A standalone file
+entry is SOURCE; a logical package entry selects a MODULE public object and
+a separate initializer context.
 
 When that initial module has an importable canonical identity, it participates
 in the same cache-before-execute lifecycle before its first source expression
@@ -610,10 +530,10 @@ Core does not require every possible host-launched source to be assigned an
 invented import identity.
 
 An initial entry that is not importable through the resolver may execute as a
-standalone module context:
+standalone SOURCE context:
 
 ```text
-Actor-local moduleContext
+Actor-local SOURCE moduleContext
 no ModuleKey
 not in import cache
 ```
@@ -677,24 +597,51 @@ The `std:` prefix is not a reserved language token and does not change
 Likewise, other environments may support their own resolver domains without
 changing Core module lifecycle semantics.
 
-## Package resolver spellings remain a resolver concern
+## Packages: publishing logical MODULE directories
 
-Current package-tool work uses resolver domains such as `self:` for package
-workspace modules.
+For package execution, the public CLI uses `protos run <entry>` from the **root
+package directory**. The only manifest for a root or a workspace member is
+`package.toml` (TOML 1.0, `manifest-version = 1`). An exact legacy
+`protos.toml` entry is rejected, including alongside a valid `package.toml`.
 
-For example, package-tool source contains calls such as:
+```toml
+manifest-version = 1
 
-```protos
-MetadataPublication: import("self:MetadataPublication")
+[package]
+id = "root"
+version = "1.0.0"
+
+[exports]
+Prices = "Prices"
 ```
 
-That demonstrates the same Core operation with a different resolver policy.
+`[exports]` maps external logical module names to **internal directories** with
+`module.protos`: `Prices = "Prices"` means `Prices/module.protos`, **not**
+`Prices.protos`, an object called `Prices`, or the SOURCE `Prices/Rules.protos`.
+The package itself can use its private MODULE paths with `self:Prices` even if
+not externally exported. Consumers of an authorized dependency use only
+`dep:<alias>/<export>`; they cannot bypass its `[exports]` with a private MODULE
+path or import its `.protos` SOURCE files. All module paths, case and entry
+kinds are exact. Even within a package, explicit relative `./`/`../` `.protos`
+imports require SOURCE authorization and must stay inside their owner; direct
+SOURCE import of `module.protos` is forbidden.
 
-Do not infer from such spellings that Core v0.1 defines package syntax,
-filesystem semantics, or an `import self` language construct.
+`protos package manifest` validates the current directory's manifest without
+resolving dependencies. `protos run <entry>` additionally performs package
+preflight and requires an already consistent `protos.lock`. **The current CLI
+cannot generate the lock**, nor install, update, fetch or publish packages.
+`protos.project` keeps its filename when such project metadata is used.
+The current content-identity method is `protos-package-tree-v2`; the methods
+`protos-resolution-input-v1` and `protos-project-metadata-v1` are unchanged.
+These are different inputs and should not be conflated.
 
-Package acquisition, manifests, dependency identities, and the bundled
-toolchain belong to their own project/library layer and are covered separately.
+The executable [package lesson](../../protos/tutorials/08-language-interactions/06-package-exports/package.toml),
+[billing cookbook](../../protos/examples/modules/package-invoice/package.toml),
+[Package Tool guide](tools/package-tool.md) and
+[manifest schema v1](../design/PACKAGE_MANIFEST_SCHEMA_V1.md) cover the
+concrete host mode, lock prerequisites and structural fields; there is no
+package registry CLI today. The newest source-tree behavior should not be
+assumed to be available in older published distributions.
 
 ## Host-supplied domains: `app:` and foreign providers
 
@@ -728,65 +675,43 @@ available today.
 
 ## Practical rules to remember
 
-1. Treat module top-level bindings as slots of one ordinary `moduleContext`.
-2. There is no separate global-variable category.
-3. `import(specifier)` is an ordinary call and eagerly returns a module instance.
-4. The specifier must be exactly a semantic String; Core does not coerce it.
-5. Separate specifier spelling, canonical `ModuleKey`, and module-instance
-   identity in your mental model.
-6. Same canonical key plus same Actor means the same active cached instance.
-7. The same canonical key in different Actors means different mutable module
-   instances.
-8. There is no dedicated export table: top-level module slots are directly
-   observable.
-9. Cache-before-execute makes cycles legal and exposes the real partial module
-   state reached so far.
-10. A missing not-yet-created cyclic slot is an ordinary lookup Error, not a
-    special uninitialized value.
-11. Failed initialization removes the active cache entry and a later retry may
-    create a fresh identity.
-12. Failure does not roll back already-completed effects or revoke escaped
-    references.
-13. Treat `std:`, `self:`, filesystem spellings, and package spellings as
-    resolver policy unless a relevant domain specification says otherwise.
-14. Use lexical nesting when implementation state should not be a top-level
-    module slot.
+1. `import` is one ordinary eager call whose exact semantic String is passed to the resolver.
+2. A SOURCE returns its complete top-level execution context, not a filtered export.
+3. A MODULE requires a directory with `module.protos`; it returns its separate public object.
+4. Bare initializer slots stay private; `this.Name: value` publishes an own slot immediately.
+5. `context` and `this` differ in a MODULE initializer; Closures retain normal lexical capture.
+6. The MODULE object, a published prototype, and an imported SOURCE context have distinct identities.
+7. Same canonical key and Actor gives the same active instance; different Actors have separate mutable state.
+8. Cycles observe only slots already created; failure evicts the active cache entry for a possible retry.
+9. Module publication provides no deep privacy, no `export` declaration, and no special binding table.
+10. Package `[exports]` names public MODULE directories; `dep:` cannot access private SOURCEs.
+11. `package.toml` replaces `protos.toml` with no fallback; `protos.lock` is still required for `run`.
 
 ## Current runnable examples
 
-The repository already contains real imports using multiple resolver domains.
+- The [existing direct-file example](../../protos/examples/modules/direct-file-import/main.protos)
+  and [SOURCE lesson](../../protos/tutorials/08-language-interactions/04-source-full-context.protos)
+  run with `bin/protos <file>` from the product root. They return complete SOURCE contexts.
+- The [MODULE identity lesson](../../protos/tutorials/08-language-interactions/05-public-module-object.protos)
+  runs with the same direct-file host but imports the actual `std:collections/range`
+  public MODULE, including its separately published frozen Range values.
+- The [package-exports lesson](../../protos/tutorials/08-language-interactions/06-package-exports/package.toml),
+  [pricing cookbook](../../protos/examples/modules/public-module-pricing/package.toml)
+  and [workspace billing cookbook](../../protos/examples/modules/package-invoice/package.toml)
+  each contain `package.toml`, `protos.lock` and real `module.protos` entries.
+  Run `protos package manifest` and `protos run Main` **from each project's own
+  directory** using the current source-HEAD build. Do not invoke their
+  `module.protos` entry as a standalone file: that would select SOURCE semantics
+  and would not provide the package resolver.
+- The [Package Tool source](../../protos/tools/package/WorkspacePlan.protos) uses
+  direct internal SOURCE imports for planning; this is not a public package
+  install/lock command.
 
-Direct-file local import:
-
-- [`../../protos/examples/modules/direct-file-import/main.protos`](../../protos/examples/modules/direct-file-import/main.protos)
-  imports the neighboring `helper.protos` with the explicit
-  `./helper.protos` direct-file spelling.
-
-Standard Library import:
-
-- [`../../protos/benchmarks/collections/array-map.protos`](../../protos/benchmarks/collections/array-map.protos)
-  imports `std:collections/array` and invokes the returned module's ordinary
-  `map` slot.
-
-Package-workspace import:
-
-- [`../../protos/tools/package/Main.protos`](../../protos/tools/package/Main.protos)
-  imports package-tool modules such as `self:MetadataPublication` and
-  `self:BootstrapMessage`.
-
-The Standard Library resolver is implementation/distribution evidence for the
-current `std:` policy:
-
-- [`../../src/main/java/com/guillermomolina/protos/execution/modules/ProtosStandardLibraryModuleResolver.java`](../../src/main/java/com/guillermomolina/protos/execution/modules/ProtosStandardLibraryModuleResolver.java).
-
-The module runtime tests exercise the Core lifecycle directly:
-
-- [`../../src/test/java/com/guillermomolina/protos/execution/modules/ProtosModuleRuntimeTest.java`](../../src/test/java/com/guillermomolina/protos/execution/modules/ProtosModuleRuntimeTest.java)
-  covers semantic-String validation, canonical-key aliasing, cache-before-execute,
-  cycles, Actor-local caches, failed-initialization eviction, and retry.
-
-These links demonstrate current behavior. The normative specification remains
-authoritative.
+The [runtime tests](../../src/test/java/com/guillermomolina/protos/execution/modules/ProtosModuleRuntimeTest.java)
+cover Actor caching, recursive imports, failed initialization and retry.
+The [DOC020 learning integration tests](../../src/test/java/com/guillermomolina/protos/cli/ProtosDoc020LearningMaterialsTest.java)
+exercise package entries and selected expected failures. The normative
+specification remains authoritative.
 
 ## Normative references
 

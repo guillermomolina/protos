@@ -152,7 +152,13 @@ takes no value and grants nothing else.
 ### `protos run`
 
 `protos run <entry>` executes an entry of the root package of the Protos
-project in the current directory (a directory with a `package.toml` manifest and no legacy `protos.toml` entry).
+project in the current directory (a directory with `package.toml` and no
+legacy `protos.toml` entry). It selects the logical `<entry>/module.protos`
+MODULE, **not** a direct-file SOURCE. Its preflight requires a consistent
+existing `protos.lock` (no public lock-generation command exists). Run it from
+the actual package root rather than the repository root; see the
+[package-exports tutorial](../../../protos/tutorials/08-language-interactions/06-package-exports/package.toml)
+and [Package Tool](package-tool.md).
 Neither `run` nor `<entry>` appears in `process.args()`. The application gets
 no network capability from the CLI.
 

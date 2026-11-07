@@ -1,0 +1,8 @@
+manifest-version = 1
+
+[package]
+id = "rates-pkg"
+version = "1.0.0"
+
+[exports]
+Rates = "Public/Rates"

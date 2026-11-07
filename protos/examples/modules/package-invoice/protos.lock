@@ -1,0 +1,7 @@
+lock-format 1
+resolver-version 1
+resolution-input protos-resolution-input-v1 sha256:20e5531e1ed43433b34a482d921ef8d7e2d20782efaa0edea7a3e158515d8211
+
+root workspace "root"
+workspace-member "rates" workspace "rates-pkg"
+dependency workspace "root" alias "rates" target workspace "rates-pkg"

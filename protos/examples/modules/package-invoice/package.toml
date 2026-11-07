@@ -1,0 +1,15 @@
+manifest-version = 1
+
+[package]
+id = "root"
+version = "1.0.0"
+
+[exports]
+Main = "Main"
+Invoice = "Billing"
+
+[dependencies.rates]
+path = "rates"
+
+[workspace]
+members = ["rates"]

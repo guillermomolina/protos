@@ -80,6 +80,15 @@ values: `Point(0, 0)` still uses the inherited `call`, which reaches an ordinary
 `construct` message, while factories such as `Range` choose their result in
 their own `construct`.
 
+The [MODULE/SOURCE chapter](06-modules-and-imports.md) is paired with the
+[SOURCE tutorial](../../protos/tutorials/08-language-interactions/04-source-full-context.protos),
+[public MODULE tutorial](../../protos/tutorials/08-language-interactions/05-public-module-object.protos)
+and [package-exports lesson](../../protos/tutorials/08-language-interactions/06-package-exports/package.toml).
+For practical projects see the [pricing example](../../protos/examples/modules/public-module-pricing/package.toml)
+and [workspace invoice example](../../protos/examples/modules/package-invoice/package.toml).
+These materials teach D242's **current source-HEAD** behavior; older published
+releases may not include `package.toml` or MODULE public-object semantics.
+
 ## Source style reference
 
 [`SOURCE_STYLE.md`](SOURCE_STYLE.md) records the non-normative project convention

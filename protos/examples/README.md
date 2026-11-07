@@ -7,6 +7,10 @@ All Protos source files use the canonical `.protos` extension. Examples are non-
 [`ROSETTA_CODE.md`](ROSETTA_CODE.md) maps exact external Rosetta Code tasks to their canonical sources in this tree, tracks their correctness status, and records any possible future Rosetta Code publication.
 
 Print-dependent cookbook programs are maintained as executable standalone-CLI sources. The CLI regression suite discovers every `.protos` file in this tree containing `print(` and executes it unchanged, including concurrent examples whose `Future.value()` suspension must run inside the Process RootActor task.
+The examples `modules/public-module-pricing/` and `modules/package-invoice/`
+are package projects, not standalone `.protos` files. Their `module.protos`
+entries use `protos run Main` and are verified separately; do not treat their
+`module.protos` paths as standalone CLI entries.
 
 `closures/non-local-return.protos` compares contextual `return value` with
 `^value` when returning early from an enclosing function inside an Array
@@ -71,6 +75,24 @@ instead.
 | Make one HTTPS request to a URL (`std:http/url_client`, requires `network` and `resolver`, manual) | `io/http-url-client.protos` |
 | Resolve a hostname and connect to a chosen address (`std:network/resolvers`, requires `network` and `resolver`, manual) | `io/hostname-resolution.protos` |
 | Authenticate TLS over a TCP connection and send one HTTP request (`std:tls/client`, requires `network` and `resolver`, manual) | `io/tls-client-over-tcp.protos` |
+| Import an entire neighboring SOURCE context | `modules/direct-file-import/main.protos` |
+| Publish a pricing MODULE with an encapsulated discount helper | `modules/public-module-pricing/` (`protos run Main`) |
+| Compose a real invoice across root and dependency MODULE exports | `modules/package-invoice/` (`protos run Main`) |
+
+The [`direct-file-import`](modules/direct-file-import/main.protos) example uses
+`bin/protos protos/examples/modules/direct-file-import/main.protos` from the
+product root. Its imported helper is a SOURCE: every top-level binding is
+visible. By contrast, the [pricing package](modules/public-module-pricing/package.toml)
+exports a distinct public MODULE object, and the
+[invoice workspace](modules/package-invoice/package.toml) uses a declared
+`dep:rates/Rates` module export. Both package projects ship matching
+`protos.lock` files. From each respective project directory invoke
+`<absolute-path-to-repo>/bin/protos package manifest`, then
+`<absolute-path-to-repo>/bin/protos run Main`. The runnable negative entries
+`CheckPrivate`, `CheckDepPrivate`, `CheckDepSource`, and `CheckMissingInitializer`
+are documented in the invoice package's [project README](modules/package-invoice/README.md).
+The public CLI cannot regenerate those lockfiles or install packages.
+
 
 Run the metadata example normally from the product repository root:
 `bin/protos protos/examples/runtime-introspection/info.protos`. The

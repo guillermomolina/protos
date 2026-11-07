@@ -1,0 +1,34 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+// DOC020 lesson 05: a MODULE returns its own public object.
+//
+// Run from the repository root:
+// bin/protos protos/tutorials/08-language-interactions/05-public-module-object.protos
+//
+// std:collections/range is a real MODULE. Its module.protos
+// explicitly publishes Range and InvertedRange using this.Name:.
+
+Ranges: import("std:collections/range")
+Again: import("std:collections/range")
+
+// Repeated imports return the same Actor-local MODULE object.
+print(Ranges === Again)
+
+// Published values retain their original identities.
+print(Ranges.Range === Range)
+print(Ranges.InvertedRange === InvertedRange)
+
+// The public MODULE object is not the published Range prototype.
+print(Ranges === Ranges.Range)
+
+// The MODULE initializer's ordinary top-level bindings belong to
+// its separate private context, not to this public module object.
