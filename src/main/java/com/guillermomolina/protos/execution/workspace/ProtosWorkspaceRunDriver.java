@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import java.io.IOException;
@@ -75,11 +76,20 @@ public final class ProtosWorkspaceRunDriver {
     public static ProtosExecutionOutcome execute(
             Request request, ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant)
             throws IOException {
+        return execute(request, networkGrant, EntropyGrant.NONE);
+    }
+
+    public static ProtosExecutionOutcome execute(
+            Request request,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant)
+            throws IOException {
+        Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(networkGrant, "networkGrant");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
-            return execute(request, networkGrant, runtimeHost);
+            return execute(request, networkGrant, entropyGrant, runtimeHost);
         }
     }
 
@@ -89,6 +99,17 @@ public final class ProtosWorkspaceRunDriver {
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
             String serviceBinding)
             throws IOException {
+        return executeService(
+                request, networkGrant, EntropyGrant.NONE, serviceBinding);
+    }
+
+    public static boolean executeService(
+            Request request,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            String serviceBinding)
+            throws IOException {
+        Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(networkGrant, "networkGrant");
         Objects.requireNonNull(serviceBinding, "serviceBinding");
@@ -120,7 +141,8 @@ public final class ProtosWorkspaceRunDriver {
                             request.stderrEncodingBinding());
 
             return ProtosWorkspacePackageApplicationExecution.executeService(
-                    application, networkGrant, serviceBinding, runtimeHost);
+                    application, networkGrant, entropyGrant,
+                    serviceBinding, runtimeHost);
         }
     }
 
@@ -129,6 +151,17 @@ public final class ProtosWorkspaceRunDriver {
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
+        return execute(
+                request, networkGrant, EntropyGrant.NONE, runtimeHost);
+    }
+
+    static ProtosExecutionOutcome execute(
+            Request request,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(networkGrant, "networkGrant");
         Objects.requireNonNull(runtimeHost, "runtimeHost");
@@ -157,7 +190,9 @@ public final class ProtosWorkspaceRunDriver {
                         request.stdinEncodingBinding(),
                         request.stdoutEncodingBinding(),
                         request.stderrEncodingBinding()),
+                ignored -> {},
                 networkGrant,
+                entropyGrant,
                 runtimeHost);
     }
 }

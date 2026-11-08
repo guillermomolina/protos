@@ -201,6 +201,8 @@ Domain owners:
 - spec/io/PROCESS_IO.md — Process I/O bootstrap, environment/arguments,
   standard streams, Process-local I/O authority.
 - spec/io/NETWORK.md — network I/O semantics.
+- spec/io/ENTROPY.md — independently granted secure Entropy capability,
+  operation, security and transfer-boundary semantics.
 - spec/io/HTTP.md — Standard Library HTTP/1.1 facilities: single-request
   server std:http/Server (D215, §§1–13), optional continuous hosting
   std:http/Host (D216, §15) and single-exchange client std:http/Client

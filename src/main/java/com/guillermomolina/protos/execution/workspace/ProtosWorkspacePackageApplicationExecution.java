@@ -20,6 +20,8 @@ import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
@@ -131,6 +133,18 @@ public final class ProtosWorkspacePackageApplicationExecution {
             Consumer<ProtosProcessRuntime> processObserver,
             NetworkGrant networkGrant,
             ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        return execute(
+                request, processObserver, networkGrant,
+                EntropyGrant.NONE, runtimeHost);
+    }
+
+    static ProtosExecutionOutcome execute(
+            Request request,
+            Consumer<ProtosProcessRuntime> processObserver,
+            NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(processObserver, "processObserver");
         Objects.requireNonNull(networkGrant, "networkGrant");
@@ -148,6 +162,7 @@ public final class ProtosWorkspacePackageApplicationExecution {
                 entryKey,
                 request.authority(),
                 networkGrant,
+                entropyGrant,
                 false,
                 "workspace package application Process failed",
                 processObserver,
@@ -200,6 +215,24 @@ public final class ProtosWorkspacePackageApplicationExecution {
             String failureMessage,
             Consumer<ProtosProcessRuntime> processObserver,
             ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        return executeEntry(
+                coreRoot, resolver, entryKey, authority,
+                networkGrant, EntropyGrant.NONE, awaitTermination,
+                failureMessage, processObserver, runtimeHost);
+    }
+
+    static ProtosExecutionOutcome executeEntry(
+            Path coreRoot,
+            ProtosModuleResolver resolver,
+            ProtosModuleKey entryKey,
+            ApplicationAuthority authority,
+            NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            boolean awaitTermination,
+            String failureMessage,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        Objects.requireNonNull(entropyGrant, "entropyGrant");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(coreRoot, resolver);
 
         ProtosEncodingValue stdinEncoding =
@@ -214,8 +247,15 @@ public final class ProtosWorkspacePackageApplicationExecution {
                     case HOST_NETWORK -> runtimeHost.provisionHostNetwork(prelude);
                 };
 
-        ProtosStandaloneProcessBootstrap.Result bootstrap =
-                ProtosStandaloneProcessBootstrap.create(
+        ProtosEntropyCapabilityValue entropy =
+                switch (entropyGrant) {
+                    case NONE -> null;
+                    case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
+                };
+
+        ProtosStandaloneProcessBootstrap.Result bootstrap;
+        try {
+            bootstrap = ProtosStandaloneProcessBootstrap.create(
                         prelude,
                         authority.applicationArguments(),
                         authority.environmentNameDomain(),
@@ -227,7 +267,15 @@ public final class ProtosWorkspacePackageApplicationExecution {
                         stdoutEncoding,
                         stderrEncoding,
                         null,
-                        network);
+                        network,
+                        null,
+                        entropy);
+        } catch (RuntimeException | Error failure) {
+            if (entropy != null) {
+                entropy.retireForRuntime();
+            }
+            throw failure;
+        }
         ProtosProcessRuntime process = bootstrap.process();
         ProtosPolyglotProcessContext processContext = null;
 
@@ -277,6 +325,24 @@ public final class ProtosWorkspacePackageApplicationExecution {
             Consumer<ProtosProcessRuntime> processObserver,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
+        return executeServiceEntry(
+                coreRoot, resolver, entryKey, authority,
+                networkGrant, EntropyGrant.NONE, serviceBinding,
+                processObserver, runtimeHost);
+    }
+
+    static boolean executeServiceEntry(
+            Path coreRoot,
+            ProtosModuleResolver resolver,
+            ProtosModuleKey entryKey,
+            ApplicationAuthority authority,
+            NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            String serviceBinding,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(resolver, "resolver");
         Objects.requireNonNull(entryKey, "entryKey");
         Objects.requireNonNull(authority, "authority");
@@ -303,8 +369,15 @@ public final class ProtosWorkspacePackageApplicationExecution {
                     case HOST_NETWORK -> runtimeHost.provisionHostNetwork(prelude);
                 };
 
-        ProtosStandaloneProcessBootstrap.Result bootstrap =
-                ProtosStandaloneProcessBootstrap.create(
+        ProtosEntropyCapabilityValue entropy =
+                switch (entropyGrant) {
+                    case NONE -> null;
+                    case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
+                };
+
+        ProtosStandaloneProcessBootstrap.Result bootstrap;
+        try {
+            bootstrap = ProtosStandaloneProcessBootstrap.create(
                         prelude,
                         authority.applicationArguments(),
                         authority.environmentNameDomain(),
@@ -316,7 +389,15 @@ public final class ProtosWorkspacePackageApplicationExecution {
                         stdoutEncoding,
                         stderrEncoding,
                         null,
-                        network);
+                        network,
+                        null,
+                        entropy);
+        } catch (RuntimeException | Error failure) {
+            if (entropy != null) {
+                entropy.retireForRuntime();
+            }
+            throw failure;
+        }
 
         ProtosProcessRuntime process = bootstrap.process();
         ProtosPolyglotProcessContext processContext = null;
@@ -363,6 +444,19 @@ public final class ProtosWorkspacePackageApplicationExecution {
             String serviceBinding,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
+        return executeService(
+                request, networkGrant, EntropyGrant.NONE,
+                serviceBinding, runtimeHost);
+    }
+
+    static boolean executeService(
+            Request request,
+            NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            String serviceBinding,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        Objects.requireNonNull(entropyGrant, "entropyGrant");
         ProtosWorkspacePackageModuleResolver resolver =
                 new ProtosWorkspacePackageModuleResolver(
                         request.projectRoot(),
@@ -374,6 +468,7 @@ public final class ProtosWorkspacePackageApplicationExecution {
                 resolver.entryModule(request.entryLogicalModule()),
                 request.authority(),
                 networkGrant,
+                entropyGrant,
                 serviceBinding,
                 ignored -> {},
                 runtimeHost);

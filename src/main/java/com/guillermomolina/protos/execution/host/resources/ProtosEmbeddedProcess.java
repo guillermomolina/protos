@@ -26,6 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.process.ProtosProcessExecutionHost;
@@ -167,37 +168,90 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
                 networkCustody == null
                         ? null
                         : new ProtosNetworkCapabilityValue(prelude, networkCustody);
+        // D243-C: unlike Network and Filesystem, Entropy is authorized
+        // exclusively by the explicit protos.AllowEntropy Context option.
+        // A granted but unused backend creates neither workers nor a CSPRNG.
+        ProtosEntropyCapabilityValue entropy =
+                env.getOptions().get(ProtosLanguage.ALLOW_ENTROPY)
+                        ? new ProtosEntropyCapabilityValue(
+                                prelude, new ProtosHostEntropyBackend())
+                        : null;
+
         // The marker precedes the RootActor; its operations are bound to the RootActor below.
         ProtosFilesystemValue filesystem =
                 filesystemCustody == null ? null : new ProtosFilesystemValue();
-        ProtosStandaloneProcessBootstrap.Result bootstrap =
-                ProtosStandaloneProcessBootstrap.create(
-                        prelude,
-                        List.of(env.getApplicationArguments()),
-                        ProtosStandaloneHostedExecution.HOST_ENVIRONMENT_NAME_DOMAIN,
-                        environmentEntries(env),
-                        ProtosStandaloneHostedExecution.readableBackend(env.in()),
-                        ProtosStandaloneHostedExecution.writableBackend(env.out()),
-                        ProtosStandaloneHostedExecution.writableBackend(env.err()),
-                        utf8,
-                        utf8,
-                        utf8,
-                        filesystem,
-                        network);
-        if (filesystem != null) {
-            // No guest source has executed yet, so no guest code can observe the empty marker.
-            ProtosStandardFilesystemProtocol.installOperations(
+        ProtosStandaloneProcessBootstrap.Result bootstrap = null;
+        try {
+            bootstrap = ProtosStandaloneProcessBootstrap.create(
+                    prelude,
+                    List.of(env.getApplicationArguments()),
+                    ProtosStandaloneHostedExecution.HOST_ENVIRONMENT_NAME_DOMAIN,
+                    environmentEntries(env),
+                    ProtosStandaloneHostedExecution.readableBackend(env.in()),
+                    ProtosStandaloneHostedExecution.writableBackend(env.out()),
+                    ProtosStandaloneHostedExecution.writableBackend(env.err()),
+                    utf8,
+                    utf8,
+                    utf8,
                     filesystem,
-                    prelude.bytesPrototypeForRuntime(),
-                    bootstrap.activation(),
-                    filesystemCustody);
+                    network,
+                    null,
+                    entropy);
+
+            if (filesystem != null) {
+                // No guest source has executed yet.
+                ProtosStandardFilesystemProtocol.installOperations(
+                        filesystem,
+                        prelude.bytesPrototypeForRuntime(),
+                        bootstrap.activation(),
+                        filesystemCustody);
+            }
+
+            ProtosEmbeddedProcess embedded =
+                    new ProtosEmbeddedProcess(
+                            owner,
+                            bootstrap,
+                            prelude,
+                            coreRoot,
+                            filesystemCustody,
+                            networkCustody);
+
+            bootstrap.process().bindExecutionHostForRuntime(embedded);
+            owner.bindModuleResolverForRuntime(resolver);
+            return embedded;
+        } catch (RuntimeException | Error failure) {
+            // No capability acquired during a failed bootstrap may
+            // survive an initialization that never reached the guest.
+            if (bootstrap != null) {
+                try {
+                    bootstrap.process().requestTerminationForRuntime();
+                } catch (RuntimeException cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
+            }
+            if (entropy != null) {
+                try {
+                    entropy.retireForRuntime();
+                } catch (RuntimeException cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
+            }
+            if (networkCustody != null) {
+                try {
+                    networkCustody.close();
+                } catch (RuntimeException cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
+            }
+            if (filesystemCustody != null) {
+                try {
+                    filesystemCustody.close();
+                } catch (RuntimeException cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
+            }
+            throw failure;
         }
-        ProtosEmbeddedProcess embedded =
-                new ProtosEmbeddedProcess(
-                        owner, bootstrap, prelude, coreRoot, filesystemCustody, networkCustody);
-        bootstrap.process().bindExecutionHostForRuntime(embedded);
-        owner.bindModuleResolverForRuntime(resolver);
-        return embedded;
     }
 
     /**
@@ -512,6 +566,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         // Termination revokes Process-local authority and retires its host resources.
         closeFilesystem();
         closeNetwork();
+        closeEntropy();
     }
 
     /**
@@ -530,6 +585,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         }
         closeFilesystem();
         closeNetwork();
+        closeEntropy();
         joinCarriers();
     }
 
@@ -544,6 +600,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         process.requestTerminationForRuntime();
         closeFilesystem();
         closeNetwork();
+        closeEntropy();
         joinCarriers();
     }
 
@@ -566,6 +623,15 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         if (networkCustody != null) {
             networkCustody.close();
         }
+    }
+
+    /**
+     * D243-C: independently revoke this Context's Entropy authority.
+     * Process termination normally performs the same retirement; the
+     * explicit Context close path is idempotent and covers disposal.
+     */
+    private void closeEntropy() {
+        process.retireEntropyForRuntime();
     }
 
     /**

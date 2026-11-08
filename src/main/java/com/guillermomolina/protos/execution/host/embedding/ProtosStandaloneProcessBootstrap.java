@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import java.util.List;
@@ -130,6 +131,42 @@ public final class ProtosStandaloneProcessBootstrap {
             ProtosFilesystemValue defaultFilesystem,
             ProtosNetworkCapabilityValue defaultNetwork,
             ProtosResolverCapabilityValue defaultResolver) {
+        return create(
+                prelude,
+                applicationArguments,
+                environmentNameDomain,
+                environmentEntries,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                stdinEncoding,
+                stdoutEncoding,
+                stderrEncoding,
+                defaultFilesystem,
+                defaultNetwork,
+                defaultResolver,
+                null);
+    }
+
+    /**
+     * D243-C complete standalone bootstrap with independent, optional
+     * Resolver and Entropy grants.
+     */
+    public static Result create(
+            ProtosPrelude prelude,
+            List<String> applicationArguments,
+            ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
+            List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            ProtosEncodingValue stdinEncoding,
+            ProtosEncodingValue stdoutEncoding,
+            ProtosEncodingValue stderrEncoding,
+            ProtosFilesystemValue defaultFilesystem,
+            ProtosNetworkCapabilityValue defaultNetwork,
+            ProtosResolverCapabilityValue defaultResolver,
+            ProtosEntropyCapabilityValue defaultEntropy) {
         return createInternal(
                 prelude,
                 applicationArguments,
@@ -144,7 +181,8 @@ public final class ProtosStandaloneProcessBootstrap {
                 defaultFilesystem,
                 defaultNetwork,
                 null,
-                defaultResolver);
+                defaultResolver,
+                defaultEntropy);
     }
 
     static Result createWithRootResources(
@@ -176,6 +214,7 @@ public final class ProtosStandaloneProcessBootstrap {
                 defaultFilesystem,
                 defaultNetwork,
                 rootResources,
+                null,
                 null);
     }
 
@@ -193,7 +232,8 @@ public final class ProtosStandaloneProcessBootstrap {
             ProtosFilesystemValue defaultFilesystem,
             ProtosNetworkCapabilityValue defaultNetwork,
             ProtosMapValue rootResources,
-            ProtosResolverCapabilityValue defaultResolver) {
+            ProtosResolverCapabilityValue defaultResolver,
+            ProtosEntropyCapabilityValue defaultEntropy) {
         Objects.requireNonNull(prelude, "prelude");
         Objects.requireNonNull(applicationArguments, "applicationArguments");
         Objects.requireNonNull(environmentNameDomain, "environmentNameDomain");
@@ -205,7 +245,8 @@ public final class ProtosStandaloneProcessBootstrap {
                         defaultFilesystem,
                         defaultNetwork,
                         rootResources,
-                        defaultResolver);
+                        defaultResolver,
+                        defaultEntropy);
 
         // The Resolver grant is now owned by this incarnation. If bootstrap fails before the
         // initial Activation escapes, retire it so no unowned live backend survives; the Process
@@ -234,6 +275,7 @@ public final class ProtosStandaloneProcessBootstrap {
                             process, prelude));
         } catch (RuntimeException | Error failure) {
             process.retireResolverForRuntime();
+            process.retireEntropyForRuntime();
             throw failure;
         }
     }

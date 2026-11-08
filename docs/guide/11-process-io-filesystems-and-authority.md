@@ -1299,18 +1299,19 @@ authority.
 The bootstrap-local slots an initial module receives depend on who starts the
 Process. For the D247-C CLI interface (older releases do not provide these options):
 
-| Launcher | `process` | `filesystem` | `network` | `resolver` |
-|---|---|---|---|---|
-| `protos file.protos`, `protos -e`, REPL | Bound | Not bound | Only with `--allow-network` | Not bound |
-| `protos run <entry>` | Bound | Not bound | Only with `--allow-network` | Not bound |
-| Java Polyglot embedding (portable JVM only) | Bound | Only when the Context allows file access | Only when the Context allows socket access | Not bound |
-| Bundled Tools | Bound | Only confined capabilities that the Tool's launcher contract grants | Not bound | Not bound |
-| A Java host using `ProtosPolyglotRuntimeHost.provisionHostResolver` explicitly | Bound | As selected | As selected | Bound |
-| `ProtosRootActorServiceSession.open` (RootActor message-service entry) | Bound | Not bound | Only with `NetworkGrant.HOST_NETWORK` | Only with `ResolverGrant.HOST_RESOLVER` |
+| Launcher | `process` | `filesystem` | `network` | `resolver` | `entropy` |
+|---|---|---|---|---|---|
+| `protos file.protos`, `protos -e`, REPL | Bound | Not bound | Only with `--allow-network` | Not bound | Only with `--allow-entropy` |
+| `protos run <entry>` | Bound | Not bound | Only with `--allow-network` | Not bound | Only with `--allow-entropy` |
+| Java Polyglot embedding (portable JVM only) | Bound | Only when the Context allows file access | Only when the Context allows socket access | Not bound | Only with `protos.AllowEntropy=true` |
+| Bundled Tools | Bound | Only confined capabilities that the Tool's launcher contract grants | Not bound | Not bound | Not bound |
+| Java host with an explicit Resolver and/or Entropy provision | Bound | As selected | As selected | Only if explicitly granted | Only if explicitly granted |
+| `ProtosRootActorServiceSession.open` (RootActor message-service entry) | Bound | Not bound | Only with `NetworkGrant.HOST_NETWORK` | Only with `ResolverGrant.HOST_RESOLVER` | Only with `EntropyGrant.HOST_ENTROPY` |
 
 The Native and portable JVM command lines use the same explicit CLI authority
-contract. `--allow-network` grants initial host TCP authority only. There is no
-CLI option granting Filesystem or Resolver authority.
+contract. `--allow-network` grants initial host TCP authority only;
+`--allow-entropy` grants only the separate secure-byte capability. Neither
+flag grants Filesystem or Resolver authority. Tools receive neither grant.
 When a slot is not bound, the name is simply absent from the initial module;
 referencing it fails like any other unbound name.
 
@@ -1326,8 +1327,8 @@ entry (D225-B1, `spec/io/PROCESS_IO.md`; see [Actors, ActorRefs, and Actor
 Groups](10-actors-actorrefs-and-groups.md#the-rootactor-has-two-entry-modes)).
 Its initial module receives exactly the bootstrap-local slots an ordinary
 initial module would receive under the same host grants: always `process`, and
-`network` or `resolver` only when the host grants each one. The two grants are
-independent, and choosing the service entry grants nothing by itself.
+`network`, `resolver` or `entropy` only when the host grants each one.
+These grants are independent, and choosing service entry grants nothing.
 
 On the standalone CLI, `--service=<binding>` explicitly selects this entry
 for SOURCE files and exported root-package MODULE bindings, independent of
@@ -1352,7 +1353,7 @@ else can reach them:
   receive them;
 - Actors the service creates start without them;
 - a GroupRef or ActorRef denoting the RootActor carries no capability; and
-- passing `network` or `resolver` in a message or `Actor.spawn` argument fails
+- passing `network`, `resolver` or `entropy` in a message or `Actor.spawn` argument fails
   with `NonTransferableValue`, because neither has an Actor-transfer contract.
 
 So when an HTTP Worker needs something that requires the network or name
@@ -1360,6 +1361,79 @@ resolution, it asks the RootActor service by message, and the service performs
 the operation with its own capability. Process termination, including after a
 fatal RootActor failure, and closing the hosting session retire the granted
 capabilities and their resources.
+
+## Secure entropy is an explicit RootActor capability (D243-C)
+
+A Protos program does not acquire cryptographically secure randomness just by
+importing a library, possessing `process`, or having `network`, `resolver` or
+`filesystem`. The host must independently grant the bootstrap-local `entropy`
+slot to the RootActor's initial module. Without the grant the binding is
+**absent**, not `null`. An ordinary frozen `Entropy` prototype contains the
+methods but no power to mint a grant. SOURCE/MODULE imports do not change
+that boundary.
+
+For a direct CLI program, select `--allow-entropy`:
+
+```sh
+bin/protos --allow-entropy protos/examples/entropy/secure-bytes.protos
+```
+
+For a long-lived message service, combine the separate service selection and
+permission:
+
+```sh
+bin/protos --allow-entropy --service=service protos/examples/entropy/actor-broker.protos
+```
+
+For package applications use `protos run --allow-entropy <entry>` (and
+`--service=<binding>` only when deliberately running a service). The CLI
+permits `--allow-network` alongside `--allow-entropy`; neither implies the
+other. Bundled Tools never receive an Entropy grant. Java Polyglot embedders
+must explicitly select `protos.AllowEntropy=true` on their own Context; default
+and `allowAllAccess` alone grant none.
+
+The public protocol has only two methods:
+
+```protos
+first: entropy.bytes(16)    // Future<Bytes>
+second: entropy.bytes(32)   // Future<Bytes>
+// Within a suspendible RootActor task/turn:
+sixteen: first.value()
+thirtyTwo: second.value()
+entropy.close().value()      // Future<entropy>
+```
+
+`bytes(count)` admits only an Integer from `0` through `65536`. Every success
+returns one fresh independent, mutable standard `Bytes` with the exact number
+of octets; zero returns a new empty Bytes without using the random source.
+Wrong arguments fail through the Future with `InvalidIOArgument`. A secure
+provider failure becomes `IOError` without partial data. Close is an
+idempotent, irreversible Future-returning lifecycle; an operation after close
+cutover fails with `IOLifecycleError`. `Future.value()` uses the existing
+suspension contract and must **not** be used to wait on a pending operation
+inside an unsuspendible RootActor bootstrap. Generation executes outside the
+Actor turn; operation commitment and cancellation obey `IO_CORE.md`.
+
+The Entropy **grant** itself is non-transferable: attempts through `send`,
+`request`/reply, Actor spawn or nested object graphs fail with
+`NonTransferableValue`; isolated P capture fails with `NonParallelValue`.
+Completed `Bytes` are ordinary transferable data, copied across Actor/P
+boundaries without shared mutable byte buffers. A child Actor or HTTP Worker
+can request Bytes through an `ActorRef`/`GroupRef` to an authorized RootActor
+broker. In `std:http/Host.owningWithFactory`, Worker `initialization` uses
+ordinary Actor transfer and can contain the broker reference, **never** the
+Entropy grant. No privileged Worker delegation is implied.
+
+Process termination or host close revokes only that Process's grant. Another
+Process/Context keeps its independent grant. JVM and Native rely on trusted,
+securely initialized host CSPRNG facilities; do not use deterministic PRNGs,
+fixed seeds or Native build-time captured generator state for secrets. Secure
+bytes do not imply mathematical uniqueness, guaranteed zeroization, or safe
+storage/logging of secret material.
+
+The normative contract is [`spec/io/ENTROPY.md`](../../spec/io/ENTROPY.md);
+see the [CLI guide](tools/cli.md#explicit-secure-entropy---allow-entropy-d243-c--i157)
+and [Java embedding](embedding/java.md#explicit-entropy-authorization).
 
 ## Name resolution is a separate capability
 

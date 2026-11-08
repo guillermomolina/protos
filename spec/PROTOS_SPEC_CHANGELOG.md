@@ -23,6 +23,28 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.497] - 2026-11-08
+
+### D243-C / I157 — Explicit secure Entropy capability
+- `io/ENTROPY.md` (new): separately host-granted, bootstrap-local `entropy`;
+  authority-free frozen protocol; `bytes(count) -> Future<Bytes>` for Integer
+  `0..65536`; fresh independent open mutable Bytes and `InvalidIOArgument`,
+  `IOError`, `IOLifecycleError`, asynchronous commitment/cancellation,
+  idempotent `close() -> Future<entropy>`, Process/host revocation,
+  Actor/P nontransferability and CSPRNG JVM/Native security assumptions.
+- `io/PROCESS_IO.md`: optional, independent RootActor `entropy` grant for
+  initial SOURCE/MODULE direct and service modes; absent without authority;
+  per-Context embedding `protos.AllowEntropy` defaults false and is
+  independent of Network, Resolver, Filesystem, Process and import rights.
+- `io/IO_CORE.md`: cross-reference for Entropy's Future-returning and
+  Closable semantics; no duplicate commitment/cancellation/lifecycle model.
+- `concurrency/ACTORS.md`: grant rejected by ordinary Actor
+  send/request/reply/spawn graph transfer; broker references and completed
+  Bytes remain transferable by their respective existing contracts;
+  `Host.owningWithFactory` Worker initialization is ordinary Actor transfer.
+- `concurrency/PARALLEL_EXECUTION.md`: grant is `NonParallelValue` across P;
+  completed Bytes remain ordinary copied data and confer no authority.
+
 ## [0.1.496] - 2026-11-06
 
 ### D242 / I151 — MODULE/SOURCE separation and public module objects

@@ -77,6 +77,20 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
             stability = OptionStability.STABLE)
     static final OptionKey<Boolean> INSPECT = new OptionKey<>(false);
 
+    /**
+     * D243-C: independent explicit embedding authorization.
+     * Other Polyglot host permissions never imply Entropy authority.
+     */
+    @Option(
+            name = "AllowEntropy",
+            help =
+                    "Explicitly grant secure host entropy to the initial RootActor"
+                            + " of this Context. Independent of allowIO, allowHostAccess,"
+                            + " sockets, filesystem, native access and inspection.",
+            category = OptionCategory.USER,
+            stability = OptionStability.STABLE)
+    static final OptionKey<Boolean> ALLOW_ENTROPY = new OptionKey<>(false);
+
     private final ProtosSourceCompiler sourceCompiler = new ProtosSourceCompiler();
 
     @Override

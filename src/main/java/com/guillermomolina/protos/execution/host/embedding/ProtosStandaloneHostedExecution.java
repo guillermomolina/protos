@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
@@ -128,6 +129,25 @@ public final class ProtosStandaloneHostedExecution {
         }
     }
 
+    /** D243-C one-shot entry with an independent Entropy selection. */
+    public static ProtosExecutionOutcome executeFile(
+            Path coreRoot,
+            Path sourceFile,
+            List<String> applicationArguments,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            NetworkGrant networkGrant,
+            EntropyGrant entropyGrant)
+            throws IOException {
+        try (ProtosStandaloneHostedSession session =
+                ProtosStandaloneHostedSession.open(
+                        coreRoot, sourceFile, applicationArguments, in, out, err,
+                        networkGrant, entropyGrant)) {
+            return session.initialOutcome();
+        }
+    }
+
     /** Convenience form: no application arguments, empty stdin, discarded stdout and stderr. */
     public static ProtosExecutionOutcome executeFile(Path coreRoot, Path sourceFile)
             throws IOException {
@@ -211,6 +231,15 @@ public final class ProtosStandaloneHostedExecution {
     }
 
     /**
+     * D243-C explicit, independent host entropy selection.
+     * The default for all existing entry points is NONE.
+     */
+    public enum EntropyGrant {
+        NONE,
+        HOST_ENTROPY
+    }
+
+    /**
      * As {@link #bootstrapProcess(Path, ProtosModuleResolver, List,
      * ProtosProcessStandardStreamBinding.ReadableBackend,
      * ProtosProcessStandardStreamBinding.WritableBackend,
@@ -242,6 +271,38 @@ public final class ProtosStandaloneHostedExecution {
                 stderrBackend,
                 networkGrant,
                 resolverGrant,
+                runtimeHost);
+    }
+
+    /**
+     * D243-C complete independent grant selection for standalone Processes.
+     */
+    public static ProtosStandaloneProcessBootstrap.Result bootstrapProcess(
+            Path coreRoot,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        Objects.requireNonNull(networkGrant, "networkGrant");
+        Objects.requireNonNull(resolverGrant, "resolverGrant");
+        Objects.requireNonNull(entropyGrant, "entropyGrant");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
+        return bootstrapProcessWithGrant(
+                coreRoot,
+                moduleResolver,
+                applicationArguments,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
                 runtimeHost);
     }
 
@@ -279,6 +340,31 @@ public final class ProtosStandaloneHostedExecution {
             ResolverGrant resolverGrant,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
+        return bootstrapProcessWithGrant(
+                coreRoot,
+                moduleResolver,
+                applicationArguments,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                networkGrant,
+                resolverGrant,
+                EntropyGrant.NONE,
+                runtimeHost);
+    }
+
+    private static ProtosStandaloneProcessBootstrap.Result bootstrapProcessWithGrant(
+            Path coreRoot,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(coreRoot, moduleResolver);
         ProtosEncodingValue utf8 = utf8(prelude);
         ProtosNetworkCapabilityValue network =
@@ -290,6 +376,11 @@ public final class ProtosStandaloneHostedExecution {
                 switch (resolverGrant) {
                     case NONE -> null;
                     case HOST_RESOLVER -> runtimeHost.provisionHostResolver(prelude);
+                };
+        ProtosEntropyCapabilityValue entropy =
+                switch (entropyGrant) {
+                    case NONE -> null;
+                    case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
                 };
         return ProtosStandaloneProcessBootstrap.create(
                 prelude,
@@ -304,7 +395,8 @@ public final class ProtosStandaloneHostedExecution {
                 utf8,
                 null,
                 network,
-                resolver);
+                resolver,
+                entropy);
     }
 
     /**

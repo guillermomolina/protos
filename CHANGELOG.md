@@ -7,6 +7,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.454-SNAPSHOT
+
+- `I157` (#1090, D243-C): implement independently granted secure Entropy for Protos.
+  - Add the frozen, authority-free, source-backed Core `Entropy` protocol and its private bridge. `bytes(count)` returns a Future of fresh mutable `Bytes` for Integer counts from 0 through 65536; `close()` is idempotent and Future-returning.
+  - Implement a lazily initialized secure host backend that generates outside Actor turns, with asynchronous commitment and cancellation, portable failures, and Process/host revocation.
+  - Add independent `--allow-entropy` grants for direct SOURCE, `-e`, REPL, `debug`, workspace/package `run` and RootActor service entry. Java embedding uses the opt-in `protos.AllowEntropy` option, default false; other host grants confer no Entropy authority.
+  - Keep live Entropy capabilities non-transferable through Actor and isolated-P boundaries while transferring completed `Bytes` as copied data; add a RootActor broker example.
+  - Document the normative contract in `spec/io/ENTROPY.md`, update user guides, and add regression tests and JVM/Native executable smoke tooling.
+  - Validate with the I157 focal tests, complete `make test`, `make check` and the directory-file limit guard.
+
 ## 0.3.453-SNAPSHOT
 
 - `DIST022` (#1085, PLAT073-C): raise the Protos Java source and bytecode baseline from Java 21 to Java 25 (classfile major 69).

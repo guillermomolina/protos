@@ -74,6 +74,7 @@ public final class ProtosProcessRuntime {
     private final ProtosNetworkCapabilityValue rootNetwork;
     private final ProtosMapValue rootResources;
     private final ProtosResolverCapabilityValue rootResolver;
+    private final ProtosEntropyCapabilityValue rootEntropy;
     private final Set<ProtosActor> liveActors = new LinkedHashSet<>();
     private final Set<ProtosActorGroupRuntime> ownedGroups = new LinkedHashSet<>();
     private LifecycleState lifecycle = LifecycleState.RUNNING;
@@ -162,18 +163,55 @@ public final class ProtosProcessRuntime {
             ProtosNetworkCapabilityValue rootNetwork,
             ProtosMapValue rootResources,
             ProtosResolverCapabilityValue rootResolver) {
+        this(
+                actorRefPrototype,
+                rootFilesystem,
+                rootNetwork,
+                rootResources,
+                rootResolver,
+                null);
+    }
+
+    /**
+     * D243-C: independent RootActor Entropy authority.
+     *
+     * <p>Null is denial, not a default generator. Each grant binds to
+     * precisely one Process incarnation and is never reusable.
+     */
+    public ProtosProcessRuntime(
+            ProtosObjectValue actorRefPrototype,
+            ProtosFilesystemValue rootFilesystem,
+            ProtosNetworkCapabilityValue rootNetwork,
+            ProtosMapValue rootResources,
+            ProtosResolverCapabilityValue rootResolver,
+            ProtosEntropyCapabilityValue rootEntropy) {
         Objects.requireNonNull(actorRefPrototype, "actorRefPrototype");
+
         if (rootResolver != null) {
             rootResolver.bindOwnerForRuntime(this);
         }
+
+        try {
+            if (rootEntropy != null) {
+                rootEntropy.bindOwnerForRuntime(this);
+            }
+        } catch (RuntimeException | Error failure) {
+            if (rootResolver != null) {
+                rootResolver.retireForRuntime();
+            }
+            throw failure;
+        }
+
         this.rootResolver = rootResolver;
+        this.rootEntropy = rootEntropy;
         this.rootFilesystem = rootFilesystem;
         this.rootNetwork = rootNetwork;
         this.rootResources = rootResources;
+
         try {
             rootActor = new ProtosActor(actorRefPrototype, this, true);
         } catch (RuntimeException | Error failure) {
-            // The bound grant must not outlive an incarnation that never came to exist.
+            retireEntropyForRuntime();
             retireResolverForRuntime();
             throw failure;
         }
@@ -276,6 +314,24 @@ public final class ProtosProcessRuntime {
     public void retireResolverForRuntime() {
         if (rootResolver != null) {
             rootResolver.retireForRuntime();
+        }
+    }
+
+    /**
+     * Optional D243-C Entropy grant for this Process's RootActor only.
+     * The public Process capability never exposes this authority.
+     */
+    public Optional<ProtosEntropyCapabilityValue> rootEntropyForRuntime() {
+        return Optional.ofNullable(rootEntropy);
+    }
+
+    /**
+     * Host-only, idempotent retirement of this Process's Entropy backend.
+     * No other Process or independent grant is affected.
+     */
+    public void retireEntropyForRuntime() {
+        if (rootEntropy != null) {
+            rootEntropy.retireForRuntime();
         }
     }
 
@@ -727,6 +783,7 @@ public final class ProtosProcessRuntime {
         // DNS work can start afterwards, and a running host lookup is never waited for. Pending
         // lookup Futures keep the ordinary Actor termination contract below.
         retireResolverForRuntime();
+        retireEntropyForRuntime();
 
         // Stop Group routing at the Process cutover before member-Actor termination can trigger
         // routing eligibility callbacks. Group termination itself never stops a member Actor.

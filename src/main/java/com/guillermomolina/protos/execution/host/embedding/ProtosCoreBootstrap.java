@@ -227,6 +227,20 @@ public final class ProtosCoreBootstrap {
             bootstrapContext.removeLocalSlot(ProtosResolverHostFacility.BOOTSTRAP_SLOT);
             throw failure;
         }
+        // D243-C: private lexical bridge for the authority-free
+        // source-backed Entropy protocol. No CSPRNG is initialized.
+        bootstrapContext.createLocalSlot(
+                ProtosEntropyHostFacility.BOOTSTRAP_SLOT,
+                ProtosEntropyHostFacility.createBridge());
+        try {
+            sourceLoader
+                    .load(coreDirectory.resolve("entropy/Entropy.protos"))
+                    .call(bootstrapActivation);
+        } catch (RuntimeException | Error failure) {
+            bootstrapContext.removeLocalSlot(
+                    ProtosEntropyHostFacility.BOOTSTRAP_SLOT);
+            throw failure;
+        }
         sourceLoader
                 .load(coreDirectory.resolve("Future.protos"))
                 .call(bootstrapActivation);
@@ -410,6 +424,16 @@ public final class ProtosCoreBootstrap {
         bootstrapContext.removeLocalSlot("ResolutionError");
         resolverPrototype.freeze();
         resolutionErrorPrototype.freeze();
+
+        // D243-C: retain Entropy privately, outside the public Prelude
+        // and outside every standard module's exported members.
+        ProtosObjectValue entropyPrototype =
+                requirePrototype(
+                        bootstrapContext,
+                        "Entropy",
+                        ProtosObjectValue.rootObject());
+        bootstrapContext.removeLocalSlot("Entropy");
+        entropyPrototype.freeze();
         ProtosObjectValue networkPrototype =
                 requirePrototype(
                         bootstrapContext, "Network", ProtosObjectValue.rootObject());
@@ -544,7 +568,8 @@ public final class ProtosCoreBootstrap {
                 bufferedWriterFactory,
                 vectorPrototype,
                 matrixPrototype,
-                tcpAcceptorPrototype);
+                tcpAcceptorPrototype,
+                entropyPrototype);
         validateFrozenStandardGraph(
                 bootstrapContext,
                 preludeBindings,
@@ -560,7 +585,8 @@ public final class ProtosCoreBootstrap {
                 bufferedWriterFactory,
                 vectorPrototype,
                 matrixPrototype,
-                tcpAcceptorPrototype);
+                tcpAcceptorPrototype,
+                entropyPrototype);
 
         return new ProtosPrelude(
                 preludeBindings,
@@ -585,7 +611,8 @@ public final class ProtosCoreBootstrap {
                 semanticTransferFamilies,
                 lazyStandardModuleMembers(),
                 tcpAcceptorPrototype,
-                filesystemOpenMethod);
+                filesystemOpenMethod,
+                entropyPrototype);
     }
 
     /*

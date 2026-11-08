@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -63,6 +64,10 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     /** Host custody of every provisioned, not yet retired Resolver capability. */
     private final List<ProtosResolverCapabilityValue> resolverCapabilities = new ArrayList<>();
     private boolean resolversRetired;
+    /** D243-C: independent custody of live Entropy grants. */
+    private final List<ProtosEntropyCapabilityValue> entropyCapabilities =
+            new ArrayList<>();
+    private boolean entropyRetired;
     private boolean closed;
 
     private ProtosPolyglotRuntimeHost(
@@ -386,6 +391,37 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         return capability;
     }
 
+    /**
+     * D243-C: provisions one independent host CSPRNG capability.
+     *
+     * <p>No permission is derived from Network, Resolver or inspection.
+     * The backend creates neither a worker nor a SecureRandom until the
+     * first admitted positive generation request.
+     */
+    public synchronized ProtosEntropyCapabilityValue provisionHostEntropy(
+            ProtosPrelude prelude) {
+        Objects.requireNonNull(prelude, "prelude");
+        if (closed || entropyRetired) {
+            throw new IllegalStateException("Polyglot runtime host is closed");
+        }
+        prelude.entropyPrototypeForRuntime();
+        entropyCapabilities.removeIf(
+                ProtosEntropyCapabilityValue::retiredForRuntime);
+
+        ProtosEntropyCapabilityValue capability =
+                new ProtosEntropyCapabilityValue(
+                        prelude, new ProtosHostEntropyBackend());
+        entropyCapabilities.add(capability);
+        return capability;
+    }
+
+    /** Number of grants still retained by this host. */
+    int provisionedEntropyCountForTesting() {
+        synchronized (this) {
+            return entropyCapabilities.size();
+        }
+    }
+
     /** Capabilities provisioned by this host and still in its custody. */
     int provisionedResolverCountForTesting() {
         synchronized (this) {
@@ -444,6 +480,14 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
             capability.retireForRuntime();
         }
         resolverCapabilities.clear();
+        // Withdraw only this host's remaining Entropy authority.
+        // Running provider work is never joined and cannot publish guest
+        // results after retirement.
+        entropyRetired = true;
+        for (ProtosEntropyCapabilityValue capability : entropyCapabilities) {
+            capability.retireForRuntime();
+        }
+        entropyCapabilities.clear();
         if (failure != null) {
             throw new IllegalStateException("A Process Context failed to close", failure);
         }

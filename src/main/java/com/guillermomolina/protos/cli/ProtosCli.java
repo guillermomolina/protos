@@ -19,6 +19,7 @@ package com.guillermomolina.protos.cli;
 import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
 import com.guillermomolina.protos.analysis.ProtosStaticMemberCompletionSite;
 import com.guillermomolina.protos.execution.*;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
 import com.guillermomolina.protos.lsp.ProtosLanguageServerMain;
 import com.guillermomolina.protos.lexer.ProtosLexer;
@@ -89,6 +90,9 @@ public final class ProtosCli {
     /** Explicit D247 host Network grant for this application invocation only. */
     private boolean networkAuthorized = false;
 
+    /** Explicit D243-C host Entropy grant for this application invocation only. */
+    private boolean entropyAuthorized = false;
+
     public ProtosCli() {
         this(ProtosLocalExactPackageMaterializationProvider::forDistributionRoot);
     }
@@ -123,6 +127,7 @@ public final class ProtosCli {
         if (args.length > 0 && args[0].equals("lint")) {
             if (Arrays.stream(args).anyMatch(
                     value -> value.equals("--allow-network")
+                            || value.equals("--allow-entropy")
                             || value.equals("--service")
                             || value.startsWith("--service="))) {
                 return usage(err, "application permissions and service mode are not available to bundled Tools");
@@ -166,17 +171,20 @@ public final class ProtosCli {
         foreignProviderPaths = List.of();
         inspectionAuthorized = false;
         networkAuthorized = false;
+        entropyAuthorized = false;
         try {
             List<Path> providerPaths = new ArrayList<>();
             boolean providerPathsRequested = false;
             boolean inspect = false;
             boolean allowNetwork = false;
+            boolean allowEntropy = false;
             String requestedService = null;
             int first = 0;
             while (first < args.length
                     && (args[first].equals("--foreign-provider-path")
                             || args[first].equals("--inspect")
                             || args[first].equals("--allow-network")
+                            || args[first].equals("--allow-entropy")
                             || args[first].equals("--service")
                             || args[first].startsWith("--service="))) {
                 if (args[first].equals("--service")
@@ -200,6 +208,14 @@ public final class ProtosCli {
                         return usage(err, "--allow-network may be given only once");
                     }
                     allowNetwork = true;
+                    first++;
+                    continue;
+                }
+                if (args[first].equals("--allow-entropy")) {
+                    if (allowEntropy) {
+                        return usage(err, "--allow-entropy may be given only once");
+                    }
+                    allowEntropy = true;
                     first++;
                     continue;
                 }
@@ -248,15 +264,18 @@ public final class ProtosCli {
             foreignProviderPaths = List.copyOf(providerPaths);
             inspectionAuthorized = inspect;
             networkAuthorized = allowNetwork;
+            entropyAuthorized = allowEntropy;
 
             if (args.length > 0
                     && SUBCOMMANDS.contains(args[0])
                     && !args[0].equals("debug")
                     && !args[0].equals("run")
                     && (allowNetwork
+                            || allowEntropy
                             || requestedService != null
                             || Arrays.stream(args).anyMatch(
                                     value -> value.equals("--allow-network")
+                                            || value.equals("--allow-entropy")
                                             || value.equals("--service")
                                             || value.startsWith("--service=")))) {
                 return usage(
@@ -264,7 +283,7 @@ public final class ProtosCli {
                         "application permissions and service mode are not available to bundled Tools");
             }
 
-            if ((allowNetwork || requestedService != null)
+            if ((allowNetwork || allowEntropy || requestedService != null)
                     && args.length > 0
                     && (args[0].equals("--help")
                             || args[0].equals("-h")
@@ -302,6 +321,7 @@ public final class ProtosCli {
                 int entry = 1;
                 while (entry < args.length
                         && (args[entry].equals("--allow-network")
+                                || args[entry].equals("--allow-entropy")
                                 || args[entry].equals("--service")
                                 || args[entry].startsWith("--service="))) {
                     if (args[entry].equals("--allow-network")) {
@@ -309,6 +329,11 @@ public final class ProtosCli {
                             return usage(err, "--allow-network may be given only once");
                         }
                         allowNetwork = true;
+                    } else if (args[entry].equals("--allow-entropy")) {
+                        if (allowEntropy) {
+                            return usage(err, "--allow-entropy may be given only once");
+                        }
+                        allowEntropy = true;
                     } else {
                         if (requestedService != null) {
                             return usage(err, "--service may be given only once");
@@ -337,6 +362,7 @@ public final class ProtosCli {
                 }
 
                 networkAuthorized = allowNetwork;
+                entropyAuthorized = allowEntropy;
                 if (args[0].equals("debug")) {
                     if (requestedService != null) {
                         return usage(err, "--service is not supported by debug");
@@ -451,6 +477,7 @@ public final class ProtosCli {
                         err,
                         applicationNetworkGrant(),
                         ResolverGrant.NONE,
+                        applicationEntropyGrant(),
                         Map.of(),
                         this::openApplicationRuntimeHost,
                         (activation, process) ->
@@ -616,7 +643,8 @@ public final class ProtosCli {
                         in,
                         out,
                         err,
-                        applicationNetworkGrant());
+                        applicationNetworkGrant(),
+                        applicationEntropyGrant());
         ProtosCliPrintFacility.install(
                 session.activation(), session.process(), renderer);
         return session;
@@ -669,6 +697,7 @@ public final class ProtosCli {
                                 request,
                                 provider,
                                 applicationNetworkGrant(),
+                                applicationEntropyGrant(),
                                 serviceBinding);
                 if (!normal) {
                     err.println(
@@ -681,7 +710,8 @@ public final class ProtosCli {
 
             ProtosExecutionOutcome outcome =
                     ProtosPackageRunDriver.execute(
-                            request, provider, applicationNetworkGrant());
+                            request, provider, applicationNetworkGrant(),
+                            applicationEntropyGrant());
 
             return workspaceOutcomeExitCode(outcome, err);
         } catch (IOException failure) {
@@ -1447,7 +1477,8 @@ public final class ProtosCli {
                                 in,
                                 out,
                                 err,
-                                applicationNetworkGrant())) {
+                                applicationNetworkGrant(),
+                                applicationEntropyGrant())) {
             ProtosCliPrintFacility.install(
                     session.activation(), session.process(), renderer);
             return evalCanonicalDirectFile(resolver, session, err);
@@ -1618,6 +1649,16 @@ public final class ProtosCli {
                 : ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE;
     }
 
+    /**
+     * D243-C independent Entropy selection for this application invocation.
+     * Bundled Tools never select HOST_ENTROPY.
+     */
+    private EntropyGrant applicationEntropyGrant() {
+        return entropyAuthorized
+                ? EntropyGrant.HOST_ENTROPY
+                : EntropyGrant.NONE;
+    }
+
     /*
      * Kept for existing REPL reflection/conformance tests. Production entry paths use the
      * argument/stream-aware overload below.
@@ -1645,7 +1686,8 @@ public final class ProtosCli {
                         in,
                         out,
                         err,
-                        applicationNetworkGrant());
+                        applicationNetworkGrant(),
+                        applicationEntropyGrant());
         ProtosCliPrintFacility.install(session.activation(), session.process(), renderer);
         return session;
     }
@@ -1683,6 +1725,21 @@ public final class ProtosCli {
             PrintStream err,
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant)
             throws IOException {
+        return createSession(
+                core, moduleResolver, applicationArguments, in, out, err,
+                networkGrant, EntropyGrant.NONE);
+    }
+
+    private Session createSession(
+            Path core,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant)
+            throws IOException {
         ProtosPolyglotRuntimeHost runtimeHost = openApplicationRuntimeHost();
         ProtosStandaloneProcessBootstrap.Result bootstrap;
         boolean bootstrapped = false;
@@ -1696,6 +1753,8 @@ public final class ProtosCli {
                             ProtosStandaloneHostedExecution.writableBackend(out),
                             ProtosStandaloneHostedExecution.writableBackend(err),
                             networkGrant,
+                            ResolverGrant.NONE,
+                            entropyGrant,
                             runtimeHost);
             bootstrapped = true;
         } finally {
@@ -1744,7 +1803,8 @@ public final class ProtosCli {
             InputStream in,
             PrintStream controlOut,
             PrintStream diagnostics,
-            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant)
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant)
             throws IOException {
         ProtosPolyglotRuntimeHost runtimeHost =
                 ProtosPolyglotRuntimeHost.openDebug(diagnostics);
@@ -1760,6 +1820,8 @@ public final class ProtosCli {
                             ProtosPolyglotStandardStreamRouting.stdoutBackend(),
                             ProtosPolyglotStandardStreamRouting.stderrBackend(),
                             networkGrant,
+                            ResolverGrant.NONE,
+                            entropyGrant,
                             runtimeHost);
             publishDebugReadiness(controlOut, runtimeHost.debugEndpoint());
             handedToBinding = true;
@@ -1941,11 +2003,11 @@ public final class ProtosCli {
     private static void help(PrintStream out) {
         out.println(
                 "Usage:\n"
-                        + "  protos [--inspect] [--allow-network] [--service=<binding>] <file> [args...]\n"
-                        + "  protos [--inspect] [--allow-network] -e <source> [args...]\n"
-                        + "  protos debug [--allow-network] <file> [args...]\n"
+                        + "  protos [--inspect] [--allow-network] [--allow-entropy] [--service=<binding>] <file> [args...]\n"
+                        + "  protos [--inspect] [--allow-network] [--allow-entropy] -e <source> [args...]\n"
+                        + "  protos debug [--allow-network] [--allow-entropy] <file> [args...]\n"
                         + "  protos language-server\n"
-                        + "  protos run [--allow-network] [--service=<binding>] <entry> [args...]\n"
+                        + "  protos run [--allow-network] [--allow-entropy] [--service=<binding>] <entry> [args...]\n"
                         + "  protos package [args...]\n"
                         + "  protos test [--jobs N] [args...]\n"
                         + "  protos format [<file>]\n"
@@ -1956,6 +2018,7 @@ public final class ProtosCli {
                         + "  --foreign-provider-path <paths> (before <file>, -e, or REPL)\n"
                         + "  --inspect (before <file>, -e, or REPL)\n"
                         + "  --allow-network (application RootActor only; no DNS or filesystem)\n"
+                        + "  --allow-entropy (application RootActor only; no other authority)\n"
                         + "  --service=<binding> (direct SOURCE message-service entry)\n"
                         + "  -h, --help\n"
                         + "  -v, --version\n\n"

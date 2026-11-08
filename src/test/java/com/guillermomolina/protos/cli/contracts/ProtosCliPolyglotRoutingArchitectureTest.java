@@ -88,13 +88,15 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         // D247: applications explicitly select HOST_NETWORK, while the separate
         // bundled-Tool session route continues to select NONE.
         assertTrue(source.contains("NetworkGrant.HOST_NETWORK"));
+        // D243-C: explicit Entropy selection remains independent.
+        assertTrue(source.contains("EntropyGrant.HOST_ENTROPY"));
         assertTrue(
                 source.matches(
                         "(?s).*private Session createSession\\(.*?NetworkGrant networkGrant\\).*"));
         assertTrue(
                 source.matches(
                         "(?s).*private Session createDebugSession\\("
-                                + ".*?NetworkGrant networkGrant\\).*"));
+                                + ".*?NetworkGrant networkGrant,\\s*EntropyGrant entropyGrant\\).*"));
         assertEquals(
                 1,
                 source.split("NetworkGrant\\.NONE\\)", -1).length - 1,

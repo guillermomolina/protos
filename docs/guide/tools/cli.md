@@ -12,11 +12,11 @@ The dispatch code is
 
 | Command | What it does | Guide |
 |---|---|---|
-| `protos [--inspect] [--allow-network] [--service=<binding>] <file> [args...]` | Runs one source file | below |
-| `protos [--inspect] [--allow-network] -e <source> [args...]` | Runs one source String | below |
-| `protos [--inspect] [--allow-network]` | Starts the interactive REPL | below |
-| `protos run [--allow-network] [--service=<binding>] <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
-| `protos debug [--allow-network] <file> [args...]` | Runs one file under the Debug Adapter Protocol | below |
+| `protos [--inspect] [--allow-network] [--allow-entropy] [--service=<binding>] <file> [args...]` | Runs one source file | below |
+| `protos [--inspect] [--allow-network] [--allow-entropy] -e <source> [args...]` | Runs one source String | below |
+| `protos [--inspect] [--allow-network] [--allow-entropy]` | Starts the interactive REPL | below |
+| `protos run [--allow-network] [--allow-entropy] [--service=<binding>] <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
+| `protos debug [--allow-network] [--allow-entropy] <file> [args...]` | Runs one file under the Debug Adapter Protocol | below |
 | `protos format [<file>]` | Prints the canonical formatting of one document | below |
 | `protos lint [--output text\|json] [--fail-on-warning] [<file>]` | Reports parser errors and lint warnings without running code | below |
 | `protos language-server` | Starts the Language Server Protocol service on stdin/stdout | [Language server](language-server.md) |
@@ -50,9 +50,50 @@ The interactive REPL supports line editing, history and TAB completion.
 `:help` lists the REPL commands; `:quit`, `:exit` or Ctrl-D exits.
 Ctrl-C cancels the current input.
 
+### Explicit secure Entropy (`--allow-entropy`, D243-C / I157)
+
+`--allow-entropy` is an independent opt-in for the **initial RootActor
+module's** local `entropy` grant, not an ambient random source. Its default is
+**absent**, not `null`. It supplies only `entropy.bytes(count) -> Future<Bytes>`
+and `entropy.close() -> Future<entropy>`, not Network, Filesystem, Resolver,
+subprocess authority, inspection or foreign interop. No import or other flag
+can mint an Entropy grant. Application SOURCE and MODULE entries, REPL, `-e`,
+`debug` and the explicit RootActor service mode may use it:
+
+```sh
+protos --allow-entropy entry.protos
+protos --allow-entropy -e 'print(entropy.bytes(16).value().size())'
+protos --allow-entropy
+protos debug --allow-entropy entry.protos
+protos run --allow-entropy Main
+protos --allow-entropy --service=service server.protos
+protos run --allow-entropy --service=service Server
+protos --allow-network --allow-entropy entry.protos
+```
+
+The flag belongs **before** the direct file or `-e` source, or after `run` or
+`debug` but before its entry. After the entry, identical text is an ordinary
+`process.args()` value. Duplicate flags, unsupported placement, or using it
+with `--help`/`--version` as application execution are usage errors (exit 2).
+It is rejected for bundled `package`, `test`, `format`, `lint`, the Language
+Server and other Tools. `--service` is a mode selection, **not** an Entropy
+permission, and still cannot be used with `-e`, REPL or `debug`.
+
+Every successful `bytes(count)` produces fresh, independent mutable Bytes with
+exactly `count` cryptographically secure octets for Integer `0..65536`.
+Wrong counts fail through `InvalidIOArgument` Futures, provider failures
+through `IOError`, and post-close calls through `IOLifecycleError`. A pending
+Future may suspend only in a context allowed by the usual Future rules.
+The live grant cannot cross Actor or P boundaries, but completed Bytes are
+ordinary copied data. A RootActor broker may serve Workers via ActorRef;
+`Host.owningWithFactory` Worker initialization cannot carry the grant.
+See [the process/authority guide](../11-process-io-filesystems-and-authority.md#secure-entropy-is-an-explicit-rootactor-capability-d243-c) and
+[`spec/io/ENTROPY.md`](../../../spec/io/ENTROPY.md).
+
 ### Network authority and RootActor service mode (D247-C / I154)
 
-`--allow-network` and `--service=<binding>` are independent options.
+`--allow-network` and `--service=<binding>` are independent options;
+`--allow-entropy` is a third independent permission option.
 `--allow-network` provisions host TCP access only through the initial
 RootActor module's bootstrap-local `network` binding. The default is absent.
 It does **not** grant a DNS `resolver`, `filesystem`, foreign/native access,
@@ -79,7 +120,7 @@ protos run --allow-network --service=service Server
 
 Options must precede the direct file or `-e` source, or follow `run`/`debug`
 before their entry. `--service` applies only to direct SOURCE files and `run`,
-not `-e`, REPL or `debug`. Neither option applies to bundled Tools or the
+not `-e`, REPL or `debug`. None of these options applies to bundled Tools or the
 Language Server. Duplicated, invalid and unsupported selections exit with
 usage status `2`. Arguments after the entry remain literal `process.args()`
 values, including arguments that resemble CLI options.
@@ -200,13 +241,14 @@ existing `protos.lock` (no public lock-generation command exists). Run it from
 the actual package root rather than the repository root; see the
 [package-exports tutorial](../../../protos/tutorials/08-language-interactions/06-package-exports/package.toml)
 and [Package Tool](package-tool.md).
-Neither `run` nor `<entry>` appears in `process.args()`. The default has no
-Network authority; only explicit `--allow-network` grants initial RootActor TCP
-authority. `--service=<binding>` selects the long-lived RootActor service entry.
+Neither `run` nor `<entry>` appears in `process.args()`. The default has no Network or Entropy authority. Explicit
+`--allow-network` grants initial RootActor TCP access, while the independent
+`--allow-entropy` grants secure-byte generation. Neither affects the Package
+Tool preflight.  `--service=<binding>` selects the long-lived RootActor service entry.
 
 ### `protos debug`
 
-`protos debug [--allow-network] <file>` runs one file through the standard Debug Adapter Protocol
+`protos debug [--allow-network] [--allow-entropy] <file>` runs one file through the standard Debug Adapter Protocol
 debugger. Before guest execution it writes exactly one `PROTOS_DEBUG_READY`
 JSON record to standard output; afterwards guest output travels over DAP. It is
 intended to be launched by an editor integration rather than by hand.
@@ -318,7 +360,7 @@ protos lint --fail-on-warning src/main.protos
 | Commands on this page | All available | All available |
 | `--foreign-provider-path` | Not available: no dynamic plugin loading | Available |
 | `--inspect` | Available | Available |
-| `--allow-network`, `--service` | Available | Available |
+| `--allow-network`, `--allow-entropy`, `--service` | Available | Available |
 | Java embedding | Not available | Available through the standard Polyglot API ([guide](../embedding/java.md)) |
 
 Download and installation are described in [Try Protos](../00-try-protos.md).

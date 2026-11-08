@@ -6,7 +6,7 @@ Last updated: 2026-09-04
 
 This document is the primary normative owner of cross-cutting I/O capability, asynchronous-operation, commitment, lifecycle, wrapper-ownership, concrete-capability-shape, and pay-as-you-grow rules.
 
-The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.md`, `FILESYSTEM.md`, `PROCESS_IO.md`, and `NETWORK.md`. Legacy section numbers from `IO_CORE.md` and the applicable sibling I/O module are intentionally retained so historical citations remain understandable. Normative ownership now belongs to these modules; the former monolithic file is removed by revision 326.
+The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.md`, `FILESYSTEM.md`, `PROCESS_IO.md`, `NETWORK.md`, and `ENTROPY.md`. Legacy section numbers from `IO_CORE.md` and the applicable sibling I/O module are intentionally retained so historical citations remain understandable. Normative ownership now belongs to these modules; the former monolithic file is removed by revision 326.
 
 ## 1. Scope
 
@@ -84,6 +84,14 @@ WriteShutdown
 Binary I/O uses `Bytes`. `String` never carries an implicit binary encoding.
 
 I/O operations that may wait return `Future` values. They never introduce hidden Protos suspension. Suspension occurs only through the ordinary Future mechanisms, such as invoking `.value()` on a pending Future.
+
+`ENTROPY.md` defines the separately granted secure Entropy resource and
+its `bytes(count) -> Future<Bytes>` and `close() -> Future<entropy>` operations.
+These share the ordinary asynchronous I/O, `IOError`, `InvalidIOArgument`,
+`IOLifecycleError`, cancellation, commitment, `Closable`, termination and
+fresh-Future rules defined here. `ENTROPY.md` specifies only the
+capability-specific admission, completed Bytes and security semantics; no
+second I/O lifecycle model is introduced.
 
 ### Portable I/O Error categories
 

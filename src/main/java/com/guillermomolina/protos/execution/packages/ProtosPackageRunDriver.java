@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.io.IOException;
@@ -67,7 +68,19 @@ public final class ProtosPackageRunDriver {
             ProtosExactPackageMaterializationProvider provider,
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant)
             throws IOException {
-        return execute(request, provider, networkGrant, PRODUCTION_STAGES);
+        return execute(
+                request, provider, networkGrant, EntropyGrant.NONE);
+    }
+
+    public static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant)
+            throws IOException {
+        return execute(
+                request, provider, networkGrant, entropyGrant,
+                PRODUCTION_STAGES);
     }
 
     static ProtosExecutionOutcome execute(
@@ -88,6 +101,18 @@ public final class ProtosPackageRunDriver {
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
             Stages stages)
             throws IOException {
+        return execute(
+                request, provider, networkGrant, EntropyGrant.NONE, stages);
+    }
+
+    static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            Stages stages)
+            throws IOException {
+        Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(provider, "provider");
         Objects.requireNonNull(networkGrant, "networkGrant");
@@ -100,7 +125,8 @@ public final class ProtosPackageRunDriver {
                         request.projectRoot(),
                         request.standardLibraryResolver());
         if (requirements.isEmpty()) {
-            return ProtosWorkspaceRunDriver.execute(request, networkGrant);
+            return ProtosWorkspaceRunDriver.execute(
+                    request, networkGrant, entropyGrant);
         }
 
         ProtosPackageExecutionPlanV2 plan;
@@ -132,7 +158,8 @@ public final class ProtosPackageRunDriver {
         }
 
         try (scope) {
-            return executeApplication(request, plan, scope, networkGrant, stages);
+            return executeApplication(
+                    request, plan, scope, networkGrant, entropyGrant, stages);
         }
     }
 
@@ -147,6 +174,19 @@ public final class ProtosPackageRunDriver {
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
             String serviceBinding)
             throws IOException {
+        return executeService(
+                request, provider, networkGrant,
+                EntropyGrant.NONE, serviceBinding);
+    }
+
+    public static boolean executeService(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            String serviceBinding)
+            throws IOException {
+        Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(provider, "provider");
         Objects.requireNonNull(networkGrant, "networkGrant");
@@ -161,7 +201,7 @@ public final class ProtosPackageRunDriver {
 
         if (requirements.isEmpty()) {
             return ProtosWorkspaceRunDriver.executeService(
-                    request, networkGrant, serviceBinding);
+                    request, networkGrant, entropyGrant, serviceBinding);
         }
 
         Stages stages = PRODUCTION_STAGES;
@@ -225,6 +265,7 @@ public final class ProtosPackageRunDriver {
                                 request.stdoutEncodingBinding(),
                                 request.stderrEncodingBinding()),
                         networkGrant,
+                        entropyGrant,
                         serviceBinding,
                         stages::applicationProcessHosted,
                         runtimeHost);
@@ -237,6 +278,7 @@ public final class ProtosPackageRunDriver {
             ProtosPackageExecutionPlanV2 plan,
             ProtosExternalPackageResourceScope scope,
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
             Stages stages)
             throws IOException {
         ProtosPackageExecutionPlanV2ModuleResolver resolver =
@@ -262,6 +304,7 @@ public final class ProtosPackageRunDriver {
                             request.stdoutEncodingBinding(),
                             request.stderrEncodingBinding()),
                     networkGrant,
+                    entropyGrant,
                     true,
                     "package application Process failed",
                     stages::applicationProcessHosted,

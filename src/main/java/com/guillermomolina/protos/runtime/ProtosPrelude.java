@@ -45,6 +45,7 @@ public final class ProtosPrelude {
     private final ProtosObjectValue runtimeIpAddressPrototype;
     private final ProtosObjectValue runtimeIpEndpointPrototype;
     private final ProtosClosureValue runtimeFilesystemOpenMethod;
+    private final ProtosObjectValue runtimeEntropyPrototype;
     private final Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers;
     private final Set<ProtosObjectValue> standardModuleMemberIdentities;
     private final Map<
@@ -270,6 +271,44 @@ public final class ProtosPrelude {
                     lazyStandardModuleMembers,
             ProtosObjectValue runtimeTcpAcceptorPrototype,
             ProtosClosureValue runtimeFilesystemOpenMethod) {
+        this(
+                bindings,
+                contextPrototype,
+                runtimeBytesPrototype,
+                runtimeActorRefPrototype,
+                runtimeTcpConnectionPrototype,
+                runtimeTcpListenerPrototype,
+                runtimeIpAddressPrototype,
+                runtimeIpEndpointPrototype,
+                standardModuleMembers,
+                semanticTransferFamilies,
+                lazyStandardModuleMembers,
+                runtimeTcpAcceptorPrototype,
+                runtimeFilesystemOpenMethod,
+                null);
+    }
+
+    /**
+     * D243-C complete Prelude construction, additionally retaining the
+     * private authority-free source-backed Entropy prototype.
+     */
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype,
+            ProtosObjectValue runtimeBytesPrototype,
+            ProtosObjectValue runtimeActorRefPrototype,
+            ProtosObjectValue runtimeTcpConnectionPrototype,
+            ProtosObjectValue runtimeTcpListenerPrototype,
+            ProtosObjectValue runtimeIpAddressPrototype,
+            ProtosObjectValue runtimeIpEndpointPrototype,
+            Map<ProtosModuleKey, Map<String, ProtosObjectValue>>
+                    standardModuleMembers,
+            List<ProtosSemanticTransferFamily> semanticTransferFamilies,
+            Map<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>>
+                    lazyStandardModuleMembers,
+            ProtosObjectValue runtimeTcpAcceptorPrototype,
+            ProtosClosureValue runtimeFilesystemOpenMethod,
+            ProtosObjectValue runtimeEntropyPrototype) {
         if (runtimeFilesystemOpenMethod != null
                 && (runtimeFilesystemOpenMethod.definition() == null
                         || runtimeFilesystemOpenMethod.nativeBody().isPresent())) {
@@ -277,6 +316,7 @@ public final class ProtosPrelude {
                     "runtime Filesystem open method must be a source-backed Closure");
         }
         this.runtimeFilesystemOpenMethod = runtimeFilesystemOpenMethod;
+        this.runtimeEntropyPrototype = runtimeEntropyPrototype;
         this.semanticTransferFamilies = copySemanticTransferFamilies(semanticTransferFamilies);
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.contextPrototype =
@@ -294,6 +334,7 @@ public final class ProtosPrelude {
                 copyLazyStandardModuleMembers(
                         lazyStandardModuleMembers, this.standardModuleMembers);
 
+        requireFrozenDirectChildOfObject(runtimeEntropyPrototype, "Entropy");
         requireFrozenDirectChildOfObject(runtimeIpAddressPrototype, "IpAddress");
         requireFrozenDirectChildOfObject(runtimeIpEndpointPrototype, "IpEndpoint");
 
@@ -592,6 +633,20 @@ public final class ProtosPrelude {
                     "this prelude does not retain the standard runtime Bytes prototype");
         }
         return runtimeBytesPrototype;
+    }
+
+    /**
+     * D243-C private Entropy protocol identity.
+     *
+     * <p>Compatibility and test Preludes without this prototype remain
+     * usable but cannot provision an Entropy grant.
+     */
+    public ProtosObjectValue entropyPrototypeForRuntime() {
+        if (runtimeEntropyPrototype == null) {
+            throw new IllegalStateException(
+                    "this prelude does not retain the runtime Entropy prototype");
+        }
+        return runtimeEntropyPrototype;
     }
 
     /** Nullable-safe identity test used only by isolation transfer machinery. */

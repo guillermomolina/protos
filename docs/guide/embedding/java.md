@@ -25,6 +25,7 @@ To supply your own Protos modules from Java, continue with
 | Java scalar arguments to Protos Closures | Implemented: `Byte`, `Short`, `Integer`, `Long`, `String` only |
 | Suspending `Future.value()` inside a host-invoked Closure | Implemented (PLAT054-3E2) |
 | Default `filesystem` / `network` slots | Only when the Context grants file / socket access (PLAT054-3E3, 3E4) |
+| Explicit `entropy` (`protos.AllowEntropy`) | Only when the embedding Context selects `true`; default `false` (D243-C / I157) |
 | Foreign providers (`java:` and other schemes) in a standard Context | Not available: no Context option or API configures them; see [Foreign interoperability](../interop/README.md) |
 | Native Image embedding hosts | Not supported. The Native CLI has no Java embedding |
 
@@ -89,8 +90,9 @@ returns an empty scope.
 
 **The first valid evaluation** bootstraps Core, the Process, and its RootActor,
 and runs as the RootActor's initial module. Only that initial module receives
-the bootstrap-local slots: `process` always, and `filesystem` / `network` only
-when granted (see below). A source with a syntax error fails before bootstrap.
+the bootstrap-local slots: `process` always, `filesystem` / `network` only
+when their Context permissions allow them, and `entropy` only when explicitly
+selected by `protos.AllowEntropy` (see below). A source with a syntax error fails before bootstrap.
 
 **Later evaluations** are further direct entries into the same RootActor. Each
 one gets a fresh standalone `moduleContext`. There is no REPL namespace: a
@@ -147,13 +149,50 @@ The Context's own Polyglot permissions bound what Protos may do:
   first evaluation fails as a bootstrap failure.
 - **Network.** `network` is present only when the Context effectively grants
   socket access.
+- **Entropy.** `entropy` is present only when the Context explicitly selects
+  `option("protos.AllowEntropy", "true")`; its default is `false`. Socket,
+  file, thread, foreign and `allowAllAccess` permissions do **not** imply it.
 - **Threads.** `Actor.spawn` needs `allowCreateThread(true)` to run the new
   Actor. In a Context that forbids thread creation, `Actor.spawn` still returns
   an `ActorRef`, but the incarnation terminates and later requests fail as
   ordinary Future failures.
 
-Neither slot is injected into later host entries; pass the capability
-explicitly if other code needs it.
+None of these optional bootstrap-local slots is injected into later host
+entries. Entropy is non-transferable to another Actor or to P; use an
+ActorRef broker to request ordinary completed Bytes when another Actor needs
+random data.
+
+## Explicit Entropy authorization
+
+Use one independent option on the `Context` builder. It is **not** inferred
+from `allowIO`, sockets, threads, `allowAllAccess`, host access, inspection,
+foreign interop or an imported module. The default is `false`.
+
+```java
+try (Context context = Context.newBuilder("protos")
+        .option("protos.AllowEntropy", "true")
+        .build()) {
+    context.eval("protos", "sample: entropy.bytes(16).value()\n");
+    // The result remains secret application data; do not print its bytes.
+}
+```
+
+The grant is installed only in the first valid initial RootActor module of
+this Context. Subsequent host `eval` entries do not acquire it by default;
+other Actors do not inherit it and it cannot be copied through ordinary
+Actor message/reply/spawn or isolated P transfer. An authorized Actor may
+serve `Bytes` results to other Actors through an ActorRef broker.
+
+`entropy.bytes(count)` returns `Future<Bytes>` for an Integer in `0..65536`.
+It suspends only when an ordinary Future is observed in a suspendible execution
+context; no blocking generator runs inside the Actor turn. `entropy.close()`
+is the normal idempotent Future-returning lifecycle operation. Context
+finalization and Process termination withdraw this Context's grant without
+affecting other Contexts' grants. Native CLI execution has the same Entropy
+semantics, but Java `Context` embedding into Native Image is not supported.
+
+See [Process, I/O and authority](../11-process-io-filesystems-and-authority.md#secure-entropy-is-an-explicit-rootactor-capability-d243-c)
+and the normative [`spec/io/ENTROPY.md`](../../../spec/io/ENTROPY.md).
 
 ## Hosting a RootActor message service
 
@@ -253,6 +292,7 @@ Authority](../11-process-io-filesystems-and-authority.md#the-rootactor-service-e
 | `PolyglotException` from `execute(1.5)` or `execute(true)` | Only the scalar types listed above cross from Java |
 | Every later `eval` fails after an Error | An unhandled Error escaping a host entry terminates the RootActor and the Process; it is never restarted. Handle Errors in Protos (`Error.handle(...)`) when the Process must survive |
 | `filesystem` is not bound | The Context was not granted file access |
+| `entropy` is not bound | `protos.AllowEntropy` is absent or `false`; socket and broad host permissions do not authorize Entropy |
 | Spawned Actor never answers | The Context was built without `allowCreateThread(true)` |
 | Concurrent `eval` from two Java threads fails | Unsafe concurrent entry into the same RootActor is rejected, not serialized |
 

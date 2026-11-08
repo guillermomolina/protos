@@ -290,6 +290,18 @@ public final class ProtosActorBootstrap {
                             }
                             locals.put("resolver", resolver);
                         });
+        // D243-C: only the authorized RootActor gets this local.
+        // Ordinary Actor.spawn never inherits the grant.
+        process.rootEntropyForRuntime()
+                .ifPresent(
+                        entropy -> {
+                            if (entropy.representedDelegationParent(prelude)
+                                    != prelude.entropyPrototypeForRuntime()) {
+                                throw new IllegalStateException(
+                                        "RootActor Entropy grant belongs to another Core prelude");
+                            }
+                            locals.put("entropy", entropy);
+                        });
         process.rootResourcesForRuntime()
                 .ifPresent(
                         resources -> {

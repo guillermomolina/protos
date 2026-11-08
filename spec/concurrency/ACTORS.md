@@ -665,6 +665,7 @@ Transferability currently follows these rules:
 -   Process capability: transferable only through the explicit Actor-delegation contract owned by `../io/PROCESS_IO.md`; the destination receives Actor-local capability authority, not a copied host resource
 -   Network: not transferable
 -   Resolver: not transferable and not delegable (`../io/NETWORK.md` §14.9); resolved `IpAddress` values remain ordinary transferable data
+-   Entropy: a live grant is neither transferable nor delegable (`../io/ENTROPY.md` §4); completed `Bytes` are ordinary value-copy data
 -   TcpListener: not transferable
 -   TcpConnection: not transferable
 -   TcpAcceptor: explicitly delegable only for same-Process `Actor.spawn` initialization arguments, through the contract owned by `../io/NETWORK.md` §11; not transferable through `send()`/`request()` payloads or replies, and its delegation authorizes no transfer of any other resource
@@ -2433,3 +2434,25 @@ per-Actor grant exists; a child Actor receives name-resolution authority only
 through a future explicitly standardized delegation facility. The frozen
 `IpAddress` values a lookup publishes are ordinary data and transfer under the
 ordinary value rules above.
+
+## D243-C secure entropy transfer boundary
+
+`Entropy` is an independently granted RootActor-local capability
+(`../io/ENTROPY.md` and `../io/PROCESS_IO.md`). An Actor message, request,
+reply or `Actor.spawn` initialization whose complete ordinary value graph
+reaches a concrete Entropy grant fails atomically with `NonTransferableValue`,
+including reachability through an ordinary object's delegation ancestry.
+No Entropy-specific `spawn` exception, implicit child-Actor inheritance,
+proxy or delegation is added. The authority-free protocol cannot mint grants.
+
+Completed `Bytes` returned by `entropy.bytes(count)` are ordinary Actor-copy
+values, not Entropy grants. An authorized Actor can respond to bounded byte
+requests received over an ordinary `ActorRef` or `GroupRef`; the requesting
+Actor receives only the copied Bytes, without acquisition authority.
+
+In `std:http/Host.owningWithFactory`, the `initialization` payload crosses
+into each Worker through **ordinary Actor transfer**; it has no special
+`Actor.spawn` delegation privileges. It may contain an ActorRef to an
+Entropy-owning broker but never the grant itself. An HTTP Worker requesting
+bytes from that broker uses ordinary request/reply Future suspension and pays
+the normal Actor communication cost.

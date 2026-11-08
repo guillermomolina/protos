@@ -351,6 +351,9 @@ public final class ProtosActorValueTransfer {
                     || value instanceof ProtosNetworkCapabilityValue
                     // D223-A1: Resolver authority is never transferred or delegated.
                     || value instanceof ProtosResolverCapabilityValue
+                    // D243-C: Entropy grants never cross Actor boundaries,
+                    // including nested graphs and spawn initialization.
+                    || value instanceof ProtosEntropyCapabilityValue
                     || value instanceof ProtosTcpConnectionValue
                     || value instanceof ProtosTcpListenerValue
                     // LIB020-A sealed families are not portable; copying would drop the family.

@@ -99,7 +99,7 @@ final class ProtosWorkspaceRunCliTest {
         Result help = runPublic("--help");
         assertEquals(0, help.code());
         assertTrue(help.stdout().contains(
-                "protos run [--allow-network] [--service=<binding>] <entry> [args...]"));
+                "protos run [--allow-network] [--allow-entropy] [--service=<binding>] <entry> [args...]"));
         assertTrue(help.stdout().contains("current directory"));
         assertTrue(help.stdout().contains("neither 'run' nor <entry>"));
     }

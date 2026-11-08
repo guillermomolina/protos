@@ -64,7 +64,8 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "Process.protos",
                     "TextReader.protos",
                     "TextWriter.protos",
-                    "Bytes.protos");
+                    "Bytes.protos",
+                    "Entropy.protos");
 
     private static final Set<String> REVIEWED_RESPONSIBILITY_SOURCES =
             Set.of(
@@ -88,6 +89,10 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "Resolver.protos");
 
     private static Path sourcePath(String name) {
+        // D243-C: Entropy is a one-owner Core source in its own directory.
+        if (name.equals("Entropy.protos")) {
+            return CORE.resolve("entropy").resolve(name);
+        }
         return NETWORK_SOURCE_NAMES.contains(name)
                 ? CORE.resolve("network").resolve(name)
                 : CORE.resolve(name);
