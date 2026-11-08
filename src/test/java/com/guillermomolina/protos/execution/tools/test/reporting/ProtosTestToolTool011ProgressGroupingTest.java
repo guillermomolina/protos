@@ -155,7 +155,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
 
         assertEquals(expected, actual);
         // LIB025: the subdivided HTTP leaf presents no group without retained Cases.
-        assertEquals(35, actual.values().stream().mapToInt(List::size).sum());
+        assertEquals(36, actual.values().stream().mapToInt(List::size).sum());
     }
 
     @Test
@@ -174,9 +174,9 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                                         + "Arrays.map(Array(detached, ...reversed), (leaf) => "
                                         + "Array(leaf.id, RepositorySuite.progressGroupNames(leaf, Array())))"));
 
-        assertEquals(29, pairs.indexedSize());
+        assertEquals(30, pairs.indexedSize());
         List<String> order = new ArrayList<>();
-        for (int index = 0; index < 29; index++) {
+        for (int index = 0; index < 30; index++) {
             ProtosArrayValue pair = arrayAt(pairs, index);
             String id = stringAt(pair, 0);
             List<String> names = strings(arrayAt(pair, 1));
@@ -189,7 +189,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         }
         assertEquals("protos/actor", order.get(0));
         assertEquals("protos/package-tool/project-projection", order.get(1));
-        assertEquals("protos/conformance", order.get(28));
+        assertEquals("protos/conformance", order.get(29));
     }
 
     @Test
@@ -440,6 +440,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                         "library/math/integer",
                         "library/math/linear-algebra",
                         "library/crypto/sha256",
+                        "library/crypto/hmac_sha256",
                         "library/network/ip-addresses",
                         "library/network/ip-endpoints",
                         "library/network/resolvers",

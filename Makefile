@@ -21,8 +21,10 @@ NATIVE_TLS_TEST_PACKAGE := com.guillermomolina.protos.execution
 NATIVE_TLS_TEST_CLASSES := ProtosTlsClientIntegrationTest ProtosTlsTrustTest
 
 # DAP tests own Graal tooling state and are not safe in the class-parallel lane.
-JAVA_SERIAL_TESTS := ProtosI026FDapBehaviorTest,ProtosI026FDapTransportTest,ProtosI116OptimizedDapAcceptanceTest,ProtosAud007DapPortOwnershipTest,ProtosTestToolPerf017AdmissionTest
-JAVA_SERIAL_TEST_EXCLUDES := **/ProtosI026FDapBehaviorTest.java,**/ProtosI026FDapTransportTest.java,**/ProtosI116OptimizedDapAcceptanceTest.java,**/ProtosAud007DapPortOwnershipTest.java,**/ProtosTestToolPerf017AdmissionTest.java
+# Workspace service tests have shown cross-class parallel instability;
+# keep their complete 13-test contract in the existing serial phase.
+JAVA_SERIAL_TESTS := ProtosI026FDapBehaviorTest,ProtosI026FDapTransportTest,ProtosI116OptimizedDapAcceptanceTest,ProtosAud007DapPortOwnershipTest,ProtosTestToolPerf017AdmissionTest,ProtosWorkspaceRunCliTest
+JAVA_SERIAL_TEST_EXCLUDES := **/ProtosI026FDapBehaviorTest.java,**/ProtosI026FDapTransportTest.java,**/ProtosI116OptimizedDapAcceptanceTest.java,**/ProtosAud007DapPortOwnershipTest.java,**/ProtosTestToolPerf017AdmissionTest.java,**/ProtosWorkspaceRunCliTest.java
 JAVA_PARALLEL_EXCLUDES := $(JAVA_SERIAL_TEST_EXCLUDES)
 JAVA_STRESS_TESTS := ProtosJsonParserStress
 # TEST008: retained current-run log and slow-test guard for `make test-java`.

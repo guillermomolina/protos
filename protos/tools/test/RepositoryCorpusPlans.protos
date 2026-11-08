@@ -116,6 +116,18 @@ load: (corpusId) => {
         matched = true
     }
 
+    if(corpusId == "protos/corpus/library/crypto/hmac_sha256") {
+        selected = planFromEntries(
+            "crypto/hmac_sha256/",
+            Array(
+            Array("vectors-and-boundaries.protos", "suite-native", "-"),
+            Array("verification-and-ownership.protos", "suite-native", "-"),
+            Array("invalid-inputs-and-private-boundary.protos", "suite-native", "-")
+            )
+        )
+        matched = true
+    }
+
     if(corpusId == "protos/corpus/library/network/ip-addresses") {
         selected = planFromEntries(
             "network/ip-addresses/",

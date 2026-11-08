@@ -79,6 +79,12 @@ final class ProtosTestCorpusRegistry {
         addBinding(
                 registry,
                 activation,
+                "protos/corpus/library/crypto/hmac_sha256",
+                "repository-explicit",
+                "libraryFilesystem");
+        addBinding(
+                registry,
+                activation,
                 "protos/corpus/library/network/ip-addresses",
                 "repository-explicit",
                 "libraryFilesystem");

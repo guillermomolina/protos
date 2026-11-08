@@ -153,6 +153,8 @@ language-teaching progression under DOC001.
 - [Dates, times, and durations](library/datetime.md) — `std:datetime/*`.
 - [Structured logging](library/logging.md) — `std:logging/*`.
 - [Text styling and encodings](library/text.md) — `std:text/*`.
+- [Cryptography: SHA-256 and HMAC-SHA256](library/crypto.md) — exact Bytes,
+  keyed full-tag verification, limits, and key handling.
 - [Semantic versions](library/semver.md) — `std:semver/sem_ver`.
 - [HTTP/1.1](library/http.md) — `std:http/server`, `std:http/host`,
   `std:http/client`, `std:http/router`, and `std:http/url_client`, with their

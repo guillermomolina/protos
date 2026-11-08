@@ -114,7 +114,7 @@ final class ProtosTestToolCorpusRegistryTest {
                                     .readLocalSlot(ProtosTestCorpusRegistry.REGISTRY_SLOT)
                                     .orElseThrow());
             assertTrue(registry.isFrozen());
-            assertEquals(28, registry.localSlotsSnapshot().size());
+            assertEquals(29, registry.localSlotsSnapshot().size());
 
             assertBinding(fixture.activation(), registry, "protos/corpus/conformance",
                     "manifest", "filesystem");
@@ -164,6 +164,12 @@ final class ProtosTestToolCorpusRegistryTest {
                     fixture.activation(),
                     registry,
                     "protos/corpus/library/crypto/sha256",
+                    "repository-explicit",
+                    "libraryFilesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/library/crypto/hmac_sha256",
                     "repository-explicit",
                     "libraryFilesystem");
             assertBinding(

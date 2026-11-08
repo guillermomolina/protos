@@ -3013,6 +3013,8 @@ rules.
 This section owns semantic `String` and `Bytes` value behavior. The standard
 Encoding-object conversion contract is owned by `../io/TEXT_IO.md`; this section
 only states the value-domain separation needed by String/Bytes semantics.
+The ordinary HMAC-SHA256 Standard Library operation contract is separately
+owned by `CRYPTO.md` and does not redefine Bytes identity or mutation.
 
 
 Core v0.1 separates abstract text from its external binary representation.

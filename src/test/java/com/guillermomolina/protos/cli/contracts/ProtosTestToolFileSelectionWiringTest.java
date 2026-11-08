@@ -54,6 +54,7 @@ final class ProtosTestToolFileSelectionWiringTest {
             "protos/corpus/library/math/integer",
             "protos/corpus/library/math/linear-algebra",
             "protos/corpus/library/crypto/sha256",
+            "protos/corpus/library/crypto/hmac_sha256",
             "protos/corpus/library/network/ip-addresses",
             "protos/corpus/library/network/ip-endpoints",
             "protos/corpus/library/network/resolvers",
@@ -80,7 +81,7 @@ final class ProtosTestToolFileSelectionWiringTest {
         }
 
         assertEquals(
-                28,
+                29,
                 occurrences(
                         source,
                         "new ProtosTestToolFileSelectionFacility.CorpusSourceRoot("));

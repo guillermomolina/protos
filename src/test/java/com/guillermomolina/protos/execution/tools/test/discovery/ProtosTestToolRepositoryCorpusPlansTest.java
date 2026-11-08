@@ -26,6 +26,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         assertPlan("protos/corpus/library/math/integer", 4, "math/integer/gcd-lcm.protos", "math/integer/integrated-closure.protos");
         assertPlan("protos/corpus/library/math/linear-algebra", 3, "math/linear-algebra/construction-and-indexing.protos", "math/linear-algebra/identity-and-state.protos");
         assertPlan("protos/corpus/library/crypto/sha256", 2, "crypto/sha256/vectors-and-boundaries.protos", "crypto/sha256/ownership-and-domain.protos");
+        assertPlan("protos/corpus/library/crypto/hmac_sha256", 3, "crypto/hmac_sha256/vectors-and-boundaries.protos", "crypto/hmac_sha256/invalid-inputs-and-private-boundary.protos");
         assertPlan("protos/corpus/library/network/ip-addresses", 3, "network/ip-addresses/surface.protos", "network/ip-addresses/validation.protos");
         assertPlan("protos/corpus/library/network/ip-endpoints", 1, "network/ip-endpoints/parse-format-and-validation.protos", "network/ip-endpoints/parse-format-and-validation.protos");
         assertPlan("protos/corpus/library/network/resolvers", 4, "network/resolvers/surface.protos", "network/resolvers/lifecycle.protos");
@@ -50,6 +51,20 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         assertEquals("suite-native", expectation("protos/corpus/library/csv", 3));
         assertEquals("suite-native", expectation("protos/corpus/library/csv", 4));
         assertEquals("suite-native", expectation("protos/corpus/library/crypto/sha256", 1));
+    }
+
+    @Test
+    void hmacSha256CasesRemainExplicitOrderedAndSuiteNative() throws Exception {
+        String corpus = "protos/corpus/library/crypto/hmac_sha256";
+        String[] expected = {
+            "crypto/hmac_sha256/vectors-and-boundaries.protos",
+            "crypto/hmac_sha256/verification-and-ownership.protos",
+            "crypto/hmac_sha256/invalid-inputs-and-private-boundary.protos"
+        };
+        for (int index = 0; index < expected.length; index++) {
+            assertEquals(expected[index], path(corpus, index));
+            assertEquals("suite-native", expectation(corpus, index));
+        }
     }
 
     @Test

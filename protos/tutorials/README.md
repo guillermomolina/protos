@@ -95,6 +95,16 @@ the LM006 system/resource integration harness also executes it with confined
 test storage. Without the explicit grant there is no `filesystem` binding: the
 capability is intentionally not made ambient for tutorial convenience.
 
+The standalone CLI lesson
+[`12-system-resources/03-hmac-sha256.protos`](12-system-resources/03-hmac-sha256.protos)
+introduces keyed HMAC-SHA256 over explicit standard Bytes, a complete 32-octet
+tag and verification of unchanged and altered messages. The key is a public
+RFC 4231 test fixture, **not** an application authentication secret. Importing
+`std:crypto/hmac_sha256` requires no host grant and does not generate a key;
+real application secrets need independently authorized acquisition and custody.
+See the [cryptography guide](../../docs/guide/library/crypto.md) and the
+[authentication cookbook example](../examples/crypto/hmac-sha256.protos).
+
 The HTTP progression follows the same rule. `01-serve-one-response.protos`
 (`Server.serveOne`) and `02-client-response-body.protos` (`Client.exchangeOne`
 with incremental body reads) are standalone-CLI lessons over the in-memory

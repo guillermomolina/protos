@@ -663,49 +663,64 @@ public final class ProtosCoreBootstrap {
             ProtosModuleKey,
             Map<String, Supplier<ProtosObjectValue>>>
             lazyStandardModuleMembers() {
-        return Map.of(
-                ProtosRuntimeMetadataFacility.MODULE_KEY,
-                Map.of(
-                        ProtosRuntimeMetadataFacility.BOOTSTRAP_SLOT,
-                        ProtosRuntimeMetadataFacility::createFacility),
+        return Map.ofEntries(
+                Map.entry(
+                        ProtosRuntimeMetadataFacility.MODULE_KEY,
+                        Map.of(
+                                ProtosRuntimeMetadataFacility.BOOTSTRAP_SLOT,
+                                ProtosRuntimeMetadataFacility::createFacility)),
                 // LIB022-B: std:inspect; its import is additionally guarded by protos.Inspect.
-                ProtosInspectFacility.MODULE_KEY,
-                Map.of(
-                        ProtosInspectFacility.BOOTSTRAP_SLOT,
-                        ProtosInspectFacility::createFacility),
+                Map.entry(
+                        ProtosInspectFacility.MODULE_KEY,
+                        Map.of(
+                                ProtosInspectFacility.BOOTSTRAP_SLOT,
+                                ProtosInspectFacility::createFacility)),
                 // LIB025: the private asynchronous bridge of std:http/server.
-                ProtosHttpAsyncFacility.MODULE_KEY,
-                Map.of(
-                        ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
-                        ProtosHttpAsyncFacility::createFacility),
+                Map.entry(
+                        ProtosHttpAsyncFacility.MODULE_KEY,
+                        Map.of(
+                                ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
+                                ProtosHttpAsyncFacility::createFacility)),
                 // I126: the same private bridge for std:http/host and its Worker bootstrap.
-                ProtosHttpAsyncFacility.HOST_MODULE_KEY,
-                Map.of(
-                        ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
-                        ProtosHttpAsyncFacility::createFacility),
-                ProtosHttpAsyncFacility.HOST_WORKER_MODULE_KEY,
-                Map.of(
-                        ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
-                        ProtosHttpAsyncFacility::createFacility),
+                Map.entry(
+                        ProtosHttpAsyncFacility.HOST_MODULE_KEY,
+                        Map.of(
+                                ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
+                                ProtosHttpAsyncFacility::createFacility)),
+                Map.entry(
+                        ProtosHttpAsyncFacility.HOST_WORKER_MODULE_KEY,
+                        Map.of(
+                                ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
+                                ProtosHttpAsyncFacility::createFacility)),
                 // I127: the same private bridge for std:http/client.
-                ProtosHttpAsyncFacility.CLIENT_MODULE_KEY,
-                Map.of(
-                        ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
-                        ProtosHttpAsyncFacility::createFacility),
+                Map.entry(
+                        ProtosHttpAsyncFacility.CLIENT_MODULE_KEY,
+                        Map.of(
+                                ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
+                                ProtosHttpAsyncFacility::createFacility)),
                 // LIB026: the same private bridge for std:http/router and std:http/url_client.
-                ProtosHttpAsyncFacility.ROUTER_MODULE_KEY,
-                Map.of(
-                        ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
-                        ProtosHttpAsyncFacility::createFacility),
-                ProtosHttpAsyncFacility.URL_CLIENT_MODULE_KEY,
-                Map.of(
-                        ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
-                        ProtosHttpAsyncFacility::createFacility),
+                Map.entry(
+                        ProtosHttpAsyncFacility.ROUTER_MODULE_KEY,
+                        Map.of(
+                                ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
+                                ProtosHttpAsyncFacility::createFacility)),
+                Map.entry(
+                        ProtosHttpAsyncFacility.URL_CLIENT_MODULE_KEY,
+                        Map.of(
+                                ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
+                                ProtosHttpAsyncFacility::createFacility)),
                 // I130-B: the private TLS backend bridge of std:tls/client.
-                ProtosTlsBackendFacility.MODULE_KEY,
-                Map.of(
-                        ProtosTlsBackendFacility.BOOTSTRAP_SLOT,
-                        ProtosTlsBackendFacility::createFacility));
+                Map.entry(
+                        ProtosTlsBackendFacility.MODULE_KEY,
+                        Map.of(
+                                ProtosTlsBackendFacility.BOOTSTRAP_SLOT,
+                                ProtosTlsBackendFacility::createFacility)),
+                // I159 / D244-C: private deferred HMAC-SHA256 bridge.
+                Map.entry(
+                        ProtosHmacSha256Facility.MODULE_KEY,
+                        Map.of(
+                                ProtosHmacSha256Facility.BOOTSTRAP_SLOT,
+                                ProtosHmacSha256Facility::createFacility)));
     }
 
     /**

@@ -144,6 +144,35 @@ do
     native_tls_cases=$((native_tls_cases + 1))
 done
 
+# I159 / D244-C: execute the real public HMAC-SHA256 module in the
+# rebuilt Native Image, including RFC 4231 known-answer vectors, verification,
+# input ownership, domain errors and private-module boundary.
+native_hmac_status=0
+native_hmac_cases=0
+
+for hmac_file in \
+    "protos/tests/library/crypto/hmac_sha256/vectors-and-boundaries.protos" \
+    "protos/tests/library/crypto/hmac_sha256/verification-and-ownership.protos" \
+    "protos/tests/library/crypto/hmac_sha256/invalid-inputs-and-private-boundary.protos"
+do
+    case_log="${tmp_dir}/hmac-${native_hmac_cases}.log"
+
+    PROTOS_HOME="${root}" \
+        "${native_bin}" \
+        test --file "${root}/${hmac_file}" \
+        >"${case_log}" 2>&1
+    case_status=$?
+
+    if [[ "${case_status}" -ne 0 ]] || \
+       ! grep -Eq '^[[:space:]]*[1-9][0-9]* passed, 0 failed[[:space:]]*$' "${case_log}"; then
+        cat "${case_log}" >&2
+        echo "NATIVE_HMAC_CASE_FAILURE=${hmac_file}" >&2
+        native_hmac_status=1
+    fi
+
+    native_hmac_cases=$((native_hmac_cases + 1))
+done
+
 test_tool_output_ok=1
 for expected_line in \
     "[library/uri] 0/4" \
@@ -484,6 +513,8 @@ echo "NATIVE_NUMERIC_CONFORMANCE_STATUS=${native_numeric_status}"
 echo "NATIVE_NUMERIC_CONFORMANCE_FILES=${native_numeric_cases}"
 echo "NATIVE_TLS_CONFORMANCE_STATUS=${native_tls_status}"
 echo "NATIVE_TLS_CONFORMANCE_FILES=${native_tls_cases}"
+echo "NATIVE_HMAC_CONFORMANCE_STATUS=${native_hmac_status}"
+echo "NATIVE_HMAC_CONFORMANCE_FILES=${native_hmac_cases}"
 echo "NATIVE_TEST_TOOL_OUTPUT_OK=${test_tool_output_ok}"
 echo "NATIVE_TEST_TOOL_CONTEXT_TEARDOWN_FAILURES=${test_tool_context_teardown_failures}"
 cat "${dap_log}"
@@ -642,7 +673,12 @@ elif [[ "${regex_status}" -ne 0 ]] || \
     cat "${regex_log}" >&2
     echo "NATIVE_REGEX=FAIL" >&2
     false
+elif [[ "${native_hmac_status}" -ne 0 ]] || \
+     [[ "${native_hmac_cases}" -ne 3 ]]; then
+    echo "NATIVE_HMAC_SHA256=FAIL" >&2
+    false
 else
     echo "NATIVE_REGEX=PASS"
+    echo "NATIVE_HMAC_SHA256=PASS"
     echo "NATIVE_REGRESSION_SUITE=PASS"
 fi

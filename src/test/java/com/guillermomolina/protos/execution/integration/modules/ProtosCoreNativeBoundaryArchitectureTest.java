@@ -119,6 +119,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/facilities/ProtosResolverHostFacility.java", 1),
                     // D243-C / I157: private host Entropy bridge, not a Core selector.
                     Map.entry("execution/facilities/ProtosEntropyHostFacility.java", 1),
+                    // D244-C / I159: private HMAC-SHA256 JCA primitive,
+                    // not a native Core selector or ambient capability.
+                    Map.entry("execution/facilities/ProtosHmacSha256Facility.java", 1),
                     Map.entry("execution/facilities/ProtosRegexUnicodeFacility.java", 3),
                     Map.entry("execution/facilities/ProtosRegexSemanticTransferFamily.java", 3),
                     Map.entry("execution/facilities/ProtosSealedFamilyFacility.java", 3),
@@ -181,6 +184,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                             // D243-C / I157: private host Entropy bridge.
                             || relative.equals(
                                     "execution/facilities/ProtosEntropyHostFacility.java")
+                            // D244-C / I159: private HMAC-SHA256 backend.
+                            || relative.equals(
+                                    "execution/facilities/ProtosHmacSha256Facility.java")
                             || relative.equals(
                                     "execution/facilities/ProtosSealedFamilyFacility.java")) {
                         actualNonCore.put(relative, count);

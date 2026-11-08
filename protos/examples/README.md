@@ -66,6 +66,7 @@ instead.
 | Route a request through an ActorGroup | `concurrency/actor-group-request.protos` |
 | Serve messages from the RootActor through a single-member GroupRef (RootActor service entry) | `actors/root-message-service.protos` |
 | Generate secure 16/32-byte secrets without printing secret material (`--allow-entropy`) | `entropy/secure-bytes.protos` |
+| Demonstrate complete HMAC-SHA256 authentication of explicit Bytes with a public RFC 4231 test key | `crypto/hmac-sha256.protos` |
 | Broker secure Bytes through a RootActor service and ActorRef (`--allow-entropy --service=service`) | `entropy/actor-broker.protos` |
 | Execute work in an isolated parallel domain | `concurrency/parallel-execution.protos` |
 | Encode, mutate, and decode bytes | `io/encoding-and-bytes.protos` |

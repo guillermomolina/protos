@@ -190,6 +190,9 @@ Domain owners:
 - spec/semantics/ERRORS.md — Error semantics.
 - spec/semantics/VALUES_AND_COLLECTIONS.md — value-family, equality/identity,
   indexing, and collection semantics.
+- spec/semantics/CRYPTO.md — ordinary Actor-local Standard Library
+  HMAC-SHA256 module operations, exact Bytes admission, limits, full-tag
+  verification, and private backend failure semantics (D244-C).
 - spec/semantics/MATCHING.md — matching protocol, matcher outcomes,
   structural projection.
 - spec/io/IO_CORE.md — cross-cutting I/O capability, commitment, lifecycle,

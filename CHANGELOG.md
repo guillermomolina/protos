@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.456-SNAPSHOT
+
+- `I159` (D244-C): implement the standard `std:crypto/hmac_sha256` module.
+  - Add `digest(key, message)` and `verify(key, message, tag)` as ordinary
+    Actor-local Protos module operations over actual `Bytes`.
+  - Implement HMAC-SHA256 through a deferred private JCA facility, without
+    exposing a native Core selector or requiring ambient host authority.
+  - Return fresh independent mutable 32-byte digests; require complete
+    32-byte verification tags and use constant-time tag comparison.
+  - Enforce exact input validation, with key lengths from 0 through 4096
+    bytes and message lengths from 0 through 16777216 bytes.
+  - Add RFC 4231 vectors, boundary, invalid-input, ownership and private
+    bridge conformance tests, plus Java integration and facility tests.
+  - Integrate the 24-case HMAC corpus with the repository Test Tool, Native
+    Image regressions and the audited Java-native Closure inventory.
+  - Add normative cryptography semantics, user documentation, a tutorial
+    and an executable example.
+  - Isolate workspace service CLI tests in the existing serial Java test
+    phase after cross-class parallel instability.
+  - Validate with focused Java and Protos tests, `make test`,
+    `make check`, `make test-native`, tutorial and example execution.
+
 ## 0.3.455-SNAPSHOT
 
 - `I155`, `I156` and `I158`: integrate explicit Filesystem authority, Linux kernel confinement and asynchronous RootActor bootstrap suspension.

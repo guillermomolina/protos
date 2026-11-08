@@ -23,6 +23,23 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.499] - 2026-11-08
+
+### D244-C / I159 — Standard HMAC-SHA256
+- `semantics/CRYPTO.md` (new): define `std:crypto/hmac_sha256` as an
+  authority-free standard cryptographic module exposing `digest(key, message)`
+  and `verify(key, message, tag)` for actual `Bytes` inputs.
+- `digest` returns a fresh, independent, mutable 32-byte HMAC-SHA256 result.
+  `verify` accepts only complete 32-byte tags, returns `false` for incorrect
+  lengths or contents, and performs fixed-length tag comparison without
+  data-dependent early termination.
+- Define exact input validation and bounds: key length `0..4096` bytes and
+  message length `0..16777216` bytes; invalid argument types and out-of-range
+  inputs signal ordinary Protos errors.
+- Keep the cryptographic primitive in a private JCA-backed facility, without
+  a public native Core selector, ambient host authority, or private bridge
+  exposure through the module API.
+
 ## [0.1.498] - 2026-11-08
 
 ### I156 — File position after a committed failed write of unknown progress (owner-approved A)
