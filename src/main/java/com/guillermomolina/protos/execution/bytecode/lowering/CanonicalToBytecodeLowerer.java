@@ -3077,7 +3077,11 @@ final class CanonicalToBytecodeLowerer {
             return i115DirectUnaryOperand(member.receiver());
         }
         if (expression instanceof CanonicalSend send) {
-            return primitiveNumericSendCandidate(send)
+            if (i115DirectArraySize(send)) {
+                return i115DirectUnaryOperand(send.receiver());
+            }
+            return (primitiveNumericSendCandidate(send)
+                            || i115DirectIndexedRead(send))
                     && i115DirectUnaryOperand(send.receiver())
                     && i115DirectUnaryOperand(send.arguments().get(0));
         }
@@ -3112,11 +3116,63 @@ final class CanonicalToBytecodeLowerer {
         if (shape == InvocationShape.SEND) {
             return selector != null
                     && !primitiveNumericSelector(selector)
+                    && !"at".equals(selector)
                     && !i115StructuredSelector(selector)
                     && I115Control.of(selector, arguments) == null
                     && i115DirectUnaryOperand(receiver);
         }
         return false;
+    }
+
+    /*
+     * I115: GraalPy ExprTy.Subscript -> BinarySubscript.
+     *
+     * The current canonicalizer represents bracket reads through the
+     * 'at' selector. I115 lowers that selector to the direct Bytecode
+     * operation without constructing a method invocation.
+     */
+    private static boolean i115DirectIndexedRead(CanonicalSend send) {
+        return "at".equals(send.message())
+                && send.arguments().size() == 1
+                && !hasSpreadArgument(send.arguments());
+    }
+
+    // I115: GraalPy GetLen for a direct lexical Array receiver.
+    private static boolean i115DirectArraySize(CanonicalSend send) {
+        return "size".equals(send.message())
+                && send.arguments().isEmpty()
+                && send.receiver() instanceof CanonicalLookup;
+    }
+
+    private void emitI115DirectArraySizeValue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send) {
+        builder.beginGetLen();
+        emitLookup(
+                builder, (CanonicalLookup) send.receiver(), false);
+        builder.endGetLen();
+    }
+
+    private void emitI115DirectIndexedReadValue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginBinarySubscript();
+        emitPrimitiveNumericOperandValue(
+                builder,
+                send.receiver(),
+                scratch,
+                childResult,
+                resumeValue);
+        emitPrimitiveNumericOperandValue(
+                builder,
+                send.arguments().get(0),
+                scratch,
+                childResult,
+                resumeValue);
+        builder.endBinarySubscript();
     }
 
     private boolean i115DirectUnaryCall(CanonicalExpression expression) {
@@ -3156,17 +3212,31 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalSend send
+                && i115DirectArraySize(send)) {
+            builder.beginGetLen();
+            emitI115DirectUnaryOperand(
+                    builder, send.receiver(), false);
+            builder.endGetLen();
+            return;
+        }
+
+        if (expression instanceof CanonicalSend send
+                && i115DirectIndexedRead(send)) {
+            builder.beginBinarySubscript();
+            emitI115DirectUnaryOperand(
+                    builder, send.receiver(), false);
+            emitI115DirectUnaryOperand(
+                    builder, send.arguments().get(0), true);
+            builder.endBinarySubscript();
+            return;
+        }
+
+        if (expression instanceof CanonicalSend send
                 && primitiveNumericSendCandidate(send)) {
             builder.beginSourceSection(
                     send.span().startOffset(), send.span().length());
-            if (!carrier) {
-                builder.beginMaterializePrimitiveNumericCarrier();
-            }
-            emitDirectNumericOperation(builder, send, null, null, null);
-            if (!carrier) {
-                builder.emitLoadConstant(true);
-                builder.endMaterializePrimitiveNumericCarrier();
-            }
+            emitDirectNumericOperation(
+                    builder, send, null, null, null);
             builder.endSourceSection();
             return;
         }
@@ -3290,6 +3360,21 @@ final class CanonicalToBytecodeLowerer {
             // Materialization only; the body runs in the Closure's own root.
             case CanonicalClosure ignored -> false;
             case CanonicalSend send -> {
+                if (i115DirectArraySize(send)) {
+                    yield false;
+                }
+                if (send.contextual()) {
+                    boolean needs = i115ContextualNeedsScratch(send.receiver());
+                    for (CanonicalExpression argument : send.arguments()) {
+                        needs |= i115ContextualNeedsScratch(argument);
+                    }
+                    yield needs;
+                }
+                if (i115DirectIndexedRead(send)) {
+                    yield requiresContinuationScratch(send.receiver())
+                            || requiresContinuationScratch(
+                                    send.arguments().get(0));
+                }
                 I115StaticControl staticControl = classifyI115StaticControl(send);
                 if (staticControl != null) {
                     if (staticControl.eliminable()) {
@@ -3321,10 +3406,15 @@ final class CanonicalToBytecodeLowerer {
             case CanonicalNotIdentity identity ->
                     requiresContinuationScratch(identity.left())
                             || requiresContinuationScratch(identity.right());
-            case CanonicalCall call -> !i115DirectUnaryCall(call);
+            case CanonicalCall call ->
+                    i115ConstantLongArray(call) == null
+                            && !i115DirectUnaryCall(call);
             case CanonicalSuperSend ignored -> true;
             case CanonicalDerivedInequality ignored -> true;
-            case CanonicalIndexedAssign ignored -> true;
+            case CanonicalIndexedAssign indexed ->
+                    requiresContinuationScratch(indexed.receiver())
+                            || requiresContinuationScratch(indexed.index())
+                            || requiresContinuationScratch(indexed.value());
             case CanonicalCompose ignored -> true;
             case CanonicalObject ignored -> true;
             case CanonicalMapConstruction ignored -> true;
@@ -3501,6 +3591,14 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (expression instanceof CanonicalCall array
+                && i115ConstantLongArray(array) != null) {
+            builder.beginStoreLocal(target);
+            emitI115ConstantLongArray(builder, array);
+            builder.endStoreLocal();
+            return;
+        }
+
         if (isI115EliminableControl(expression)) {
             builder.beginStoreLocal(target);
             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
@@ -3708,6 +3806,14 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (expression instanceof CanonicalCall array
+                && i115ConstantLongArray(array) != null) {
+            builder.beginStoreLocal(target);
+            emitI115ConstantLongArray(builder, array);
+            builder.endStoreLocal();
+            return;
+        }
+
         if (i115DirectUnaryCall(expression)
                 || (expression instanceof CanonicalSend send
                         && isDirectNumericOperand(send))) {
@@ -4972,14 +5078,7 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         builder.beginStoreLocal(result);
-        if (value.carrier()) {
-            builder.beginMaterializePrimitiveNumericCarrier();
-        }
         builder.emitLoadLocal(local);
-        if (value.carrier()) {
-            builder.emitLoadConstant(true);
-            builder.endMaterializePrimitiveNumericCarrier();
-        }
         builder.endStoreLocal();
     }
 
@@ -5086,6 +5185,69 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
+    /*
+     * I115: GraalPy direct SetItem.
+     * Values are emitted directly onto the Bytecode operand stack.
+     */
+    private boolean i115DirectIndexedWrite(
+            CanonicalIndexedAssign assign) {
+        return i115DirectUnaryOperand(assign.receiver())
+                && i115DirectUnaryOperand(assign.index())
+                && i115DirectUnaryOperand(assign.value());
+    }
+
+    /*
+     * I115: direct SetItem, preserving receiver/index/RHS order.
+     * BindStackValue retains evaluated operands without frame locals.
+     */
+    /*
+     * I115: Protos-first operand order for the direct Array write.
+     * A discarded assignment needs no stack bindings or frame locals.
+     */
+    /*
+     * I115 / GraalPy StoreVisitor:
+     * RHS, primary, slice. No temporary for discarded writes.
+     * A consumed RHS uses one BindStackValue, as in GraalPy's
+     * multi-target assignment emission.
+     */
+    private void emitI115DirectIndexedWrite(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalIndexedAssign assign,
+            BytecodeLocal result) {
+        if (result == null) {
+            builder.beginSetItem();
+            emitI115DirectUnaryOperand(
+                    builder, assign.value(), true);
+            emitI115DirectUnaryOperand(
+                    builder, assign.receiver(), false);
+            emitI115DirectUnaryOperand(
+                    builder, assign.index(), true);
+            builder.endSetItem();
+            return;
+        }
+
+        builder.beginBlock();
+
+        builder.beginBindStackValue();
+        emitI115DirectUnaryOperand(
+                builder, assign.value(), true);
+        StackValue rhs = builder.endBindStackValue();
+
+        builder.beginSetItem();
+        builder.emitLoadStackValue(rhs);
+        emitI115DirectUnaryOperand(
+                builder, assign.receiver(), false);
+        emitI115DirectUnaryOperand(
+                builder, assign.index(), true);
+        builder.endSetItem();
+
+        builder.beginStoreLocal(result);
+        builder.emitLoadStackValue(rhs);
+        builder.endStoreLocal();
+
+        builder.endBlock();
+    }
+
     private void emitBodyIndexedAssign(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalIndexedAssign indexedAssign,
@@ -5093,11 +5255,23 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (i115DirectIndexedWrite(indexedAssign)) {
+            emitI115DirectIndexedWrite(
+                    builder, indexedAssign, result);
+            return;
+        }
+
         BytecodeLocal receiver = builder.createLocal("indexedAssignReceiver", null);
         BytecodeLocal index = builder.createLocal("indexedAssignIndex", null);
         BytecodeLocal value = builder.createLocal("indexedAssignValue", null);
-        BytecodeLocal dispatchResult = builder.createLocal("indexedAssignDispatchResult", null);
 
+        emitBodyExpressionToLocal(
+                builder,
+                indexedAssign.value(),
+                value,
+                preparedCall,
+                childResult,
+                resumeValue);
         emitBodyExpressionToLocal(
                 builder,
                 indexedAssign.receiver(),
@@ -5112,22 +5286,16 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue);
-        emitBodyExpressionToLocal(
-                builder,
-                indexedAssign.value(),
-                value,
-                preparedCall,
-                childResult,
-                resumeValue);
 
-        emitDispatchedSendOfLocals(
-                builder, "atPut", receiver, java.util.List.of(index, value),
-                dispatchResult, childResult, resumeValue);
+        builder.beginSetItem();
+        builder.emitLoadLocal(value);
+        builder.emitLoadLocal(receiver);
+        builder.emitLoadLocal(index);
+        builder.endSetItem();
 
         /*
-         * Indexed assignment returns the exact RHS, never the atPut result.
-         * dispatchResult is the continuation's own destination and stays
-         * even when the statement value is discarded.
+         * GraalPy SetItem writes directly. When consumed, the assignment
+         * expression retains the evaluated RHS as its result.
          */
         if (result != null) {
             builder.beginStoreLocal(result);
@@ -5284,11 +5452,23 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (i115DirectIndexedWrite(indexedAssign)) {
+            emitI115DirectIndexedWrite(
+                    builder, indexedAssign, result);
+            return;
+        }
+
         BytecodeLocal receiver = builder.createLocal("defaultIndexedAssignReceiver", null);
         BytecodeLocal index = builder.createLocal("defaultIndexedAssignIndex", null);
         BytecodeLocal value = builder.createLocal("defaultIndexedAssignValue", null);
-        BytecodeLocal dispatchResult = builder.createLocal("defaultIndexedAssignDispatchResult", null);
 
+        emitDefaultExpressionToLocal(
+                builder,
+                indexedAssign.value(),
+                value,
+                preparedCall,
+                childResult,
+                resumeValue);
         emitDefaultExpressionToLocal(
                 builder,
                 indexedAssign.receiver(),
@@ -5303,17 +5483,12 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue);
-        emitDefaultExpressionToLocal(
-                builder,
-                indexedAssign.value(),
-                value,
-                preparedCall,
-                childResult,
-                resumeValue);
 
-        emitDispatchedSendOfLocals(
-                builder, "atPut", receiver, java.util.List.of(index, value),
-                dispatchResult, childResult, resumeValue);
+        builder.beginSetItem();
+        builder.emitLoadLocal(value);
+        builder.emitLoadLocal(receiver);
+        builder.emitLoadLocal(index);
+        builder.endSetItem();
 
         builder.beginStoreLocal(result);
         builder.emitLoadLocal(value);
@@ -5373,6 +5548,42 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (send.contextual()) {
+            emitI115ContextualControl(
+                    builder, send, result,
+                    scratch, childResult, resumeValue, false);
+            return;
+        }
+        if (i115DirectArraySize(send)) {
+            if (result == null) {
+                builder.beginDiscardValue();
+            } else {
+                builder.beginStoreLocal(result);
+            }
+            emitI115DirectArraySizeValue(builder, send);
+            if (result == null) {
+                builder.endDiscardValue();
+            } else {
+                builder.endStoreLocal();
+            }
+            return;
+        }
+        if (i115DirectIndexedRead(send)) {
+            builder.beginSourceSection(
+                    send.span().startOffset(),
+                    send.span().length());
+            builder.beginStoreLocal(result);
+            emitI115DirectIndexedReadValue(
+                    builder,
+                    send,
+                    scratch,
+                    childResult,
+                    resumeValue);
+            builder.endStoreLocal();
+            builder.endSourceSection();
+            return;
+        }
+
         builder.beginSourceSection(send.span().startOffset(), send.span().length());
         emitDispatchedInvocation(
                 builder, InvocationShape.SEND, send.receiver(), send.message(), send.arguments(),
@@ -5761,6 +5972,17 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
+        if (expression instanceof CanonicalCall array
+                && i115ConstantLongArray(array) != null) {
+            emitI115ConstantLongArray(builder, array);
+            return;
+        }
+
+        if (expression instanceof CanonicalSend send
+                && i115DirectArraySize(send)) {
+            emitI115DirectArraySizeValue(builder, send);
+            return;
+        }
         if (isI115EliminableControl(expression)) {
             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
             return;
@@ -5805,6 +6027,14 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (expression instanceof CanonicalSend contextual
+                && contextual.contextual()) {
+            emitI115ContextualControl(
+                    builder, contextual, null,
+                    scratch, childResult, resumeValue, false);
+            return;
+        }
+
         I115StaticControl staticControl = classifyI115StaticControl(expression);
         if (staticControl != null) {
             if (!staticControl.eliminable()) {
@@ -6015,6 +6245,233 @@ final class CanonicalToBytecodeLowerer {
      * control flow, including {@code CanonicalControlCondition} where needed.
      * The selector itself is never sent.
      */
+    /*
+     * I115: contextual while/if follow GraalPy RootNodeCompiler.
+     *
+     * These source constructs are lowered directly into the current
+     * physical Bytecode root. No synthetic Closure is materialized,
+     * no callback CallTarget is invoked, and no callback cell scope
+     * is introduced.
+     */
+    private boolean i115ContextualNeedsScratch(
+            CanonicalExpression expression) {
+        if (expression instanceof CanonicalClosure closure) {
+            return closure.body().expressions().stream()
+                    .anyMatch(this::requiresContinuationScratch);
+        }
+        return requiresContinuationScratch(expression);
+    }
+
+    private void emitI115ContextualCondition(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginCanonicalControlCondition(true);
+
+        if (expression instanceof CanonicalClosure closure) {
+            emitI115ContextualValue(
+                    builder, closure.body(),
+                    scratch, childResult, resumeValue, false);
+        } else {
+            emitExpressionValue(
+                    builder, expression,
+                    scratch, childResult, resumeValue, false);
+        }
+
+        builder.endCanonicalControlCondition();
+    }
+
+    private void emitI115ContextualStatements(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSequence body,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginBlock();
+        DiscardSink sink = new DiscardSink();
+
+        for (CanonicalExpression expression : body.expressions()) {
+            beginStatement(builder, expression);
+            emitExpressionStatement(
+                    builder, expression, sink,
+                    scratch, childResult, resumeValue);
+            endStatement(builder);
+        }
+
+        builder.endBlock();
+    }
+
+    private void emitI115ContextualValue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSequence body,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        builder.beginBlock();
+        java.util.List<CanonicalExpression> expressions =
+                body.expressions();
+        DiscardSink sink = new DiscardSink();
+
+        if (expressions.isEmpty()) {
+            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+        } else {
+            for (int index = 0; index < expressions.size(); index++) {
+                CanonicalExpression expression = expressions.get(index);
+                boolean last = index == expressions.size() - 1;
+
+                beginStatement(builder, expression);
+
+                if (last) {
+                    emitExpressionValue(
+                            builder, expression,
+                            scratch, childResult, resumeValue,
+                            primitiveCarrierResult);
+                } else {
+                    emitExpressionStatement(
+                            builder, expression, sink,
+                            scratch, childResult, resumeValue);
+                }
+
+                endStatement(builder);
+            }
+        }
+
+        builder.endBlock();
+    }
+
+    private void emitI115ContextualControl(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        if (!send.contextual()) {
+            throw new AssertionError("Not contextual control");
+        }
+
+        boolean valueUsed = result != null
+                && discardedControlStatement != send;
+
+        switch (send.message()) {
+            case "whileTrue" -> {
+                if (!(send.receiver() instanceof CanonicalClosure condition)
+                        || condition.body().expressions().size() != 1
+                        || send.arguments().size() != 1
+                        || !(send.arguments().get(0)
+                                instanceof CanonicalClosure body)) {
+                    throw new AssertionError("Malformed contextual while");
+                }
+
+                if (valueUsed) {
+                    builder.beginStoreLocal(result);
+                    builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                    builder.endStoreLocal();
+                }
+
+                builder.beginWhile();
+
+                builder.beginBlock();
+                emitI115ContextualCondition(
+                        builder, condition,
+                        scratch, childResult, resumeValue);
+                builder.endBlock();
+
+                builder.beginBlock();
+                if (valueUsed) {
+                    builder.beginStoreLocal(result);
+                    emitI115ContextualValue(
+                            builder, body.body(),
+                            scratch, childResult, resumeValue,
+                            primitiveCarrierResult);
+                    builder.endStoreLocal();
+                } else {
+                    emitI115ContextualStatements(
+                            builder, body.body(),
+                            scratch, childResult, resumeValue);
+                }
+                builder.endBlock();
+
+                builder.endWhile();
+            }
+
+            case "ifTrue", "ifTrueIfFalse" -> {
+                if (send.arguments().isEmpty()
+                        || !(send.arguments().get(0)
+                                instanceof CanonicalClosure trueBranch)) {
+                    throw new AssertionError("Malformed contextual if");
+                }
+
+                CanonicalClosure falseBranch = null;
+                if ("ifTrueIfFalse".equals(send.message())) {
+                    if (send.arguments().size() != 2
+                            || !(send.arguments().get(1)
+                                    instanceof CanonicalClosure second)) {
+                        throw new AssertionError("Malformed contextual else");
+                    }
+                    falseBranch = second;
+                }
+
+                if (valueUsed) {
+                    builder.beginStoreLocal(result);
+                    builder.beginConditional();
+
+                    emitI115ContextualCondition(
+                            builder, send.receiver(),
+                            scratch, childResult, resumeValue);
+                    emitI115ContextualValue(
+                            builder, trueBranch.body(),
+                            scratch, childResult, resumeValue,
+                            primitiveCarrierResult);
+
+                    if (falseBranch != null) {
+                        emitI115ContextualValue(
+                                builder, falseBranch.body(),
+                                scratch, childResult, resumeValue,
+                                primitiveCarrierResult);
+                    } else {
+                        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                    }
+
+                    builder.endConditional();
+                    builder.endStoreLocal();
+                } else if (falseBranch != null) {
+                    builder.beginIfThenElse();
+
+                    emitI115ContextualCondition(
+                            builder, send.receiver(),
+                            scratch, childResult, resumeValue);
+                    emitI115ContextualStatements(
+                            builder, trueBranch.body(),
+                            scratch, childResult, resumeValue);
+                    emitI115ContextualStatements(
+                            builder, falseBranch.body(),
+                            scratch, childResult, resumeValue);
+
+                    builder.endIfThenElse();
+                } else {
+                    builder.beginIfThen();
+
+                    emitI115ContextualCondition(
+                            builder, send.receiver(),
+                            scratch, childResult, resumeValue);
+                    emitI115ContextualStatements(
+                            builder, trueBranch.body(),
+                            scratch, childResult, resumeValue);
+
+                    builder.endIfThen();
+                }
+            }
+
+            default -> throw new AssertionError(
+                    "Unsupported contextual control: " + send.message());
+        }
+    }
+
     private void emitI115Control(
             ProtosBytecodeRootNodeGen.Builder builder,
             I115Control control,
@@ -6796,6 +7253,12 @@ final class CanonicalToBytecodeLowerer {
     private void emitExpression(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression) {
+        if (expression instanceof CanonicalCall array
+                && i115ConstantLongArray(array) != null) {
+            emitI115ConstantLongArray(builder, array);
+            return;
+        }
+
         if (expression instanceof CanonicalLiteral literal) {
             emitLiteral(builder, literal);
             return;
@@ -6938,14 +7401,9 @@ final class CanonicalToBytecodeLowerer {
             }
             BytecodeLocal local = ownLocalOrNull(identity);
             if (local != null) {
-                if (!carrierOperand) {
-                    builder.beginMaterializePrimitiveNumericCarrier();
-                }
+                // I115 / GraalPy LoadLocal.
+                // Long and Double already use their guest representation.
                 builder.emitLoadLocal(local);
-                if (!carrierOperand) {
-                    builder.emitLoadConstant(true);
-                    builder.endMaterializePrimitiveNumericCarrier();
-                }
                 return;
             }
             if (isStaticModuleBinding(resolution, identity)) {
@@ -7112,6 +7570,22 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (expression instanceof CanonicalSend indexed
+                && i115DirectIndexedRead(indexed)) {
+            emitI115DirectIndexedReadValue(
+                    builder,
+                    indexed,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            return;
+        }
+
+        if (expression instanceof CanonicalSend send
+                && i115DirectArraySize(send)) {
+            emitI115DirectArraySizeValue(builder, send);
+            return;
+        }
         if (i115DirectUnaryCall(expression)) {
             emitI115DirectUnaryValue(builder, expression, true);
             return;
@@ -7661,15 +8135,8 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
-        boolean materialize = !primitiveCarrierResult && "/".equals(send.message());
-        if (materialize) {
-            builder.beginMaterializePrimitiveNumericCarrier();
-        }
-        emitDirectNumericOperation(builder, send, scratch, childResult, resumeValue);
-        if (materialize) {
-            builder.emitLoadConstant(true);
-            builder.endMaterializePrimitiveNumericCarrier();
-        }
+        emitDirectNumericOperation(
+                builder, send, scratch, childResult, resumeValue);
     }
 
     /**
@@ -7705,6 +8172,39 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
+        if (send.contextual()) {
+            emitI115ContextualControl(
+                    builder, send, result,
+                    scratch, childResult, resumeValue,
+                    primitiveCarrierResult);
+            return;
+        }
+        if (i115DirectArraySize(send)) {
+            if (result == null) {
+                builder.beginDiscardValue();
+            } else {
+                builder.beginStoreLocal(result);
+            }
+            emitI115DirectArraySizeValue(builder, send);
+            if (result == null) {
+                builder.endDiscardValue();
+            } else {
+                builder.endStoreLocal();
+            }
+            return;
+        }
+        if (i115DirectIndexedRead(send)) {
+            builder.beginStoreLocal(result);
+            emitI115DirectIndexedReadValue(
+                    builder,
+                    send,
+                    scratch,
+                    childResult,
+                    resumeValue);
+            builder.endStoreLocal();
+            return;
+        }
+
         if (primitiveNumericSendCandidate(send)) {
             switch (send.message()) {
                 case "+", "-", "*" -> emitGraalPyGeneralArithmeticSend(
@@ -7738,8 +8238,18 @@ final class CanonicalToBytecodeLowerer {
             case CanonicalMultipleCreate create -> containsClosure(create.value());
             case CanonicalCall call ->
                     containsClosure(call.receiver()) || anyContainsClosure(call.arguments());
-            case CanonicalSend send ->
-                    containsClosure(send.receiver()) || anyContainsClosure(send.arguments());
+            case CanonicalSend send -> {
+                if (send.contextual()) {
+                    boolean found =
+                            containsContextualOperandClosure(send.receiver());
+                    for (CanonicalExpression argument : send.arguments()) {
+                        found |= containsContextualOperandClosure(argument);
+                    }
+                    yield found;
+                }
+                yield containsClosure(send.receiver())
+                        || anyContainsClosure(send.arguments());
+            }
             case CanonicalSuperSend send -> anyContainsClosure(send.arguments());
             case CanonicalCompose compose -> containsClosure(compose.object());
             case CanonicalDerivedInequality inequality ->
@@ -7771,6 +8281,18 @@ final class CanonicalToBytecodeLowerer {
             case CanonicalLiteral literal -> false;
             case CanonicalLookup lookup -> false;
         };
+    }
+
+    /*
+     * I115: a contextual while/if block is inline code, not a
+     * materialized Closure. Real Closures nested in its body still count.
+     */
+    private static boolean containsContextualOperandClosure(
+            CanonicalExpression expression) {
+        if (expression instanceof CanonicalClosure closure) {
+            return containsClosure(closure.body());
+        }
+        return containsClosure(expression);
     }
 
     private static boolean anyContainsClosure(
@@ -7833,6 +8355,52 @@ final class CanonicalToBytecodeLowerer {
         }
         Object descriptor = numberLiteralDescriptor(literal);
         return descriptor instanceof Long || descriptor instanceof Double ? descriptor : null;
+    }
+
+    /*
+     * I115: GraalPy RootNodeCompiler constant collection selection.
+     * Only literal Arrays containing signed-64 Integer constants
+     * qualify for the direct primitive operation.
+     */
+    private long[] i115ConstantLongArray(CanonicalCall call) {
+        if (!call.arrayLiteral()) {
+            return null;
+        }
+
+        long[] values = new long[call.arguments().size()];
+
+        for (int index = 0; index < values.length; index++) {
+            CanonicalExpression expression =
+                    call.arguments().get(index);
+
+            if (!(expression instanceof CanonicalLiteral literal)
+                    || literal.kind() != CanonicalLiteral.Kind.NUMBER) {
+                return null;
+            }
+
+            Object number = numberLiteralDescriptor(literal);
+
+            if (!(number instanceof Long integer)) {
+                return null;
+            }
+
+            values[index] = integer.longValue();
+        }
+
+        return values;
+    }
+
+    private void emitI115ConstantLongArray(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalCall call) {
+        long[] values = i115ConstantLongArray(call);
+
+        if (values == null) {
+            throw new AssertionError(
+                    "Not an admitted constant Long Array");
+        }
+
+        builder.emitMakeConstantLongArray(values);
     }
 
     private Object numberLiteralDescriptor(CanonicalLiteral literal) {

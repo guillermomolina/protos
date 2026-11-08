@@ -24,8 +24,17 @@ import java.util.Objects;
 public record CanonicalCall(
         CanonicalExpression receiver,
         List<CanonicalExpression> arguments,
-        SourceSpan span)
+        SourceSpan span,
+        boolean arrayLiteral)
         implements CanonicalExpression {
+
+    public CanonicalCall(
+            CanonicalExpression receiver,
+            List<CanonicalExpression> arguments,
+            SourceSpan span) {
+        this(receiver, arguments, span, false);
+    }
+
     public CanonicalCall {
         Objects.requireNonNull(receiver, "receiver");
         arguments = List.copyOf(Objects.requireNonNull(arguments, "arguments"));

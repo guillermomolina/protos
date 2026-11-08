@@ -25,8 +25,18 @@ public record CanonicalSend(
         CanonicalExpression receiver,
         String message,
         List<CanonicalExpression> arguments,
-        SourceSpan span)
+        SourceSpan span,
+        boolean contextual)
         implements CanonicalExpression {
+
+    public CanonicalSend(
+            CanonicalExpression receiver,
+            String message,
+            List<CanonicalExpression> arguments,
+            SourceSpan span) {
+        this(receiver, message, arguments, span, false);
+    }
+
     public CanonicalSend {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(message, "message");

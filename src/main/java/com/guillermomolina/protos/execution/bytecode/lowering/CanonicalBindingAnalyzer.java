@@ -180,9 +180,16 @@ final class CanonicalBindingAnalyzer {
                 }
             }
             case CanonicalSend send -> {
-                collectDeclaredNames(send.receiver(), scope);
-                for (CanonicalExpression argument : send.arguments()) {
-                    collectDeclaredNames(argument, scope);
+                if (send.contextual()) {
+                    collectContextualOperand(send.receiver(), scope);
+                    for (CanonicalExpression argument : send.arguments()) {
+                        collectContextualOperand(argument, scope);
+                    }
+                } else {
+                    collectDeclaredNames(send.receiver(), scope);
+                    for (CanonicalExpression argument : send.arguments()) {
+                        collectDeclaredNames(argument, scope);
+                    }
                 }
             }
             case CanonicalCall call -> {
@@ -263,9 +270,16 @@ final class CanonicalBindingAnalyzer {
             }
             case CanonicalSequence sequence -> walkSequence(sequence, scope);
             case CanonicalSend send -> {
-                walk(send.receiver(), scope);
-                for (CanonicalExpression argument : send.arguments()) {
-                    walk(argument, scope);
+                if (send.contextual()) {
+                    walkContextualOperand(send.receiver(), scope);
+                    for (CanonicalExpression argument : send.arguments()) {
+                        walkContextualOperand(argument, scope);
+                    }
+                } else {
+                    walk(send.receiver(), scope);
+                    for (CanonicalExpression argument : send.arguments()) {
+                        walk(argument, scope);
+                    }
                 }
             }
             case CanonicalCall call -> {
@@ -296,6 +310,32 @@ final class CanonicalBindingAnalyzer {
             case CanonicalAssign assign -> walkAssign(assign, scope);
             case CanonicalClosure closure -> walkClosure(closure, scope);
             case CanonicalObject object -> walkObject(object, scope);
+        }
+    }
+
+    /*
+     * I115 / GraalPy: while and if bodies do not introduce function
+     * scopes. The synthetic CanonicalClosure is only a legacy carrier
+     * of the source block; its declarations and references are resolved
+     * in the surrounding function scope.
+     */
+    private void collectContextualOperand(
+            CanonicalExpression expression,
+            CanonicalLexicalScope scope) {
+        if (expression instanceof CanonicalClosure closure) {
+            collectDeclaredNames(closure.body(), scope);
+        } else {
+            collectDeclaredNames(expression, scope);
+        }
+    }
+
+    private void walkContextualOperand(
+            CanonicalExpression expression,
+            CanonicalLexicalScope scope) {
+        if (expression instanceof CanonicalClosure closure) {
+            walkSequence(closure.body(), scope);
+        } else {
+            walk(expression, scope);
         }
     }
 

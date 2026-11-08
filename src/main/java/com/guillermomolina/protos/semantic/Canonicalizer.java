@@ -135,12 +135,17 @@ public final class Canonicalizer {
         return new CanonicalIntrinsic(kind, intrinsic.span());
     }
 
+    /*
+     * I115: GraalPy constant-list lowering.
+     * Preserve literal Array provenance.
+     */
     private CanonicalExpression lowerArrayConstruction(
             SurfaceArrayConstruction array) {
         return new CanonicalCall(
                 new CanonicalLookup("Array", array.span()),
                 canonicalizeArguments(array.arguments()),
-                array.span());
+                array.span(),
+                true);
     }
 
     private CanonicalExpression lowerMapConstruction(
@@ -193,7 +198,8 @@ public final class Canonicalizer {
                 condition,
                 "whileTrue",
                 List.of(canonicalize(loop.body())),
-                loop.span());
+                loop.span(),
+                true);
     }
 
     /**
@@ -236,7 +242,8 @@ public final class Canonicalizer {
                     condition,
                     "ifTrue",
                     List.of(canonicalize(conditional.trueBranch())),
-                    conditional.span());
+                    conditional.span(),
+                    true);
         }
 
         CanonicalExpression trueBranch = canonicalize(conditional.trueBranch());
@@ -245,7 +252,8 @@ public final class Canonicalizer {
                 condition,
                 "ifTrueIfFalse",
                 List.of(trueBranch, falseBranch),
-                conditional.span());
+                conditional.span(),
+                true);
     }
 
     /**

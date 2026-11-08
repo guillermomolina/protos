@@ -44,6 +44,7 @@ import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedLo
 import com.guillermomolina.protos.execution.ProtosStructuredMapUpdateCalls.PreparedMapInitialDefinition;
 import com.guillermomolina.protos.execution.ProtosFrameLocalBindings.ResolvedLexicalWriteTarget;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 // PRUIBA DE I115, en algún momento esto volverá a funcionar
 // import com.guillermomolina.protos.runtime.ProtosIntegerValue;
@@ -929,6 +930,127 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 captured[index] = (ProtosLexicalCell) cells[index];
             }
             return closure.installCapturedCellsForRuntime(captured);
+        }
+    }
+
+    /*
+     * I115: GraalPy BinarySubscript / SetItem model.
+     *
+     * The built-in Array path specializes primitive long storage.
+     * This experimental path intentionally does not restore ordinary
+     * at/atPut protocol dispatch for non-Array receivers.
+     */
+    @Operation(storeBytecodeIndex = true)
+    public static final class BinarySubscript {
+
+        @Specialization(guards = "array.hasLongStorageForRuntime()")
+        public static long doLongStorage(
+                ProtosArrayValue array, long index) {
+            return array.indexedLongAt(Math.toIntExact(index));
+        }
+
+        @Specialization(replaces = "doLongStorage")
+        public static Object doArray(
+                ProtosArrayValue array, long index) {
+            return array.indexedAt(Math.toIntExact(index));
+        }
+
+        @Fallback
+        @InliningCutoff
+        public static Object doOther(
+                Object receiver,
+                Object index,
+                @Bind VirtualFrame frame) {
+            ProtosActivation activation =
+                    ProtosFrameArguments.activation(frame.getArguments());
+            throw ProtosCoreErrors.signal(
+                    activation,
+                    ProtosCoreErrors.newError(activation));
+        }
+    }
+
+    @Operation(storeBytecodeIndex = true)
+    public static final class SetItem {
+
+        @Specialization(guards = "array.hasLongStorageForRuntime()")
+        public static void doLongStorage(
+                long value,
+                ProtosArrayValue array,
+                long index) {
+            array.indexedLongPut(Math.toIntExact(index), value);
+        }
+
+        @Specialization(replaces = "doLongStorage")
+        public static void doArray(
+                Object value,
+                ProtosArrayValue array,
+                long index) {
+            array.indexedPut(Math.toIntExact(index), value);
+        }
+
+        @Fallback
+        @InliningCutoff
+        public static void doOther(
+                Object value,
+                Object receiver,
+                Object index,
+                @Bind VirtualFrame frame) {
+            ProtosActivation activation =
+                    ProtosFrameArguments.activation(frame.getArguments());
+            throw ProtosCoreErrors.signal(
+                    activation,
+                    ProtosCoreErrors.newError(activation));
+        }
+    }
+
+    /*
+     * I115: GraalPy PBytecodeDSLRootNode.MakeConstantLongList.
+     * The long[] constant is copied on every evaluation.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = long[].class, dimensions = 0)
+    public static final class MakeConstantLongArray {
+
+        @Specialization
+        public static ProtosArrayValue perform(
+                long[] values,
+                @Bind VirtualFrame frame) {
+            ProtosPrelude prelude =
+                    ProtosFrameArguments.preludeOrNull(
+                            frame.getArguments());
+
+            if (prelude == null) {
+                throw new IllegalStateException(
+                        "A constant Array requires a Core Prelude");
+            }
+
+            return new ProtosArrayValue(
+                    prelude.arrayPrototype(), values);
+        }
+    }
+
+
+    /*
+     * I115: GraalPy PBytecodeDSLRootNode.GetLen.
+     * Direct Array length, without method dispatch.
+     */
+    @Operation(storeBytecodeIndex = true)
+    public static final class GetLen {
+        @Specialization
+        public static long doArray(ProtosArrayValue array) {
+            return array.indexedSize();
+        }
+
+        @Fallback
+        @InliningCutoff
+        public static Object doOther(
+                Object receiver,
+                @Bind VirtualFrame frame) {
+            ProtosActivation activation =
+                    ProtosFrameArguments.activation(frame.getArguments());
+            throw ProtosCoreErrors.signal(
+                    activation,
+                    ProtosCoreErrors.newError(activation));
         }
     }
 

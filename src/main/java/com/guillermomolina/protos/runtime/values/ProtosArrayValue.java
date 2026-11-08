@@ -25,6 +25,7 @@ import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
 
+import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -40,24 +41,111 @@ public final class ProtosArrayValue extends ProtosObjectValue {
      * exactly as long as their shallow snapshots do.
      */
     private static final class IndexedGeneration {
-        private final ArrayList<Object> elements;
+        private ArrayList<Object> elements;
+        private long[] longElements;
         private List<Object> snapshotView;
         private boolean published;
 
-        private IndexedGeneration(ArrayList<Object> elements) {
-            this.elements = Objects.requireNonNull(elements, "elements");
+        private IndexedGeneration(ArrayList<Object> values) {
+            Objects.requireNonNull(values, "values");
+
+            boolean allLong = !values.isEmpty();
+            for (Object value : values) {
+                if (!(value instanceof Long)) {
+                    allLong = false;
+                    break;
+                }
+            }
+
+            if (allLong) {
+                longElements = new long[values.size()];
+                for (int index = 0; index < values.size(); index++) {
+                    longElements[index] =
+                            ((Long) values.get(index)).longValue();
+                }
+            } else {
+                elements = values;
+            }
+        }
+
+        private IndexedGeneration(long[] values) {
+            longElements = Objects.requireNonNull(values, "values");
+        }
+
+        private int size() {
+            return longElements != null
+                    ? longElements.length
+                    : elements.size();
+        }
+
+        private Object get(int index) {
+            return longElements != null
+                    ? Long.valueOf(longElements[index])
+                    : elements.get(index);
+        }
+
+        private long getLong(int index) {
+            return longElements[index];
+        }
+
+        private void put(int index, Object value) {
+            if (longElements != null) {
+                if (value instanceof Long number) {
+                    longElements[index] = number.longValue();
+                    return;
+                }
+
+                ArrayList<Object> widened =
+                        new ArrayList<>(longElements.length);
+                for (long element : longElements) {
+                    widened.add(Long.valueOf(element));
+                }
+
+                elements = widened;
+                longElements = null;
+            }
+
+            elements.set(index, value);
+        }
+
+        private void putLong(int index, long value) {
+            if (longElements != null) {
+                longElements[index] = value;
+            } else {
+                elements.set(index, Long.valueOf(value));
+            }
         }
 
         private List<Object> publishSnapshot() {
             published = true;
+
             if (snapshotView == null) {
-                snapshotView = Collections.unmodifiableList(elements);
+                if (longElements == null) {
+                    snapshotView = Collections.unmodifiableList(elements);
+                } else {
+                    IndexedGeneration captured = this;
+                    snapshotView = Collections.unmodifiableList(
+                            new AbstractList<Object>() {
+                                @Override
+                                public Object get(int index) {
+                                    return captured.get(index);
+                                }
+
+                                @Override
+                                public int size() {
+                                    return captured.size();
+                                }
+                            });
+                }
             }
+
             return snapshotView;
         }
 
         private IndexedGeneration detachedCopy() {
-            return new IndexedGeneration(new ArrayList<>(elements));
+            return longElements != null
+                    ? new IndexedGeneration(longElements.clone())
+                    : new IndexedGeneration(new ArrayList<>(elements));
         }
     }
 
@@ -76,12 +164,31 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         this.indexedGeneration = new IndexedGeneration(ownedElements);
     }
 
+    /*
+     * I115: GraalPy LongSequenceStorage construction.
+     * Each Array gets its own primitive backing.
+     */
+    public ProtosArrayValue(Object parent, long[] elements) {
+        super(parent);
+        this.indexedGeneration =
+                new IndexedGeneration(
+                        Objects.requireNonNull(elements, "elements").clone());
+    }
+
     public int indexedSize() {
-        return indexedGeneration.elements.size();
+        return indexedGeneration.size();
+    }
+
+    public boolean hasLongStorageForRuntime() {
+        return indexedGeneration.longElements != null;
     }
 
     public Object indexedAt(int index) {
-        return indexedGeneration.elements.get(requireExistingIndex(index));
+        return indexedGeneration.get(requireExistingIndex(index));
+    }
+
+    public long indexedLongAt(int index) {
+        return indexedGeneration.getLong(requireExistingIndex(index));
     }
 
     public Object indexedPut(int index, Object value) {
@@ -91,7 +198,17 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         }
 
         int existingIndex = requireExistingIndex(index);
-        writableIndexedGeneration().elements.set(existingIndex, value);
+        writableIndexedGeneration().put(existingIndex, value);
+        return value;
+    }
+
+    public long indexedLongPut(int index, long value) {
+        if (isFrozen()) {
+            throw new IllegalStateException("array is frozen");
+        }
+
+        int existingIndex = requireExistingIndex(index);
+        writableIndexedGeneration().putLong(existingIndex, value);
         return value;
     }
 
@@ -107,7 +224,7 @@ public final class ProtosArrayValue extends ProtosObjectValue {
     }
 
     private int requireExistingIndex(int index) {
-        if (index < 0 || index >= indexedGeneration.elements.size()) {
+        if (index < 0 || index >= indexedGeneration.size()) {
             throw new IndexOutOfBoundsException("array index out of bounds: " + index);
         }
         return index;
@@ -121,16 +238,15 @@ public final class ProtosArrayValue extends ProtosObjectValue {
     @ExportMessage
     @TruffleBoundary
     long getArraySize() {
-        return indexedGeneration.elements.size();
+        return indexedGeneration.size();
     }
 
     @ExportMessage
     boolean isArrayElementReadable(long index) {
-        if (index < 0 || index >= indexedGeneration.elements.size()) {
+        if (index < 0 || index >= indexedGeneration.size()) {
             return false;
         }
-        return InteropLibrary.isValidValue(
-                indexedGeneration.elements.get((int) index));
+        return InteropLibrary.isValidValue(indexedAt((int) index));
     }
 
     @ExportMessage
@@ -138,7 +254,7 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         if (!isArrayElementReadable(index)) {
             throw InvalidArrayIndexException.create(index);
         }
-        return indexedGeneration.elements.get((int) index);
+        return indexedAt((int) index);
     }
 
     /*

@@ -814,6 +814,30 @@ final class CanonicalCompilationFacts {
                     || anyDemandsPersistentFrame(call.arguments(), analysis, scope, ownBindingsOnly, promotable);
         }
         if (expression instanceof CanonicalSend send) {
+            if (send.contextual()) {
+                CanonicalExpression receiver =
+                        send.receiver() instanceof CanonicalClosure closure
+                                ? closure.body()
+                                : send.receiver();
+
+                if (demandsPersistentFrame(
+                        receiver, analysis, scope, ownBindingsOnly, promotable)) {
+                    return true;
+                }
+
+                for (CanonicalExpression argument : send.arguments()) {
+                    CanonicalExpression operand =
+                            argument instanceof CanonicalClosure closure
+                                    ? closure.body()
+                                    : argument;
+                    if (demandsPersistentFrame(
+                            operand, analysis, scope, ownBindingsOnly, promotable)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
             return demandsPersistentFrame(send.receiver(), analysis, scope, ownBindingsOnly, promotable)
                     || anyDemandsPersistentFrame(send.arguments(), analysis, scope, ownBindingsOnly, promotable);
         }
