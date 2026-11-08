@@ -1,0 +1,296 @@
+{
+  "baseline_protos_revision": "b1f4c05387e7e2143d3660c9834716e8383124f7",
+  "expected_graalvm_ce": "25.5.5.0.3",
+  "root_count": 41,
+  "roots": {
+    "bubble-sort": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 496
+      },
+      "protos-root:70bac6408c0f1e35[CLOSURE|truffle:8c8b06c859fab89576f04883abcf0733514bc26f45eb3cc2459a45c7c26b5e12//workspaces/protos-benchmarks/cases/bubble-sort/bubble-sort.protos|1050+804]": {
+        "dsl_static": {
+          "CACHED": 200
+        },
+        "tier1_nodes": 531,
+        "tier2_nodes": 376
+      }
+    },
+    "factorial": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 421
+      },
+      "protos-root:0349b7af98147903[CLOSURE|truffle:f92b387a9255dff172615a2ca49e8f3aa274be0c2480234d44a382d6a974cf01//workspaces/protos-benchmarks/cases/factorial/factorial.protos|1046+89]": {
+        "dsl_static": {
+          "CACHED": 48
+        },
+        "tier1_nodes": 174,
+        "tier2_nodes": 336
+      },
+      "protos-root:78dd5017e44815f0[CLOSURE|truffle:f92b387a9255dff172615a2ca49e8f3aa274be0c2480234d44a382d6a974cf01//workspaces/protos-benchmarks/cases/factorial/factorial.protos|1156+13]": {
+        "dsl_static": {
+          "CACHED": 20
+        },
+        "tier1_nodes": 143,
+        "tier2_nodes": 281
+      }
+    },
+    "fibonacci": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 1129
+      },
+      "protos-root:4308b246ea11a3c5[CLOSURE|truffle:4c064b92f8adb13540f0ffe7d834b9c44a9bade6354151c27ec09a10413e711f//workspaces/protos-benchmarks/cases/fibonacci/fibonacci.protos|1172+13]": {
+        "dsl_static": {
+          "CACHED": 20
+        },
+        "tier1_nodes": 143,
+        "tier2_nodes": 989
+      },
+      "protos-root:9e63b5cbd94a66e6[CLOSURE|truffle:4c064b92f8adb13540f0ffe7d834b9c44a9bade6354151c27ec09a10413e711f//workspaces/protos-benchmarks/cases/fibonacci/fibonacci.protos|1046+105]": {
+        "dsl_static": {
+          "CACHED": 56
+        },
+        "tier1_nodes": 207,
+        "tier2_nodes": 1199
+      }
+    },
+    "integer-loop": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 212
+      },
+      "protos-root:77d1c4a1d5f56b7a[CLOSURE|truffle:1fc8228620f35aad55f2059da959eec5b4e4ab2256f4cf34e05469eaa324b221//workspaces/protos-benchmarks/cases/integer-loop/integer-loop.protos|1050+110]": {
+        "dsl_static": {
+          "CACHED": 52
+        },
+        "tier1_nodes": 183,
+        "tier2_nodes": 75
+      }
+    },
+    "method-call": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 235
+      },
+      "protos-root:52ca6570f17f6fd3[CLOSURE|truffle:a1c5016d528c7a34c195463d937a350a177734c8372bc7a6b45126c46a063fd6//workspaces/protos-benchmarks/cases/method-call/method-call.protos|1072+5]": {
+        "dsl_static": {
+          "CACHED": 18
+        },
+        "tier1_nodes": 106,
+        "tier2_nodes": 49
+      },
+      "protos-root:66bdbc199ef1f645[CLOSURE|truffle:a1c5016d528c7a34c195463d937a350a177734c8372bc7a6b45126c46a063fd6//workspaces/protos-benchmarks/cases/method-call/method-call.protos|1100+129]": {
+        "dsl_static": {
+          "CACHED": 64
+        },
+        "tier1_nodes": 235,
+        "tier2_nodes": 94
+      }
+    },
+    "primitive-closure-call": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 144
+      },
+      "protos-root:767e03159230ea4a[CLOSURE|truffle:60c558345a43a5283e8f7ac95b518fed14d80164e52e1b907b83fb4c432d2ed4//workspaces/protos-benchmarks/cases/primitive-closure-call/primitive-closure-call.protos|1073+5]": {
+        "dsl_static": {
+          "CACHED": 18
+        },
+        "tier1_nodes": 105,
+        "tier2_nodes": 48
+      },
+      "protos-root:e09ef5c7513d2c90[CLOSURE|truffle:60c558345a43a5283e8f7ac95b518fed14d80164e52e1b907b83fb4c432d2ed4//workspaces/protos-benchmarks/cases/primitive-closure-call/primitive-closure-call.protos|1050+46]": {
+        "dsl_static": {
+          "CACHED": 28
+        },
+        "tier1_nodes": 149,
+        "tier2_nodes": 44
+      }
+    },
+    "primitive-if-false": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 144
+      },
+      "protos-root:40338fab65c4a66b[CLOSURE|truffle:7ad53e0e90c221693f8a7bb22a7b5ec8516f71a357922303cfe0ba65cfb34c9e//workspaces/protos-benchmarks/cases/primitive-if-false/primitive-if-false.protos|1050+27]": {
+        "dsl_static": {
+          "CACHED": 16
+        },
+        "tier1_nodes": 104,
+        "tier2_nodes": 47
+      }
+    },
+    "primitive-if-true": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 144
+      },
+      "protos-root:5f70adb39a622520[CLOSURE|truffle:fc93fee9b05d3fcd9c3e77a5a33fb538358a84e391344dac7964d288aa8fdfed//workspaces/protos-benchmarks/cases/primitive-if-true/primitive-if-true.protos|1050+69]": {
+        "dsl_static": {
+          "CACHED": 24
+        },
+        "tier1_nodes": 104,
+        "tier2_nodes": 47
+      }
+    },
+    "primitive-integer-add": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 144
+      },
+      "protos-root:ce98415490e06f7d[CLOSURE|truffle:ae8ba162beb092793920a40655bc10d1ff57b4dc62edbae370ad86c0d1e97aff//workspaces/protos-benchmarks/cases/primitive-integer-add/primitive-integer-add.protos|1050+37]": {
+        "dsl_static": {
+          "CACHED": 28
+        },
+        "tier1_nodes": 104,
+        "tier2_nodes": 47
+      }
+    },
+    "primitive-local-read": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 144
+      },
+      "protos-root:2e9ed1a71f73a5f0[CLOSURE|truffle:c90b54a10a932465e693ee8d220949d380e20828b854fba732771b502cb03f6c//workspaces/protos-benchmarks/cases/primitive-local-read/primitive-local-read.protos|1050+18]": {
+        "dsl_static": {
+          "CACHED": 20
+        },
+        "tier1_nodes": 104,
+        "tier2_nodes": 47
+      }
+    },
+    "primitive-local-write": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 144
+      },
+      "protos-root:85d74f07baa4c42b[CLOSURE|truffle:5121fa3730c6a6a5a064fa624dadfcfa26b3099a2edc944fe6c96ce08dcb545c//workspaces/protos-benchmarks/cases/primitive-local-write/primitive-local-write.protos|1050+32]": {
+        "dsl_static": {
+          "CACHED": 24
+        },
+        "tier1_nodes": 104,
+        "tier2_nodes": 47
+      }
+    },
+    "primitive-method-call": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 162
+      },
+      "protos-root:16125c1e5cdb117c[CLOSURE|truffle:9b611aa15067adacd900b6acfff975e64caa72af738fc4d9d97c7e8efd8b6bdf//workspaces/protos-benchmarks/cases/primitive-method-call/primitive-method-call.protos|1100+20]": {
+        "dsl_static": {
+          "CACHED": 28
+        },
+        "tier1_nodes": 149,
+        "tier2_nodes": 60
+      },
+      "protos-root:8c41fefc9e980289[CLOSURE|truffle:9b611aa15067adacd900b6acfff975e64caa72af738fc4d9d97c7e8efd8b6bdf//workspaces/protos-benchmarks/cases/primitive-method-call/primitive-method-call.protos|1072+5]": {
+        "dsl_static": {
+          "CACHED": 18
+        },
+        "tier1_nodes": 106,
+        "tier2_nodes": 49
+      }
+    },
+    "primitive-object-slot-read": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 165
+      },
+      "protos-root:b1af43ea3a194806[CLOSURE|truffle:6159a67cb7861e97bcedc9ced885e10f06f001c6e6eaf41378afbc844ade194f//workspaces/protos-benchmarks/cases/primitive-object-slot-read/primitive-object-slot-read.protos|1076+12]": {
+        "dsl_static": {
+          "CACHED": 18
+        },
+        "tier1_nodes": 124,
+        "tier2_nodes": 67
+      }
+    },
+    "primitive-object-slot-write": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 223
+      },
+      "protos-root:8e64d08e1bfab4e8[CLOSURE|truffle:2a35cbce22fb58b97bc524695ec744b377b54440793fb635528183094dbce59f//workspaces/protos-benchmarks/cases/primitive-object-slot-write/primitive-object-slot-write.protos|1076+33]": {
+        "dsl_static": {
+          "CACHED": 24
+        },
+        "tier1_nodes": 151,
+        "tier2_nodes": 92
+      }
+    },
+    "primitive-return-literal": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 144
+      },
+      "protos-root:12000139cc4702dc[CLOSURE|truffle:f494944568512836899852d95514f4b6b313193fd9c59274ccd9fc6d6d000d79//workspaces/protos-benchmarks/cases/primitive-return-literal/primitive-return-literal.protos|1050+1]": {
+        "dsl_static": {
+          "CACHED": 16
+        },
+        "tier1_nodes": 104,
+        "tier2_nodes": 47
+      }
+    },
+    "primitive-while-counted": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 207
+      },
+      "protos-root:08f712e1e6afaa16[CLOSURE|truffle:21f0bf224ad657cab54382967cf03d613dd934fda101cd276cf11997966da580//workspaces/protos-benchmarks/cases/primitive-while-counted/primitive-while-counted.protos|1050+66]": {
+        "dsl_static": {
+          "CACHED": 40
+        },
+        "tier1_nodes": 177,
+        "tier2_nodes": 70
+      }
+    },
+    "primitive-while-once": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 206
+      },
+      "protos-root:521567ba759907ff[CLOSURE|truffle:8156f1bb440eefb5e274569f6643fb96719bdfec815810db3b611bbb81e616dd//workspaces/protos-benchmarks/cases/primitive-while-once/primitive-while-once.protos|1050+66]": {
+        "dsl_static": {
+          "CACHED": 40
+        },
+        "tier1_nodes": 177,
+        "tier2_nodes": 69
+      }
+    },
+    "primitive-while-zero": {
+      "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute": {
+        "dsl_static": {},
+        "tier1_nodes": 239,
+        "tier2_nodes": 144
+      },
+      "protos-root:68028c3f51c1177d[CLOSURE|truffle:6b1aea546f0216b308b8d0668b0b21738924412e010ebddb76c04f4ead3a9a37//workspaces/protos-benchmarks/cases/primitive-while-zero/primitive-while-zero.protos|1050+38]": {
+        "dsl_static": {
+          "CACHED": 16
+        },
+        "tier1_nodes": 104,
+        "tier2_nodes": 47
+      }
+    }
+  },
+  "schema": 1,
+  "workload_count": 18
+}

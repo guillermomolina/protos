@@ -76,7 +76,21 @@ TRUFFLE_ROOT_SELECTOR ?=
 TRUFFLE_ROOT_EXPANSION ?= method
 TRUFFLE_ROOT_DUMP_LEVEL ?= 1
 
+.PHONY: semantic-performance-gate i115-performance-baseline i115-performance-probe test-semantic-performance-gate
 .PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate build-native test-native clean-native
+
+# I115: self-contained Protos local JVM gate. No external benchmarks checkout.
+semantic-performance-gate:
+	$(PYTHON) tools/i115_semantic_performance_gate.py run
+
+i115-performance-baseline:
+	$(PYTHON) tools/i115_semantic_performance_gate.py baseline
+
+i115-performance-probe:
+	$(PYTHON) tools/i115_semantic_performance_gate.py probe
+
+test-semantic-performance-gate:
+	$(PYTHON) -m unittest discover -s tools/tests -p 'test_i115_*gate.py'
 
 help:
 	@printf '%s\n' \
