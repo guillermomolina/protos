@@ -131,6 +131,13 @@ final class ProtosForeignValueFixture implements AutoCloseable {
     public void close() {
         try {
             bootstrap.process().requestTerminationForRuntime();
+            /*
+             * I158: initialization may have created an Actor whose pending
+             * Future retains a continuation or a Task. Process termination
+             * is cooperative; requesting it is not proof that its Context
+             * has already completed its terminal cleanup.
+             */
+            context.awaitTerminalDispositionForRuntime();
         } finally {
             host.close();
         }

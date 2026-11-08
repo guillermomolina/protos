@@ -158,6 +158,43 @@ python3 dist/build_artifact_set.py --verify target/artifact-set --expect-revisio
 This set is local construction evidence. Durable exact-revision publication
 of the D064 artifact is the separate explicit step below.
 
+### Filesystem grant under Native Image (I156)
+
+`--allow-filesystem=<directory>` is served by the Linux kernel-confined
+backend (`openat2` with `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS |
+RESOLVE_NO_MAGICLINKS | RESOLVE_NO_XDEV`, plus one Landlock-restricted thread
+per grant). Its system calls are made through Java 25 Foreign Function &
+Memory downcalls of the C library `syscall` function:
+
+- The JVM distribution needs nothing extra: `bin/protos` already starts the JVM
+  with `--enable-native-access=ALL-UNNAMED`.
+- The Native Image build relies on FFM support, enabled by default in GraalVM
+  25, passes `--enable-native-access=ALL-UNNAMED` and registers the
+  single downcall descriptor in
+  `src/main/resources/META-INF/native-image/com.guillermomolina/protos/reachability-metadata.json`
+  (`foreign.downcalls`, with `firstVariadicArg: 1` and `captureCallState`).
+- No JNI library, C source, compiler or `.so` is built, shipped or needed on
+  the target system, and the Native executable still needs no installed JVM.
+  The distribution contract is unchanged: Linux x86_64 with dynamic glibc at
+  the established minimum.
+
+The grant additionally requires a host kernel that serves Landlock ABI 3 or
+later. On a host without it the grant is refused at startup, before guest
+code runs; that is the expected fail-closed behavior, not a packaging
+failure.
+
+`make test-native` checks the grant on `target/native/protos`
+(`NATIVE_I155_FILESYSTEM`): write and read in separate invocations, tree
+operations, refusal without the option, refusal of missing, file and
+symbolic-link roots, a symbolic link inside the root that points outside,
+a bind mount when the host permits creating one
+(`NATIVE_I156_BIND_MOUNT_STATUS=ADMISSION_HOST_REFUSES_BIND_MOUNT` otherwise),
+and the absence of any private native library. On a host that refuses the grant
+it reports `REJECTED_UNSUPPORTED_PLATFORM`, which verifies only the fail-closed
+refusal. `dist/validate_native.py` repeats write, read-after-restart,
+outside-root refusal and denial cases against the relocated installed archive
+(`NATIVE_DIST_FILESYSTEM_GRANT=PASS`, or `REJECTED_UNSUPPORTED_HOST`).
+
 ### TLS under Native Image
 
 **Native check.** The Human Executor runs:

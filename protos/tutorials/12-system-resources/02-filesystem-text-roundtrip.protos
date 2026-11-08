@@ -12,7 +12,16 @@
 Files: import("std:io/files")
 
 // This lesson requires the host to provision the bootstrap-local `filesystem`
-// capability. The ordinary standalone application CLI intentionally does not do so.
+// capability. The standalone CLI does so only when explicitly asked, for one
+// directory that must already exist (it is never created):
+//
+//     mkdir -p ./tutorial-data
+//     protos --allow-filesystem=./tutorial-data \
+//         protos/tutorials/12-system-resources/02-filesystem-text-roundtrip.protos
+//
+// Without --allow-filesystem there is no `filesystem` binding at all. The path
+// below is relative to the authorized directory, never to the host's current
+// directory.
 path: Path.relative().child("tutorial-system-resource.txt")
 Files.writeAllText(
     filesystem,

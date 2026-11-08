@@ -427,6 +427,81 @@ task representation, or continuation mechanism; an implementation may block
 the calling host thread, park a continuation, or use any other mechanism that
 preserves these observations.
 
+### Actor initialization suspension
+
+This subsection is the normative owner of D251-A1. It is independent of
+"Suspendible host-initiated RootActor entries" above (HOST-FUT-1): neither
+grants the other's permission, and neither extends suspension permission to a
+callback of a synchronous foreign operation, which remains governed exclusively
+by "Synchronous foreign callbacks and the current Task" below, including when
+that callback is invoked from initialization code.
+
+An **Actor initialization continuation** is the single logical initialization
+of one Actor incarnation (`ACTORS.md`, Bootstrap representation and
+initialization): execution of its initial SOURCE or MODULE initializer
+(`../semantics/MODULES.md`), every nested import that initializer executes,
+and the selection and invocation of its bootstrap binding. It exists for an
+Actor created by `Actor.spawn` and for the RootActor in message-service mode.
+The following rules apply:
+
+1. A `value()` call on a pending Future may suspend an Actor initialization
+   continuation although no Task exists. The absence of a task does not by
+   itself prevent that explicit suspension.
+2. The permission covers the initial SOURCE or MODULE initializer, the nested
+   imports it executes, and the bootstrap binding invocation, both for
+   `Actor.spawn` and for the RootActor in service mode. It is granted by the
+   initialization being executed, not by the Actor merely being
+   `INITIALIZING`; in particular a RootActor that is `INITIALIZING` while
+   serving direct host entries gains nothing from this subsection.
+3. During the suspension the Actor remains `INITIALIZING` and the
+   initialization retains the Actor's execution exclusivity: no other Protos
+   code of that Actor executes ordinary guest code, no message is dispatched,
+   and no task of the same Actor runs.
+4. Internal completions of Futures owned by that Actor's domain may progress
+   within that owning domain while the initialization is suspended, so that the
+   awaited Future can become terminal. This progress executes no arbitrary
+   task, no external message, and no user callback that this specification does
+   not otherwise authorize.
+5. No implicit task is created for the initialization, and no new structured
+   cancellation relationship is introduced by suspending it. Tasks started by
+   initialization code keep their ordinary ownership (§24).
+6. No progress is promised when the awaited Future's producer needs another
+   task of the same Actor that remains excluded by the initialization. There is
+   no automatic reentry, implicit yield, or auxiliary task created to avoid it.
+7. The lost-wakeup exclusion, the atomic observer registration with respect to
+   the first terminal transition, the observation of a resolved, failed, or
+   cancelled Future, and the prohibition of duplicate resumption in this
+   section apply unchanged. Resumption continues the suspended continuation at
+   the suspension point and never re-evaluates expressions that completed
+   before it or duplicates their effects.
+8. Suspension is not an unwind. It does not by itself run any `ensure` body
+   (`../semantics/EXECUTION_AND_CONTROL.md`), and it does not turn `import()`
+   into a waiting operation: an import still returns its cached, possibly
+   partially initialized result immediately (`../semantics/MODULES.md`).
+9. Termination of the Actor or of its Process invalidates a suspended
+   initialization continuation definitively. A later terminal transition of the
+   awaited Future cannot execute guest code of that initialization and cannot
+   publish `READY`. Suspension neither cancels nor otherwise affects the
+   observed Future.
+
+   Invalidation is immediate, but it is not itself the end of the
+   initialization. A continuation that is suspended when termination begins is
+   invalidated at once and can never resume; releasing what it retains is then
+   performed within the Actor's own execution domain, without resuming guest
+   code and without running any `ensure` body. A segment of the initialization
+   that is already executing guest code when termination begins is not
+   interrupted: it runs until it next suspends or ends, after which it is
+   invalidated in the same way. In both cases the Actor does not become
+   `TERMINATED` until that release has happened and no such segment is still
+   executing. This clarifies rule 9; it adds no implicit suspension and no
+   reentry.
+
+Permission to suspend imposes no cost on initializations that never suspend.
+This subsection standardizes no carrier, lock, waiter structure, or
+continuation mechanism; a conforming implementation must not block a shared
+execution carrier for the duration of the wait in a way that changes the
+observations above.
+
 ## 30. Future Composition
 
 Core v0.1 standardizes the ordinary Future transformation operation:

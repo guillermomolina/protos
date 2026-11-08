@@ -36,6 +36,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosTask;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.math.BigInteger;
@@ -467,6 +468,132 @@ class ProtosForeignCallbackTest {
                 return Marker.NULL;
             };
             setup.eval("m.fn(1, \"x\")");
+        }
+    }
+
+    /**
+     * I158 / D251-A1 regression: a callback of a synchronous foreign operation invoked while an
+     * Actor initialization runs in its BOOTSTRAP extent. The ordinary foreign protocol marks the
+     * callback SYNCHRONOUS, so {@code value()} on a pending Future is rejected with the existing
+     * Error; no bootstrap continuation is retained, no Task is created and BOOTSTRAP is restored.
+     */
+    @Test
+    void synchronousCallbackDuringActorBootstrapRejectsPendingValueAndRestoresBootstrap()
+            throws Exception {
+        try (Setup setup = new Setup()) {
+            AtomicReference<com.guillermomolina.protos.runtime.ProtosActor> target =
+                    new AtomicReference<>();
+            List<com.guillermomolina.protos.runtime.ProtosActorExecutionDomain.HostEntryExtent>
+                    extents = new ArrayList<>();
+            setup.fn.body =
+                    arguments -> {
+                        extents.add(target.get().executionDomain().hostEntryExtentForRuntime());
+                        if (!arguments.isEmpty() && arguments.get(0).isCallback()) {
+                            return back(invoke(arguments.get(0)));
+                        }
+                        return Marker.NULL;
+                    };
+            String bootstrapSource =
+                    M
+                            + "p: (() => 1).future()\n"
+                            + "outcome: m.fn(() => {\n"
+                            + "    m.fn(null)\n"
+                            + "    Error.handle(() => { p.value() }, (error) => { \"rejected\" })\n"
+                            + "})\n"
+                            + "m.fn(null)\n"
+                            + "boot: () => { { outcome: outcome } }\n";
+            ProtosModuleKey key = ProtosModuleKey.source("canonical:i158-foreign-boot");
+            ProtosModuleRuntime moduleRuntime =
+                    new ProtosModuleRuntime(
+                            new ProtosModuleResolver() {
+                                @Override
+                                public ProtosModuleKey resolve(
+                                        String exactSpecifier,
+                                        java.util.Optional<ProtosModuleKey> importingModule) {
+                                    return ProtosModuleKey.source("canonical:" + exactSpecifier);
+                                }
+
+                                @Override
+                                public ProtosModuleSource loadSource(ProtosModuleKey requested) {
+                                    return ProtosModuleSource.fromCharacters(requested, bootstrapSource);
+                                }
+                            });
+            List<ProtosActorBootstrapSuspension.ProbePoint> retained = new ArrayList<>();
+            ProtosActorBootstrapSuspension.probeForTesting =
+                    (point, future) -> {
+                        if (point == ProtosActorBootstrapSuspension.ProbePoint.BEFORE_RETENTION) {
+                            retained.add(point);
+                        }
+                    };
+            AtomicReference<Boolean> initialized = new AtomicReference<>();
+            try {
+                // The initialization runs synchronously inside an ordinary guest call, entered
+                // in the fixture's hosted Context, through the public bootstrap engine.
+                setup.probe(
+                        ProtosClosureValue.nativeClosure(
+                                (activation, supplied) -> {
+                                    com.guillermomolina.protos.runtime.ProtosActor actor =
+                                            setup.fixture.bootstrap.process()
+                                                    .rootActorForRuntime()
+                                                    .createHostedActorForRuntime(
+                                                            new ProtosObjectValue(
+                                                                            ProtosObjectValue.rootObject())
+                                                                    .freeze());
+                                    target.set(actor);
+                                    initialized.set(
+                                            new ProtosActorBootstrap(moduleRuntime)
+                                                    .initialize(
+                                                            actor,
+                                                            setup.fixture.prelude,
+                                                            key,
+                                                            "boot",
+                                                            List.of()));
+                                    return ProtosNullValue.INSTANCE;
+                                }));
+                setup.eval("m.probe()");
+            } finally {
+                ProtosActorBootstrapSuspension.probeForTesting = null;
+            }
+
+            assertEquals(Boolean.TRUE, initialized.get());
+            com.guillermomolina.protos.runtime.ProtosActor actor = target.get();
+            assertEquals(
+                    com.guillermomolina.protos.runtime.ProtosActor.LifecycleState.READY,
+                    actor.lifecycleState());
+            assertEquals(
+                    "rejected",
+                    ((com.guillermomolina.protos.runtime.ProtosStringValue)
+                                    actor.currentBehavior()
+                                            .orElseThrow()
+                                            .readLocalSlot("outcome")
+                                            .orElseThrow())
+                            .value());
+            // Foreign call entry, inside the callback, after the foreign call returned.
+            assertEquals(
+                    List.of(
+                            com.guillermomolina.protos.runtime.ProtosActorExecutionDomain.HostEntryExtent.BOOTSTRAP,
+                            com.guillermomolina.protos.runtime.ProtosActorExecutionDomain.HostEntryExtent.SYNCHRONOUS,
+                            com.guillermomolina.protos.runtime.ProtosActorExecutionDomain.HostEntryExtent.BOOTSTRAP),
+                    extents);
+            assertTrue(retained.isEmpty(), "no bootstrap continuation was retained");
+            assertTrue(actor.bootstrapCustodyForRuntime().isEmpty());
+            assertEquals(
+                    com.guillermomolina.protos.runtime.ProtosActorExecutionDomain.HostEntryExtent.NONE,
+                    actor.executionDomain().hostEntryExtentForRuntime(),
+                    "the bootstrap extent ends with the initialization");
+            assertEquals(1, actor.executionDomain().liveTaskCount(), "only the guest's own Task");
+
+            // I158: this Actor was created directly for the synchronous-bootstrap
+            // regression, bypassing the usual Actor.spawn scheduler attachment.
+            // The deliberately pending .future() Task must acquire a carrier
+            // before Process termination can complete its cooperative cancellation.
+            // Attach only after all bootstrap assertions: earlier execution would
+            // invalidate the pending-Future premise of this test.
+            setup.fixture.bootstrap.process()
+                    .executionHostForRuntime()
+                    .flatMap(host -> host.actorSchedulerForRuntime())
+                    .orElseThrow()
+                    .attach(actor);
         }
     }
 }

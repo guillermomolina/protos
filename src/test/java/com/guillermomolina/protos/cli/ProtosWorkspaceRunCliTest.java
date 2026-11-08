@@ -27,6 +27,7 @@ import com.guillermomolina.protos.execution.ProtosExactExternalPackageIdentity;
 import com.guillermomolina.protos.execution.ProtosExecutionOutcome;
 import com.guillermomolina.protos.execution.ProtosNioReadOnlyTreeFilesystemBackend;
 import com.guillermomolina.protos.execution.ProtosPackageContentIdentity;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.FilesystemGrant;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -88,6 +89,17 @@ final class ProtosWorkspaceRunCliTest {
                     + "writer.writeLine(Api.value).value()\n"
                     + "Api.value\n";
 
+    /** I155: a root-package MODULE that writes and reads under its explicit Filesystem grant. */
+    private static final String FILESYSTEM_MAIN =
+            "Files: import(\"std:io/files\")\n"
+                    + "path: Path.relative().child(\"nested\").child(\"run.txt\")\n"
+                    + "Files.writeAllText(filesystem, path, process.args().at(0), Encoding.UTF8)"
+                    + ".value()\n"
+                    + "writer: TextWriter(process.stdout(), process.stdoutEncoding())\n"
+                    + "writer.writeLine(Files.readAllText(filesystem, path, Encoding.UTF8).value())"
+                    + ".value()\n"
+                    + "null\n";
+
     @TempDir Path temp;
 
     @Test
@@ -102,6 +114,80 @@ final class ProtosWorkspaceRunCliTest {
                 "protos run [--allow-network] [--allow-entropy] [--service=<binding>] <entry> [args...]"));
         assertTrue(help.stdout().contains("current directory"));
         assertTrue(help.stdout().contains("neither 'run' nor <entry>"));
+    }
+
+    @Test
+    void workspaceRunReceivesOnlyTheExplicitFilesystemGrant() throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        Files.writeString(project.resolve("Main/module.protos"), FILESYSTEM_MAIN);
+        String lockBefore = Files.readString(project.resolve("protos.lock"));
+        Path data = Files.createDirectories(temp.resolve("granted-data/nested"));
+
+        Result granted =
+                runWorkspace(
+                        new ProtosCli(),
+                        project,
+                        "Main",
+                        FilesystemGrant.directory(data.getParent()),
+                        "workspace-value");
+
+        assertEquals(0, granted.code(), granted.stderr());
+        assertEquals("workspace-value\n", granted.stdout());
+        assertEquals("workspace-value", Files.readString(data.resolve("run.txt")));
+        // The grant is the selected directory, never the package root, and preflight left the
+        // package metadata untouched.
+        assertTrue(Files.notExists(project.resolve("nested")));
+        assertEquals(lockBefore, Files.readString(project.resolve("protos.lock")));
+
+        Result ungranted = runWorkspace(project, "Main", "workspace-value");
+        assertEquals(1, ungranted.code());
+        assertTrue(ungranted.stderr().contains("Error:"), ungranted.stderr());
+    }
+
+    @Test
+    void publicRunParsesFilesystemGrantBeforeTheEntryOnly() {
+        Result duplicate =
+                runPublic("run", "--allow-filesystem=a", "--allow-filesystem=b", "Main");
+        assertEquals(2, duplicate.code());
+        Result bare = runPublic("run", "--allow-filesystem", "Main");
+        assertEquals(2, bare.code());
+    }
+
+    @Test
+    void externalMaterializationRunReceivesTheExplicitFilesystemGrant() throws Exception {
+        MixedProject mixed = materializeMixedProject("mixed-filesystem");
+        ProtosLocalExactPackageMaterializationProvider provider =
+                new ProtosLocalExactPackageMaterializationProvider(
+                        temp.resolve("mixed-filesystem-store"));
+        Path selectedRoot = provider.locationFor(mixed.identity());
+        copyTree(mixed.externalSource(), selectedRoot);
+        assumeSecureConfinement(selectedRoot);
+        Files.writeString(
+                mixed.project().resolve("Main/module.protos"),
+                "Api: import(\"dep:reg/Api\")\n" + FILESYSTEM_MAIN);
+        Path data = Files.createDirectories(temp.resolve("mixed-data/nested"));
+
+        Result granted =
+                runWorkspace(
+                        new ProtosCli(ignoredDistributionRoot -> provider),
+                        mixed.project(),
+                        "Main",
+                        FilesystemGrant.directory(data.getParent()),
+                        "external-value");
+
+        assertEquals(0, granted.code(), granted.stderr());
+        assertEquals("external-value\n", granted.stdout());
+        assertEquals("external-value", Files.readString(data.resolve("run.txt")));
+        assertTrue(Files.notExists(selectedRoot.resolve("nested")));
+
+        Result ungranted =
+                runWorkspace(
+                        new ProtosCli(ignoredDistributionRoot -> provider),
+                        mixed.project(),
+                        "Main",
+                        "external-value");
+        assertEquals(1, ungranted.code());
     }
 
     @Test
@@ -423,6 +509,23 @@ final class ProtosWorkspaceRunCliTest {
 
     private Result runWorkspace(Path project, String entry, String... args) {
         return runWorkspace(new ProtosCli(), project, entry, args);
+    }
+
+    private Result runWorkspace(
+            ProtosCli cli, Path project, String entry, FilesystemGrant grant, String... args) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        int code =
+                cli.runWorkspaceApplication(
+                        project,
+                        entry,
+                        List.of(args),
+                        InputStream.nullInputStream(),
+                        new PrintStream(out),
+                        new PrintStream(err),
+                        null,
+                        grant);
+        return result(code, out, err);
     }
 
     private Result runWorkspace(

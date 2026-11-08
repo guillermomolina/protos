@@ -3029,6 +3029,36 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    // ---- I158 Actor initialization C-prime phases ----------------------------------
+
+    /**
+     * I158 / D251-A1: prepares the initial MODULE/SOURCE of the single Actor initialization owned
+     * by the bootstrap sequence in argument 1 of {@link ProtosActorBootstrapCPrimeExecution}. Runs
+     * exactly once per initialization: a resumption continues after this operation, so neither
+     * preparation nor the cache-before-execute insertion is repeated after a {@code Yield}.
+     */
+    @Operation
+    public static final class PrepareActorBootstrapModule {
+        @Specialization
+        public static PreparedClosureCall perform(Object sequence) {
+            return ProtosActorBootstrap.Sequence.prepareModuleForRuntime(sequence);
+        }
+    }
+
+    /**
+     * I158 / D251-A1: after the initial module body truly completed (its record is READY), selects
+     * the bootstrap binding as an own slot of the public MODULE object or SOURCE Context,
+     * materializes the transferred arguments once and prepares the ordinary invocation: a MODULE
+     * send preserving receiver and method home, or the SOURCE slot-value invocation.
+     */
+    @Operation
+    public static final class PrepareActorBootstrapBinding {
+        @Specialization
+        public static PreparedClosureCall perform(Object sequence, Object module) {
+            return ProtosActorBootstrap.Sequence.prepareBindingForRuntime(sequence, module);
+        }
+    }
+
     // ---- Prepared call/send selection ----------------------------------------------
 
     @Operation

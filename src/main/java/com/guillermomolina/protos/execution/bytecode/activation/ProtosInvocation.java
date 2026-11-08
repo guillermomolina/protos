@@ -136,6 +136,12 @@ public final class ProtosInvocation {
     private static Object invokeForeignCallbackOutsideTask(
             Object receiver, List<?> supplied, ProtosActivation caller) {
         ProtosActorExecutionDomain domain = caller.executionDomain();
+        /*
+         * I158 / D251-A1: an active Actor bootstrap extent (BOOTSTRAP) is treated like a
+         * suspendible host entry here: the synchronous callback runs in SYNCHRONOUS, where an
+         * actual suspension is rejected, and the bootstrap extent is restored afterwards even
+         * when the callback fails.
+         */
         if (domain == null
                 || domain.hostEntryExtentForRuntime() == HostEntryExtent.NONE) {
             return invoke(receiver, supplied, caller);

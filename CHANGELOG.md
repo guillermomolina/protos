@@ -7,6 +7,18 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.455-SNAPSHOT
+
+- `I155`, `I156` and `I158`: integrate explicit Filesystem authority, Linux kernel confinement and asynchronous RootActor bootstrap suspension.
+  - Add opt-in `--allow-filesystem=<directory>` to standalone CLI application entry points, preserving default-deny authority and bootstrap-local capability binding.
+  - Replace the former confined Filesystem backend with Linux `openat2` and Landlock confinement, using Java 25 FFM without a private JNI library.
+  - Preserve File resource identity, asynchronous I/O commitment, failure and cancellation semantics, and Process-scoped resource revocation.
+  - Support suspension and resumption of RootActor initialization, with Actor-domain ownership, lifecycle coordination and continuation custody.
+  - Ensure hosted Process termination and Context disposition complete before closing the Polyglot runtime host.
+  - Isolate filesystem write-fault injection per File to prevent interference between concurrently executing tests.
+  - Update specifications, user guides, examples, tutorials, Native Image metadata and executable validation.
+  - Validate with I156/I158 concurrent integration regressions, complete `make test`, `make check` and generated-bytecode compilation guards.
+
 ## 0.3.454-SNAPSHOT
 
 - `I157` (#1090, D243-C): implement independently granted secure Entropy for Protos.

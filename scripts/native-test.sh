@@ -239,6 +239,206 @@ run_inspect_case FILE_AUTHORIZED 0 --inspect "${inspect_source}"
 run_inspect_case EVAL_DENIED 1 -e "${inspect_eval_source}"
 run_inspect_case EVAL_AUTHORIZED 0 --inspect -e "${inspect_eval_source}"
 
+# I155 / D248-B: the explicit --allow-filesystem=<directory> grant on the real
+# Native executable. Every case asserts its exit status; success cases also
+# assert guest output and host-side effects, failure cases assert that no guest
+# expression ran and that no internal error escaped.
+fs_root="${tmp_dir}/i155-data"
+fs_source="${tmp_dir}/i155-app.protos"
+mkdir -p "${fs_root}/nested/deeper"
+fs_write_read='Files: import("std:io/files")
+path: Path.relative().child("nested").child("note.txt")
+Files.writeAllText(filesystem, path, "native-granted", Encoding.UTF8).value()
+print(Files.readAllText(filesystem, path, Encoding.UTF8).value())'
+fs_read_note='Files: import("std:io/files")
+print(Files.readAllText(filesystem, Path.relative().child("nested").child("note.txt"), Encoding.UTF8).value())'
+fs_tree='Files: import("std:io/files")
+deeper: Path.relative().child("nested").child("deeper")
+Files.writeAllText(filesystem, deeper.child("a.txt"), "moved", Encoding.UTF8).value()
+filesystem.replace(deeper.child("a.txt"), deeper.child("b.txt")).value()
+kinds: ""
+filesystem.entries(deeper).value().each((entry) => { kinds = kinds + entry.name + ":" + entry.kind })
+filesystem.remove(deeper.child("b.txt")).value()
+remaining: "nonempty"
+if(filesystem.entries(deeper).value().size() == 0) { remaining = "empty" }
+print("entries-" + kinds + "-" + remaining)'
+fs_open_at_exit='file: filesystem.open(Path.relative().child("held.txt"), write: true, create: true).value()
+print("held")'
+printf '%s\n' "${fs_write_read}" >"${fs_source}"
+
+fs_failures=0
+
+run_fs_case() {
+    local name="$1"
+    local expected_status="$2"
+    local expected_output="$3"
+    shift 3
+    local case_out="${tmp_dir}/i155-${name}.out"
+    local case_err="${tmp_dir}/i155-${name}.err"
+    local case_ok=1
+
+    PROTOS_HOME="${root}" \
+        "${native_bin}" \
+        "$@" \
+        >"${case_out}" 2>"${case_err}"
+    local case_status=$?
+
+    if [[ "${case_status}" -ne "${expected_status}" ]]; then
+        case_ok=0
+    elif [[ -n "${expected_output}" ]] && ! grep -Fq "${expected_output}" "${case_out}"; then
+        case_ok=0
+    elif grep -Fq 'Internal error' "${case_err}"; then
+        case_ok=0
+    elif [[ "${expected_status}" -ne 0 ]] && grep -Fq 'ran' "${case_out}"; then
+        case_ok=0
+    fi
+
+    echo "NATIVE_I155_${name}_STATUS=${case_status}"
+    if [[ "${case_ok}" -ne 1 ]]; then
+        cat "${case_out}" "${case_err}" >&2
+        echo "NATIVE_I155_CASE_FAILURE=${name}" >&2
+        fs_failures=$((fs_failures + 1))
+    fi
+}
+
+# Platform qualification: an unsupported provider must fail closed (exit 1
+# with the provisioning diagnostic and no guest effect), never succeed.
+fs_platform="SUPPORTED"
+# I156 confinement verdicts; each is set only by the case that actually ran.
+# NOT_EXECUTED_UNSUPPORTED_PLATFORM: the grant was refused before any case ran.
+fs_symlink_status="NOT_EXECUTED_UNSUPPORTED_PLATFORM"
+fs_bind_status="NOT_EXECUTED_UNSUPPORTED_PLATFORM"
+PROTOS_HOME="${root}" "${native_bin}" "--allow-filesystem=${fs_root}" -e 'null' \
+    >"${tmp_dir}/i155-probe.out" 2>"${tmp_dir}/i155-probe.err"
+fs_probe_status=$?
+if [[ "${fs_probe_status}" -ne 0 ]]; then
+    # Only a controlled provisioning refusal counts as an unsupported platform;
+    # any other failure of the probe is a regression.
+    if [[ "${fs_probe_status}" -eq 1 ]] && \
+       grep -Fq 'cannot authorize Filesystem root' "${tmp_dir}/i155-probe.err" && \
+       ! grep -Fq 'Internal error' "${tmp_dir}/i155-probe.err"; then
+        fs_platform="UNSUPPORTED"
+    else
+        fs_platform="PROBE_FAILED"
+        cat "${tmp_dir}/i155-probe.out" "${tmp_dir}/i155-probe.err" >&2
+        echo "NATIVE_I155_CASE_FAILURE=PROBE" >&2
+        fs_failures=$((fs_failures + 1))
+    fi
+    run_fs_case FAIL_CLOSED 1 "" "--allow-filesystem=${fs_root}" -e "${fs_write_read}"
+    if ! grep -Fq 'cannot authorize Filesystem root' "${tmp_dir}/i155-FAIL_CLOSED.err" || \
+       [[ -e "${fs_root}/nested/note.txt" ]]; then
+        echo "NATIVE_I155_CASE_FAILURE=FAIL_CLOSED_EFFECT" >&2
+        fs_failures=$((fs_failures + 1))
+    fi
+    # The grant must also stay absent without the option on such a platform.
+    run_fs_case NO_GRANT 1 "" -e 'filesystem'
+else
+    run_fs_case NO_GRANT 1 "" -e 'filesystem'
+    run_fs_case EVAL_WRITE_READ 0 "native-granted" "--allow-filesystem=${fs_root}" -e "${fs_write_read}"
+    rm -f "${fs_root}/nested/note.txt"
+    run_fs_case SOURCE_WRITE_READ 0 "native-granted" "--allow-filesystem=${fs_root}" "${fs_source}"
+    run_fs_case PERSISTENCE 0 "native-granted" "--allow-filesystem=${fs_root}" -e "${fs_read_note}"
+    run_fs_case TREE_OPERATIONS 0 "entries-b.txt:regular-empty" "--allow-filesystem=${fs_root}" -e "${fs_tree}"
+    run_fs_case POST_ENTRY_ARGUMENT 1 "" -e 'filesystem' "--allow-filesystem=${fs_root}"
+    run_fs_case DUPLICATE 2 "" "--allow-filesystem=${fs_root}" "--allow-filesystem=${fs_root}" -e 'null'
+    run_fs_case BARE 2 "" --allow-filesystem -e 'null'
+    run_fs_case EMPTY 2 "" "--allow-filesystem=" -e 'null'
+    run_fs_case MISSING_ROOT 1 "" "--allow-filesystem=${tmp_dir}/i155-missing" -e 'print("ran")'
+    if [[ -e "${tmp_dir}/i155-missing" ]]; then
+        echo "NATIVE_I155_CASE_FAILURE=MISSING_ROOT_CREATED" >&2
+        fs_failures=$((fs_failures + 1))
+    fi
+    run_fs_case FILE_ROOT 1 "" "--allow-filesystem=${fs_source}" -e 'print("ran")'
+    if ln -s "${fs_root}" "${tmp_dir}/i155-link" 2>/dev/null; then
+        run_fs_case SYMLINK_ROOT 1 "" "--allow-filesystem=${tmp_dir}/i155-link" -e 'print("ran")'
+    else
+        echo "NATIVE_I155_SYMLINK_ROOT_STATUS=SKIPPED_NO_SYMLINK_FIXTURE"
+    fi
+    run_fs_case TOOL_PACKAGE 2 "" "--allow-filesystem=${fs_root}" package
+    run_fs_case TOOL_TEST 2 "" test "--allow-filesystem=${fs_root}"
+    run_fs_case TOOL_LINT 2 "" lint "--allow-filesystem=${fs_root}"
+    run_fs_case NO_NETWORK 1 "" "--allow-filesystem=${fs_root}" -e 'network'
+    run_fs_case NO_RESOLVER 1 "" "--allow-filesystem=${fs_root}" -e 'resolver'
+    # Cleanup: a File left open at exit is revoked by Process termination, and
+    # the next invocation can remove its entry.
+    run_fs_case OPEN_AT_EXIT 0 "held" "--allow-filesystem=${fs_root}" -e "${fs_open_at_exit}"
+    run_fs_case CLEANUP_REMOVE 0 "removed" "--allow-filesystem=${fs_root}" \
+        -e 'filesystem.remove(Path.relative().child("held.txt")).value()
+print("removed")'
+    if [[ -e "${fs_root}/held.txt" ]]; then
+        echo "NATIVE_I155_CASE_FAILURE=CLEANUP_ENTRY_REMAINS" >&2
+        fs_failures=$((fs_failures + 1))
+    fi
+
+    # I156: kernel confinement of the FFM backend on the real executable. A
+    # symbolic link inside the root never reaches the outside directory.
+    fs_outside="${tmp_dir}/i156-outside"
+    mkdir -p "${fs_outside}"
+    printf 'outside\n' >"${fs_outside}/secret.txt"
+    if ln -s "${fs_outside}" "${fs_root}/escape" 2>/dev/null; then
+        fs_failures_before_symlink=${fs_failures}
+        run_fs_case OUTSIDE_VIA_SYMLINK 1 "" "--allow-filesystem=${fs_root}" -e 'Files: import("std:io/files")
+Files.writeAllText(filesystem, Path.relative().child("escape").child("new.txt"), "x", Encoding.UTF8).value()
+print("ran")'
+        if [[ -e "${fs_outside}/new.txt" ]]; then
+            echo "NATIVE_I155_CASE_FAILURE=OUTSIDE_VIA_SYMLINK_EFFECT" >&2
+            fs_failures=$((fs_failures + 1))
+        fi
+        rm -f "${fs_root}/escape"
+        if [[ "${fs_failures}" -eq "${fs_failures_before_symlink}" ]]; then
+            fs_symlink_status="EXECUTED_REFUSED"
+        else
+            fs_symlink_status="FAILED"
+        fi
+    else
+        fs_symlink_status="NOT_EXECUTED_NO_SYMLINK_FIXTURE"
+    fi
+    # A bind mount below the root is never traversed. Creating one needs
+    # privileges; an explicit admission is printed instead of a pass.
+    mkdir -p "${fs_root}/bound"
+    # The source lives under the same temporary directory: this is the
+    # same-device case only; the cross-device case is covered by the JVM test
+    # otherDeviceBindMountIsNeverTraversed.
+    if mount --bind "${fs_outside}" "${fs_root}/bound" 2>/dev/null; then
+        fs_failures_before_bind=${fs_failures}
+        run_fs_case BIND_MOUNT_SAME_DEVICE 1 "" "--allow-filesystem=${fs_root}" -e 'Files: import("std:io/files")
+print(Files.readAllText(filesystem, Path.relative().child("bound").child("secret.txt"), Encoding.UTF8).value())
+print("ran")'
+        if ! umount "${fs_root}/bound" 2>/dev/null; then
+            echo "NATIVE_I155_CASE_FAILURE=BIND_MOUNT_UNMOUNT" >&2
+            fs_failures=$((fs_failures + 1))
+        fi
+        if [[ "${fs_failures}" -eq "${fs_failures_before_bind}" ]]; then
+            fs_bind_status="EXECUTED_REFUSED_SAME_DEVICE"
+        else
+            fs_bind_status="FAILED"
+        fi
+    else
+        fs_bind_status="ADMISSION_HOST_REFUSES_BIND_MOUNT"
+    fi
+    rmdir "${fs_root}/bound" 2>/dev/null
+    if [[ "$(cat "${fs_outside}/secret.txt")" != "outside" ]]; then
+        echo "NATIVE_I155_CASE_FAILURE=OUTSIDE_CONTENT_CHANGED" >&2
+        fs_failures=$((fs_failures + 1))
+    fi
+fi
+
+# I156 / PLAT073-C: the Filesystem bridge is Java FFM only. The executable must
+# not ship or depend on a private Protos JNI library.
+native_private_libraries="$(
+    find "$(dirname "${native_bin}")" -maxdepth 2 -name '*.so' 2>/dev/null \
+        | grep -Ei 'protos|confined|filesystem' || true
+)"
+native_needed_private="$(
+    readelf -d "${native_bin}" 2>/dev/null \
+        | grep -E 'NEEDED' | grep -Ei 'protos|confined|filesystem' || true
+)"
+if [[ -n "${native_private_libraries}" || -n "${native_needed_private}" ]]; then
+    echo "${native_private_libraries}${native_needed_private}" >&2
+    echo "NATIVE_I155_CASE_FAILURE=PRIVATE_NATIVE_LIBRARY" >&2
+    fs_failures=$((fs_failures + 1))
+fi
+
 # Truffle's own interpreter-only warning is the selection evidence; it is
 # intentionally not suppressed.
 fallback_markers="$(
@@ -291,6 +491,12 @@ echo "NATIVE_DAP_STACKTRACE_STATUS=${dap_status}"
 echo "NATIVE_LSP_WORKSPACE_SYMBOLS_STATUS=${lsp_status}"
 echo "NATIVE_REGEX_STATUS=${regex_status}"
 echo "NATIVE_INSPECT_FAILURES=${inspect_failures}"
+echo "NATIVE_I155_FILESYSTEM_PLATFORM=${fs_platform}"
+echo "NATIVE_I155_FILESYSTEM_FAILURES=${fs_failures}"
+echo "NATIVE_I156_OUTSIDE_VIA_SYMLINK_STATUS=${fs_symlink_status}"
+echo "NATIVE_I156_BIND_MOUNT_STATUS=${fs_bind_status}"
+# T04/T05 (parent moved outside the root) are verified only by the JVM test
+# ProtosLinuxConfinedFilesystemSecurityTest; this script never reports them.
 echo "NATIVE_INTERPRETER_ONLY_STATUS=${probe_status}"
 echo "NATIVE_FALLBACK_RUNTIME_MARKERS=${fallback_markers}"
 echo "NATIVE_GUEST_JIT_POLICY=UNSUPPORTED_UPSTREAM_ORACLE_GRAAL_14579"
@@ -356,6 +562,11 @@ if [[ "${inspect_failures}" -ne 0 ]]; then
     exit 1
 fi
 
+if [[ "${fs_failures}" -ne 0 ]]; then
+    echo "NATIVE_I155_FILESYSTEM=FAIL" >&2
+    exit 1
+fi
+
 if [[ "${probe_status}" -ne 0 ]]; then
     cat "${probe_log}" >&2
     echo "NATIVE_INTERPRETER_ONLY=FAIL_STATUS" >&2
@@ -400,6 +611,24 @@ echo "NATIVE_NUMERIC_CONFORMANCE=PASS"
 echo "NATIVE_TLS_CONFORMANCE=PASS"
 echo "NATIVE_DAP_STACKTRACE_REGRESSION=PASS"
 echo "NATIVE_INSPECT=PASS"
+# Distinct I155 verdicts: PASS means the positive and negative grant cases ran
+# and passed; REJECTED_UNSUPPORTED_PLATFORM means only the controlled refusal
+# and its absence of effects were verified, not grant write/read behavior.
+if [[ "${fs_platform}" == "SUPPORTED" ]]; then
+    echo "NATIVE_I155_FILESYSTEM=PASS"
+    fs_verified="grant-read-write,tree-operations,persistence,usage-errors,provisioning-refusals,tool-refusal,no-implied-network-resolver,cleanup,no-private-native-library"
+    if [[ "${fs_symlink_status}" == "EXECUTED_REFUSED" ]]; then
+        fs_verified="${fs_verified},kernel-confined-symlink"
+    fi
+    if [[ "${fs_bind_status}" == "EXECUTED_REFUSED_SAME_DEVICE" ]]; then
+        fs_verified="${fs_verified},same-device-bind-mount-refused"
+    fi
+    echo "NATIVE_I155_FILESYSTEM_VERIFIED=${fs_verified}"
+    echo "NATIVE_I156_NOT_VERIFIED_HERE=t04-t05,other-device-bind-mount"
+else
+    echo "NATIVE_I155_FILESYSTEM=REJECTED_UNSUPPORTED_PLATFORM"
+    echo "NATIVE_I155_FILESYSTEM_VERIFIED=fail-closed-refusal,no-effect,default-absence"
+fi
 echo "NATIVE_INTERPRETER_ONLY=PASS"
 echo "NATIVE_GUEST_JIT=UNSUPPORTED_UPSTREAM_ORACLE_GRAAL_14579"
 echo "FRAME_WITHOUT_BOXING_REGRESSION=PASS"

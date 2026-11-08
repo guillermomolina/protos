@@ -398,6 +398,29 @@ public final class ProtosIoOperation {
         return won;
     }
 
+    /**
+     * I156: settles an in-flight first-effect attempt whose effect is unknown when its owning
+     * Actor is already terminating, so the owner can no longer receive the unknown-effect failure.
+     * Only the termination disposition is applied (no guest Error is built off the owner domain);
+     * it is valid solely in {@code ATTEMPTING_FIRST_EFFECT} and never touches a committed or
+     * terminal operation.
+     *
+     * @return whether this call terminalized the operation
+     */
+    public boolean abandonFirstEffectAttemptAtOwnerTerminationForRuntime() {
+        synchronized (lifecycle) {
+            if (phase != Phase.ATTEMPTING_FIRST_EFFECT) {
+                return false;
+            }
+            phase = Phase.TERMINAL;
+            deferredCutover = DeferredCutover.NONE;
+            deferredCloseError = null;
+        }
+        future.cancelTerminal();
+        finishTerminal();
+        return true;
+    }
+
     boolean firstEffectAttemptInFlight() {
         synchronized(lifecycle) {
             return phase == Phase.ATTEMPTING_FIRST_EFFECT;

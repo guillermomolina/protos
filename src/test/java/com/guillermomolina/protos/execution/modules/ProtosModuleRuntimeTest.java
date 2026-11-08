@@ -564,4 +564,96 @@ class ProtosModuleRuntimeTest {
             return ProtosModuleSource.fromCharacters(key, source);
         }
     }
+
+    // ---- I158 / D251-A1: suspended module initialization ---------------------------------
+
+    @Test
+    void i158ModuleCircularImportReturnsThePartialObjectAcrossASuspension() throws Exception {
+        com.guillermomolina.protos.runtime.modules.ProtosModuleKey key =
+                com.guillermomolina.protos.runtime.modules.ProtosModuleKey.module("canonical:mod:app");
+        ProtosI158ActorBootstrapSuspensionTest.Harness x =
+                ProtosI158ActorBootstrapSuspensionTest.Harness.create(
+                        "mod:app",
+                        key,
+                        """
+                        starts: 0
+                        starts = starts + 1
+                        secret: "private"
+                        this.published: "early"
+                        b: import("b")
+                        this.boot: (acceptor) => {
+                            Error.handle(() => { acceptor.accept().value() }, (error) => { null })
+                            { sawSelf: b.sawSelf; sameA: b.a; starts: starts; sawSecret: b.sawSecret }
+                        }
+                        """,
+                        java.util.Map.of(
+                                "canonical:b",
+                                """
+                                a: import("mod:app")
+                                sawSelf: a.published
+                                sawSecret: a.hasSlot("secret")
+                                """));
+        com.guillermomolina.protos.runtime.ProtosActor spawned = x.local(x.invokeSpawn(x.acquire()));
+        x.executor().drain();
+
+        // Suspended inside the binding: the module itself already completed its body.
+        var record = spawned.moduleState().lookup(key).orElseThrow();
+        ProtosObjectValue partialA = record.instance();
+        assertEquals(
+                com.guillermomolina.protos.runtime.ProtosActorModuleState.InitializationState.READY,
+                record.state());
+        assertEquals(
+                com.guillermomolina.protos.runtime.ProtosActor.LifecycleState.INITIALIZING,
+                spawned.lifecycleState(),
+                "module READY is not Actor READY");
+
+        x.backend().pending.pollFirst().failed();
+        x.executor().drain();
+
+        ProtosObjectValue behavior = spawned.currentBehavior().orElseThrow();
+        assertSame(partialA, spawned.moduleState().lookup(key).orElseThrow().instance());
+        assertSame(partialA, behavior.readLocalSlot("sameA").orElseThrow());
+        assertEquals("early", ((com.guillermomolina.protos.runtime.ProtosStringValue) behavior.readLocalSlot("sawSelf").orElseThrow()).value());
+        assertSame(com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE, behavior.readLocalSlot("sawSecret").orElseThrow());
+        assertFalse(partialA.hasLocalSlot("secret"));
+        assertEquals("1", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(behavior.readLocalSlot("starts").orElseThrow()));
+    }
+
+    @Test
+    void i158ImportThatSuspendsThenFailsIsEvictedWithoutRollback() throws Exception {
+        com.guillermomolina.protos.runtime.modules.ProtosModuleKey failingKey =
+                com.guillermomolina.protos.runtime.modules.ProtosModuleKey.source("canonical:failing");
+        ProtosI158ActorBootstrapSuspensionTest.Harness x =
+                ProtosI158ActorBootstrapSuspensionTest.Harness.create(
+                        "app",
+                        com.guillermomolina.protos.runtime.modules.ProtosModuleKey.source("canonical:app"),
+                        """
+                        box: { pending: null; effects: 0 }
+                        boot: (acceptor) => {
+                            box.pending = acceptor.accept()
+                            first: Error.handle(() => { import("failing") }, (error) => { "failed" })
+                            second: Error.handle(() => { import("failing") }, (error) => { "failed" })
+                            { first: first; second: second; effects: box.effects }
+                        }
+                        """,
+                        java.util.Map.of(
+                                "canonical:failing",
+                                """
+                                main: import("app")
+                                main.box.effects = main.box.effects + 1
+                                Error.handle(() => { main.box.pending.value() }, (error) => { null })
+                                Error().signal()
+                                """));
+        com.guillermomolina.protos.runtime.ProtosActor spawned = x.local(x.invokeSpawn(x.acquire()));
+        x.executor().drain();
+        assertTrue(spawned.moduleState().lookup(failingKey).isPresent(), "cached INITIALIZING while suspended");
+
+        x.backend().pending.pollFirst().failed();
+        x.executor().drain();
+
+        ProtosObjectValue behavior = spawned.currentBehavior().orElseThrow();
+        assertTrue(spawned.moduleState().lookup(failingKey).isEmpty(), "failed record evicted");
+        assertEquals("2", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(behavior.readLocalSlot("effects").orElseThrow()));
+        assertEquals("failed", ((com.guillermomolina.protos.runtime.ProtosStringValue) behavior.readLocalSlot("second").orElseThrow()).value());
+    }
 }

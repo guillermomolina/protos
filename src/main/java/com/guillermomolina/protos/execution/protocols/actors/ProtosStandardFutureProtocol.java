@@ -46,6 +46,13 @@ public final class ProtosStandardFutureProtocol {
                     if (ProtosHostEntrySuspension.suspendible(a)) {
                         return ProtosHostEntrySuspension.awaitFuture(a,observed);
                     }
+                    if (ProtosActorBootstrapSuspension.suspendible(a)) {
+                        // I158 / D251-A1: Task-free Actor initialization in an active bootstrap
+                        // segment. A terminal Future returns now; a pending one yields the
+                        // initialization continuation. A synchronous foreign callback replaced
+                        // the BOOTSTRAP mode with SYNCHRONOUS and never reaches this branch.
+                        return ProtosActorBootstrapSuspension.awaitFuture(a,observed);
+                    }
                     return observed.observeValueForContinuationForRuntime(
                             a,
                             (dependency,resumer) ->

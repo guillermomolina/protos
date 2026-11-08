@@ -21,11 +21,13 @@ import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIoLifecycle;
+import com.guillermomolina.protos.runtime.ProtosHostCompletionThread;
 import com.guillermomolina.protos.runtime.ProtosIoOperation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
 
 /**
  * I021-A host-neutral asynchronous Filesystem namespace-mutation substrate.
@@ -155,24 +157,31 @@ public final class ProtosFilesystemNamespaceMutationFlow {
 
         CancellationBridge cancellationBridge = new CancellationBridge();
         operation.onCancellation(cancellationBridge::requestCancellation);
+        OwnerDelivery delivery = new OwnerDelivery(operation);
 
         MutationCompletion completion =
                 new MutationCompletion() {
                     @Override
                     public boolean commitPortableEffect(NamespaceEffect effect) {
                         Objects.requireNonNull(effect, "effect");
+                        boolean committed;
+                        /*
+                         * The effect runs on the backend's thread (for I156 the restricted grant
+                         * worker) under this operation-private lifecycle monitor; only the guest
+                         * outcome is delivered to the owning Actor afterwards.
+                         */
                         synchronized (lifecycle) {
                             if (operation.terminal() || operation.committed()) {
                                 return false;
                             }
                             try {
                                 effect.run();
+                                committed = true;
                             } catch (Exception failure) {
                                 if (failure instanceof InterruptedException) {
                                     Thread.currentThread().interrupt();
                                 }
-                                operation.fail(ioError(activation));
-                                return false;
+                                committed = false;
                             }
 
                             /*
@@ -180,51 +189,93 @@ public final class ProtosFilesystemNamespaceMutationFlow {
                              * is private to this operation and never enters a close lifecycle, a
                              * successful effect cannot lose the immediately following commit.
                              */
-                            if (!operation.commit()) {
+                            if (committed && !operation.commit()) {
                                 throw new AssertionError(
                                         "namespace effect completed without a commit cutover");
                             }
-                            if (!operation.resolve(filesystemCapability)) {
-                                throw new AssertionError(
-                                        "committed namespace effect did not resolve its Future");
+                            if (!ProtosHostCompletionThread.isCurrent()) {
+                                // Direct publication stays under the commitment monitor, so a
+                                // racing cancellation observes the terminal outcome.
+                                if (committed) {
+                                    if (!operation.resolve(filesystemCapability)) {
+                                        throw new AssertionError(
+                                                "committed namespace effect did not resolve its"
+                                                        + " Future");
+                                    }
+                                } else {
+                                    failUncommitted(operation, activation);
+                                }
+                                return committed;
                             }
-                            return true;
                         }
+                        if (committed) {
+                            // A committed operation can only resolve; late cancellation cannot win.
+                            delivery.deliver(() -> operation.resolve(filesystemCapability));
+                        } else {
+                            delivery.deliver(() -> failUncommitted(operation, activation));
+                        }
+                        return committed;
                     }
 
                     @Override
                     public void succeeded() {
-                        synchronized (lifecycle) {
-                            if (operation.terminal()) {
-                                return;
-                            }
-                            if (!operation.committed() && !operation.commit()) {
-                                return;
-                            }
-                            operation.resolve(filesystemCapability);
-                        }
+                        delivery.deliver(
+                                () -> {
+                                    synchronized (lifecycle) {
+                                        if (operation.terminal()) {
+                                            return false;
+                                        }
+                                        if (!operation.committed() && !operation.commit()) {
+                                            return false;
+                                        }
+                                    }
+                                    return operation.resolve(filesystemCapability);
+                                });
                     }
 
                     @Override
                     public void failed() {
-                        synchronized (lifecycle) {
-                            if (!operation.terminal()) {
-                                operation.fail(ioError(activation));
-                            }
-                        }
+                        delivery.deliver(() -> failUncommitted(operation, activation));
                     }
                 };
 
         try {
             cancellationBridge.install(backendInvocation.start(completion));
         } catch (RuntimeException backendFailure) {
-            synchronized (lifecycle) {
-                if (!operation.terminal()) {
-                    operation.fail(ioError(activation));
-                }
-            }
+            failUncommitted(operation, activation);
         }
         return operation.future();
+    }
+
+    private boolean failUncommitted(ProtosIoOperation operation, ProtosActivation activation) {
+        return !operation.terminal() && operation.fail(ioError(activation));
+    }
+
+    /**
+     * Publishes an outcome directly, unless it arrives on a marked host completion thread (the I156
+     * Filesystem grant driver); then it runs as a targeted completion of the operation's Future in
+     * the owning Actor, so no guest Error or Future resolution is produced on that host thread. A
+     * delivery refused by a terminating owner is dropped: that Actor's termination already settles
+     * its operations.
+     */
+    private final class OwnerDelivery {
+        private final ProtosIoOperation operation;
+
+        OwnerDelivery(ProtosIoOperation operation) {
+            this.operation = operation;
+        }
+
+        void deliver(BooleanSupplier publication) {
+            if (!ProtosHostCompletionThread.isCurrent()) {
+                publication.getAsBoolean();
+                return;
+            }
+            try {
+                domain.enqueueTargetedFutureCompletionForRuntime(operation.future(), publication);
+            } catch (IllegalStateException ownerTerminating) {
+                // Host-only drop; no guest execution is attempted for a terminating owner.
+            }
+        }
     }
 
     private ProtosObjectValue ioError(ProtosActivation activation) {

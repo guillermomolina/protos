@@ -1,0 +1,48 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+// Application data under an explicit standalone Filesystem grant (D248-B).
+//
+// The host directory and its "notes" subdirectory must already exist; the CLI
+// never creates them and the guest has no mkdir operation:
+//
+//     mkdir -p ./app-data/notes
+//     protos --allow-filesystem=./app-data protos/examples/filesystem/cli-confined-data.protos
+//
+// Without --allow-filesystem the RootActor has no `filesystem` binding, so the
+// first line that uses it fails. The grant is recursive but confined to
+// ./app-data: Paths are relative to that directory, links are never followed
+// and nothing outside it is reachable.
+
+Files: import("std:io/files")
+ProcessStreams: import("std:io/process_streams")
+
+out: ProcessStreams.stdoutWriter(process)
+notes: Path.relative().child("notes")
+journal: notes.child("journal.txt")
+
+// Whole-file helpers open, write or read, and always close their File.
+Files.writeAllText(filesystem, journal, "first entry\n", Encoding.UTF8).value()
+
+// A directly opened File is closed explicitly once the work is done.
+file: filesystem.open(journal, read: true, write: true).value()
+file.seekToEnd().value()
+file.write(Encoding.UTF8.encode("second entry\n")).value()
+file.close().value()
+
+out.writeLine("journal:").value()
+out.writeLine(Files.readAllText(filesystem, journal, Encoding.UTF8).value()).value()
+
+names: ""
+filesystem.entries(notes).value().each((entry) => {
+    names = names + " " + entry.name
+})
+out.writeLine("notes contains:" + names).value()

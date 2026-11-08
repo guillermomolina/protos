@@ -119,6 +119,11 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
         assertEquals(1, backend.readStarts);
 
         backend.readCompletions.removeFirst().data(new byte[] {1, 2});
+        assertEquals(ProtosFutureValue.State.PENDING, read1.state());
+        assertEquals(1, backend.readStarts);
+        assertTrue(
+                activation.executionDomain()
+                        .dispatchTargetedRuntimeCompletionWithoutHandoffForRuntime());
         assertEquals(2, backend.readStarts);
         ProtosBytesValue result = (ProtosBytesValue) read1.resolvedValue().orElseThrow();
         assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(result.indexedAt(0)));
@@ -126,6 +131,10 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
 
         backend.writeCompletions.removeFirst().succeeded();
         backend.readCompletions.removeFirst().eof();
+        assertEquals(ProtosFutureValue.State.PENDING, read2.state());
+        assertTrue(
+                activation.executionDomain()
+                        .dispatchTargetedRuntimeCompletionWithoutHandoffForRuntime());
         assertSame(connection, write2.resolvedValue().orElseThrow());
         assertSame(ProtosNullValue.INSTANCE, read2.resolvedValue().orElseThrow());
     }
@@ -145,6 +154,9 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
         ProtosFutureValue read = future(connection, "read", List.of(integer(2)), activation);
         assertTrue(read.cancelRequest());
         backend.readCompletions.removeFirst().data(new byte[] {4, 5});
+        assertTrue(
+                activation.executionDomain()
+                        .dispatchTargetedRuntimeCompletionWithoutHandoffForRuntime());
         assertEquals(ProtosFutureValue.State.CANCELLED, read.state());
 
         ProtosFutureValue replay = future(connection, "read", List.of(integer(2)), activation);
@@ -256,6 +268,9 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
                 future(writeConnection, "read", List.of(integer(1)), writeActivation);
         assertEquals(1, writeBackend.readStarts);
         writeBackend.readCompletions.removeFirst().eof();
+        assertTrue(
+                writeActivation.executionDomain()
+                        .dispatchTargetedRuntimeCompletionWithoutHandoffForRuntime());
         assertSame(ProtosNullValue.INSTANCE, stillReadable.resolvedValue().orElseThrow());
     }
 

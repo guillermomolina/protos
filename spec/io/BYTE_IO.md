@@ -399,6 +399,8 @@ A successful position-sharing ByteReadable read advances the receiver's logical 
 
 When a `ByteWritable` write on such a receiver fails after contributing a prefix of length `k`, the shared logical position advances exactly by the committed contribution that the receiver's positioned-write semantics place into the sequence. A later ordered position-sensitive operation therefore starts from the post-prefix logical position, not from the pre-write position merely because the write's Future failed.
 
+For the standard `File` receiver only, `io/FILESYSTEM.md` §18.2.1 additionally specifies recoverable **indeterminate position** when a committed failed write has a contributed prefix whose exact length the backend cannot establish. This is a concrete receiver's stronger failure behavior, not a new universal poisoned `ByteSeekable` state or a claim that the hidden prefix was zero. Absolute `seek(position)` or successful `seekToEnd()` may recover the File position; operations needing the unknown position fail with `IOError` until then.
+
 `position()` is asynchronous for uniform no-hidden-suspension semantics even when a concrete implementation can answer immediately.
 
 `position()` is an observation-only I/O query. Its operation commits only when its non-negative Integer result or its failure outcome has been determined for that query. Before that commitment, cancellation may win and the Future becomes `cancelled`. A successfully cancelled `position()` contributes no logical-position change, no sequence-state effect, no ordering frontier beyond reaching its own terminal cancellation outcome, and no Protos-visible position observation.

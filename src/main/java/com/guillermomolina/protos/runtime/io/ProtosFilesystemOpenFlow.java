@@ -56,8 +56,49 @@ public final class ProtosFilesystemOpenFlow {
      * first irreversible namespace/content effect attributable to this open. A false result means
      * cancellation already won and that effect must not be published.
      */
+    /**
+     * One indivisible native open effect (creation or truncation), executed by {@link
+     * OpenCompletion#commitPortableEffect(OpenEffect)} inside the open's commitment boundary.
+     *
+     * <p>Returns true only when the effect was published. Returns false when the native operation
+     * failed without any effect; the backend may then choose another selection branch or fail.
+     * The effect must not throw after publishing; a throw is treated as "not published".
+     */
+    @FunctionalInterface
+    public interface OpenEffect {
+        boolean publish();
+    }
+
+    /** Outcome of {@link OpenCompletion#commitPortableEffect(OpenEffect)}. */
+    public enum EffectOutcome {
+        /** Cancellation won; the effect was not published and the backend must stop silently. */
+        CANCELLED,
+        /** The effect failed without effect; the open is still uncommitted. */
+        NOT_PUBLISHED,
+        /** The effect was published and the open is committed; cancellation can no longer win. */
+        COMMITTED
+    }
+
     public interface OpenCompletion {
         boolean commitPortableEffect();
+
+        /**
+         * Runs one indivisible native open effect inside the commitment boundary (I156).
+         *
+         * <p>If cancellation already won, the effect is not run ({@link EffectOutcome#CANCELLED}).
+         * Otherwise the effect runs while cancellation is deferred, without holding any lock
+         * shared with other opens. A published effect commits the open before cancellation can
+         * win ({@link EffectOutcome#COMMITTED}); an unpublished one leaves it uncommitted ({@link
+         * EffectOutcome#NOT_PUBLISHED}) unless a cancellation deferred during the attempt now
+         * wins ({@link EffectOutcome#CANCELLED}).
+         *
+         * <p>Unlike {@link #commitPortableEffect()}, an effect that fails without effect never
+         * leaves the open falsely committed.
+         */
+        default EffectOutcome commitPortableEffect(OpenEffect effect) {
+            throw new UnsupportedOperationException(
+                    "this open completion has no native effect commitment boundary");
+        }
 
         /**
          * Transfers a successfully acquired File result.
@@ -172,6 +213,46 @@ public final class ProtosFilesystemOpenFlow {
                     }
 
                     @Override
+                    public EffectOutcome commitPortableEffect(OpenEffect effect) {
+                        Objects.requireNonNull(effect, "effect");
+                        if (operation.committed()) {
+                            return publishSafely(effect)
+                                    ? EffectOutcome.COMMITTED
+                                    : EffectOutcome.NOT_PUBLISHED;
+                        }
+                        // PLAT009 first-effect attempt: cancellation requested while the native
+                        // effect runs is deferred, and settled by the effect's actual aftermath.
+                        if (!operation.beginFirstEffectAttempt()) {
+                            return EffectOutcome.CANCELLED;
+                        }
+                        boolean published;
+                        try {
+                            // false is reliable evidence that nothing was published.
+                            published = effect.publish();
+                        } catch (RuntimeException | Error unknownEffect) {
+                            // The effect may or may not have happened. The attempt stays in flight
+                            // (cancellation and close remain deferred) until the owning domain
+                            // settles it as a failure with unknown effect; no guest Error is made
+                            // on this thread. The backend stops silently.
+                            invocation.deliver(
+                                    () ->
+                                            operation.failFirstEffectAttemptWithUnknownEffect(
+                                                    ProtosCoreErrors.newOccurrence(
+                                                            activation,
+                                                            ProtosCoreErrors.StandardError.I_O_ERROR)),
+                                    // A terminating owner refuses the delivery: apply only its
+                                    // termination disposition, never leave the Future pending.
+                                    operation::abandonFirstEffectAttemptAtOwnerTerminationForRuntime);
+                            return EffectOutcome.CANCELLED;
+                        }
+                        boolean proceed = operation.finishFirstEffectAttempt(published);
+                        if (published) {
+                            return EffectOutcome.COMMITTED;
+                        }
+                        return proceed ? EffectOutcome.NOT_PUBLISHED : EffectOutcome.CANCELLED;
+                    }
+
+                    @Override
                     public void succeeded(
                             ProtosObjectValue file, Runnable releaseIfUntransferred) {
                         Objects.requireNonNull(file, "file");
@@ -264,6 +345,15 @@ public final class ProtosFilesystemOpenFlow {
                         activation.prelude().orElseThrow().futurePrototype(), domain);
         future.fail(ProtosCoreErrors.newOccurrence(activation, error));
         return future;
+    }
+
+    /** A throwing effect counts as unpublished: the effect contract forbids throwing after it. */
+    private static boolean publishSafely(OpenEffect effect) {
+        try {
+            return effect.publish();
+        } catch (RuntimeException unpublished) {
+            return false;
+        }
     }
 
     private static void releaseSafely(Runnable release) {

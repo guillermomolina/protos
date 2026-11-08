@@ -235,4 +235,135 @@ final class ProtosProcessRuntimeTest {
             return pending.size();
         }
     }
+
+    // ---- I158 / D251-A1: termination of a suspended initialization ------------------------
+    // The custodian mirrors the two-phase protocol of ProtosActorBootstrapSuspension: phase 1
+    // (terminationBegun) only invalidates and registers the pending cleanup obligation; phase 2
+    // runs later under domain ownership and releases it.
+
+    private static final class TwoPhaseCustody implements ProtosActor.BootstrapCustody {
+        private final ProtosActor actor;
+        private final AtomicInteger invalidations = new AtomicInteger();
+        private final AtomicInteger cleanups = new AtomicInteger();
+
+        TwoPhaseCustody(ProtosActor actor) {
+            this.actor = actor;
+        }
+
+        @Override
+        public void terminationBegun() {
+            invalidations.incrementAndGet();
+            actor.executionDomain().beginBootstrapCleanupForRuntime();
+        }
+
+        void runCleanup() {
+            if (cleanups.incrementAndGet() == 1) {
+                actor.clearBootstrapCustodyForRuntime(this);
+                actor.executionDomain().finishBootstrapCleanupForRuntime();
+            }
+        }
+    }
+
+    @Test
+    void i158NonRootSuspendedTerminationWaitsForCleanupAndSparesTheProcess() {
+        ProtosObjectValue prototype = actorRefPrototype();
+        ProtosProcessRuntime process = new ProtosProcessRuntime(prototype);
+        ProtosActor child = process.createHostedActorForRuntime(prototype);
+        TwoPhaseCustody custody = new TwoPhaseCustody(child);
+        assertTrue(child.registerBootstrapCustodyForRuntime(custody));
+
+        child.requestTerminationForRuntime();
+        child.requestTerminationForRuntime();
+
+        assertEquals(1, custody.invalidations.get(), "invalidated exactly once");
+        assertEquals(ProtosActor.LifecycleState.TERMINATING, child.lifecycleState());
+        assertTrue(child.executionDomain().hasTerminationCleanupForRuntime());
+
+        custody.runCleanup();
+        custody.runCleanup();
+
+        assertEquals(ProtosActor.LifecycleState.TERMINATED, child.lifecycleState());
+        assertFalse(child.executionDomain().hasTerminationCleanupForRuntime());
+        assertTrue(child.currentBehavior().isEmpty());
+        assertEquals(ProtosProcessRuntime.LifecycleState.RUNNING, process.lifecycleState());
+        assertFalse(child.registerBootstrapCustodyForRuntime(new TwoPhaseCustody(child)));
+    }
+
+    @Test
+    void i158ProcessTerminationWithASuspendedRootActorCompletesOnlyAfterCleanup() {
+        ProtosObjectValue prototype = actorRefPrototype();
+        ProtosProcessRuntime process = new ProtosProcessRuntime(prototype);
+        ProtosActor root = process.rootActorForRuntime();
+        TwoPhaseCustody custody = new TwoPhaseCustody(root);
+        assertTrue(root.registerBootstrapCustodyForRuntime(custody));
+
+        process.requestTerminationForRuntime();
+
+        assertEquals(1, custody.invalidations.get());
+        assertEquals(ProtosActor.LifecycleState.TERMINATING, root.lifecycleState());
+        assertFalse(root.completeInitialization(new ProtosObjectValue(ProtosObjectValue.rootObject())),
+                "no READY after the termination cutover");
+
+        custody.runCleanup();
+        assertEquals(ProtosActor.LifecycleState.TERMINATED, root.lifecycleState());
+        assertTrue(root.currentBehavior().isEmpty());
+        assertTrue(process.lifecycleState() != ProtosProcessRuntime.LifecycleState.RUNNING);
+    }
+
+    @Test
+    void i158CustodyClearedByATerminalInitializationIsNeverInvalidated() {
+        ProtosObjectValue prototype = actorRefPrototype();
+        ProtosProcessRuntime process = new ProtosProcessRuntime(prototype);
+        ProtosActor child = process.createHostedActorForRuntime(prototype);
+        TwoPhaseCustody custody = new TwoPhaseCustody(child);
+        assertTrue(child.registerBootstrapCustodyForRuntime(custody));
+        // The Future terminalized and the initialization completed just before termination.
+        child.clearBootstrapCustodyForRuntime(custody);
+        assertTrue(child.completeInitialization(new ProtosObjectValue(ProtosObjectValue.rootObject())));
+
+        child.requestTerminationForRuntime();
+
+        assertEquals(0, custody.invalidations.get());
+        assertEquals(ProtosActor.LifecycleState.TERMINATED, child.lifecycleState());
+    }
+
+    @Test
+    void i158ConcurrentTerminationAndTerminalizationInvalidateAtMostOnce() throws Exception {
+        ProtosObjectValue prototype = actorRefPrototype();
+        ProtosProcessRuntime process = new ProtosProcessRuntime(prototype);
+        ProtosActor child = process.createHostedActorForRuntime(prototype);
+        TwoPhaseCustody custody = new TwoPhaseCustody(child);
+        assertTrue(child.registerBootstrapCustodyForRuntime(custody));
+        java.util.concurrent.CyclicBarrier start = new java.util.concurrent.CyclicBarrier(2);
+        java.util.concurrent.atomic.AtomicBoolean ready = new java.util.concurrent.atomic.AtomicBoolean();
+
+        Thread terminalizer =
+                new Thread(
+                        () -> {
+                            await(start);
+                            child.clearBootstrapCustodyForRuntime(custody);
+                            ready.set(child.completeInitialization(
+                                    new ProtosObjectValue(ProtosObjectValue.rootObject())));
+                        });
+        terminalizer.start();
+        await(start);
+        child.requestTerminationForRuntime();
+        terminalizer.join(java.util.concurrent.TimeUnit.SECONDS.toMillis(5));
+        assertFalse(terminalizer.isAlive());
+
+        assertTrue(custody.invalidations.get() <= 1);
+        if (custody.invalidations.get() == 1) {
+            assertFalse(ready.get(), "an invalidated initialization never publishes READY");
+            custody.runCleanup();
+        }
+        assertEquals(ProtosActor.LifecycleState.TERMINATED, child.lifecycleState());
+    }
+
+    private static void await(java.util.concurrent.CyclicBarrier barrier) {
+        try {
+            barrier.await(5, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception failure) {
+            throw new AssertionError(failure);
+        }
+    }
 }

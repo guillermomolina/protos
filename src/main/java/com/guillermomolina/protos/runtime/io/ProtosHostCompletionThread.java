@@ -14,32 +14,29 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-
 package com.guillermomolina.protos.runtime;
 
-import static org.junit.jupiter.api.Assertions.assertSame;
+/**
+ * I156 marker of host threads whose I/O completions must be published inside the owning Actor.
+ *
+ * <p>A backend that completes operations on a dedicated host thread (the confined Filesystem
+ * grant's driver thread) marks that thread once. Flows then deliver such completions as targeted
+ * Future completions of the owning Actor domain instead of creating guest values or resolving
+ * Futures on the host thread. A completion arriving on any other thread, including the owner
+ * itself completing a held backend callback later, is published directly as before.
+ */
+public final class ProtosHostCompletionThread {
+    private static final ThreadLocal<Boolean> MARKED = ThreadLocal.withInitial(() -> false);
 
-import java.util.List;
-import org.junit.jupiter.api.Test;
+    private ProtosHostCompletionThread() {}
 
-class ProtosMethodHomeTest {
-    @Test
-    void objectConstructionPreservesEnclosingMethodHome() {
-        ProtosObjectValue context =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosObjectValue receiver =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosObjectValue methodHome =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosActivation enclosing =
-                ProtosActivation.withMethodHome(
-                        context, List.of(), receiver, methodHome);
-        ProtosObjectValue object =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
+    /** Marks the calling thread for its whole lifetime. */
+    public static void markCurrent() {
+        MARKED.set(true);
+    }
 
-        ProtosActivation construction =
-                ProtosActivation.forObjectConstruction(object, enclosing);
-
-        assertSame(methodHome, construction.methodHome().orElseThrow());
+    /** Whether the calling thread is a marked host completion thread. */
+    public static boolean isCurrent() {
+        return MARKED.get();
     }
 }

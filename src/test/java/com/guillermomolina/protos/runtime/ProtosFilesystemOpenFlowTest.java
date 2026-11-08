@@ -567,4 +567,158 @@ class ProtosFilesystemOpenFlowTest {
             this.completion = completion;
         }
     }
+
+    // ---- I156: dispositions of a backend task that fails unexpectedly, by operation phase ----
+    // The worker reports a task that threw through the backend's ordinary failure callback; the
+    // flow settles it according to the phase the operation actually reached.
+
+    @Test
+    void unexpectedFailureBeforeTheFirstEffectFailsWithoutEffect() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude));
+        Invocation invocation = x.backend.invocations.get(0);
+
+        invocation.completion.failed();
+        dispatch(x);
+
+        assertIoError(x, future);
+        AtomicInteger effects = new AtomicInteger();
+        assertEquals(
+                ProtosFilesystemOpenFlow.EffectOutcome.CANCELLED,
+                invocation.completion.commitPortableEffect(
+                        () -> {
+                            effects.incrementAndGet();
+                            return true;
+                        }));
+        assertEquals(0, effects.get(), "no effect runs after the failure");
+    }
+
+    @Test
+    void attemptWithoutContributionHonoursTheDeferredCancellation() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude));
+        Invocation invocation = x.backend.invocations.get(0);
+
+        ProtosFilesystemOpenFlow.EffectOutcome outcome =
+                invocation.completion.commitPortableEffect(
+                        () -> {
+                            // Requested while the effect runs: deferred, then applied because the
+                            // attempt reliably published nothing.
+                            future.cancelRequest();
+                            assertEquals(ProtosFutureValue.State.PENDING, future.state());
+                            return false;
+                        });
+
+        assertEquals(ProtosFilesystemOpenFlow.EffectOutcome.CANCELLED, outcome);
+        assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+    }
+
+    @Test
+    void attemptWithUnknownEffectFailsInTheOwnerAndCannotBecomeACancellation() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude));
+        Invocation invocation = x.backend.invocations.get(0);
+
+        ProtosFilesystemOpenFlow.EffectOutcome[] outcome = new ProtosFilesystemOpenFlow.EffectOutcome[1];
+        onHostThread(
+                () ->
+                        outcome[0] =
+                                invocation.completion.commitPortableEffect(
+                                        () -> {
+                                            future.cancelRequest();
+                                            throw new IllegalStateException("i156 unknown effect");
+                                        }));
+
+        assertEquals(ProtosFilesystemOpenFlow.EffectOutcome.CANCELLED, outcome[0], "the backend stops");
+        assertEquals(ProtosFutureValue.State.PENDING, future.state(), "no guest Error on the host thread");
+        dispatch(x);
+        assertIoError(x, future);
+        Object error = future.failedError().orElseThrow();
+
+        // Duplicate and late reports after the failure are inert; late custody is released.
+        invocation.completion.failed();
+        AtomicInteger releases = new AtomicInteger();
+        invocation.completion.succeeded(
+                new ProtosObjectValue(ProtosObjectValue.rootObject()), releases::incrementAndGet);
+        dispatch(x);
+        assertSame(error, future.failedError().orElseThrow());
+        assertEquals(1, releases.get());
+    }
+
+    @Test
+    void unexpectedFailureAfterCommitmentFailsAndKeepsTheCommitment() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude));
+        Invocation invocation = x.backend.invocations.get(0);
+
+        assertEquals(
+                ProtosFilesystemOpenFlow.EffectOutcome.COMMITTED,
+                invocation.completion.commitPortableEffect(() -> true));
+        future.cancelRequest();
+        assertEquals(ProtosFutureValue.State.PENDING, future.state(), "cancellation cannot win now");
+
+        onHostThread(invocation.completion::failed);
+        dispatch(x);
+
+        assertIoError(x, future);
+    }
+
+    @Test
+    void cancellationRacingAnUnexpectedFailureSettlesExactlyOnce() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude));
+        Invocation invocation = x.backend.invocations.get(0);
+        java.util.concurrent.CyclicBarrier start = new java.util.concurrent.CyclicBarrier(2);
+
+        Thread host =
+                new Thread(
+                        () -> {
+                            try {
+                                start.await(5, java.util.concurrent.TimeUnit.SECONDS);
+                            } catch (Exception broken) {
+                                throw new IllegalStateException(broken);
+                            }
+                            invocation.completion.failed();
+                        },
+                        "i156-failure-racer");
+        host.start();
+        start.await(5, java.util.concurrent.TimeUnit.SECONDS);
+        future.cancelRequest();
+        host.join(java.util.concurrent.TimeUnit.SECONDS.toMillis(5));
+        dispatch(x);
+
+        assertTrue(
+                future.state() == ProtosFutureValue.State.CANCELLED
+                        || future.state() == ProtosFutureValue.State.FAILED,
+                "settled once, never left pending: " + future.state());
+    }
+
+    @Test
+    void ownerTerminationRacingAnUnknownEffectNeverLeavesAPendingFuture() throws Exception {
+        Fixture x = actorFixture();
+        ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude));
+        Invocation invocation = x.backend.invocations.get(0);
+
+        onHostThread(
+                () ->
+                        invocation.completion.commitPortableEffect(
+                                () -> {
+                                    // The owner terminates while the effect runs (close/revocation
+                                    // of everything it owns), then the effect fails unknown.
+                                    x.actor().requestTerminationForRuntime();
+                                    throw new IllegalStateException("i156 unknown effect");
+                                }));
+
+        assertEquals(
+                ProtosFutureValue.State.CANCELLED,
+                future.state(),
+                "the termination disposition applies; nothing stays pending");
+    }
+
+    private static void assertIoError(Fixture x, ProtosFutureValue future) {
+        assertEquals(ProtosFutureValue.State.FAILED, future.state());
+        assertSame(
+                x.prelude.standardErrorPrototype("IOError"),
+                future.failedError().orElseThrow().parent().orElseThrow());
+    }
 }

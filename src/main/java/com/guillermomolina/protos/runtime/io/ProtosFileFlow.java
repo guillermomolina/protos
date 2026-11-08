@@ -31,7 +31,17 @@ public final class ProtosFileFlow {
     public interface WriteCompletion {
         boolean commitFirstContribution();
         void succeeded();
+
+        /** An ordinary backend failure whose exact accepted prefix is known. */
         void failed(int contributedPrefix);
+
+        /**
+         * An unexpected failure whose progress is unknown: the backend cannot tell how many bytes,
+         * if any, became effective after {@link #commitFirstContribution()}. No prefix is
+         * invented; before the commitment no contribution is possible, so the failure is then an
+         * ordinary zero-effect failure. Ignored once the write already has its outcome.
+         */
+        void failedWithUnknownProgress();
     }
 
     /** A host-representable non-negative position or size; the flow forms the exact Integer. */
@@ -135,8 +145,8 @@ public final class ProtosFileFlow {
     private static final int DEFAULT_MAX_RETAINED_WRITE_BYTES = 1024 * 1024;
     private static final Object ZERO = ProtosNumericValueSupport.integer(0L);
 
-    private final ProtosObjectValue receiver;
-    private final ProtosObjectValue bytesPrototype;
+    final ProtosObjectValue receiver;
+    final ProtosObjectValue bytesPrototype;
     private final ProtosActivation constructionActivation;
     /*
      * Owner of a position beyond the signed-64 range: the File's own domain Prelude. The exact
@@ -144,15 +154,23 @@ public final class ProtosFileFlow {
      * logical position or a resolved guest value, so the Prelude is required at construction.
      */
     private final ProtosPrelude owningPrelude;
-    private final ProtosActorExecutionDomain domain;
-    private final Resource resource;
+    final ProtosActorExecutionDomain domain;
+    final Resource resource;
     private final Capabilities capabilities;
     private final ProtosIoLifecycle lifecycle;
     private final int maxRetainedWriteBytes;
     private final ArrayDeque<Request> operations = new ArrayDeque<>();
+    private final ProtosFileFlowResourceCalls resourceCalls =
+            new ProtosFileFlowResourceCalls(this);
 
     /* The exact semantic Integer position; beyond the signed-64 range only after seeks. */
     private Object logicalPosition = ZERO;
+    /*
+     * A committed failed write may have contributed an unknown prefix.
+     * The exact logical cursor still exists, but it cannot be observed or
+     * used for relative positioning until an absolute seek succeeds.
+     */
+    private boolean logicalPositionKnown = true;
     private int retainedWriteBytes;
 
     public ProtosFileFlow(
@@ -354,156 +372,26 @@ public final class ProtosFileFlow {
             }
         }
 
+        if (requiresKnownPosition(request.kind) && !positionKnown()) {
+            failIo(request);
+            finish(request);
+            return;
+        }
+
         switch (request.kind) {
-            case READ -> startRead(request);
-            case WRITE -> startWrite(request);
+            case READ -> resourceCalls.startRead(request);
+            case WRITE -> resourceCalls.startWrite(request);
             case POSITION -> completeLocalPosition(request);
             case SEEK -> completeSeek(request);
             case SEEK_BY -> completeSeekBy(request);
-            case SEEK_END -> startSeekToEnd(request);
-            case SIZE -> startSize(request);
-            case TRUNCATE -> startTruncate(request);
-            case SYNC -> startSync(request);
+            case SEEK_END -> resourceCalls.startSeekToEnd(request);
+            case SIZE -> resourceCalls.startSize(request);
+            case TRUNCATE -> resourceCalls.startTruncate(request);
+            case SYNC -> resourceCalls.startSync(request);
         }
     }
 
-    private void startRead(Request request) {
-        Object start = currentPosition();
-        request.startPosition = start;
-        if (!ProtosNumericValueSupport.isIntegerInLongRange(start)) {
-            // No host file has a byte at a position beyond the signed-64 range.
-            failIo(request);
-            finish(request);
-            return;
-        }
-        try {
-            setCancellation(
-                    request,
-                    ((ReadableResource) resource)
-                            .readAt(
-                                    ProtosNumericValueSupport.exactLong(start),
-                                    ProtosNumericValueSupport.exactInt(request.number),
-                                    new ReadCompletion() {
-                                        @Override
-                                        public void data(byte[] bytes) {
-                                            completeReadData(request, bytes);
-                                        }
-
-                                        @Override
-                                        public void eof() {
-                                            if (request.operation.commit()) {
-                                                request.operation.resolve(ProtosNullValue.INSTANCE);
-                                            }
-                                            finish(request);
-                                        }
-
-                                        @Override
-                                        public void failed() {
-                                            failIo(request);
-                                            finish(request);
-                                        }
-                                    }));
-        } catch (RuntimeException backendFailure) {
-            failIo(request);
-            finish(request);
-        }
-    }
-
-    private void completeReadData(Request request, byte[] bytes) {
-        Objects.requireNonNull(bytes, "bytes");
-        if (bytes.length == 0 || bytes.length > ProtosNumericValueSupport.exactInt(request.number)) {
-            failIo(request);
-            finish(request);
-            return;
-        }
-        if (!request.operation.commit()) {
-            finish(request);
-            return;
-        }
-
-        ProtosBytesValue result = new ProtosBytesValue(bytesPrototype);
-        for (byte octet : bytes) {
-            result.indexedAdd(ProtosNumericValueSupport.octet(octet & 0xff));
-        }
-        synchronized (this) {
-            logicalPosition = advanced(request.startPosition, bytes.length);
-        }
-        request.operation.resolve(result);
-        finish(request);
-    }
-
-    private void startWrite(Request request) {
-        Object start = currentPosition();
-        request.startPosition = start;
-        if (request.bytes.length == 0) {
-            if (request.operation.commit()) {
-                request.operation.resolve(receiver);
-            }
-            finish(request);
-            return;
-        }
-
-        if (!ProtosNumericValueSupport.isIntegerInLongRange(start)) {
-            // No contribution is possible beyond the signed-64 host range.
-            failIo(request);
-            finish(request);
-            return;
-        }
-        try {
-            setCancellation(
-                    request,
-                    ((WritableResource) resource)
-                            .writeAt(
-                                    ProtosNumericValueSupport.exactLong(start),
-                                    request.bytes.clone(),
-                                    new WriteCompletion() {
-                                        @Override
-                                        public boolean commitFirstContribution() {
-                                            return request.operation.commit();
-                                        }
-
-                                        @Override
-                                        public void succeeded() {
-                                            if (!request.operation.committed()
-                                                    && !request.operation.commit()) {
-                                                finish(request);
-                                                return;
-                                            }
-                                            setPositionAfterWrite(
-                                                    request, request.bytes.length);
-                                            request.operation.resolve(receiver);
-                                            finish(request);
-                                        }
-
-                                        @Override
-                                        public void failed(int contributedPrefix) {
-                                            validateContributedPrefix(request, contributedPrefix);
-                                            if (contributedPrefix > 0) {
-                                                if (!request.operation.committed()) {
-                                                    failIo(request);
-                                                    finish(request);
-                                                    return;
-                                                }
-                                                setPositionAfterWrite(
-                                                        request, contributedPrefix);
-                                            }
-                                            failIo(request);
-                                            finish(request);
-                                        }
-                                    }));
-        } catch (RuntimeException backendFailure) {
-            failIo(request);
-            finish(request);
-        }
-    }
-
-    private static void validateContributedPrefix(Request request, int contributedPrefix) {
-        if (contributedPrefix < 0 || contributedPrefix > request.bytes.length) {
-            throw new IllegalArgumentException("invalid contributed write prefix");
-        }
-    }
-
-    private void setPositionAfterWrite(Request request, int contributedPrefix) {
+    void setPositionAfterWrite(Request request, int contributedPrefix) {
         synchronized (this) {
             if (request.startPosition == null) {
                 throw new IllegalStateException("write contribution without start position");
@@ -522,9 +410,7 @@ public final class ProtosFileFlow {
 
     private void completeSeek(Request request) {
         if (request.operation.commit()) {
-            synchronized (this) {
-                logicalPosition = request.number;
-            }
+            setLogicalPosition(request.number);
             request.operation.resolve(request.number);
         }
         finish(request);
@@ -540,155 +426,10 @@ public final class ProtosFileFlow {
             return;
         }
         if (request.operation.commit()) {
-            synchronized (this) {
-                logicalPosition = target;
-            }
+            setLogicalPosition(target);
             request.operation.resolve(target);
         }
         finish(request);
-    }
-
-    private void startSeekToEnd(Request request) {
-        try {
-            setCancellation(
-                    request,
-                    ((SeekableResource) resource)
-                            .endPosition(
-                                    new IntegerCompletion() {
-                                        @Override
-                                        public void succeeded(long end) {
-                                            if (end < 0) {
-                                                failIo(request);
-                                                finish(request);
-                                                return;
-                                            }
-                                            if (request.operation.commit()) {
-                                                Object value =
-                                                        ProtosNumericValueSupport.integer(end);
-                                                synchronized (ProtosFileFlow.this) {
-                                                    logicalPosition = value;
-                                                }
-                                                request.operation.resolve(value);
-                                            }
-                                            finish(request);
-                                        }
-
-                                        @Override
-                                        public void failed() {
-                                            failIo(request);
-                                            finish(request);
-                                        }
-                                    }));
-        } catch (RuntimeException backendFailure) {
-            failIo(request);
-            finish(request);
-        }
-    }
-
-    private void startSize(Request request) {
-        try {
-            setCancellation(
-                    request,
-                    ((SizedResource) resource)
-                            .size(
-                                    new IntegerCompletion() {
-                                        @Override
-                                        public void succeeded(long size) {
-                                            if (size < 0) {
-                                                failIo(request);
-                                                finish(request);
-                                                return;
-                                            }
-                                            if (request.operation.commit()) {
-                                                request.operation.resolve(
-                                                        ProtosNumericValueSupport.integer(size));
-                                            }
-                                            finish(request);
-                                        }
-
-                                        @Override
-                                        public void failed() {
-                                            failIo(request);
-                                            finish(request);
-                                        }
-                                    }));
-        } catch (RuntimeException backendFailure) {
-            failIo(request);
-            finish(request);
-        }
-    }
-
-    private void startTruncate(Request request) {
-        try {
-            setCancellation(
-                    request,
-                    ((TruncatableResource) resource)
-                            .truncate(
-                                    ProtosNumericValueSupport.isIntegerInLongRange(request.number)
-                                            ? ProtosNumericValueSupport.exactLong(request.number)
-                                            : Long.MAX_VALUE,
-                                    new ChangeCompletion() {
-                                        @Override
-                                        public boolean commitChange() {
-                                            return request.operation.commit();
-                                        }
-
-                                        @Override
-                                        public void succeeded() {
-                                            if (!request.operation.committed()
-                                                    && !request.operation.commit()) {
-                                                finish(request);
-                                                return;
-                                            }
-                                            request.operation.resolve(receiver);
-                                            finish(request);
-                                        }
-
-                                        @Override
-                                        public void failed() {
-                                            failIo(request);
-                                            finish(request);
-                                        }
-                                    }));
-        } catch (RuntimeException backendFailure) {
-            failIo(request);
-            finish(request);
-        }
-    }
-
-    private void startSync(Request request) {
-        try {
-            setCancellation(
-                    request,
-                    ((SyncableResource) resource)
-                            .sync(
-                                    new SyncCompletion() {
-                                        @Override
-                                        public boolean commitDurability() {
-                                            return request.operation.commit();
-                                        }
-
-                                        @Override
-                                        public void succeeded() {
-                                            if (!request.operation.committed()
-                                                    && !request.operation.commit()) {
-                                                finish(request);
-                                                return;
-                                            }
-                                            request.operation.resolve(receiver);
-                                            finish(request);
-                                        }
-
-                                        @Override
-                                        public void failed() {
-                                            failIo(request);
-                                            finish(request);
-                                        }
-                                    }));
-        } catch (RuntimeException backendFailure) {
-            failIo(request);
-            finish(request);
-        }
     }
 
     private void cancellationRequested(Request request) {
@@ -715,7 +456,7 @@ public final class ProtosFileFlow {
         }
     }
 
-    private void setCancellation(Request request, Cancellation cancellation) {
+    void setCancellation(Request request, Cancellation cancellation) {
         boolean cancelNow;
         synchronized (this) {
             request.cancellation = cancellation;
@@ -726,7 +467,7 @@ public final class ProtosFileFlow {
         }
     }
 
-    private void finish(Request request) {
+    void finish(Request request) {
         boolean removed;
         synchronized (this) {
             removed = operations.remove(request);
@@ -750,6 +491,12 @@ public final class ProtosFileFlow {
 
                         @Override
                         public void failed() {
+                            if (ProtosHostCompletionThread.isCurrent()) {
+                                // I156: a host-thread release failure lets the lifecycle build
+                                // the IOError inside the owning Actor.
+                                completion.failedWithIoErrorForRuntime();
+                                return;
+                            }
                             completion.failed(
                                     ProtosCoreErrors.newOccurrence(
                                             constructionActivation,
@@ -763,13 +510,39 @@ public final class ProtosFileFlow {
         }
     }
 
-    private Object currentPosition() {
+    void setLogicalPosition(Object position) {
+        synchronized (this) {
+            logicalPosition = position;
+            logicalPositionKnown = true;
+        }
+    }
+
+    void markPositionUnknown() {
+        synchronized (this) {
+            logicalPositionKnown = false;
+        }
+    }
+
+    private boolean positionKnown() {
+        synchronized (this) {
+            return logicalPositionKnown;
+        }
+    }
+
+    private static boolean requiresKnownPosition(Kind kind) {
+        return switch (kind) {
+            case READ, WRITE, POSITION, SEEK_BY -> true;
+            case SEEK, SEEK_END, SIZE, TRUNCATE, SYNC -> false;
+        };
+    }
+
+    Object currentPosition() {
         synchronized (this) {
             return logicalPosition;
         }
     }
 
-    private void failIo(Request request) {
+    void failIo(Request request) {
         request.operation.fail(
                 ProtosCoreErrors.newOccurrence(
                         request.operation.origin(), ProtosCoreErrors.StandardError.I_O_ERROR));
@@ -830,23 +603,23 @@ public final class ProtosFileFlow {
         }
     }
 
-    private Object advanced(Object start, int octets) {
+    Object advanced(Object start, int octets) {
         return ProtosNumericValueSupport.addIntegers(
                 start, ProtosNumericValueSupport.integer(octets), owningPrelude);
     }
 
-    private static final class Request {
-        private final Kind kind;
-        private final ProtosIoOperation operation;
+    static final class Request {
+        final Kind kind;
+        final ProtosIoOperation operation;
         /* The exact semantic Integer argument, if any. */
-        private final Object number;
-        private final byte[] bytes;
-        private boolean started;
-        private boolean cancellationRequested;
-        private Cancellation cancellation;
-        private Object startPosition;
+        final Object number;
+        final byte[] bytes;
+        boolean started;
+        boolean cancellationRequested;
+        Cancellation cancellation;
+        Object startPosition;
 
-        private Request(
+        Request(
                 Kind kind,
                 ProtosIoOperation operation,
                 Object number,

@@ -165,6 +165,9 @@ public final class ProtosFreshProcessExecutor {
             return processContext.execute(request.entry(), bootstrap.activation());
         } finally {
             process.requestTerminationForRuntime();
+            process.awaitTerminationForRuntime();
+            process.executionHostForRuntime()
+                    .ifPresent(host -> host.awaitTerminalDispositionForRuntime());
         }
     }
 }

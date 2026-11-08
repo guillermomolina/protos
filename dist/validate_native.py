@@ -340,6 +340,138 @@ def run_case(
     return result
 
 
+FILESYSTEM_WRITE = (
+    'Files: import("std:io/files")\n'
+    'Files.writeAllText(filesystem, Path.relative().child("note.txt"),'
+    ' "dist-granted", Encoding.UTF8).value()\n'
+    'print("written")\n'
+)
+FILESYSTEM_READ = (
+    'Files: import("std:io/files")\n'
+    'print(Files.readAllText(filesystem, Path.relative().child("note.txt"),'
+    " Encoding.UTF8).value())\n"
+)
+FILESYSTEM_REFUSAL = "cannot authorize Filesystem root"
+
+
+def run_refused(
+    label: str,
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    expected_status: int,
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        command, cwd=cwd, env=env, text=True, capture_output=True, check=False
+    )
+    if result.returncode != expected_status:
+        fail(
+            label
+            + " exited with "
+            + str(result.returncode)
+            + " instead of "
+            + str(expected_status)
+            + "\nstdout:\n"
+            + result.stdout
+            + "\nstderr:\n"
+            + result.stderr
+        )
+    if "Internal error" in result.stderr or "ran" in result.stdout:
+        fail(label + " ran guest code or leaked an internal error:\n" + result.stderr)
+    print("NATIVE_DIST_" + label + "_CHECK: PASS")
+    return result
+
+
+def validate_filesystem_grant(
+    launcher: Path, temp: Path, cwd: Path, env: dict[str, str]
+) -> None:
+    """I156: the installed executable serves --allow-filesystem=<directory>.
+
+    Writes in one Process, reads in a second one (persistence), and checks the
+    denials. A host kernel without the required Landlock ABI must refuse the
+    grant before guest code; that is reported as a distinct verdict, never as
+    a pass of the grant itself.
+    """
+    root = temp / "filesystem-grant"
+    root.mkdir()
+    grant = "--allow-filesystem=" + str(root)
+
+    run_refused(
+        "FILESYSTEM_NO_GRANT",
+        [str(launcher), "-e", "filesystem"],
+        cwd=cwd,
+        env=env,
+        expected_status=1,
+    )
+    run_refused(
+        "FILESYSTEM_MISSING_ROOT",
+        [str(launcher), "--allow-filesystem=" + str(temp / "absent"), "-e", 'print("ran")'],
+        cwd=cwd,
+        env=env,
+        expected_status=1,
+    )
+    if (temp / "absent").exists():
+        fail("a refused Filesystem grant created its root")
+
+    probe = subprocess.run(
+        [str(launcher), grant, "-e", "null"],
+        cwd=cwd,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if probe.returncode != 0:
+        if probe.returncode == 1 and FILESYSTEM_REFUSAL in probe.stderr:
+            print("NATIVE_DIST_FILESYSTEM_GRANT=REJECTED_UNSUPPORTED_HOST")
+            # Only the controlled refusal ran; no confinement case was executed.
+            print("NATIVE_DIST_FILESYSTEM_CONFINEMENT=NOT_EXECUTED_UNSUPPORTED_HOST")
+            print("NATIVE_DIST_FILESYSTEM_BIND_MOUNT=NOT_EXECUTED_UNSUPPORTED_HOST")
+            return
+        fail("Filesystem grant probe failed:\n" + probe.stderr)
+
+    run_case(
+        "FILESYSTEM_GRANT_WRITE",
+        [str(launcher), grant, "-e", FILESYSTEM_WRITE],
+        cwd=cwd,
+        env=env,
+        expected_stdout="written",
+    )
+    run_case(
+        "FILESYSTEM_GRANT_PERSISTENCE",
+        [str(launcher), grant, "-e", FILESYSTEM_READ],
+        cwd=cwd,
+        env=env,
+        expected_stdout="dist-granted",
+    )
+    outside = temp / "filesystem-outside"
+    outside.mkdir()
+    (root / "escape").symlink_to(outside)
+    run_refused(
+        "FILESYSTEM_OUTSIDE_ROOT",
+        [
+            str(launcher),
+            grant,
+            "-e",
+            'Files: import("std:io/files")\n'
+            'Files.writeAllText(filesystem, Path.relative().child("escape")'
+            '.child("x"), "x", Encoding.UTF8).value()\n'
+            'print("ran")\n',
+        ],
+        cwd=cwd,
+        env=env,
+        expected_status=1,
+    )
+    if any(outside.iterdir()):
+        fail("a confined Filesystem grant wrote outside its root")
+    print("NATIVE_DIST_FILESYSTEM_GRANT=PASS")
+    print("NATIVE_DIST_FILESYSTEM_CONFINEMENT=EXECUTED_SYMLINK_REFUSED")
+    # Bind mounts and T04/T05 are not exercised by the distribution check; the
+    # JVM security test and scripts/native-test.sh report them separately.
+    print("NATIVE_DIST_FILESYSTEM_BIND_MOUNT=NOT_EXECUTED_IN_DIST_CHECK")
+
+
 def normalized_terminal_text(data: bytes) -> str:
     data = ANSI_TERMINAL_RE.sub(b"", data)
 
@@ -1825,6 +1957,8 @@ def validate(archive: Path) -> None:
         print("NATIVE_DIST_UNRELATED_CWD_CHECK: PASS")
         print("NATIVE_DIST_EXTERNAL_SOURCE_LOCATION_CHECK: PASS")
         print("NATIVE_DIST_PROTOS_HOME_DERIVATION_CHECK: PASS")
+
+        validate_filesystem_grant(launcher, temp, unrelated_cwd, env)
 
         workspace_fixture = (
             dist

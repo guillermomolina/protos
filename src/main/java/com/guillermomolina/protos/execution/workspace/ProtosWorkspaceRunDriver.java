@@ -35,7 +35,9 @@ import java.util.Objects;
  * <p>One RuntimeHost owns the whole run: the Package Tool preflight Process, any explicitly
  * selected Network grant and the application Process. Preflight never receives Network; the
  * application receives it only through {@link #execute(Request,
- * ProtosWorkspacePackageApplicationExecution.NetworkGrant)}, never by default.
+ * ProtosWorkspacePackageApplicationExecution.NetworkGrant)}, never by default. A D248-B
+ * {@link Request#filesystemGrant()} likewise reaches only the application Process; preflight never
+ * receives it.
  */
 public final class ProtosWorkspaceRunDriver {
     private ProtosWorkspaceRunDriver() {}
@@ -54,8 +56,44 @@ public final class ProtosWorkspaceRunDriver {
             ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
             String stdinEncodingBinding,
             String stdoutEncodingBinding,
-            String stderrEncodingBinding) {
+            String stderrEncodingBinding,
+            ProtosStandaloneHostedExecution.FilesystemGrant filesystemGrant) {
+        /** Request without a D248-B Filesystem grant. */
+        public Request(
+                Path coreRoot,
+                Path packageToolRoot,
+                Path projectRoot,
+                ProtosModuleResolver standardLibraryResolver,
+                String entryLogicalModule,
+                List<String> applicationArguments,
+                ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
+                List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
+                ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+                ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+                ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+                String stdinEncodingBinding,
+                String stdoutEncodingBinding,
+                String stderrEncodingBinding) {
+            this(
+                    coreRoot,
+                    packageToolRoot,
+                    projectRoot,
+                    standardLibraryResolver,
+                    entryLogicalModule,
+                    applicationArguments,
+                    environmentNameDomain,
+                    environmentEntries,
+                    stdinBackend,
+                    stdoutBackend,
+                    stderrBackend,
+                    stdinEncodingBinding,
+                    stdoutEncodingBinding,
+                    stderrEncodingBinding,
+                    ProtosStandaloneHostedExecution.FilesystemGrant.NONE);
+        }
+
         public Request {
+            Objects.requireNonNull(filesystemGrant, "filesystemGrant");
             Objects.requireNonNull(coreRoot, "coreRoot");
             Objects.requireNonNull(packageToolRoot, "packageToolRoot");
             Objects.requireNonNull(projectRoot, "projectRoot");
@@ -138,7 +176,8 @@ public final class ProtosWorkspaceRunDriver {
                             request.stderrBackend(),
                             request.stdinEncodingBinding(),
                             request.stdoutEncodingBinding(),
-                            request.stderrEncodingBinding());
+                            request.stderrEncodingBinding(),
+                            request.filesystemGrant());
 
             return ProtosWorkspacePackageApplicationExecution.executeService(
                     application, networkGrant, entropyGrant,
@@ -189,7 +228,8 @@ public final class ProtosWorkspaceRunDriver {
                         request.stderrBackend(),
                         request.stdinEncodingBinding(),
                         request.stdoutEncodingBinding(),
-                        request.stderrEncodingBinding()),
+                        request.stderrEncodingBinding(),
+                        request.filesystemGrant()),
                 ignored -> {},
                 networkGrant,
                 entropyGrant,

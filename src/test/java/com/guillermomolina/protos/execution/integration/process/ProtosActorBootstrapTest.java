@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
+import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
@@ -40,6 +41,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -585,5 +587,495 @@ final class ProtosActorBootstrapTest {
             }
             return ProtosModuleSource.fromCharacters(key, source);
         }
+    }
+
+    // ---- I158 / D251-A1: the shared suspendible bootstrap engine --------------------------
+    // The awaited Future is a transferred TcpAcceptor accept() whose completion the test holds
+    // (ProtosI158ActorBootstrapSuspensionTest.Harness); carriers run only when drained.
+
+    private static final String I158_ARGUMENTS =
+            """
+            boot: (acceptor, holder) => {
+                before: holder
+                Error.handle(() => { acceptor.accept().value() }, (error) => { null })
+                { before: before; after: holder }
+            }
+            """;
+
+    @Test
+    void i158SpawnReturnsTheRefAndMaterializesArgumentsOnceAcrossTheSuspension() throws Exception {
+        ProtosI158ActorBootstrapSuspensionTest.Harness x =
+                ProtosI158ActorBootstrapSuspensionTest.Harness.create(
+                        "app", ProtosModuleKey.source("canonical:app"), I158_ARGUMENTS);
+        ProtosObjectValue holder = new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+        ProtosActorRefValue reference = x.invokeSpawn(x.acquire(), holder);
+        ProtosActor spawned = x.local(reference);
+        assertEquals(ProtosActor.LifecycleState.INITIALIZING, spawned.lifecycleState());
+        x.executor().drain();
+        assertEquals(ProtosActor.LifecycleState.INITIALIZING, spawned.lifecycleState());
+        assertTrue(spawned.currentBehavior().isEmpty());
+        // The suspended initialization owns no Task.
+        assertEquals(0, spawned.executionDomain().liveTaskCount());
+
+        x.backend().pending.pollFirst().failed();
+        x.executor().drain();
+
+        ProtosObjectValue behavior = spawned.currentBehavior().orElseThrow();
+        Object before = behavior.readLocalSlot("before").orElseThrow();
+        assertSame(before, behavior.readLocalSlot("after").orElseThrow());
+        assertNotSame(holder, before, "destination-local materialization");
+        assertSame(behavior, spawned.currentBehavior().orElseThrow());
+        assertEquals(0, spawned.executionDomain().liveTaskCount());
+    }
+
+    @Test
+    void i158ModuleBindingSuspensionKeepsTheReceiverAndPrivateContext() throws Exception {
+        ProtosModuleKey key = ProtosModuleKey.module("canonical:mod:app");
+        ProtosI158ActorBootstrapSuspensionTest.Harness x =
+                ProtosI158ActorBootstrapSuspensionTest.Harness.create(
+                        "mod:app",
+                        key,
+                        """
+                        hidden: 3
+                        this.boot: (acceptor) => {
+                            receiver: this
+                            Error.handle(() => { acceptor.accept().value() }, (error) => { null })
+                            { receiver: receiver; same: receiver == this; hidden: hidden }
+                        }
+                        """);
+        ProtosActor spawned = x.local(x.invokeSpawn(x.acquire()));
+        x.executor().drain();
+        x.backend().pending.pollFirst().failed();
+        x.executor().drain();
+
+        ProtosObjectValue publicModule = spawned.moduleState().lookup(key).orElseThrow().instance();
+        ProtosObjectValue behavior = spawned.currentBehavior().orElseThrow();
+        assertSame(publicModule, behavior.readLocalSlot("receiver").orElseThrow());
+        assertFalse(publicModule.hasLocalSlot("hidden"));
+        assertEquals("3", ProtosNumericValueSupport.integerDecimalText(behavior.readLocalSlot("hidden").orElseThrow()));
+    }
+
+    @Test
+    void i158HandledAndUnhandledFutureErrorsDuringBootstrap() throws Exception {
+        ProtosI158ActorBootstrapSuspensionTest.Harness handled =
+                ProtosI158ActorBootstrapSuspensionTest.Harness.create(
+                        "app",
+                        ProtosModuleKey.source("canonical:app"),
+                        "boot: (acceptor) => {\n"
+                                + "    label: IOError.handle(() => { acceptor.accept().value() }, (error) => { \"io\" })\n"
+                                + "    { label: label }\n"
+                                + "}\n");
+        ProtosActor ok = handled.local(handled.invokeSpawn(handled.acquire()));
+        handled.executor().drain();
+        handled.backend().pending.pollFirst().failed();
+        handled.executor().drain();
+        assertEquals(ProtosActor.LifecycleState.READY, ok.lifecycleState());
+
+        ProtosI158ActorBootstrapSuspensionTest.Harness unhandled =
+                ProtosI158ActorBootstrapSuspensionTest.Harness.create(
+                        "app",
+                        ProtosModuleKey.source("canonical:app"),
+                        "boot: (acceptor) => {\n    acceptor.accept().value()\n    {}\n}\n");
+        ProtosActor failed = unhandled.local(unhandled.invokeSpawn(unhandled.acquire()));
+        unhandled.executor().drain();
+        unhandled.backend().pending.pollFirst().failed();
+        unhandled.executor().drain();
+        assertEquals(ProtosActor.LifecycleState.TERMINATED, failed.lifecycleState());
+        assertTrue(failed.currentBehavior().isEmpty());
+        // A non-root failure does not terminate the Process.
+        assertEquals(ProtosProcessRuntime.LifecycleState.RUNNING, unhandled.process().lifecycleState());
+    }
+
+    @Test
+    void i158ResumptionMayRunOnADifferentCarrierThread() throws Exception {
+        ProtosI158ActorBootstrapSuspensionTest.Harness x =
+                ProtosI158ActorBootstrapSuspensionTest.Harness.create(
+                        "app", ProtosModuleKey.source("canonical:app"), I158_ARGUMENTS);
+        ProtosActor spawned =
+                x.local(x.invokeSpawn(x.acquire(), new ProtosObjectValue(ProtosObjectValue.rootObject())));
+        x.executor().drain();
+        x.backend().pending.pollFirst().failed();
+
+        Thread other = new Thread(() -> x.executor().drain(), "i158-second-carrier");
+        other.start();
+        other.join(TimeUnit.SECONDS.toMillis(5));
+        assertFalse(other.isAlive());
+        assertEquals(ProtosActor.LifecycleState.READY, spawned.lifecycleState());
+    }
+
+    // ---- I158: body-level suspension on a request to an independent provider Actor -------
+    // The test execution host puts the guest's global Actor.spawn on the same manual scheduler,
+    // so the provider cannot answer before the consumer has suspended.
+
+    private static final String PROVIDER =
+            """
+            boot: () => {
+                { twice: (n) => { n * 2 } }
+            }
+            """;
+
+    @Test
+    void i158SpawnedSourceBodyAwaitsAProviderRequestBeforeDefiningItsBinding() throws Exception {
+        ProtosI158ActorBootstrapSuspensionTest.Harness x =
+                ProtosI158ActorBootstrapSuspensionTest.Harness.create(
+                                "app",
+                                ProtosModuleKey.source("canonical:app"),
+                                """
+                                effects: 0
+                                effects = effects + 1
+                                provider: Actor.spawn("provider", "boot")
+                                answer: provider.request("twice", 21).value()
+                                effects = effects + 10
+                                boot: () => {
+                                    {
+                                        answer: answer
+                                        poke: () => {
+                                            effects = effects + 100
+                                            null
+                                        }
+                                    }
+                                }
+                                """,
+                                Map.of("canonical:provider", PROVIDER))
+                        .hosted();
+
+        ProtosActorRefValue reference = x.invokeSpawn();
+        ProtosActor consumer = x.local(reference);
+        assertEquals(ProtosActor.LifecycleState.INITIALIZING, consumer.lifecycleState(), "immediate ActorRef");
+        ProtosInvocation.invokeMessage(
+                reference, "send", List.of(new ProtosStringValue("poke")), x.activation());
+
+        ProtosFutureValue awaited = observeRetainedProviderRequest(
+                x, consumer,
+                () -> assertEquals(1L, x.sourceSlot(consumer, "effects"),
+                        "no message dispatched before READY"));
+        assertEquals(ProtosFutureValue.State.RESOLVED, awaited.state(),
+                "the provider answers only after the suspension has been inspected");
+
+        assertEquals(ProtosActor.LifecycleState.READY, consumer.lifecycleState());
+        ProtosObjectValue behavior = consumer.currentBehavior().orElseThrow();
+        assertEquals("42", ProtosNumericValueSupport.integerDecimalText(behavior.readLocalSlot("answer").orElseThrow()));
+        // Module effects ran once (1 + 10); the retained message ran once, after READY (+100).
+        assertEquals(111L, x.sourceSlot(consumer, "effects"));
+        assertSame(behavior, consumer.currentBehavior().orElseThrow(), "one behavior publication");
+    }
+
+    @Test
+    void i158SpawnedModuleBodyAwaitsAProviderRequestAndKeepsItsPublicIdentity() throws Exception {
+        ProtosModuleKey key = ProtosModuleKey.module("canonical:mod:app");
+        ProtosI158ActorBootstrapSuspensionTest.Harness x =
+                ProtosI158ActorBootstrapSuspensionTest.Harness.create(
+                                "mod:app",
+                                key,
+                                """
+                                effects: 0
+                                effects = effects + 1
+                                provider: Actor.spawn("provider", "boot")
+                                answer: provider.request("twice", 21).value()
+                                effects = effects + 10
+                                this.boot: () => {
+                                    hits: { count: 0 }
+                                    moduleOwner: this
+                                    {
+                                        owner: moduleOwner
+                                        answer: answer
+                                        effects: effects
+                                        hits: hits
+                                        poke: () => {
+                                            hits.count = hits.count + 1
+                                            null
+                                        }
+                                    }
+                                }
+                                """,
+                                Map.of("canonical:provider", PROVIDER))
+                        .hosted();
+
+        ProtosActorRefValue reference = x.invokeSpawn();
+        ProtosActor consumer = x.local(reference);
+        assertEquals(ProtosActor.LifecycleState.INITIALIZING, consumer.lifecycleState(), "immediate ActorRef");
+
+        // Queue this message before initialization. It cannot dispatch until READY.
+        ProtosInvocation.invokeMessage(
+                reference, "send", List.of(new ProtosStringValue("poke")), x.activation());
+        java.util.concurrent.atomic.AtomicReference<ProtosObjectValue> moduleAtSuspension =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        ProtosFutureValue awaited = observeRetainedProviderRequest(
+                x, consumer, () -> {
+                    ProtosObjectValue partial =
+                            consumer.moduleState().lookup(key).orElseThrow().instance();
+                    moduleAtSuspension.set(partial);
+                    assertFalse(partial.hasLocalSlot("boot"),
+                            "the binding is not selectable before the body ends");
+                });
+        assertEquals(ProtosFutureValue.State.RESOLVED, awaited.state());
+        ProtosObjectValue publicModule = moduleAtSuspension.get();
+        assertNotNull(publicModule);
+
+        assertEquals(ProtosActor.LifecycleState.READY, consumer.lifecycleState());
+        assertSame(publicModule, consumer.moduleState().lookup(key).orElseThrow().instance());
+        ProtosObjectValue behavior = consumer.currentBehavior().orElseThrow();
+        assertSame(publicModule, behavior.readLocalSlot("owner").orElseThrow());
+        assertEquals("42", ProtosNumericValueSupport.integerDecimalText(behavior.readLocalSlot("answer").orElseThrow()));
+        // Selected only after the body ended: it sees both effects, each exactly once.
+        assertEquals("11", ProtosNumericValueSupport.integerDecimalText(behavior.readLocalSlot("effects").orElseThrow()));
+        for (String privateName : List.of("effects", "provider", "answer")) {
+            assertFalse(publicModule.hasLocalSlot(privateName), privateName + " stays private");
+        }
+        assertSame(behavior, consumer.currentBehavior().orElseThrow());
+        // The retained message ran after READY, exactly once.
+        ProtosObjectValue hits = (ProtosObjectValue) behavior.readLocalSlot("hits").orElseThrow();
+        assertEquals("1", ProtosNumericValueSupport.integerDecimalText(hits.readLocalSlot("count").orElseThrow()));
+    }
+
+    /**
+     * Observe the first pending provider request while the scheduler carrier
+     * is paused after the consumer's continuation has been retained.
+     *
+     * A single ManualExecutor command can execute several Actor segments.
+     * Inspecting only after runOne() may miss the suspension entirely.
+     */
+    private static ProtosFutureValue observeRetainedProviderRequest(
+            ProtosI158ActorBootstrapSuspensionTest.Harness x,
+            ProtosActor consumer,
+            Runnable whileSuspended) throws Exception {
+        java.util.concurrent.CountDownLatch retained =
+                new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release =
+                new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<ProtosFutureValue> observed =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<Throwable> carrierFailure =
+                new java.util.concurrent.atomic.AtomicReference<>();
+
+        ProtosActorBootstrapSuspension.probeForTesting = (point, future) -> {
+            if (point != ProtosActorBootstrapSuspension.ProbePoint.AFTER_RETENTION
+                    || !observed.compareAndSet(null, future)) {
+                return;
+            }
+            retained.countDown();
+            try {
+                if (!release.await(5, TimeUnit.SECONDS)) {
+                    throw new AssertionError("test barrier was not released");
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("test carrier interrupted", interrupted);
+            }
+        };
+
+        Thread carrier = Thread.ofPlatform()
+                .name("i158-provider-bootstrap-carrier")
+                .start(() -> {
+                    try {
+                        x.executor().drain();
+                    } catch (Throwable failure) {
+                        carrierFailure.set(failure);
+                    }
+                });
+
+        try {
+            assertTrue(retained.await(5, TimeUnit.SECONDS),
+                    "no bootstrap continuation retained: actor=" + consumer.lifecycleState()
+                            + ", process=" + x.process().lifecycleState()
+                            + ", carrierFailure=" + carrierFailure.get());
+
+            ProtosFutureValue awaited = observed.get();
+            assertNotNull(awaited);
+            assertEquals(ProtosFutureValue.State.PENDING, awaited.state());
+            assertSame(awaited,
+                    ProtosActorBootstrapSuspension.awaitedFutureForTesting(consumer),
+                    "the awaiting Future must belong to the consumer, not the provider");
+            assertEquals(ProtosActor.LifecycleState.INITIALIZING,
+                    consumer.lifecycleState());
+            assertTrue(consumer.currentBehavior().isEmpty(),
+                    "no behavior before READY");
+
+            whileSuspended.run();
+        } finally {
+            release.countDown();
+            carrier.join(TimeUnit.SECONDS.toMillis(5));
+            ProtosActorBootstrapSuspension.probeForTesting = null;
+        }
+
+        assertFalse(carrier.isAlive(),
+                "the provider/consumer carrier did not finish");
+
+        if (carrierFailure.get() != null) {
+            throw new AssertionError(
+                    "provider/consumer carrier failed", carrierFailure.get());
+        }
+
+        return observed.get();
+    }
+
+    // ---- I158: the real RootActor service initialization Future (startRootService) ----------
+
+    /** Test execution host: one manual scheduler, optional placement failure, cleanup counters. */
+    private static final class CountingHost
+            implements com.guillermomolina.protos.runtime.process.ProtosProcessExecutionHost {
+        final com.guillermomolina.protos.runtime.ProtosActorScheduler scheduler;
+        final RuntimeException placementFailure;
+        final AtomicInteger actorTerminations = new AtomicInteger();
+        final AtomicInteger processTerminations = new AtomicInteger();
+
+        CountingHost(Executor carriers, RuntimeException placementFailure) {
+            this.scheduler = new com.guillermomolina.protos.runtime.ProtosActorScheduler(carriers, 1);
+            this.placementFailure = placementFailure;
+        }
+
+        @Override
+        public <T> T callForRuntime(java.util.function.Supplier<T> action) {
+            if (placementFailure != null) {
+                throw placementFailure;
+            }
+            return ProtosTestExecutionSupport.callEntered(action);
+        }
+
+        @Override
+        public Optional<com.guillermomolina.protos.runtime.ProtosActorScheduler> actorSchedulerForRuntime() {
+            return Optional.of(scheduler);
+        }
+
+        @Override
+        public void actorTerminatedForRuntime(ProtosActor actor) {
+            actorTerminations.incrementAndGet();
+        }
+
+        @Override
+        public void processTerminatedForRuntime() {
+            processTerminations.incrementAndGet();
+        }
+    }
+
+    private static ProtosI158ActorBootstrapSuspensionTest.Harness rootService(
+            String source, CountingHost[] host, RuntimeException placementFailure) throws Exception {
+        ProtosI158ActorBootstrapSuspensionTest.Harness x =
+                ProtosI158ActorBootstrapSuspensionTest.Harness.create(
+                        "app", ProtosModuleKey.source("canonical:app"), source);
+        host[0] = new CountingHost(x.executor(), placementFailure);
+        x.process().bindExecutionHostForRuntime(host[0]);
+        return x;
+    }
+
+    @Test
+    void i158RootServiceFutureCompletesTrueOnlyAfterTheBehaviorIsInstalled() throws Exception {
+        CountingHost[] host = new CountingHost[1];
+        var x = rootService("boot: () => { { ok: 1 } }\n", host, null);
+        ProtosActor root = x.process().rootActorForRuntime();
+        java.util.concurrent.CompletableFuture<Boolean> outcome =
+                ProtosActorBootstrap.startRootService(x.process(), x.prelude(), x.key(), "boot");
+        AtomicInteger behaviorAtCompletion = new AtomicInteger(-1);
+        outcome.thenAccept(ready -> behaviorAtCompletion.set(root.currentBehavior().isPresent() ? 1 : 0));
+        assertFalse(outcome.isDone(), "nothing ran before the scheduler turn");
+
+        x.executor().drain();
+
+        assertTrue(outcome.getNow(false));
+        assertEquals(1, behaviorAtCompletion.get(), "true is published after the behavior");
+        assertEquals(ProtosActor.LifecycleState.READY, root.lifecycleState());
+    }
+
+    @Test
+    void i158RootServiceGuestFailureCompletesFalseAndTerminatesTheProcess() throws Exception {
+        CountingHost[] host = new CountingHost[1];
+        var x = rootService("boot: () => { Error().signal() }\n", host, null);
+        java.util.concurrent.CompletableFuture<Boolean> outcome =
+                ProtosActorBootstrap.startRootService(x.process(), x.prelude(), x.key(), "boot");
+
+        x.executor().drain();
+
+        assertTrue(outcome.isDone());
+        assertFalse(outcome.isCompletedExceptionally(), "a Protos Error is not a host failure");
+        assertFalse(outcome.join());
+        assertTrue(x.process().rootActorForRuntime().currentBehavior().isEmpty());
+        assertTrue(
+                x.process().lifecycleState() != ProtosProcessRuntime.LifecycleState.RUNNING,
+                "RootActor initialization failure terminates the Process");
+    }
+
+    @Test
+    void i158RootServiceTerminationBeforeReadyCompletesFalse() throws Exception {
+        CountingHost[] host = new CountingHost[1];
+        // The only producer is a Task of the same Actor: the initialization stays suspended.
+        var x = rootService("pending: (() => 1).future()\npending.value()\nboot: () => { {} }\n", host, null);
+        ProtosActor root = x.process().rootActorForRuntime();
+        java.util.concurrent.CompletableFuture<Boolean> outcome =
+                ProtosActorBootstrap.startRootService(x.process(), x.prelude(), x.key(), "boot");
+        x.executor().drain();
+        assertFalse(outcome.isDone(), "a suspension is never reported as provisional success");
+        assertEquals(ProtosActor.LifecycleState.INITIALIZING, root.lifecycleState());
+
+        x.process().requestTerminationForRuntime();
+        x.executor().drain();
+
+        assertEquals(Boolean.FALSE, outcome.getNow(null));
+        assertTrue(root.currentBehavior().isEmpty());
+        assertEquals(ProtosActor.LifecycleState.TERMINATED, root.lifecycleState());
+        assertTrue(host[0].processTerminations.get() <= 1, "Process cleanup runs at most once");
+        assertTrue(host[0].actorTerminations.get() <= 1, "Actor cleanup runs at most once");
+    }
+
+    @Test
+    void i158RootServiceHostFailureCompletesExceptionallyWithItsCause() throws Exception {
+        CountingHost[] host = new CountingHost[1];
+        IllegalStateException placement = new IllegalStateException("i158 test host placement failure");
+        var x = rootService("boot: () => { {} }\n", host, placement);
+        java.util.concurrent.CompletableFuture<Boolean> outcome =
+                ProtosActorBootstrap.startRootService(x.process(), x.prelude(), x.key(), "boot");
+
+        // No Context is entered by the carrier, so every segment goes through the host placement.
+        x.executor().drainUnentered();
+
+        assertTrue(outcome.isCompletedExceptionally());
+        java.util.concurrent.CompletionException failure =
+                assertThrows(java.util.concurrent.CompletionException.class, outcome::join);
+        assertSame(placement, failure.getCause());
+        assertTrue(x.process().rootActorForRuntime().currentBehavior().isEmpty());
+    }
+
+    @Test
+    void i158RootServiceTerminationDuringAnActiveSegmentWaitsForIt() throws Exception {
+        CountingHost[] host = new CountingHost[1];
+        var x = rootService("pending: (() => 1).future()\npending.value()\nboot: () => { {} }\n", host, null);
+        ProtosActor root = x.process().rootActorForRuntime();
+        java.util.concurrent.CompletableFuture<Boolean> outcome =
+                ProtosActorBootstrap.startRootService(x.process(), x.prelude(), x.key(), "boot");
+        java.util.concurrent.atomic.AtomicReference<ProtosActor.LifecycleState> stateInSegment =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        AtomicInteger segmentsInSegment = new AtomicInteger(-1);
+        ProtosActorBootstrapSuspension.probeForTesting =
+                (point, future) -> {
+                    if (point != ProtosActorBootstrapSuspension.ProbePoint.BEFORE_REGISTRATION
+                            || stateInSegment.get() != null) {
+                        return;
+                    }
+                    Thread terminator =
+                            new Thread(() -> x.process().requestTerminationForRuntime(), "i158-process-stop");
+                    terminator.start();
+                    try {
+                        terminator.join(TimeUnit.SECONDS.toMillis(5));
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                    stateInSegment.set(root.lifecycleState());
+                    segmentsInSegment.set(root.executionDomain().activeBootstrapSegmentCountForRuntime());
+                };
+        try {
+            x.executor().drain();
+        } finally {
+            ProtosActorBootstrapSuspension.probeForTesting = null;
+        }
+        x.executor().drain();
+
+        assertEquals(ProtosActor.LifecycleState.TERMINATING, stateInSegment.get(),
+                "the Process cannot make the RootActor TERMINATED while its segment runs");
+        assertEquals(1, segmentsInSegment.get());
+        assertEquals(Boolean.FALSE, outcome.getNow(null));
+        assertEquals(ProtosActor.LifecycleState.TERMINATED, root.lifecycleState());
+        assertEquals(0, root.executionDomain().activeBootstrapSegmentCountForRuntime());
+        assertTrue(host[0].processTerminations.get() <= 1);
+        assertTrue(host[0].actorTerminations.get() <= 1);
     }
 }

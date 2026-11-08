@@ -191,6 +191,140 @@ final class ProtosLm009DPublicDebugCliTest {
         }
     }
 
+    /** I155: debug startup under a Filesystem grant keeps the exact readiness protocol. */
+    @Test
+    void grantedDebugStartupKeepsReadinessProtocolAndUsesTheGrant() throws Exception {
+        Path root = Files.createTempDirectory("protos-i155-debug-");
+        Path data = Files.createDirectories(root.resolve("data"));
+        Path source = root.resolve("main.protos");
+        Files.writeString(
+                source,
+                "Files: import(\"std:io/files\")\n"
+                        + "path: Path.relative().child(\"debug.txt\")\n"
+                        + "Files.writeAllText(filesystem, path, \"debug-granted\", Encoding.UTF8).value()\n"
+                        + "print(Files.readAllText(filesystem, path, Encoding.UTF8).value())\n",
+                StandardCharsets.UTF_8);
+        ByteArrayOutputStream controlOut = new ByteArrayOutputStream();
+        ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
+        AtomicInteger exitCode = new AtomicInteger(Integer.MIN_VALUE);
+        Thread cliThread =
+                startDebug(
+                        controlOut,
+                        diagnostics,
+                        exitCode,
+                        "debug",
+                        "--allow-filesystem=" + data,
+                        source.toString());
+        DapClient client = null;
+        try {
+            String readiness = awaitReadinessLine(controlOut);
+            Matcher match = READINESS.matcher(readiness);
+            assertTrue(match.matches(), () -> "Unexpected readiness: " + readiness);
+            client = DapClient.connect(match.group(1), Integer.parseInt(match.group(2)), TIMEOUT);
+            driveToTermination(client);
+            String stdoutEvent = client.awaitOutputContaining("stdout", "debug-granted", TIMEOUT);
+            assertTrue(stdoutEvent.contains("debug-granted"), stdoutEvent);
+            client.awaitEvent("terminated", TIMEOUT);
+            client.close();
+            client = null;
+            cliThread.join(TIMEOUT.toMillis());
+            assertFalse(cliThread.isAlive());
+            assertEquals(0, exitCode.get(), () -> diagnostics.toString(StandardCharsets.UTF_8));
+            assertEquals(
+                    readiness + System.lineSeparator(),
+                    controlOut.toString(StandardCharsets.UTF_8));
+            assertEquals("debug-granted", Files.readString(data.resolve("debug.txt")));
+        } finally {
+            if (client != null) {
+                client.close();
+            }
+            if (cliThread.isAlive()) {
+                cliThread.interrupt();
+                cliThread.join(TIMEOUT.toMillis());
+            }
+            Files.deleteIfExists(data.resolve("debug.txt"));
+            Files.deleteIfExists(data);
+            Files.deleteIfExists(source);
+            Files.deleteIfExists(root);
+        }
+    }
+
+    /** I155: an invalid grant root fails before readiness, so no false-ready record exists. */
+    @Test
+    void invalidFilesystemGrantRootNeverPublishesReadiness() throws Exception {
+        Path root = Files.createTempDirectory("protos-i155-debug-invalid-");
+        Path source = root.resolve("main.protos");
+        Files.writeString(source, "print(\"ran\")\n", StandardCharsets.UTF_8);
+        ByteArrayOutputStream controlOut = new ByteArrayOutputStream();
+        ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
+        AtomicInteger exitCode = new AtomicInteger(Integer.MIN_VALUE);
+        try {
+            Thread cliThread =
+                    startDebug(
+                            controlOut,
+                            diagnostics,
+                            exitCode,
+                            "debug",
+                            "--allow-filesystem=" + root.resolve("missing"),
+                            source.toString());
+            cliThread.join(TIMEOUT.toMillis());
+            assertFalse(cliThread.isAlive());
+            assertEquals(1, exitCode.get());
+            assertEquals("", controlOut.toString(StandardCharsets.UTF_8));
+            String diagnosticText = diagnostics.toString(StandardCharsets.UTF_8);
+            assertTrue(
+                    diagnosticText.contains("cannot authorize Filesystem root"), diagnosticText);
+            assertFalse(diagnosticText.contains("Internal error"), diagnosticText);
+        } finally {
+            Files.deleteIfExists(source);
+            Files.deleteIfExists(root);
+        }
+    }
+
+    private static Thread startDebug(
+            ByteArrayOutputStream controlOut,
+            ByteArrayOutputStream diagnostics,
+            AtomicInteger exitCode,
+            String... arguments) {
+        return Thread.ofPlatform()
+                .name("protos-i155-debug-cli")
+                .start(
+                        () ->
+                                exitCode.set(
+                                        new ProtosCli()
+                                                .run(
+                                                        arguments,
+                                                        InputStream.nullInputStream(),
+                                                        new PrintStream(
+                                                                controlOut,
+                                                                true,
+                                                                StandardCharsets.UTF_8),
+                                                        new PrintStream(
+                                                                diagnostics,
+                                                                true,
+                                                                StandardCharsets.UTF_8))));
+    }
+
+    private static void driveToTermination(DapClient client) throws Exception {
+        int initialize =
+                client.request(
+                        "initialize",
+                        "{\"adapterID\":\"protos\","
+                                + "\"clientID\":\"protos-i155\","
+                                + "\"linesStartAt1\":true,"
+                                + "\"columnsStartAt1\":true,"
+                                + "\"pathFormat\":\"path\"}");
+        assertSuccessfulResponse(client.awaitResponse(initialize, TIMEOUT), initialize, "initialize");
+        client.awaitEvent("initialized", TIMEOUT);
+        int launch = client.request("launch", "{}");
+        assertSuccessfulResponse(client.awaitResponse(launch, TIMEOUT), launch, "launch");
+        int configurationDone = client.request("configurationDone", "{}");
+        assertSuccessfulResponse(
+                client.awaitResponse(configurationDone, TIMEOUT),
+                configurationDone,
+                "configurationDone");
+    }
+
     private static String awaitReadinessLine(ByteArrayOutputStream output)
             throws InterruptedException {
         long deadline = System.nanoTime() + TIMEOUT.toNanos();

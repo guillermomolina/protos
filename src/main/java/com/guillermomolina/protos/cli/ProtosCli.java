@@ -20,6 +20,7 @@ import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
 import com.guillermomolina.protos.analysis.ProtosStaticMemberCompletionSite;
 import com.guillermomolina.protos.execution.*;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.FilesystemGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
 import com.guillermomolina.protos.lsp.ProtosLanguageServerMain;
 import com.guillermomolina.protos.lexer.ProtosLexer;
@@ -92,6 +93,14 @@ public final class ProtosCli {
 
     /** Explicit D243-C host Entropy grant for this application invocation only. */
     private boolean entropyAuthorized = false;
+    /**
+     * Explicit D248-B host Filesystem grant for this application invocation only; reset by every
+     * dispatch, so it never persists into another {@link #run} invocation.
+     */
+    private FilesystemGrant filesystemGrant = FilesystemGrant.NONE;
+
+    private static final String ALLOW_FILESYSTEM_OPTION = "--allow-filesystem";
+    private static final String ALLOW_FILESYSTEM_PREFIX = "--allow-filesystem=";
 
     public ProtosCli() {
         this(ProtosLocalExactPackageMaterializationProvider::forDistributionRoot);
@@ -128,6 +137,7 @@ public final class ProtosCli {
             if (Arrays.stream(args).anyMatch(
                     value -> value.equals("--allow-network")
                             || value.equals("--allow-entropy")
+                            || isFilesystemGrantOption(value)
                             || value.equals("--service")
                             || value.startsWith("--service="))) {
                 return usage(err, "application permissions and service mode are not available to bundled Tools");
@@ -172,12 +182,16 @@ public final class ProtosCli {
         inspectionAuthorized = false;
         networkAuthorized = false;
         entropyAuthorized = false;
+        filesystemGrant = FilesystemGrant.NONE;
         try {
+            // Relative grant roots resolve against the invocation directory, captured once here.
+            Path invocationDirectory = Path.of("").toAbsolutePath();
             List<Path> providerPaths = new ArrayList<>();
             boolean providerPathsRequested = false;
             boolean inspect = false;
             boolean allowNetwork = false;
             boolean allowEntropy = false;
+            Path grantedFilesystemRoot = null;
             String requestedService = null;
             int first = 0;
             while (first < args.length
@@ -185,8 +199,22 @@ public final class ProtosCli {
                             || args[first].equals("--inspect")
                             || args[first].equals("--allow-network")
                             || args[first].equals("--allow-entropy")
+                            || isFilesystemGrantOption(args[first])
                             || args[first].equals("--service")
                             || args[first].startsWith("--service="))) {
+                if (isFilesystemGrantOption(args[first])) {
+                    if (grantedFilesystemRoot != null) {
+                        return usage(err, "--allow-filesystem may be given only once");
+                    }
+                    try {
+                        grantedFilesystemRoot =
+                                filesystemGrantRoot(args[first], invocationDirectory);
+                    } catch (IllegalArgumentException invalid) {
+                        return usage(err, invalid.getMessage());
+                    }
+                    first++;
+                    continue;
+                }
                 if (args[first].equals("--service")
                         || args[first].startsWith("--service=")) {
                     if (requestedService != null) {
@@ -265,6 +293,7 @@ public final class ProtosCli {
             inspectionAuthorized = inspect;
             networkAuthorized = allowNetwork;
             entropyAuthorized = allowEntropy;
+            filesystemGrant = filesystemGrant(grantedFilesystemRoot);
 
             if (args.length > 0
                     && SUBCOMMANDS.contains(args[0])
@@ -272,10 +301,12 @@ public final class ProtosCli {
                     && !args[0].equals("run")
                     && (allowNetwork
                             || allowEntropy
+                            || grantedFilesystemRoot != null
                             || requestedService != null
                             || Arrays.stream(args).anyMatch(
                                     value -> value.equals("--allow-network")
                                             || value.equals("--allow-entropy")
+                                            || isFilesystemGrantOption(value)
                                             || value.equals("--service")
                                             || value.startsWith("--service=")))) {
                 return usage(
@@ -283,7 +314,8 @@ public final class ProtosCli {
                         "application permissions and service mode are not available to bundled Tools");
             }
 
-            if ((allowNetwork || allowEntropy || requestedService != null)
+            if ((allowNetwork || allowEntropy || grantedFilesystemRoot != null
+                    || requestedService != null)
                     && args.length > 0
                     && (args[0].equals("--help")
                             || args[0].equals("-h")
@@ -322,9 +354,20 @@ public final class ProtosCli {
                 while (entry < args.length
                         && (args[entry].equals("--allow-network")
                                 || args[entry].equals("--allow-entropy")
+                                || isFilesystemGrantOption(args[entry])
                                 || args[entry].equals("--service")
                                 || args[entry].startsWith("--service="))) {
-                    if (args[entry].equals("--allow-network")) {
+                    if (isFilesystemGrantOption(args[entry])) {
+                        if (grantedFilesystemRoot != null) {
+                            return usage(err, "--allow-filesystem may be given only once");
+                        }
+                        try {
+                            grantedFilesystemRoot =
+                                    filesystemGrantRoot(args[entry], invocationDirectory);
+                        } catch (IllegalArgumentException invalid) {
+                            return usage(err, invalid.getMessage());
+                        }
+                    } else if (args[entry].equals("--allow-network")) {
                         if (allowNetwork) {
                             return usage(err, "--allow-network may be given only once");
                         }
@@ -363,6 +406,7 @@ public final class ProtosCli {
 
                 networkAuthorized = allowNetwork;
                 entropyAuthorized = allowEntropy;
+                filesystemGrant = filesystemGrant(grantedFilesystemRoot);
                 if (args[0].equals("debug")) {
                     if (requestedService != null) {
                         return usage(err, "--service is not supported by debug");
@@ -439,9 +483,43 @@ public final class ProtosCli {
                     in,
                     out,
                     err);
+        } catch (ProtosStandaloneHostedExecution.FilesystemGrantProvisioningException failure) {
+            // Expected host provisioning failure before any guest source ran: application exit 1.
+            err.println("protos: " + failure.getMessage());
+            return 1;
         } catch (Throwable e) {
             return internalError(err, e);
         }
+    }
+
+    private static boolean isFilesystemGrantOption(String value) {
+        return value.equals(ALLOW_FILESYSTEM_OPTION) || value.startsWith(ALLOW_FILESYSTEM_PREFIX);
+    }
+
+    /**
+     * Parses one {@code --allow-filesystem=<directory>} option into an absolute host path,
+     * resolving a relative value against the invocation directory. Only syntax is checked here;
+     * existence, kind and secure acquisition are application bootstrap provisioning.
+     *
+     * @throws IllegalArgumentException with the usage diagnostic when the option is malformed
+     */
+    private static Path filesystemGrantRoot(String option, Path invocationDirectory) {
+        if (!option.startsWith(ALLOW_FILESYSTEM_PREFIX)) {
+            throw new IllegalArgumentException("--allow-filesystem requires =<directory>");
+        }
+        String value = option.substring(ALLOW_FILESYSTEM_PREFIX.length());
+        if (value.isEmpty()) {
+            throw new IllegalArgumentException("--allow-filesystem requires a non-empty directory");
+        }
+        try {
+            return invocationDirectory.resolve(value).toAbsolutePath().normalize();
+        } catch (InvalidPathException invalid) {
+            throw new IllegalArgumentException("invalid --allow-filesystem directory: " + value);
+        }
+    }
+
+    private static FilesystemGrant filesystemGrant(Path root) {
+        return root == null ? FilesystemGrant.NONE : FilesystemGrant.directory(root);
     }
 
     private static boolean validServiceBinding(String name) {
@@ -478,6 +556,7 @@ public final class ProtosCli {
                         applicationNetworkGrant(),
                         ResolverGrant.NONE,
                         applicationEntropyGrant(),
+                        filesystemGrant,
                         Map.of(),
                         this::openApplicationRuntimeHost,
                         (activation, process) ->
@@ -644,7 +723,8 @@ public final class ProtosCli {
                         out,
                         err,
                         applicationNetworkGrant(),
-                        applicationEntropyGrant());
+                        applicationEntropyGrant(),
+                        filesystemGrant);
         ProtosCliPrintFacility.install(
                 session.activation(), session.process(), renderer);
         return session;
@@ -670,6 +750,32 @@ public final class ProtosCli {
             PrintStream out,
             PrintStream err,
             String serviceBinding) {
+        return runWorkspaceApplication(
+                projectRoot,
+                entryLogicalModule,
+                applicationArguments,
+                in,
+                out,
+                err,
+                serviceBinding,
+                filesystemGrant);
+    }
+
+    /**
+     * Workspace application route under an explicit D248-B Filesystem grant. The grant reaches
+     * only the final application Process; it is the selected host directory, never the project
+     * root, and preflight, planning and package materialization never receive it.
+     */
+    int runWorkspaceApplication(
+            Path projectRoot,
+            String entryLogicalModule,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err,
+            String serviceBinding,
+            FilesystemGrant applicationFilesystemGrant) {
+        Objects.requireNonNull(applicationFilesystemGrant, "applicationFilesystemGrant");
         try {
             Path core = core();
             Path distributionRoot = core.getParent().getParent();
@@ -688,7 +794,8 @@ public final class ProtosCli {
                             ProtosStandaloneHostedExecution.writableBackend(err),
                             "UTF8",
                             "UTF8",
-                            "UTF8");
+                            "UTF8",
+                            applicationFilesystemGrant);
             ProtosExactPackageMaterializationProvider provider =
                     exactPackageMaterializationProviderFactory.create(distributionRoot);
             if (serviceBinding != null) {
@@ -1478,7 +1585,8 @@ public final class ProtosCli {
                                 out,
                                 err,
                                 applicationNetworkGrant(),
-                                applicationEntropyGrant())) {
+                                applicationEntropyGrant(),
+                                filesystemGrant)) {
             ProtosCliPrintFacility.install(
                     session.activation(), session.process(), renderer);
             return evalCanonicalDirectFile(resolver, session, err);
@@ -1687,7 +1795,8 @@ public final class ProtosCli {
                         out,
                         err,
                         applicationNetworkGrant(),
-                        applicationEntropyGrant());
+                        applicationEntropyGrant(),
+                        filesystemGrant);
         ProtosCliPrintFacility.install(session.activation(), session.process(), renderer);
         return session;
     }
@@ -1710,12 +1819,7 @@ public final class ProtosCli {
                 ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE);
     }
 
-    /**
-     * Hosting seam shared by application and bundled-Tool sessions. Only explicitly
-     * authorized application invocations select HOST_NETWORK; bundled Tools retain NONE.
-     * The RuntimeHost opens first
-     * so a granted Network is provisioned on the host of this Process from its exact Prelude.
-     */
+    /** Session seam without a Filesystem grant; bundled Tools always use this form. */
     private Session createSession(
             Path core,
             ProtosModuleResolver moduleResolver,
@@ -1727,9 +1831,14 @@ public final class ProtosCli {
             throws IOException {
         return createSession(
                 core, moduleResolver, applicationArguments, in, out, err,
-                networkGrant, EntropyGrant.NONE);
+                networkGrant, EntropyGrant.NONE, FilesystemGrant.NONE);
     }
 
+    /**
+     * All application permissions are independent; bundled Tools choose NONE.
+     * Network and Entropy use the same hosting Prelude, while Filesystem is
+     * provisioned and bound to exactly this Process before guest execution.
+     */
     private Session createSession(
             Path core,
             ProtosModuleResolver moduleResolver,
@@ -1738,7 +1847,8 @@ public final class ProtosCli {
             PrintStream out,
             PrintStream err,
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
-            EntropyGrant entropyGrant)
+            EntropyGrant entropyGrant,
+            FilesystemGrant filesystemGrant)
             throws IOException {
         ProtosPolyglotRuntimeHost runtimeHost = openApplicationRuntimeHost();
         ProtosStandaloneProcessBootstrap.Result bootstrap;
@@ -1755,6 +1865,7 @@ public final class ProtosCli {
                             networkGrant,
                             ResolverGrant.NONE,
                             entropyGrant,
+                            filesystemGrant,
                             runtimeHost);
             bootstrapped = true;
         } finally {
@@ -1791,11 +1902,7 @@ public final class ProtosCli {
         return runtimeHost;
     }
 
-    /**
-     * Debug counterpart of {@link #createSession}: the debug RuntimeHost opens first, the Process
-     * is bootstrapped against it under the explicitly selected {@code networkGrant}, and
-     * readiness is published only once that bootstrap succeeded.
-     */
+    /** Debug session seam without a Filesystem grant. */
     private Session createDebugSession(
             Path core,
             ProtosModuleResolver moduleResolver,
@@ -1805,6 +1912,35 @@ public final class ProtosCli {
             PrintStream diagnostics,
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
             EntropyGrant entropyGrant)
+            throws IOException {
+        return createDebugSession(
+                core,
+                moduleResolver,
+                applicationArguments,
+                in,
+                controlOut,
+                diagnostics,
+                networkGrant,
+                entropyGrant,
+                FilesystemGrant.NONE);
+    }
+
+    /**
+     * Debug counterpart of {@link #createSession}: the debug RuntimeHost opens first, the Process
+     * is bootstrapped against it under the explicitly selected {@code networkGrant} and {@code
+     * filesystemGrant}, and readiness is published only once that bootstrap, including secure
+     * Filesystem provisioning, succeeded.
+     */
+    private Session createDebugSession(
+            Path core,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream controlOut,
+            PrintStream diagnostics,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            FilesystemGrant filesystemGrant)
             throws IOException {
         ProtosPolyglotRuntimeHost runtimeHost =
                 ProtosPolyglotRuntimeHost.openDebug(diagnostics);
@@ -1822,6 +1958,7 @@ public final class ProtosCli {
                             networkGrant,
                             ResolverGrant.NONE,
                             entropyGrant,
+                            filesystemGrant,
                             runtimeHost);
             publishDebugReadiness(controlOut, runtimeHost.debugEndpoint());
             handedToBinding = true;
@@ -2012,13 +2149,20 @@ public final class ProtosCli {
                         + "  protos test [--jobs N] [args...]\n"
                         + "  protos format [<file>]\n"
                         + "  protos lint [--output text|json] [--fail-on-warning] [<file>]\n"
-                        + "  protos [--inspect]\n\n"
+                        + "  protos [--inspect]\n"
+                        + "  protos --allow-filesystem=<dir> <file> [args...]\n"
+                        + "  protos --allow-filesystem=<dir> -e <source> [args...]\n"
+                        + "  protos --allow-filesystem=<dir>\n"
+                        + "  protos run --allow-filesystem=<dir> <entry> [args...]\n"
+                        + "  protos debug --allow-filesystem=<dir> <file> [args...]\n\n"
                         + "Options:\n"
                         + "  -e <source> [args...]\n"
                         + "  --foreign-provider-path <paths> (before <file>, -e, or REPL)\n"
                         + "  --inspect (before <file>, -e, or REPL)\n"
                         + "  --allow-network (application RootActor only; no DNS or filesystem)\n"
                         + "  --allow-entropy (application RootActor only; no other authority)\n"
+                        + "  --allow-filesystem=<dir> (application RootActor only; one existing "
+                        + "directory)\n"
                         + "  --service=<binding> (direct SOURCE message-service entry)\n"
                         + "  -h, --help\n"
                         + "  -v, --version\n\n"
@@ -2056,6 +2200,14 @@ public final class ProtosCli {
                         + "may be given once and combined with --foreign-provider-path in any "
                         + "order before the input; arguments after the input are passed "
                         + "unchanged to process.args().\n"
+                        + "--allow-filesystem=<dir> grants the application RootActor a "
+                        + "filesystem capability over exactly one existing directory, "
+                        + "recursively and confined to it; a relative <dir> resolves against "
+                        + "the current directory, and the directory is never created. Without "
+                        + "it there is no filesystem binding. It may be given once, before the "
+                        + "input; the same spelling after the input is an ordinary "
+                        + "process.args() element. It is not available to bundled Tools and "
+                        + "implies no Network, Resolver or inspection authority.\n"
                         + "Interactive REPL: arrow-key editing/history; Ctrl-D exits.");
     }
 

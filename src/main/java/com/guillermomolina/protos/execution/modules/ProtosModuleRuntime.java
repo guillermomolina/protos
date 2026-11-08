@@ -241,7 +241,36 @@ public final class ProtosModuleRuntime {
         return prepareBytecodeCanonicalModule(
                 resolveModuleKey(supplied.get(0), caller),
                 caller,
-                task);
+                task,
+                Map.of(),
+                false);
+    }
+
+    /**
+     * I158 / D251-A1: prepares the initial MODULE/SOURCE of one Actor initialization for the
+     * Task-free bootstrap C-prime root instead of executing it synchronously.
+     *
+     * <p>This is the same prepared-import algorithm used by standard Bytecode imports: authority is
+     * checked before any record exists, the MODULE/SOURCE frame is allocated, RootActor bootstrap
+     * locals are installed only into the private MODULE initializer Context (or the complete
+     * SOURCE Context, never the public MODULE object), the record is inserted INITIALIZING before
+     * any code executes, and the compiled body plus its activation are returned. The returned
+     * {@link PreparedModuleInitialization} owns the single {@code finish()} (READY) or {@code
+     * fail()} (cache removal) of the record, so a suspended body keeps its key, record and objects
+     * and a resumption is never a second initialization attempt. No Task is attached.
+     *
+     * <p>An existing record is the ordinary cache-hit result for a spawned Actor; for a RootActor
+     * initial module with bootstrap authority it is an internal invariant violation, exactly as for
+     * the synchronous loader.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    PreparedModuleInitialization prepareActorInitialModule(
+            ProtosModuleKey key,
+            ProtosActivation bootstrapActivation,
+            Map<String, ?> bootstrapLocals) {
+        Objects.requireNonNull(bootstrapLocals, "bootstrapLocals");
+        return prepareBytecodeCanonicalModule(
+                key, bootstrapActivation, null, bootstrapLocals, !bootstrapLocals.isEmpty());
     }
 
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
@@ -258,7 +287,9 @@ public final class ProtosModuleRuntime {
     private PreparedModuleInitialization prepareBytecodeCanonicalModule(
             ProtosModuleKey key,
             ProtosActivation caller,
-            ProtosTask task) {
+            ProtosTask task,
+            Map<String, ?> bootstrapLocals,
+            boolean initialBootstrap) {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(caller, "caller");
         // LIB022-B: authority of the entered Context is checked before any cached instance.
@@ -268,10 +299,17 @@ public final class ProtosModuleRuntime {
         ProtosActorModuleState.ModuleRecord existing =
                 actorState.lookup(key).orElse(null);
         if (existing != null) {
+            if (initialBootstrap) {
+                throw new IllegalStateException(
+                        "RootActor initial module was cached before bootstrap-local provisioning");
+            }
             return PreparedModuleInitialization.cached(
                     key, actorState, existing, caller);
         }
         if (ProtosForeignModuleKey.owns(key)) {
+            if (initialBootstrap) {
+                throw new IllegalStateException("RootActor initial module must be source-backed");
+            }
             // Foreign initialization is provider acquisition with no Protos child root: it
             // completes (or evicts its record) during preparation, so the result is immediate.
             return PreparedModuleInitialization.cached(
@@ -286,9 +324,13 @@ public final class ProtosModuleRuntime {
                                                 "module import requires an owning Core prelude"));
         ModuleFrame frame = ModuleFrame.allocate(prelude, key);
         ProtosObjectValue moduleInstance = frame.importResult();
+        if (initialBootstrap) {
+            // D242: bootstrap grants are private initializer authority, never public exports.
+            installBootstrapLocalsForRuntime(frame.lexicalContext(), bootstrapLocals);
+        }
         ProtosActorModuleState.ModuleRecord record =
                 new ProtosActorModuleState.ModuleRecord(moduleInstance);
-        actorState.put(key, record);
+        actorState.put(key, record); // normative cache-before-execute point
 
         try {
             ProtosActivation moduleActivation =
@@ -361,7 +403,7 @@ public final class ProtosModuleRuntime {
      */
     public ProtosObjectValue loadCanonicalModule(
             ProtosModuleKey key, ProtosActivation caller) {
-        return loadCanonicalModuleInternal(key, caller, Map.of(), false);
+        return loadCanonicalModuleInternal(key, caller);
     }
 
     /**
@@ -382,26 +424,6 @@ public final class ProtosModuleRuntime {
             throw new IllegalStateException("Core prelude has no standard import facility");
         }
         return runtime.loadCanonicalModule(key, caller);
-    }
-
-    /**
-     * Loads the RootActor initial module after installing bootstrap-local slots and before the
-     * first source expression executes.
-     *
-     * <p>This package-private entry is used only by Actor bootstrap. Ordinary imports always use
-     * {@link #loadCanonicalModule} and therefore receive no ambient bootstrap locals. The initial
-     * record is still inserted before source execution, preserving cache-before-execute and cycles.
-     */
-    ProtosObjectValue loadCanonicalInitialModule(
-            ProtosModuleKey key,
-            ProtosActivation caller,
-            Map<String, ?> bootstrapLocals) {
-        Objects.requireNonNull(bootstrapLocals, "bootstrapLocals");
-        if (bootstrapLocals.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "RootActor initial module requires bootstrap-local authority");
-        }
-        return loadCanonicalModuleInternal(key, caller, bootstrapLocals, true);
     }
 
     /**
@@ -437,30 +459,25 @@ public final class ProtosModuleRuntime {
         }
     }
 
+    /*
+     * Direct synchronous loading for callers outside the I158 suspendible Actor bootstrap. The
+     * RootActor initial module with bootstrap-local authority is prepared only through
+     * prepareActorInitialModule, so this path never provisions bootstrap locals.
+     */
     private ProtosObjectValue loadCanonicalModuleInternal(
             ProtosModuleKey key,
-            ProtosActivation caller,
-            Map<String, ?> bootstrapLocals,
-            boolean initialBootstrap) {
+            ProtosActivation caller) {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(caller, "caller");
-        Objects.requireNonNull(bootstrapLocals, "bootstrapLocals");
         // LIB022-B: authority of the entered Context is checked before any cached instance.
         ProtosInspectFacility.requireAuthorizedImport(key, caller);
 
         ProtosActorModuleState actorState = caller.actorModuleState();
         ProtosActorModuleState.ModuleRecord existing = actorState.lookup(key).orElse(null);
         if (existing != null) {
-            if (initialBootstrap) {
-                throw new IllegalStateException(
-                        "RootActor initial module was cached before bootstrap-local provisioning");
-            }
             return existing.instance();
         }
         if (ProtosForeignModuleKey.owns(key)) {
-            if (initialBootstrap) {
-                throw new IllegalStateException("RootActor initial module must be source-backed");
-            }
             return initializeForeignModule(key, caller, actorState).instance();
         }
 
@@ -472,12 +489,6 @@ public final class ProtosModuleRuntime {
                                                 "module import requires an owning Core prelude"));
         ModuleFrame frame = ModuleFrame.allocate(prelude, key);
         ProtosObjectValue moduleInstance = frame.importResult();
-
-        if (initialBootstrap) {
-            // D242: bootstrap grants are private initializer authority, never public exports.
-            installBootstrapLocalsForRuntime(frame.lexicalContext(), bootstrapLocals);
-        }
-
         ProtosActorModuleState.ModuleRecord record =
                 new ProtosActorModuleState.ModuleRecord(moduleInstance);
         actorState.put(key, record); // normative cache-before-execute point

@@ -27,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -275,7 +276,133 @@ public final class ProtosStandaloneHostedExecution {
     }
 
     /**
-     * D243-C complete independent grant selection for standalone Processes.
+     * Explicit host selection of the optional D248-B standalone Filesystem grant: one existing
+     * host directory whose recursive namespace becomes the RootActor's bootstrap-local {@code
+     * filesystem}. It is independent of {@link NetworkGrant} and {@link ResolverGrant}; {@link
+     * #NONE} leaves the initial {@code filesystem} slot absent. The host root is never published
+     * to guest code.
+     *
+     * @param authorizedRoot the absolute host directory, or {@code null} for {@link #NONE}
+     */
+    public record FilesystemGrant(Path authorizedRoot) {
+        public static final FilesystemGrant NONE = new FilesystemGrant(null);
+
+        public FilesystemGrant {
+            if (authorizedRoot != null && !authorizedRoot.isAbsolute()) {
+                throw new IllegalArgumentException("authorized Filesystem root must be absolute");
+            }
+        }
+
+        public static FilesystemGrant directory(Path authorizedRoot) {
+            return new FilesystemGrant(Objects.requireNonNull(authorizedRoot, "authorizedRoot"));
+        }
+
+        public boolean granted() {
+            return authorizedRoot != null;
+        }
+    }
+
+    /**
+     * Expected host provisioning failure of a {@link FilesystemGrant}: the selected root is
+     * absent, not a directory, a final symbolic link, or cannot be confined by the host provider.
+     * It is raised before any guest source executes and is an application bootstrap failure, not
+     * an internal runtime defect.
+     */
+    public static final class FilesystemGrantProvisioningException extends IOException {
+        private static final long serialVersionUID = 1L;
+
+        FilesystemGrantProvisioningException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    /**
+     * Process-local provisioning of one optional Filesystem grant. {@link #marker()} is passed to
+     * {@link ProtosStandaloneProcessBootstrap#create} as {@code defaultFilesystem}; {@link #bind}
+     * then installs the operations on the new RootActor activation and transfers backend custody
+     * to {@code runtimeHost} for exactly that Process. Until that transfer {@link #close()}
+     * releases the backend; afterwards it does nothing.
+     */
+    static final class FilesystemProvisioning implements AutoCloseable {
+        private static final FilesystemProvisioning NONE = new FilesystemProvisioning(null, null);
+
+        private final ProtosLinuxConfinedReadWriteTreeFilesystemBackend backend;
+        private final ProtosFilesystemValue marker;
+        private boolean transferred;
+
+        private FilesystemProvisioning(
+                ProtosLinuxConfinedReadWriteTreeFilesystemBackend backend,
+                ProtosFilesystemValue marker) {
+            this.backend = backend;
+            this.marker = marker;
+        }
+
+        static FilesystemProvisioning provision(FilesystemGrant grant)
+                throws FilesystemGrantProvisioningException {
+            Objects.requireNonNull(grant, "filesystemGrant");
+            if (!grant.granted()) {
+                return NONE;
+            }
+            try {
+                return new FilesystemProvisioning(
+                        ProtosLinuxConfinedReadWriteTreeFilesystemBackend.provision(
+                                grant.authorizedRoot()),
+                        new ProtosFilesystemValue());
+            } catch (IOException | RuntimeException failure) {
+                throw new FilesystemGrantProvisioningException(
+                        "cannot authorize Filesystem root "
+                                + grant.authorizedRoot()
+                                + ": "
+                                + failure.getMessage(),
+                        failure);
+            }
+        }
+
+        /** The uninitialized bootstrap marker, or {@code null} when nothing was granted. */
+        ProtosFilesystemValue marker() {
+            return marker;
+        }
+
+        /**
+         * Binds the marker to the exact RootActor bootstrap activation, before any guest source
+         * runs, and transfers backend custody to {@code runtimeHost} for this Process only.
+         */
+        void bind(
+                ProtosStandaloneProcessBootstrap.Result bootstrap,
+                ProtosPrelude prelude,
+                ProtosPolyglotRuntimeHost runtimeHost) {
+            if (backend == null) {
+                return;
+            }
+            Objects.requireNonNull(runtimeHost, "runtimeHost");
+            ProtosStandardFilesystemProtocol.installOperations(
+                    marker, prelude.bytesPrototypeForRuntime(), bootstrap.activation(), backend);
+            runtimeHost.attachProcessFilesystemForRuntime(bootstrap.process(), backend);
+            transferred = true;
+        }
+
+        @Override
+        public void close() {
+            if (backend == null || transferred) {
+                return;
+            }
+            // Revocation of an untransferred backend publishes no Protos-visible result.
+            backend.close();
+        }
+    }
+
+    /**
+     * As {@link #bootstrapProcess(Path, ProtosModuleResolver, List,
+     * ProtosProcessStandardStreamBinding.ReadableBackend,
+     * ProtosProcessStandardStreamBinding.WritableBackend,
+     * ProtosProcessStandardStreamBinding.WritableBackend, NetworkGrant, ResolverGrant,
+     * ProtosPolyglotRuntimeHost)}, additionally applying the host's independent D248-B Filesystem
+     * selection. A granted root is securely provisioned after Core bootstrap and before the
+     * Process exists; its backend is then owned by {@code runtimeHost} for this Process and is
+     * revoked at Process termination or when {@code runtimeHost} closes.
+     *
+     * @throws FilesystemGrantProvisioningException when the granted root cannot be provisioned;
+     *     no Process was created and nothing remains open
      */
     public static ProtosStandaloneProcessBootstrap.Result bootstrapProcess(
             Path coreRoot,
@@ -287,11 +414,13 @@ public final class ProtosStandaloneHostedExecution {
             NetworkGrant networkGrant,
             ResolverGrant resolverGrant,
             EntropyGrant entropyGrant,
+            FilesystemGrant filesystemGrant,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
         Objects.requireNonNull(networkGrant, "networkGrant");
         Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
+        Objects.requireNonNull(filesystemGrant, "filesystemGrant");
         Objects.requireNonNull(runtimeHost, "runtimeHost");
         return bootstrapProcessWithGrant(
                 coreRoot,
@@ -303,7 +432,34 @@ public final class ProtosStandaloneHostedExecution {
                 networkGrant,
                 resolverGrant,
                 entropyGrant,
+                filesystemGrant,
                 runtimeHost);
+    }
+
+    /** D243-C source compatibility: no Filesystem grant. */
+    public static ProtosStandaloneProcessBootstrap.Result bootstrapProcess(
+            Path coreRoot, ProtosModuleResolver moduleResolver, List<String> applicationArguments,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            NetworkGrant networkGrant, ResolverGrant resolverGrant, EntropyGrant entropyGrant,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        return bootstrapProcess(coreRoot, moduleResolver, applicationArguments,
+                stdinBackend, stdoutBackend, stderrBackend, networkGrant, resolverGrant,
+                entropyGrant, FilesystemGrant.NONE, runtimeHost);
+    }
+
+    /** D248-B source compatibility: no Entropy grant. */
+    public static ProtosStandaloneProcessBootstrap.Result bootstrapProcess(
+            Path coreRoot, ProtosModuleResolver moduleResolver, List<String> applicationArguments,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            NetworkGrant networkGrant, ResolverGrant resolverGrant, FilesystemGrant filesystemGrant,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        return bootstrapProcess(coreRoot, moduleResolver, applicationArguments,
+                stdinBackend, stdoutBackend, stderrBackend, networkGrant, resolverGrant,
+                EntropyGrant.NONE, filesystemGrant, runtimeHost);
     }
 
     /** {@code runtimeHost} is consulted only for a HOST grant. */
@@ -350,6 +506,7 @@ public final class ProtosStandaloneHostedExecution {
                 networkGrant,
                 resolverGrant,
                 EntropyGrant.NONE,
+                FilesystemGrant.NONE,
                 runtimeHost);
     }
 
@@ -363,6 +520,7 @@ public final class ProtosStandaloneHostedExecution {
             NetworkGrant networkGrant,
             ResolverGrant resolverGrant,
             EntropyGrant entropyGrant,
+            FilesystemGrant filesystemGrant,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(coreRoot, moduleResolver);
@@ -377,26 +535,47 @@ public final class ProtosStandaloneHostedExecution {
                     case NONE -> null;
                     case HOST_RESOLVER -> runtimeHost.provisionHostResolver(prelude);
                 };
-        ProtosEntropyCapabilityValue entropy =
-                switch (entropyGrant) {
-                    case NONE -> null;
-                    case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
-                };
-        return ProtosStandaloneProcessBootstrap.create(
-                prelude,
-                applicationArguments,
-                HOST_ENVIRONMENT_NAME_DOMAIN,
-                hostEnvironmentEntries(),
-                stdinBackend,
-                stdoutBackend,
-                stderrBackend,
-                utf8,
-                utf8,
-                utf8,
-                null,
-                network,
-                resolver,
-                entropy);
+        try (FilesystemProvisioning filesystem = FilesystemProvisioning.provision(filesystemGrant)) {
+            ProtosEntropyCapabilityValue entropy =
+                    switch (entropyGrant) {
+                        case NONE -> null;
+                        case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
+                    };
+            ProtosStandaloneProcessBootstrap.Result bootstrap;
+            try {
+                bootstrap = ProtosStandaloneProcessBootstrap.create(
+                        prelude,
+                        applicationArguments,
+                        HOST_ENVIRONMENT_NAME_DOMAIN,
+                        hostEnvironmentEntries(),
+                        stdinBackend,
+                        stdoutBackend,
+                        stderrBackend,
+                        utf8,
+                        utf8,
+                        utf8,
+                        filesystem.marker(),
+                        network,
+                        resolver,
+                        entropy);
+            } catch (RuntimeException | Error failure) {
+                if (entropy != null) {
+                    entropy.retireForRuntime();
+                }
+                throw failure;
+            }
+            boolean bound = false;
+            try {
+                // Bind the confined Filesystem before the initial source can run.
+                filesystem.bind(bootstrap, prelude, runtimeHost);
+                bound = true;
+            } finally {
+                if (!bound) {
+                    bootstrap.process().requestTerminationForRuntime();
+                }
+            }
+            return bootstrap;
+        }
     }
 
     /**
@@ -476,6 +655,12 @@ public final class ProtosStandaloneHostedExecution {
         CompletableFuture<Boolean> outcome =
                 ProtosActorBootstrap.startRootService(
                         process, prelude, entryModule, bootstrapBinding);
+        /*
+         * I158 / D251-A1: synchronous for the host only. The guest initialization may suspend in
+         * pending Future.value() calls; it then holds no scheduler carrier, and this host thread
+         * (never a carrier) waits for the real terminal outcome: READY, initialization failure or
+         * termination. A suspension never completes this Future provisionally.
+         */
         boolean ready;
         try {
             ready = outcome.join();

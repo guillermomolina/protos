@@ -273,6 +273,95 @@ final class ProtosRootActorBootstrapAuthorityTest {
         assertFalse(child.hasLocalSlot("process"));
     }
 
+    /**
+     * I155 / D248-B: a RootActor Filesystem bound to the standalone confined backend reaches
+     * neither imported modules nor independently created Actors.
+     */
+    @Test
+    void grantedStandaloneFilesystemDoesNotPropagateToImportsOrOtherActors(
+            @org.junit.jupiter.api.io.TempDir Path data) throws Exception {
+        Resolver resolver =
+                new Resolver()
+                        .module("root", "child: import(\"child\")\nboot: () => { {} }")
+                        .module("child", "value: 1")
+                        .module("other", "boot: () => { {} }");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosFilesystemValue filesystem = new ProtosFilesystemValue();
+        ProtosProcessRuntime process = new ProtosProcessRuntime(actorRefPrototype(), filesystem);
+        ProtosActor root = process.rootActorForRuntime();
+        try (ProtosLinuxConfinedReadWriteTreeFilesystemBackend backend =
+                ProtosLinuxConfinedReadWriteTreeFilesystemBackend.provision(data)) {
+            ProtosStandardFilesystemProtocol.installOperations(
+                    filesystem,
+                    prelude.bytesPrototypeForRuntime(),
+                    prelude.newModuleActivation(),
+                    backend);
+            ProtosActorBootstrap bootstrap =
+                    new ProtosActorBootstrap(new ProtosModuleRuntime(resolver));
+            assertTrue(
+                    bootstrap.initialize(
+                            root, prelude, ProtosModuleKey.source("root"), "boot", List.of()));
+            assertSame(
+                    filesystem,
+                    root.moduleState()
+                            .lookup(ProtosModuleKey.source("root"))
+                            .orElseThrow()
+                            .instance()
+                            .readLocalSlot("filesystem")
+                            .orElseThrow());
+            assertFalse(
+                    root.moduleState()
+                            .lookup(ProtosModuleKey.source("child"))
+                            .orElseThrow()
+                            .instance()
+                            .hasLocalSlot("filesystem"));
+
+            ProtosActor other = process.createHostedActorForRuntime(actorRefPrototype());
+            assertTrue(
+                    bootstrap.initialize(
+                            other, prelude, ProtosModuleKey.source("other"), "boot", List.of()));
+            assertFalse(
+                    other.moduleState()
+                            .lookup(ProtosModuleKey.source("other"))
+                            .orElseThrow()
+                            .instance()
+                            .hasLocalSlot("filesystem"));
+        }
+    }
+
+    /** I155: a granted, operation-bound Filesystem has no P transfer contract. */
+    @Test
+    void grantedStandaloneFilesystemIsNotParallelTransferable(
+            @org.junit.jupiter.api.io.TempDir Path data) throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosFilesystemValue filesystem = new ProtosFilesystemValue();
+        try (ProtosLinuxConfinedReadWriteTreeFilesystemBackend backend =
+                ProtosLinuxConfinedReadWriteTreeFilesystemBackend.provision(data)) {
+            ProtosStandardFilesystemProtocol.installOperations(
+                    filesystem, prelude.bytesPrototypeForRuntime(), activation, backend);
+            Class<?> transfer =
+                    Class.forName(
+                            "com.guillermomolina.protos.execution.ProtosParallelRuntime$Transfer");
+            java.lang.reflect.Method copy =
+                    transfer.getDeclaredMethod(
+                            "copy",
+                            Object.class,
+                            ProtosActivation.class,
+                            java.util.IdentityHashMap.class);
+            copy.setAccessible(true);
+            java.lang.reflect.InvocationTargetException failure =
+                    assertThrows(
+                            java.lang.reflect.InvocationTargetException.class,
+                            () -> copy.invoke(
+                                    null,
+                                    filesystem,
+                                    activation,
+                                    new java.util.IdentityHashMap<Object, Object>()));
+            assertEquals("NonParallel", failure.getCause().getClass().getSimpleName());
+        }
+    }
+
     private static ProtosObjectValue actorRefPrototype() {
         return new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze();
     }

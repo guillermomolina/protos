@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -267,6 +268,39 @@ final class ProtosNioTcpConnectionReadTest {
                     poller.close();
                 }
             }
+        }
+    }
+
+    /**
+     * I158: a read completed by the poller thread after read() returned publishes only inert host
+     * data; the guest result is built and the Future resolved only when the owning domain admits
+     * the targeted completion, without Task handoff and without any additional Task.
+     */
+    @Test
+    void asynchronousReadIsPublishedOnlyByTheOwningDomainCompletion() throws Exception {
+        try (ConnectedFixture x = connected("protos-test-nio-read-targeted")) {
+            ProtosFutureValue read = read(x, 4);
+            assertEquals(ProtosFutureValue.State.PENDING, read.state());
+            var domain = read.domain();
+            int tasksBefore = domain.liveTaskCount();
+
+            writeFully(x.peer, new byte[] {9});
+            long deadline = System.nanoTime() + WAIT.toNanos();
+            while (!domain.hasTargetedRuntimeCompletionForRuntime()) {
+                if (System.nanoTime() > deadline) {
+                    throw new AssertionError("poller never published the read completion");
+                }
+                Thread.onSpinWait();
+            }
+            // Published by the poller thread, but not yet admitted by the domain.
+            assertEquals(ProtosFutureValue.State.PENDING, read.state());
+
+            assertTrue(domain.dispatchTargetedRuntimeCompletionWithoutHandoffForRuntime());
+            assertEquals(ProtosFutureValue.State.RESOLVED, read.state());
+            assertEquals(List.of(9), resolvedBytes(read));
+            assertFalse(domain.dispatchTargetedRuntimeCompletionWithoutHandoffForRuntime(),
+                    "exactly one completion per read");
+            assertEquals(tasksBefore, domain.liveTaskCount());
         }
     }
 }

@@ -53,6 +53,8 @@ final class ProtosLanguageContext {
      */
     private volatile ProtosPolyglotExecutionContext hostExecutionContext;
     private volatile ProtosTaskCPrimeEntryExecution.Plan taskCPrimeEntryPlan;
+    /** I158: lazy Context-local root of Task-free suspendible Actor initialization. */
+    private volatile ProtosActorBootstrapCPrimeExecution.Plan actorBootstrapCPrimePlan;
     private volatile ProtosTextWriterCPrimeExecution.Plan textWriterCPrimePlan;
     private volatile ProtosTextReaderCPrimeExecution.Plan textReaderCPrimePlan;
     private volatile ProtosBufferedByteReaderCPrimeExecution.Plan bufferedByteReaderCPrimePlan;
@@ -247,6 +249,25 @@ final class ProtosLanguageContext {
                 taskCPrimeEntryPlan = ProtosTaskCPrimeEntryExecution.createPlan(language);
             }
             return taskCPrimeEntryPlan;
+        }
+    }
+
+    ProtosActorBootstrapCPrimeExecution.Plan actorBootstrapCPrimePlanForRuntime() {
+        ProtosActorBootstrapCPrimeExecution.Plan existing = actorBootstrapCPrimePlan;
+        if (existing != null) {
+            return existing;
+        }
+        return createActorBootstrapCPrimePlanOnCacheMiss();
+    }
+
+    /** Lazy Context-local plan construction; kept out of partial evaluation on cache miss. */
+    @TruffleBoundary
+    private ProtosActorBootstrapCPrimeExecution.Plan createActorBootstrapCPrimePlanOnCacheMiss() {
+        synchronized (this) {
+            if (actorBootstrapCPrimePlan == null) {
+                actorBootstrapCPrimePlan = ProtosActorBootstrapCPrimeExecution.createPlan(language);
+            }
+            return actorBootstrapCPrimePlan;
         }
     }
 

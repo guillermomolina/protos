@@ -367,6 +367,45 @@ Reading a slot that has not yet been created follows the ordinary Protos missing
 
 When a recursive import discovers an existing `INITIALIZING` module in the current Actor's cache, the import returns that module instance immediately. It must not suspend waiting for initialization to finish, because suspending would deadlock ordinary cyclic imports within the same Actor. No hidden Actor reentrancy or hidden suspension point is introduced for this case. Actor reentrancy remains identifiable only from explicit suspension operations.
 
+### Explicit Suspension During Initialization
+
+A module initializer may contain explicit suspension points. In particular, the
+initial module of an Actor initialization, and every import it executes, may
+suspend in `value()` on a pending Future (D251-A1,
+`../concurrency/FUTURES_AND_TASKS.md` §29, Actor initialization suspension).
+Such a suspension pauses the one initialization attempt in progress; it is not
+a new attempt and not a failure. The following invariants hold:
+
+- the module instance is cached before its initializer executes, exactly as in
+  Cache Before Execution;
+- during the suspension the same `ModuleKey`, the same `ModuleRecord`, and the
+  same public MODULE object or SOURCE `moduleContext` remain the active cached
+  instance in state `INITIALIZING`;
+- the bindings of a MODULE's private initializer context remain private;
+- a recursive import that finds the `INITIALIZING` record returns the partially
+  initialized instance immediately and does not wait for its completion (see
+  Recursive Import Does Not Suspend); `import()` never waits for `READY`;
+- resuming a suspended initializer continues the same attempt; it never starts
+  a second initialization attempt and never re-executes the part of the body
+  that completed before the suspension point;
+- the module transitions to `READY` once, when its body actually completes;
+- when the Actor terminates, a suspended initializer never resumes and its
+  attempt fails; an initializer segment already executing when termination
+  begins is not interrupted; if that segment next suspends, the attempt fails
+  without resuming, and in every case the Actor initialization can no longer
+  publish `READY` (`../concurrency/FUTURES_AND_TASKS.md` §29, rule 9);
+- a failed initialization removes the cache entry under Failed Initialization,
+  without undoing effects already performed and without invalidating ordinary
+  references to a partial instance that escaped.
+
+The module state `READY` is distinct from the `READY` lifecycle state of the
+owning Actor (`../concurrency/ACTORS.md` §9). The initial module of an Actor
+initialization becomes `READY` when its body completes, before the bootstrap
+binding is selected; the Actor becomes `READY` only after the binding produced
+its behavior object. Termination of the Actor while its initialization is
+suspended ends that Actor's module state with it (Actor Lifetime and Module
+Lifetime); no suspended initializer resumes afterwards.
+
 ### Successful Initialization
 
 When execution of the module body completes normally, the cached module instance transitions:
@@ -513,6 +552,11 @@ an importable initial module of the lifecycle above:
 6. the binding is invoked in the same RootActor, with that module instance's
    environment, and the module body is not executed a second time to obtain the
    behavior.
+
+The initial module and the binding invocation may suspend in pending `value()`
+calls under Explicit Suspension During Initialization; the bootstrap-local slots
+are installed once, before the first source expression, and a resumption never
+provisions them again.
 
 Cyclic imports of the initial module return that same cached instance, and failed
 initialization follows the failed-initialization rule above; failure is RootActor

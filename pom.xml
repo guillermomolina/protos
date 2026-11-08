@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.3.454-SNAPSHOT</version>
+    <version>0.3.455-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -379,6 +379,15 @@
                                 <buildArg>-Dtruffle.UseFallbackRuntime=true</buildArg>
                                 <buildArg>-march=compatibility</buildArg>
                                 <buildArg>@${project.build.directory}/native-image-init.args</buildArg>
+                                <!--
+                                    I156 / PLAT073-C: the confined Filesystem grant
+                                    calls libc syscall through Java FFM downcalls
+                                    registered in reachability-metadata.json
+                                    (foreign.downcalls). FFM is enabled by
+                                    default in GraalVM 25. No JNI library or C
+                                    compilation step is involved.
+                                -->
+                                <buildArg>--enable-native-access=ALL-UNNAMED</buildArg>
                             </buildArgs>
                         </configuration>
                     </plugin>

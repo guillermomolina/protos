@@ -46,6 +46,8 @@ import java.util.Objects;
  * only the application Process, provisioned from that Process's exact Prelude on the RuntimeHost
  * that hosts it. Requirement derivation, verification, planning and the resource scope never
  * receive Network, and selecting a grant never consults the provider for workspace-only runs.
+ * The D248-B Filesystem grant of the request follows the same rule: it reaches only the final
+ * application Process, never preflight, planning, the resolver or the materialization provider.
  *
  * <p>This driver owns no CLI spelling, current-directory policy, default materialization backend
  * or diagnostic text.
@@ -263,7 +265,8 @@ public final class ProtosPackageRunDriver {
                                 request.stderrBackend(),
                                 request.stdinEncodingBinding(),
                                 request.stdoutEncodingBinding(),
-                                request.stderrEncodingBinding()),
+                                request.stderrEncodingBinding(),
+                                request.filesystemGrant()),
                         networkGrant,
                         entropyGrant,
                         serviceBinding,
@@ -302,7 +305,8 @@ public final class ProtosPackageRunDriver {
                             request.stderrBackend(),
                             request.stdinEncodingBinding(),
                             request.stdoutEncodingBinding(),
-                            request.stderrEncodingBinding()),
+                            request.stderrEncodingBinding(),
+                            request.filesystemGrant()),
                     networkGrant,
                     entropyGrant,
                     true,

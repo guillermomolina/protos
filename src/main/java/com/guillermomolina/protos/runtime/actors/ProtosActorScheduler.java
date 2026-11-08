@@ -33,9 +33,51 @@ public final class ProtosActorScheduler {
     private static final int DEFAULT_PARALLELISM =
             Math.max(1, Runtime.getRuntime().availableProcessors());
 
+    /**
+     * I158 / D251-A1: the custodian of one suspended Task-free Actor initialization.
+     *
+     * <p>While it is held for an INITIALIZING Actor, that initialization keeps the Actor's
+     * execution exclusivity: the only work admitted for the Actor is the resumption of that same
+     * initialization and targeted runtime completions dispatched without Task handoff. Ordinary
+     * Tasks, deferred C-prime segments and mailbox turns stay queued. Implementations are invoked
+     * under the scheduler lock for {@link #resumeReady()} and must therefore never call back into
+     * this scheduler while holding their own monitor.
+     */
+    /**
+     * A bootstrap control turn whose host placement can fail before run() starts.
+     * This callback is never invoked after the control turn has been dequeued.
+     */
+    public interface HostEntryFailureAwareControl extends Runnable {
+        void hostEntryFailed(Throwable failure);
+    }
+
+    public interface ExclusiveBootstrap {
+        /** Whether the suspended continuation's prerequisite is terminal and it may resume. */
+        boolean resumeReady();
+
+        /** Runs one resumed initialization segment on the current carrier, in the hosted Context. */
+        void resume();
+
+        /**
+         * Whether termination invalidated the initialization and its C-prime transports still
+         * await their abandon under the domain's exclusive ownership.
+         */
+        default boolean cleanupPending() {
+            return false;
+        }
+
+        /**
+         * Abandons the invalidated transports exactly once and releases custody. Runs no Task,
+         * message or Protos user code.
+         */
+        default void runCleanup() {}
+    }
+
     private static final class State {
         private final ProtosActor actor;
         private final ArrayDeque<Runnable> controlTurns = new ArrayDeque<>();
+        /** I158: the suspended exclusive initialization of this Actor, when present. */
+        private ExclusiveBootstrap bootstrap;
         private boolean queued;
         private boolean running;
         private boolean preferMailbox;
@@ -109,6 +151,9 @@ public final class ProtosActorScheduler {
                 state.observationPlaceholder = true;
                 states.put(actor, state);
             } else if (state.running || state.observed) {
+                return Optional.empty();
+            } else if (holdsExclusiveBootstrap(state)) {
+                // I158: a suspended initialization retains Actor exclusivity; no observation entry.
                 return Optional.empty();
             }
             state.observed = true;
@@ -198,6 +243,7 @@ public final class ProtosActorScheduler {
             state.queued = false;
         }
         state.controlTurns.clear();
+        state.bootstrap = null;
         if (state.observed) {
             state.observationPlaceholder = true;
         } else {
@@ -216,6 +262,57 @@ public final class ProtosActorScheduler {
             state.controlTurns.addLast(turn);
         }
         signal(actor, true);
+    }
+
+    /**
+     * I158: records that the INITIALIZING Actor's single initialization suspended while running
+     * its current segment. Its custodian becomes the only resumable control of the Actor until it
+     * is released, READY is published or termination begins.
+     *
+     * @return false when the Actor is no longer INITIALIZING (or not attached); the caller then
+     *     abandons the continuation itself
+     */
+    public boolean holdExclusiveBootstrap(ProtosActor actor, ExclusiveBootstrap bootstrap) {
+        Objects.requireNonNull(bootstrap, "bootstrap");
+        synchronized (lock) {
+            State state = states.get(actor);
+            if (state == null || state.observationPlaceholder
+                    || actor.lifecycleState() != ProtosActor.LifecycleState.INITIALIZING) {
+                return false;
+            }
+            if (state.bootstrap != null && state.bootstrap != bootstrap) {
+                throw new IllegalStateException("Actor already holds another exclusive bootstrap");
+            }
+            state.bootstrap = bootstrap;
+        }
+        signal(actor, false);
+        return true;
+    }
+
+    /** I158: releases a held initialization custodian; idempotent and identity-checked. */
+    public void releaseExclusiveBootstrap(ProtosActor actor, ExclusiveBootstrap bootstrap) {
+        Objects.requireNonNull(bootstrap, "bootstrap");
+        synchronized (lock) {
+            State state = states.get(actor);
+            if (state != null && state.bootstrap == bootstrap) {
+                state.bootstrap = null;
+            }
+        }
+        signal(actor, false);
+    }
+
+    /** Re-evaluates one Actor's schedulability; used by runtime wakeups that hold no monitor. */
+    public void wakeForRuntime(ProtosActor actor) {
+        signal(actor, false);
+    }
+
+    /*
+     * I158: exclusivity applies only to a held custodian of an INITIALIZING Actor. A direct-entry
+     * RootActor is INITIALIZING without any held bootstrap and keeps its existing admission.
+     */
+    private static boolean holdsExclusiveBootstrap(State state) {
+        return state.bootstrap != null
+                && state.actor.lifecycleState() == ProtosActor.LifecycleState.INITIALIZING;
     }
 
     /** Removes a terminal/unpublished Actor from this scheduler; queued work is not transferred. */
@@ -305,20 +402,59 @@ public final class ProtosActorScheduler {
             runOneSegment(state);
             return;
         }
-        process.runInExecutionHostForRuntime(() -> runOneSegment(state));
+        try {
+            process.runInExecutionHostForRuntime(() -> runOneSegment(state));
+        } catch (RuntimeException | Error hostFailure) {
+            HostEntryFailureAwareControl rejected = null;
+            synchronized (lock) {
+                // If the control is still queued, the host rejected the entry
+                // before runOneSegment could dequeue and execute it.
+                // Never report this failure a second time after execution began.
+                if (state.actor.lifecycleState()
+                                == ProtosActor.LifecycleState.INITIALIZING
+                        && state.controlTurns.peekFirst()
+                                instanceof HostEntryFailureAwareControl pending) {
+                    state.controlTurns.removeFirst();
+                    rejected = pending;
+                }
+            }
+            if (rejected != null) {
+                rejected.hostEntryFailed(hostFailure);
+            }
+            throw hostFailure;
+        }
     }
 
     private void runOneSegment(State state) {
         ProtosActor actor = state.actor;
         Runnable control = null;
+        ExclusiveBootstrap bootstrap = null;
+        ExclusiveBootstrap cleanup = null;
         synchronized (lock) {
-            if (actor.lifecycleState() == ProtosActor.LifecycleState.INITIALIZING) {
-                control = state.controlTurns.pollFirst();
+            if (actor.lifecycleState() == ProtosActor.LifecycleState.TERMINATING
+                    && state.bootstrap != null
+                    && state.bootstrap.cleanupPending()) {
+                // I158: the deferred abandon has priority over any stale resumption.
+                cleanup = state.bootstrap;
+                state.bootstrap = null;
+                state.controlTurns.clear();
+            } else if (actor.lifecycleState() == ProtosActor.LifecycleState.INITIALIZING) {
+                bootstrap = state.bootstrap;
+                if (bootstrap == null) {
+                    control = state.controlTurns.pollFirst();
+                }
             } else {
                 // Graceful stop/failure before bootstrap selection makes queued initialization
-                // control stale. It must never begin after the termination cutover.
+                // control stale. It must never begin after the termination cutover. A held
+                // suspended initialization is equally stale; its custodian was invalidated by the
+                // termination cutover itself.
                 state.controlTurns.clear();
+                state.bootstrap = null;
             }
+        }
+        if (cleanup != null) {
+            cleanup.runCleanup();
+            return;
         }
         if (control != null) {
             control.run();
@@ -326,6 +462,19 @@ public final class ProtosActorScheduler {
         }
 
         ProtosActorExecutionDomain domain = actor.executionDomain();
+        if (bootstrap != null) {
+            /*
+             * I158 / D251-A1: a suspended initialization retains exclusivity. Its own resumption
+             * wins; otherwise only one targeted runtime completion runs, without Task handoff.
+             * Ordinary Tasks and mailbox turns are neither run nor discarded.
+             */
+            if (bootstrap.resumeReady()) {
+                bootstrap.resume();
+            } else {
+                domain.dispatchTargetedRuntimeCompletionWithoutHandoffForRuntime();
+            }
+            return;
+        }
         boolean taskReady = domain.hasRunnableForRuntime();
         boolean messageReady =
                 actor.lifecycleState() == ProtosActor.LifecycleState.READY
@@ -369,6 +518,16 @@ public final class ProtosActorScheduler {
         ProtosActor actor = state.actor;
         if (actor.lifecycleState() == ProtosActor.LifecycleState.TERMINATED) {
             return false;
+        }
+        if (state.bootstrap != null
+                && actor.lifecycleState() == ProtosActor.LifecycleState.TERMINATING
+                && state.bootstrap.cleanupPending()) {
+            return true;
+        }
+        if (holdsExclusiveBootstrap(state)) {
+            // I158: excluded Tasks and accepted messages never make a suspended bootstrap runnable.
+            return state.bootstrap.resumeReady()
+                    || actor.executionDomain().hasTargetedRuntimeCompletionForRuntime();
         }
         if (actor.lifecycleState() == ProtosActor.LifecycleState.INITIALIZING
                 && !state.controlTurns.isEmpty()) {

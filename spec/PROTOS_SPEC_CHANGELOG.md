@@ -23,6 +23,26 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.498] - 2026-11-08
+
+### I156 — File position after a committed failed write of unknown progress (owner-approved A)
+- `io/FILESYSTEM.md` §18.2.1: when a committed failed positioned write has an unknown exact
+  prefix, the File cursor is indeterminate. No position-dependent operation can assume `k = 0`
+  or guess an offset. `position`, `read`, `write`, and `seekBy` fail with `IOError`; a successful
+  absolute `seek` or `seekToEnd` recovers a reliable position. Position-independent operations
+  and close remain available. Known-prefix writes preserve the existing exact `p + k` contract.
+- `io/BYTE_IO.md` §10: clarify that this is a standard File-specific recovery contract, not
+  a new universal ByteSeekable failure state or observable write-prefix count.
+
+### D251-A1 / I158 — Suspendible Actor bootstrap
+- `concurrency/ACTORS.md`, `concurrency/FUTURES_AND_TASKS.md`: bootstrap
+  execution may suspend on pending provider Futures while the Actor remains
+  INITIALIZING; continuation ownership, cancellation and service completion
+  follow the existing Actor/Process lifetime rules.
+- `semantics/MODULES.md`, `semantics/EXECUTION_AND_CONTROL.md`: SOURCE and
+  MODULE bootstrap retain their distinct context and public object identities
+  across suspension and resumption.
+
 ## [0.1.497] - 2026-11-08
 
 ### D243-C / I157 — Explicit secure Entropy capability

@@ -60,6 +60,13 @@ import java.util.Objects;
 final class ProtosHostEntrySuspension {
     private ProtosHostEntrySuspension() {}
 
+    /**
+     * Test-only, read-only observation; null in production. Called on the entry thread once a
+     * host entry holds its suspended continuation and is about to wait for the observed Future.
+     * It changes nothing in the HOST-FUT-1 protocol.
+     */
+    static volatile java.util.function.Consumer<ProtosFutureValue> suspendedForTesting;
+
     /** Whether {@code activation} executes directly inside a suspendible outermost host entry. */
     static boolean suspendible(ProtosActivation activation) {
         ProtosActorExecutionDomain domain = activation.executionDomain();
@@ -189,6 +196,10 @@ final class ProtosHostEntrySuspension {
         HostEntryExtent entryExtent = domain.swapHostEntryExtentForRuntime(HostEntryExtent.NONE);
         boolean ready = false;
         try {
+            java.util.function.Consumer<ProtosFutureValue> observation = suspendedForTesting;
+            if (observation != null && dependency instanceof FutureDependency observer) {
+                observation.accept(observer.future);
+            }
             while (true) {
                 /*
                  * Liveness first: termination itself may terminalize the observed Future (Actor

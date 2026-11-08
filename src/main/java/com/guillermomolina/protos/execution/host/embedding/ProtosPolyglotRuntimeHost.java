@@ -28,7 +28,9 @@ import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -68,6 +70,13 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private final List<ProtosEntropyCapabilityValue> entropyCapabilities =
             new ArrayList<>();
     private boolean entropyRetired;
+    /**
+     * D248-B host custody of standalone Filesystem backends, keyed by their exact owning Process.
+     * Guarded by this. A backend leaves this map exactly once: at its Process's termination or
+     * when this host closes.
+     */
+    private final Map<ProtosProcessRuntime, ProtosLinuxConfinedReadWriteTreeFilesystemBackend>
+            processFilesystems = new IdentityHashMap<>();
     private boolean closed;
 
     private ProtosPolyglotRuntimeHost(
@@ -422,6 +431,60 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         }
     }
 
+
+    /**
+     * Transfers custody of one provisioned standalone Filesystem backend to this host for exactly
+     * {@code process} (D248-B). The backend stays live while the Process lives, including a
+     * message-service Process that outlives its entry source, and is revoked by {@link
+     * #releaseProcessFilesystemForRuntime} at that Process's termination or by {@link #close()}.
+     *
+     * @throws IllegalStateException when this host is closed, the Process already owns a
+     *     Filesystem backend, or the backend is already owned by another Process; custody is then
+     *     not transferred and the caller still owns the backend
+     */
+    synchronized void attachProcessFilesystemForRuntime(
+            ProtosProcessRuntime process, ProtosLinuxConfinedReadWriteTreeFilesystemBackend backend) {
+        Objects.requireNonNull(process, "process");
+        Objects.requireNonNull(backend, "backend");
+        if (closed) {
+            throw new IllegalStateException("Polyglot runtime host is closed");
+        }
+        if (processFilesystems.containsKey(process)) {
+            throw new IllegalStateException("Process already owns a standalone Filesystem");
+        }
+        if (processFilesystems.containsValue(backend)) {
+            throw new IllegalStateException("Filesystem backend is owned by another Process");
+        }
+        processFilesystems.put(process, backend);
+    }
+
+    /**
+     * Revokes the standalone Filesystem backend of exactly {@code process}, if any. Idempotent;
+     * never touches another Process's backend.
+     *
+     * @return the revocation failure, or {@code null}
+     */
+    Throwable releaseProcessFilesystemForRuntime(ProtosProcessRuntime process) {
+        ProtosLinuxConfinedReadWriteTreeFilesystemBackend backend;
+        synchronized (this) {
+            backend = processFilesystems.remove(process);
+        }
+        return backend == null ? null : closeFilesystem(backend);
+    }
+
+    private static Throwable closeFilesystem(ProtosLinuxConfinedReadWriteTreeFilesystemBackend backend) {
+        try {
+            backend.close();
+            return null;
+        } catch (RuntimeException failure) {
+            return failure;
+        }
+    }
+
+    synchronized int processFilesystemCountForTesting() {
+        return processFilesystems.size();
+    }
+
     /** Capabilities provisioned by this host and still in its custody. */
     int provisionedResolverCountForTesting() {
         synchronized (this) {
@@ -488,6 +551,13 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
             capability.retireForRuntime();
         }
         entropyCapabilities.clear();
+        // Backends whose Process never reached its termination callback, for example after a
+        // failed Context binding, are revoked here; termination already released the others.
+        // A handle-close failure leaves the backend revoked and must not keep the Engine open.
+        for (ProtosLinuxConfinedReadWriteTreeFilesystemBackend backend : processFilesystems.values()) {
+            closeFilesystem(backend);
+        }
+        processFilesystems.clear();
         if (failure != null) {
             throw new IllegalStateException("A Process Context failed to close", failure);
         }

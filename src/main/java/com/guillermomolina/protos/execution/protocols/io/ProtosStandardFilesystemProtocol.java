@@ -68,6 +68,19 @@ public final class ProtosStandardFilesystemProtocol {
     public interface OpenCompletion {
         boolean commitPortableEffect();
 
+        /**
+         * I156 native effect commitment: runs one indivisible creation/truncation effect inside
+         * the open's commitment boundary; see {@link
+         * ProtosFilesystemOpenFlow.OpenCompletion#commitPortableEffect(
+         * ProtosFilesystemOpenFlow.OpenEffect)}. Existing backends keep using {@link
+         * #commitPortableEffect()}.
+         */
+        default ProtosFilesystemOpenFlow.EffectOutcome commitPortableEffect(
+                ProtosFilesystemOpenFlow.OpenEffect effect) {
+            throw new UnsupportedOperationException(
+                    "this open completion has no native effect commitment boundary");
+        }
+
         void succeeded(
                 ProtosFileFlow.Resource resource,
                 ProtosFileFlow.Capabilities capabilities,
@@ -178,6 +191,14 @@ public final class ProtosStandardFilesystemProtocol {
                                             @Override
                                             public boolean commitPortableEffect() {
                                                 return completion.commitPortableEffect();
+                                            }
+
+                                            @Override
+                                            public ProtosFilesystemOpenFlow.EffectOutcome
+                                                    commitPortableEffect(
+                                                            ProtosFilesystemOpenFlow.OpenEffect
+                                                                    effect) {
+                                                return completion.commitPortableEffect(effect);
                                             }
 
                                             @Override

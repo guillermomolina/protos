@@ -165,14 +165,16 @@ public final class ProtosClosureInvoker {
          * root. A foreign callback marks its own synchronous extent before arriving here.
          */
         ProtosActorExecutionDomain domain = activation.executionDomain();
-        if (domain == null || domain.hostEntryExtentForRuntime() != HostEntryExtent.SUSPENDIBLE) {
+        // I158: the suspendible Actor bootstrap extent ends at this boundary exactly the same way.
+        HostEntryExtent extent = domain == null ? HostEntryExtent.NONE : domain.hostEntryExtentForRuntime();
+        if (extent != HostEntryExtent.SUSPENDIBLE && extent != HostEntryExtent.BOOTSTRAP) {
             return invokePreparedInExtent(closure, supplied, activation);
         }
         domain.swapHostEntryExtentForRuntime(HostEntryExtent.NONE);
         try {
             return invokePreparedInExtent(closure, supplied, activation);
         } finally {
-            domain.swapHostEntryExtentForRuntime(HostEntryExtent.SUSPENDIBLE);
+            domain.swapHostEntryExtentForRuntime(extent);
         }
     }
 

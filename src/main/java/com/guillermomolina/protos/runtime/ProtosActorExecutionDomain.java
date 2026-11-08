@@ -82,6 +82,13 @@ public final class ProtosActorExecutionDomain {
      */
     private HostEntryExtent hostEntryExtent = HostEntryExtent.NONE;
     private int activeTargetedRuntimeCompletions;
+    /*
+     * I158: invalidated Actor initializations whose C-prime transports still await their abandon
+     * under this domain's exclusive ownership. Termination cannot complete before they are freed.
+     */
+    private int pendingBootstrapCleanups;
+    /** I158: initialization segments currently executing (first or resumed); never Tasks. */
+    private int activeBootstrapSegments;
 
     /**
      * PLAT054-3E2 ({@code FUTURES_AND_TASKS.md} §29, Suspendible host-initiated RootActor entries):
@@ -100,7 +107,16 @@ public final class ProtosActorExecutionDomain {
          * Inside a host entry but within a callback of a synchronous foreign operation (including
          * a nested host entry): an actual suspension is rejected with a fresh {@code Error}.
          */
-        SYNCHRONOUS
+        SYNCHRONOUS,
+        /**
+         * I158 / D251-A1 ({@code FUTURES_AND_TASKS.md} §29, Actor initialization suspension): a
+         * segment of the single Task-free Actor initialization continuation is executing, with
+         * only Bytecode frames between an explicit suspension point and the bootstrap C-prime
+         * root. Installed only while such a segment runs and removed when it suspends or ends; it
+         * is never inferred from the INITIALIZING lifecycle, never authorizes ordinary host entries,
+         * and a synchronous foreign callback replaces it with {@link #SYNCHRONOUS}.
+         */
+        BOOTSTRAP
     }
 
     public HostEntryExtent hostEntryExtentForRuntime() {
@@ -457,6 +473,149 @@ public final class ProtosActorExecutionDomain {
         while(true){ProtosTask.State s=root.state();if(s==ProtosTask.State.COMPLETED||s==ProtosTask.State.FAILED||s==ProtosTask.State.CANCELLED)return;if(dispatchOne()||helper.getAsBoolean())continue;synchronized(this){s=root.state();if(s==ProtosTask.State.COMPLETED||s==ProtosTask.State.FAILED||s==ProtosTask.State.CANCELLED)return;if(!runnable.isEmpty()||!targetedRuntimeCompletions.isEmpty())continue;try{wait();}catch(InterruptedException e){Thread.currentThread().interrupt();root.requestCancellation();}}}
     }
 
+    /**
+     * I158: whether an Actor-private targeted runtime completion is queued. This is the precise
+     * work predicate of an Actor whose initialization is suspended: ordinary runnable Tasks,
+     * deferred C-prime I/O segments and mailbox turns are excluded by that initialization and must
+     * not make the Actor schedulable.
+     */
+    public synchronized boolean hasTargetedRuntimeCompletionForRuntime() {
+        return !targetedRuntimeCompletions.isEmpty();
+    }
+
+    /**
+     * I158 / D251-A1: dispatches exactly one queued targeted runtime completion while the Actor's
+     * initialization is suspended, in this Actor's domain and Context.
+     *
+     * <p>The completion runs with the ownership, cancellation, release and commitment checks it
+     * already carries, so its terminal transition may wake a suspended bootstrap observer. Unlike
+     * {@link #dispatchOne()}, the optimized handoff to a single waiting Task is never performed and
+     * the ordinary runnable queue is never consumed: a Task made runnable by the completion stays
+     * queued, in FIFO order, for the regime after READY or for termination cancellation.
+     *
+     * @return whether a completion was dispatched
+     */
+    public boolean dispatchTargetedRuntimeCompletionWithoutHandoffForRuntime() {
+        TargetedRuntimeCompletion runtimeCompletion;
+        synchronized (this) {
+            runtimeCompletion = targetedRuntimeCompletions.pollFirst();
+            if (runtimeCompletion == null) {
+                return false;
+            }
+            activeTargetedRuntimeCompletions++;
+        }
+        try {
+            runtimeCompletion.completion.getAsBoolean();
+        } finally {
+            finishTargetedRuntimeCompletion();
+        }
+        return true;
+    }
+
+    /**
+     * I158 / D251-A1: work classes of a suspended or invalidated Actor initialization. Only the
+     * first three are runtime work admitted by the initialization itself; ordinary Tasks, deferred
+     * C-prime operations and mailbox turns gain no authorization from it.
+     */
+    public enum BootstrapWork {
+        /** A targeted Future completion, dispatched without Task handoff. */
+        SAFE_COMPLETION,
+        /** The resumption of the initialization's own continuation. */
+        RESUMPTION,
+        /** The deferred abandon of an invalidated initialization's C-prime transports. */
+        CLEANUP
+    }
+
+    /**
+     * I158: records that an invalidated initialization still owns C-prime transports to abandon.
+     * Safe from any thread; it only blocks the TERMINATING -> TERMINATED completion.
+     */
+    public synchronized void beginBootstrapCleanupForRuntime() {
+        pendingBootstrapCleanups++;
+    }
+
+    /**
+     * I158: the deferred abandon ran under this domain's exclusive ownership; termination may now
+     * complete if nothing else remains.
+     */
+    public void finishBootstrapCleanupForRuntime() {
+        ProtosActor actor;
+        synchronized (this) {
+            if (pendingBootstrapCleanups <= 0) {
+                throw new IllegalStateException("bootstrap cleanup accounting underflow");
+            }
+            pendingBootstrapCleanups--;
+            notifyAll();
+            actor = ownerActor;
+        }
+        if (actor != null) {
+            actor.tryCompleteTerminationForRuntime();
+        }
+    }
+
+    /**
+     * I158: reserves one executing initialization segment, from before its Context is entered to
+     * after it is left. While any reservation exists the Actor cannot reach TERMINATED, so a
+     * termination begun from another thread waits for the segment instead of overtaking it. The
+     * reservation is neither a Task nor a Future and runs no code.
+     */
+    public synchronized void beginBootstrapSegmentForRuntime() {
+        activeBootstrapSegments++;
+    }
+
+    /**
+     * I158: releases one reservation taken by {@link #beginBootstrapSegmentForRuntime()}. When the
+     * last reservation is released the ordinary termination completion is re-evaluated; no monitor
+     * is held while doing so.
+     */
+    public void finishBootstrapSegmentForRuntime() {
+        ProtosActor actor;
+        synchronized (this) {
+            if (activeBootstrapSegments <= 0) {
+                throw new IllegalStateException("bootstrap segment accounting underflow");
+            }
+            activeBootstrapSegments--;
+            if (activeBootstrapSegments != 0) {
+                return;
+            }
+            notifyAll();
+            actor = ownerActor;
+        }
+        if (actor != null) {
+            actor.tryCompleteTerminationForRuntime();
+        }
+    }
+
+    /** I158 test inspection: number of executing initialization segments. */
+    public synchronized int activeBootstrapSegmentCountForRuntime() {
+        return activeBootstrapSegments;
+    }
+
+    /**
+     * I158: blocks a host thread that synchronously drives an Actor initialization (never a
+     * scheduler carrier) until a targeted completion is queued or {@code wake} holds. Every source
+     * that can make {@code wake} true notifies this monitor, so no wakeup is lost.
+     */
+    public synchronized void awaitBootstrapWakeupForRuntime(BooleanSupplier wake)
+            throws InterruptedException {
+        if (targetedRuntimeCompletions.isEmpty() && !wake.getAsBoolean()) {
+            wait();
+        }
+    }
+
+    /**
+     * I158: asks the attached scheduler to re-evaluate this Actor. Used by a terminalized observer
+     * of a suspended initialization; it runs no guest code and holds no monitor while signalling.
+     */
+    public void requestSchedulerWakeupForRuntime() {
+        Runnable wakeup;
+        synchronized (this) {
+            notifyAll();
+            wakeup = schedulerWakeup;
+        }
+        runSchedulerWakeup(wakeup);
+    }
+
     public synchronized int runnableCount() {
         return runnable.size() + targetedRuntimeCompletions.size();
     }
@@ -604,6 +763,8 @@ public final class ProtosActorExecutionDomain {
     synchronized boolean hasLiveTasksForRuntime() { return !liveTasks.isEmpty(); }
     synchronized boolean hasTerminationCleanupForRuntime() {
         return activeTargetedRuntimeCompletions != 0
+                || pendingBootstrapCleanups != 0
+                || activeBootstrapSegments != 0
                 || (actorTerminationBegun && !targetedRuntimeCompletions.isEmpty())
                 || !actorIoLifecycleCleanup.isEmpty()
                 || !actorIoReleases.isEmpty();

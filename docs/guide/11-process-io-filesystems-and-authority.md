@@ -141,10 +141,79 @@ Imported modules likewise do not receive the initial Filesystem automatically.
 This lets an embedder or tool give a program exactly the namespace authority it
 needs without turning filesystem access into ambient global state.
 
-The current standalone application CLI intentionally grants no default
-application Filesystem merely because the launcher itself could read the source
-file. Bundled tools may receive specifically confined Filesystem capabilities
-because their launcher contract grants them explicitly.
+The standalone application CLI never grants a Filesystem merely because the
+launcher itself could read the source file. Since D248-B it grants one only as
+an explicit hosting choice, `--allow-filesystem=<directory>`; see
+[Explicit standalone Filesystem grant](#explicit-standalone-filesystem-grant-d248-b).
+Bundled tools may receive specifically confined Filesystem capabilities
+because their launcher contract grants them explicitly, and never receive the
+CLI grant.
+
+### Explicit standalone Filesystem grant (D248-B)
+
+`protos --allow-filesystem=<directory> ...` (also with `-e`, the REPL, `run`
+and `debug`) is a decision of whoever starts the Process, exactly like a Java
+host choosing to provision a capability. It does not change the Process/Actor
+authority model: the capability is still one bootstrap-local `filesystem`
+binding of the RootActor's initial module, it is still absent without the
+option, and nothing propagates it automatically.
+
+The capability's namespace is the selected, already existing host directory,
+recursively. The directory is opened once at startup and that opened directory,
+not its path text, is the authority. `Path.relative()` names it, and every Path
+is resolved below it without following links or entering another mount; the
+host path is never visible to Protos code. A `File` keeps referring to the file
+it opened even if that file's name is later renamed, replaced or removed.
+
+Startup refuses the grant (exit `1`, before any guest code) when the directory
+is missing, is not a directory or is a final symbolic link, or when the host
+cannot provide the kernel confinement the grant relies on: Linux x86_64 with
+`openat2` and a Landlock ABI of at least 3. Every operation of one grant runs on
+its own Landlock-restricted thread. Namespace mutations such as `remove` and
+`replace` are checked against the current directory hierarchy, including when
+a parent directory was moved outside the grant after its descriptor was opened.
+An already-open File retains access through its descriptor: moving its entry
+does not retroactively revoke previously authorized reads or writes. This
+confines the granted capability, not the whole JVM; see the
+[CLI guide](tools/cli.md#filesystem-authority-d248-b--i155--i156)
+for the platform contract and the limits.
+
+```protos
+Files: import("std:io/files")
+ProcessStreams: import("std:io/process_streams")
+
+// Received through the RootActor bootstrap-local context.
+store: filesystem
+out: ProcessStreams.stdoutWriter(process)
+
+// A nested file under the authorized directory; "logs" must already exist.
+log: Path.relative().child("logs").child("today.txt")
+
+file: store.open(log, read: true, write: true, create: true).value()
+file.seekToEnd().value()
+file.write(Encoding.UTF8.encode("started\n")).value()
+file.close().value()
+
+out.writeLine(Files.readAllText(store, log, Encoding.UTF8).value()).value()
+```
+
+Run it as `protos --allow-filesystem=./app-data app.protos` after creating
+`./app-data/logs`. The ordinary lifetime and commitment rules apply unchanged:
+`open(..., create: true)` publishes its creation only once the open commits;
+each `write` commits independently and a failed write may contribute an
+unreported prefix. If that prefix's length cannot be determined, the File's
+logical position is indeterminate until a successful `seek` or `seekToEnd`.
+The File stays bound to the resource it opened even if
+its entry is later replaced or removed; and closing the File releases it. Any File still open when the Process terminates is
+revoked with the capability. Neither `write`, `close` nor `replace` promises
+crash durability; only an explicit `sync()` on a File that offers it requests
+that.
+
+Because the grant belongs to the Process, a future Protos shell running many
+commands inside one authorized session can hand the same capability to each
+in-Process command explicitly, without prompting per operation. Child Protos
+Processes and operating-system subprocesses are separate designs that have
+not been selected; nothing about this grant implies either.
 
 In the standard Polyglot embedding, the initial module receives `filesystem`
 only when the host Context effectively allows file access. Its base is the
@@ -1301,17 +1370,20 @@ Process. For the D247-C CLI interface (older releases do not provide these optio
 
 | Launcher | `process` | `filesystem` | `network` | `resolver` | `entropy` |
 |---|---|---|---|---|---|
-| `protos file.protos`, `protos -e`, REPL | Bound | Not bound | Only with `--allow-network` | Not bound | Only with `--allow-entropy` |
-| `protos run <entry>` | Bound | Not bound | Only with `--allow-network` | Not bound | Only with `--allow-entropy` |
+| `protos file.protos`, `protos -e`, REPL | Bound | Only with `--allow-filesystem=<dir>` | Only with `--allow-network` | Not bound | Only with `--allow-entropy` |
+| `protos run <entry>` | Bound | Only with `--allow-filesystem=<dir>` | Only with `--allow-network` | Not bound | Only with `--allow-entropy` |
 | Java Polyglot embedding (portable JVM only) | Bound | Only when the Context allows file access | Only when the Context allows socket access | Not bound | Only with `protos.AllowEntropy=true` |
 | Bundled Tools | Bound | Only confined capabilities that the Tool's launcher contract grants | Not bound | Not bound | Not bound |
-| Java host with an explicit Resolver and/or Entropy provision | Bound | As selected | As selected | Only if explicitly granted | Only if explicitly granted |
-| `ProtosRootActorServiceSession.open` (RootActor message-service entry) | Bound | Not bound | Only with `NetworkGrant.HOST_NETWORK` | Only with `ResolverGrant.HOST_RESOLVER` | Only with `EntropyGrant.HOST_ENTROPY` |
+| Java host with explicitly selected capabilities | Bound | As selected | As selected | Only if explicitly granted | Only if explicitly granted |
+| `ProtosRootActorServiceSession.open` (RootActor message-service entry) | Bound | Only with a `FilesystemGrant` directory | Only with `NetworkGrant.HOST_NETWORK` | Only with `ResolverGrant.HOST_RESOLVER` | Only with `EntropyGrant.HOST_ENTROPY` |
 
 The Native and portable JVM command lines use the same explicit CLI authority
-contract. `--allow-network` grants initial host TCP authority only;
-`--allow-entropy` grants only the separate secure-byte capability. Neither
-flag grants Filesystem or Resolver authority. Tools receive neither grant.
+contract. `--allow-network` grants only initial TCP authority,
+`--allow-filesystem=<dir>` grants only one confined Filesystem, and
+`--allow-entropy` grants only the independent secure-byte capability. None of
+these flags grants Resolver authority or implies either of the others. Bundled
+Tools receive none of these application grants.
+
 When a slot is not bound, the name is simply absent from the initial module;
 referencing it fails like any other unbound name.
 
@@ -1327,7 +1399,7 @@ entry (D225-B1, `spec/io/PROCESS_IO.md`; see [Actors, ActorRefs, and Actor
 Groups](10-actors-actorrefs-and-groups.md#the-rootactor-has-two-entry-modes)).
 Its initial module receives exactly the bootstrap-local slots an ordinary
 initial module would receive under the same host grants: always `process`, and
-`network`, `resolver` or `entropy` only when the host grants each one.
+`network`, `resolver`, `entropy` or `filesystem` only when the host grants each one.
 These grants are independent, and choosing service entry grants nothing.
 
 On the standalone CLI, `--service=<binding>` explicitly selects this entry
@@ -1510,8 +1582,8 @@ This is the executable tutorial
 
 ### Filesystem: whole-file text helpers
 
-Needs a host that binds `filesystem`, such as a Java embedding with file
-access. `std:io/files` provides `readAllBytes`, `writeAllBytes`,
+Needs a host that binds `filesystem`, such as `protos --allow-filesystem=<dir>`
+or a Java embedding with file access. `std:io/files` provides `readAllBytes`, `writeAllBytes`,
 `readAllText`, and `writeAllText`; each takes the Filesystem explicitly and
 returns a Future:
 
@@ -1702,8 +1774,9 @@ same.
    capability; imports do not receive it automatically.
 3. `filesystem` is a separate optional bootstrap capability and cannot be
    recovered from Process.
-4. The current standalone application CLI does not grant a default Filesystem
-   merely because the launcher can read source.
+4. The standalone application CLI does not grant a Filesystem merely because
+   the launcher can read source; only explicit `--allow-filesystem=<dir>`
+   grants one, confined to that existing directory.
 5. Process capability delegation to another Actor is explicit; Process has no
    Core P-transfer contract.
 6. `process.args()` returns a frozen ordinary Array with stable content; the
@@ -1820,9 +1893,11 @@ making examples work by granting hidden ambient access.
   bootstrap-local `process` capability and its Process-selected Encoding.
 - [`../../protos/tutorials/12-system-resources/02-filesystem-text-roundtrip.protos`](../../protos/tutorials/12-system-resources/02-filesystem-text-roundtrip.protos)
   requires a host that explicitly provisions bootstrap-local `filesystem`
-  authority. The LM006 system/resource integration harness executes that source
-  with deterministic confined test storage.
+  authority, such as `protos --allow-filesystem=<existing-directory>`. The LM006
+  system/resource integration harness executes that source with deterministic
+  confined test storage.
 
 The ordinary standalone application CLI therefore does **not** run the Filesystem
-lesson merely because it can read the lesson's source file. Source discovery and
-filesystem authority remain separate concerns.
+lesson merely because it can read the lesson's source file; it needs the
+explicit grant. Source discovery and filesystem authority remain separate
+concerns.

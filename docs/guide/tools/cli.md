@@ -12,11 +12,11 @@ The dispatch code is
 
 | Command | What it does | Guide |
 |---|---|---|
-| `protos [--inspect] [--allow-network] [--allow-entropy] [--service=<binding>] <file> [args...]` | Runs one source file | below |
-| `protos [--inspect] [--allow-network] [--allow-entropy] -e <source> [args...]` | Runs one source String | below |
-| `protos [--inspect] [--allow-network] [--allow-entropy]` | Starts the interactive REPL | below |
-| `protos run [--allow-network] [--allow-entropy] [--service=<binding>] <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
-| `protos debug [--allow-network] [--allow-entropy] <file> [args...]` | Runs one file under the Debug Adapter Protocol | below |
+| `protos [--inspect] [--allow-network] [--allow-entropy] [--allow-filesystem=<dir>] [--service=<binding>] <file> [args...]` | Runs one source file | below |
+| `protos [--inspect] [--allow-network] [--allow-entropy] [--allow-filesystem=<dir>] -e <source> [args...]` | Runs one source String | below |
+| `protos [--inspect] [--allow-network] [--allow-entropy] [--allow-filesystem=<dir>]` | Starts the interactive REPL | below |
+| `protos run [--allow-network] [--allow-entropy] [--allow-filesystem=<dir>] [--service=<binding>] <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
+| `protos debug [--allow-network] [--allow-entropy] [--allow-filesystem=<dir>] <file> [args...]` | Runs one file under the Debug Adapter Protocol | below |
 | `protos format [<file>]` | Prints the canonical formatting of one document | below |
 | `protos lint [--output text\|json] [--fail-on-warning] [<file>]` | Reports parser errors and lint warnings without running code | below |
 | `protos language-server` | Starts the Language Server Protocol service on stdin/stdout | [Language server](language-server.md) |
@@ -132,6 +132,103 @@ listener and Workers, not the RootActor service. No automatic graceful HTTP
 drain is promised on SIGINT, SIGTERM or OS-forced termination: a program must
 explicitly request `Host.shutdown("drain")` when graceful draining is required.
 
+### Filesystem authority (D248-B / I155 / I156)
+
+`--allow-filesystem=<directory>` grants the initial RootActor module one
+bootstrap-local `filesystem` binding over exactly one existing host directory.
+Without the option there is no `filesystem` binding at all (the name is absent,
+not `null`), and no confinement machinery is started.
+
+```sh
+protos --allow-filesystem=./data app.protos
+protos --allow-filesystem=./data -e 'print(filesystem === filesystem)'
+protos --allow-filesystem=./data
+protos run --allow-filesystem=./data app
+protos debug --allow-filesystem=./data app.protos
+```
+
+- `<directory>` is a host-native absolute or relative path. A relative path is
+  resolved against the directory in which `protos` was invoked, never against
+  the source file, the package root, `package.toml` or a module identity.
+- The directory must already exist and its final component must not be a
+  symbolic link. It is never created for you. It is opened once at startup;
+  from then on the opened directory, not its path text, is the authority.
+  Renaming or replacing an ancestor of the path afterwards does not move the
+  grant.
+- Access is recursive but confined to that directory. Guest code names files
+  with Core paths: `Path.relative()` is the authorized directory itself and
+  `child(name)` selects one entry below it. Symbolic links (intermediate or
+  final) are never followed, `..` and separator-containing components are
+  refused, and no other mount, including a bind mount of the same filesystem,
+  is ever entered. The authorized directory itself may be a mount point.
+- The capability is the ordinary Core `Filesystem`: `open(path, read:, write:,
+  create:, createNew:, truncate:)`, `entries(path)`, `replace(source, target)`
+  and `remove(path)`. There is no `mkdir`, no append mode, no general
+  rename/move, no recursive delete and no way to reach the host path itself.
+  `open` returns a File only for a regular file.
+- A `File` stays bound to the file it opened: renaming, replacing or removing
+  its name later does not retarget it. Files and the grant live as long as the
+  Process that received it (including a `--service` RootActor until the Process
+  really terminates) and are revoked when it ends.
+- The grant is not inherited: imported modules, other Actors, isolated
+  parallel work, subprocesses, package preflight and bundled Tools receive
+  nothing. Pass the capability explicitly where Protos permits it. The
+  launcher's own authority to read source files and resolve packages is
+  separate and never becomes guest authority.
+- It is independent of `--inspect`, `--allow-network` and the (unselectable)
+  Resolver: none of them implies another.
+
+The option may be given once, before the direct file, `-e` or the REPL, or
+after `run`/`debug` but before their entry. After the entry it is an ordinary
+`process.args()` element and grants nothing. It is refused for `package`,
+`test`, `format`, `lint` and `language-server`.
+
+A duplicated, bare (`--allow-filesystem`), empty or malformed option exits with
+usage status `2`. Startup is refused with status `1`, before any guest
+expression runs (and under `debug` without a `PROTOS_DEBUG_READY` record), when:
+
+- the directory does not exist, is a file, or its final component is a
+  symbolic link; or
+- the host cannot provide the kernel confinement described below.
+
+#### Platform contract and confinement
+
+The grant is implemented on Linux x86_64 only. Confinement is enforced by the
+kernel:
+
+- every entry below the directory is selected relative to the opened directory
+  with `openat2` and `RESOLVE_BENEATH`, `RESOLVE_NO_SYMLINKS`,
+  `RESOLVE_NO_MAGICLINKS` and `RESOLVE_NO_XDEV`; and
+- all file operations of one grant run on one dedicated Landlock-restricted
+  thread. Its policy grants the filesystem rights needed by the backend,
+  including namespace-creation rights used for replacement; the Protos API
+  exposes only its documented operations. Namespace mutations are checked
+  against the current hierarchy, including a parent directory moved outside
+  the grant after its descriptor was acquired.
+
+Landlock does not retroactively revoke access through an already-open File
+descriptor. Reads and writes through that descriptor retain the authorization
+established when the file was opened, even if its entry is later moved.
+This is distinct from the namespace-mutation confinement tested by T04/T05.
+
+The host kernel must serve Landlock ABI 3 or later (it provides the `REFER`
+and `TRUNCATE` rights). On any other operating system or architecture, on a
+kernel without a sufficient Landlock ABI, when Landlock is disabled, or when a
+seccomp or security policy refuses the required calls, the grant is refused at
+startup. There is no weaker fallback.
+
+The native calls are made through the Java 25 Foreign Function & Memory API
+(PLAT073-C); Protos ships no JNI library or C code for this feature. The JVM
+launcher already runs with `--enable-native-access=ALL-UNNAMED`; the Native
+Image executable registers the same calls at build time. Both apply the same
+fail-closed rules.
+
+This confines the operations of the granted Filesystem capability. It is not a
+sandbox of the whole JVM or of the operating-system process: native libraries,
+privileged host changes (such as new mounts made by an administrator),
+pre-existing hard links and separately authorized OS processes are outside
+what the flag can confine.
+
 ### TAB completion in the REPL
 
 On a terminal, press TAB to complete:
@@ -241,14 +338,16 @@ existing `protos.lock` (no public lock-generation command exists). Run it from
 the actual package root rather than the repository root; see the
 [package-exports tutorial](../../../protos/tutorials/08-language-interactions/06-package-exports/package.toml)
 and [Package Tool](package-tool.md).
-Neither `run` nor `<entry>` appears in `process.args()`. The default has no Network or Entropy authority. Explicit
-`--allow-network` grants initial RootActor TCP access, while the independent
-`--allow-entropy` grants secure-byte generation. Neither affects the Package
-Tool preflight.  `--service=<binding>` selects the long-lived RootActor service entry.
+Neither `run` nor `<entry>` appears in `process.args()`. The default grants
+no Network, Entropy or Filesystem authority. Explicit `--allow-network` grants
+initial RootActor TCP access; independent `--allow-entropy` grants secure-byte
+generation; independent `--allow-filesystem=<dir>` confines Filesystem access
+to the selected pre-existing directory. None affects Package Tool preflight.
+`--service=<binding>` selects the long-lived RootActor service entry.
 
 ### `protos debug`
 
-`protos debug [--allow-network] [--allow-entropy] <file>` runs one file through the standard Debug Adapter Protocol
+`protos debug [--allow-network] [--allow-entropy] [--allow-filesystem=<dir>] <file>` runs one file through the standard Debug Adapter Protocol
 debugger. Before guest execution it writes exactly one `PROTOS_DEBUG_READY`
 JSON record to standard output; afterwards guest output travels over DAP. It is
 intended to be launched by an editor integration rather than by hand.
@@ -258,7 +357,7 @@ intended to be launched by an editor integration rather than by hand.
 | Status | Meaning |
 |---|---|
 | `0` | The program completed |
-| `1` | Syntax error, uncaught Error (`Runtime error: ...` on stderr), or unreadable source file |
+| `1` | Syntax error, uncaught Error (`Runtime error: ...` on stderr), unreadable source file, or a `--allow-filesystem` directory that cannot be provisioned |
 | `2` | Command-line usage error (`protos: <message>` and `Try 'protos --help'.` on stderr) |
 | `70` | Internal error in the toolchain itself |
 
@@ -360,7 +459,7 @@ protos lint --fail-on-warning src/main.protos
 | Commands on this page | All available | All available |
 | `--foreign-provider-path` | Not available: no dynamic plugin loading | Available |
 | `--inspect` | Available | Available |
-| `--allow-network`, `--allow-entropy`, `--service` | Available | Available |
+| `--allow-network`, `--allow-entropy`, `--allow-filesystem=<dir>`, `--service` | Available | Available |
 | Java embedding | Not available | Available through the standard Polyglot API ([guide](../embedding/java.md)) |
 
 Download and installation are described in [Try Protos](../00-try-protos.md).

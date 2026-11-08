@@ -88,9 +88,12 @@ Current progression:
 The system/resource progression deliberately uses two execution hosts:
 `01-process-stream-output.protos` is a normal standalone-CLI lesson, while
 `02-filesystem-text-roundtrip.protos` requires an explicitly provisioned
-bootstrap-local `filesystem` capability and is executed by the LM006 system/resource
-integration harness. The latter is intentionally not made ambient merely for
-tutorial convenience.
+bootstrap-local `filesystem` capability. The standalone CLI provisions one only
+when asked, over a directory that must already exist
+(`protos --allow-filesystem=<existing-directory> protos/tutorials/12-system-resources/02-filesystem-text-roundtrip.protos`);
+the LM006 system/resource integration harness also executes it with confined
+test storage. Without the explicit grant there is no `filesystem` binding: the
+capability is intentionally not made ambient for tutorial convenience.
 
 The HTTP progression follows the same rule. `01-serve-one-response.protos`
 (`Server.serveOne`) and `02-client-response-body.protos` (`Client.exchangeOne`

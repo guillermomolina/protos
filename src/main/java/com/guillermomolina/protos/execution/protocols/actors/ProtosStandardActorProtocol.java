@@ -217,23 +217,23 @@ public final class ProtosStandardActorProtocol {
                                                 "Actor.spawn requires execution inside an Actor incarnation"));
         ProtosActor actor = creator.createHostedActorForRuntime(actorRefPrototype);
         ProtosActorRefValue reference = actor.reference();
-        Runnable bootstrap =
-                () -> {
-                    try {
-                        actorBootstrap.initialize(
-                                actor,
-                                prelude,
-                                moduleKey,
-                                bindingName,
-                                transferredArguments);
-                    } catch (ProtosSignalException initializationFailure) {
-                        // I011-3 already terminalized this same incarnation. Core exposes no
-                        // implicit remote Error channel for initialization failure.
-                    } catch (RuntimeException runtimeFailure) {
-                        terminateAfterCutover(actor);
-                    }
-                };
         ProtosActorScheduler scheduler = schedulerFor(actor);
+        /*
+         * I158 / D251-A1: the control turn starts the single suspendible initialization. A
+         * suspension of the destination releases its carrier and never delays this creator, which
+         * has already passed the creation cutover. An unhandled initialization Error already
+         * terminalized this same incarnation (I011-3); Core exposes no implicit remote Error
+         * channel for it. A host failure terminates the incarnation inside the sequence.
+         */
+        Runnable bootstrap =
+                actorBootstrap.controlTurn(
+                        actor,
+                        scheduler,
+                        prelude,
+                        moduleKey,
+                        bindingName,
+                        transferredArguments,
+                        null);
         try {
             scheduler.attach(actor);
             scheduler.submitControl(actor, bootstrap);

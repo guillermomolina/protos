@@ -75,8 +75,44 @@ public final class ProtosWorkspacePackageApplicationExecution {
             ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
             String stdinEncodingBinding,
             String stdoutEncodingBinding,
-            String stderrEncodingBinding) {
+            String stderrEncodingBinding,
+            ProtosStandaloneHostedExecution.FilesystemGrant filesystemGrant) {
+        /** Request without a D248-B Filesystem grant. */
+        public Request(
+                Path coreRoot,
+                Path projectRoot,
+                ProtosPackageExecutionPlan plan,
+                ProtosModuleResolver standardLibraryResolver,
+                String entryLogicalModule,
+                List<String> applicationArguments,
+                ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
+                List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
+                ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+                ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+                ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+                String stdinEncodingBinding,
+                String stdoutEncodingBinding,
+                String stderrEncodingBinding) {
+            this(
+                    coreRoot,
+                    projectRoot,
+                    plan,
+                    standardLibraryResolver,
+                    entryLogicalModule,
+                    applicationArguments,
+                    environmentNameDomain,
+                    environmentEntries,
+                    stdinBackend,
+                    stdoutBackend,
+                    stderrBackend,
+                    stdinEncodingBinding,
+                    stdoutEncodingBinding,
+                    stderrEncodingBinding,
+                    ProtosStandaloneHostedExecution.FilesystemGrant.NONE);
+        }
+
         public Request {
+            Objects.requireNonNull(filesystemGrant, "filesystemGrant");
             Objects.requireNonNull(coreRoot, "coreRoot");
             Objects.requireNonNull(projectRoot, "projectRoot");
             Objects.requireNonNull(plan, "plan");
@@ -102,7 +138,8 @@ public final class ProtosWorkspacePackageApplicationExecution {
                     stderrBackend,
                     stdinEncodingBinding,
                     stdoutEncodingBinding,
-                    stderrEncodingBinding);
+                    stderrEncodingBinding,
+                    filesystemGrant);
         }
     }
 
@@ -171,7 +208,9 @@ public final class ProtosWorkspacePackageApplicationExecution {
 
     /**
      * Explicit application bootstrap authority shared by every package-backed application route:
-     * arguments, environment, standard-stream backends and exact Encoding bindings.
+     * arguments, environment, standard-stream backends, exact Encoding bindings and the optional
+     * D248-B Filesystem grant. The grant is the CLI-selected host directory, never the project
+     * root, and it reaches only the application Process bootstrapped from this authority.
      */
     record ApplicationAuthority(
             List<String> applicationArguments,
@@ -182,8 +221,33 @@ public final class ProtosWorkspacePackageApplicationExecution {
             ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
             String stdinEncodingBinding,
             String stdoutEncodingBinding,
-            String stderrEncodingBinding) {
+            String stderrEncodingBinding,
+            ProtosStandaloneHostedExecution.FilesystemGrant filesystemGrant) {
+        ApplicationAuthority(
+                List<String> applicationArguments,
+                ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
+                List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
+                ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+                ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+                ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+                String stdinEncodingBinding,
+                String stdoutEncodingBinding,
+                String stderrEncodingBinding) {
+            this(
+                    applicationArguments,
+                    environmentNameDomain,
+                    environmentEntries,
+                    stdinBackend,
+                    stdoutBackend,
+                    stderrBackend,
+                    stdinEncodingBinding,
+                    stdoutEncodingBinding,
+                    stderrEncodingBinding,
+                    ProtosStandaloneHostedExecution.FilesystemGrant.NONE);
+        }
+
         ApplicationAuthority {
+            Objects.requireNonNull(filesystemGrant, "filesystemGrant");
             Objects.requireNonNull(applicationArguments, "applicationArguments");
             Objects.requireNonNull(environmentNameDomain, "environmentNameDomain");
             Objects.requireNonNull(environmentEntries, "environmentEntries");
@@ -247,39 +311,74 @@ public final class ProtosWorkspacePackageApplicationExecution {
                     case HOST_NETWORK -> runtimeHost.provisionHostNetwork(prelude);
                 };
 
-        ProtosEntropyCapabilityValue entropy =
-                switch (entropyGrant) {
-                    case NONE -> null;
-                    case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
-                };
-
-        ProtosStandaloneProcessBootstrap.Result bootstrap;
-        try {
-            bootstrap = ProtosStandaloneProcessBootstrap.create(
-                        prelude,
-                        authority.applicationArguments(),
-                        authority.environmentNameDomain(),
-                        authority.environmentEntries(),
-                        authority.stdinBackend(),
-                        authority.stdoutBackend(),
-                        authority.stderrBackend(),
-                        stdinEncoding,
-                        stdoutEncoding,
-                        stderrEncoding,
-                        null,
-                        network,
-                        null,
-                        entropy);
-        } catch (RuntimeException | Error failure) {
-            if (entropy != null) {
-                entropy.retireForRuntime();
+        try (ProtosStandaloneHostedExecution.FilesystemProvisioning filesystem =
+                ProtosStandaloneHostedExecution.FilesystemProvisioning.provision(
+                        authority.filesystemGrant())) {
+            ProtosEntropyCapabilityValue entropy =
+                    switch (entropyGrant) {
+                        case NONE -> null;
+                        case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
+                    };
+            ProtosStandaloneProcessBootstrap.Result bootstrap;
+            try {
+                bootstrap = createApplicationProcess(
+                        prelude, authority, stdinEncoding, stdoutEncoding, stderrEncoding,
+                        filesystem, network, entropy);
+            } catch (RuntimeException | Error failure) {
+                if (entropy != null) {
+                    entropy.retireForRuntime();
+                }
+                throw failure;
             }
-            throw failure;
+            return executeBootstrappedEntry(
+                    prelude, resolver, entryKey, bootstrap, filesystem,
+                    awaitTermination, failureMessage, processObserver, runtimeHost);
         }
+    }
+
+    private static ProtosStandaloneProcessBootstrap.Result createApplicationProcess(
+            ProtosPrelude prelude,
+            ApplicationAuthority authority,
+            ProtosEncodingValue stdinEncoding,
+            ProtosEncodingValue stdoutEncoding,
+            ProtosEncodingValue stderrEncoding,
+            ProtosStandaloneHostedExecution.FilesystemProvisioning filesystem,
+            ProtosNetworkCapabilityValue network,
+            ProtosEntropyCapabilityValue entropy) {
+        return ProtosStandaloneProcessBootstrap.create(
+                prelude,
+                authority.applicationArguments(),
+                authority.environmentNameDomain(),
+                authority.environmentEntries(),
+                authority.stdinBackend(),
+                authority.stdoutBackend(),
+                authority.stderrBackend(),
+                stdinEncoding,
+                stdoutEncoding,
+                stderrEncoding,
+                filesystem.marker(),
+                network,
+                null,
+                entropy);
+    }
+
+    private static ProtosExecutionOutcome executeBootstrappedEntry(
+            ProtosPrelude prelude,
+            ProtosModuleResolver resolver,
+            ProtosModuleKey entryKey,
+            ProtosStandaloneProcessBootstrap.Result bootstrap,
+            ProtosStandaloneHostedExecution.FilesystemProvisioning filesystem,
+            boolean awaitTermination,
+            String failureMessage,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
         ProtosProcessRuntime process = bootstrap.process();
         ProtosPolyglotProcessContext processContext = null;
 
         try {
+            // Same marker/bootstrap/operation binding as a standalone SOURCE entry; the Process is
+            // terminated below if binding fails, before any guest source runs.
+            filesystem.bind(bootstrap, prelude, runtimeHost);
             processContext =
                     runtimeHost.hostProcess(
                             process,
@@ -369,40 +468,46 @@ public final class ProtosWorkspacePackageApplicationExecution {
                     case HOST_NETWORK -> runtimeHost.provisionHostNetwork(prelude);
                 };
 
-        ProtosEntropyCapabilityValue entropy =
-                switch (entropyGrant) {
-                    case NONE -> null;
-                    case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
-                };
-
-        ProtosStandaloneProcessBootstrap.Result bootstrap;
-        try {
-            bootstrap = ProtosStandaloneProcessBootstrap.create(
-                        prelude,
-                        authority.applicationArguments(),
-                        authority.environmentNameDomain(),
-                        authority.environmentEntries(),
-                        authority.stdinBackend(),
-                        authority.stdoutBackend(),
-                        authority.stderrBackend(),
-                        stdinEncoding,
-                        stdoutEncoding,
-                        stderrEncoding,
-                        null,
-                        network,
-                        null,
-                        entropy);
-        } catch (RuntimeException | Error failure) {
-            if (entropy != null) {
-                entropy.retireForRuntime();
+        try (ProtosStandaloneHostedExecution.FilesystemProvisioning filesystem =
+                ProtosStandaloneHostedExecution.FilesystemProvisioning.provision(
+                        authority.filesystemGrant())) {
+            ProtosEntropyCapabilityValue entropy =
+                    switch (entropyGrant) {
+                        case NONE -> null;
+                        case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
+                    };
+            ProtosStandaloneProcessBootstrap.Result bootstrap;
+            try {
+                bootstrap = createApplicationProcess(
+                        prelude, authority, stdinEncoding, stdoutEncoding, stderrEncoding,
+                        filesystem, network, entropy);
+            } catch (RuntimeException | Error failure) {
+                if (entropy != null) {
+                    entropy.retireForRuntime();
+                }
+                throw failure;
             }
-            throw failure;
+            return executeBootstrappedService(
+                    prelude, entryKey, bootstrap, filesystem, serviceBinding,
+                    processObserver, runtimeHost);
         }
+    }
 
+    private static boolean executeBootstrappedService(
+            ProtosPrelude prelude,
+            ProtosModuleKey entryKey,
+            ProtosStandaloneProcessBootstrap.Result bootstrap,
+            ProtosStandaloneHostedExecution.FilesystemProvisioning filesystem,
+            String serviceBinding,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
         ProtosProcessRuntime process = bootstrap.process();
         ProtosPolyglotProcessContext processContext = null;
 
         try {
+            // The backend stays live past READY and is revoked only at Process termination.
+            filesystem.bind(bootstrap, prelude, runtimeHost);
             processContext =
                     runtimeHost.hostProcess(
                             process,

@@ -1361,7 +1361,8 @@ final class ProtosPreparedCalls {
             if ((activation.task().isPresent()
                             || activation.deferredCPrimeOperationForRuntime().isPresent()
                             || activation.deferredCPrimeReleaseForRuntime().isPresent()
-                            || ProtosHostEntrySuspension.suspendible(activation))
+                            || ProtosHostEntrySuspension.suspendible(activation)
+                            || ProtosActorBootstrapSuspension.admitsNativeContinuation(activation))
                     && nativeBody
                             instanceof ProtosSuspensionCapableNativeClosureBody
                                     suspensionCapable) {

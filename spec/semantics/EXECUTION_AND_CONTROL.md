@@ -761,6 +761,11 @@ Resumption continues inside the same protected extent. A single `ensure`
 installation therefore executes its cleanup exactly once on semantic scope exit,
 not once per physical suspension/replay segment.
 
+This includes a suspension of an Actor initialization continuation in a pending
+`Future.value()` (D251-A1, `../concurrency/FUTURES_AND_TASKS.md` §29, Actor
+initialization suspension): it is not an exit from an enclosing `ensure` scope,
+and its resumption does not repeat the protected body.
+
 The same rule applies while cleanup itself is running: cleanup may explicitly
 suspend and later resume without re-invoking the protected body or repeating
 already-completed cleanup effects.

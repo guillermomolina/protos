@@ -230,6 +230,16 @@ non-invokable bootstrap binding, an unhandled Error from bootstrap invocation,
 or failure to produce the required behavior prevents `READY` and is ordinary
 Actor initialization failure.
 
+Initialization is **logically single but physically suspendible** (D251-A1,
+`FUTURES_AND_TASKS.md` §29, Actor initialization suspension). The initial
+SOURCE or MODULE, the selection of the bootstrap binding, its invocation, and
+the fixing of the behavior object form one initialization sequence. That
+sequence may suspend any number of times in `value()` calls on pending Futures,
+in the initial module, in a nested import it executes, or in the binding.
+`Actor.spawn` still returns the `ActorRef` after the creation cutover and never
+waits for that sequence. There is no second initialization protocol and no
+provisional or placeholder behavior.
+
 This representation deliberately resembles a code-identity-plus-arguments model:
 code is resolved and executed inside the destination Actor while only permitted
 values cross the isolation boundary. It does not create a second transferable
@@ -345,6 +355,18 @@ If initialization fails with an unhandled error, that is an unhandled fatal
 failure of that Actor incarnation. The Actor never reaches READY and instead
 terminates. Its failure authority observes the failure and applies the ordinary
 Actor-failure policy.
+
+The initialization sequence of §8 may suspend in pending `value()` calls
+(D251-A1). Neither a suspension nor an internal Future completion processed
+while it is suspended enables message dispatch before `READY`; accepted
+deliveries stay retained under their ordinary bounds and backpressure. The
+behavior object is fixed exactly once, only after the bootstrap binding
+invocation completed normally, and `INITIALIZING -> READY` happens at most once.
+An unhandled Error in any segment of the sequence, including a resumed one,
+keeps the existing fatality of the Actor (or RootActor) and never publishes
+`READY`. A stop request or termination while the sequence is suspended prevents
+it from continuing; it does not turn the initialization failure into a
+retroactive synchronous failure of `Actor.spawn`.
 
 A RootActor started through the optional message-service bootstrap entry of §32
 follows this lifecycle exactly: it dispatches no external message while
@@ -2332,6 +2354,18 @@ selection is not revisited for that Process incarnation.
      that same behavior object under §§11 and 12. Its behavior identity is
      stable; nothing installs or replaces a behavior again for that
      incarnation.
+
+  Steps 2 through 5 are the single, physically suspendible initialization
+  sequence of §8 and §9 (D251-A1): the initial module, a nested import, or the
+  binding may suspend in `value()` on a pending Future while the RootActor
+  stays `INITIALIZING` and retains its exclusivity. For the host, the
+  message-service bootstrap remains one synchronous operation that completes
+  only at the `READY` cutover or at initialization failure or termination; a
+  suspension is never reported as provisional success. Termination of the
+  Process while the sequence is suspended invalidates it without running guest
+  code; a segment of the sequence already executing when termination begins
+  finishes that segment first and is then invalidated in the same way
+  (`FUTURES_AND_TASKS.md` §29, rule 9).
 
   A missing binding, an inherited-only binding, a non-invokable binding, a
   result that is not an ordinary behavior object (including `null` and a

@@ -77,6 +77,16 @@ final class ProtosCliTest {
         assertTrue(help.o.contains("PROTOS_DEBUG_READY"));
         assertTrue(help.o.contains("explicit program output"));
         assertTrue(help.o.contains("protos format [<file>]"));
+        // I155 / D248-B: the explicit Filesystem grant forms, without changing earlier lines.
+        assertTrue(help.o.contains("protos --allow-filesystem=<dir> <file> [args...]"));
+        assertTrue(help.o.contains("protos --allow-filesystem=<dir> -e <source> [args...]"));
+        assertTrue(help.o.contains("protos --allow-filesystem=<dir>\n"));
+        assertTrue(help.o.contains("protos run --allow-filesystem=<dir> <entry> [args...]"));
+        assertTrue(help.o.contains("protos debug --allow-filesystem=<dir> <file> [args...]"));
+        assertTrue(help.o.contains("never created"));
+        assertTrue(help.o.contains("not available to bundled Tools"));
+        assertFalse(help.o.contains("--allow-all"));
+        assertFalse(help.o.contains("mkdir"));
 
         String expectedIdentity =
                 ProtosCli.versionIdentity(
@@ -353,6 +363,17 @@ final class ProtosCliTest {
     @Test
     void ordinaryCliApplicationDoesNotReceivePackageToolFilesystemAuthority() {
         assertNotEquals(0, run("-e", "filesystem").c);
+    }
+
+    @Test
+    void filesystemBindingIsAbsentByDefaultAndPresentOnlyUnderExplicitGrant(@TempDir Path dir) {
+        R absent = run("-e", "filesystem");
+        assertEquals(1, absent.c);
+        assertTrue(absent.e.startsWith("Error:"), absent.e);
+
+        R granted = run("--allow-filesystem=" + dir, "-e", "print(filesystem === filesystem)");
+        assertEquals(0, granted.c, granted.e);
+        assertEquals("true\n", granted.o);
     }
 
     @Test

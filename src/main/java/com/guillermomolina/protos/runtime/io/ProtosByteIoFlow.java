@@ -340,13 +340,42 @@ public final class ProtosByteIoFlow {
             }
         }
         if(buffered!=null){completeReadData(r,buffered);return;}
+        ReadDelivery delivery=new ReadDelivery(r);
+        delivery.synchronousCaller=Thread.currentThread();
         try{
             setCancellation(r,backend.read(ProtosNumericValueSupport.exactInt(r.number),new ReadCompletion(){
-                public void data(byte[] b){completeReadData(r,b);}
-                public void eof(){if(r.op.commit())r.op.resolve(ProtosNullValue.INSTANCE);finish(r);}
-                public void failed(){failIo(r);finish(r);}
+                public void data(byte[] b){byte[] copy=Objects.requireNonNull(b).clone();delivery.deliver(()->completeReadData(r,copy));}
+                public void eof(){delivery.deliver(()->{if(r.op.commit())r.op.resolve(ProtosNullValue.INSTANCE);finish(r);});}
+                public void failed(){delivery.deliver(()->{failIo(r);finish(r);});}
             }));
-        }catch(RuntimeException ex){failIo(r);finish(r);}
+        }catch(RuntimeException ex){if(delivery.claim()){failIo(r);finish(r);}}
+        finally{delivery.synchronousCaller=null;}
+    }
+
+    /**
+     * I158: one read's single host completion. A callback that runs inside the still-active
+     * backend {@code read()} call on the caller's thread keeps its synchronous behavior. Any later
+     * callback, typically from a host poller thread, carries only inert host data (copied bytes,
+     * EOF or failure) into a targeted completion of the owning Actor domain, which alone builds the
+     * Protos result, commits and resolves the Future and advances the read queue. A duplicate
+     * callback is ignored; a completion refused or discarded by a terminating Actor produces no
+     * guest outcome.
+     */
+    private final class ReadDelivery{
+        private final Request request;
+        private final java.util.concurrent.atomic.AtomicBoolean claimed=new java.util.concurrent.atomic.AtomicBoolean();
+        volatile Thread synchronousCaller;
+        ReadDelivery(Request request){this.request=request;}
+        boolean claim(){return claimed.compareAndSet(false,true);}
+        void deliver(Runnable action){
+            if(!claim())return;
+            if(synchronousCaller==Thread.currentThread()){action.run();return;}
+            try{
+                domain.enqueueTargetedFutureCompletionForRuntime(request.op.future(),()->{action.run();return true;});
+            }catch(IllegalStateException terminatingActor){
+                // The owning Actor is terminating: the read outcome is discarded without guest work.
+            }
+        }
     }
 
     private void completeReadData(Request r,byte[] bytes){

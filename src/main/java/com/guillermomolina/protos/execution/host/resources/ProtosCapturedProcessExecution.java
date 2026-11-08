@@ -247,6 +247,10 @@ public final class ProtosCapturedProcessExecution {
             return new Result(outcome, stdout.snapshot(), stderr.snapshot());
         } finally {
             bootstrap.process().requestTerminationForRuntime();
+            bootstrap.process().awaitTerminationForRuntime();
+            bootstrap.process()
+                    .executionHostForRuntime()
+                    .ifPresent(host -> host.awaitTerminalDispositionForRuntime());
         }
     }
 

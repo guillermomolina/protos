@@ -345,8 +345,15 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
 
     @Override
     public void processTerminatedForRuntime() {
+        // D248-B: the Process-owned standalone Filesystem is revoked first, so no File of this
+        // Process stays usable after its terminal boundary.
+        Throwable filesystemFailure = runtimeHost.releaseProcessFilesystemForRuntime(process);
         // Process-owned provider resources disappear before the Process Context is released.
-        foreignCleanupFailure = foreignProviders.closeForRuntime();
+        Throwable foreignFailure = foreignProviders.closeForRuntime();
+        if (filesystemFailure != null && foreignFailure != null) {
+            filesystemFailure.addSuppressed(foreignFailure);
+        }
+        foreignCleanupFailure = filesystemFailure != null ? filesystemFailure : foreignFailure;
         try {
             context.requestClose();
         } catch (RuntimeException | Error failure) {

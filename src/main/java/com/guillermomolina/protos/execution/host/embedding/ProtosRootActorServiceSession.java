@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.FilesystemGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
 import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
@@ -203,8 +204,58 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
                 networkGrant,
                 resolverGrant,
                 entropyGrant,
+                FilesystemGrant.NONE,
                 applicationModules,
                 ProtosPolyglotRuntimeHost::open,
+                (activation, process) -> {});
+    }
+
+    /**
+     * As {@link #open(Path, Path, String, List, InputStream, OutputStream, OutputStream,
+     * NetworkGrant, ResolverGrant, Map)}, additionally applying the independent D248-B Filesystem
+     * selection; see {@link #openWithHost(Path, Path, String, List, InputStream, OutputStream,
+     * OutputStream, NetworkGrant, ResolverGrant, FilesystemGrant, Map, Supplier, BiConsumer)}.
+     */
+    public static ProtosRootActorServiceSession open(
+            Path coreRoot,
+            Path sourceFile,
+            String bootstrapBinding,
+            List<String> applicationArguments,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            FilesystemGrant filesystemGrant,
+            Map<String, String> applicationModules)
+            throws IOException {
+        return openWithHost(
+                coreRoot,
+                sourceFile,
+                bootstrapBinding,
+                applicationArguments,
+                in,
+                out,
+                err,
+                networkGrant,
+                resolverGrant,
+                EntropyGrant.NONE,
+                filesystemGrant,
+                applicationModules,
+                ProtosPolyglotRuntimeHost::open,
+                (activation, process) -> {});
+    }
+
+    /** Explicit independent Entropy and Filesystem selection for service embedding. */
+    public static ProtosRootActorServiceSession open(
+            Path coreRoot, Path sourceFile, String bootstrapBinding,
+            List<String> applicationArguments, InputStream in, OutputStream out, OutputStream err,
+            NetworkGrant networkGrant, ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant, FilesystemGrant filesystemGrant,
+            Map<String, String> applicationModules) throws IOException {
+        return openWithHost(coreRoot, sourceFile, bootstrapBinding, applicationArguments,
+                in, out, err, networkGrant, resolverGrant, entropyGrant, filesystemGrant,
+                applicationModules, ProtosPolyglotRuntimeHost::open,
                 (activation, process) -> {});
     }
 
@@ -239,12 +290,45 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
                 networkGrant,
                 resolverGrant,
                 EntropyGrant.NONE,
+                FilesystemGrant.NONE,
                 applicationModules,
                 runtimeHostFactory,
                 bootstrapHook);
     }
 
-    /** D243-C service entry with independently selected Entropy. */
+    /** D243-C compatibility: Entropy grant without a Filesystem grant. */
+    public static ProtosRootActorServiceSession openWithHost(
+            Path coreRoot, Path sourceFile, String bootstrapBinding,
+            List<String> applicationArguments, InputStream in, OutputStream out, OutputStream err,
+            NetworkGrant networkGrant, ResolverGrant resolverGrant, EntropyGrant entropyGrant,
+            Map<String, String> applicationModules,
+            Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory,
+            BiConsumer<ProtosActivation, ProtosProcessRuntime> bootstrapHook) throws IOException {
+        return openWithHost(
+                coreRoot, sourceFile, bootstrapBinding, applicationArguments, in, out, err,
+                networkGrant, resolverGrant, entropyGrant, FilesystemGrant.NONE,
+                applicationModules, runtimeHostFactory, bootstrapHook);
+    }
+
+    /** D248-B compatibility: Filesystem grant without an Entropy grant. */
+    public static ProtosRootActorServiceSession openWithHost(
+            Path coreRoot, Path sourceFile, String bootstrapBinding,
+            List<String> applicationArguments, InputStream in, OutputStream out, OutputStream err,
+            NetworkGrant networkGrant, ResolverGrant resolverGrant, FilesystemGrant filesystemGrant,
+            Map<String, String> applicationModules,
+            Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory,
+            BiConsumer<ProtosActivation, ProtosProcessRuntime> bootstrapHook) throws IOException {
+        return openWithHost(
+                coreRoot, sourceFile, bootstrapBinding, applicationArguments, in, out, err,
+                networkGrant, resolverGrant, EntropyGrant.NONE, filesystemGrant,
+                applicationModules, runtimeHostFactory, bootstrapHook);
+    }
+
+    /**
+     * RootActor service authority is selected independently: Entropy and confined
+     * Filesystem grants are never inferred from Network or Resolver. Filesystem
+     * custody survives READY but is revoked at Process termination.
+     */
     public static ProtosRootActorServiceSession openWithHost(
             Path coreRoot,
             Path sourceFile,
@@ -256,10 +340,12 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
             NetworkGrant networkGrant,
             ResolverGrant resolverGrant,
             EntropyGrant entropyGrant,
+            FilesystemGrant filesystemGrant,
             Map<String, String> applicationModules,
             Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory,
             BiConsumer<ProtosActivation, ProtosProcessRuntime> bootstrapHook)
             throws IOException {
+        Objects.requireNonNull(filesystemGrant, "filesystemGrant");
         Objects.requireNonNull(runtimeHostFactory, "runtimeHostFactory");
         Objects.requireNonNull(bootstrapHook, "bootstrapHook");
         Map<String, String> catalog =
@@ -302,6 +388,7 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
                             networkGrant,
                             resolverGrant,
                             entropyGrant,
+                            filesystemGrant,
                             runtimeHost);
             process = bootstrap.process();
             // bindProcess terminates the Process and closes the host itself when binding fails.

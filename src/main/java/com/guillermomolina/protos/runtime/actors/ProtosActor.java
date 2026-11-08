@@ -60,6 +60,59 @@ public final class ProtosActor {
             new LinkedHashSet<>();
     private final Set<ProtosActorGroupRuntime> routingGroups = new LinkedHashSet<>();
     private boolean terminationCutoverCleanupComplete;
+    /** I158: custodian of this incarnation's suspendible initialization, while one is live. */
+    private BootstrapCustody bootstrapCustody;
+
+    /**
+     * I158 / D251-A1 internal custody of a live Task-free initialization sequence.
+     *
+     * <p>{@link #terminationBegun()} is invoked exactly once, outside this Actor's monitor, by the
+     * call that performs the termination cutover, on whatever thread requested termination. It is
+     * only the immediate invalidation phase: it prevents any resumption, makes pending
+     * notifications inert, removes the Future observer and reports that READY is no longer
+     * possible. Abandoning the retained C-prime transports is deferred to the domain owner; until
+     * then the domain reports termination cleanup, so this Actor cannot become TERMINATED. A
+     * segment that was already executing is not interrupted: its own domain reservation (taken for
+     * every first or resumed segment) equally keeps this Actor out of TERMINATED until it exits,
+     * and READY can no longer be published because the lifecycle left INITIALIZING. It must never
+     * execute guest code.
+     */
+    public interface BootstrapCustody {
+        void terminationBegun();
+    }
+
+    /**
+     * I158: registers the custodian of this incarnation's initialization.
+     *
+     * @return false when the Actor is no longer INITIALIZING; the termination cutover already won
+     */
+    public boolean registerBootstrapCustodyForRuntime(BootstrapCustody custody) {
+        Objects.requireNonNull(custody, "custody");
+        synchronized (this) {
+            if (lifecycle.get() != LifecycleState.INITIALIZING) {
+                return false;
+            }
+            if (bootstrapCustody != null && bootstrapCustody != custody) {
+                throw new IllegalStateException("Actor initialization custody is already held");
+            }
+            bootstrapCustody = custody;
+            return true;
+        }
+    }
+
+    /** I158: the live initialization custodian, if any; read-only runtime inspection. */
+    public synchronized java.util.Optional<BootstrapCustody> bootstrapCustodyForRuntime() {
+        return java.util.Optional.ofNullable(bootstrapCustody);
+    }
+
+    /** I158: clears a custodian whose initialization reached a terminal outcome; idempotent. */
+    public void clearBootstrapCustodyForRuntime(BootstrapCustody custody) {
+        synchronized (this) {
+            if (bootstrapCustody == custody) {
+                bootstrapCustody = null;
+            }
+        }
+    }
 
     public ProtosActor(ProtosObjectValue actorRefPrototype) {
         this(
@@ -351,6 +404,18 @@ public final class ProtosActor {
                 }
                 if (transitioned) break;
             }
+        }
+
+        // I158: invalidate a suspended initialization before any other cutover consequence; the
+        // custodian runs no guest code and this monitor is not held while it releases observers.
+        // The custodian stays registered: it releases itself once nothing of the initialization
+        // remains (no retained continuation to abandon and no executing segment).
+        BootstrapCustody custody;
+        synchronized (this) {
+            custody = bootstrapCustody;
+        }
+        if (custody != null) {
+            custody.terminationBegun();
         }
 
         // The cutover owns cancellation, but producer callbacks may acquire another Actor's

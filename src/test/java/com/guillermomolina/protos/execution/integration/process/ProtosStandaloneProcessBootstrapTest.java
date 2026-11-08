@@ -148,6 +148,73 @@ final class ProtosStandaloneProcessBootstrapTest {
         assertFalse(absent.activation().context().hasLocalSlot("filesystem"));
     }
 
+    /**
+     * I155 / D248-B: the preallocated marker passed as {@code defaultFilesystem} is exactly the
+     * RootActor's bootstrap-local capability, and its operations are bound before any guest
+     * source runs; the backend is owned by the runtime host for that Process only.
+     */
+    @Test
+    void grantedStandaloneFilesystemMarkerIsTheBoundRootActorCapability(
+            @org.junit.jupiter.api.io.TempDir Path data) throws Exception {
+        ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
+        try {
+            ProtosStandaloneProcessBootstrap.Result granted =
+                    ProtosStandaloneHostedExecution.bootstrapProcess(
+                            CORE,
+                            new ProtosStandardLibraryModuleResolver(CORE.getParent()),
+                            List.of(),
+                            ProtosStandaloneHostedExecution.readableBackend(
+                                    java.io.InputStream.nullInputStream()),
+                            ProtosStandaloneHostedExecution.writableBackend(
+                                    java.io.OutputStream.nullOutputStream()),
+                            ProtosStandaloneHostedExecution.writableBackend(
+                                    java.io.OutputStream.nullOutputStream()),
+                            ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                            ProtosStandaloneHostedExecution.ResolverGrant.NONE,
+                            ProtosStandaloneHostedExecution.FilesystemGrant.directory(data),
+                            runtimeHost);
+            Object slot =
+                    granted.activation().context().readLocalSlot("filesystem").orElseThrow();
+            ProtosFilesystemValue filesystem = assertInstanceOf(ProtosFilesystemValue.class, slot);
+            assertTrue(filesystem.hasLocalSlot("open"));
+            assertTrue(filesystem.hasLocalSlot("entries"));
+            assertTrue(filesystem.hasLocalSlot("replace"));
+            assertTrue(filesystem.hasLocalSlot("remove"));
+            assertFalse(granted.activation().context().hasLocalSlot("network"));
+            assertFalse(granted.activation().context().hasLocalSlot("resolver"));
+            assertEquals(1, runtimeHost.processFilesystemCountForTesting());
+            granted.process().requestTerminationForRuntime();
+        } finally {
+            runtimeHost.close();
+        }
+        assertEquals(0, runtimeHost.processFilesystemCountForTesting());
+    }
+
+    @Test
+    void missingGrantedFilesystemRootFailsBootstrapWithoutAProcess(
+            @org.junit.jupiter.api.io.TempDir Path data) throws Exception {
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            assertThrows(
+                    ProtosStandaloneHostedExecution.FilesystemGrantProvisioningException.class,
+                    () -> ProtosStandaloneHostedExecution.bootstrapProcess(
+                            CORE,
+                            new ProtosStandardLibraryModuleResolver(CORE.getParent()),
+                            List.of(),
+                            ProtosStandaloneHostedExecution.readableBackend(
+                                    java.io.InputStream.nullInputStream()),
+                            ProtosStandaloneHostedExecution.writableBackend(
+                                    java.io.OutputStream.nullOutputStream()),
+                            ProtosStandaloneHostedExecution.writableBackend(
+                                    java.io.OutputStream.nullOutputStream()),
+                            ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                            ProtosStandaloneHostedExecution.ResolverGrant.NONE,
+                            ProtosStandaloneHostedExecution.FilesystemGrant.directory(
+                                    data.resolve("missing")),
+                            runtimeHost));
+            assertEquals(0, runtimeHost.processFilesystemCountForTesting());
+        }
+    }
+
     @Test
     void invalidBootstrapDataRemainsStableForPublicProcessAccessors()
             throws Exception {
@@ -199,5 +266,85 @@ final class ProtosStandaloneProcessBootstrapTest {
         return assertInstanceOf(
                 ProtosEncodingValue.class,
                 prelude.encodingPrototype().readLocalSlot(name).orElseThrow());
+    }
+
+    // ---- I158 / D251-A1: bootstrap locals across a real suspension ------------------------
+
+    private static ProtosObjectValue initializeRootWithSuspension(
+            String specifier,
+            com.guillermomolina.protos.runtime.modules.ProtosModuleKey key,
+            String source)
+            throws Exception {
+        ProtosI158ActorBootstrapSuspensionTest.Harness x =
+                ProtosI158ActorBootstrapSuspensionTest.Harness.create(specifier, key, source);
+        com.guillermomolina.protos.runtime.ProtosActor root = x.process().rootActorForRuntime();
+        List<?> transferred =
+                com.guillermomolina.protos.runtime.ProtosActorValueTransfer.snapshotSpawnArguments(
+                        List.of(x.acquire()), x.activation());
+        java.util.concurrent.CompletableFuture<Boolean> result =
+                new java.util.concurrent.CompletableFuture<>();
+        Thread host =
+                new Thread(
+                        () -> {
+                            try {
+                                result.complete(
+                                        new ProtosActorBootstrap(x.moduleRuntime())
+                                                .initialize(root, x.prelude(), key, "boot", transferred));
+                            } catch (Throwable failure) {
+                                result.completeExceptionally(failure);
+                            }
+                        },
+                        "i158-root-locals");
+        host.setDaemon(true);
+        host.start();
+        // The completion is released only after the guest is provably suspended on it.
+        assertTrue(x.backend().accepted.await(5, java.util.concurrent.TimeUnit.SECONDS));
+        assertFalse(result.isDone());
+        assertEquals(com.guillermomolina.protos.runtime.ProtosActor.LifecycleState.INITIALIZING, root.lifecycleState());
+        x.backend().pending.pollFirst().failed();
+        assertTrue(result.get(5, java.util.concurrent.TimeUnit.SECONDS));
+        assertEquals(0, root.executionDomain().liveTaskCount());
+        ProtosObjectValue behavior = root.currentBehavior().orElseThrow();
+        behavior.createLocalSlot("i158TestModule", root.moduleState().lookup(key).orElseThrow().instance());
+        return behavior;
+    }
+
+    @Test
+    void i158SourceBootstrapLocalKeepsItsIdentityAcrossASuspension() throws Exception {
+        ProtosObjectValue behavior =
+                initializeRootWithSuspension(
+                        "app",
+                        com.guillermomolina.protos.runtime.modules.ProtosModuleKey.source("canonical:app"),
+                        """
+                        firstSeen: process
+                        boot: (acceptor) => {
+                            Error.handle(() => { acceptor.accept().value() }, (error) => { null })
+                            { before: firstSeen; after: process }
+                        }
+                        """);
+        Object before = behavior.readLocalSlot("before").orElseThrow();
+        assertInstanceOf(ProtosProcessCapabilityValue.class, before);
+        assertSame(before, behavior.readLocalSlot("after").orElseThrow());
+    }
+
+    @Test
+    void i158ModuleBootstrapLocalStaysPrivateAcrossASuspension() throws Exception {
+        ProtosObjectValue behavior =
+                initializeRootWithSuspension(
+                        "mod:app",
+                        com.guillermomolina.protos.runtime.modules.ProtosModuleKey.module("canonical:mod:app"),
+                        """
+                        firstSeen: process
+                        this.boot: (acceptor) => {
+                            Error.handle(() => { acceptor.accept().value() }, (error) => { null })
+                            { before: firstSeen; after: process }
+                        }
+                        """);
+        assertSame(
+                behavior.readLocalSlot("before").orElseThrow(),
+                behavior.readLocalSlot("after").orElseThrow());
+        ProtosObjectValue publicModule = (ProtosObjectValue) behavior.readLocalSlot("i158TestModule").orElseThrow();
+        assertFalse(publicModule.hasLocalSlot("process"));
+        assertFalse(publicModule.hasLocalSlot("firstSeen"));
     }
 }
