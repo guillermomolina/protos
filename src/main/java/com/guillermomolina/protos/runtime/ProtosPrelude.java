@@ -34,6 +34,7 @@ public final class ProtosPrelude {
     private final ProtosObjectValue bindings;
     private final ProtosObjectValue contextPrototype;
     private final ProtosObjectValue errorPrototype;
+    private final Object arrayPrototypeBinding;
     private final ProtosObjectValue runtimeBytesPrototype;
     private final ProtosObjectValue runtimeActorRefPrototype;
     private final ProtosObjectValue runtimeTcpConnectionPrototype;
@@ -411,6 +412,8 @@ public final class ProtosPrelude {
                     "prelude Error binding must be an ordinary child of Object");
         }
         this.errorPrototype = errorPrototype;
+        // Frozen Prelude binding: resolve once, not during every Array creation.
+        this.arrayPrototypeBinding = bindings.readLocalSlot("Array").orElse(null);
     }
 
     private static void requireFrozenDirectChildOfObject(
@@ -854,14 +857,13 @@ public final class ProtosPrelude {
     }
 
     public ProtosObjectValue arrayPrototype() {
-        Optional<Object> found = bindings.readLocalSlot("Array");
-        if (found.isEmpty()) {
+        Object binding = arrayPrototypeBinding;
+        if (binding == null) {
             // TEST009-AI: a Prelude whose frozen bindings lack Array is a real but cold
             // failure; keep its NoSuchElementException out of partial evaluation.
             CompilerDirectives.transferToInterpreter();
             throw new NoSuchElementException("No value present");
         }
-        Object binding = found.orElse(null);
         if (!(binding instanceof ProtosObjectValue arrayPrototype)) {
             throw new IllegalStateException(
                     "standard Array binding is not an ordinary object");

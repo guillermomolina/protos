@@ -1016,7 +1016,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 long[] values,
                 @Bind VirtualFrame frame) {
             ProtosPrelude prelude =
-                    ProtosFrameArguments.preludeOrNull(
+                    ProtosFrameArguments.admittedPreludeOrNull(
                             frame.getArguments());
 
             if (prelude == null) {
