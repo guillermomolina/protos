@@ -50,7 +50,7 @@ import java.util.Objects;
  * first, the homes the abandoned frames own.
  *
  * <p>Like a Bytecode root, the transport reports a control transfer leaving it
- * in bridged form ({@link ProtosBytecodeControlTransferException}).
+ * directly as {@link ControlFlowException}.
  *
  * <p>Diagnostic continuity (CLI008): the transport keeps the logical location
  * of its terminal call, created only on a real suspension.
@@ -237,12 +237,9 @@ final class ProtosTailCallContinuation implements TruffleObject {
             next = Objects.requireNonNull(
                     resume(pending, resumeValue),
                     "resumed terminal Closure continuation returned null");
-        } catch (ProtosBytecodeControlTransferException bridged) {
-            state = State.DONE;
-            throw bridged;
         } catch (ControlFlowException transfer) {
             state = State.DONE;
-            throw ProtosBytecodeControlTransferException.bridge(transfer);
+            throw transfer;
         } catch (AbstractTruffleException failure) {
             state = State.DONE;
             ProtosDiagnosticTraceCapture.recordResumedTerminalCaller(failure, callerLocation);

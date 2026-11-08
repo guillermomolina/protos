@@ -171,11 +171,9 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
                 if (!eligibleForPersistentLexicalObservation(activation)) {
                     return List.of();
                 }
-                List<String> names =
-                        activation.lexicalBindingNamesForRuntime();
-                return eligibleForPersistentLexicalObservation(activation)
-                        ? names
-                        : List.of();
+                // I115: lexical-name observation is temporarily
+                // unavailable through the new activation representation.
+                return List.of();
             });
         } catch (RuntimeException unavailable) {
             return List.of();

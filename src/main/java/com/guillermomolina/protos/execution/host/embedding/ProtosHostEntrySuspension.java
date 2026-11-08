@@ -109,14 +109,12 @@ final class ProtosHostEntrySuspension {
             Object[] supplied,
             ProtosActivation caller) {
         Object outcome;
-        try {
+
             outcome =
                     Objects.requireNonNull(
                             ProtosCallRequest.call(closure, List.of(supplied), caller).callUncached(),
                             "host entry returned null");
-        } catch (ProtosBytecodeControlTransferException bridged) {
-            throw bridged.transfer();
-        }
+
         return drive(embedding, outcome);
     }
 
@@ -125,15 +123,13 @@ final class ProtosHostEntrySuspension {
         while (ProtosTailCallContinuation.isPending(outcome)) {
             Object continuation = outcome;
             awaitReady(embedding, suspensionLeaf(continuation).dependency(), continuation);
-            try {
+
                 outcome =
                         Objects.requireNonNull(
                                 ProtosTailCallContinuation.resume(
                                         continuation, ProtosNullValue.INSTANCE),
                                 "resumed host-entry continuation returned null");
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
+
         }
         return ProtosNumericValueSupport.guestValue(outcome);
     }

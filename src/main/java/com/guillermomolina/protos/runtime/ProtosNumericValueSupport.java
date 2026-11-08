@@ -797,21 +797,21 @@ public final class ProtosNumericValueSupport {
      */
 
     public static Object bitAndIntegers(Object left, Object right, ProtosPrelude prelude) {
-        if (left instanceof ProtosIntegerValue a && right instanceof ProtosIntegerValue b) {
+        if (left instanceof Long a && right instanceof Long b) {
             return integer(a.longValue() & b.longValue());
         }
         return bigBitwiseResult(BitwiseOperation.AND, left, right, prelude);
     }
 
     public static Object bitOrIntegers(Object left, Object right, ProtosPrelude prelude) {
-        if (left instanceof ProtosIntegerValue a && right instanceof ProtosIntegerValue b) {
+        if (left instanceof Long a && right instanceof Long b) {
             return integer(a.longValue() | b.longValue());
         }
         return bigBitwiseResult(BitwiseOperation.OR, left, right, prelude);
     }
 
     public static Object bitXorIntegers(Object left, Object right, ProtosPrelude prelude) {
-        if (left instanceof ProtosIntegerValue a && right instanceof ProtosIntegerValue b) {
+        if (left instanceof Long a && right instanceof Long b) {
             return integer(a.longValue() ^ b.longValue());
         }
         return bigBitwiseResult(BitwiseOperation.XOR, left, right, prelude);
@@ -819,7 +819,7 @@ public final class ProtosNumericValueSupport {
 
     /** The complement {@code -x - 1}. */
     public static Object bitNotInteger(Object value, ProtosPrelude prelude) {
-        if (value instanceof ProtosIntegerValue a) {
+        if (value instanceof Long a) {
             return integer(~a.longValue());
         }
         return bigBitNot(value, prelude);
@@ -833,7 +833,7 @@ public final class ProtosNumericValueSupport {
         if (integerSignum(value) == 0) {
             return integer(0L);
         }
-        if (value instanceof ProtosIntegerValue a && count instanceof ProtosIntegerValue c) {
+        if (value instanceof Long a && count instanceof Long c) {
             long x = a.longValue();
             long n = c.longValue();
             // Java masks shift counts, so the round-trip check is valid only below 63.
@@ -852,9 +852,11 @@ public final class ProtosNumericValueSupport {
      * {@code count}. The count is never reduced modulo a host word width.
      */
     public static Object shiftRightInteger(Object value, Object count, ProtosPrelude prelude) {
-        if (value instanceof ProtosIntegerValue a) {
+        if (value instanceof Long a) {
             long x = a.longValue();
-            if (count instanceof ProtosIntegerValue c && c.longValue() < Long.SIZE) {
+            if (count instanceof Long c
+                    && c.longValue() >= 0L
+                    && c.longValue() < Long.SIZE) {
                 return integer(x >> c.longValue());
             }
             return integer(x < 0L ? -1L : 0L);
@@ -889,7 +891,9 @@ public final class ProtosNumericValueSupport {
     @TruffleBoundary
     private static Object bigShiftLeft(Object value, Object count, ProtosPrelude prelude) {
         // value is nonzero here; a count beyond the host shift range cannot be represented.
-        if (!(count instanceof ProtosIntegerValue c) || c.longValue() > Integer.MAX_VALUE) {
+        if (!(count instanceof Long c)
+                || c.longValue() < 0L
+                || c.longValue() > Integer.MAX_VALUE) {
             throw new ArithmeticException("Integer shift result exceeds implementation resources");
         }
         return integer(exactBigInteger(value).shiftLeft((int) c.longValue()), prelude);
@@ -899,7 +903,7 @@ public final class ProtosNumericValueSupport {
     private static Object bigShiftRight(Object value, Object count, ProtosPrelude prelude) {
         BigInteger x = large(value).exactValue();
         // A count at or beyond the bit length leaves only the infinite sign extension.
-        if (!(count instanceof ProtosIntegerValue c) || c.longValue() >= x.bitLength()) {
+        if (!(count instanceof Long c) || c.longValue() >= x.bitLength()) {
             return integer(x.signum() < 0 ? -1L : 0L);
         }
         return integer(x.shiftRight((int) c.longValue()), prelude);

@@ -22,7 +22,6 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -75,7 +74,7 @@ public final class ProtosEntropyHostFacility {
                 grantedOrNull(activation, supplied.get(0));
 
         if (entropy == null
-                || !(supplied.get(1) instanceof ProtosIntegerValue count)) {
+                || !(supplied.get(1) instanceof Long count)) {
             return invalidArgument(activation);
         }
 

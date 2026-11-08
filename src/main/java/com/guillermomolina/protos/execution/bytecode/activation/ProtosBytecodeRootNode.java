@@ -22,7 +22,6 @@ import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.Prepare
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedErrorHandlerCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardImportCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardObjectCall;
-import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardObjectConstruct;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedArrayMatchCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedIdentityMapAtIfAbsentCall;
 import com.guillermomolina.protos.execution.ProtosStructuredMapQueryCalls.PreparedMapMatchCall;
@@ -574,10 +573,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * the former structured/C-prime interpreter did. Exceptional path only;
          * the classification is a compilation-final property of this root.
          */
-        if (!semanticActivationRoot) {
-            throw ProtosBytecodeControlTransferException.bridge(transfer);
-        }
-        throw ProtosBytecodeControlTransferException.bridge(transfer, bytecodeNode, bytecodeIndex);
+        throw transfer;
     }
 
     /*
@@ -2450,12 +2446,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         @Specialization
-        public static Object standardObjectConstruct(
-                PreparedStandardObjectConstruct prepared, Object result) {
-            return prepared.finish(result);
-        }
-
-        @Specialization
         public static Object standardImport(PreparedStandardImportCall prepared, Object result) {
             return prepared.finish(result);
         }
@@ -2809,12 +2799,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static Object terminal(
                 ProtosTailCallContinuation pending,
                 Object resumeValue) {
-            try {
+
                 return ProtosTailCallContinuation.resume(
                         pending, resumeValue);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
+
         }
 
         @Specialization(
@@ -2827,11 +2815,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         ContinuationRootNode cachedRoot,
                 @Cached("create(cachedRoot.getCallTarget())")
                         DirectCallNode node) {
-            try {
+
                 return node.call(result.getFrame(), resumeValue);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
+
         }
 
         @Specialization(replaces = "direct")
@@ -2839,14 +2825,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ContinuationResult result,
                 Object resumeValue,
                 @Cached IndirectCallNode node) {
-            try {
+
                 return node.call(
                         result.getContinuationCallTarget(),
                         result.getFrame(),
                         resumeValue);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
+
         }
 
         /* A builtin suspension leaf resumes through its own descriptor. */
@@ -3182,96 +3166,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosIoReleaseCPrimeExecution.Sequence sequence,
                 boolean completedOrSignalled) {
             return sequence.beginTransferCleanup(completedOrSignalled);
-        }
-    }
-
-    /**
-     * PLAT070: enters a mandatory finalizer during lifecycle-release transfer cleanup. TEST009-J:
-     * specialized on the four concrete prepared-call representations.
-     */
-    @Operation
-    public static final class IoReleaseEnterFinalizer {
-        @Specialization
-        public static Object ordinary(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence,
-                OrdinarySourceCall prepared,
-                @Shared("finalizerCall") @Cached IndirectCallNode node) {
-            return ProtosIoReleaseCPrimeExecution.enterFinalizer(sequence, prepared, node);
-        }
-
-        @Specialization
-        public static Object nativeCall(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence,
-                NativeCall prepared,
-                @Shared("finalizerCall") @Cached IndirectCallNode node) {
-            return ProtosIoReleaseCPrimeExecution.enterFinalizer(sequence, prepared, node);
-        }
-
-        @Specialization
-        public static Object immediate(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence,
-                ImmediateResultCall prepared,
-                @Shared("finalizerCall") @Cached IndirectCallNode node) {
-            return ProtosIoReleaseCPrimeExecution.enterFinalizer(sequence, prepared, node);
-        }
-
-        @Specialization
-        public static Object moduleInitialization(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence,
-                ModuleInitializationCall prepared,
-                @Shared("finalizerCall") @Cached IndirectCallNode node) {
-            return ProtosIoReleaseCPrimeExecution.enterFinalizer(sequence, prepared, node);
-        }
-    }
-
-    /**
-     * PLAT070: resumes a mandatory finalizer during lifecycle-release transfer cleanup. TEST009-J:
-     * specialized on the four concrete prepared-call representations.
-     */
-    @Operation
-    public static final class IoReleaseResumeFinalizer {
-        @Specialization
-        @TruffleBoundary
-        public static Object ordinary(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence,
-                OrdinarySourceCall prepared,
-                Object child,
-                Object resumeValue) {
-            return ProtosIoReleaseCPrimeExecution.resumeFinalizer(
-                    sequence, prepared, child, resumeValue);
-        }
-
-        @Specialization
-        @TruffleBoundary
-        public static Object nativeCall(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence,
-                NativeCall prepared,
-                Object child,
-                Object resumeValue) {
-            return ProtosIoReleaseCPrimeExecution.resumeFinalizer(
-                    sequence, prepared, child, resumeValue);
-        }
-
-        @Specialization
-        @TruffleBoundary
-        public static Object immediate(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence,
-                ImmediateResultCall prepared,
-                Object child,
-                Object resumeValue) {
-            return ProtosIoReleaseCPrimeExecution.resumeFinalizer(
-                    sequence, prepared, child, resumeValue);
-        }
-
-        @Specialization
-        @TruffleBoundary
-        public static Object moduleInitialization(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence,
-                ModuleInitializationCall prepared,
-                Object child,
-                Object resumeValue) {
-            return ProtosIoReleaseCPrimeExecution.resumeFinalizer(
-                    sequence, prepared, child, resumeValue);
         }
     }
 

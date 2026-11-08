@@ -32,6 +32,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMapConstruction;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalMultipleCreate;
+import com.guillermomolina.protos.semantic.ast.CanonicalNamedArgument;
 import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalObject;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
@@ -191,6 +192,8 @@ final class I115InlineStoragePlan {
             }
             case CanonicalReturn result -> walk(result.value(), materialized);
             case CanonicalSpread spread -> walk(spread.expression(), materialized);
+            case CanonicalNamedArgument named ->
+                    walk(named.expression(), materialized);
             case CanonicalIntrinsic ignored -> { }
             case CanonicalLiteral ignored -> { }
             case CanonicalLookup ignored -> { }

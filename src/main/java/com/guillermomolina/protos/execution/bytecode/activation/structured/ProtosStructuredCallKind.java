@@ -63,22 +63,6 @@ public enum ProtosStructuredCallKind {
         }
     },
 
-    /**
-     * D239-C1: the actual standard Object.construct allocation and init
-     * bridge. Private Bytecode DSL machinery, not a guest dispatch operation.
-     */
-    OBJECT_CONSTRUCT {
-        @Override
-        boolean admits(PreparedClosureCall prepared) {
-            return prepared.isStructuredObjectConstruct();
-        }
-
-        @Override
-        Object prepare(PreparedClosureCall prepared) {
-            return prepared.prepareStructuredObjectConstruct();
-        }
-    },
-
     IMPORT {
         @Override
         boolean admits(StructuredNativeInvocation prepared) {

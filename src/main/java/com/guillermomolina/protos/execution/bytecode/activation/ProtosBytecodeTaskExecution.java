@@ -206,8 +206,6 @@ final class ProtosBytecodeTaskExecution {
             }
             Objects.requireNonNull(outcome, "nested synchronous C-prime call returned null");
             return ProtosNumericValueSupport.guestValue(outcome);
-        } catch (ProtosBytecodeControlTransferException bridged) {
-            throw bridged.transfer();
         } finally {
             task.exitSynchronousForeignCallbackForRuntime();
         }

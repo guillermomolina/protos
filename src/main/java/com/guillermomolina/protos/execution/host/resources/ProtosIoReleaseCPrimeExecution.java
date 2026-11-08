@@ -6,10 +6,7 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIoReleaseExecution;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.ImmediateResultCall;
 import com.guillermomolina.protos.execution.ProtosPreparedCalls.ModuleInitializationCall;
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.NativeCall;
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
@@ -152,65 +149,6 @@ public final class ProtosIoReleaseCPrimeExecution {
     /** PLAT070 private result of a finalizer whose invocation was left by a held transfer. */
     private static final Object FINALIZER_TRANSFER_ESCAPED = new Object();
 
-    /**
-     * PLAT070: enters a mandatory finalizer during transfer cleanup exactly as {@code
-     * EnterClosureCall} does, except that a control transfer escaping it is held by {@code
-     * sequence} instead of abandoning the remaining finalizers.
-     */
-    static Object enterFinalizer(
-            Sequence sequence, PreparedClosureCall prepared, IndirectCallNode node) {
-        try {
-            if (prepared instanceof ImmediateResultCall immediate) {
-                return immediate.enterImmediate();
-            }
-            if (prepared instanceof NativeCall nativeCall) {
-                return nativeCall.enterNative();
-            }
-            if (prepared instanceof ModuleInitializationCall module && module.isImmediate()) {
-                return module.enterImmediate();
-            }
-            return node.call(prepared.bodyTarget(), prepared.targetArguments());
-        } catch (ControlFlowException transfer) {
-            return sequence.finalizerTransfer(prepared, transfer);
-        } catch (AbstractTruffleException failure) {
-            prepared.failIfModuleInitialization();
-            throw failure;
-        } catch (RuntimeException failure) {
-            throw prepared.mapRuntimeFailure(failure);
-        }
-    }
-
-    /**
-     * PLAT070: resumes a suspended mandatory finalizer during transfer cleanup exactly as {@code
-     * ResumeContinuation} does, with the same transfer holding as {@link #enterFinalizer}.
-     */
-    static Object resumeFinalizer(
-            Sequence sequence, PreparedClosureCall prepared, Object child, Object resumeValue) {
-        try {
-            if (child instanceof ProtosTailCallContinuation
-                    || child instanceof ContinuationResult) {
-                return ProtosTailCallContinuation.resume(child, resumeValue);
-            }
-            if (child instanceof ProtosNativeSuspension suspension) {
-                return ProtosBytecodeRootNode.ResumeContinuation.nativeSuspension(
-                        prepared, suspension, resumeValue);
-            }
-            if (child instanceof ProtosIoOperationSuspension suspension) {
-                return ProtosBytecodeRootNode.ResumeContinuation.ioOperationSuspension(
-                        prepared, suspension, resumeValue);
-            }
-            throw new IllegalStateException(
-                    "lifecycle release finalizer resumed an unsupported pending result");
-        } catch (ControlFlowException transfer) {
-            return sequence.finalizerTransfer(prepared, transfer);
-        } catch (AbstractTruffleException failure) {
-            prepared.failIfModuleInitialization();
-            throw failure;
-        } catch (RuntimeException failure) {
-            throw prepared.mapRuntimeFailure(failure);
-        }
-    }
-
     public static final class Sequence {
         private final ProtosIoReleaseExecution release;
         private final List<Step> steps;
@@ -338,21 +276,6 @@ public final class ProtosIoReleaseCPrimeExecution {
         }
 
         /**
-         * PLAT070: a control transfer left a mandatory finalizer during transfer cleanup. The
-         * finalizer's own prepared call still consumes a return to its own home; any other
-         * transfer is held, by identity, as the latest superseding transfer, and the finalizer is
-         * accounted as a failed invocation so the remaining finalizers still run.
-         */
-        Object finalizerTransfer(PreparedClosureCall prepared, ControlFlowException transfer) {
-            try {
-                return prepared.handleControlTransfer(transfer);
-            } catch (ControlFlowException escaping) {
-                laterTransfer = escaping;
-                return FINALIZER_TRANSFER_ESCAPED;
-            }
-        }
-
-        /**
          * PLAT070: guards the transfer cleanup itself. Finalizer transfers never leave the cleanup
          * loop (see {@link #finalizerTransfer}), so this runs only when the cleanup is left by an
          * internal failure (a host failure of the release machinery, or the superseding transfer
@@ -454,144 +377,30 @@ public final class ProtosIoReleaseCPrimeExecution {
 
     static Plan createPlan(ProtosLanguage language) {
         Objects.requireNonNull(language, "language");
+
         BytecodeRootNodes<ProtosBytecodeRootNode> roots =
                 ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {
                             builder.beginRoot();
+
                             StepLocals locals = new StepLocals(builder);
 
-                            /*
-                             * PLAT070: an internal control transfer (non-local return or
-                             * cancellation) unwinds directly and never enters the step TryCatch.
-                             * The release body therefore runs inside a TryFinally whose handler,
-                             * only when the body neither completed nor left through a guest
-                             * Error, accounts the interrupted step once and then runs every
-                             * pending mandatory finalizer through this same C-prime step loop
-                             * (suspension included) while the original transfer stays pending.
-                             * The release is terminalized only after those finalizers ran.
-                             */
-                            BytecodeLocal completed =
-                                    builder.createLocal("ioReleaseCompletedOrSignalled", null);
-                            BytecodeLocal cleanupCompleted =
-                                    builder.createLocal("ioReleaseTransferCleanupCompleted", null);
-                            builder.beginStoreLocal(completed);
-                            builder.emitLoadConstant(false);
-                            builder.endStoreLocal();
                             builder.beginBlock();
 
-                            builder.beginStoreLocal(child);
-                            builder.beginCallRequest(false);
-                            builder.emitLoadLocal(prepared);
-                            builder.endCallRequest();
-                            builder.endStoreLocal();
-
-                            builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
-                            builder.emitLoadLocal(child);
-                            builder.endIsResultKind();
-                            builder.beginBlock();
-                            builder.beginStoreLocal(resume);
-                            builder.beginYield();
-                            builder.emitLoadLocal(child);
-                            builder.endYield();
-                            builder.endStoreLocal();
-                            builder.beginStoreLocal(child);
-                            builder.beginResumeDispatchedContinuation();
-                            builder.emitLoadLocal(child);
-                            builder.emitLoadLocal(resume);
-                            builder.endResumeDispatchedContinuation();
-                            builder.endStoreLocal();
-                            builder.endBlock();
-                            builder.endWhile();
-
-                            builder.beginStoreLocal(targetResult);
-                            builder.beginMaterializePrimitiveNumericCarrier();
-                            builder.emitLoadLocal(child);
-                            builder.emitLoadConstant(true);
-                            builder.endMaterializePrimitiveNumericCarrier();
-                            builder.endStoreLocal();
-
-                            builder.endBlock();
-
-                            builder.beginStoreLocal(invocation);
-                            builder.beginIoInvocationSucceeded(false);
-                            builder.emitLoadArgument(1);
-                            builder.emitLoadLocal(targetResult);
-                            builder.endIoInvocationSucceeded();
-                            builder.endStoreLocal();
-                            builder.endBlock();
-
-                            builder.beginBlock();
-                            builder.beginStoreLocal(invocation);
-                            builder.beginIoInvocationFailed();
-                            builder.emitLoadArgument(1);
-                            builder.endIoInvocationFailed();
-                            builder.endStoreLocal();
-                            builder.endBlock();
-
-                            builder.endTryCatch();
-
-                            builder.beginStoreLocal(lowerOutcome);
-                            builder.beginIoInvocationSucceeded(true);
-                            builder.emitLoadArgument(1);
-                            builder.emitLoadLocal(invocation);
-                            builder.endIoInvocationSucceeded();
-                            builder.endStoreLocal();
-
-                            builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
-                            builder.emitLoadLocal(lowerOutcome);
-                            builder.endIsResultKind();
-                            builder.beginBlock();
-                            builder.beginStoreLocal(yielded);
-                            builder.emitLoadLocal(lowerOutcome);
-                            builder.endStoreLocal();
-                            builder.beginStoreLocal(resume);
-                            builder.beginYield();
-                            builder.emitLoadLocal(yielded);
-                            builder.endYield();
-                            builder.endStoreLocal();
-                            builder.beginStoreLocal(lowerOutcome);
-                            builder.beginResumeIoReleaseTargetFutureWait();
-                            builder.emitLoadArgument(0);
-                            builder.emitLoadLocal(yielded);
-                            builder.emitLoadLocal(resume);
-                            builder.endResumeIoReleaseTargetFutureWait();
-                            builder.endStoreLocal();
-                            builder.endBlock();
-                            builder.endWhile();
-
-                            builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.CHILD);
-                            builder.emitLoadArgument(1);
-                            builder.emitLoadLocal(lowerOutcome);
-                            builder.endStructuredAcceptChildOutcome();
-
-                            builder.endBlock();
-                            builder.endWhile();
+                            emitStepLoop(builder, locals);
 
                             builder.beginReturn();
                             builder.beginStructuredFinish();
                             builder.emitLoadArgument(1);
                             builder.endStructuredFinish();
                             builder.endReturn();
+
                             builder.endBlock();
-
-                            builder.beginBlock();
-                            builder.beginStoreLocal(completed);
-                            builder.emitLoadConstant(true);
-                            builder.endStoreLocal();
-                            builder.beginRethrowTruffleException();
-                            builder.emitLoadException();
-                            builder.endRethrowTruffleException();
-                            builder.endBlock();
-
-                            builder.endTryCatch();
-                            builder.endTryFinally();
-
                             builder.endRoot();
                         });
+
         return new Plan(roots.getNode(0).getCallTarget());
     }
 
@@ -621,7 +430,7 @@ public final class ProtosIoReleaseCPrimeExecution {
      * on its own invocation or on its lower Future, and has its outcome accepted exactly once.
      */
     private static void emitStepLoop(
-            ProtosBytecodeRootNodeGen.Builder b, StepLocals l, boolean transferCleanup) {
+            ProtosBytecodeRootNodeGen.Builder b, StepLocals l) {
         b.beginWhile();
         b.beginStructuredHasNext(ProtosStructuredPhase.STEP);
         b.emitLoadArgument(1);
@@ -639,65 +448,41 @@ public final class ProtosIoReleaseCPrimeExecution {
         b.endIoPrepareTargetCall();
         b.endStoreLocal();
 
-        b.beginTryFinally(
-                () -> {
-                    b.beginCompleteClosureCall();
-                    b.emitLoadLocal(l.prepared);
-                    b.endCompleteClosureCall();
-                });
-        b.beginBlock();
-
         b.beginStoreLocal(l.child);
-        if (transferCleanup) {
-            b.beginIoReleaseEnterFinalizer();
-            b.emitLoadArgument(1);
-            b.emitLoadLocal(l.prepared);
-            b.endIoReleaseEnterFinalizer();
-        } else {
-            b.beginEnterClosureCall();
-            b.emitLoadLocal(l.prepared);
-            b.endEnterClosureCall();
-        }
+        b.beginCallRequest(false);
+        b.emitLoadLocal(l.prepared);
+        b.endCallRequest();
         b.endStoreLocal();
 
         b.beginWhile();
         b.beginIsResultKind(ProtosResultKind.CONTINUATION);
         b.emitLoadLocal(l.child);
         b.endIsResultKind();
+
         b.beginBlock();
+
         b.beginStoreLocal(l.resume);
         b.beginYield();
         b.emitLoadLocal(l.child);
         b.endYield();
         b.endStoreLocal();
+
         b.beginStoreLocal(l.child);
-        if (transferCleanup) {
-            b.beginIoReleaseResumeFinalizer();
-            b.emitLoadArgument(1);
-            b.emitLoadLocal(l.prepared);
-            b.emitLoadLocal(l.child);
-            b.emitLoadLocal(l.resume);
-            b.endIoReleaseResumeFinalizer();
-        } else {
-            b.beginResumeContinuation();
-            b.emitLoadLocal(l.prepared);
-            b.emitLoadLocal(l.child);
-            b.emitLoadLocal(l.resume);
-            b.endResumeContinuation();
-        }
+        b.beginResumeDispatchedContinuation();
+        b.emitLoadLocal(l.child);
+        b.emitLoadLocal(l.resume);
+        b.endResumeDispatchedContinuation();
         b.endStoreLocal();
+
         b.endBlock();
         b.endWhile();
 
         b.beginStoreLocal(l.targetResult);
-        b.beginFinishClosureCall(true);
-        b.emitLoadLocal(l.prepared);
+        b.beginMaterializePrimitiveNumericCarrier();
         b.emitLoadLocal(l.child);
-        b.endFinishClosureCall();
+        b.emitLoadConstant(true);
+        b.endMaterializePrimitiveNumericCarrier();
         b.endStoreLocal();
-
-        b.endBlock();
-        b.endTryFinally();
 
         b.beginStoreLocal(l.invocation);
         b.beginIoInvocationSucceeded(false);
@@ -754,54 +539,6 @@ public final class ProtosIoReleaseCPrimeExecution {
 
         b.endBlock();
         b.endWhile();
-    }
-
-    /**
-     * PLAT070 transfer cleanup, emitted as the release body's finally handler. When the body was
-     * left by an internal control transfer, the interrupted step is accounted and the pending
-     * mandatory finalizers run through {@link #emitStepLoop}; then the release is terminalized.
-     * In this loop a finalizer is entered and resumed through {@code IoReleaseEnterFinalizer} /
-     * {@code IoReleaseResumeFinalizer}: a later transfer escaping one finalizer is held by the
-     * {@link Sequence} so every remaining mandatory finalizer is still invoked, and the latest
-     * such transfer is thrown, superseding the pending one as in ensure cleanup, only after the
-     * release is terminalized. {@code IoReleaseAbandonTransferCleanup} only guards an internal
-     * failure of the cleanup itself.
-     */
-    private static void emitTransferCleanup(
-            ProtosBytecodeRootNodeGen.Builder b,
-            StepLocals l,
-            BytecodeLocal completed,
-            BytecodeLocal cleanupCompleted) {
-        b.beginIfThen();
-        b.beginIoReleaseBeginTransferCleanup();
-        b.emitLoadArgument(1);
-        b.emitLoadLocal(completed);
-        b.endIoReleaseBeginTransferCleanup();
-
-        b.beginBlock();
-        b.beginStoreLocal(cleanupCompleted);
-        b.emitLoadConstant(false);
-        b.endStoreLocal();
-        b.beginTryFinally(
-                () -> {
-                    b.beginIoReleaseAbandonTransferCleanup();
-                    b.emitLoadArgument(1);
-                    b.emitLoadLocal(cleanupCompleted);
-                    b.endIoReleaseAbandonTransferCleanup();
-                });
-        b.beginBlock();
-        emitStepLoop(b, l, true);
-        b.beginIoReleaseFinishTransferCleanup();
-        b.emitLoadArgument(1);
-        b.endIoReleaseFinishTransferCleanup();
-        b.beginStoreLocal(cleanupCompleted);
-        b.emitLoadConstant(true);
-        b.endStoreLocal();
-        b.endBlock();
-        b.endTryFinally();
-        b.endBlock();
-
-        b.endIfThen();
     }
 
     public static void schedule(

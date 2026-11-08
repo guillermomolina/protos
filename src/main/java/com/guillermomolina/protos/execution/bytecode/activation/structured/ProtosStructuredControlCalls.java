@@ -176,32 +176,6 @@ final class ProtosStructuredControlCalls {
         }
     }
 
-    /**
-     * D239-C1 standard Object.construct: the fresh child allocated with the
-     * receiver as its immediate parent and the prepared ordinary {@code init}
-     * send on it. Its finish ignores init's normal result and answers the
-     * child; errors and control transfers from init never reach finish.
-     */
-    static final class PreparedStandardObjectConstruct {
-        private final PreparedClosureCall init;
-        private final ProtosObjectValue instance;
-
-        PreparedStandardObjectConstruct(
-                PreparedClosureCall init,
-                ProtosObjectValue instance) {
-            this.init = java.util.Objects.requireNonNull(init, "init");
-            this.instance = java.util.Objects.requireNonNull(instance, "instance");
-        }
-
-        PreparedClosureCall child() {
-            return init;
-        }
-
-        Object finish(Object ignoredInitResult) {
-            return instance;
-        }
-    }
-
     static final class PreparedStandardImportCall {
         private final ProtosPreparedCalls.ModuleInitializationCall child;
 

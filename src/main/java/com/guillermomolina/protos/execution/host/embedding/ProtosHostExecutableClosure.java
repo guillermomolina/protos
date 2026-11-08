@@ -276,7 +276,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                     embedding == null ? null : embedding.beginHostEntryExtent(token);
             try {
                 Object outcome;
-                try {
+
                     outcome =
                             callNode.execute(
                                     null,
@@ -285,9 +285,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                                     ProtosFrameArguments.functionCallArguments(supplied),
                                     receiver.caller,
                                     null);
-                } catch (ProtosBytecodeControlTransferException bridged) {
-                    throw bridged.transfer();
-                }
+
                 if (ProtosTailCallContinuation.isPending(outcome)) {
                     outcome = drivePending(embedding, outcome);
                 }

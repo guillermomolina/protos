@@ -324,7 +324,6 @@ final class ProtosPreparedCalls {
                 return true;
             }
             return isStructuredCaseOf()
-                    || isStructuredObjectConstruct()
                     || isStructuredMapMatch()
                     || isStructuredArrayMatch()
                     || isStructuredIdentityMapAtIfAbsent()
@@ -650,8 +649,6 @@ final class ProtosPreparedCalls {
             }
             try {
                 return callNode.call(bodyTarget, targetArguments());
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                return handleControlTransfer(bridged.transfer());
             } catch (ControlFlowException transfer) {
                 return handleControlTransfer(transfer);
             } catch (com.oracle.truffle.api.exception.AbstractTruffleException failure) {

@@ -3429,6 +3429,8 @@ final class CanonicalToBytecodeLowerer {
             case CanonicalReturn ignored -> true;
             case CanonicalSequence ignored -> true;
             case CanonicalSpread ignored -> true;
+            case CanonicalNamedArgument named ->
+                    requiresContinuationScratch(named.expression());
         };
     }
 

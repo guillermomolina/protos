@@ -97,14 +97,12 @@ final class ProtosBuiltinCallRootNode extends RootNode {
                         supplied,
                         activation);
         if (structured != null) {
-            try {
+
                 return structuredCall.call(
                         ProtosTaskCPrimeEntryExecution.structuredDispatchTargetForEnteredContext(),
                         activation,
                         structured);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
+
         }
         if (body instanceof ProtosSuspensionCapableNativeClosureBody suspensionCapable
                 && suspendible(activation)) {

@@ -747,15 +747,13 @@ final class ProtosFunctionCallDispatchers {
         if (context == null) {
             throw new IllegalStateException("Closure invocation requires an entered Protos Context");
         }
-        try {
+
             if (closure.nativeBody().isPresent()) {
                 return context.builtinCallTarget(nativeBody(closure)).call(activation, closure);
             }
             return functionCallTargetOrFail(closure, context)
                     .call(ProtosFrameArguments.publishedInvocation(activation));
-        } catch (ProtosBytecodeControlTransferException bridged) {
-            throw bridged.transfer();
-        }
+
     }
 
     private static RootCallTarget functionCallTargetOrFail(

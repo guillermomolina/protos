@@ -116,8 +116,11 @@ final class ProtosMapBackedLexicalBindingAuthority
     @Override
     public void appendBindingNamesTo(java.util.ArrayList<String> names) {
         Objects.requireNonNull(names, "names");
-        if (bindings != null) {
-            names.addAll(bindings.keySet());
+        Object[] keys =
+                DynamicObject.GetKeyArrayNode.getUncached()
+                        .execute(storage);
+        for (Object key : keys) {
+            names.add((String) key);
         }
     }
 
@@ -126,15 +129,15 @@ final class ProtosMapBackedLexicalBindingAuthority
             java.util.ArrayList<String> names,
             int remainingBudget) {
         Objects.requireNonNull(names, "names");
-        if (bindings == null) {
-            return true;
-        }
+        Object[] keys =
+                DynamicObject.GetKeyArrayNode.getUncached()
+                        .execute(storage);
         int appended = 0;
-        for (String name : bindings.keySet()) {
+        for (Object key : keys) {
             if (appended >= remainingBudget) {
                 return false;
             }
-            names.add(name);
+            names.add((String) key);
             appended++;
         }
         return true;
