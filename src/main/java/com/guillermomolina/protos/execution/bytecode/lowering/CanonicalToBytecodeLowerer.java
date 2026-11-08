@@ -741,6 +741,14 @@ final class CanonicalToBytecodeLowerer {
                                 }
                             });
 
+            // I115: Truffle SimpleLanguage's immediate cached-tier admission.
+            // Specialize source-root locals from the first invocation.
+            for (ProtosBytecodeRootNode root : roots.getNodes()) {
+                if (root.isSemanticActivationRoot()) {
+                    root.getBytecodeNode().setUncachedThreshold(0);
+                }
+            }
+
             for (PendingGroupClosure pending : pendingGroupClosures) {
                 pending.cell()
                         .freeze(
