@@ -139,6 +139,17 @@ load: (corpusId) => {
         matched = true
     }
 
+    if(corpusId == "protos/corpus/library/crypto/password") {
+        selected = planFromEntries(
+            "crypto/password/",
+            Array(
+                Array("vectors-and-nfc.protos", "suite-native", "-"),
+                Array("invalid-records.protos", "suite-native", "-")
+            )
+        )
+        matched = true
+    }
+
     if(corpusId == "protos/corpus/library/auth/jwt") {
         selected = planFromEntries(
             "auth/jwt/",

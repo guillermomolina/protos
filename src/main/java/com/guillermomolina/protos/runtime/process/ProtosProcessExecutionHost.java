@@ -19,6 +19,7 @@ package com.guillermomolina.protos.runtime.process;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import java.util.Objects;
+import java.util.Arrays;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -32,6 +33,159 @@ import java.util.function.Supplier;
  */
 public interface ProtosProcessExecutionHost {
     <T> T callForRuntime(Supplier<T> action);
+
+    /**
+     * I160: cancellation handle for one privately admitted Argon2id
+     * computation. This is host machinery, not a Protos capability.
+     */
+    @FunctionalInterface
+    interface PasswordKdfTicket {
+        void cancel();
+    }
+
+    /**
+     * Complete, independently owned result of one password KDF operation.
+     *
+     * <p>No guest object, Actor activation or Closure is retained.
+     * The receiver must close the result after publication or discard.
+     */
+    final class PasswordKdfResult implements AutoCloseable {
+        private byte[] salt;
+        private byte[] tag;
+        private final Boolean matches;
+        private final boolean unavailable;
+
+        public PasswordKdfResult(
+                byte[] salt,
+                byte[] tag,
+                Boolean matches,
+                boolean unavailable) {
+            this.salt = salt == null ? null : Arrays.copyOf(salt, salt.length);
+            this.tag = tag == null ? null : Arrays.copyOf(tag, tag.length);
+            this.matches = matches;
+            this.unavailable = unavailable;
+        }
+
+        public boolean unavailable() {
+            return unavailable;
+        }
+
+        public boolean verification() {
+            return matches != null;
+        }
+
+        public boolean matches() {
+            if (matches == null) {
+                throw new IllegalStateException(
+                        "Result does not contain verification");
+            }
+            return matches;
+        }
+
+        public synchronized byte[] saltSnapshot() {
+            if (salt == null) {
+                throw new IllegalStateException("No salt result");
+            }
+            return Arrays.copyOf(salt, salt.length);
+        }
+
+        public synchronized byte[] tagSnapshot() {
+            if (tag == null) {
+                throw new IllegalStateException("No tag result");
+            }
+            return Arrays.copyOf(tag, tag.length);
+        }
+
+        @Override
+        public synchronized void close() {
+            if (salt != null) {
+                Arrays.fill(salt, (byte) 0);
+                salt = null;
+            }
+            if (tag != null) {
+                Arrays.fill(tag, (byte) 0);
+                tag = null;
+            }
+        }
+    }
+
+    /**
+     * Host-only completion handoff.
+     *
+     * <p>Called off-turn. Implementations must enqueue completion
+     * into the owning Actor and never invoke guest code here.
+     */
+    @FunctionalInterface
+    interface PasswordKdfCompletion {
+        void completed(PasswordKdfResult result);
+    }
+
+    /**
+     * Submit one fixed-profile Argon2id computation.
+     *
+     * <p>expectedTag is null for hashing and exactly 32 octets
+     * for verification. All input arrays are borrowed and must
+     * be snapshotted by the implementation before returning.
+     *
+     * <p>Admission is nonblocking. An empty result means that
+     * the host is unavailable or its bounded queue is full.
+     *
+     * <p>Unhosted execution does not silently create a fallback
+     * executor or compute Argon2id on the Actor.
+     */
+    /**
+     * Private KDF admission failures. These values are host-only and
+     * are not exposed to Protos programs.
+     */
+    enum PasswordKdfRejection {
+        CAPACITY,
+        UNAVAILABLE
+    }
+
+    /**
+     * Exactly one of ticket and rejection is present.
+     *
+     * <p>Successful admission owns one cancellable ticket.
+     * Rejected admission retains no submitted work.
+     */
+    record PasswordKdfAdmission(
+            PasswordKdfTicket ticket,
+            PasswordKdfRejection rejection) {
+
+        public PasswordKdfAdmission {
+            if ((ticket == null) == (rejection == null)) {
+                throw new IllegalArgumentException(
+                        "Invalid password KDF admission result");
+            }
+        }
+
+        public static PasswordKdfAdmission accepted(
+                PasswordKdfTicket ticket) {
+            return new PasswordKdfAdmission(
+                    Objects.requireNonNull(ticket), null);
+        }
+
+        public static PasswordKdfAdmission refused(
+                PasswordKdfRejection rejection) {
+            return new PasswordKdfAdmission(
+                    null, Objects.requireNonNull(rejection));
+        }
+
+        public boolean isAdmitted() {
+            return ticket != null;
+        }
+    }
+
+    default PasswordKdfAdmission submitPasswordKdfForRuntime(
+            ProtosActor owner,
+            byte[] normalizedPassword,
+            byte[] salt,
+            byte[] expectedTag,
+            PasswordKdfCompletion completion) {
+        return PasswordKdfAdmission.refused(
+                PasswordKdfRejection.UNAVAILABLE);
+    }
+
 
     default void runForRuntime(Runnable action) {
         Objects.requireNonNull(action, "action");

@@ -1,0 +1,103 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Password: import("std:crypto/password")
+
+prefix: "protos-password-v1:nfc:$argon2id$v=19$m=65536,t=3,p=4$"
+saltText: "AAECAwQFBgcICQoLDA0ODw"
+tagText: "vUrOhcKV+zjYROFncankOSUoKsmCyGVr5Vou9s8g/Vg"
+valid: prefix + saltText + "$" + tagText
+
+expectInvalid: (record) => {
+    Assertions.signals(Password.PasswordError, () => {
+        Password.needsRehash(record)
+    })
+}
+
+// A malformed record must fail through the verification Future.
+// It must never become a successful false comparison.
+expectInvalidVerification: (record) => {
+    Assertions.signals(Password.PasswordError, () => {
+        Password.verify("password", record).value()
+    })
+}
+
+tests: [
+    Test("canonical baseline does not need rehash", () => {
+        Assertions.require(!Password.needsRehash(valid))
+    }),
+    Test("incorrect record argument domain", () => {
+        expectInvalid(null)
+        expectInvalid(Array())
+        expectInvalid(123)
+    }),
+    Test("missing fields and truncated base64", () => {
+        expectInvalid("")
+        expectInvalid(prefix)
+        expectInvalid(prefix + saltText)
+        expectInvalid(prefix + saltText + "$")
+        expectInvalid(prefix + saltText + "$" + "vUrOhcKV")
+    }),
+    Test("different algorithms and version are not accepted", () => {
+        expectInvalid(
+            "protos-password-v1:nfc:$argon2i$v=19$m=65536,t=3,p=4$" +
+            saltText + "$" + tagText)
+        expectInvalid(
+            "protos-password-v1:nfc:$argon2id$v=16$m=65536,t=3,p=4$" +
+            saltText + "$" + tagText)
+    }),
+    Test("modified work parameters are rejected before KDF", () => {
+        expectInvalid(
+            "protos-password-v1:nfc:$argon2id$v=19$m=8192,t=3,p=4$" +
+            saltText + "$" + tagText)
+        expectInvalid(
+            "protos-password-v1:nfc:$argon2id$v=19$m=65536,t=2,p=4$" +
+            saltText + "$" + tagText)
+        expectInvalid(
+            "protos-password-v1:nfc:$argon2id$v=19$m=65536,t=3,p=1$" +
+            saltText + "$" + tagText)
+    }),
+    Test("padded and noncanonical base64 are rejected", () => {
+        expectInvalid(prefix + saltText + "==" + "$" + tagText)
+        expectInvalid(prefix + saltText + "$" + tagText + "=")
+        expectInvalid(
+            prefix + "AAECAwQFBgcICQoLDA0ODx" + "$" + tagText)
+        expectInvalid(
+            prefix + saltText + "$" +
+            "vUrOhcKV+zjYROFncankOSUoKsmCyGVr5Vou9s8g/Vh")
+    }),
+    Test("unexpected characters and trailing fields", () => {
+        expectInvalid(prefix + saltText + "$" + tagText + "$extra")
+        expectInvalid(prefix + saltText + "$" + tagText + " ")
+        expectInvalid(prefix + saltText + "$" + tagText + "\n")
+    }),
+    Test("malformed records fail verification rather than returning false", () => {
+        expectInvalidVerification("")
+        expectInvalidVerification(prefix)
+        expectInvalidVerification(prefix + saltText + "$")
+        expectInvalidVerification(prefix + saltText + "$" + tagText + "=")
+        expectInvalidVerification(
+            "protos-password-v1:nfc:$argon2id$v=19$m=1024,t=3,p=4$" +
+            saltText + "$" + tagText)
+    }),
+    Test("non-String verification records fail with PasswordError", () => {
+        expectInvalidVerification(null)
+        expectInvalidVerification(Array())
+        expectInvalidVerification(123)
+    })
+]
+tests.freeze()

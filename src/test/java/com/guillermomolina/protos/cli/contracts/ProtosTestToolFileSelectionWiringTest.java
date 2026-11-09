@@ -56,6 +56,7 @@ final class ProtosTestToolFileSelectionWiringTest {
             "protos/corpus/library/crypto/sha256",
             "protos/corpus/library/crypto/hmac_sha256",
             "protos/corpus/library/text/base64url",
+            "protos/corpus/library/crypto/password",
             "protos/corpus/library/auth/jwt",
             "protos/corpus/library/network/ip-addresses",
             "protos/corpus/library/network/ip-endpoints",
@@ -83,7 +84,7 @@ final class ProtosTestToolFileSelectionWiringTest {
         }
 
         assertEquals(
-                31,
+                32,
                 occurrences(
                         source,
                         "new ProtosTestToolFileSelectionFacility.CorpusSourceRoot("));

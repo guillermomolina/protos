@@ -77,6 +77,11 @@ root: SuiteGraph.suite(
             "protos/test/ordinary"
         ),
         SuiteGraph.leaf(
+            "protos/library/crypto/password",
+            "protos/corpus/library/crypto/password",
+            "protos/test/ordinary"
+        ),
+        SuiteGraph.leaf(
             "protos/library/auth/jwt",
             "protos/corpus/library/auth/jwt",
             "protos/test/ordinary"

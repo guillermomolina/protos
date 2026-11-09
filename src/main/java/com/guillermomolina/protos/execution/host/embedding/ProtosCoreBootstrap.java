@@ -720,7 +720,14 @@ public final class ProtosCoreBootstrap {
                         ProtosHmacSha256Facility.MODULE_KEY,
                         Map.of(
                                 ProtosHmacSha256Facility.BOOTSTRAP_SLOT,
-                                ProtosHmacSha256Facility::createFacility)));
+                                ProtosHmacSha256Facility::createFacility)),
+                // I160 / D245-C: private deferred Argon2id password bridge.
+                // Module initialization grants no entropy or ambient authority.
+                Map.entry(
+                        ProtosPasswordArgon2Facility.MODULE_KEY,
+                        Map.of(
+                                ProtosPasswordArgon2Facility.BOOTSTRAP_SLOT,
+                                ProtosPasswordArgon2Facility::createFacility)));
     }
 
     /**

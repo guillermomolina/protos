@@ -106,6 +106,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     private volatile boolean stopped;
     private ProtosEmbeddedCarrierPool actorCarrierPool;
     private ProtosActorScheduler actorScheduler;
+    private final ProtosPasswordKdfCustody passwordKdfCustody;
 
     private ProtosEmbeddedProcess(
             ProtosLanguageContext owner,
@@ -119,6 +120,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         this.filesystemCustody = filesystemCustody;
         this.networkCustody = networkCustody;
         this.process = bootstrap.process();
+        this.passwordKdfCustody = ProtosPasswordKdfCustody.owned(this.process);
         this.prelude = prelude;
         this.rootActor = process.rootActorForRuntime();
         this.pendingInitialActivation = bootstrap.activation();
@@ -560,9 +562,26 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     }
 
     @Override
+    public PasswordKdfAdmission submitPasswordKdfForRuntime(
+            ProtosActor owner,
+            byte[] normalizedPassword,
+            byte[] salt,
+            byte[] expectedTag,
+            PasswordKdfCompletion completion) {
+        return passwordKdfCustody.submitForRuntime(
+                owner, normalizedPassword, salt, expectedTag, completion);
+    }
+
+    @Override
+    public void actorTerminatedForRuntime(ProtosActor actor) {
+        passwordKdfCustody.cancelActorForRuntime(actor);
+    }
+
+    @Override
     public void processTerminatedForRuntime() {
         // The Polyglot Context belongs to the host; Process termination does not close it.
         stop();
+        passwordKdfCustody.close();
         // Termination revokes Process-local authority and retires its host resources.
         closeFilesystem();
         closeNetwork();
@@ -581,8 +600,14 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         stop();
         process.requestTerminationForRuntime();
         if (!owner.env().getContext().isCancelling() && !owner.env().getContext().isExiting()) {
+            // The hosted RootActor has no independent carrier.
+            // Termination makes suspended Tasks runnable so they can
+            // observe cancellation and complete their cleanup.
+            // Drain those Actor-owned segments before awaiting terminality.
+            rootActor.executionDomain().dispatchUntilIdle();
             process.awaitTerminationForRuntime();
         }
+        passwordKdfCustody.close();
         closeFilesystem();
         closeNetwork();
         closeEntropy();
@@ -598,6 +623,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     void abandonForContextDisposal() {
         stop();
         process.requestTerminationForRuntime();
+        passwordKdfCustody.close();
         closeFilesystem();
         closeNetwork();
         closeEntropy();

@@ -81,3 +81,46 @@ and token handling require their own explicit application protocols.
 
 Try the runnable [HMAC example](../../../protos/examples/crypto/hmac-sha256.protos)
 or the [HMAC tutorial](../../../protos/tutorials/12-system-resources/03-hmac-sha256.protos).
+
+## Password storage with Argon2id
+
+For password verifiers, use `std:crypto/password`, **not** SHA-256 or HMAC as
+an improvised password hash. Its four operations are `hash`, `hashWithSalt`,
+`verify`, and `needsRehash`; it also exports `PasswordError`. Passwords are
+Strings normalized to NFC before strict UTF-8 encoding. Stored records are
+versioned `protos-password-v1:nfc:` envelopes with canonical Argon2id PHC
+content. The initial cost is 64 MiB, three iterations, four lanes, a random
+16-byte salt and a 32-byte verifier tag.
+
+```protos
+Password: import("std:crypto/password")
+
+// Only an explicitly granted, still-live RootActor entropy capability works.
+// Run the program with --allow-entropy; importing Password grants nothing.
+record: Password.hash("example passphrase", entropy).value()
+authenticated: Password.verify("example passphrase", record).value()
+shouldUpgrade: Password.needsRehash(record)
+```
+
+The three cryptographic operations return Futures so the Actor is not held by
+a 64 MiB derivation. `needsRehash` is a cheap synchronous inspection. Workers
+perform no guest calls. A wrong password against a valid, supported record
+resolves `false`; malformed or unsupported records, absent permissions,
+capacity exhaustion and provider errors fail with a `PasswordError` instead
+of resolving `false`. Its stable `kind` distinguishes `invalidArgument`,
+`invalidRecord`, `unsupportedRecord`, `capacity` and `unavailable`.
+
+A service worker Actor cannot transfer the `entropy` capability from the
+RootActor. To hash in a worker, use a separately authorized RootActor broker
+to obtain a freshly generated 16-byte salt, then call
+`Password.hashWithSalt(password, salt)` in the worker. This explicit-salt
+path **does not validate the unpredictability of a caller-provided salt**.
+Never reuse the fixed salt from test vectors for real accounts.
+
+A full record is a persistent verifier, not an encryption key or a password
+recovery mechanism. Protect credentials and authentication responses in the
+application, apply rate limits and avoid logging the password or record.
+For the normative API, error, capacity and representation contract see
+[`spec/semantics/PASSWORD.md`](../../../spec/semantics/PASSWORD.md).
+
+Try the runnable [Argon2id password example](../../../protos/examples/crypto/password-argon2id.protos).

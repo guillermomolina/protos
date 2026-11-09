@@ -89,11 +89,23 @@ final class ProtosCliLearningMaterialsTest {
     }
 
     private static void assertRuns(Path path) throws Exception {
-        // CLI010: material importing std:inspect requires explicit --inspect authorization.
-        Result result =
-                Files.readString(path, StandardCharsets.UTF_8).contains("import(\"std:inspect\")")
-                        ? run("--inspect", path.toString())
-                        : run(path.toString());
+        String program = Files.readString(path, StandardCharsets.UTF_8);
+        List<String> arguments = new ArrayList<>();
+
+        // CLI010: inspection remains an explicitly granted authority.
+        if (program.contains("import(\"std:inspect\")")) {
+            arguments.add("--inspect");
+        }
+
+        // I160 / D245-C: this example deliberately demonstrates an
+        // explicitly granted entropy capability, never ambient entropy.
+        if (path.equals(Path.of(
+                "protos", "examples", "crypto", "password-argon2id.protos"))) {
+            arguments.add("--allow-entropy");
+        }
+
+        arguments.add(path.toString());
+        Result result = run(arguments.toArray(String[]::new));
 
         assertEquals(
                 0,

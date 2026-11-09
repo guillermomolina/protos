@@ -122,6 +122,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     // D244-C / I159: private HMAC-SHA256 JCA primitive,
                     // not a native Core selector or ambient capability.
                     Map.entry("execution/facilities/ProtosHmacSha256Facility.java", 1),
+                    // I160: private Argon2id admission facility, not a Core selector.
+                    Map.entry("execution/facilities/ProtosPasswordArgon2Facility.java", 1),
                     Map.entry("execution/facilities/ProtosRegexUnicodeFacility.java", 3),
                     Map.entry("execution/facilities/ProtosRegexSemanticTransferFamily.java", 3),
                     Map.entry("execution/facilities/ProtosSealedFamilyFacility.java", 3),
@@ -187,6 +189,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                             // D244-C / I159: private HMAC-SHA256 backend.
                             || relative.equals(
                                     "execution/facilities/ProtosHmacSha256Facility.java")
+                            // I160: private Password facility, not a Core selector.
+                            || relative.equals(
+                                    "execution/facilities/ProtosPasswordArgon2Facility.java")
                             || relative.equals(
                                     "execution/facilities/ProtosSealedFamilyFacility.java")) {
                         actualNonCore.put(relative, count);

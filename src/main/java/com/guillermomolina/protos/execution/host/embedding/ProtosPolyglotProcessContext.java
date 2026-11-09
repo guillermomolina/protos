@@ -50,6 +50,10 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
     private final ProtosForeignProviderProcessLifecycle foreignProviders;
     private volatile Throwable foreignCleanupFailure;
 
+    private final ProtosPasswordKdfCustody passwordKdfCustody;
+
+
+
     /**
      * D227-A1: admission shared by standalone persistent RootActor
      * evaluation and its completion observation. Not a cross-Actor lock.
@@ -72,6 +76,8 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
             ProtosPolyglotExecutionContext context) {
         this.runtimeHost = Objects.requireNonNull(runtimeHost, "runtimeHost");
         this.process = Objects.requireNonNull(process, "process");
+        this.passwordKdfCustody = ProtosPasswordKdfCustody.shared(
+                this.process, runtimeHost::passwordKdfExecutorForRuntime);
         this.context = Objects.requireNonNull(context, "context");
         this.foreignProviders =
                 new ProtosForeignProviderProcessLifecycle(
@@ -338,13 +344,35 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
         return Optional.of(runtimeHost.actorSchedulerForRuntime());
     }
 
+
+    /**
+     * I160: private per-Process admission to the host-owned KDF executor.
+     *
+     * <p>Actor identity is verified before admission. The Process retains
+     * cancellation tickets only, never a public cryptographic capability.
+     * The callback is a host-only handoff, not guest publication.
+     */
+    @Override
+    public PasswordKdfAdmission submitPasswordKdfForRuntime(
+            ProtosActor owner,
+            byte[] normalizedPassword,
+            byte[] salt,
+            byte[] expectedTag,
+            PasswordKdfCompletion completion) {
+        return passwordKdfCustody.submitForRuntime(
+                owner, normalizedPassword, salt, expectedTag, completion);
+    }
+
     @Override
     public void actorTerminatedForRuntime(ProtosActor actor) {
+        passwordKdfCustody.cancelActorForRuntime(actor);
         foreignProviders.actorTerminatedForRuntime(actor);
     }
 
     @Override
     public void processTerminatedForRuntime() {
+        passwordKdfCustody.retireForRuntime();
+
         // D248-B: the Process-owned standalone Filesystem is revoked first, so no File of this
         // Process stays usable after its terminal boundary.
         Throwable filesystemFailure = runtimeHost.releaseProcessFilesystemForRuntime(process);

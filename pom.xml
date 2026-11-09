@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.3.457-SNAPSHOT</version>
+    <version>0.3.458-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -31,6 +31,11 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>1.86</version>
+        </dependency>
         <dependency>
             <groupId>org.jline</groupId>
             <artifactId>jline</artifactId>

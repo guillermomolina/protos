@@ -1,0 +1,203 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private canonical password-record codec for D245-C.
+//! This file is not a public Standard Library module.
+//! It does not derive passwords, allocate Argon2 memory or acquire entropy.
+
+alphabet: Encoding.UTF8.encode(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+)
+
+prefix: "protos-password-v1:nfc:$argon2id$v=19$m=65536,t=3,p=4$"
+prefixBytes: Encoding.UTF8.encode(prefix)
+namespaceBytes: Encoding.UTF8.encode("protos-password-")
+
+newBytes: () => {
+    Encoding.UTF8.encode("")
+}
+
+// Return the alphabet index for an ASCII Base64 octet, or -1.
+alphabetIndex: (octet) => {
+    result: -1
+    index: 0
+    while(index < 64) {
+        if(alphabet[index] == octet) {
+            result = index
+        }
+        index = index + 1
+    }
+    result
+}
+
+// Encode fixed-size binary data as canonical unpadded standard Base64.
+encodeBase64: (input) => {
+    encoded: newBytes()
+    index: 0
+    length: input.size()
+
+    while(index < length) {
+        first: input[index]
+        second: 0
+        third: 0
+
+        remaining: length - index
+        if(remaining > 1) {
+            second = input[index + 1]
+        }
+        if(remaining > 2) {
+            third = input[index + 2]
+        }
+
+        encoded.add(alphabet[first.div(4)])
+        encoded.add(alphabet[(first.mod(4) * 16) + second.div(16)])
+
+        if(remaining > 1) {
+            encoded.add(alphabet[(second.mod(16) * 4) + third.div(64)])
+        }
+        if(remaining > 2) {
+            encoded.add(alphabet[third.mod(64)])
+        }
+
+        index = index + 3
+    }
+
+    Encoding.UTF8.decode(encoded)
+}
+
+// Decode exactly one fixed-size unpadded Base64 field.
+// null indicates malformed spelling, length or nonzero trailing bits.
+decodeBase64: (input, start, encodedLength, decodedLength) => {
+    output: newBytes()
+    accumulator: 0
+    bits: 0
+    index: 0
+    valid: true
+
+    while(index < encodedLength && valid) {
+        digit: alphabetIndex(input[start + index])
+
+        if(digit < 0) {
+            valid = false
+        } else {
+            accumulator = accumulator * 64 + digit
+            bits = bits + 6
+
+            if(bits >= 8) {
+                bits = bits - 8
+                divisor: 1
+
+                if(bits == 2) {
+                    divisor = 4
+                }
+                if(bits == 4) {
+                    divisor = 16
+                }
+
+                octet: accumulator.div(divisor)
+                output.add(octet)
+                accumulator = accumulator.mod(divisor)
+            }
+        }
+
+        index = index + 1
+    }
+
+    if(!valid || output.size() != decodedLength || accumulator != 0) {
+        null
+    } else {
+        output
+    }
+}
+
+// Compare an ASCII prefix without allocating substrings.
+matchesPrefix: (input, expected) => {
+    matches: input.size() >= expected.size()
+    index: 0
+
+    while(matches && index < expected.size()) {
+        if(input[index] != expected[index]) {
+            matches = false
+        }
+        index = index + 1
+    }
+
+    matches
+}
+
+/// Format a validated 16-byte salt and 32-byte tag.
+/// Admission and exact Bytes-domain validation belong to the caller.
+// Only called with freshly constructed Bytes from the private
+// Argon2id facility. Exact representation checks and independent
+// snapshots occur at the host boundary, not through guest selectors.
+this.format: (salt, tag) => {
+    if(salt.size() != 16 || tag.size() != 32) {
+        Error().signal()
+    }
+
+    prefix + encodeBase64(salt) + "$" + encodeBase64(tag)
+}
+
+/// Parse the single supported D245-C profile.
+///
+/// A successful result owns fresh decoded Bytes.
+/// A rejected result contains only a public-safe classification:
+/// invalidRecord or unsupportedRecord.
+///
+/// The caller converts that classification into a fresh PasswordError.
+this.parse: (record) => {
+    result: { kind: "invalidArgument" }
+
+    if(String.recognizes(record)) {
+        result = { kind: "invalidRecord" }
+        // Early character bound prevents large UTF-8 conversion work.
+        if(record.size() <= 120) {
+            input: Encoding.UTF8.encode(record)
+
+            if(input.size() == 120 && matchesPrefix(input, prefixBytes)) {
+                if(input[76] == 36) {
+                    salt: decodeBase64(input, 54, 22, 16)
+                    tag: decodeBase64(input, 77, 43, 32)
+
+                    if(salt !== null && tag !== null) {
+                        result = {
+                            kind: "current"
+                            salt: salt
+                            tag: tag
+                        }
+                    }
+                }
+            } else {
+                if(matchesPrefix(input, namespaceBytes)) {
+                    if(matchesPrefix(input, Encoding.UTF8.encode("protos-password-v1:nfc:"))) {
+                        result = { kind: "invalidRecord" }
+                    } else {
+                        result = { kind: "unsupportedRecord" }
+                    }
+                }
+            }
+        } else {
+            result = { kind: "invalidRecord" }
+        }
+    }
+
+    result
+}
+
+/// The only supported profile in I160 is the current creation profile.
+/// Future recognized profiles require an explicit normative revision.
+this.isCurrentProfile: (parsed) => {
+    parsed.kind == "current"
+}

@@ -91,6 +91,12 @@ final class ProtosTestCorpusRegistry {
         addBinding(
                 registry,
                 activation,
+                "protos/corpus/library/crypto/password",
+                "repository-explicit",
+                "libraryFilesystem");
+        addBinding(
+                registry,
+                activation,
                 "protos/corpus/library/auth/jwt",
                 "repository-explicit",
                 "libraryFilesystem");

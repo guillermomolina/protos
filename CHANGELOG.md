@@ -7,6 +7,37 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.458-SNAPSHOT
+
+- `I160` (D245-C): implement `std:crypto/password` with Argon2id.
+  - Add a source-backed Standard Library Password module with
+    `hash`, `hashWithSalt`, `verify`, `needsRehash` and strict
+    password-record parsing and validation.
+  - Normalize password text using NFC and derive Argon2id tags
+    through the private Bouncy Castle backend, preserving the
+    Protos-first public API.
+  - Require independently granted Entropy for random-salt hashing;
+    importing the module never creates or grants entropy authority.
+  - Execute expensive derivations outside Actor turns through a
+    bounded asynchronous host executor. Return Futures and preserve
+    Actor-local publication, cancellation and terminality semantics.
+  - Maintain Process-local KDF admission and ticket custody.
+    Standalone Processes share a runtime-host-owned executor;
+    embedded Processes own lazily initialized executors.
+  - Cancel outstanding tickets on Actor termination and retire KDF
+    resources on Process and Context termination, suppressing late
+    publication and preserving independent Process state.
+  - Add independent Argon2id vectors, NFC and invalid-input
+    regressions, password-record tests, Future handoff tests,
+    bounded-executor tests and hosted Context lifecycle tests.
+  - Integrate the Password corpus with the repository Test Tool,
+    SuiteGraph, progress grouping, source ownership and native
+    boundary auditing. Add specifications, user documentation
+    and an executable example requiring explicit Entropy.
+  - Validate focused Java and Protos integration tests, complete
+    `make test`, `make check` and `git diff HEAD --check`
+    before the version bump.
+
 ## 0.3.457-SNAPSHOT
 
 - `I161` (D246-C): implement strict Base64url and HS256 JWT Standard Library modules.

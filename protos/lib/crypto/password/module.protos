@@ -1,0 +1,133 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Standard Library Argon2id password storage (D245-C, PASSWORD.md).
+//!
+//! This module exports exactly four operations and PasswordError.
+//! Password records use a versioned NFC-aware Argon2id PHC envelope.
+//! No module import acquires entropy, filesystem or network authority.
+//!
+//! Expensive derivation runs through a private bounded host facility.
+//! Results are delivered as Futures on the originating Actor.
+//! Invalid or unsupported records never verify as false.
+
+/// Password operation error prototype.
+/// The stable own kind is invalidArgument, invalidRecord,
+/// unsupportedRecord, unavailable or capacity.
+this.PasswordError: Error {}
+
+/// Hash a password with a caller-supplied sixteen-octet standard Bytes salt.
+/// Answers Future<String>. The private backend snapshots both inputs
+/// before dispatching expensive Argon2id computation.
+this.hashWithSalt: ((facility, errors) => {
+    codec: import("./internal/Record.protos")
+
+    (password, salt) => {
+        // The private facility validates semantic domains and bounds.
+        // It answers a Future holding fresh salt/tag Bytes on success.
+        tagFuture: facility.hashWithSalt(password, salt, errors)
+
+        tagFuture.then((tag) => {
+            // Record syntax and serialization are Protos-owned.
+            // The salt snapshot comes from the backend's admission.
+            codec.format(tag.salt, tag.tag)
+        })
+    }
+})(_passwordArgon2Facility, this.PasswordError)
+
+/// Hash a password using exactly sixteen octets from an authentic
+/// explicitly supplied D243-C entropy grant.
+/// Answers Future<String>; no implicit randomness is available.
+this.hash: ((facility, errors, explicitHash) => {
+    (password, entropy) => {
+        result: null
+
+        if(!facility.validPassword(password)) {
+            result = facility.failed(
+                errors { kind: "invalidArgument" }
+            )
+        } else {
+            if(!facility.authenticEntropy(entropy)) {
+                result = facility.failed(
+                    errors { kind: "invalidArgument" }
+                )
+            } else {
+                saltFuture: entropy.bytes(16)
+
+                // Future adoption flattens the Future returned by
+                // hashWithSalt without blocking the RootActor.
+                result = saltFuture.then((salt) => {
+                    explicitHash(password, salt)
+                })
+            }
+        }
+
+        result
+    }
+})(_passwordArgon2Facility, this.PasswordError, this.hashWithSalt)
+
+/// Verify against an exact supported persistent password record.
+/// Answers Future<Boolean>. Only an incorrect password against a
+/// valid record resolves to false.
+this.verify: ((facility, errors) => {
+    codec: import("./internal/Record.protos")
+
+    (password, record) => {
+        result: null
+
+        if(!facility.validPassword(password)) {
+            result = facility.failed(
+                errors { kind: "invalidArgument" }
+            )
+        } else {
+            parsed: codec.parse(record)
+
+            if(parsed.kind == "current") {
+                result = facility.verify(
+                    password,
+                    parsed.salt,
+                    parsed.tag,
+                    errors
+                )
+            } else {
+                result = facility.failed(
+                    errors { kind: parsed.kind }
+                )
+            }
+        }
+
+        result
+    }
+})(_passwordArgon2Facility, this.PasswordError)
+
+/// Return false for a valid current-profile record.
+/// Reject invalid and unsupported records synchronously.
+/// This operation never executes Argon2id or acquires entropy.
+this.needsRehash: ((errors) => {
+    codec: import("./internal/Record.protos")
+
+    (record) => {
+        parsed: codec.parse(record)
+
+        if(parsed.kind != "current") {
+            (errors { kind: parsed.kind }).signal()
+        }
+
+        false
+    }
+})(this.PasswordError)
+
+// Capture the private facility lexically, then remove its module slot.
+context.removeSlot("_passwordArgon2Facility")

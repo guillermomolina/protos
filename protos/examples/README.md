@@ -21,6 +21,7 @@ instead.
 
 | Task | Example |
 | --- | --- |
+| Hash and verify a password with explicit Argon2id entropy | `crypto/password-argon2id.protos` (requires `--allow-entropy`) |
 | Print a value | `hello-world.protos` |
 | Print the exact Rosetta Code Hello world/Text message | `basics/rosetta-hello-world-text.protos` |
 | Create and modify slots | `basics/slots.protos` |

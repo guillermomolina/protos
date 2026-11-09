@@ -937,6 +937,9 @@ public final class ProtosCli {
                                         "protos/corpus/library/text/base64url",
                                         libraryRoot),
                                 new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/library/crypto/password",
+                                        libraryRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
                                         "protos/corpus/library/auth/jwt",
                                         libraryRoot),
                                 new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(

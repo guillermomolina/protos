@@ -769,6 +769,8 @@ public final class ProtosActorExecutionDomain {
                 || !actorIoLifecycleCleanup.isEmpty()
                 || !actorIoReleases.isEmpty();
     }
+
+
     synchronized int actorNonTaskFutureCountForTesting() { return actorNonTaskFutures.size(); }
     synchronized int actorIoOperationCountForTesting() { return actorIoOperations.size(); }
     synchronized int actorIoReleaseCountForTesting() { return actorIoReleases.size(); }

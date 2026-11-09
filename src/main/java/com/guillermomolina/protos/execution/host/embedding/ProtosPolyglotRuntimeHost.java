@@ -61,6 +61,7 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private final AtomicInteger actorCarrierThreadSequence = new AtomicInteger();
     private final AtomicReference<Throwable> contextCloseFailure = new AtomicReference<>();
     private ExecutorService actorCarrierExecutor;
+    private ProtosPasswordKdfExecutor passwordKdfExecutor;
     private ProtosActorScheduler actorScheduler;
     private ProtosNioNetworkHost networkHost;
     /** Host custody of every provisioned, not yet retired Resolver capability. */
@@ -316,6 +317,29 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
      * Actor-carrier thread cost. Its platform threads are shared across every local Process Context
      * hosted here; Process termination never owns this executor's lifetime.
      */
+    /**
+     * I160 / D245-C: host-owned bounded Argon2id execution substrate.
+     *
+     * <p>The executor is created only when password derivation is
+     * requested. It is independent of Actor carriers and every
+     * Network, Resolver and Filesystem worker.
+     *
+     * <p>Its numerical capacity is fixed by the private executor:
+     * two active derivations and sixteen queued requests.
+     */
+    synchronized ProtosPasswordKdfExecutor passwordKdfExecutorForRuntime() {
+        if (closed) {
+            throw new IllegalStateException(
+                    "Polyglot runtime host is closed");
+        }
+
+        if (passwordKdfExecutor == null) {
+            passwordKdfExecutor = new ProtosPasswordKdfExecutor();
+        }
+
+        return passwordKdfExecutor;
+    }
+
     synchronized ProtosActorScheduler actorSchedulerForRuntime() {
         if (closed) {
             throw new IllegalStateException("Polyglot runtime host is closed");
@@ -529,6 +553,14 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                     "Polyglot runtime host cannot close while Process Contexts are active");
         }
         Throwable failure = contextCloseFailure.get();
+
+        // I160: retire pending KDF admission before closing other
+        // host resources. Retirement cannot execute guest code.
+        if (passwordKdfExecutor != null) {
+            passwordKdfExecutor.close();
+            passwordKdfExecutor = null;
+        }
+
         if (actorCarrierExecutor != null) {
             actorCarrierExecutor.close();
         }
