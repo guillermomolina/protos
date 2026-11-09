@@ -1,0 +1,304 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private structured JSON claim helpers for std:auth/jwt.
+//! No coercion from ordinary objects or floating-point approximations.
+
+fail: () => {
+    Error().signal()
+}
+
+// Conservative pre-serialization representation budget.
+// The exact 4096-octet payload limit remains authoritative.
+decimalRepresentationLimit: 1 << 13610
+
+/// Require a structured JSON object node.
+requireObject: (node) => {
+    (node.kind === "object").ifFalse(() => {
+        fail()
+    })
+
+    node
+}
+
+/// Check member presence independently of its JSON value.
+has: (objectNode, name) => {
+    requireObject(objectNode)
+    objectNode.value.containsKey(name)
+}
+
+/// Retrieve a required member, or signal Error.
+required: (objectNode, name) => {
+    has(objectNode, name).ifFalse(() => {
+        fail()
+    })
+
+    objectNode.value[name]
+}
+
+/// Retrieve an optional member, or null when absent.
+optional: (objectNode, name) => {
+    value: null
+
+    if(has(objectNode, name)) {
+        value = objectNode.value[name]
+    }
+
+    value
+}
+
+/// Require an exact JSON string node.
+stringValue: (node) => {
+    (node.kind === "string").ifFalse(() => {
+        fail()
+    })
+
+    String.recognizes(node.value).ifFalse(() => {
+        fail()
+    })
+
+    node.value
+}
+
+/// Require a nonempty JSON string.
+nonemptyString: (node) => {
+    value: stringValue(node)
+
+    (value == "").ifTrue(() => {
+        fail()
+    })
+
+    value
+}
+
+/// Require an exact JSON array node.
+arrayValue: (node) => {
+    (node.kind === "array").ifFalse(() => {
+        fail()
+    })
+
+    Array.recognizes(node.value).ifFalse(() => {
+        fail()
+    })
+
+    node.value
+}
+
+/// Convert a JSON decimal to its exact Integer value.
+///
+/// The representation is coefficient * 10^exponent.
+/// Negative exponents are accepted only if division is exact.
+integerValue: (node) => {
+    (node.kind === "number").ifFalse(() => {
+        fail()
+    })
+
+    decimal: node.value
+
+    coefficient: decimal.coefficient
+    exponent: decimal.exponent
+
+    Integer.recognizes(coefficient).ifFalse(() => {
+        fail()
+    })
+
+    Integer.recognizes(exponent).ifFalse(() => {
+        fail()
+    })
+
+    // A 4096-octet JWT payload bounds the useful decimal
+    // representation. Reject extreme nonzero exponents before
+    // performing repeated exact Integer arithmetic.
+    if(coefficient != 0) {
+        if((exponent > 4096) || (exponent < -4096)) {
+            fail()
+        }
+    }
+
+    value: coefficient
+
+    if(exponent > 0) {
+        scale: 10
+        remaining: exponent
+
+        // Avoid unnecessarily expanding zero.
+        if(coefficient == 0) {
+            remaining = 0
+        }
+
+        while(remaining > 0) {
+            value = value * scale
+            remaining = remaining - 1
+        }
+    }
+
+    if((exponent < 0) && (coefficient != 0)) {
+        remaining: 0 - exponent
+
+        while(remaining > 0) {
+            ((value % 10) != 0).ifTrue(() => {
+                fail()
+            })
+
+            value = value.div(10)
+            remaining = remaining - 1
+        }
+    }
+
+    value
+}
+
+/// Validate an audience claim against an exact expected String.
+matchesAudience: (node, expected) => {
+    matched: false
+
+    if(node.kind === "string") {
+        matched = stringValue(node) == expected
+    } else {
+        values: arrayValue(node)
+
+        (values.size() == 0).ifTrue(() => {
+            fail()
+        })
+
+        for(element in values) {
+            value: stringValue(element)
+
+            if(value == expected) {
+                matched = true
+            }
+        }
+    }
+
+    matched
+}
+
+/// Inspect all structured JSON nodes and enforce a nesting limit.
+/// Object and array nesting contributes one level per container.
+validateDepth: (root, maxDepth) => {
+    active: IdentityMap()
+    visited: 0
+
+    visit: null
+
+    visit = (node, depth) => {
+        visited = visited + 1
+
+        // Every serialized JSON node consumes at least one octet.
+        // More than 4096 nodes cannot fit a 4096-octet payload.
+        if(visited > 4096) {
+            fail()
+        }
+
+        kind: node.kind
+
+        container: (kind === "object") || (kind === "array")
+
+        if(container) {
+            (depth > maxDepth).ifTrue(() => {
+                fail()
+            })
+
+            active.containsKey(node).ifTrue(() => {
+                fail()
+            })
+
+            active[node] = true
+
+            if(kind === "object") {
+                node.value.each((name, child) => {
+                    String.recognizes(name).ifFalse(() => {
+                        fail()
+                    })
+
+                    // A longer name cannot fit the payload even
+                    // before its quotes and escaping are counted.
+                    if(name.size() > 4096) {
+                        fail()
+                    }
+
+                    visit(child, depth + 1)
+                })
+            } else {
+                for(child in node.value) {
+                    visit(child, depth + 1)
+                }
+            }
+
+            active.remove(node)
+        }
+
+        valid: (kind === "null") ||
+            (kind === "boolean") ||
+            (kind === "string") ||
+            (kind === "number") ||
+            container
+
+        valid.ifFalse(() => {
+            fail()
+        })
+
+        if(kind === "string") {
+            value: stringValue(node)
+
+            // Every Unicode scalar requires at least one UTF-8 octet.
+            // This is a necessary bound, not a substitute for the
+            // exact encoded-byte limit enforced by Compact.
+            if(value.size() > 4096) {
+                fail()
+            }
+        }
+
+        if(kind === "number") {
+            Integer.recognizes(node.value.coefficient).ifFalse(() => {
+                fail()
+            })
+
+            Integer.recognizes(node.value.exponent).ifFalse(() => {
+                fail()
+            })
+
+            // Bound both decimal representations before JSON.encode.
+            // This is independent of the exact NumericDate rule.
+            coefficient: node.value.coefficient
+            exponent: node.value.exponent
+
+            if((coefficient >= decimalRepresentationLimit) ||
+                (coefficient <= (0 - decimalRepresentationLimit))) {
+                fail()
+            }
+
+            if((exponent >= decimalRepresentationLimit) ||
+                (exponent <= (0 - decimalRepresentationLimit))) {
+                fail()
+            }
+        }
+
+        if(kind === "boolean") {
+            ((node.value === true) || (node.value === false)).ifFalse(() => {
+                fail()
+            })
+        }
+
+        if(kind === "null") {
+            (node.value !== null).ifTrue(() => {
+                fail()
+            })
+        }
+    }
+
+    visit(root, 1)
+    root
+}

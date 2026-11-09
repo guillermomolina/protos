@@ -74,6 +74,7 @@ instead.
 | Perform an HTTP GET over an application-opened TCP connection (`std:http/client`, requires `network`) | `io/http-get.protos` |
 | Host HTTP on loopback with explicit bounds and drain it (`std:http/host`, requires `network`) | `io/http-loopback-hosting.protos` with `io/http-echo-handler.protos` |
 | Host HTTP Workers that call a RootActor service (`std:http/host`, RootActor service entry, requires `network`) | `http/root-service-host.protos` with `http/root-service-handler.protos` as `app:root-service-handler` |
+| Verify a compact JWT and reject a tampered token without HTTP/network authority | `http/jwt-token-verification.protos` |
 | Dispatch requests by method and path with captured parameters (`std:http/router`) | `io/http-router.protos` |
 | Make one HTTPS request to a URL (`std:http/url_client`, requires `network` and `resolver`, manual) | `io/http-url-client.protos` |
 | Resolve a hostname and connect to a chosen address (`std:network/resolvers`, requires `network` and `resolver`, manual) | `io/hostname-resolution.protos` |

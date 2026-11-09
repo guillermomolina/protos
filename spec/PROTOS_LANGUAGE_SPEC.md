@@ -8,6 +8,8 @@ Normative I/O-domain semantics are defined in `io/IO_CORE.md`.
 Normative semantic-domain ownership is modularized under `semantics/`: `OBJECT_MODEL.md`, `EXECUTION_AND_CONTROL.md`, `CALLABLES.md`, `MODULES.md`, `ERRORS.md`, `VALUES_AND_COLLECTIONS.md`, `MATCHING.md`, and `CRYPTO.md` (ordinary Standard Library HMAC-SHA256; not Core or I/O). Compatibility headings retained in this document are navigation only.
 
 
+The independently importable Standard Library `std:auth/jwt` is normatively owned by [`auth/JWT.md`](auth/JWT.md); reusable canonical `std:text/base64url` is owned by [`encoding/BASE64URL.md`](encoding/BASE64URL.md). Neither adds Core or Prelude bindings.
+
 Normative concurrency-domain semantics are defined by the modular specifications
 under `concurrency/`. Non-normative unresolved concurrency design notes live in
 `../docs/design/CONCURRENCY_DESIGN.md` and are not a source of observable behavior.

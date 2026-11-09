@@ -97,6 +97,30 @@ Each helper delegates directly to the Core `Encoding`, `TextReader`, and
 input follow [`spec/io/TEXT_IO.md`](../../../spec/io/TEXT_IO.md). These modules are conveniences; `Encoding.UTF8.encode(text)`
 and the Core `TextReader`/`TextWriter` remain available directly.
 
+## Binary Base64url codec
+
+`std:text/base64url` exports only `encode(bytes) -> String` and
+`decode(text) -> Bytes`. This independent RFC 4648 URL-safe codec uses `-` and
+`_`, emits no padding, and accepts only canonical unpadded input: whitespace,
+`+`, `/`, `=`, Unicode, impossible lengths, and nonzero trailing unused pad
+bits signal an ordinary fresh `Error`. Successful decoded results are fresh,
+independent, open standard Bytes, including binary zero and 255. It imposes no
+JWT-specific length cap.
+
+```protos
+Base64url: import("std:text/base64url")
+bytes: Encoding.Latin1.encode("Hello")
+wire: Base64url.encode(bytes) // "SGVsbG8"
+copy: Base64url.decode(wire)
+```
+
+Base64url is **binary-to-ASCII encoding**, not Unicode text encoding. Never
+assume that arbitrary decoded Bytes contain UTF-8 text: perform a separate
+explicit UTF-8 decode only when the protocol requires valid UTF-8. JWT adds
+separate protected-header/payload limits and authentication; see
+[the strict JWT guide](jwt.md) and
+[the normative codec contract](../../../spec/encoding/BASE64URL.md).
+
 ## JVM and Native
 
 All `std:text` modules behave identically on both distributions. Neither

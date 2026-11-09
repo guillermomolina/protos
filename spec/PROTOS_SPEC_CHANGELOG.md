@@ -23,6 +23,14 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.500] - 2026-11-09
+
+### D246-C / I161 — Strict HS256 JWT and Base64url
+- `auth/JWT.md` (new): define authority-free `std:auth/jwt` with synchronous `issue` and `verify`, actual Bytes signing keys of 32–4096 octets, caller-provided strict own-slot policy and trusted exact Instant, protected compact HS256 only and fresh `JwtError` for malformed/unauthenticated tokens.
+- Strict JWT registered claims and exact integral NumericDates, nanosecond precision with configurable bounded skew, full HMAC-SHA256 verification before parsing/returning payload, strict JOSE header, duplicate-name rejection, and bounded token/header/payload/depth resources.
+- `encoding/BASE64URL.md` (new): independent reusable strict canonical unpadded RFC 4648 URL-safe binary-to-ASCII module, exact arbitrary octets and fresh standard Bytes output; invalid types or noncanonical encodings signal fresh ordinary Error.
+- `semantics/ERRORS.md`: register the ordinary Standard Library `JwtError` prototype under `Error`; neither module adds a Core/Prelude member or ambient authority.
+
 ## [0.1.499] - 2026-11-08
 
 ### D244-C / I159 — Standard HMAC-SHA256

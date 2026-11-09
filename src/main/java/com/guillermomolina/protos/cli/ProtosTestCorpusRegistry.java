@@ -85,6 +85,18 @@ final class ProtosTestCorpusRegistry {
         addBinding(
                 registry,
                 activation,
+                "protos/corpus/library/text/base64url",
+                "repository-explicit",
+                "libraryFilesystem");
+        addBinding(
+                registry,
+                activation,
+                "protos/corpus/library/auth/jwt",
+                "repository-explicit",
+                "libraryFilesystem");
+        addBinding(
+                registry,
+                activation,
                 "protos/corpus/library/network/ip-addresses",
                 "repository-explicit",
                 "libraryFilesystem");

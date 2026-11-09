@@ -128,6 +128,30 @@ load: (corpusId) => {
         matched = true
     }
 
+    if(corpusId == "protos/corpus/library/text/base64url") {
+        selected = planFromEntries(
+            "text/base64url/",
+            Array(
+                Array("vectors-and-canonicality.protos", "suite-native", "-"),
+                Array("domain-and-roundtrip.protos", "suite-native", "-")
+            )
+        )
+        matched = true
+    }
+
+    if(corpusId == "protos/corpus/library/auth/jwt") {
+        selected = planFromEntries(
+            "auth/jwt/",
+            Array(
+                Array("issue-and-interoperability.protos", "suite-native", "-"),
+                Array("verify-negative-security.protos", "suite-native", "-"),
+                Array("claims-time-and-limits.protos", "suite-native", "-"),
+                Array("identity-and-actor-boundaries.protos", "suite-native", "-")
+            )
+        )
+        matched = true
+    }
+
     if(corpusId == "protos/corpus/library/network/ip-addresses") {
         selected = planFromEntries(
             "network/ip-addresses/",

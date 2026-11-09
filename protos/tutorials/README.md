@@ -120,6 +120,12 @@ Polyglot embedding with socket access. `04-router-dispatch.protos`
 ordinary handler that needs no duplex and no authority. The
 [HTTP guide](../../docs/guide/library/http.md) explains all five HTTP modules.
 
+The authority-free lesson
+[`13-http/05-strict-jwt.protos`](13-http/05-strict-jwt.protos) demonstrates
+an explicitly injected test Bytes key, an explicit Instant, structured JSON
+claims and HS256 issue/verify. Authentication does not itself grant account
+permissions. See the [strict JWT guide](../../docs/guide/library/jwt.md).
+
 After the HTTP progression, the next advanced workflow reaches real hosts and
 is not a tutorial: the manual cookbook examples
 [`http-url-client.protos`](../examples/io/http-url-client.protos) (one HTTPS

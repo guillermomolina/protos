@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.457-SNAPSHOT
+
+- `I161` (D246-C): implement strict Base64url and HS256 JWT Standard Library modules.
+  - Add `std:text/base64url` with canonical unpadded RFC 4648
+    `encode(Bytes)` and `decode(String)`, rejecting invalid alphabets,
+    padding, lengths and noncanonical trailing bits.
+  - Add `std:auth/jwt` with `issue`, `verify` and `JwtError`,
+    using explicit trusted Bytes keys, policy and Instant values.
+  - Enforce strict compact JWS structure, HS256-only JOSE headers,
+    authenticated payload processing and bounded UTF-8 JSON.
+  - Validate required registered claims, exact NumericDate integers,
+    issuer and audience, token lifetime, expiration, not-before
+    constraints and bounded optional clock skew.
+  - Preserve synchronous, authority-free operation, fresh error
+    instances and Actor boundary contracts; propagate HMAC provider
+    failures separately from malformed-token failures.
+  - Add specifications, library guides, tutorial, executable example
+    and six Test Tool corpora with 52 passing functional cases.
+  - Integrate the new corpora with repository registration,
+    completeness auditing, SuiteGraph, progress grouping and
+    Standard Library documentation extraction.
+  - Validate all 52 functional cases, 52 focal Java integration
+    tests, full `make test`, `make check` and `git diff --check`.
+
 ## 0.3.456-SNAPSHOT
 
 - `I159` (D244-C): implement the standard `std:crypto/hmac_sha256` module.

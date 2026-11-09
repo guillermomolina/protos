@@ -92,6 +92,8 @@ final class ProtosTestToolRepositoryCompletenessSupport {
                     library("math/linear-algebra"),
                     library("crypto/sha256"),
                     library("crypto/hmac_sha256"),
+                    library("text/base64url"),
+                    library("auth/jwt"),
                     library("network/ip-addresses"),
                     library("network/ip-endpoints"),
                     library("network/resolvers"),

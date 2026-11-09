@@ -1,0 +1,180 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Strict unpadded RFC 4648 Base64url encoding.
+//!
+//! Binary-to-ASCII conversion without implicit Unicode interpretation.
+//! Both operations are synchronous and require no ambient authority.
+
+alphabet: Encoding.Latin1.encode(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+)
+
+digit: (octet) => {
+    value: -1
+
+    if((octet >= 65) && (octet <= 90)) {
+        value = octet - 65
+    }
+    if((octet >= 97) && (octet <= 122)) {
+        value = octet - 97 + 26
+    }
+    if((octet >= 48) && (octet <= 57)) {
+        value = octet - 48 + 52
+    }
+    if(octet == 45) {
+        value = 62
+    }
+    if(octet == 95) {
+        value = 63
+    }
+
+    value
+}
+
+snapshot: (value) => {
+    copy: null
+
+    Error.handle(
+        () => {
+            copy = Encoding.Latin1.encode(
+                Encoding.Latin1.decode(value)
+            )
+        },
+        (error) => {
+            Error().signal()
+        }
+    )
+
+    copy
+}
+
+/// Encodes genuine standard Bytes as canonical unpadded Base64url.
+/// The source is copied without retaining or modifying it.
+encode: (bytes) => {
+    source: snapshot(bytes)
+    output: Encoding.UTF8.encode("")
+    count: source.size()
+    index: 0
+
+    while((index + 3) <= count) {
+        a: source[index]
+        b: source[index + 1]
+        c: source[index + 2]
+
+        output.add(alphabet[a >> 2])
+        output.add(alphabet[((a & 3) << 4) | (b >> 4)])
+        output.add(alphabet[((b & 15) << 2) | (c >> 6)])
+        output.add(alphabet[c & 63])
+
+        index = index + 3
+    }
+
+    remaining: count - index
+
+    if(remaining == 1) {
+        a: source[index]
+
+        output.add(alphabet[a >> 2])
+        output.add(alphabet[(a & 3) << 4])
+    }
+
+    if(remaining == 2) {
+        a: source[index]
+        b: source[index + 1]
+
+        output.add(alphabet[a >> 2])
+        output.add(alphabet[((a & 3) << 4) | (b >> 4)])
+        output.add(alphabet[(b & 15) << 2])
+    }
+
+    Encoding.Latin1.decode(output)
+}
+
+/// Decodes canonical unpadded Base64url into fresh standard Bytes.
+/// Invalid characters, lengths and unused trailing bits signal Error.
+decode: (text) => {
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+
+    source: Encoding.UTF8.encode(text)
+    count: source.size()
+
+    ((count % 4) == 1).ifTrue(() => {
+        Error().signal()
+    })
+
+    index: 0
+    while(index < count) {
+        (digit(source[index]) < 0).ifTrue(() => {
+            Error().signal()
+        })
+        index = index + 1
+    }
+
+    output: Encoding.UTF8.encode("")
+    index = 0
+
+    while((index + 4) <= count) {
+        a: digit(source[index])
+        b: digit(source[index + 1])
+        c: digit(source[index + 2])
+        d: digit(source[index + 3])
+
+        output.add((a << 2) | (b >> 4))
+        output.add(((b & 15) << 4) | (c >> 2))
+        output.add(((c & 3) << 6) | d)
+
+        index = index + 4
+    }
+
+    remaining: count - index
+
+    if(remaining == 2) {
+        a: digit(source[index])
+        b: digit(source[index + 1])
+
+        ((b & 15) != 0).ifTrue(() => {
+            Error().signal()
+        })
+
+        output.add((a << 2) | (b >> 4))
+    }
+
+    if(remaining == 3) {
+        a: digit(source[index])
+        b: digit(source[index + 1])
+        c: digit(source[index + 2])
+
+        ((c & 3) != 0).ifTrue(() => {
+            Error().signal()
+        })
+
+        output.add((a << 2) | (b >> 4))
+        output.add(((b & 15) << 4) | (c >> 2))
+    }
+
+    output
+}
+
+// Publish only the two supported operations.
+/// Encode standard Bytes as canonical unpadded Base64url text.
+this.encode: encode
+/// Decode canonical unpadded Base64url text to fresh Bytes.
+this.decode: decode
+
+// The helpers remain private initializer bindings, captured by the
+// exported operations. They are not public module slots.

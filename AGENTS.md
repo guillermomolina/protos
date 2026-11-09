@@ -190,6 +190,8 @@ Domain owners:
 - spec/semantics/ERRORS.md — Error semantics.
 - spec/semantics/VALUES_AND_COLLECTIONS.md — value-family, equality/identity,
   indexing, and collection semantics.
+- spec/auth/JWT.md — strict HS256 compact JWT issuance/verification, policy, time, claims, limits and authenticated-output boundary (D246-C).
+- spec/encoding/BASE64URL.md — strict, unpadded, canonical reusable Base64url codec (D246-C).
 - spec/semantics/CRYPTO.md — ordinary Actor-local Standard Library
   HMAC-SHA256 module operations, exact Bytes admission, limits, full-tag
   verification, and private backend failure semantics (D244-C).

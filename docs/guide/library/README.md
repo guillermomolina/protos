@@ -58,6 +58,8 @@ is not a module; import `std:datetime/date`, `std:datetime/instant`, and so on.
 | [Dates, times, and durations](datetime.md) | `std:datetime/*` | Civil dates and times, instants, fixed offsets, durations, periods, ISO 8601 and RFC 3339 text |
 | [Structured logging](logging.md) | `std:logging/*` | Explicit loggers, levels, structured fields, text/JSON/colored formatting, and sinks |
 | [Text styling and encodings](text.md) | `std:text/*` | Styled text, ANSI rendering, color-mode policy, and UTF-8/UTF-16/Latin-1 helpers |
+| [Strict JWT authentication](jwt.md) | `std:auth/jwt` | Explicit-policy, explicit-time HS256 compact JWT issue/verify with authenticated JSON claims |
+| [Binary Base64url](text.md#binary-base64url-codec) | `std:text/base64url` | Canonical, unpadded RFC 4648 binary-to-ASCII conversion of genuine Bytes |
 | [Cryptography: SHA-256 and HMAC-SHA256](crypto.md) | `std:crypto/sha256`, `std:crypto/hmac_sha256` | Distinguish unkeyed digests from complete 32-octet keyed authentication, with exact Bytes and explicit key custody |
 | [Semantic versions](semver.md) | `std:semver/sem_ver` | Strict Semantic Versioning 2.0.0 parsing, formatting, equality, and precedence |
 | [HTTP/1.1](http.md) | `std:http/server`, `std:http/host`, `std:http/client`, `std:http/router`, `std:http/url_client` | One request on a supplied duplex, continuous hosting on an owned `TcpListener`, one client exchange on a supplied duplex, authority-free route dispatch, and one URL request from explicit capabilities |

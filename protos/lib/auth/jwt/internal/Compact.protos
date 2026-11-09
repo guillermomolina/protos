@@ -1,0 +1,178 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private compact JWS helpers for std:auth/jwt.
+//! Not a public Standard Library module.
+
+maxTokenBytes: 8192
+maxHeaderBytes: 1024
+maxPayloadBytes: 4096
+
+fail: () => {
+    Error().signal()
+}
+
+/// Validate a compact ASCII token and retain its original segments.
+/// No JSON parsing or cryptographic verification occurs here.
+split: (token) => {
+    String.recognizes(token).ifFalse(() => {
+        fail()
+    })
+
+    // An ASCII compact token has exactly one octet per character.
+    // If the String already exceeds the octet limit in characters,
+    // no encoding or further processing is necessary.
+    if(token.size() > maxTokenBytes) {
+        fail()
+    }
+
+    // UTF-8 encoding makes non-ASCII input observable as octets.
+    source: Encoding.UTF8.encode(token)
+    count: source.size()
+
+    if((count == 0) || (count > maxTokenBytes)) {
+        fail()
+    }
+
+    separatorCount: 0
+    first: -1
+    second: -1
+    index: 0
+
+    while(index < count) {
+        octet: source[index]
+
+        if(octet > 127) {
+            fail()
+        }
+
+        // Compact JWS permits Base64url characters and exactly
+        // two period separators. Validate the full wire alphabet
+        // independently of recording separator positions.
+        valid: ((octet >= 65) && (octet <= 90)) ||
+            ((octet >= 97) && (octet <= 122)) ||
+            ((octet >= 48) && (octet <= 57)) ||
+            (octet == 45) ||
+            (octet == 95) ||
+            (octet == 46)
+
+        valid.ifFalse(() => {
+            fail()
+        })
+
+        if(octet == 46) {
+            separatorCount = separatorCount + 1
+
+            if(separatorCount == 1) {
+                first = index
+            }
+            if(separatorCount == 2) {
+                second = index
+            }
+            if(separatorCount > 2) {
+                fail()
+            }
+        }
+
+        index = index + 1
+    }
+
+    (separatorCount == 2).ifFalse(() => {
+        fail()
+    })
+
+
+    if((first == 0) || (second <= first + 1) ||
+        (second == count - 1)) {
+        fail()
+    }
+
+    // A private byte range is used rather than String slicing.
+    copyRange: (start, stop) => {
+        bytes: Encoding.UTF8.encode("")
+        position: start
+
+        while(position < stop) {
+            bytes.add(source[position])
+            position = position + 1
+        }
+
+        Encoding.Latin1.decode(bytes)
+    }
+
+    header: copyRange(0, first)
+    payload: copyRange(first + 1, second)
+    signature: copyRange(second + 1, count)
+    signingInput: copyRange(0, second)
+
+    {
+        header: header
+        payload: payload
+        signature: signature
+        signingInput: signingInput
+    }
+}
+
+/// Encode a bounded header/payload/signature as three compact segments.
+assemble: (header, payload, signature) => {
+    String.recognizes(header).ifFalse(() => { fail() })
+    String.recognizes(payload).ifFalse(() => { fail() })
+    String.recognizes(signature).ifFalse(() => { fail() })
+
+    token: header + "." + payload + "." + signature
+
+    // Reuse the strict wire spelling validation.
+    parts: split(token)
+
+    parts.header
+    parts.payload
+    parts.signature
+
+    token
+}
+
+/// Convert UTF-8 text to fresh Bytes, enforcing an octet limit.
+boundedUtf8: (text, limit) => {
+    String.recognizes(text).ifFalse(() => { fail() })
+
+    bytes: Encoding.UTF8.encode(text)
+
+    (bytes.size() > limit).ifTrue(() => {
+        fail()
+    })
+
+    bytes
+}
+
+/// Validate a decoded header's byte size.
+headerBytes: (bytes) => {
+    (bytes.size() > maxHeaderBytes).ifTrue(() => {
+        fail()
+    })
+    bytes
+}
+
+/// Validate a decoded payload's byte size.
+payloadBytes: (bytes) => {
+    (bytes.size() > maxPayloadBytes).ifTrue(() => {
+        fail()
+    })
+    bytes
+}
+
+/// Strictly decode an authenticated UTF-8 JSON text snapshot.
+jsonText: (bytes) => {
+    Encoding.UTF8.decode(bytes)
+}

@@ -27,6 +27,16 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         assertPlan("protos/corpus/library/math/linear-algebra", 3, "math/linear-algebra/construction-and-indexing.protos", "math/linear-algebra/identity-and-state.protos");
         assertPlan("protos/corpus/library/crypto/sha256", 2, "crypto/sha256/vectors-and-boundaries.protos", "crypto/sha256/ownership-and-domain.protos");
         assertPlan("protos/corpus/library/crypto/hmac_sha256", 3, "crypto/hmac_sha256/vectors-and-boundaries.protos", "crypto/hmac_sha256/invalid-inputs-and-private-boundary.protos");
+        assertPlan(
+                "protos/corpus/library/text/base64url",
+                2,
+                "text/base64url/vectors-and-canonicality.protos",
+                "text/base64url/domain-and-roundtrip.protos");
+        assertPlan(
+                "protos/corpus/library/auth/jwt",
+                4,
+                "auth/jwt/issue-and-interoperability.protos",
+                "auth/jwt/identity-and-actor-boundaries.protos");
         assertPlan("protos/corpus/library/network/ip-addresses", 3, "network/ip-addresses/surface.protos", "network/ip-addresses/validation.protos");
         assertPlan("protos/corpus/library/network/ip-endpoints", 1, "network/ip-endpoints/parse-format-and-validation.protos", "network/ip-endpoints/parse-format-and-validation.protos");
         assertPlan("protos/corpus/library/network/resolvers", 4, "network/resolvers/surface.protos", "network/resolvers/lifecycle.protos");
@@ -64,6 +74,34 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         for (int index = 0; index < expected.length; index++) {
             assertEquals(expected[index], path(corpus, index));
             assertEquals("suite-native", expectation(corpus, index));
+        }
+    }
+
+    @Test
+    void base64urlAndJwtCasesRemainExplicitOrderedAndSuiteNative()
+            throws Exception {
+        String base64 = "protos/corpus/library/text/base64url";
+        String[] base64Paths = {
+            "text/base64url/vectors-and-canonicality.protos",
+            "text/base64url/domain-and-roundtrip.protos"
+        };
+
+        for (int index = 0; index < base64Paths.length; index++) {
+            assertEquals(base64Paths[index], path(base64, index));
+            assertEquals("suite-native", expectation(base64, index));
+        }
+
+        String jwt = "protos/corpus/library/auth/jwt";
+        String[] jwtPaths = {
+            "auth/jwt/issue-and-interoperability.protos",
+            "auth/jwt/verify-negative-security.protos",
+            "auth/jwt/claims-time-and-limits.protos",
+            "auth/jwt/identity-and-actor-boundaries.protos"
+        };
+
+        for (int index = 0; index < jwtPaths.length; index++) {
+            assertEquals(jwtPaths[index], path(jwt, index));
+            assertEquals("suite-native", expectation(jwt, index));
         }
     }
 

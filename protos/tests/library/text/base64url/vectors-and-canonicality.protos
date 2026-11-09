@@ -1,0 +1,80 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Base64url: import("std:text/base64url")
+
+octets: (values) => {
+    result: Encoding.UTF8.encode("")
+    for(value in values) { result.add(value) }
+    result
+}
+
+same: (left, right) => {
+    equal: left.size() == right.size()
+    index: 0
+    while(equal && (index < left.size())) {
+        if(left[index] != right[index]) { equal = false }
+        index = index + 1
+    }
+    equal
+}
+
+tests: [
+    Test("RFC 4648 unpadded vectors", () => {
+        Assertions.require(Base64url.encode(Encoding.UTF8.encode("")) == "")
+        Assertions.require(Base64url.encode(Encoding.UTF8.encode("f")) == "Zg")
+        Assertions.require(Base64url.encode(Encoding.UTF8.encode("fo")) == "Zm8")
+        Assertions.require(Base64url.encode(Encoding.UTF8.encode("foo")) == "Zm9v")
+        Assertions.require(Base64url.encode(Encoding.UTF8.encode("foob")) == "Zm9vYg")
+        Assertions.require(Base64url.encode(Encoding.UTF8.encode("fooba")) == "Zm9vYmE")
+        Assertions.require(Base64url.encode(Encoding.UTF8.encode("foobar")) == "Zm9vYmFy")
+    }),
+    Test("canonical decoding of RFC vectors", () => {
+        Assertions.require(same(Base64url.decode(""), octets(Array())))
+        Assertions.require(same(Base64url.decode("Zg"), Encoding.UTF8.encode("f")))
+        Assertions.require(same(Base64url.decode("Zm8"), Encoding.UTF8.encode("fo")))
+        Assertions.require(same(Base64url.decode("Zm9v"), Encoding.UTF8.encode("foo")))
+        Assertions.require(same(Base64url.decode("Zm9vYg"), Encoding.UTF8.encode("foob")))
+        Assertions.require(same(Base64url.decode("Zm9vYmE"), Encoding.UTF8.encode("fooba")))
+        Assertions.require(same(Base64url.decode("Zm9vYmFy"), Encoding.UTF8.encode("foobar")))
+    }),
+    Test("URL-safe alphabet for binary octets", () => {
+        source: octets(Array(0, 255, 254, 128, 251, 252, 253))
+        encoded: Base64url.encode(source)
+        Assertions.require(encoded == "AP_-gPv8_Q")
+        Assertions.require(same(Base64url.decode(encoded), source))
+        Assertions.require(Base64url.encode(octets(Array(251, 255, 255))) == "-___")
+    }),
+    Test("all 256 octets roundtrip", () => {
+        source: octets(Array())
+        index: 0
+        while(index < 256) {
+            source.add(index)
+            index = index + 1
+        }
+        restored: Base64url.decode(Base64url.encode(source))
+        Assertions.require(same(restored, source))
+        Assertions.require(restored !== source)
+    }),
+    Test("invalid trailing sextets are not canonical", () => {
+        Assertions.signals(Error, () => { Base64url.decode("Zh") })
+        Assertions.signals(Error, () => { Base64url.decode("Zm9") })
+        Assertions.require(Base64url.encode(Base64url.decode("Zg")) == "Zg")
+        Assertions.require(Base64url.encode(Base64url.decode("Zm8")) == "Zm8")
+    })
+]
+tests.freeze()
