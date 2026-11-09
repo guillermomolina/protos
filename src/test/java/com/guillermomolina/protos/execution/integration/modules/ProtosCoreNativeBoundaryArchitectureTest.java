@@ -119,6 +119,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/facilities/ProtosResolverHostFacility.java", 1),
                     // D243-C / I157: private host Entropy bridge, not a Core selector.
                     Map.entry("execution/facilities/ProtosEntropyHostFacility.java", 1),
+                    Map.entry("execution/facilities/ProtosClockHostFacility.java", 1),
                     // D244-C / I159: private HMAC-SHA256 JCA primitive,
                     // not a native Core selector or ambient capability.
                     Map.entry("execution/facilities/ProtosHmacSha256Facility.java", 1),
@@ -130,6 +131,19 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/tools/test/catalog/ProtosTestToolCatalogAcquisitionFacility.java", 1),
                     Map.entry("execution/tools/test/catalog/ProtosTestToolFileSelectionFacility.java", 2),
                     Map.entry("execution/tools/test/reporting/ProtosTestToolStalledCaseDiagnosticFacility.java", 1));
+
+    @Test
+    void clockHasOnlyOneSourceBackedPublicOperationAndNoPublicGrantFactory() throws IOException {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosObjectValue clock = prelude.clockPrototypeForRuntime();
+        assertSourceBacked(clock, "epochNanoseconds");
+        assertNativeSelectors("Clock", clock, Set.of());
+        assertEquals(Set.of("epochNanoseconds"), clock.localSlotsSnapshot().keySet());
+        for (String name : Set.of("Clock", "clock", "_coreClockBridge")) {
+            assertFalse(prelude.bindings().hasLocalSlot(name), name);
+        }
+        assertFalse(prelude.isStandardModuleMemberForRuntime(clock));
+    }
 
     @Test
     void javaNativeClosureProvidersMatchTheAuditedBoundaryExactly() throws IOException {
@@ -186,6 +200,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                             // D243-C / I157: private host Entropy bridge.
                             || relative.equals(
                                     "execution/facilities/ProtosEntropyHostFacility.java")
+                            || relative.equals("execution/facilities/ProtosClockHostFacility.java")
                             // D244-C / I159: private HMAC-SHA256 backend.
                             || relative.equals(
                                     "execution/facilities/ProtosHmacSha256Facility.java")

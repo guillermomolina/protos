@@ -102,6 +102,93 @@ final class ProtosWorkspaceRunCliTest {
 
     @TempDir Path temp;
 
+    private static final String CLOCK_MAIN = """
+            writer: TextWriter(process.stdout(), process.stdoutEncoding())
+            if(context.hasSlot("clock")) {
+                if(!Integer.recognizes(clock.epochNanoseconds())) { Error().signal() }
+                writer.writeLine("true").value()
+            } else {
+                writer.writeLine("false").value()
+            }
+            null
+            """;
+
+    @Test
+    void workspaceAndPackageRunForwardOnlyExplicitClockSelection() throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        Files.writeString(project.resolve("Main/module.protos"), CLOCK_MAIN);
+        Result absent = runWorkspace(project, "Main");
+        assertEquals(0, absent.code(), absent.stderr());
+        assertEquals("false\n", absent.stdout());
+        ProtosCli grantedCli = new ProtosCli();
+        selectClockForApplication(grantedCli);
+        Result granted = runWorkspace(grantedCli, project, "Main");
+        assertEquals(0, granted.code(), granted.stderr());
+        assertEquals("true\n", granted.stdout());
+
+        MixedProject mixed = materializeMixedProject("mixed-clock");
+        ProtosLocalExactPackageMaterializationProvider provider =
+                new ProtosLocalExactPackageMaterializationProvider(temp.resolve("mixed-clock-store"));
+        Path selectedRoot = provider.locationFor(mixed.identity());
+        copyTree(mixed.externalSource(), selectedRoot);
+        assumeSecureConfinement(selectedRoot);
+        Files.writeString(mixed.project().resolve("Main/module.protos"),
+                "Api: import(\"dep:reg/Api\")\n" + CLOCK_MAIN);
+        ProtosCli packageCli = new ProtosCli(ignored -> provider);
+        selectClockForApplication(packageCli);
+        Result packaged = runWorkspace(packageCli, mixed.project(), "Main");
+        assertEquals(0, packaged.code(), packaged.stderr());
+        assertEquals("true\n", packaged.stdout());
+    }
+
+    @Test
+    void workspaceAndPackageServiceKeepClockAfterReady() throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        String service = """
+                this.service: () => {
+                    Actor.current().send("finish")
+                    {
+                        finish: () => {
+                            if(!Integer.recognizes(clock.epochNanoseconds())) { Error().signal() }
+                            writer: TextWriter(process.stdout(), process.stdoutEncoding())
+                            writer.writeLine("true").value()
+                            Actor.current().stop()
+                            null
+                        }
+                    }
+                }
+                """;
+        Files.writeString(project.resolve("Main/module.protos"), service);
+        ProtosCli workspaceCli = new ProtosCli();
+        selectClockForApplication(workspaceCli);
+        Result workspace = runWorkspaceService(workspaceCli, project, "Main", "service");
+        assertEquals(0, workspace.code(), workspace.stderr());
+        assertEquals("true\n", workspace.stdout());
+
+        MixedProject mixed = materializeMixedProject("mixed-clock-service");
+        ProtosLocalExactPackageMaterializationProvider provider =
+                new ProtosLocalExactPackageMaterializationProvider(temp.resolve("mixed-clock-service-store"));
+        Path selectedRoot = provider.locationFor(mixed.identity());
+        copyTree(mixed.externalSource(), selectedRoot);
+        assumeSecureConfinement(selectedRoot);
+        Files.writeString(mixed.project().resolve("Main/module.protos"),
+                "Api: import(\"dep:reg/Api\")\n" + service);
+        ProtosCli packageCli = new ProtosCli(ignored -> provider);
+        selectClockForApplication(packageCli);
+        Result packaged = runWorkspaceService(packageCli, mixed.project(), "Main", "service");
+        assertEquals(0, packaged.code(), packaged.stderr());
+        assertEquals("true\n", packaged.stdout());
+    }
+
+    /** Exercises the post-admission run seam with the same selection set by CLI dispatch. */
+    private static void selectClockForApplication(ProtosCli cli) throws Exception {
+        java.lang.reflect.Field selection = ProtosCli.class.getDeclaredField("clockAuthorized");
+        selection.setAccessible(true);
+        selection.setBoolean(cli, true);
+    }
+
     @Test
     void publicRunRequiresExplicitEntryAndHelpDocumentsExactContract() {
         Result missing = runPublic("run");
@@ -111,7 +198,7 @@ final class ProtosWorkspaceRunCliTest {
         Result help = runPublic("--help");
         assertEquals(0, help.code());
         assertTrue(help.stdout().contains(
-                "protos run [--allow-network] [--allow-entropy] [--service=<binding>] <entry> [args...]"));
+                "protos run [--allow-network] [--allow-entropy] [--allow-clock] [--service=<binding>] <entry> [args...]"));
         assertTrue(help.stdout().contains("current directory"));
         assertTrue(help.stdout().contains("neither 'run' nor <entry>"));
     }

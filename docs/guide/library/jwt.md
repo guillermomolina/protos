@@ -100,3 +100,29 @@ but neither replaces this JWT profile and policy validation.
 See the [HTTP guide](http.md), [cryptography guide](crypto.md),
 [text and Base64url guide](text.md), and the runnable
 [`05-strict-jwt.protos` tutorial](../../../protos/tutorials/13-http/05-strict-jwt.protos).
+
+## Supplying current time through an authorized Clock
+
+An authorized RootActor (`--allow-clock`, or `protos.AllowClock=true`) obtains
+one genuine Instant and passes it explicitly. With the trusted key and policy
+above, construct current claims from that one observation:
+
+```protos
+now: Instant(clock.epochNanoseconds())
+issuedSeconds: now.nanoseconds.div(1000000000)
+currentClaims: JSON.object(
+    "iss", JSON.string(policy.issuer),
+    "aud", JSON.string(policy.audience),
+    "sub", JSON.string("user-id-42"),
+    "iat", JSON.number(issuedSeconds, 0),
+    "exp", JSON.number(issuedSeconds + 3600, 0)
+)
+currentToken: JWT.issue(currentClaims, fixtureKey, policy, now)
+currentVerified: JWT.verify(currentToken, fixtureKey, policy, now)
+```
+
+The key above remains a test fixture. Both JWT signatures and caller-controlled
+time policy are unchanged. JWT imports no Clock and never acquires time
+implicitly. A genuine Instant certifies its value family, not the trustworthiness
+of its origin; wall time can move backward. This example adds no key generation
+or HTTP authentication middleware.

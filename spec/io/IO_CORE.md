@@ -6,11 +6,17 @@ Last updated: 2026-09-04
 
 This document is the primary normative owner of cross-cutting I/O capability, asynchronous-operation, commitment, lifecycle, wrapper-ownership, concrete-capability-shape, and pay-as-you-grow rules.
 
-The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.md`, `FILESYSTEM.md`, `PROCESS_IO.md`, `NETWORK.md`, and `ENTROPY.md`. Legacy section numbers from `IO_CORE.md` and the applicable sibling I/O module are intentionally retained so historical citations remain understandable. Normative ownership now belongs to these modules; the former monolithic file is removed by revision 326.
+The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.md`, `FILESYSTEM.md`, `PROCESS_IO.md`, `NETWORK.md`, `ENTROPY.md`, and `CLOCK.md`. Legacy section numbers from `IO_CORE.md` and the applicable sibling I/O module are intentionally retained so historical citations remain understandable. Normative ownership now belongs to these modules; the former monolithic file is removed by revision 326.
 
 ## 1. Scope
 
 Core I/O is capability-oriented, byte-oriented at the lowest layer, asynchronous where an operation may wait, and compatible with the Actor isolation model.
+
+`Clock.epochNanoseconds()` (`CLOCK.md`) is a synchronous authorized host
+observation. The general Future rule for operations that may wait does not
+require a Future for this operation. Ordinary synchronous Error signaling
+applies, using `InvalidIOArgument`, `IOError` and `IOLifecycleError` as defined
+by that owner; no new Error prototype, Closable or lifecycle Future is added.
 
 This document defines:
 

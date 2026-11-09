@@ -578,7 +578,8 @@ creation. It is ordinary local state thereafter. Imported modules and non-root
 Actor initial modules do not receive it implicitly.
 
 The same lifecycle placement applies to every other optional bootstrap-local
-grant of the RootActor initial module, including the D223-A1 `resolver` slot
+grant of the RootActor initial module, including the D253-C1 `clock` slot
+(`../io/CLOCK.md`) and the D223-A1 `resolver` slot
 (`../io/PROCESS_IO.md`, Root resolver capability provisioning). The
 `std:network/resolvers` module (`../io/NETWORK.md` §14.1) and its grant are
 separate: importing that module yields only the authority-free `Resolver`

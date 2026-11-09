@@ -46,6 +46,7 @@ public final class ProtosPrelude {
     private final ProtosObjectValue runtimeIpEndpointPrototype;
     private final ProtosClosureValue runtimeFilesystemOpenMethod;
     private final ProtosObjectValue runtimeEntropyPrototype;
+    private final ProtosObjectValue runtimeClockPrototype;
     private final Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers;
     private final Set<ProtosObjectValue> standardModuleMemberIdentities;
     private final Map<
@@ -309,6 +310,42 @@ public final class ProtosPrelude {
             ProtosObjectValue runtimeTcpAcceptorPrototype,
             ProtosClosureValue runtimeFilesystemOpenMethod,
             ProtosObjectValue runtimeEntropyPrototype) {
+        this(
+                bindings,
+                contextPrototype,
+                runtimeBytesPrototype,
+                runtimeActorRefPrototype,
+                runtimeTcpConnectionPrototype,
+                runtimeTcpListenerPrototype,
+                runtimeIpAddressPrototype,
+                runtimeIpEndpointPrototype,
+                standardModuleMembers,
+                semanticTransferFamilies,
+                lazyStandardModuleMembers,
+                runtimeTcpAcceptorPrototype,
+                runtimeFilesystemOpenMethod,
+                runtimeEntropyPrototype,
+                null);
+    }
+
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype,
+            ProtosObjectValue runtimeBytesPrototype,
+            ProtosObjectValue runtimeActorRefPrototype,
+            ProtosObjectValue runtimeTcpConnectionPrototype,
+            ProtosObjectValue runtimeTcpListenerPrototype,
+            ProtosObjectValue runtimeIpAddressPrototype,
+            ProtosObjectValue runtimeIpEndpointPrototype,
+            Map<ProtosModuleKey, Map<String, ProtosObjectValue>>
+                    standardModuleMembers,
+            List<ProtosSemanticTransferFamily> semanticTransferFamilies,
+            Map<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>>
+                    lazyStandardModuleMembers,
+            ProtosObjectValue runtimeTcpAcceptorPrototype,
+            ProtosClosureValue runtimeFilesystemOpenMethod,
+            ProtosObjectValue runtimeEntropyPrototype,
+            ProtosObjectValue runtimeClockPrototype) {
         if (runtimeFilesystemOpenMethod != null
                 && (runtimeFilesystemOpenMethod.definition() == null
                         || runtimeFilesystemOpenMethod.nativeBody().isPresent())) {
@@ -317,6 +354,8 @@ public final class ProtosPrelude {
         }
         this.runtimeFilesystemOpenMethod = runtimeFilesystemOpenMethod;
         this.runtimeEntropyPrototype = runtimeEntropyPrototype;
+        this.runtimeClockPrototype = runtimeClockPrototype;
+        requireFrozenDirectChildOfObject(runtimeClockPrototype, "Clock");
         this.semanticTransferFamilies = copySemanticTransferFamilies(semanticTransferFamilies);
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.contextPrototype =
@@ -633,6 +672,14 @@ public final class ProtosPrelude {
                     "this prelude does not retain the standard runtime Bytes prototype");
         }
         return runtimeBytesPrototype;
+    }
+
+    /** Private authority-free Clock protocol; reduced legacy fixtures cannot provision grants. */
+    public ProtosObjectValue clockPrototypeForRuntime() {
+        if (runtimeClockPrototype == null) {
+            throw new IllegalStateException("this prelude does not retain the runtime Clock prototype");
+        }
+        return runtimeClockPrototype;
     }
 
     /**

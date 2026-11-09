@@ -12,11 +12,11 @@ The dispatch code is
 
 | Command | What it does | Guide |
 |---|---|---|
-| `protos [--inspect] [--allow-network] [--allow-entropy] [--allow-filesystem=<dir>] [--service=<binding>] <file> [args...]` | Runs one source file | below |
-| `protos [--inspect] [--allow-network] [--allow-entropy] [--allow-filesystem=<dir>] -e <source> [args...]` | Runs one source String | below |
-| `protos [--inspect] [--allow-network] [--allow-entropy] [--allow-filesystem=<dir>]` | Starts the interactive REPL | below |
-| `protos run [--allow-network] [--allow-entropy] [--allow-filesystem=<dir>] [--service=<binding>] <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
-| `protos debug [--allow-network] [--allow-entropy] [--allow-filesystem=<dir>] <file> [args...]` | Runs one file under the Debug Adapter Protocol | below |
+| `protos [--inspect] [--allow-network] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] [--service=<binding>] <file> [args...]` | Runs one source file | below |
+| `protos [--inspect] [--allow-network] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] -e <source> [args...]` | Runs one source String | below |
+| `protos [--inspect] [--allow-network] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>]` | Starts the interactive REPL | below |
+| `protos run [--allow-network] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] [--service=<binding>] <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
+| `protos debug [--allow-network] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] <file> [args...]` | Runs one file under the Debug Adapter Protocol | below |
 | `protos format [<file>]` | Prints the canonical formatting of one document | below |
 | `protos lint [--output text\|json] [--fail-on-warning] [<file>]` | Reports parser errors and lint warnings without running code | below |
 | `protos language-server` | Starts the Language Server Protocol service on stdin/stdout | [Language server](language-server.md) |
@@ -347,7 +347,7 @@ to the selected pre-existing directory. None affects Package Tool preflight.
 
 ### `protos debug`
 
-`protos debug [--allow-network] [--allow-entropy] [--allow-filesystem=<dir>] <file>` runs one file through the standard Debug Adapter Protocol
+`protos debug [--allow-network] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] <file>` runs one file through the standard Debug Adapter Protocol
 debugger. Before guest execution it writes exactly one `PROTOS_DEBUG_READY`
 JSON record to standard output; afterwards guest output travels over DAP. It is
 intended to be launched by an editor integration rather than by hand.
@@ -459,7 +459,34 @@ protos lint --fail-on-warning src/main.protos
 | Commands on this page | All available | All available |
 | `--foreign-provider-path` | Not available: no dynamic plugin loading | Available |
 | `--inspect` | Available | Available |
-| `--allow-network`, `--allow-entropy`, `--allow-filesystem=<dir>`, `--service` | Available | Available |
+| `--allow-network`, `--allow-entropy`, `--allow-clock`, `--allow-filesystem=<dir>`, `--service` | Available | Available |
 | Java embedding | Not available | Available through the standard Polyglot API ([guide](../embedding/java.md)) |
 
 Download and installation are described in [Try Protos](../00-try-protos.md).
+
+### Explicit wall-clock authority (`--allow-clock`, D253-C1 / I163)
+
+`--allow-clock` grants only the initial application RootActor module's private
+`clock` slot, absent by default. `clock.epochNanoseconds()` synchronously returns
+an exact Integer; it grants no Network, Entropy, Filesystem, Resolver or inspection.
+It is available for SOURCE, `-e`, REPL, debug, package/workspace run and services:
+
+```sh
+bin/protos --allow-clock protos/examples/clock/current-time.protos
+protos --allow-clock -e 'print(Integer.recognizes(clock.epochNanoseconds()))'
+protos --allow-clock
+protos debug --allow-clock entry.protos
+protos run --allow-clock Main
+protos --allow-clock --service=service server.protos
+protos run --allow-clock --service=service Server
+protos --allow-network --allow-entropy --allow-clock entry.protos
+```
+
+Place the flag before the source, or after `debug`/`run` and before its entry.
+After the source path or expression it is an application argument. Duplicates,
+invalid placement and help/version-only requests are usage errors (exit 2).
+Bundled package/test/format/lint Tools and the Language Server reject it.
+Service mode itself grants no Clock. Package preflight and materialization
+receive no application Clock authority. Samples are wall time, not monotonic
+measurements; the [authority guide](../11-process-io-filesystems-and-authority.md)
+explains lifecycle and isolation.

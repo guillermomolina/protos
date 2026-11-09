@@ -44,6 +44,20 @@ import org.junit.jupiter.api.Test;
 
 class ProtosCoreBootstrapTest {
     @Test
+    void clockIsPrivateFrozenSourceBackedAndNeverImplicitlyGranted() throws IOException {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+        ProtosObjectValue clock = prelude.clockPrototypeForRuntime();
+        assertTrue(clock.isFrozen());
+        assertSame(ProtosObjectValue.rootObject(), clock.parent().orElseThrow());
+        assertEquals(Set.of("epochNanoseconds"), clock.localSlotsSnapshot().keySet());
+        assertSourceBackedObjectClosure(clock, "epochNanoseconds");
+        assertFalse(prelude.bindings().hasLocalSlot("Clock"));
+        assertFalse(prelude.bindings().hasLocalSlot("clock"));
+        assertFalse(prelude.bindings().hasLocalSlot("_coreClockBridge"));
+        assertFalse(prelude.newExecutionContext().hasLocalSlot("clock"));
+    }
+
+    @Test
     void bootstrapsContextPrototypeFromDistributableCoreSource()
             throws IOException {
         ProtosPrelude prelude =

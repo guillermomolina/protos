@@ -25,6 +25,7 @@ To supply your own Protos modules from Java, continue with
 | Java scalar arguments to Protos Closures | Implemented: `Byte`, `Short`, `Integer`, `Long`, `String` only |
 | Suspending `Future.value()` inside a host-invoked Closure | Implemented (PLAT054-3E2) |
 | Default `filesystem` / `network` slots | Only when the Context grants file / socket access (PLAT054-3E3, 3E4) |
+| Explicit `clock` (`protos.AllowClock`) | Only with explicit `true`; default `false` (D253-C1 / I163) |
 | Explicit `entropy` (`protos.AllowEntropy`) | Only when the embedding Context selects `true`; default `false` (D243-C / I157) |
 | Foreign providers (`java:` and other schemes) in a standard Context | Not available: no Context option or API configures them; see [Foreign interoperability](../interop/README.md) |
 | Native Image embedding hosts | Not supported. The Native CLI has no Java embedding |
@@ -92,7 +93,8 @@ returns an empty scope.
 and runs as the RootActor's initial module. Only that initial module receives
 the bootstrap-local slots: `process` always, `filesystem` / `network` only
 when their Context permissions allow them, and `entropy` only when explicitly
-selected by `protos.AllowEntropy` (see below). A source with a syntax error fails before bootstrap.
+selected by `protos.AllowEntropy`, and `clock` only by `protos.AllowClock`
+(see below). A source with a syntax error fails before bootstrap.
 
 **Later evaluations** are further direct entries into the same RootActor. Each
 one gets a fresh standalone `moduleContext`. There is no REPL namespace: a
@@ -325,3 +327,25 @@ Normative specification:
   receiver-bound Closure extraction;
 - [`spec/concurrency/FUTURES_AND_TASKS.md`](../../../spec/concurrency/FUTURES_AND_TASKS.md)
   §29, Suspendible host-initiated RootActor entries.
+
+## Explicit Clock authorization
+
+```java
+try (Context context = Context.newBuilder("protos")
+        .option("protos.AllowClock", "true")
+        .build()) {
+    context.eval("protos", "Instant: import(\"std:datetime/instant\")\n"
+            + "now: Instant(clock.epochNanoseconds())\n");
+}
+```
+
+The option defaults to `false`. Only the first initial RootActor module receives
+its private `clock` grant; later evaluations, imported MODULEs and spawned Actors
+receive none. `allowAllAccess`, I/O/host permissions and `protos.AllowEntropy`
+never imply Clock. Grants have independent Context/Process ownership and are
+retired on Process termination, Context shutdown or host revocation. Closing one
+Context does not revoke another's grant. The operation is synchronous and has no
+guest `close()`. Samples are exact epoch-nanoseconds Integers, with no monotonic
+or physical-resolution promise. This Java embedding is supported on the JVM;
+Java Native Image embedding remains unsupported. The standalone Native CLI
+supports its own explicit `--allow-clock` authorization.

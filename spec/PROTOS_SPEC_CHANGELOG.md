@@ -23,6 +23,19 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.501] - 2026-11-09
+
+### D253-C1 / I163 — Explicit Core wall-clock nanoseconds
+- `io/CLOCK.md` (new): source-backed, authority-free Clock protocol; independent
+  host grant; synchronous exact epoch-nanoseconds Integer; ordinary errors,
+  revocation, isolation, portability and explicit Instant/JWT/logging composition.
+- `io/PROCESS_IO.md`: initial RootActor private bootstrap placement and independent
+  CLI/Polyglot authorization, absent by default in direct and service entries.
+- `io/IO_CORE.md`: synchronous observation and existing Error/lifecycle categories.
+- `concurrency/ACTORS.md`, `concurrency/PARALLEL_EXECUTION.md`: reject live Clock
+  authority while preserving ordinary transfer of Integer samples.
+- `semantics/MODULES.md`: Clock follows private initial-module slot placement.
+
 ## [0.1.500] - 2026-11-09
 
 ### D246-C / I161 — Strict HS256 JWT and Base64url

@@ -91,6 +91,14 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
             stability = OptionStability.STABLE)
     static final OptionKey<Boolean> ALLOW_ENTROPY = new OptionKey<>(false);
 
+    /** Independent of allowAllAccess, I/O, foreign access, inspection and Entropy. */
+    @Option(
+            name = "AllowClock",
+            help = "Explicitly grant wall-clock observation to this Context's initial RootActor module.",
+            category = OptionCategory.USER,
+            stability = OptionStability.STABLE)
+    static final OptionKey<Boolean> ALLOW_CLOCK = new OptionKey<>(false);
+
     private final ProtosSourceCompiler sourceCompiler = new ProtosSourceCompiler();
 
     @Override

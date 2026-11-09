@@ -20,6 +20,7 @@ import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
 import com.guillermomolina.protos.analysis.ProtosStaticMemberCompletionSite;
 import com.guillermomolina.protos.execution.*;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ClockGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.FilesystemGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
 import com.guillermomolina.protos.lsp.ProtosLanguageServerMain;
@@ -93,6 +94,7 @@ public final class ProtosCli {
 
     /** Explicit D243-C host Entropy grant for this application invocation only. */
     private boolean entropyAuthorized = false;
+    private boolean clockAuthorized = false;
     /**
      * Explicit D248-B host Filesystem grant for this application invocation only; reset by every
      * dispatch, so it never persists into another {@link #run} invocation.
@@ -137,6 +139,7 @@ public final class ProtosCli {
             if (Arrays.stream(args).anyMatch(
                     value -> value.equals("--allow-network")
                             || value.equals("--allow-entropy")
+                            || value.equals("--allow-clock")
                             || isFilesystemGrantOption(value)
                             || value.equals("--service")
                             || value.startsWith("--service="))) {
@@ -182,6 +185,7 @@ public final class ProtosCli {
         inspectionAuthorized = false;
         networkAuthorized = false;
         entropyAuthorized = false;
+        clockAuthorized = false;
         filesystemGrant = FilesystemGrant.NONE;
         try {
             // Relative grant roots resolve against the invocation directory, captured once here.
@@ -191,6 +195,7 @@ public final class ProtosCli {
             boolean inspect = false;
             boolean allowNetwork = false;
             boolean allowEntropy = false;
+            boolean allowClock = false;
             Path grantedFilesystemRoot = null;
             String requestedService = null;
             int first = 0;
@@ -199,6 +204,7 @@ public final class ProtosCli {
                             || args[first].equals("--inspect")
                             || args[first].equals("--allow-network")
                             || args[first].equals("--allow-entropy")
+                            || args[first].equals("--allow-clock")
                             || isFilesystemGrantOption(args[first])
                             || args[first].equals("--service")
                             || args[first].startsWith("--service="))) {
@@ -244,6 +250,14 @@ public final class ProtosCli {
                         return usage(err, "--allow-entropy may be given only once");
                     }
                     allowEntropy = true;
+                    first++;
+                    continue;
+                }
+                if (args[first].equals("--allow-clock")) {
+                    if (allowClock) {
+                        return usage(err, "--allow-clock may be given only once");
+                    }
+                    allowClock = true;
                     first++;
                     continue;
                 }
@@ -293,6 +307,7 @@ public final class ProtosCli {
             inspectionAuthorized = inspect;
             networkAuthorized = allowNetwork;
             entropyAuthorized = allowEntropy;
+            clockAuthorized = allowClock;
             filesystemGrant = filesystemGrant(grantedFilesystemRoot);
 
             if (args.length > 0
@@ -300,12 +315,13 @@ public final class ProtosCli {
                     && !args[0].equals("debug")
                     && !args[0].equals("run")
                     && (allowNetwork
-                            || allowEntropy
+                            || allowEntropy || allowClock
                             || grantedFilesystemRoot != null
                             || requestedService != null
                             || Arrays.stream(args).anyMatch(
                                     value -> value.equals("--allow-network")
                                             || value.equals("--allow-entropy")
+                                            || value.equals("--allow-clock")
                                             || isFilesystemGrantOption(value)
                                             || value.equals("--service")
                                             || value.startsWith("--service=")))) {
@@ -314,7 +330,7 @@ public final class ProtosCli {
                         "application permissions and service mode are not available to bundled Tools");
             }
 
-            if ((allowNetwork || allowEntropy || grantedFilesystemRoot != null
+            if ((allowNetwork || allowEntropy || allowClock || grantedFilesystemRoot != null
                     || requestedService != null)
                     && args.length > 0
                     && (args[0].equals("--help")
@@ -354,6 +370,7 @@ public final class ProtosCli {
                 while (entry < args.length
                         && (args[entry].equals("--allow-network")
                                 || args[entry].equals("--allow-entropy")
+                                || args[entry].equals("--allow-clock")
                                 || isFilesystemGrantOption(args[entry])
                                 || args[entry].equals("--service")
                                 || args[entry].startsWith("--service="))) {
@@ -377,6 +394,11 @@ public final class ProtosCli {
                             return usage(err, "--allow-entropy may be given only once");
                         }
                         allowEntropy = true;
+                    } else if (args[entry].equals("--allow-clock")) {
+                        if (allowClock) {
+                            return usage(err, "--allow-clock may be given only once");
+                        }
+                        allowClock = true;
                     } else {
                         if (requestedService != null) {
                             return usage(err, "--service may be given only once");
@@ -406,6 +428,7 @@ public final class ProtosCli {
 
                 networkAuthorized = allowNetwork;
                 entropyAuthorized = allowEntropy;
+                clockAuthorized = allowClock;
                 filesystemGrant = filesystemGrant(grantedFilesystemRoot);
                 if (args[0].equals("debug")) {
                     if (requestedService != null) {
@@ -556,6 +579,7 @@ public final class ProtosCli {
                         applicationNetworkGrant(),
                         ResolverGrant.NONE,
                         applicationEntropyGrant(),
+                        applicationClockGrant(),
                         filesystemGrant,
                         Map.of(),
                         this::openApplicationRuntimeHost,
@@ -724,6 +748,7 @@ public final class ProtosCli {
                         err,
                         applicationNetworkGrant(),
                         applicationEntropyGrant(),
+                        applicationClockGrant(),
                         filesystemGrant);
         ProtosCliPrintFacility.install(
                 session.activation(), session.process(), renderer);
@@ -805,6 +830,7 @@ public final class ProtosCli {
                                 provider,
                                 applicationNetworkGrant(),
                                 applicationEntropyGrant(),
+                                applicationClockGrant(),
                                 serviceBinding);
                 if (!normal) {
                     err.println(
@@ -818,7 +844,7 @@ public final class ProtosCli {
             ProtosExecutionOutcome outcome =
                     ProtosPackageRunDriver.execute(
                             request, provider, applicationNetworkGrant(),
-                            applicationEntropyGrant());
+                            applicationEntropyGrant(), applicationClockGrant());
 
             return workspaceOutcomeExitCode(outcome, err);
         } catch (IOException failure) {
@@ -1598,6 +1624,7 @@ public final class ProtosCli {
                                 err,
                                 applicationNetworkGrant(),
                                 applicationEntropyGrant(),
+                                applicationClockGrant(),
                                 filesystemGrant)) {
             ProtosCliPrintFacility.install(
                     session.activation(), session.process(), renderer);
@@ -1769,10 +1796,12 @@ public final class ProtosCli {
                 : ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE;
     }
 
-    /**
-     * D243-C independent Entropy selection for this application invocation.
-     * Bundled Tools never select HOST_ENTROPY.
-     */
+    /** D253-C1 independent selection for the initial application module only. */
+    private ClockGrant applicationClockGrant() {
+        return clockAuthorized ? ClockGrant.HOST_CLOCK : ClockGrant.NONE;
+    }
+
+    /** D243-C independent selection; bundled Tools never select HOST_ENTROPY. */
     private EntropyGrant applicationEntropyGrant() {
         return entropyAuthorized
                 ? EntropyGrant.HOST_ENTROPY
@@ -1808,6 +1837,7 @@ public final class ProtosCli {
                         err,
                         applicationNetworkGrant(),
                         applicationEntropyGrant(),
+                        applicationClockGrant(),
                         filesystemGrant);
         ProtosCliPrintFacility.install(session.activation(), session.process(), renderer);
         return session;
@@ -1862,6 +1892,31 @@ public final class ProtosCli {
             EntropyGrant entropyGrant,
             FilesystemGrant filesystemGrant)
             throws IOException {
+        return createSession(
+                core,
+                moduleResolver,
+                applicationArguments,
+                in,
+                out,
+                err,
+                networkGrant,
+                entropyGrant,
+                ClockGrant.NONE,
+                filesystemGrant);
+    }
+
+    private Session createSession(
+            Path core,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            FilesystemGrant filesystemGrant)
+            throws IOException {
         ProtosPolyglotRuntimeHost runtimeHost = openApplicationRuntimeHost();
         ProtosStandaloneProcessBootstrap.Result bootstrap;
         boolean bootstrapped = false;
@@ -1876,7 +1931,7 @@ public final class ProtosCli {
                             ProtosStandaloneHostedExecution.writableBackend(err),
                             networkGrant,
                             ResolverGrant.NONE,
-                            entropyGrant,
+                            entropyGrant, clockGrant,
                             filesystemGrant,
                             runtimeHost);
             bootstrapped = true;
@@ -1934,6 +1989,28 @@ public final class ProtosCli {
                 diagnostics,
                 networkGrant,
                 entropyGrant,
+                ClockGrant.NONE);
+    }
+
+    private Session createDebugSession(
+            Path core,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream controlOut,
+            PrintStream diagnostics,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant, ClockGrant clockGrant)
+            throws IOException {
+        return createDebugSession(
+                core,
+                moduleResolver,
+                applicationArguments,
+                in,
+                controlOut,
+                diagnostics,
+                networkGrant,
+                entropyGrant, clockGrant,
                 FilesystemGrant.NONE);
     }
 
@@ -1954,6 +2031,31 @@ public final class ProtosCli {
             EntropyGrant entropyGrant,
             FilesystemGrant filesystemGrant)
             throws IOException {
+        return createDebugSession(
+                core,
+                moduleResolver,
+                applicationArguments,
+                in,
+                controlOut,
+                diagnostics,
+                networkGrant,
+                entropyGrant,
+                ClockGrant.NONE,
+                filesystemGrant);
+    }
+
+    private Session createDebugSession(
+            Path core,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream controlOut,
+            PrintStream diagnostics,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            FilesystemGrant filesystemGrant)
+            throws IOException {
         ProtosPolyglotRuntimeHost runtimeHost =
                 ProtosPolyglotRuntimeHost.openDebug(diagnostics);
         ProtosStandaloneProcessBootstrap.Result bootstrap = null;
@@ -1969,7 +2071,7 @@ public final class ProtosCli {
                             ProtosPolyglotStandardStreamRouting.stderrBackend(),
                             networkGrant,
                             ResolverGrant.NONE,
-                            entropyGrant,
+                            entropyGrant, clockGrant,
                             filesystemGrant,
                             runtimeHost);
             publishDebugReadiness(controlOut, runtimeHost.debugEndpoint());
@@ -2152,11 +2254,11 @@ public final class ProtosCli {
     private static void help(PrintStream out) {
         out.println(
                 "Usage:\n"
-                        + "  protos [--inspect] [--allow-network] [--allow-entropy] [--service=<binding>] <file> [args...]\n"
-                        + "  protos [--inspect] [--allow-network] [--allow-entropy] -e <source> [args...]\n"
-                        + "  protos debug [--allow-network] [--allow-entropy] <file> [args...]\n"
+                        + "  protos [--inspect] [--allow-network] [--allow-entropy] [--allow-clock] [--service=<binding>] <file> [args...]\n"
+                        + "  protos [--inspect] [--allow-network] [--allow-entropy] [--allow-clock] -e <source> [args...]\n"
+                        + "  protos debug [--allow-network] [--allow-entropy] [--allow-clock] <file> [args...]\n"
                         + "  protos language-server\n"
-                        + "  protos run [--allow-network] [--allow-entropy] [--service=<binding>] <entry> [args...]\n"
+                        + "  protos run [--allow-network] [--allow-entropy] [--allow-clock] [--service=<binding>] <entry> [args...]\n"
                         + "  protos package [args...]\n"
                         + "  protos test [--jobs N] [args...]\n"
                         + "  protos format [<file>]\n"
@@ -2173,6 +2275,7 @@ public final class ProtosCli {
                         + "  --inspect (before <file>, -e, or REPL)\n"
                         + "  --allow-network (application RootActor only; no DNS or filesystem)\n"
                         + "  --allow-entropy (application RootActor only; no other authority)\n"
+                        + "  --allow-clock (initial application RootActor only; synchronous epoch nanoseconds)\n"
                         + "  --allow-filesystem=<dir> (application RootActor only; one existing "
                         + "directory)\n"
                         + "  --service=<binding> (direct SOURCE message-service entry)\n"

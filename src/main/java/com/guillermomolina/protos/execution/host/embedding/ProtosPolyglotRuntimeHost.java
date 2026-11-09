@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosClockCapabilityValue;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -71,6 +72,8 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private final List<ProtosEntropyCapabilityValue> entropyCapabilities =
             new ArrayList<>();
     private boolean entropyRetired;
+    private final List<ProtosClockCapabilityValue> clockCapabilities = new ArrayList<>();
+    private boolean clockRetired;
     /**
      * D248-B host custody of standalone Filesystem backends, keyed by their exact owning Process.
      * Guarded by this. A backend leaves this map exactly once: at its Process's termination or
@@ -448,6 +451,19 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         return capability;
     }
 
+    /** Provisions authority only after the caller explicitly selects HOST_CLOCK. */
+    public synchronized ProtosClockCapabilityValue provisionHostClock(ProtosPrelude prelude) {
+        Objects.requireNonNull(prelude, "prelude");
+        if (closed || clockRetired) {
+            throw new IllegalStateException("Polyglot runtime host is closed");
+        }
+        clockCapabilities.removeIf(ProtosClockCapabilityValue::retiredForRuntime);
+        ProtosClockCapabilityValue capability =
+                new ProtosClockCapabilityValue(prelude, new ProtosHostClockBackend());
+        clockCapabilities.add(capability);
+        return capability;
+    }
+
     /** Number of grants still retained by this host. */
     int provisionedEntropyCountForTesting() {
         synchronized (this) {
@@ -553,6 +569,14 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                     "Polyglot runtime host cannot close while Process Contexts are active");
         }
         Throwable failure = contextCloseFailure.get();
+
+        // Clock retirement cannot fail and precedes cleanup of independent host resources.
+        clockRetired = true;
+        for (ProtosClockCapabilityValue capability : clockCapabilities) {
+            capability.retireForRuntime();
+        }
+        clockCapabilities.clear();
+
 
         // I160: retire pending KDF admission before closing other
         // host resources. Retirement cannot execute guest code.

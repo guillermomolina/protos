@@ -27,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosClockCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.process.ProtosProcessExecutionHost;
@@ -179,6 +180,9 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
                                 prelude, new ProtosHostEntropyBackend())
                         : null;
 
+        ProtosClockCapabilityValue clock = env.getOptions().get(ProtosLanguage.ALLOW_CLOCK)
+                ? new ProtosClockCapabilityValue(prelude, new ProtosHostClockBackend()) : null;
+
         // The marker precedes the RootActor; its operations are bound to the RootActor below.
         ProtosFilesystemValue filesystem =
                 filesystemCustody == null ? null : new ProtosFilesystemValue();
@@ -198,7 +202,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
                     filesystem,
                     network,
                     null,
-                    entropy);
+                    entropy, clock);
 
             if (filesystem != null) {
                 // No guest source has executed yet.
@@ -231,6 +235,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
                     failure.addSuppressed(cleanupFailure);
                 }
             }
+            if (clock != null) clock.retireForRuntime();
             if (entropy != null) {
                 try {
                     entropy.retireForRuntime();
@@ -583,6 +588,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         stop();
         passwordKdfCustody.close();
         // Termination revokes Process-local authority and retires its host resources.
+        process.retireClockForRuntime();
         closeFilesystem();
         closeNetwork();
         closeEntropy();
@@ -608,6 +614,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
             process.awaitTerminationForRuntime();
         }
         passwordKdfCustody.close();
+        process.retireClockForRuntime();
         closeFilesystem();
         closeNetwork();
         closeEntropy();
@@ -624,6 +631,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         stop();
         process.requestTerminationForRuntime();
         passwordKdfCustody.close();
+        process.retireClockForRuntime();
         closeFilesystem();
         closeNetwork();
         closeEntropy();

@@ -100,7 +100,13 @@ public final class ProtosParallelRuntime {
         if(object.hasLocalSlot("parallel"))return;
         object.createLocalSlot("parallel",ProtosClosureValue.nativeClosure((a,args)->{
             if(!(a.receiver() instanceof ProtosClosureValue closure))throw error(a);
-            Snapshot snapshot=Snapshot.capture(closure,args,a);
+            Snapshot snapshot;
+            try {
+                snapshot=Snapshot.capture(closure,args,a);
+            } catch(NonParallel rejected) {
+                // Input rejection is synchronous: no Future or P work is admitted (§71.13).
+                throw new ProtosSignalException(nonParallel(a));
+            }
             return ownedFuture(a,c->submit(()->run(snapshot,c)));
         }));
     }
@@ -462,7 +468,7 @@ public final class ProtosParallelRuntime {
                 ProtosEnvironmentValue y=x.rematerializeForParallelTransfer();memo.put(v,y);return y;
             }
             // A Core Fraction or Complex crossed above as an inert descriptor (D197-C, I090-C1); other sealed values stay non-parallel.
-            if(v instanceof ProtosFutureValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosNetworkCapabilityValue||v instanceof ProtosResolverCapabilityValue||v instanceof ProtosEntropyCapabilityValue||v instanceof ProtosTcpConnectionValue||v instanceof ProtosTcpListenerValue||v instanceof ProtosTcpAcceptorValue||v instanceof ProtosProcessStandardStreamValue||v instanceof ProtosSendOperationControl||v instanceof ProtosSealedValue||v==null)throw new NonParallel();
+            if(v instanceof ProtosFutureValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosNetworkCapabilityValue||v instanceof ProtosResolverCapabilityValue||v instanceof ProtosClockCapabilityValue||v instanceof ProtosEntropyCapabilityValue||v instanceof ProtosTcpConnectionValue||v instanceof ProtosTcpListenerValue||v instanceof ProtosTcpAcceptorValue||v instanceof ProtosProcessStandardStreamValue||v instanceof ProtosSendOperationControl||v instanceof ProtosSealedValue||v==null)throw new NonParallel();
             if(memo.containsKey(v))return memo.get(v);
             ProtosPrelude p=a.prelude().orElseThrow();
             if(v==ProtosObjectValue.rootObject()||prelude(v,p))return v;

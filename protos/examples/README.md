@@ -21,6 +21,7 @@ instead.
 
 | Task | Example |
 | --- | --- |
+| Sample wall time and construct an Instant (`--allow-clock`) | `clock/current-time.protos` |
 | Hash and verify a password with explicit Argon2id entropy | `crypto/password-argon2id.protos` (requires `--allow-entropy`) |
 | Print a value | `hello-world.protos` |
 | Print the exact Rosetta Code Hello world/Text message | `basics/rosetta-hello-world-text.protos` |
@@ -174,3 +175,10 @@ same facilities lives in controlled-fixture Java integration tests:
 `ProtosHttpUrlClientIntegrationTest`. See the
 [networking guide](../../docs/guide/library/networking.md) and the
 [TLS client guide](../../docs/guide/library/tls.md).
+
+### Explicit current wall time
+
+`bin/protos --allow-clock protos/examples/clock/current-time.protos` samples an
+exact Integer and constructs a normal Instant. The example is opt-in: it has
+no `print(...)` and is not automatically executed by the normal ungranted
+print-example sweep. It provides wall time, not monotonic timing or HTTP deadlines.

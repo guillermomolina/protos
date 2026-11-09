@@ -75,6 +75,7 @@ public final class ProtosProcessRuntime {
     private final ProtosMapValue rootResources;
     private final ProtosResolverCapabilityValue rootResolver;
     private final ProtosEntropyCapabilityValue rootEntropy;
+    private final ProtosClockCapabilityValue rootClock;
     private final Set<ProtosActor> liveActors = new LinkedHashSet<>();
     private final Set<ProtosActorGroupRuntime> ownedGroups = new LinkedHashSet<>();
     private LifecycleState lifecycle = LifecycleState.RUNNING;
@@ -185,25 +186,55 @@ public final class ProtosProcessRuntime {
             ProtosMapValue rootResources,
             ProtosResolverCapabilityValue rootResolver,
             ProtosEntropyCapabilityValue rootEntropy) {
-        Objects.requireNonNull(actorRefPrototype, "actorRefPrototype");
+        this(actorRefPrototype, rootFilesystem, rootNetwork, rootResources, rootResolver, rootEntropy, null);
+    }
 
-        if (rootResolver != null) {
-            rootResolver.bindOwnerForRuntime(this);
-        }
-
+    public ProtosProcessRuntime(
+            ProtosObjectValue actorRefPrototype,
+            ProtosFilesystemValue rootFilesystem,
+            ProtosNetworkCapabilityValue rootNetwork,
+            ProtosMapValue rootResources,
+            ProtosResolverCapabilityValue rootResolver,
+            ProtosEntropyCapabilityValue rootEntropy,
+            ProtosClockCapabilityValue rootClock) {
         try {
+            Objects.requireNonNull(actorRefPrototype, "actorRefPrototype");
+            if (rootResolver != null) {
+                rootResolver.bindOwnerForRuntime(this);
+            }
             if (rootEntropy != null) {
                 rootEntropy.bindOwnerForRuntime(this);
             }
+            if (rootClock != null) {
+                rootClock.bindOwnerForRuntime(this);
+            }
         } catch (RuntimeException | Error failure) {
-            if (rootResolver != null) {
-                rootResolver.retireForRuntime();
+            if (rootClock != null && (rootClock.ownerForRuntime().isEmpty()
+                    || rootClock.ownerForRuntime().orElse(null) == this)) {
+                rootClock.retireForRuntime();
+            }
+            if (rootEntropy != null && (rootEntropy.ownerForRuntime().isEmpty()
+                    || rootEntropy.ownerForRuntime().orElse(null) == this)) {
+                try {
+                    rootEntropy.retireForRuntime();
+                } catch (RuntimeException cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
+            }
+            if (rootResolver != null && (rootResolver.ownerForRuntime().isEmpty()
+                    || rootResolver.ownerForRuntime().orElse(null) == this)) {
+                try {
+                    rootResolver.retireForRuntime();
+                } catch (RuntimeException cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
             }
             throw failure;
         }
 
         this.rootResolver = rootResolver;
         this.rootEntropy = rootEntropy;
+        this.rootClock = rootClock;
         this.rootFilesystem = rootFilesystem;
         this.rootNetwork = rootNetwork;
         this.rootResources = rootResources;
@@ -211,8 +242,17 @@ public final class ProtosProcessRuntime {
         try {
             rootActor = new ProtosActor(actorRefPrototype, this, true);
         } catch (RuntimeException | Error failure) {
-            retireEntropyForRuntime();
-            retireResolverForRuntime();
+            retireClockForRuntime();
+            try {
+                retireEntropyForRuntime();
+            } catch (RuntimeException cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+            try {
+                retireResolverForRuntime();
+            } catch (RuntimeException cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
             throw failure;
         }
         liveActors.add(rootActor);
@@ -317,10 +357,17 @@ public final class ProtosProcessRuntime {
         }
     }
 
-    /**
-     * Optional D243-C Entropy grant for this Process's RootActor only.
-     * The public Process capability never exposes this authority.
-     */
+    /** Optional D253-C1 Clock grant, absent from the public Process capability. */
+    public Optional<ProtosClockCapabilityValue> rootClockForRuntime() {
+        return Optional.ofNullable(rootClock);
+    }
+
+    /** Host-only, idempotent revocation independent of all other grants. */
+    public void retireClockForRuntime() {
+        if (rootClock != null) rootClock.retireForRuntime();
+    }
+
+    /** Optional D243-C Entropy grant, absent from the public Process capability. */
     public Optional<ProtosEntropyCapabilityValue> rootEntropyForRuntime() {
         return Optional.ofNullable(rootEntropy);
     }
@@ -782,6 +829,7 @@ public final class ProtosProcessRuntime {
         // Withdraw the Resolver host authority at the cutover, outside the Process monitor: no
         // DNS work can start afterwards, and a running host lookup is never waited for. Pending
         // lookup Futures keep the ordinary Actor termination contract below.
+        retireClockForRuntime();
         retireResolverForRuntime();
         retireEntropyForRuntime();
 

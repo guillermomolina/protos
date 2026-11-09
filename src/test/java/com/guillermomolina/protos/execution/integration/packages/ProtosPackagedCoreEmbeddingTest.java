@@ -72,6 +72,7 @@ final class ProtosPackagedCoreEmbeddingTest {
         Path sourceTree = Path.of(SOURCE_TREE_LIBRARY).toAbsolutePath().toRealPath();
         assertFalse(core.startsWith(sourceTree), "Core must not come from the checkout: " + core);
         assertTrue(Files.isRegularFile(core.resolve("Context.protos")));
+        assertTrue(Files.isRegularFile(core.resolve("clock/Clock.protos")));
         return core;
     }
 
@@ -97,6 +98,8 @@ final class ProtosPackagedCoreEmbeddingTest {
             Value bindings = context.getBindings(ProtosLanguage.ID);
             assertFalse(bindings.hasMember("filesystem"), "packaged Core grants no Filesystem");
             assertFalse(bindings.hasMember("network"), "no default Network authority");
+            assertFalse(bindings.hasMember("clock"), "no default Clock authority");
+            assertTrue(embedded(context).processForTesting().rootClockForRuntime().isEmpty());
             // Pay as you grow: ordinary Closure calls allocate no Task and start no Actor carrier.
             assertEquals(
                     0,

@@ -26,6 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosClockCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import java.util.List;
@@ -167,6 +168,40 @@ public final class ProtosStandaloneProcessBootstrap {
             ProtosNetworkCapabilityValue defaultNetwork,
             ProtosResolverCapabilityValue defaultResolver,
             ProtosEntropyCapabilityValue defaultEntropy) {
+        return create(
+                prelude,
+                applicationArguments,
+                environmentNameDomain,
+                environmentEntries,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                stdinEncoding,
+                stdoutEncoding,
+                stderrEncoding,
+                defaultFilesystem,
+                defaultNetwork,
+                defaultResolver,
+                defaultEntropy,
+                null);
+    }
+
+    public static Result create(
+            ProtosPrelude prelude,
+            List<String> applicationArguments,
+            ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
+            List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            ProtosEncodingValue stdinEncoding,
+            ProtosEncodingValue stdoutEncoding,
+            ProtosEncodingValue stderrEncoding,
+            ProtosFilesystemValue defaultFilesystem,
+            ProtosNetworkCapabilityValue defaultNetwork,
+            ProtosResolverCapabilityValue defaultResolver,
+            ProtosEntropyCapabilityValue defaultEntropy,
+            ProtosClockCapabilityValue defaultClock) {
         return createInternal(
                 prelude,
                 applicationArguments,
@@ -182,7 +217,7 @@ public final class ProtosStandaloneProcessBootstrap {
                 defaultNetwork,
                 null,
                 defaultResolver,
-                defaultEntropy);
+                defaultEntropy, defaultClock);
     }
 
     static Result createWithRootResources(
@@ -215,6 +250,7 @@ public final class ProtosStandaloneProcessBootstrap {
                 defaultNetwork,
                 rootResources,
                 null,
+                null,
                 null);
     }
 
@@ -233,20 +269,42 @@ public final class ProtosStandaloneProcessBootstrap {
             ProtosNetworkCapabilityValue defaultNetwork,
             ProtosMapValue rootResources,
             ProtosResolverCapabilityValue defaultResolver,
-            ProtosEntropyCapabilityValue defaultEntropy) {
-        Objects.requireNonNull(prelude, "prelude");
-        Objects.requireNonNull(applicationArguments, "applicationArguments");
-        Objects.requireNonNull(environmentNameDomain, "environmentNameDomain");
-        Objects.requireNonNull(environmentEntries, "environmentEntries");
-
-        ProtosProcessRuntime process =
-                new ProtosProcessRuntime(
-                        prelude.actorRefPrototypeForRuntime(),
-                        defaultFilesystem,
-                        defaultNetwork,
-                        rootResources,
-                        defaultResolver,
-                        defaultEntropy);
+            ProtosEntropyCapabilityValue defaultEntropy,
+            ProtosClockCapabilityValue defaultClock) {
+        ProtosProcessRuntime process;
+        try {
+            Objects.requireNonNull(prelude, "prelude");
+            Objects.requireNonNull(applicationArguments, "applicationArguments");
+            Objects.requireNonNull(environmentNameDomain, "environmentNameDomain");
+            Objects.requireNonNull(environmentEntries, "environmentEntries");
+            if (defaultClock != null
+                    && defaultClock.representedDelegationParent(prelude) != prelude.clockPrototypeForRuntime()) {
+                throw new IllegalArgumentException("Clock grant belongs to another Prelude");
+            }
+            process = new ProtosProcessRuntime(prelude.actorRefPrototypeForRuntime(),
+                    defaultFilesystem, defaultNetwork, rootResources, defaultResolver,
+                    defaultEntropy, defaultClock);
+        } catch (RuntimeException | Error failure) {
+            // A failed rebind must not revoke a grant already owned by another Process.
+            if (defaultClock != null && defaultClock.ownerForRuntime().isEmpty()) {
+                defaultClock.retireForRuntime();
+            }
+            if (defaultEntropy != null && defaultEntropy.ownerForRuntime().isEmpty()) {
+                try {
+                    defaultEntropy.retireForRuntime();
+                } catch (RuntimeException cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
+            }
+            if (defaultResolver != null && defaultResolver.ownerForRuntime().isEmpty()) {
+                try {
+                    defaultResolver.retireForRuntime();
+                } catch (RuntimeException cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
+            }
+            throw failure;
+        }
 
         // The Resolver grant is now owned by this incarnation. If bootstrap fails before the
         // initial Activation escapes, retire it so no unowned live backend survives; the Process
@@ -274,8 +332,17 @@ public final class ProtosStandaloneProcessBootstrap {
                     ProtosActorBootstrap.newStandaloneInitialActivation(
                             process, prelude));
         } catch (RuntimeException | Error failure) {
-            process.retireResolverForRuntime();
-            process.retireEntropyForRuntime();
+            process.retireClockForRuntime();
+            try {
+                process.retireResolverForRuntime();
+            } catch (RuntimeException cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+            try {
+                process.retireEntropyForRuntime();
+            } catch (RuntimeException cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
             throw failure;
         }
     }

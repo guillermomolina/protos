@@ -90,6 +90,10 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         assertTrue(source.contains("NetworkGrant.HOST_NETWORK"));
         // D243-C: explicit Entropy selection remains independent.
         assertTrue(source.contains("EntropyGrant.HOST_ENTROPY"));
+        assertTrue(source.contains("ClockGrant.HOST_CLOCK"));
+        assertTrue(source.contains("networkGrant, EntropyGrant.NONE, FilesystemGrant.NONE"));
+        assertTrue(source.matches("(?s).*applicationEntropyGrant\\(\\),\\s*applicationClockGrant\\(\\).*"));
+        assertTrue(source.contains("entropyGrant, clockGrant,"));
         assertTrue(
                 source.matches(
                         "(?s).*private Session createSession\\(.*?NetworkGrant networkGrant\\).*"));

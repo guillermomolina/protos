@@ -100,8 +100,8 @@ Error.handle(() => { Failure().signal() }, (failure) => {
 - Timestamps are opt-in. `timeSource` is a zero-argument callable answering a
   `std:datetime/instant`; it is called once per enabled event. Without it,
   events have `timestamp` `null` and formatters omit the time. The library
-  never reads a clock itself, and the Standard Library does not currently
-  provide a wall-clock source; a program supplies one explicitly.
+  never reads a clock itself. An authorized application may explicitly supply
+  a callback using its independent Core Clock grant.
 
 ```protos
 Instant: import("std:datetime/instant")
@@ -109,6 +109,18 @@ fixed: Logger(Level.INFO, TextSink(TextFormatter, writer), () => { Instant(0) })
 fixed.info("tick")
 // 1970-01-01T00:00:00Z INFO "tick"
 ```
+
+With `--allow-clock` (or `protos.AllowClock=true`), an authorized RootActor can
+supply the same zero-argument callback protocol:
+
+```protos
+Instant: import("std:datetime/instant")
+timeSource: () => { Instant(clock.epochNanoseconds()) }
+timed: Logger(Level.INFO, TextSink(TextFormatter, writer), timeSource)
+```
+
+The logger does not acquire Clock itself. The callback retains the caller's
+explicit authority; timestamps may repeat or go backward with the host wall clock.
 
 ## Formatters
 

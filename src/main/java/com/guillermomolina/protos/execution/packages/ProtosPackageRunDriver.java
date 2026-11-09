@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ClockGrant;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.io.IOException;
@@ -80,8 +81,17 @@ public final class ProtosPackageRunDriver {
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
             EntropyGrant entropyGrant)
             throws IOException {
+        return execute(request, provider, networkGrant, entropyGrant, ClockGrant.NONE);
+    }
+
+    public static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant, ClockGrant clockGrant)
+            throws IOException {
         return execute(
-                request, provider, networkGrant, entropyGrant,
+                request, provider, networkGrant, entropyGrant, clockGrant,
                 PRODUCTION_STAGES);
     }
 
@@ -114,7 +124,19 @@ public final class ProtosPackageRunDriver {
             EntropyGrant entropyGrant,
             Stages stages)
             throws IOException {
+        return execute(request, provider, networkGrant, entropyGrant, ClockGrant.NONE, stages);
+    }
+
+    static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            Stages stages)
+            throws IOException {
         Objects.requireNonNull(entropyGrant, "entropyGrant");
+        Objects.requireNonNull(clockGrant, "clockGrant");
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(provider, "provider");
         Objects.requireNonNull(networkGrant, "networkGrant");
@@ -128,7 +150,7 @@ public final class ProtosPackageRunDriver {
                         request.standardLibraryResolver());
         if (requirements.isEmpty()) {
             return ProtosWorkspaceRunDriver.execute(
-                    request, networkGrant, entropyGrant);
+                    request, networkGrant, entropyGrant, clockGrant);
         }
 
         ProtosPackageExecutionPlanV2 plan;
@@ -161,7 +183,7 @@ public final class ProtosPackageRunDriver {
 
         try (scope) {
             return executeApplication(
-                    request, plan, scope, networkGrant, entropyGrant, stages);
+                    request, plan, scope, networkGrant, entropyGrant, clockGrant, stages);
         }
     }
 
@@ -188,7 +210,19 @@ public final class ProtosPackageRunDriver {
             EntropyGrant entropyGrant,
             String serviceBinding)
             throws IOException {
+        return executeService(request, provider, networkGrant, entropyGrant, ClockGrant.NONE, serviceBinding);
+    }
+
+    public static boolean executeService(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            String serviceBinding)
+            throws IOException {
         Objects.requireNonNull(entropyGrant, "entropyGrant");
+        Objects.requireNonNull(clockGrant, "clockGrant");
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(provider, "provider");
         Objects.requireNonNull(networkGrant, "networkGrant");
@@ -203,7 +237,7 @@ public final class ProtosPackageRunDriver {
 
         if (requirements.isEmpty()) {
             return ProtosWorkspaceRunDriver.executeService(
-                    request, networkGrant, entropyGrant, serviceBinding);
+                    request, networkGrant, entropyGrant, clockGrant, serviceBinding);
         }
 
         Stages stages = PRODUCTION_STAGES;
@@ -268,7 +302,7 @@ public final class ProtosPackageRunDriver {
                                 request.stderrEncodingBinding(),
                                 request.filesystemGrant()),
                         networkGrant,
-                        entropyGrant,
+                        entropyGrant, clockGrant,
                         serviceBinding,
                         stages::applicationProcessHosted,
                         runtimeHost);
@@ -282,6 +316,18 @@ public final class ProtosPackageRunDriver {
             ProtosExternalPackageResourceScope scope,
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
             EntropyGrant entropyGrant,
+            Stages stages)
+            throws IOException {
+        return executeApplication(request, plan, scope, networkGrant, entropyGrant, ClockGrant.NONE, stages);
+    }
+
+    private static ProtosExecutionOutcome executeApplication(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosPackageExecutionPlanV2 plan,
+            ProtosExternalPackageResourceScope scope,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
             Stages stages)
             throws IOException {
         ProtosPackageExecutionPlanV2ModuleResolver resolver =
@@ -308,7 +354,7 @@ public final class ProtosPackageRunDriver {
                             request.stderrEncodingBinding(),
                             request.filesystemGrant()),
                     networkGrant,
-                    entropyGrant,
+                    entropyGrant, clockGrant,
                     true,
                     "package application Process failed",
                     stages::applicationProcessHosted,

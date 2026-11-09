@@ -1368,14 +1368,14 @@ authority.
 The bootstrap-local slots an initial module receives depend on who starts the
 Process. For the D247-C CLI interface (older releases do not provide these options):
 
-| Launcher | `process` | `filesystem` | `network` | `resolver` | `entropy` |
-|---|---|---|---|---|---|
-| `protos file.protos`, `protos -e`, REPL | Bound | Only with `--allow-filesystem=<dir>` | Only with `--allow-network` | Not bound | Only with `--allow-entropy` |
-| `protos run <entry>` | Bound | Only with `--allow-filesystem=<dir>` | Only with `--allow-network` | Not bound | Only with `--allow-entropy` |
-| Java Polyglot embedding (portable JVM only) | Bound | Only when the Context allows file access | Only when the Context allows socket access | Not bound | Only with `protos.AllowEntropy=true` |
-| Bundled Tools | Bound | Only confined capabilities that the Tool's launcher contract grants | Not bound | Not bound | Not bound |
-| Java host with explicitly selected capabilities | Bound | As selected | As selected | Only if explicitly granted | Only if explicitly granted |
-| `ProtosRootActorServiceSession.open` (RootActor message-service entry) | Bound | Only with a `FilesystemGrant` directory | Only with `NetworkGrant.HOST_NETWORK` | Only with `ResolverGrant.HOST_RESOLVER` | Only with `EntropyGrant.HOST_ENTROPY` |
+| Launcher | `process` | `filesystem` | `network` | `resolver` | `entropy` | `clock` |
+|---|---|---|---|---|---|---|
+| `protos file.protos`, `protos -e`, REPL | Bound | Only with `--allow-filesystem=<dir>` | Only with `--allow-network` | Not bound | Only with `--allow-entropy` | Only with `--allow-clock` |
+| `protos run <entry>` | Bound | Only with `--allow-filesystem=<dir>` | Only with `--allow-network` | Not bound | Only with `--allow-entropy` | Only with `--allow-clock` |
+| Java Polyglot embedding (portable JVM only) | Bound | Only when the Context allows file access | Only when the Context allows socket access | Not bound | Only with `protos.AllowEntropy=true` | Only with `protos.AllowClock=true` |
+| Bundled Tools | Bound | Only confined capabilities that the Tool's launcher contract grants | Not bound | Not bound | Not bound | Not bound |
+| Java host with explicitly selected capabilities | Bound | As selected | As selected | Only if explicitly granted | Only if explicitly granted | Only if explicitly granted |
+| `ProtosRootActorServiceSession.open` (RootActor message-service entry) | Bound | Only with a `FilesystemGrant` directory | Only with `NetworkGrant.HOST_NETWORK` | Only with `ResolverGrant.HOST_RESOLVER` | Only with `EntropyGrant.HOST_ENTROPY` | Only with `ClockGrant.HOST_CLOCK` |
 
 The Native and portable JVM command lines use the same explicit CLI authority
 contract. `--allow-network` grants only initial TCP authority,
@@ -1901,3 +1901,38 @@ The ordinary standalone application CLI therefore does **not** run the Filesyste
 lesson merely because it can read the lesson's source file; it needs the
 explicit grant. Source discovery and filesystem authority remain separate
 concerns.
+
+## Wall-clock observation is explicit RootActor authority (D253-C1)
+
+Clock is independently authorized with `--allow-clock` in the CLI or
+`Context.newBuilder("protos").option("protos.AllowClock", "true")` in JVM
+embedding. Its default is absence. The host installs a genuine `clock` local
+before the first expression of the initial RootActor SOURCE or MODULE; a MODULE
+receives it in its private initializer context. Imports, later host evaluations
+and Workers receive no automatic grant. Process, Network, Filesystem, Resolver,
+Entropy, inspection and broad host access imply no Clock authority.
+
+```sh
+bin/protos --allow-clock protos/examples/clock/current-time.protos
+```
+
+```protos
+Instant: import("std:datetime/instant")
+epochNanoseconds: clock.epochNanoseconds()
+now: Instant(epochNanoseconds)
+Integer.recognizes(epochNanoseconds) && Instant.recognizes(now)
+```
+
+The result is an exact, unbounded Integer count of wall-clock nanoseconds since
+1970-01-01T00:00:00Z; negative values are valid. This observation is synchronous,
+with no Future or `.value()`, unlike Entropy generation. Nanosecond units do not
+promise nanosecond physical resolution. Samples may repeat, go backward or jump;
+Clock supplies no monotonicity, anti-rollback or time-attestation guarantee.
+
+Clock cannot cross Actor messages, requests, replies, spawn initialization or P,
+even nested in a graph or delegation parent. A RootActor may send completed
+Integer samples as ordinary data. Process/Context termination and host revocation
+retire only the affected grant. Service READY preserves it. There is no guest
+`close()`. Invalid admission signals `InvalidIOArgument`, retirement signals
+`IOLifecycleError`, and provider failure signals `IOError` synchronously.
+See [`CLOCK.md`](../../spec/io/CLOCK.md).

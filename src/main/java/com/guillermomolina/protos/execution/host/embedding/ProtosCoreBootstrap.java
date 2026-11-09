@@ -241,6 +241,20 @@ public final class ProtosCoreBootstrap {
                     ProtosEntropyHostFacility.BOOTSTRAP_SLOT);
             throw failure;
         }
+        // D253-C1: private lexical bridge for the authority-free
+        // source-backed Clock protocol. No clock is sampled.
+        bootstrapContext.createLocalSlot(
+                ProtosClockHostFacility.BOOTSTRAP_SLOT,
+                ProtosClockHostFacility.createBridge());
+        try {
+            sourceLoader
+                    .load(coreDirectory.resolve("clock/Clock.protos"))
+                    .call(bootstrapActivation);
+        } catch (RuntimeException | Error failure) {
+            bootstrapContext.removeLocalSlot(
+                    ProtosClockHostFacility.BOOTSTRAP_SLOT);
+            throw failure;
+        }
         sourceLoader
                 .load(coreDirectory.resolve("Future.protos"))
                 .call(bootstrapActivation);
@@ -434,6 +448,16 @@ public final class ProtosCoreBootstrap {
                         ProtosObjectValue.rootObject());
         bootstrapContext.removeLocalSlot("Entropy");
         entropyPrototype.freeze();
+        // D253-C1: retain Clock privately, outside the public Prelude
+        // and outside every standard module's exported members.
+        ProtosObjectValue clockPrototype =
+                requirePrototype(
+                        bootstrapContext,
+                        "Clock",
+                        ProtosObjectValue.rootObject());
+        bootstrapContext.removeLocalSlot("Clock");
+        requireSourceBackedClosure(clockPrototype, "epochNanoseconds");
+        clockPrototype.freeze();
         ProtosObjectValue networkPrototype =
                 requirePrototype(
                         bootstrapContext, "Network", ProtosObjectValue.rootObject());
@@ -569,7 +593,8 @@ public final class ProtosCoreBootstrap {
                 vectorPrototype,
                 matrixPrototype,
                 tcpAcceptorPrototype,
-                entropyPrototype);
+                entropyPrototype,
+                clockPrototype);
         validateFrozenStandardGraph(
                 bootstrapContext,
                 preludeBindings,
@@ -586,7 +611,8 @@ public final class ProtosCoreBootstrap {
                 vectorPrototype,
                 matrixPrototype,
                 tcpAcceptorPrototype,
-                entropyPrototype);
+                entropyPrototype,
+                clockPrototype);
 
         return new ProtosPrelude(
                 preludeBindings,
@@ -612,7 +638,8 @@ public final class ProtosCoreBootstrap {
                 lazyStandardModuleMembers(),
                 tcpAcceptorPrototype,
                 filesystemOpenMethod,
-                entropyPrototype);
+                entropyPrototype,
+                clockPrototype);
     }
 
     /*

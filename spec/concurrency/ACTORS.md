@@ -2490,3 +2490,13 @@ into each Worker through **ordinary Actor transfer**; it has no special
 Entropy-owning broker but never the grant itself. An HTTP Worker requesting
 bytes from that broker uses ordinary request/reply Future suspension and pays
 the normal Actor communication cost.
+
+## D253-C1 Clock transfer boundary
+
+Authentic Clock grants (`../io/CLOCK.md`) are non-transferable and
+non-delegable. Messages, requests, replies and spawn initialization reject
+complete graphs reaching them, including nested graphs, cycles and delegation
+parents, atomically with `NonTransferableValue`. No Actor inherits `clock`.
+Completed Integer samples remain ordinary transferable values. A RootActor may
+provide sampled values through normal messaging without transferring authority.
+The existing Process and TcpAcceptor transfer contracts are unchanged.

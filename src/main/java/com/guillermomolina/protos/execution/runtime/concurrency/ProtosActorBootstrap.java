@@ -821,6 +821,18 @@ public final class ProtosActorBootstrap {
                             }
                             locals.put("entropy", entropy);
                         });
+        process.rootClockForRuntime()
+                .ifPresent(
+                        clock -> {
+                            if (clock.retiredForRuntime()
+                                    || clock.ownerForRuntime().orElse(null) != process
+                                    || clock.representedDelegationParent(prelude)
+                                    != prelude.clockPrototypeForRuntime()) {
+                                throw new IllegalStateException(
+                                        "RootActor Clock grant belongs to another Core prelude");
+                            }
+                            locals.put("clock", clock);
+                        });
         process.rootResourcesForRuntime()
                 .ifPresent(
                         resources -> {

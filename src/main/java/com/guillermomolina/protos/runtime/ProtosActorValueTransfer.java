@@ -353,6 +353,7 @@ public final class ProtosActorValueTransfer {
                     || value instanceof ProtosResolverCapabilityValue
                     // D243-C: Entropy grants never cross Actor boundaries,
                     // including nested graphs and spawn initialization.
+                    || value instanceof ProtosClockCapabilityValue
                     || value instanceof ProtosEntropyCapabilityValue
                     || value instanceof ProtosTcpConnectionValue
                     || value instanceof ProtosTcpListenerValue

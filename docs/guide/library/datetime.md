@@ -21,9 +21,11 @@ Each source file's doc comment under
 
 ## What the library does not do
 
-- **No clock.** Nothing in `std:datetime` reads the current time. A program
-  that needs "now" receives it from something that has that authority; the
-  logging library, for example, takes an explicit time-source callable.
+- **No ambient clock in this library.** `std:datetime` remains authority-free.
+  An authorized RootActor can separately use the Core Clock capability and
+  explicitly construct `Instant(clock.epochNanoseconds())`. Clock is wall time,
+  not a monotonic measurement source. Logging accepts an explicit time-source
+  callable; importing datetime or logging never acquires Clock.
 - **No time zones.** There is no zone name, no time-zone database, and no
   daylight-saving rule. An `Offset` is only a fixed displacement.
 - **No leap seconds**, no locale-dependent formatting, and no host time API.

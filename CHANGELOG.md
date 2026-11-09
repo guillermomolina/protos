@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.459-SNAPSHOT
+
+- `I163` (D253-C1): implement explicit Core wall-clock nanoseconds authority.
+  - Add the private, frozen, source-backed Clock protocol and an authenticated
+    synchronous host bridge returning exact semantic Integer epoch nanoseconds.
+  - Provision Clock independently through `--allow-clock`, `protos.AllowClock`
+    and explicit Java host grants, only in the initial RootActor module.
+  - Preserve existing Java overloads and forward explicit grants through direct,
+    REPL, debug, workspace, package and RootActor service execution.
+  - Revoke grants on failed bootstrap, Process/Context termination and host close;
+    preserve existing owners on failed reuse and serialize observation admission
+    with per-grant retirement.
+  - Reject Clock authority across Actor and P boundaries while preserving normal
+    transfer of completed Integer samples. Signal synchronous `NonParallelValue`
+    on rejected P input rather than leaking an internal exception and stranding
+    the caller Task during Context shutdown.
+  - Add deterministic conversion, authority, lifecycle, isolation, packaging,
+    architecture and CLI regressions; JVM/Native smoke source; normative Clock
+    specifications; user documentation and an opt-in Instant composition example.
+
 ## 0.3.458-SNAPSHOT
 
 - `I160` (D245-C): implement `std:crypto/password` with Argon2id.
