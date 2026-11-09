@@ -271,6 +271,7 @@ public final class ProtosProcessRuntime {
      */
     public void awaitTerminationForRuntime() {
         boolean interrupted = false;
+
         synchronized (this) {
             while (lifecycle != LifecycleState.TERMINATED) {
                 try {

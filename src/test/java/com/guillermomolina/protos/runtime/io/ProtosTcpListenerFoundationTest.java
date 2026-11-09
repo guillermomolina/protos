@@ -150,7 +150,7 @@ final class ProtosTcpListenerFoundationTest {
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue prototype = prelude.tcpAcceptorPrototypeForRuntime();
         ProtosObjectValue ordinary = new ProtosObjectValue(prototype);
-        ordinary.createLocalSlot("payload", new ProtosIntegerValue(19));
+        ordinary.createLocalSlot("payload", Long.valueOf(19L));
         ordinary.freeze();
 
         ProtosObjectValue actorCopy =

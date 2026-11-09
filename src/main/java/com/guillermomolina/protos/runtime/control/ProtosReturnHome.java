@@ -120,6 +120,9 @@ public final class ProtosReturnHome {
     public void closeOwned() {
         if (active && isMaterialized()) {
             active = false;
+            // Release the owner after deactivation, just as complete()
+            // does. An escaped Closure must not retain a completed Task.
+            ownerTask = null;
         }
     }
 }

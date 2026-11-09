@@ -73,13 +73,11 @@ class ProtosI143NamedActivationPresenceTest {
 
         assertSame(
                 ProtosNullValue.INSTANCE,
-                ProtosBytecodeRootNode.LoadClosureArgument.perform(
-                        activation, 0));
+                activation.suppliedArgumentsForRuntime().get(0));
 
         assertEquals(
                 99,
-                ProtosBytecodeRootNode.LoadClosureArgument.perform(
-                        activation, 2));
+                activation.suppliedArgumentsForRuntime().get(2));
     }
 
     @Test
@@ -101,8 +99,7 @@ class ProtosI143NamedActivationPresenceTest {
 
         assertSame(
                 ProtosNullValue.INSTANCE,
-                ProtosBytecodeRootNode.LoadClosureArgument.perform(
-                        activation, 0));
+                activation.suppliedArgumentsForRuntime().get(0));
     }
 
     @Test
@@ -173,9 +170,8 @@ class ProtosI143NamedActivationPresenceTest {
 
         assertEquals(
                 List.of(),
-                ((ProtosArrayValue)
-                        ProtosFrameLocalBindings.closureRestArray(
-                                activation, 3)).indexedSnapshot());
+                activation.suppliedArgumentsForRuntime().subList(
+                        3, activation.suppliedArgumentsForRuntime().size()));
     }
 
     @Test
@@ -190,9 +186,8 @@ class ProtosI143NamedActivationPresenceTest {
 
         assertEquals(
                 List.of(4, 5),
-                ((ProtosArrayValue)
-                        ProtosFrameLocalBindings.closureRestArray(
-                                activation, 3)).indexedSnapshot());
+                activation.suppliedArgumentsForRuntime().subList(
+                        3, activation.suppliedArgumentsForRuntime().size()));
     }
 
     @Test
@@ -224,8 +219,7 @@ class ProtosI143NamedActivationPresenceTest {
 
         assertSame(
                 ProtosNullValue.INSTANCE,
-                ProtosBytecodeRootNode.LoadClosureArgument.perform(
-                        activation, 2));
+                activation.suppliedArgumentsForRuntime().get(2));
     }
 
     @Test
@@ -272,8 +266,7 @@ class ProtosI143NamedActivationPresenceTest {
 
     private static boolean has(
             ProtosActivation activation, int index) {
-        return ProtosBytecodeRootNode.HasClosureArgument.perform(
-                activation, index);
+        return activation.hasSuppliedParameterForRuntime(index);
     }
 
     private static Association associate(

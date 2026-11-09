@@ -83,9 +83,9 @@ final class ProtosI108BCallNDispatchTest {
                         "i108-b-mutation-warm.protos", module));
             }
 
-            assertTerminalVarargsSite("callN", module);
-            assertComposedVarargsSite("callSpread", module);
-            assertComposedVarargsSite("callWithMutation", module);
+            assertTerminalBinarySite("callN", module);
+            assertComposedSite("callSpread", "CallVarargsMethod", module);
+            assertComposedSite("callWithMutation", "CallBinaryMethod", module);
 
 
             ProtosClosureValue sample = assertInstanceOf(
@@ -132,9 +132,9 @@ final class ProtosI108BCallNDispatchTest {
                     "i108-b-spread-recovered.protos", module));
 
             // Rejections must not discard the positive PIC entry.
-            assertTerminalVarargsSite("callN", module);
-            assertComposedVarargsSite("callSpread", module);
-            assertComposedVarargsSite("callWithMutation", module);
+            assertTerminalBinarySite("callN", module);
+            assertComposedSite("callSpread", "CallVarargsMethod", module);
+            assertComposedSite("callWithMutation", "CallBinaryMethod", module);
         });
     }
 
@@ -208,8 +208,8 @@ final class ProtosI108BCallNDispatchTest {
                         "i108-b-positive-spread.protos", module));
             }
 
-            assertTerminalVarargsSite("callN", module);
-            assertComposedVarargsSite("callSpread", module);
+            assertTerminalBinarySite("callN", module);
+            assertComposedSite("callSpread", "CallVarargsMethod", module);
 
 
             // Generic -> direct on the same previously overridden value.
@@ -248,8 +248,8 @@ final class ProtosI108BCallNDispatchTest {
                     "callSpread(overridden, Array(4, 5))",
                     "i108-b-recovered-spread.protos", module));
 
-            assertTerminalVarargsSite("callN", module);
-            assertComposedVarargsSite("callSpread", module);
+            assertTerminalBinarySite("callN", module);
+            assertComposedSite("callSpread", "CallVarargsMethod", module);
         });
     }
 
@@ -462,7 +462,7 @@ final class ProtosI108BCallNDispatchTest {
         java.util.List<Site> sites = java.util.List.of(
                 new Site("callZero", "CallNilaryMethod"),
                 new Site("callOne", "CallUnaryMethod"),
-                new Site("callN", "CallVarargsMethod"),
+                new Site("callN", "CallBinaryMethod"),
                 new Site("callSpread", "CallVarargsMethod"));
 
         for (boolean debugger : new boolean[] {false, true}) {
@@ -568,43 +568,46 @@ final class ProtosI108BCallNDispatchTest {
             String description) {
         assertTrue(
                 containsOperation(instructions, expectedInvocation),
-                description + ": missing semantic invocation "
+                description + ": missing invocation "
                         + expectedInvocation + " in " + instructions);
 
-        assertEquals(
-                !terminal,
-                containsOperation(
-                        instructions, "IsPreparedClosureInvocation"),
-                description + ": prepared-result discrimination only at a composed site");
+        // I115 terminal calls return their result or pending
+        // transport directly. Composed calls own Yield/Resume.
+        boolean composed = !terminal;
 
-        // No second mechanical preparation/dispatch pipeline at
-        // the caller site. The generic preparation belongs to the
-        // semantic operation itself.
-        for (String obsolete : java.util.List.of(
+        assertEquals(
+                composed,
+                containsOperation(instructions, "IsContinuation"),
+                description + ": continuation classification");
+
+        assertEquals(
+                composed,
+                containsOperation(
+                        instructions, "ResumeDispatchedContinuation"),
+                description + ": continuation resumption");
+
+        assertEquals(
+                composed,
+                containsOperation(instructions, "yield"),
+                description + ": Bytecode continuation yield");
+
+        for (String retired : java.util.List.of(
+                "IsPreparedClosureInvocation",
+                "RequiresStructuredDispatch",
+                "EnterClosureCall",
+                "InvokeClosureArguments",
                 "TryDirectCallZero",
                 "TryDirectCallOne",
                 "PrepareClosureCall",
                 "PrepareClosureCallOne",
                 "PrepareClosureCallArguments",
-                "PrepareClosureCallVector")) {
-            org.junit.jupiter.api.Assertions.assertFalse(
-                    containsOperation(instructions, obsolete),
-                    description + ": obsolete caller operation "
-                            + obsolete);
-        }
-
-        // Unknown calls still require the real Bytecode DSL
-        // suspension/resumption machinery. It must not be moved
-        // into an ordinary Java-only operation.
-        for (String continuation : java.util.List.of(
+                "PrepareClosureCallVector",
                 "IsContinuationForCall",
-                "yield",
                 "ResumeContinuation")) {
-            // I112: a terminal site transports a suspension instead.
-            assertEquals(
-                    !terminal,
-                    containsOperation(instructions, continuation),
-                    description + ": structural continuation " + continuation);
+            assertTrue(
+                    !containsOperation(instructions, retired),
+                    description + ": retired operation "
+                            + retired + " in " + instructions);
         }
     }
 
@@ -662,8 +665,8 @@ final class ProtosI108BCallNDispatchTest {
                     "i108-b-polymorphic-first-spread.protos",
                     module));
 
-            assertTerminalVarargsSite("callN", module);
-            assertComposedVarargsSite("callSpread", module);
+            assertTerminalBinarySite("callN", module);
+            assertComposedSite("callSpread", "CallVarargsMethod", module);
 
             // Five independently parsed Closure definitions at each
             // of two stable call sites, exceeding the PIC limit of 3.
@@ -744,55 +747,62 @@ final class ProtosI108BCallNDispatchTest {
                 .bytecodeActivationRootForTesting();
     }
 
-    private static void assertTerminalVarargsSite(
+    private static void assertTerminalBinarySite(
             String function, ProtosActivation module) {
         java.util.List<String> instructions =
                 instructionNames(functionRoot(function, module));
 
-        long varargs = instructions.stream()
-                .filter(name -> name.equals("c.CallVarargsMethod")
-                        || name.equals("CallVarargsMethod"))
+        long binary = instructions.stream()
+                .filter(name -> name.equals("c.CallBinaryMethod")
+                        || name.equals("CallBinaryMethod"))
                 .count();
 
-        long legacy = instructions.stream()
-                .filter(name -> name.equals("c.InvokeClosureArguments")
-                        || name.equals("InvokeClosureArguments")
-                        || name.equals("c.InvokeClosureArgumentsTail")
-                        || name.equals("InvokeClosureArgumentsTail"))
-                .count();
-
-        assertEquals(1L, varargs,
-                "one terminal CallVarargsMethod in "
-                        + function + ": " + instructions);
-        assertEquals(0L, legacy,
-                "no legacy CallN dispatch in "
-                        + function + ": " + instructions);
-    }
-
-    private static void assertComposedVarargsSite(
-            String function, ProtosActivation module) {
-        java.util.List<String> instructions =
-                instructionNames(functionRoot(function, module));
-
-        long varargs = instructions.stream()
-                .filter(name -> name.equals("c.CallVarargsMethod")
-                        || name.equals("CallVarargsMethod"))
-                .count();
-
-        assertEquals(1L, varargs,
-                "one composed CallVarargsMethod in "
+        assertEquals(
+                1L, binary,
+                "one terminal CallBinaryMethod in "
                         + function + ": " + instructions);
 
         assertTrue(
+                !containsOperation(instructions, "InvokeClosureArguments")
+                        && !containsOperation(
+                                instructions, "InvokeClosureArgumentsTail"),
+                "legacy CallN dispatch remains: " + instructions);
+    }
+
+    private static void assertComposedSite(
+            String function,
+            String expectedOperation,
+            ProtosActivation module) {
+        java.util.List<String> instructions =
+                instructionNames(functionRoot(function, module));
+
+        long calls = instructions.stream()
+                .filter(name -> name.equals(expectedOperation)
+                        || name.equals("c." + expectedOperation))
+                .count();
+
+        assertEquals(
+                1L, calls,
+                "one composed " + expectedOperation + " in "
+                        + function + ": " + instructions);
+
+        assertTrue(
+                containsOperation(instructions, "IsContinuation"),
+                "composed call must discriminate continuations: "
+                        + instructions);
+
+        assertTrue(
                 containsOperation(
-                        instructions, "IsPreparedClosureInvocation"),
-                "composed call retains continuation discrimination: "
+                        instructions, "ResumeDispatchedContinuation"),
+                "composed call must resume its selected callee: "
                         + instructions);
 
         assertTrue(
                 !containsOperation(
-                        instructions, "InvokeClosureArguments"),
-                "legacy CallN dispatch remains: " + instructions);
+                        instructions, "IsPreparedClosureInvocation")
+                        && !containsOperation(
+                                instructions, "InvokeClosureArguments"),
+                "legacy preparation/dispatch remains: " + instructions);
     }
 
     private interface CoreCase {

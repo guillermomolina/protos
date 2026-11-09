@@ -689,9 +689,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
         Object value = outcome.value();
         assertEquals(
                 8L,
-                value instanceof com.guillermomolina.protos.runtime.ProtosIntegerValue integer
-                        ? integer.longValue()
-                        : value);
+                assertInstanceOf(Long.class, value));
         assertEquals(1, conditions.get());
         assertEquals(1, ticks.get());
         assertEquals(1, cleanups.get());

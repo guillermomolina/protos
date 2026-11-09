@@ -75,21 +75,13 @@ public final class ProtosDispatchTestSupport {
 
     /** Enters the CallTarget; the result is projected to the guest domain. */
     public static Object enter(DirectEntry entry) {
-        try {
-            return ProtosNumericValueSupport.guestValue(
-                    entry.target().call(entry.targetArguments()));
-        } catch (ProtosBytecodeControlTransferException bridged) {
-            throw bridged.transfer();
-        }
+        return ProtosNumericValueSupport.guestValue(
+                entry.target().call(entry.targetArguments()));
     }
 
     /** As {@link #enter}, without projecting the raw callee result. */
     public static Object enterRaw(DirectEntry entry) {
-        try {
-            return entry.target().call(entry.targetArguments());
-        } catch (ProtosBytecodeControlTransferException bridged) {
-            throw bridged.transfer();
-        }
+        return entry.target().call(entry.targetArguments());
     }
 
     /* The dispatcher's ReturnHome selection (ProtosFunctionCallDispatchers). */

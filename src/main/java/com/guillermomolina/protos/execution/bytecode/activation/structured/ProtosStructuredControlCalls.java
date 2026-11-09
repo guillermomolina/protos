@@ -143,28 +143,14 @@ final class ProtosStructuredControlCalls {
      */
     static final class PreparedStandardObjectCall {
         private final ProtosCallRequest child;
-        private final ProtosObjectValue constructedInstance;
 
-        private PreparedStandardObjectCall(
-                ProtosCallRequest child,
-                ProtosObjectValue constructedInstance) {
+        private PreparedStandardObjectCall(ProtosCallRequest child) {
             this.child = java.util.Objects.requireNonNull(child, "child");
-            this.constructedInstance = constructedInstance;
         }
 
-        static PreparedStandardObjectCall closure(
+        static PreparedStandardObjectCall forward(
                 ProtosCallRequest child) {
-            return new PreparedStandardObjectCall(child, null);
-        }
-
-        static PreparedStandardObjectCall construction(
-                ProtosCallRequest child,
-                ProtosObjectValue constructedInstance) {
-            return new PreparedStandardObjectCall(
-                    child,
-                    java.util.Objects.requireNonNull(
-                            constructedInstance,
-                            "constructedInstance"));
+            return new PreparedStandardObjectCall(child);
         }
 
         ProtosCallRequest child() {

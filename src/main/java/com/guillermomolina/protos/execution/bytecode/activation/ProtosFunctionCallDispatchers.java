@@ -207,6 +207,184 @@ final class ProtosFunctionCallDispatchers {
         }
     }
 
+    /**
+     * D237 / I115: cold name-bearing entry to the shared dispatcher.
+     *
+     * The caller's source expressions and spreads have already been
+     * evaluated. Selection uses the actual callable, then association
+     * uses the selected implementation's declared source formals.
+     *
+     * Positional-only Call*Method sites never enter this route.
+     */
+    @TruffleBoundary
+    static Object callNamed(
+            Object callable,
+            ProtosPreparedCalls.NamedArgumentPacket packet,
+            ProtosActivation caller) {
+        java.util.Objects.requireNonNull(packet, "named packet");
+        java.util.Objects.requireNonNull(caller, "caller");
+
+        if (callable instanceof ProtosBoundMethod bound) {
+            return invokeSelectedNamed(
+                    bound.callable(),
+                    bound.receiver(),
+                    bound.methodHome(),
+                    packet,
+                    caller);
+        }
+
+        // D237: a name-bearing invocation selects the actual D013
+        // `call` behavior even when its receiver is a Closure.
+        // Standard Object.call subsequently forwards directly to
+        // that Closure, without repeating the lookup.
+        if (callable instanceof ProtosClosureValue closure) {
+            ProtosSlotLookupResult selected =
+                    selectCall(closure, caller, null);
+
+            return invokeSelectedNamed(
+                    (ProtosClosureValue) selected.value(),
+                    closure,
+                    selected.home(),
+                    packet,
+                    caller);
+        }
+
+        // All other values use ordinary dynamic `call` lookup.
+        Object receiver = ProtosNumericValueSupport.guestValue(callable);
+        ProtosSlotLookupResult selected =
+                selectCall(receiver, caller, null);
+
+        return invokeSelectedNamed(
+                (ProtosClosureValue) selected.value(),
+                receiver,
+                selected.home(),
+                packet,
+                caller);
+    }
+
+    /**
+     * Invoke the exact selected implementation with the P,K packet.
+     *
+     * Only the actual executable standard Object.call/construct bodies
+     * forward names transparently. Other native implementations have
+     * no declared Protos named signature and reject the packet.
+     */
+    private static Object invokeSelectedNamed(
+            ProtosClosureValue selected,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            ProtosPreparedCalls.NamedArgumentPacket packet,
+            ProtosActivation caller) {
+        ProtosNamedArgumentAssociation.SelectedBinding binding =
+                ProtosNamedArgumentAssociation.classifySelectedImplementation(
+                        selected,
+                        packet.positional(),
+                        packet.named());
+
+        if (binding == null) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(caller));
+        }
+
+        if (ProtosStandardObjectProtocol
+                .isStandardCallImplementation(selected)) {
+
+            if (receiver instanceof ProtosClosureValue closure) {
+                // Standard Object.call executes the receiver Closure
+                // directly, retaining its captured receiver/home.
+                return invokeSelectedNamed(
+                        closure, null, null, packet, caller);
+            }
+
+            if (!ProtosStandardObjectProtocol
+                    .isOrdinaryConstructionReceiver(receiver)) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(caller));
+            }
+
+            // D239-C1: ordinary construct lookup on the original
+            // receiver, after all source arguments were evaluated.
+            Object construct =
+                    ProtosExperimentalGetMethodNode.select(
+                            receiver, "construct", null, caller);
+
+            return callNamed(construct, packet, caller);
+        }
+
+        if (ProtosStandardObjectProtocol
+                .isStandardConstructImplementation(selected)) {
+
+            if (!ProtosStandardObjectProtocol
+                    .isOrdinaryConstructionReceiver(receiver)) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(caller));
+            }
+
+            ProtosObjectValue instance =
+                    new ProtosObjectValue((ProtosObjectValue) receiver);
+
+            // D239-C1: select init on the fresh child, preserving
+            // its actual receiver and methodHome.
+            Object initializer =
+                    ProtosExperimentalGetMethodNode.select(
+                            instance, "init", null, caller);
+
+            Object initialized =
+                    callNamed(initializer, packet, caller);
+
+            // A suspended init must finish before construct returns.
+            // Its normal return value is ignored; the instance wins.
+            return ProtosTailCallContinuation.afterSuccessfulChild(
+                    initialized, instance);
+        }
+
+        if (!(binding instanceof
+                ProtosNamedArgumentAssociation.SourceBinding source)) {
+            throw new IllegalStateException(
+                    "named source binding classification was not consumed");
+        }
+
+        ProtosNamedArgumentAssociation.Association association =
+                source.association();
+
+        java.util.List<Object> supplied =
+                association.boundSuppliedArgumentsForRuntime();
+
+        ProtosActivation activation;
+        if (methodHome == null) {
+            activation = ProtosActivation.forClosureInvocation(
+                    selected,
+                    supplied,
+                    caller.prelude().orElse(null),
+                    caller.actorModuleState(),
+                    caller.currentModuleKey().orElse(null),
+                    caller.executionDomain());
+        } else {
+            activation = ProtosActivation.forImmediateMethodInvocation(
+                    selected,
+                    supplied,
+                    receiver,
+                    methodHome,
+                    caller.prelude().orElse(null),
+                    caller.actorModuleState(),
+                    caller.currentModuleKey().orElse(null),
+                    caller.executionDomain());
+        }
+
+        activation.installNamedParameterPresenceForRuntime(
+                association.parameterPresenceForRuntime());
+
+        if (caller.task().isPresent()) {
+            activation.attachTask(caller.task().orElseThrow());
+        } else {
+            activation.inheritDynamicControlState(caller);
+        }
+
+        // The same Context-local source CallTarget used by I115,
+        // entered with an already published exact activation.
+        return callPublishedUncached(selected, activation);
+    }
+
     /** GraalPy {@code CallDispatchers.FunctionCachedCallNode}. */
     @GenerateInline
     @GenerateCached(false)
@@ -511,8 +689,10 @@ final class ProtosFunctionCallDispatchers {
      * I115: select only the caller state requested by the effective
      * callee root. The ordinary source-call case transports null.
      *
-     * Host and native entries retain their explicit caller when there
-     * is no source frame or no source Bytecode root.
+     * NEEDS_CALLER_PRELUDE transports a Prelude; NEEDS_EXACT_ACTIVATION
+     * transports the exact Activation. Callee slot 3 never contains arrays.
+     * Frame-null host entry retains its explicit caller, as does entry
+     * without a source Bytecode callee root.
      */
     private static Object prepareCallerForCallee(
             VirtualFrame frame,
@@ -767,15 +947,11 @@ final class ProtosFunctionCallDispatchers {
     }
 
     /**
-     * This root's own caller reference: the published activation, or the
-     * still-compact frame arguments.
-     */
-
-
-    /**
-     * I115 (GraalPy CalleeContext / ReadFrameNode): the exact activation a
-     * caller reference denotes. Publishing a still-compact reference is the
-     * root's {@link ProtosBytecodeRootNode#NEEDS_EXACT_ACTIVATION} need.
+     * Observes the exact activation of the caller. An argument array here
+     * is the running caller root's own current header: publishing it records
+     * NEEDS_EXACT_ACTIVATION. It is never retained in a callee's B5[3], whose
+     * payload is only null, Prelude, or exact Activation. Frame-null host
+     * entry retains its explicit caller instead of recovering a source frame.
      */
     static ProtosActivation exactCaller(ProtosBytecodeRootNode root, Object caller) {
         if (caller instanceof ProtosActivation activation) {
@@ -793,9 +969,11 @@ final class ProtosFunctionCallDispatchers {
 
 
     /**
-     * I115: the prelude of a caller reference by the admitted B5 accessors,
-     * without publishing anything; an untransported inherited prelude
-     * registers {@code root}'s NEEDS_CALLER_PRELUDE once.
+     * Reads a transported Prelude or exact Activation, or the running
+     * caller root's own admitted header. That array is current-frame input
+     * to this helper, never a callee's B5[3] payload. An untransported
+     * inherited Prelude registers NEEDS_CALLER_PRELUDE once so subsequent
+     * calls transport it; this read itself publishes no activation.
      */
     static ProtosPrelude admittedCallerPrelude(ProtosBytecodeRootNode root, Object caller) {
         if (caller instanceof ProtosPrelude prelude) {

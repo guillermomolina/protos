@@ -670,10 +670,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             if (root.needsTraceAndProfileInstrumentation()) {
                 root.traceOrProfileReturn(frame, bytecodeNode, value);
             }
-            // I115: the definitive completion of this activation closes its own home.
-            // PRUIBA DE I115, en algún momento esto volverá a funcionar
-            // closeOwnedReturnHome(frame, value);
-            // PRUIBA DE I115, en algún momento esto volverá a funcionar
+            // A suspended invocation retains its owned ReturnHome.
+            // Normal completion closes only the home owned by this root.
+            closeOwnedReturnHome(frame, value);
             return value;
         }
     }
@@ -694,9 +693,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             if (root.needsTraceAndProfileInstrumentation()) {
                 root.traceOrProfileException(frame, bytecodeNode, exception);
             }
-            // I115: a guest exception definitively abandons this activation.
-            // PRUIBA DE I115, en algún momento esto volverá a funcionar
-            // closeOwnedReturnHome(frame, null);
+            // A guest Error definitively leaves this invocation.
+            // Captured ReturnHomes remain owned by their outer roots.
+            closeOwnedReturnHome(frame, null);
         }
     }
 
@@ -820,7 +819,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class HasSuppliedArgument {
         @Specialization
         public static boolean perform(int index, @Bind VirtualFrame frame) {
-            return ProtosFrameArguments.suppliedArgumentCount(frame.getArguments()) > index;
+            return ProtosFrameArguments.hasSuppliedParameter(
+                    frame.getArguments(), index);
         }
     }
 
@@ -1971,6 +1971,27 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 }
 
 
+    /**
+     * D237 / I115: cold name-aware call after operand evaluation.
+     *
+     * The argument vector retains both positional values and source
+     * labels. Only this operation freezes the P,K packet. Ordinary
+     * positional Call*Method operations are unaffected.
+     */
+    @Operation
+    public static final class CallNamedMethod {
+        @Specialization
+        public static Object perform(
+                Object callable,
+                PreparedArgumentVector supplied,
+                @Bind VirtualFrame frame) {
+            return ProtosFunctionCallDispatchers.callNamed(
+                    callable,
+                    supplied.namedPacket(),
+                    ProtosFrameArguments.activation(frame));
+        }
+    }
+
     // ---- Call arguments ------------------------------------------------------------
 
     /** I108-B: positional arguments, already evaluated left to right. */
@@ -2706,17 +2727,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
              * root materializes the real C-prime ContinuationResult; callers
              * then continue to see only ordinary nested ContinuationResults.
              */
-            return value instanceof ContinuationResult
-                    || value instanceof ProtosTailCallContinuation
-                    || value instanceof ProtosNativeSuspension
-                    || value instanceof ProtosIoOperationSuspension
-                    || value instanceof ProtosIoReleaseSuspension;
+            return ProtosTailCallContinuation.isSuspended(value);
         }
 
         /** Exactly {@link IsContinuation#perform} for every instance of {@code type}. */
         static boolean isContinuationClass(Class<?> type) {
             return ContinuationResult.class.isAssignableFrom(type)
                     || ProtosTailCallContinuation.class.isAssignableFrom(type)
+                    || ProtosTailCallContinuation.isMappedCompletionClass(type)
                     || ProtosNativeSuspension.class.isAssignableFrom(type)
                     || ProtosIoOperationSuspension.class.isAssignableFrom(type)
                     || ProtosIoReleaseSuspension.class.isAssignableFrom(type);
@@ -2866,7 +2884,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static Object leaf(
                 Object pending,
                 Object resumeValue) {
-            return ProtosTailCallContinuation.resumeLeaf(pending, resumeValue);
+            return ProtosTailCallContinuation.resume(pending, resumeValue);
         }
     }
 

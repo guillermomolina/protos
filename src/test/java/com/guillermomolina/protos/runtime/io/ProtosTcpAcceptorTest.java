@@ -30,7 +30,6 @@ import com.guillermomolina.protos.execution.ProtosInvocation;
 import com.guillermomolina.protos.execution.ProtosStandardTcpListenerProtocol;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosIoLifecycle;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -57,7 +56,7 @@ final class ProtosTcpAcceptorTest {
             assertSame(x.listenerFlow(), acceptor.flowForRuntime());
         }
 
-        first.createLocalSlot("label", new ProtosIntegerValue(3));
+        first.createLocalSlot("label", Long.valueOf(3));
         assertTrue(first.readLocalSlot("label").isPresent());
         assertTrue(second.localSlotsSnapshot().isEmpty());
         assertEquals(0, x.backend.accepts.get());
@@ -91,7 +90,7 @@ final class ProtosTcpAcceptorTest {
         assertThrows(ProtosSignalException.class,
                 () -> ProtosInvocation.invokeMessage(capabilityChild, "accept", List.of(), x.activation));
         assertThrows(ProtosSignalException.class,
-                () -> ProtosInvocation.invokeMessage(acceptor, "accept", List.of(new ProtosIntegerValue(1)), x.activation));
+                () -> ProtosInvocation.invokeMessage(acceptor, "accept", List.of(Long.valueOf(1)), x.activation));
         assertThrows(ProtosSignalException.class,
                 () -> ProtosInvocation.invokeMessage(acceptor, "accept", List.of(), foreign));
         assertFalse(acceptor.ownedByForRuntime(foreign));

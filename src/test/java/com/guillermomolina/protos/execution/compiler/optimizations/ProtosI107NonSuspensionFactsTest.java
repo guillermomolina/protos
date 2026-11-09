@@ -231,7 +231,7 @@ class ProtosI107NonSuspensionFactsTest {
         CanonicalLexicalScope scope = analysis.scopeOf(closure).orElseThrow();
         CanonicalCompilationFacts facts = new CanonicalCompilationFacts();
         CanonicalCompilationFacts.EffectiveRoot root =
-                facts.effectiveRoot(closure, analysis, scope, null);
+                facts.effectiveRoot(closure, analysis, scope);
 
         // Planner (before the builder) has no proof.
         assertEquals(CanonicalCompilationFacts.Publication.RECORDED, facts.publishNonSuspension(
@@ -256,7 +256,7 @@ class ProtosI107NonSuspensionFactsTest {
         CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeClosure(closure);
         CanonicalLexicalScope scope = analysis.scopeOf(closure).orElseThrow();
         CanonicalCompilationFacts facts = new CanonicalCompilationFacts();
-        Object identity = facts.effectiveRoot(closure, analysis, scope, null);
+        Object identity = facts.effectiveRoot(closure, analysis, scope);
 
         Result first = new Result(Proof.PROVEN_NO_SUSPENSION, Subject.EFFECTIVE_ROOT, identity,
                 analysis, scope, EnumSet.of(Precondition.UNOBSERVABLE_RETURN_HOME), "a");
@@ -372,7 +372,7 @@ class ProtosI107NonSuspensionFactsTest {
         CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeClosure(closure);
         CanonicalLexicalScope scope = analysis.scopeOf(closure).orElseThrow();
         CanonicalCompilationFacts facts = new CanonicalCompilationFacts();
-        Object identity = facts.effectiveRoot(closure, analysis, scope, null);
+        Object identity = facts.effectiveRoot(closure, analysis, scope);
 
         Result first = new Result(
                 Proof.PROVEN_NO_SUSPENSION, Subject.EFFECTIVE_ROOT,
@@ -407,8 +407,8 @@ class ProtosI107NonSuspensionFactsTest {
                 closure.body(), closure, analysis, scope);
         assertSame(first, facts.canonicalBodyNonSuspension(
                 closure.body(), closure, analysis, scope));
-        assertSame(facts.effectiveRoot(closure, analysis, scope, null),
-                facts.effectiveRoot(closure, analysis, scope, null));
+        assertSame(facts.effectiveRoot(closure, analysis, scope),
+                facts.effectiveRoot(closure, analysis, scope));
     }
 
     @Test
@@ -438,36 +438,29 @@ class ProtosI107NonSuspensionFactsTest {
         CanonicalLexicalScope twinScope = twinAnalysis.scopeOf(twin).orElseThrow();
         assertEquals(closure, twin);
         assertNotSame(
-                facts.effectiveRoot(closure, isolated, isolated.scopeOf(closure).orElseThrow(), null),
-                facts.effectiveRoot(twin, twinAnalysis, twinScope, null));
+                facts.effectiveRoot(closure, isolated, isolated.scopeOf(closure).orElseThrow()),
+                facts.effectiveRoot(twin, twinAnalysis, twinScope));
         assertTrue(facts.queryNonSuspension(
                 Subject.CANONICAL_BODY, twin.body(), twinAnalysis, twinScope).isEmpty());
     }
 
     @Test
-    void reparsedTreesAndDifferentTransformationsGetNewIdentities() {
+    void reparsedTreesHaveDistinctEffectiveRootIdentities() {
         CanonicalCompilationFacts facts = new CanonicalCompilationFacts();
         CanonicalClosure original = closure("() => { true.ifTrue() { 1 } }");
         CanonicalBindingAnalysis analysis = facts.isolatedClosureAnalysis(original);
         CanonicalLexicalScope scope = analysis.scopeOf(original).orElseThrow();
-        CanonicalCompilationFacts.EffectiveRoot unfolded =
-                facts.effectiveRoot(original, analysis, scope, null);
-        CanonicalLiteral literal = assertInstanceOf(CanonicalLiteral.class,
-                assertInstanceOf(CanonicalClosure.class,
-                        assertInstanceOf(CanonicalSend.class, original.body().expressions().get(0))
-                                .arguments().get(0)).body().expressions().get(0));
-        CanonicalCompilationFacts.EffectiveRoot folded =
-                facts.effectiveRoot(original, analysis, scope, literal);
-        assertNotSame(unfolded, folded);
-        assertSame(literal, folded.foldedTerminal());
+        CanonicalCompilationFacts.EffectiveRoot identity =
+                facts.effectiveRoot(original, analysis, scope);
+        assertSame(identity, facts.effectiveRoot(original, analysis, scope));
+        assertSame(original, identity.canonicalRoot());
 
         CanonicalClosure reparsed = closure("() => { true.ifTrue() { 1 } }");
         CanonicalBindingAnalysis rematerialized = analysis.rematerializeForReparsedClosure(reparsed);
         CanonicalLexicalScope reparsedScope = rematerialized.scopeOf(reparsed).orElseThrow();
-        assertNotSame(folded, facts.effectiveRoot(reparsed, rematerialized, reparsedScope, literal));
+        assertNotSame(identity, facts.effectiveRoot(reparsed, rematerialized, reparsedScope));
         assertFalse(facts.canonicalBodyNonSuspension(
-                original.body(), original, rematerialized, reparsedScope)
-                .proven());
+                original.body(), original, rematerialized, reparsedScope).proven());
     }
 
     @Test
@@ -481,8 +474,8 @@ class ProtosI107NonSuspensionFactsTest {
         normal.canonicalBodyNonSuspension(closure.body(), closure, analysis, scope);
         assertTrue(debug.queryNonSuspension(
                 Subject.CANONICAL_BODY, closure.body(), analysis, scope).isEmpty());
-        assertNotSame(normal.effectiveRoot(closure, analysis, scope, null),
-                debug.effectiveRoot(closure, analysis, scope, null));
+        assertNotSame(normal.effectiveRoot(closure, analysis, scope),
+                debug.effectiveRoot(closure, analysis, scope));
     }
 
     @Test
@@ -536,7 +529,7 @@ class ProtosI107NonSuspensionFactsTest {
         CanonicalCompilationFacts facts = new CanonicalCompilationFacts();
         return facts.newAnalysis(analysis, scope, closure, SendSelection.NONE)
                 .proveEffectiveRoot(
-                        facts.effectiveRoot(closure, analysis, scope, null),
+                        facts.effectiveRoot(closure, analysis, scope),
                         closure,
                         closure.body().expressions(),
                         facts.mayObserveReturnHome(closure),

@@ -17,292 +17,144 @@
 
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.OrdinarySourceCall;
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedArgumentVector;
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
-import com.guillermomolina.protos.parser.ProtosParser;
-import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosNullValue;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.guillermomolina.protos.semantic.Canonicalizer;
-import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
-import com.oracle.truffle.api.nodes.IndirectCallNode;
-import java.util.List;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
-/** I143: selected source Closure activation and named binding. */
+/**
+ * I115 / D237 / D239-C1: observable named-call semantics
+ * through the current Bytecode DSL and shared dispatcher.
+ * No historical prepared-call implementation is recreated.
+ */
 class ProtosI143SelectedSourcePreparationTest {
 
     @Test
-    void directSourcePreservesAbsentDefaults() {
-        ProtosActivation caller = moduleActivation();
-        ProtosClosureValue selected =
-                sourceClosure("(a: 10, b: 20, c: 30) => c");
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.appendNamed("c", 99);
-
-        ProtosActivation activation =
-                ProtosNamedCallPreparation
-                        .activationForSelectedDirectSource(
-                                selected, caller, supplied);
-
-        assertSame(selected.capturedReceiver(), activation.receiver());
-        assertFalse(activation.hasSuppliedParameterForRuntime(0));
-        assertFalse(activation.hasSuppliedParameterForRuntime(1));
-        assertTrue(activation.hasSuppliedParameterForRuntime(2));
-        assertEquals(
-                List.of(
-                        ProtosNullValue.INSTANCE,
-                        ProtosNullValue.INSTANCE,
-                        99),
-                activation.suppliedArgumentsForRuntime());
-    }
-
-    @Test
-    void selectedMethodPreservesActualReceiverAndHome() {
-        ProtosActivation caller = moduleActivation();
-        ProtosClosureValue selected =
-                sourceClosure("(a, b: 20, c: 30) => c");
-
-        ProtosObjectValue receiver =
-                new ProtosObjectValue(
-                        ProtosObjectValue.rootObject());
-        ProtosObjectValue home =
-                new ProtosObjectValue(
-                        ProtosObjectValue.rootObject());
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.append(1);
-        supplied.appendNamed("c", 33);
-
-        ProtosActivation activation =
-                ProtosNamedCallPreparation
-                        .activationForSelectedSourceMethod(
-                                selected, receiver, home, caller, supplied);
-
-        assertSame(receiver, activation.receiver());
-        assertSame(home, activation.methodHome().orElseThrow());
-        assertTrue(activation.hasSuppliedParameterForRuntime(0));
-        assertFalse(activation.hasSuppliedParameterForRuntime(1));
-        assertTrue(activation.hasSuppliedParameterForRuntime(2));
-        assertEquals(
-                List.of(1, ProtosNullValue.INSTANCE, 33),
-                activation.suppliedArgumentsForRuntime());
-    }
-
-    @Test
-    void explicitGuestNullIsPresent() {
-        ProtosActivation caller = moduleActivation();
-        ProtosClosureValue selected =
-                sourceClosure("(a: 10, b: 20) => a");
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.appendNamed("a", ProtosNullValue.INSTANCE);
-
-        ProtosActivation activation =
-                ProtosNamedCallPreparation
-                        .activationForSelectedDirectSource(
-                                selected, caller, supplied);
-
-        assertTrue(activation.hasSuppliedParameterForRuntime(0));
-        assertFalse(activation.hasSuppliedParameterForRuntime(1));
+    void directSourcePreservesAbsentDefaults() throws Exception {
         assertSame(
-                ProtosNullValue.INSTANCE,
-                activation.suppliedArgumentsForRuntime().get(0));
+                ProtosBooleanValue.TRUE,
+                evaluate("""
+                f: (a: 1, b: 2, c: 3) => a * 100 + b * 10 + c
+                f(c: 7) == 127
+                """));
     }
 
     @Test
-    void collisionSignalsGuestErrorBeforeActivation() {
-        ProtosActivation caller = moduleActivation();
-        ProtosClosureValue selected =
-                sourceClosure("(a, b) => a");
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.append(1);
-        supplied.appendNamed("a", 2);
-
-        assertThrows(
-                ProtosSignalException.class,
-                () -> ProtosNamedCallPreparation
-                        .activationForSelectedDirectSource(
-                                selected, caller, supplied));
+    void selectedMethodPreservesActualReceiverAndHome() throws Exception {
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                evaluate("""
+                base: {
+                    read: (a, b: 20, c: 30) => this.marker + a + c
+                }
+                receiver: base { marker: 7 }
+                receiver.read(1, c: 2) == 10
+                """));
     }
 
     @Test
-    void unknownNameSignalsGuestError() {
-        ProtosActivation caller = moduleActivation();
-        ProtosClosureValue selected =
-                sourceClosure("(a) => a");
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.appendNamed("missing", 1);
-
-        assertThrows(
-                ProtosSignalException.class,
-                () -> ProtosNamedCallPreparation
-                        .activationForSelectedDirectSource(
-                                selected, caller, supplied));
+    void explicitGuestNullIsPresent() throws Exception {
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                evaluate("""
+                f: (a: true, b: false) => a
+                f(a: null) === null
+                """));
     }
 
     @Test
-    void customSourceCallDoesNotForwardUndeclaredNames() {
-        ProtosActivation caller = moduleActivation();
-
-        // Model the actually selected overridden call behavior.
-        ProtosClosureValue override =
-                sourceClosure("(arg) => arg");
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.appendNamed("other", 12);
-
-        assertThrows(
-                ProtosSignalException.class,
-                () -> ProtosNamedCallPreparation
-                        .activationForSelectedSourceMethod(
-                                override,
-                                ProtosObjectValue.rootObject(),
-                                ProtosObjectValue.rootObject(),
-                                caller,
-                                supplied));
+    void collisionSignalsGuestErrorBeforeActivation() throws Exception {
+        assertGuestError(
+                """
+                f: (a, b) => a
+                f(1, a: 2)
+                """,
+                ProtosCoreErrors.StandardError.ERROR);
     }
 
     @Test
-    void namedFormalCanLeaveRestEmpty() {
-        ProtosActivation caller = moduleActivation();
-        ProtosClosureValue selected =
-                sourceClosure("(a, b, c, ...rest) => rest");
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.append(1);
-        supplied.append(2);
-        supplied.appendNamed("c", 3);
-
-        ProtosActivation activation =
-                ProtosNamedCallPreparation
-                        .activationForSelectedDirectSource(
-                                selected, caller, supplied);
-
-        assertEquals(
-                List.of(1, 2, 3),
-                activation.suppliedArgumentsForRuntime());
-        assertEquals(
-                List.of(),
-                ProtosNamedArgumentAssociation.associate(
-                        selected.definition().parameters(),
-                        supplied.positionalSnapshot(),
-                        supplied.namedSnapshot()).restValues());
+    void unknownNameSignalsGuestError() throws Exception {
+        assertGuestError(
+                """
+                f: (a) => a
+                f(missing: 1)
+                """,
+                ProtosCoreErrors.StandardError.ERROR);
     }
 
     @Test
-    void selectedImplementationDeterminesItsFormalNames() {
-        ProtosActivation caller = moduleActivation();
-        ProtosClosureValue former =
-                sourceClosure("(oldName) => oldName");
-        ProtosClosureValue replacement =
-                sourceClosure("(newName) => newName");
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.appendNamed("newName", 5);
-
-        assertThrows(
-                ProtosSignalException.class,
-                () -> ProtosNamedCallPreparation
-                        .activationForSelectedDirectSource(
-                                former, caller, supplied));
-
-        ProtosActivation accepted =
-                ProtosNamedCallPreparation
-                        .activationForSelectedDirectSource(
-                                replacement, caller, supplied);
-
-        assertEquals(5, accepted.suppliedArgumentsForRuntime().get(0));
+    void customSourceCallDoesNotForwardUndeclaredNames() throws Exception {
+        assertGuestError(
+                """
+                receiver: { call: (arg) => arg }
+                receiver(other: 12)
+                """,
+                ProtosCoreErrors.StandardError.ERROR);
     }
 
     @Test
-    void selectedSourceCanEnterPreparedBytecodeWithNamedValue() {
-        ProtosActivation caller = moduleActivation();
-
-        ProtosClosureValue selected = assertInstanceOf(
-                ProtosClosureValue.class,
-                ProtosTestExecutionSupport.evaluate(
-                        "i143-selected-source.protos",
-                        "(a: 10, b: 20, c: 30) => c",
-                        caller));
-
-        ProtosObjectValue value =
-                new ProtosObjectValue(
-                        ProtosObjectValue.rootObject());
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.appendNamed("c", value);
-
-        Object result = ProtosTestExecutionSupport.callEntered(
-                () -> {
-                    PreparedClosureCall prepared =
-                            ProtosNamedCallPreparation
-                                    .prepareSelectedDirectSource(
-                                            selected, caller, supplied);
-
-                    Object entered =
-                            ProtosBytecodeRootNode.EnterClosureCall
-                                    .ordinaryIndirect(
-                                            assertInstanceOf(
-                                                    OrdinarySourceCall.class,
-                                                    prepared),
-                                            IndirectCallNode.create());
-
-                    return prepared.finish(entered);
-                });
-
-        assertSame(value, result);
+    void namedFormalCanLeaveRestEmpty() throws Exception {
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                evaluate("""
+                f: (a, b, c, ...rest) => rest.size()
+                f(1, 2, c: 3) == 0
+                """));
     }
 
-    private static ProtosClosureValue sourceClosure(String text) {
-        SurfaceSequence program = new ProtosParser(text).parseProgram();
-        CanonicalClosure definition = assertInstanceOf(
-                CanonicalClosure.class,
-                new Canonicalizer().canonicalize(
-                        program.expressions().get(0)));
-
-        return new ProtosClosureValue(
-                definition,
-                List.of(),
-                ProtosObjectValue.rootObject());
+    @Test
+    void selectedImplementationDeterminesItsFormalNames() throws Exception {
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                evaluate("""
+                receiver: { call: (oldName) => oldName }
+                receiver.call = (newName) => newName
+                receiver(newName: 5) == 5
+                """));
     }
 
-    private static ProtosActivation moduleActivation() {
-        ProtosObjectValue contextPrototype =
-                new ProtosObjectValue(
-                        ProtosObjectValue.rootObject());
-        ProtosObjectValue bindings =
-                new ProtosObjectValue(contextPrototype);
+    @Test
+    void selectedSourceCanEnterPreparedBytecodeWithNamedValue() throws Exception {
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                evaluate("""
+                f: (a: 10, b: 20, c: 30) => c
+                value: {}
+                f(c: value) === value
+                """));
+    }
 
-        bindings.createLocalSlot("Context", contextPrototype);
-        bindings.createLocalSlot(
-                "Error",
-                new ProtosObjectValue(
-                        ProtosObjectValue.rootObject()));
-        bindings.createLocalSlot(
-                "Array",
-                new ProtosObjectValue(
-                        ProtosObjectValue.rootObject()));
-        bindings.freeze();
 
+    private static Object evaluate(String source) throws Exception {
         ProtosPrelude prelude =
-                new ProtosPrelude(bindings, contextPrototype);
+                new ProtosCoreBootstrap().bootstrap(
+                        Path.of("protos", "lib", "core"));
+        return ProtosTestExecutionSupport.evaluate(
+                source, prelude.newModuleActivation());
+    }
 
-        return prelude.newModuleActivation();
+    private static void assertGuestError(
+            String source,
+            ProtosCoreErrors.StandardError expected)
+            throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(
+                        Path.of("protos", "lib", "core"));
+        ProtosActivation module = prelude.newModuleActivation();
+
+        ProtosSignalException failure = assertThrows(
+                ProtosSignalException.class,
+                () -> ProtosTestExecutionSupport.evaluate(
+                        source, module));
+
+        assertSame(
+                ProtosCoreErrors.prototype(module, expected),
+                failure.error().parent().orElseThrow());
     }
 }

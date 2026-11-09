@@ -62,13 +62,99 @@ import java.util.Objects;
 final class ProtosTailCallContinuation implements TruffleObject {
     private enum State { PENDING, RESUMING, DONE }
 
+    /**
+     * D239-C1: completion mapping for an init invocation that has
+     * suspended. The selected init owns its real continuation;
+     * this carrier only replaces its eventual normal result with
+     * the already-created instance.
+     *
+     * Errors and non-local control transfers are never mapped.
+     */
+    private static final class MappedCompletion implements TruffleObject {
+        private Object pending;
+        private final Object normalResult;
+        private State state = State.PENDING;
+
+        private MappedCompletion(Object pending, Object normalResult) {
+            this.pending = Objects.requireNonNull(pending, "pending");
+            this.normalResult =
+                    Objects.requireNonNull(normalResult, "normalResult");
+        }
+
+        private Object resumeOwned(Object resumeValue) {
+            if (state != State.PENDING) {
+                throw new IllegalStateException(
+                        "mapped completion resumed while not pending");
+            }
+
+            state = State.RESUMING;
+            Object next;
+            try {
+                next = Objects.requireNonNull(
+                        ProtosTailCallContinuation.resume(
+                                pending, resumeValue),
+                        "mapped completion returned null");
+            } catch (RuntimeException | Error failure) {
+                state = State.DONE;
+                throw failure;
+            }
+
+            if (isSuspended(next)) {
+                pending = next;
+                state = State.PENDING;
+                return this;
+            }
+
+            pending = null;
+            state = State.DONE;
+            return normalResult;
+        }
+
+        private void abandonOwned() {
+            if (state != State.PENDING) {
+                return;
+            }
+
+            state = State.DONE;
+            Object abandoned = pending;
+            pending = null;
+            ProtosTailCallContinuation.abandon(abandoned);
+        }
+    }
+
+    /**
+     * Return the specified result only after the child completes
+     * normally. Synchronous children need no wrapper allocation.
+     */
+    static Object afterSuccessfulChild(
+            Object childOutcome, Object normalResult) {
+        if (isSuspended(childOutcome)) {
+            return new MappedCompletion(childOutcome, normalResult);
+        }
+        return normalResult;
+    }
+
+    static boolean isMappedCompletionClass(Class<?> type) {
+        return MappedCompletion.class.isAssignableFrom(type);
+    }
+
     private final BytecodeLocation callerLocation;
+    private final ProtosReturnHome ownedHome;
     private Object pending;
     private State state = State.PENDING;
 
-    private ProtosTailCallContinuation(Object pending, BytecodeLocation callerLocation) {
+    private ProtosTailCallContinuation(
+            Object pending, BytecodeLocation callerLocation) {
+        this(pending, callerLocation, null);
+    }
+
+    private ProtosTailCallContinuation(
+            Object pending,
+            BytecodeLocation callerLocation,
+            ProtosReturnHome ownedHome) {
         this.callerLocation = callerLocation;
         this.pending = Objects.requireNonNull(pending, "pending");
+        this.ownedHome = ownedHome;
     }
 
     /**
@@ -97,6 +183,21 @@ final class ProtosTailCallContinuation implements TruffleObject {
     }
 
     /**
+     * I115: an owned builtin ReturnHome survives a suspended
+     * native/structured child. The pending transport closes it
+     * exactly when that invocation ends or is abandoned.
+     */
+    @TruffleBoundary
+    static Object deferOwned(
+            Object suspendedOutcome,
+            ProtosReturnHome ownedHome) {
+        return new ProtosTailCallContinuation(
+                suspendedOutcome,
+                null,
+                Objects.requireNonNull(ownedHome, "ownedHome"));
+    }
+
+    /**
      * The logical location of the terminal call that created this transport (tooling and
      * diagnostics), or {@code null}. Use {@link BytecodeLocation#update()} after a reparse.
      */
@@ -115,13 +216,15 @@ final class ProtosTailCallContinuation implements TruffleObject {
      */
     static boolean isPending(Object outcome) {
         return outcome instanceof ContinuationResult
-                || outcome instanceof ProtosTailCallContinuation;
+                || outcome instanceof ProtosTailCallContinuation
+                || outcome instanceof MappedCompletion;
     }
 
     /** Whether {@code outcome} is any suspended result, including a raw native/I/O leaf. */
     static boolean isSuspended(Object outcome) {
         return outcome instanceof ContinuationResult
                 || outcome instanceof ProtosTailCallContinuation
+                || outcome instanceof MappedCompletion
                 || outcome instanceof ProtosNativeSuspension
                 || outcome instanceof ProtosIoOperationSuspension
                 || outcome instanceof ProtosIoReleaseSuspension;
@@ -138,6 +241,8 @@ final class ProtosTailCallContinuation implements TruffleObject {
                 current = continuation.getResult();
             } else if (current instanceof ProtosTailCallContinuation transport) {
                 current = transport.pending;
+            } else if (current instanceof MappedCompletion mapped) {
+                current = mapped.pending;
             } else {
                 return current;
             }
@@ -160,6 +265,9 @@ final class ProtosTailCallContinuation implements TruffleObject {
      * result may be pending again.
      */
     static Object resume(Object pending, Object resumeValue) {
+        if (pending instanceof MappedCompletion mapped) {
+            return mapped.resumeOwned(resumeValue);
+        }
         if (pending instanceof ProtosTailCallContinuation transport) {
             return transport.resumeOwned(resumeValue);
         }
@@ -189,6 +297,9 @@ final class ProtosTailCallContinuation implements TruffleObject {
         if (leaf instanceof ProtosIoOperationSuspension suspension) {
             return suspension.resume();
         }
+        if (leaf instanceof ProtosIoReleaseSuspension suspension) {
+            return suspension.resume();
+        }
         throw new IllegalStateException(
                 "resumed a result that is not a pending continuation");
     }
@@ -201,7 +312,9 @@ final class ProtosTailCallContinuation implements TruffleObject {
      * Idempotent.
      */
     static void abandon(Object pending) {
-        if (pending instanceof ProtosTailCallContinuation transport) {
+        if (pending instanceof MappedCompletion mapped) {
+            mapped.abandonOwned();
+        } else if (pending instanceof ProtosTailCallContinuation transport) {
             transport.abandonOwned();
         } else if (pending instanceof ContinuationResult continuation) {
             abandon(continuation.getResult());
@@ -239,13 +352,17 @@ final class ProtosTailCallContinuation implements TruffleObject {
                     "resumed terminal Closure continuation returned null");
         } catch (ControlFlowException transfer) {
             state = State.DONE;
+            closeOwnedHome();
             throw transfer;
         } catch (AbstractTruffleException failure) {
             state = State.DONE;
-            ProtosDiagnosticTraceCapture.recordResumedTerminalCaller(failure, callerLocation);
+            ProtosDiagnosticTraceCapture.recordResumedTerminalCaller(
+                    failure, callerLocation);
+            closeOwnedHome();
             throw failure;
         } catch (RuntimeException | Error failure) {
             state = State.DONE;
+            closeOwnedHome();
             throw failure;
         }
         if (isSuspended(next)) {
@@ -255,7 +372,14 @@ final class ProtosTailCallContinuation implements TruffleObject {
         }
         state = State.DONE;
         pending = null;
+        closeOwnedHome();
         return ProtosNumericValueSupport.guestValue(next);
+    }
+
+    private void closeOwnedHome() {
+        if (ownedHome != null) {
+            ownedHome.closeOwned();
+        }
     }
 
     @TruffleBoundary
@@ -266,6 +390,10 @@ final class ProtosTailCallContinuation implements TruffleObject {
         state = State.DONE;
         Object inner = pending;
         pending = null;
-        abandon(inner);
+        try {
+            abandon(inner);
+        } finally {
+            closeOwnedHome();
+        }
     }
 }

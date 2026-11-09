@@ -136,7 +136,7 @@ final class ProtosNetworkCapabilityTransferTest {
         // A resolved address is ordinary frozen IpAddress data.
         ProtosObjectValue address = new ProtosObjectValue(prelude.ipAddressPrototypeForRuntime());
         address.createLocalSlot("version", ProtosNumericValueSupport.integer(4));
-        address.createLocalSlot("bits", new ProtosIntegerValue(0xC0000201L));
+        address.createLocalSlot("bits", ProtosNumericValueSupport.integer(0xC0000201L));
         address.freeze();
         ProtosObjectValue actorCopy =
                 assertInstanceOf(

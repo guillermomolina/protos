@@ -1217,13 +1217,16 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
             var selected =
                     com.guillermomolina.protos.runtime.ProtosValueLookup
-                            .lookupGuarded(custom, "+", null);
+                            .selectStructural(custom, "+");
             assertTrue(selected != null);
-            assertTrue(selected.stability().isValid());
+            assertTrue(selected.isValid());
 
-            // Mutation invalidates the original mutable-object selection.
+            // Same-Shape assignment is read freshly by the structural selection.
             custom.assignLocalSlot("+", replacement);
-            assertFalse(selected.stability().isValid());
+            assertTrue(selected.isValid());
+            assertSame(replacement, selected.read());
+            custom.createLocalSlot("structuralMarker", 1L);
+            assertFalse(selected.isValid());
 
             assertEquals(
                     "42",

@@ -34,8 +34,11 @@ import com.oracle.truffle.api.nodes.RootNode;
  * recovers the active caller and registers the callee's caller need.
  * Subsequent calls use the existing demand-driven B5 transport.
  *
- * This reader does not retain ancestral frames or add an allocation
- * to the ordinary direct-call path.
+ * FrameInstance observations and the temporary Frame remain confined to
+ * this cold recovery operation while the caller is on the active stack.
+ * Only the returned exact ProtosActivation may be retained by the invocation;
+ * no frame or wrapper escapes into a B5 caller slot. The ordinary direct-call
+ * path gains no persistent frame, wrapper, or allocation.
  */
 final class ProtosReadCallerFrameNode {
 

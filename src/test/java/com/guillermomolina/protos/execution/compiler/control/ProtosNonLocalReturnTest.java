@@ -29,7 +29,6 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -318,6 +317,44 @@ class ProtosNonLocalReturnTest {
     }
 
     /**
+     * I115 / PLAT070: closing an owned home must release the exact
+     * Task reference, even when the closure was entered through
+     * the compact B5 call path. A second close is harmless.
+     */
+    @Test
+    void closeOwnedReturnHomeReleasesTaskAndIsIdempotent() {
+        com.guillermomolina.protos.runtime.ProtosActorExecutionDomain domain =
+                new com.guillermomolina.protos.runtime.ProtosActorExecutionDomain();
+
+        com.guillermomolina.protos.runtime.ProtosTask task =
+                domain.createTask(null, current -> {});
+
+        ProtosReturnHome home = new ProtosReturnHome();
+
+        home.bindOwnerTaskForRuntime(task);
+        assertSame(task, home.ownerTaskForRuntime());
+        assertTrue(home.isActive());
+
+        home.closeOwned();
+
+        assertFalse(home.isActive());
+        assertNull(
+                home.ownerTaskForRuntime(),
+                "closing an owned home must release its Task");
+
+        home.closeOwned();
+
+        assertFalse(home.isActive());
+        assertNull(home.ownerTaskForRuntime());
+
+        home.bindOwnerTaskForRuntime(task);
+
+        assertNull(
+                home.ownerTaskForRuntime(),
+                "a completed home must never be rebound");
+    }
+
+    /**
      * PLAT070: the home of a completed Task-owned invocation released its Task, and a Closure that
      * escaped with it still signals InvalidReturn rather than passing as a Task-free home.
      */
@@ -383,9 +420,6 @@ class ProtosNonLocalReturnTest {
     }
 
     private static long integer(Object value) {
-        if (value instanceof ProtosIntegerValue integer) {
-            return integer.longValue();
-        }
         return assertInstanceOf(Long.class, value);
     }
 

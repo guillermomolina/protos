@@ -75,11 +75,11 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
     }
 
     /*
-     * PERF037-B: only a binding a guarded member-read PIC selects is promoted
-     * to a stable location, in place, inside the same single map.
+     * Structural selection reads object storage without promoting lexical
+     * bindings or allocating a second authority.
      */
     @Test
-    void bindingsStayUncelledUntilAGuardedReadSelectsThem() throws Exception {
+    void structuralReadsKeepLexicalBindingsUncelled() throws Exception {
         ProtosObjectValue object =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         Object unread = new Object();
@@ -94,18 +94,13 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         assertSame(unread, object.readLocalSlot("unread").orElseThrow());
         assertSame(selected, object.readLocalSlot("selected").orElseThrow());
 
-        var guarded =
-                ProtosValueLookup.lookupGuardedSlotSelection(
-                        object, "selected", null);
-        assertTrue(guarded != null);
-        assertTrue(
-                guarded.nonClosureContinuity() != null
-                        && guarded.nonClosureContinuity().isValid());
+        var selectedSlot = ProtosValueLookup.selectStructural(object, "selected");
+        assertNotNull(selectedSlot);
+        assertTrue(selectedSlot.isValid());
+        assertSame(selected, selectedSlot.read());
         assertSame(bindings, privateField(lexicalAuthority(object), "bindings"));
         assertNull(bindings.get("unread"));
-        assertInstanceOf(
-                ProtosMapBackedLexicalBindingAuthority.SlotCell.class,
-                bindings.get("selected"));
+        assertNull(bindings.get("selected"));
         assertEquals(List.of("unread", "selected"), List.copyOf(bindings.keySet()));
         assertSame(selected, object.readLocalSlot("selected").orElseThrow());
         assertSame(selected, object.localSlotsSnapshot().get("selected"));
@@ -119,36 +114,20 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
      */
 
     private static long checkedLongLocation(
-            ProtosValueLookup.GuardedSlotSelection selection,
+            ProtosValueLookup.StructuralSelection selection,
             String phase) {
-        var storage = selection.storage();
-        var getter = selection.propertyGetter();
-        var property = storage.getShape().getProperty(
-                selection.propertyKey());
-
-        Object raw = getter.get(storage);
-
-        String type = raw == null
-                ? "null"
-                : raw.getClass().getName();
-
-        String location = property == null
-                ? "MISSING"
-                : property.getLocation().getClass().getName();
-
-        System.out.println(
-                "I115_H10_LONG_PHASE=" + phase
-                + " VALUE_TYPE=" + type
-                + " LOCATION=" + location);
-
+        assertTrue(selection.isValid(), phase);
+        var property = selection.home().getShape().getProperty("value");
+        assertNotNull(property, phase);
+        long current = assertInstanceOf(Long.class, selection.read(), phase).longValue();
         try {
-            return getter.getLong(storage);
-        } catch (com.oracle.truffle.api.nodes.UnexpectedResultException e) {
-            throw new AssertionError(
-                    "I115_H10_LONG_FAILURE phase=" + phase
-                    + " valueType=" + type
-                    + " location=" + location,
-                    e);
+            long stored = selection.home().getShape().makePropertyGetter("value")
+                    .getLong(selection.home());
+            assertEquals(current, stored, phase);
+            return stored;
+        } catch (com.oracle.truffle.api.nodes.UnexpectedResultException failure) {
+            throw new AssertionError("Expected typed long storage during " + phase
+                    + ": " + property.getLocation().getClass().getName(), failure);
         }
     }
 
@@ -160,8 +139,7 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         object.createLocalSlot(
                 "value", ProtosNumericValueSupport.integer(1L));
 
-        var selected = ProtosValueLookup.lookupGuardedSlotSelection(
-                object, "value", null);
+        var selected = ProtosValueLookup.selectStructural(object, "value");
 
         assertNotNull(selected);
         assertEquals(
@@ -195,18 +173,21 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
                 Long.MIN_VALUE,
                 checkedLongLocation(selected, "MIN_VALUE"));
 
+        object.createLocalSlot("other", 2L);
+        assertFalse(selected.isValid());
+        selected = ProtosValueLookup.selectStructural(object, "value");
+        assertNotNull(selected);
         Object other = new Object();
         object.assignLocalSlot("value", other);
         assertSame(other, object.readLocalSlot("value").orElseThrow());
 
         assertSame(other, object.removeLocalSlot("value"));
-        assertFalse(selected.stability().isValid());
+        assertFalse(selected.isValid());
 
         object.createLocalSlot(
                 "value", ProtosNumericValueSupport.integer(Long.MAX_VALUE));
 
-        var recreated = ProtosValueLookup.lookupGuardedSlotSelection(
-                object, "value", null);
+        var recreated = ProtosValueLookup.selectStructural(object, "value");
 
         assertNotNull(recreated);
         /*
@@ -215,7 +196,7 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
          * must then fall back to Object without truncating the value.
          */
         Object recreatedRaw =
-                recreated.propertyGetter().get(recreated.storage());
+                recreated.read();
 
         assertEquals(
                 Long.MAX_VALUE,
@@ -230,8 +211,8 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
 
         System.out.println(
                 "I115_H10_RECREATED_FALLBACK=PASS LOCATION="
-                + recreated.storage().getShape()
-                        .getProperty(recreated.propertyKey())
+                + recreated.home().getShape()
+                        .getProperty("value")
                         .getLocation().getClass().getName());
     }
 
@@ -358,15 +339,21 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
     }
 
     @Test
-    void localCallPresenceSurvivesSlotCellPromotionAndReplacement() {
+    void localCallPresenceSurvivesStructuralSelectionAndReplacement() {
         ProtosObjectValue object =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         object.createLocalSlot("call", 1L);
-        assertNotNull(object.slotCellForGuardedRead("call"));
+        var selection = ProtosValueLookup.selectStructural(object, "call");
+        assertNotNull(selection);
+        assertTrue(selection.isValid());
+        assertEquals(1L, selection.read());
         assertCallPresence(object, true);
         object.assignLocalSlot("call", 2L);
+        assertTrue(selection.isValid());
+        assertEquals(2L, selection.read());
         assertCallPresence(object, true);
         object.removeLocalSlot("call");
+        assertFalse(selection.isValid());
         assertCallPresence(object, false);
         object.createLocalSlot("call", 3L);
         assertCallPresence(object, true);
@@ -431,11 +418,12 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         source.putBinding("call", 2L);
         ProtosMapBackedLexicalBindingAuthority target =
                 new ProtosMapBackedLexicalBindingAuthority();
-        assertFalse(target.hasLocalCallBindingForRuntime());
+        assertFalse(target.containsBinding("call"));
 
         ProtosLexicalBindingAuthorityCalls.transferAll(source, target);
-        assertTrue(target.hasLocalCallBindingForRuntime());
         assertTrue(target.containsBinding("call"));
+        assertEquals(2L, target.readBinding("call").orElseThrow());
+        assertEquals(1L, target.readBinding("alpha").orElseThrow());
 
         ProtosMapBackedLexicalBindingAuthority withoutCall =
                 new ProtosMapBackedLexicalBindingAuthority();
@@ -443,8 +431,8 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         ProtosMapBackedLexicalBindingAuthority otherTarget =
                 new ProtosMapBackedLexicalBindingAuthority();
         ProtosLexicalBindingAuthorityCalls.transferAll(withoutCall, otherTarget);
-        assertFalse(otherTarget.hasLocalCallBindingForRuntime());
         assertFalse(otherTarget.containsBinding("call"));
+        assertEquals(1L, otherTarget.readBinding("alpha").orElseThrow());
     }
 
     private static ProtosClosureValue nativeClosure() {

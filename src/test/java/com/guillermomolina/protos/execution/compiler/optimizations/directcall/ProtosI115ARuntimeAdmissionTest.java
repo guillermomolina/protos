@@ -32,6 +32,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CallTarget;
@@ -40,7 +41,6 @@ import com.oracle.truffle.api.source.Source;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.RecordComponent;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
@@ -52,7 +52,7 @@ import org.junit.jupiter.api.Test;
 /**
  * I115-A foundations for direct Closure admission and execution: the
  * Prelude-free {@code call} selection, the reusable canonical root
- * {@code Object.call} assumption, and the per-definition executable facts a
+ * {@code Object.call} Shape/final-location certificate, and the per-definition executable facts a
  * later direct-call cache entry installs. These are structural assertions on
  * real guest-materialized Closures plus guest call sites whose results prove
  * the generic path still observes {@code call} overrides; nothing here
@@ -217,62 +217,47 @@ final class ProtosI115ARuntimeAdmissionTest {
     }
 
     @Test
-    void localCallAbsenceCertificateInvalidatesAndRestores()
-            throws Exception {
+    void localCallLookupChangesOnlyTheTargetedClosure() throws Exception {
         withCore(module -> {
-            evaluate(
-                    "make: () => { (value) => { value } }\n",
-                    "i115c-certificate-definition.protos",
-                    module);
-
+            evaluate("make: () => { (value) => { value } }\n",
+                    "i115c-local-call.protos", module);
             ProtosClosureValue first = closure("make()\n", module);
             ProtosClosureValue second = closure("make()\n", module);
-
+            assertNotSame(first, second);
             assertSame(first.definition(), second.definition());
-
-            Assumption firstCertificate =
-                    first.localCallAbsentSelectionAssumptionOrNullForRuntime();
-            Assumption secondCertificate =
-                    second.localCallAbsentSelectionAssumptionOrNullForRuntime();
-
-            assertNotNull(firstCertificate);
-            assertNotNull(secondCertificate);
-            assertTrue(firstCertificate.isValid());
-            assertTrue(secondCertificate.isValid());
-
+            ProtosPrelude prelude = module.prelude().orElseThrow();
+            ProtosObjectValue root = ProtosObjectValue.rootObject();
+            Object standard = root.readLocalSlot("call").orElseThrow();
+            for (ProtosClosureValue current : List.of(first, second)) {
+                assertFalse(current.hasLocalSlot("call"));
+                var selected = ProtosValueLookup.lookup(current, "call", prelude).orElseThrow();
+                assertSame(root, selected.home());
+                assertSame(standard, selected.value());
+            }
             first.createLocalSlot("call", ProtosNullValue.INSTANCE);
-
-            assertFalse(firstCertificate.isValid());
-            assertTrue(secondCertificate.isValid());
-            assertNull(
-                    first.localCallAbsentSelectionAssumptionOrNullForRuntime());
-
-            first.assignLocalSlot(
-                    "call",
-                    closure("make()\n", module));
-
-            assertNull(
-                    first.localCallAbsentSelectionAssumptionOrNullForRuntime());
-
-            first.removeLocalSlot("call");
-
-            Assumption restored =
-                    first.localCallAbsentSelectionAssumptionOrNullForRuntime();
-
-            assertNotNull(restored);
-            assertTrue(restored.isValid());
-            assertNotSame(firstCertificate, restored);
-
-            second.createLocalSlot("call", ProtosNullValue.INSTANCE);
-
-            assertFalse(secondCertificate.isValid());
-            assertTrue(restored.isValid());
-
-            first.createLocalSlot("call", ProtosNullValue.INSTANCE);
-            assertFalse(restored.isValid());
+            ProtosClosureValue replacement = closure("make()\n", module);
+            for (Object value : List.of(ProtosNullValue.INSTANCE, replacement)) {
+                first.assignLocalSlot("call", value);
+                assertTrue(first.hasLocalSlot("call"));
+                var selected = ProtosValueLookup.lookup(first, "call", prelude).orElseThrow();
+                assertSame(first, selected.home());
+                assertSame(value, selected.value());
+                assertFalse(second.hasLocalSlot("call"));
+                var sibling = ProtosValueLookup.lookup(second, "call", prelude).orElseThrow();
+                assertSame(root, sibling.home());
+                assertSame(standard, sibling.value());
+            }
+            assertSame(replacement, first.removeLocalSlot("call"));
+            assertFalse(first.hasLocalSlot("call"));
+            var restored = ProtosValueLookup.lookup(first, "call", prelude).orElseThrow();
+            assertSame(root, restored.home());
+            assertSame(standard, restored.value());
+            assertFalse(second.hasLocalSlot("call"));
+            var sibling = ProtosValueLookup.lookup(second, "call", prelude).orElseThrow();
+            assertSame(root, sibling.home());
+            assertSame(standard, sibling.value());
         });
     }
-
 
     @Test
     void projectionCertificateInvalidatesOnTransition()
@@ -573,15 +558,18 @@ final class ProtosI115ARuntimeAdmissionTest {
     @Test
     void validRootCertificateIsReusedAndTheFrozenRootRejectsMutation() throws Exception {
         withCore(module -> {
-            Assumption first = ProtosStandardObjectProtocol.canonicalRootCallAssumptionOrNullForRuntime();
+            var first = ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime();
             assertNotNull(first);
             assertTrue(first.isValid());
-            Object certificate = canonicalRootCallCertificate();
-            assertNotNull(certificate);
+            assertSame(ProtosObjectValue.rootObject().getShape(), first.rootShape());
+            assertTrue(first.callLocationFinal().isValid());
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
-                assertSame(first, ProtosStandardObjectProtocol.canonicalRootCallAssumptionOrNullForRuntime());
+                var next = ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime();
+                assertNotNull(next);
+                assertTrue(next.isValid());
+                assertSame(first.rootShape(), next.rootShape());
+                assertSame(first.callLocationFinal(), next.callLocationFinal());
                 assertTrue(ProtosStandardObjectProtocol.isCanonicalRootCallSelectionForRuntime());
-                assertSame(certificate, canonicalRootCallCertificate());
             }
 
             ProtosObjectValue root = ProtosObjectValue.rootObject();
@@ -765,12 +753,6 @@ final class ProtosI115ARuntimeAdmissionTest {
         }
     }
 
-    private static Object canonicalRootCallCertificate() throws ReflectiveOperationException {
-        Field field = ProtosStandardObjectProtocol.class.getDeclaredField("canonicalRootCall");
-        field.setAccessible(true);
-        return field.get(null);
-    }
-
     /**
      * Runs inside {@link ProtosFirstClassLoader}: every Protos class it names
      * is that loader's private copy, whose root Object has not been
@@ -795,10 +777,12 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertNull(functionSelection(sourceShaped));
 
             root.createLocalSlot("call", standardCall);
-            Assumption a = certificate();
+            var a = certificate();
             assertNotNull(a);
             assertTrue(a.isValid());
-            assertSame(a, certificate());
+            assertSame(root.getShape(), a.rootShape());
+            assertTrue(a.callLocationFinal().isValid());
+            assertSame(a.callLocationFinal(), certificate().callLocationFinal());
             assertNull(functionSelection(sourceShaped));
 
             root.assignLocalSlot("call", ProtosNullValue.INSTANCE);
@@ -808,37 +792,31 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertNull(functionSelection(sourceShaped));
 
             root.assignLocalSlot("call", standardCall);
-            Assumption b = certificate();
-            assertNotNull(b);
-            assertTrue(b.isValid());
-            assertNotSame(a, b);
+            assertNull(certificate(), "overwriting cannot restore location finality");
+            assertFalse(a.isValid());
 
             root.removeLocalSlot("call");
-            assertFalse(b.isValid());
+            assertFalse(a.isValid());
             assertNull(certificate());
             assertNull(functionSelection(sourceShaped));
 
             root.createLocalSlot("call", standardCall);
-            Assumption c = certificate();
+            var c = certificate();
             assertNotNull(c);
             assertTrue(c.isValid());
             assertNotSame(a, c);
-            assertNotSame(b, c);
             assertFalse(a.isValid());
-            assertFalse(b.isValid());
 
             // Assigning even the identical value invalidates value dependencies.
             root.assignLocalSlot("call", standardCall);
             assertFalse(c.isValid());
-            Assumption d = certificate();
-            assertNotNull(d);
-            assertTrue(d.isValid());
-            assertNotSame(c, d);
+            assertFalse(c.callLocationFinal().isValid());
+            assertNull(certificate());
             assertNull(functionSelection(sourceShaped));
         }
 
-        private static Assumption certificate() {
-            return ProtosStandardObjectProtocol.canonicalRootCallAssumptionOrNullForRuntime();
+        private static ProtosStandardObjectProtocol.CanonicalRootCallSelection certificate() {
+            return ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime();
         }
     }
 

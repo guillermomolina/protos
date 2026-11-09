@@ -21,14 +21,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
-import com.oracle.truffle.api.profiles.InlinedBranchProfile;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -42,29 +41,31 @@ final class ProtosGuardedLookupTest {
     }
 
     private static Object read(
-            Object receiver, ProtosValueLookup.GuardedSlotSelection selection) {
-        return ProtosValueLookup.materializeGuardedMemberRead(
-                receiver, selection, null, InlinedBranchProfile.getUncached());
+            Object receiver, ProtosValueLookup.StructuralSelection selection) {
+        assertTrue(selection.isValid());
+        return ProtosValueLookup.extractMember(receiver, selection.home(), selection.read());
     }
 
-    private static Object read(
-            Object receiver, ProtosValueLookup.SharedInheritedSlotSelection selection) {
-        return ProtosValueLookup.materializeGuardedMemberRead(
-                receiver, selection, null, InlinedBranchProfile.getUncached());
-    }
-
-    private static ProtosValueLookup.GuardedLookup selected(ProtosObjectValue receiver) {
-        var result = ProtosValueLookup.lookupGuarded(receiver, "pick", null);
+    private static ProtosValueLookup.StructuralSelection selected(ProtosObjectValue receiver) {
+        var result = ProtosValueLookup.selectStructural(receiver, "pick");
         assertNotNull(result);
-        assertTrue(result.stability().isValid());
+        assertTrue(result.isValid());
         var generic = ProtosValueLookup.lookup(receiver, "pick", null).orElseThrow();
-        assertSame(generic.value(), result.selected().value());
-        assertSame(generic.home(), result.selected().home());
+        assertSame(generic.value(), result.read());
+        assertSame(generic.home(), result.home());
         return result;
     }
 
+    private static boolean matchesShared(
+            Object receiver, String name, ProtosValueLookup.StructuralSelection selection) {
+        return ProtosValueLookup.isOrdinaryObject(receiver)
+                && !((ProtosObjectValue) receiver).hasLocalSlot(name)
+                && ProtosValueLookup.hasSelectionParent((ProtosObjectValue) receiver, selection)
+                && selection.isValid();
+    }
+
     @Test
-    void replacementInvalidatesEveryDependentReceiver() {
+    void replacementPreservesSelectionsAndReadsEveryReceiverFresh() {
         var parent = object();
         var first = new ProtosObjectValue(parent);
         var second = new ProtosObjectValue(parent);
@@ -76,10 +77,11 @@ final class ProtosGuardedLookupTest {
 
         parent.assignLocalSlot("pick", newValue);
 
-        assertFalse(firstLookup.stability().isValid());
-        assertFalse(secondLookup.stability().isValid());
-        assertSame(oldValue, firstLookup.selected().value());
-        assertSame(newValue, selected(first).selected().value());
+        assertTrue(firstLookup.isValid());
+        assertTrue(secondLookup.isValid());
+        assertSame(newValue, read(first, firstLookup));
+        assertSame(newValue, read(second, secondLookup));
+        assertSame(newValue, selected(first).read());
     }
 
     @Test
@@ -94,56 +96,52 @@ final class ProtosGuardedLookupTest {
         var third = new ProtosObjectValue(parent);
 
         var shared =
-                ProtosValueLookup.lookupGuardedSharedInherited(
-                        first,
-                        "pick",
-                        null);
+                ProtosValueLookup.selectInheritedStructural(first, "pick");
         assertNotNull(shared);
-        assertSame(parent, shared.exactParent());
-        assertSame(inherited, shared.selected().value());
-        assertSame(parent, shared.selected().home());
-        assertTrue(shared.stability().isValid());
+        assertSame(parent, shared.origin());
+        assertSame(inherited, shared.read());
+        assertSame(parent, shared.home());
+        assertTrue(shared.isValid());
 
         assertTrue(
-                ProtosValueLookup.matchesGuardedSharedInherited(
+                matchesShared(
                         second,
                         "pick",
                         shared));
         assertTrue(
-                ProtosValueLookup.matchesGuardedSharedInherited(
+                matchesShared(
                         third,
                         "pick",
                         shared));
 
         second.createLocalSlot("pick", new Object());
         assertFalse(
-                ProtosValueLookup.matchesGuardedSharedInherited(
+                matchesShared(
                         second,
                         "pick",
                         shared));
         assertTrue(
-                shared.stability().isValid(),
+                shared.isValid(),
                 "a sibling-local shadow is deliberately not a parent-chain dependency");
 
         second.removeLocalSlot("pick");
         assertTrue(
-                ProtosValueLookup.matchesGuardedSharedInherited(
+                matchesShared(
                         second,
                         "pick",
                         shared));
-        assertTrue(shared.stability().isValid());
+        assertTrue(shared.isValid());
 
         parent.assignLocalSlot("pick", replacement);
-        assertFalse(shared.stability().isValid());
+        assertTrue(shared.isValid());
+        assertSame(replacement, read(first, shared));
+        assertSame(replacement, read(third, shared));
 
         var refreshed =
-                ProtosValueLookup.lookupGuardedSharedInherited(
-                        third,
-                        "pick",
-                        null);
+                ProtosValueLookup.selectInheritedStructural(third, "pick");
         assertNotNull(refreshed);
-        assertSame(replacement, refreshed.selected().value());
-        assertSame(parent, refreshed.selected().home());
+        assertSame(replacement, refreshed.read());
+        assertSame(parent, refreshed.home());
     }
 
     @Test
@@ -158,26 +156,20 @@ final class ProtosGuardedLookupTest {
         var second = new ProtosObjectValue(parent);
 
         var shared =
-                ProtosValueLookup.lookupGuardedSharedInherited(
-                        first,
-                        "pick",
-                        null);
+                ProtosValueLookup.selectInheritedStructural(first, "pick");
         assertNotNull(shared);
-        assertSame(parent, shared.exactParent());
-        assertSame(ancestor, shared.selected().home());
-        assertSame(inherited, shared.selected().value());
+        assertSame(parent, shared.origin());
+        assertSame(ancestor, shared.home());
+        assertSame(inherited, shared.read());
 
         parent.createLocalSlot("pick", nearer);
-        assertFalse(shared.stability().isValid());
+        assertFalse(shared.isValid());
 
         var refreshed =
-                ProtosValueLookup.lookupGuardedSharedInherited(
-                        second,
-                        "pick",
-                        null);
+                ProtosValueLookup.selectInheritedStructural(second, "pick");
         assertNotNull(refreshed);
-        assertSame(parent, refreshed.selected().home());
-        assertSame(nearer, refreshed.selected().value());
+        assertSame(parent, refreshed.home());
+        assertSame(nearer, refreshed.read());
     }
 
     @Test
@@ -188,27 +180,18 @@ final class ProtosGuardedLookupTest {
         var own = new ProtosObjectValue(parent);
         own.createLocalSlot("pick", new Object());
         assertNull(
-                ProtosValueLookup.lookupGuardedSharedInherited(
-                        own,
-                        "pick",
-                        null));
+                ProtosValueLookup.selectInheritedStructural(own, "pick"));
 
         var context =
                 new ProtosExecutionContextValue(
                         ProtosObjectValue.rootObject());
         context.createLocalSlot("pick", new Object());
         assertNull(
-                ProtosValueLookup.lookupGuardedSharedInherited(
-                        context,
-                        "pick",
-                        null));
+                ProtosValueLookup.selectInheritedStructural(context, "pick"));
 
         var childOfContext = new ProtosObjectValue(context);
         assertNull(
-                ProtosValueLookup.lookupGuardedSharedInherited(
-                        childOfContext,
-                        "pick",
-                        null));
+                ProtosValueLookup.selectInheritedStructural(childOfContext, "pick"));
     }
 
     @Test
@@ -219,17 +202,17 @@ final class ProtosGuardedLookupTest {
         parent.createLocalSlot("pick", inherited);
         receiver.createLocalSlot("pick", new Object());
         var before = selected(receiver);
-        assertSame(receiver, before.selected().home());
+        assertSame(receiver, before.home());
 
         receiver.removeLocalSlot("pick");
 
-        assertFalse(before.stability().isValid());
+        assertFalse(before.isValid());
         var after = selected(receiver);
-        assertSame(parent, after.selected().home());
-        assertSame(inherited, after.selected().value());
+        assertSame(parent, after.home());
+        assertSame(inherited, after.read());
         parent.removeLocalSlot("pick");
-        assertFalse(after.stability().isValid());
-        assertNull(ProtosValueLookup.lookupGuarded(receiver, "pick", null));
+        assertFalse(after.isValid());
+        assertNull(ProtosValueLookup.selectStructural(receiver, "pick"));
     }
 
     @Test
@@ -244,26 +227,30 @@ final class ProtosGuardedLookupTest {
 
         middle.createLocalSlot("pick", closure);
 
-        assertFalse(before.stability().isValid());
+        assertFalse(before.isValid());
         var after = selected(receiver);
-        assertSame(closure, after.selected().value());
-        assertSame(middle, after.selected().home());
+        assertSame(closure, after.read());
+        assertSame(middle, after.home());
     }
 
     @Test
-    void unrelatedNamesAndObjectsDoNotInvalidate() {
+    void observedStructuralChangesInvalidateButIndependentChangesDoNot() {
         var parent = object();
         var receiver = new ProtosObjectValue(parent);
         parent.createLocalSlot("pick", new Object());
         var lookup = selected(receiver);
-
-        receiver.createLocalSlot("other", new Object());
-        receiver.assignLocalSlot("other", new Object());
-        receiver.removeLocalSlot("other");
-        parent.createLocalSlot("other", new Object());
         object().createLocalSlot("pick", new Object());
-
-        assertTrue(lookup.stability().isValid());
+        assertTrue(lookup.isValid());
+        receiver.createLocalSlot("other", new Object());
+        assertFalse(lookup.isValid());
+        lookup = selected(receiver);
+        receiver.assignLocalSlot("other", new Object());
+        assertTrue(lookup.isValid());
+        receiver.removeLocalSlot("other");
+        assertFalse(lookup.isValid());
+        lookup = selected(receiver);
+        parent.createLocalSlot("other", new Object());
+        assertFalse(lookup.isValid());
     }
 
     @Test
@@ -276,11 +263,11 @@ final class ProtosGuardedLookupTest {
         var before = selected(receiver);
 
         receiver.composeLocalSlotsFrom(source, Set.of("pick"));
-        assertTrue(before.stability().isValid());
+        assertTrue(before.isValid());
 
         receiver.composeLocalSlotsFrom(source, Set.of());
-        assertFalse(before.stability().isValid());
-        assertSame(receiver, selected(receiver).selected().home());
+        assertFalse(before.isValid());
+        assertSame(receiver, selected(receiver).home());
     }
 
     @Test
@@ -293,15 +280,15 @@ final class ProtosGuardedLookupTest {
 
         assertThrows(IllegalStateException.class,
                 () -> receiver.composeLocalSlotsFrom(source, Set.of()));
-        assertTrue(lookup.stability().isValid());
+        assertTrue(lookup.isValid());
         receiver.close();
         assertThrows(IllegalStateException.class,
                 () -> receiver.removeLocalSlot("pick"));
         receiver.freeze();
         assertThrows(IllegalStateException.class,
                 () -> receiver.assignLocalSlot("pick", new Object()));
-        assertTrue(lookup.stability().isValid());
-        assertTrue(selected(receiver).stability().isValid());
+        assertTrue(lookup.isValid());
+        assertTrue(selected(receiver).isValid());
     }
 
     @Test
@@ -309,12 +296,12 @@ final class ProtosGuardedLookupTest {
         var context = new ProtosExecutionContextValue(ProtosObjectValue.rootObject());
         Object value = new Object();
         context.createLocalSlot("pick", value);
-        assertNull(ProtosValueLookup.lookupGuarded(context, "pick", null));
+        assertNull(ProtosValueLookup.selectStructural(context, "pick"));
         assertSame(value,
                 ProtosValueLookup.lookup(context, "pick", null).orElseThrow().value());
 
         var child = new ProtosObjectValue(context);
-        assertNull(ProtosValueLookup.lookupGuarded(child, "pick", null));
+        assertNull(ProtosValueLookup.selectStructural(child, "pick"));
     }
 
     @Test
@@ -326,76 +313,54 @@ final class ProtosGuardedLookupTest {
         var represented = new MutableRepresentedValue(first);
         var receiver = new ProtosObjectValue(represented);
 
-        assertNull(ProtosValueLookup.lookupGuarded(receiver, "pick", null));
+        assertNull(ProtosValueLookup.selectStructural(receiver, "pick"));
         assertSame(first,
                 ProtosValueLookup.lookup(receiver, "pick", null).orElseThrow().home());
         represented.parent = second;
-        assertNull(ProtosValueLookup.lookupGuarded(receiver, "pick", null));
+        assertNull(ProtosValueLookup.selectStructural(receiver, "pick"));
         assertSame(second,
                 ProtosValueLookup.lookup(receiver, "pick", null).orElseThrow().home());
     }
 
     @Test
-    void canonicalBooleanGuardedSelectionMatchesGenericLookup() {
-        var root = ProtosObjectValue.rootObject();
+    void booleanCallbacksUseGenericPreludeLookup() throws IOException {
+        var prelude = corePrelude();
         for (Object receiver : new Object[] {ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE}) {
-            assertNull(ProtosValueLookup.lookupGuardedCanonicalBoolean(
-                    receiver, "perf015Absent", null));
-            // The ordinary guarded entry point stays generic for represented values.
-            assertNull(ProtosValueLookup.lookupGuarded(receiver, "ifTrue", null));
-
-            // Present only once Core bootstrap has installed the standard protocol.
-            if (root.hasLocalSlot("ifTrue")) {
-                var guarded = ProtosValueLookup.lookupGuardedCanonicalBoolean(
-                        receiver, "ifTrue", null);
-                assertNotNull(guarded);
-                assertTrue(guarded.stability().isValid());
-                var generic = ProtosValueLookup.lookup(receiver, "ifTrue", null).orElseThrow();
-                assertSame(generic.value(), guarded.selected().value());
-                assertSame(generic.home(), guarded.selected().home());
-                assertSame(root, guarded.selected().home());
-            }
-        }
-    }
-
-    /**
-     * Root Object is frozen by Core bootstrap, so this mutation evidence is
-     * only reachable while it is still open (JVM-order dependent).
-     */
-    @Test
-    void canonicalBooleanGuardedSelectionInvalidatesOnRootObjectMutation() {
-        var root = ProtosObjectValue.rootObject();
-        assumeFalse(root.isFrozen(), "root Object already frozen by Core bootstrap");
-        for (Object receiver : new Object[] {ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE}) {
-            Object first = new Object();
-            Object second = new Object();
-            root.createLocalSlot("perf015Probe", first);
-            try {
-                var guarded = ProtosValueLookup.lookupGuardedCanonicalBoolean(
-                        receiver, "perf015Probe", null);
-                assertNotNull(guarded);
-                assertTrue(guarded.stability().isValid());
-                assertSame(first, guarded.selected().value());
-                root.assignLocalSlot("perf015Probe", second);
-                assertFalse(guarded.stability().isValid());
-            } finally {
-                root.removeLocalSlot("perf015Probe");
+            assertFalse(ProtosValueLookup.isOrdinaryObject(receiver));
+            for (String name : List.of("and", "or")) {
+                assertNull(ProtosValueLookup.selectStructural(receiver, name));
+                var generic = ProtosValueLookup.lookup(receiver, name, prelude).orElseThrow();
+                assertSame(ProtosObjectValue.rootObject(), generic.home());
+                assertInstanceOf(ProtosClosureValue.class, generic.value());
             }
         }
     }
 
     @Test
-    void canonicalBooleanGuardedSelectionRejectsOtherReceivers() {
-        var represented = new MutableRepresentedValue(ProtosObjectValue.rootObject());
-        assertNull(ProtosValueLookup.lookupGuardedCanonicalBoolean(
-                represented, "perf015Probe", null));
-        assertNull(ProtosValueLookup.lookupGuardedCanonicalBoolean(
-                object(), "perf015Probe", null));
-        assertFalse(ProtosValueLookup.isCanonicalBoolean(represented));
-        assertTrue(ProtosValueLookup.isCanonicalBoolean(ProtosBooleanValue.TRUE));
-        assertTrue(ProtosValueLookup.isCanonicalBoolean(ProtosBooleanValue.FALSE));
+    void rootStructuralSelectionInvalidatesOnNewSlot() {
+        var root = object();
+        root.createLocalSlot("pick", new Object());
+        try {
+            var selection = selected(root);
+            root.createLocalSlot("other", new Object());
+            assertFalse(selection.isValid());
+            assertTrue(selected(root).isValid());
+        } finally {
+            root.removeLocalSlot("other");
+            root.removeLocalSlot("pick");
+        }
     }
 
+    @Test
+    void representedValuesAreNotOrdinaryObjects() {
+        for (Object receiver : new Object[] {
+                ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE, 1L, 1.5d,
+                new MutableRepresentedValue(ProtosObjectValue.rootObject())}) {
+            assertFalse(ProtosValueLookup.isOrdinaryObject(receiver));
+            assertNull(ProtosValueLookup.selectStructural(receiver, "pick"));
+        }
+        assertTrue(ProtosValueLookup.isOrdinaryObject(object()));
+    }
 
     @Test
     void slotSelectionSurvivesRepeatedValueReplacement() {
@@ -404,22 +369,22 @@ final class ProtosGuardedLookupTest {
         holder.createLocalSlot("pick", initial);
 
         var selection =
-                ProtosValueLookup.lookupGuardedSlotSelection(holder, "pick", null);
-        var valueSensitive = selected(holder);
+                ProtosValueLookup.selectStructural(holder, "pick");
+        var secondSelection = selected(holder);
         assertNotNull(selection);
         assertSame(holder, selection.home());
 
         for (int index = 0; index < 200; index++) {
             Object replacement = new Object();
             holder.assignLocalSlot("pick", replacement);
-            assertTrue(selection.stability().isValid());
+            assertTrue(selection.isValid());
             assertSame(
                     replacement,
                     read(holder, selection));
         }
 
-        assertFalse(valueSensitive.stability().isValid());
-        assertSame(initial, valueSensitive.selected().value());
+        assertTrue(secondSelection.isValid());
+        assertSame(selection.read(), secondSelection.read());
     }
 
     /*
@@ -435,17 +400,16 @@ final class ProtosGuardedLookupTest {
         holder.createLocalSlot("c", "C");
 
         var selection =
-                ProtosValueLookup.lookupGuardedSlotSelection(holder, "pick", null);
+                ProtosValueLookup.selectStructural(holder, "pick");
         assertNotNull(selection);
-        assertSame(
-                selection.location(),
-                ProtosValueLookup.lookupGuardedSlotSelection(holder, "pick", null).location());
+        assertSame(holder.getShape().getProperty("pick"),
+                selection.home().getShape().getProperty("pick"));
         assertEquals(List.of("a", "pick", "c"), List.copyOf(holder.localSlotsSnapshot().keySet()));
         assertEquals("first", holder.localSlotsSnapshot().get("pick"));
         assertEquals("first", holder.readLocalSlot("pick").orElseThrow());
 
         holder.assignLocalSlot("pick", "second");
-        assertTrue(selection.stability().isValid());
+        assertTrue(selection.isValid());
         assertEquals("second", read(holder, selection));
         var names = new java.util.ArrayList<String>();
         var values = new java.util.ArrayList<Object>();
@@ -459,13 +423,14 @@ final class ProtosGuardedLookupTest {
         assertEquals("second", read(holder, selection));
 
         assertEquals("second", holder.removeLocalSlot("pick"));
-        assertFalse(selection.stability().isValid());
+        assertFalse(selection.isValid());
         holder.createLocalSlot("pick", "recreated");
         assertEquals(List.of("a", "c", "pick"), List.copyOf(holder.localSlotsSnapshot().keySet()));
         var recreated =
-                ProtosValueLookup.lookupGuardedSlotSelection(holder, "pick", null);
+                ProtosValueLookup.selectStructural(holder, "pick");
         assertNotNull(recreated);
-        assertFalse(recreated.location() == selection.location());
+        assertTrue(recreated.isValid());
+        assertFalse(selection.isValid());
         assertEquals("recreated", read(holder, recreated));
     }
 
@@ -476,29 +441,27 @@ final class ProtosGuardedLookupTest {
                 (activation, supplied) -> ProtosNullValue.INSTANCE);
         receiver.createLocalSlot("pick", ProtosNullValue.INSTANCE);
         var selection =
-                ProtosValueLookup.lookupGuardedSlotSelection(receiver, "pick", null);
+                ProtosValueLookup.selectStructural(receiver, "pick");
         assertNotNull(selection);
-        assertNotNull(selection.nonClosureContinuity());
-        assertTrue(selection.nonClosureContinuity().isValid());
         assertSame(ProtosNullValue.INSTANCE, read(receiver, selection));
 
         receiver.assignLocalSlot("pick", closure);
-        assertFalse(selection.nonClosureContinuity().isValid());
         var first = (ProtosClosureValue) read(receiver, selection);
         var second = (ProtosClosureValue) read(receiver, selection);
         assertFalse(first == second);
         assertFalse(first == closure);
         assertSame(receiver, first.capturedReceiver());
+        assertSame(receiver, first.methodHome().orElseThrow());
+        assertSame(receiver, second.methodHome().orElseThrow());
 
         Object data = new Object();
         receiver.assignLocalSlot("pick", data);
-        assertTrue(selection.stability().isValid());
-        assertFalse(selection.nonClosureContinuity().isValid());
+        assertTrue(selection.isValid());
         assertSame(data, read(receiver, selection));
     }
 
     @Test
-    void nonClosureContinuityInvalidatesOnlyItsOwnCell() {
+    void replacementKeepsIndependentSelectionsAndFreshBinding() {
         var first = object();
         var second = object();
 
@@ -509,23 +472,20 @@ final class ProtosGuardedLookupTest {
         second.createLocalSlot("pick", originalSecond);
 
         var firstSelection =
-                ProtosValueLookup.lookupGuardedSlotSelection(
-                        first, "pick", null);
+                ProtosValueLookup.selectStructural(first, "pick");
         var secondSelection =
-                ProtosValueLookup.lookupGuardedSlotSelection(
-                        second, "pick", null);
+                ProtosValueLookup.selectStructural(second, "pick");
 
         assertNotNull(firstSelection);
         assertNotNull(secondSelection);
-        assertNotNull(firstSelection.nonClosureContinuity());
-        assertNotNull(secondSelection.nonClosureContinuity());
 
         for (int index = 0; index < 20; index++) {
             Object replacement = new Object();
             first.assignLocalSlot("pick", replacement);
             assertSame(replacement, read(first, firstSelection));
-            assertTrue(firstSelection.nonClosureContinuity().isValid());
-            assertTrue(secondSelection.nonClosureContinuity().isValid());
+            assertTrue(firstSelection.isValid());
+            assertTrue(secondSelection.isValid());
+            assertSame(originalSecond, read(second, secondSelection));
         }
 
         ProtosClosureValue closure =
@@ -534,28 +494,28 @@ final class ProtosGuardedLookupTest {
 
         first.assignLocalSlot("pick", closure);
 
-        assertFalse(firstSelection.nonClosureContinuity().isValid());
-        assertTrue(secondSelection.nonClosureContinuity().isValid());
-        assertTrue(firstSelection.stability().isValid());
+        assertTrue(firstSelection.isValid());
 
         ProtosClosureValue bound =
                 assertInstanceOf(
                         ProtosClosureValue.class,
                         read(first, firstSelection));
         assertSame(first, bound.capturedReceiver());
+        assertSame(first, bound.methodHome().orElseThrow());
+        assertTrue(secondSelection.isValid());
+        assertSame(originalSecond, read(second, secondSelection));
 
         Object restored = new Object();
         first.assignLocalSlot("pick", restored);
 
         assertSame(restored, read(first, firstSelection));
-        assertFalse(firstSelection.nonClosureContinuity().isValid());
         assertSame(originalSecond, read(second, secondSelection));
     }
 
     @Test
     void emptyObjectsNeverAllocateSlotStorageForGuardedReads() {
         var empty = object();
-        assertNull(ProtosValueLookup.lookupGuardedSlotSelection(empty, "pick", null));
+        assertNull(ProtosValueLookup.selectStructural(empty, "pick"));
         assertFalse(empty.hasLocalBindingsForRuntime());
         assertTrue(empty.localSlotsSnapshot().isEmpty());
     }
@@ -569,44 +529,42 @@ final class ProtosGuardedLookupTest {
         ancestor.createLocalSlot("pick", new Object());
 
         var selection =
-                ProtosValueLookup.lookupGuardedSharedInheritedSlotSelection(
-                        first, "pick", null);
+                ProtosValueLookup.selectInheritedStructural(first, "pick");
         assertNotNull(selection);
-        assertSame(ancestor, selection.parentSelection().home());
+        assertSame(ancestor, selection.home());
         assertTrue(
-                ProtosValueLookup.matchesGuardedSharedInheritedSlotSelection(
+                matchesShared(
                         second, "pick", selection));
 
         Object updated = new Object();
         ancestor.assignLocalSlot("pick", updated);
-        assertTrue(selection.stability().isValid());
+        assertTrue(selection.isValid());
         assertSame(
                 updated,
                 read(second, selection));
 
         second.createLocalSlot("pick", new Object());
-        assertTrue(selection.stability().isValid());
+        assertTrue(selection.isValid());
         assertFalse(
-                ProtosValueLookup.matchesGuardedSharedInheritedSlotSelection(
+                matchesShared(
                         second, "pick", selection));
         assertTrue(
-                ProtosValueLookup.matchesGuardedSharedInheritedSlotSelection(
+                matchesShared(
                         first, "pick", selection));
 
         second.removeLocalSlot("pick");
         assertTrue(
-                ProtosValueLookup.matchesGuardedSharedInheritedSlotSelection(
+                matchesShared(
                         second, "pick", selection));
 
         Object nearer = new Object();
         parent.createLocalSlot("pick", nearer);
-        assertFalse(selection.stability().isValid());
+        assertFalse(selection.isValid());
 
         var refreshed =
-                ProtosValueLookup.lookupGuardedSharedInheritedSlotSelection(
-                        first, "pick", null);
+                ProtosValueLookup.selectInheritedStructural(first, "pick");
         assertNotNull(refreshed);
-        assertSame(parent, refreshed.parentSelection().home());
+        assertSame(parent, refreshed.home());
         assertSame(
                 nearer,
                 read(first, refreshed));
@@ -619,30 +577,27 @@ final class ProtosGuardedLookupTest {
         parent.createLocalSlot("pick", new Object());
         receiver.createLocalSlot("pick", new Object());
 
-        var local = ProtosValueLookup.lookupGuardedSlotSelection(
-                receiver, "pick", null);
+        var local = ProtosValueLookup.selectStructural(receiver, "pick");
         assertNotNull(local);
         receiver.removeLocalSlot("pick");
-        assertFalse(local.stability().isValid());
+        assertFalse(local.isValid());
 
-        var inherited = ProtosValueLookup.lookupGuardedSlotSelection(
-                receiver, "pick", null);
+        var inherited = ProtosValueLookup.selectStructural(receiver, "pick");
         assertNotNull(inherited);
         assertSame(parent, inherited.home());
 
         var source = object();
         source.createLocalSlot("pick", new Object());
         receiver.composeLocalSlotsFrom(source, Set.of());
-        assertFalse(inherited.stability().isValid());
+        assertFalse(inherited.isValid());
 
-        var composed = ProtosValueLookup.lookupGuardedSlotSelection(
-                receiver, "pick", null);
+        var composed = ProtosValueLookup.selectStructural(receiver, "pick");
         assertNotNull(composed);
         assertSame(receiver, composed.home());
     }
 
     @Test
-    void sharedInheritedPlainContinuityHandlesClosureAndShadowing() {
+    void sharedInheritedSelectionHandlesClosureAndShadowing() {
         var parent = object();
         var first = new ProtosObjectValue(parent);
         var second = new ProtosObjectValue(parent);
@@ -651,19 +606,15 @@ final class ProtosGuardedLookupTest {
         parent.createLocalSlot("pick", originalValue);
 
         var selection =
-                ProtosValueLookup.lookupGuardedSharedInheritedSlotSelection(
-                        first, "pick", null);
+                ProtosValueLookup.selectInheritedStructural(first, "pick");
         assertNotNull(selection);
 
-        var continuity = selection.nonClosureContinuity();
-        assertNotNull(continuity);
-        assertTrue(continuity.isValid());
+        assertSame(originalValue, read(first, selection));
 
         Object replacement = new Object();
         parent.assignLocalSlot("pick", replacement);
 
-        assertTrue(selection.stability().isValid());
-        assertTrue(continuity.isValid());
+        assertTrue(selection.isValid());
         assertSame(replacement, read(first, selection));
         assertSame(replacement, read(second, selection));
 
@@ -673,8 +624,7 @@ final class ProtosGuardedLookupTest {
 
         parent.assignLocalSlot("pick", closure);
 
-        assertFalse(continuity.isValid());
-        assertTrue(selection.stability().isValid());
+        assertTrue(selection.isValid());
 
         ProtosClosureValue extractedA =
                 assertInstanceOf(
@@ -692,18 +642,17 @@ final class ProtosGuardedLookupTest {
         second.createLocalSlot("pick", new Object());
 
         assertFalse(
-                ProtosValueLookup.matchesGuardedSharedInheritedSlotSelection(
+                matchesShared(
                         second, "pick", selection));
 
         assertTrue(
-                ProtosValueLookup.matchesGuardedSharedInheritedSlotSelection(
+                matchesShared(
                         first, "pick", selection));
 
         Object restored = new Object();
         parent.assignLocalSlot("pick", restored);
 
         assertSame(restored, read(first, selection));
-        assertFalse(continuity.isValid());
     }
 
     @Test
@@ -716,13 +665,9 @@ final class ProtosGuardedLookupTest {
                 (activation, supplied) -> ProtosBooleanValue.TRUE);
         parent.createLocalSlot("pick", first);
 
-        var selection = ProtosValueLookup.lookupGuardedSlotSelection(
-                receiver, "pick", null);
+        var selection = ProtosValueLookup.selectStructural(receiver, "pick");
         assertNotNull(selection);
         assertSame(parent, selection.home());
-        assertNull(
-                selection.nonClosureContinuity(),
-                "an initially Closure-valued slot cannot admit the plain lane");
 
         var extractedA = (ProtosClosureValue)
                 read(receiver, selection);
@@ -733,7 +678,7 @@ final class ProtosGuardedLookupTest {
         assertSame(parent, extractedA.methodHome().orElseThrow());
 
         parent.assignLocalSlot("pick", replacement);
-        assertTrue(selection.stability().isValid());
+        assertTrue(selection.isValid());
 
         var extractedC = (ProtosClosureValue)
                 read(receiver, selection);
@@ -752,13 +697,13 @@ final class ProtosGuardedLookupTest {
         var receiver = object();
         receiver.createLocalSlot("pick", new Object());
         var selection =
-                ProtosValueLookup.lookupGuardedSlotSelection(receiver, "pick", null);
+                ProtosValueLookup.selectStructural(receiver, "pick");
         assertNotNull(selection);
 
         receiver.close();
         Object updated = new Object();
         receiver.assignLocalSlot("pick", updated);
-        assertTrue(selection.stability().isValid());
+        assertTrue(selection.isValid());
         assertSame(
                 updated,
                 read(receiver, selection));
@@ -766,13 +711,12 @@ final class ProtosGuardedLookupTest {
         receiver.freeze();
         assertThrows(IllegalStateException.class,
                 () -> receiver.assignLocalSlot("pick", new Object()));
-        assertTrue(selection.stability().isValid());
+        assertTrue(selection.isValid());
 
         var context =
                 new ProtosExecutionContextValue(ProtosObjectValue.rootObject());
         context.createLocalSlot("pick", new Object());
-        assertNull(ProtosValueLookup.lookupGuardedSlotSelection(
-                context, "pick", null));
+        assertNull(ProtosValueLookup.selectStructural(context, "pick"));
     }
 
     private static ProtosPrelude corePrelude() throws IOException {
@@ -783,118 +727,35 @@ final class ProtosGuardedLookupTest {
         return Long.valueOf(value);
     }
 
-    /** PERF016: admission is by representation family, never by value or identity. */
     @Test
-    void integerFamilyAdmissionIsByRepresentationNotIdentity() throws IOException {
-        var prelude = corePrelude();
-        var first = integer(3);
-        var second = integer(3);
-        var huge = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.TWO.pow(200), prelude);
-        for (Object receiver : new Object[] {first, second, huge}) {
-            assertTrue(ProtosValueLookup.isInteger(receiver));
-            assertNotNull(ProtosValueLookup.lookupGuardedInteger(receiver, "-", prelude));
-        }
-        assertFalse(ProtosValueLookup.isInteger(ProtosBooleanValue.TRUE));
-        assertFalse(ProtosValueLookup.isInteger(new ProtosFloatValue(1.5d)));
-        assertFalse(ProtosValueLookup.isInteger(
-                new MutableRepresentedValue(prelude.integerPrototype())));
-        assertFalse(ProtosValueLookup.isInteger(object()));
-    }
-
-    @Test
-    void integerMinusSelectsIntegerPrototypeAndMatchesGenericLookup() throws IOException {
-        var prelude = corePrelude();
-        var guarded = ProtosValueLookup.lookupGuardedInteger(integer(10), "-", prelude);
-        assertNotNull(guarded);
-        assertTrue(guarded.stability().isValid());
-        assertSame(prelude.integerPrototype(), guarded.selected().home());
-        assertTrue(guarded.selected().value() instanceof ProtosClosureValue closure
-                && closure.nativeBody().isPresent());
-
-        // The selection made from one Integer is exactly the generic selection
-        // for every other Integer, so it is reusable across fresh receivers.
-        for (long value : new long[] {10, 9, 0, -7}) {
-            var generic = ProtosValueLookup.lookup(integer(value), "-", prelude).orElseThrow();
-            assertSame(generic.value(), guarded.selected().value());
-            assertSame(generic.home(), guarded.selected().home());
-        }
-        assertTrue(guarded.stability().isValid());
-    }
-
-    @Test
-    void integerGreaterSelectsNumberPrototypeAndMatchesGenericLookup() throws IOException {
-        var prelude = corePrelude();
-        var guarded = ProtosValueLookup.lookupGuardedInteger(integer(10), ">", prelude);
-        assertNotNull(guarded);
-        assertTrue(guarded.stability().isValid());
-        assertSame(prelude.numberPrototype(), guarded.selected().home());
-        assertTrue(guarded.selected().value() instanceof ProtosClosureValue closure
-                && closure.nativeBody().isPresent());
-
-        for (long value : new long[] {10, 9, 0, -7}) {
-            var generic = ProtosValueLookup.lookup(integer(value), ">", prelude).orElseThrow();
-            assertSame(generic.value(), guarded.selected().value());
-            assertSame(generic.home(), guarded.selected().home());
-        }
-    }
-
-    /**
-     * D197-C: both concrete Integer families reach the inherited operations
-     * with the canonical home (Integer for arithmetic, Number for ordering),
-     * and a selection made from either family equals the generic selection for
-     * the other, so one guarded selection may serve every Integer receiver.
-     */
-    @Test
-    void concreteIntegerFamiliesShareInheritedGuardedSelections() throws IOException {
+    void integerFamiliesUseGenericLookupWithTheirRealPrototypes() throws IOException {
         var prelude = corePrelude();
         Object small = integer(10);
-        Object big = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.TWO.pow(70), prelude);
+        Object big = ProtosNumericValueSupport.integerFromHost(BigInteger.TWO.pow(70), prelude);
         assertSame(prelude.smallIntegerPrototype(),
                 ProtosValueLookup.delegationParent(small, prelude).orElseThrow());
         assertSame(prelude.bigIntegerPrototype(),
                 ProtosValueLookup.delegationParent(big, prelude).orElseThrow());
-        for (String selector : new String[] {"-", ">"}) {
-            ProtosObjectValue expectedHome =
-                    selector.equals("-") ? prelude.integerPrototype() : prelude.numberPrototype();
-            var fromSmall = ProtosValueLookup.lookupGuardedInteger(small, selector, prelude);
-            var fromBig = ProtosValueLookup.lookupGuardedInteger(big, selector, prelude);
-            assertNotNull(fromSmall);
-            assertNotNull(fromBig);
-            assertSame(expectedHome, fromSmall.selected().home());
-            assertSame(expectedHome, fromBig.selected().home());
-            assertSame(fromSmall.selected().value(), fromBig.selected().value());
-            for (Object receiver : new Object[] {small, big}) {
+        for (String selector : List.of("-", ">")) {
+            var fromSmall = ProtosValueLookup.lookup(small, selector, prelude).orElseThrow();
+            var fromBig = ProtosValueLookup.lookup(big, selector, prelude).orElseThrow();
+            var home = selector.equals("-") ? prelude.integerPrototype() : prelude.numberPrototype();
+            assertSame(home, fromSmall.home());
+            assertSame(home, fromBig.home());
+            assertSame(fromSmall.value(), fromBig.value());
+            assertInstanceOf(ProtosClosureValue.class, fromSmall.value());
+            for (Object receiver : new Object[] {small, big, 9L, 0L, -7L}) {
+                assertFalse(ProtosValueLookup.isOrdinaryObject(receiver));
+                assertNull(ProtosValueLookup.selectStructural(receiver, selector));
                 var generic = ProtosValueLookup.lookup(receiver, selector, prelude).orElseThrow();
-                assertSame(generic.value(), fromSmall.selected().value());
-                assertSame(generic.home(), fromSmall.selected().home());
+                assertSame(home, generic.home());
+                assertSame(fromSmall.value(), generic.value());
             }
         }
-        // A family-local slot differs per family, so it is never shared by a guard.
-        assertNull(ProtosValueLookup.lookupGuardedInteger(small, "recognizes", prelude));
-        assertNull(ProtosValueLookup.lookupGuardedInteger(big, "recognizes", prelude));
-    }
-
-    @Test
-    void integerGuardedSelectionRejectsAnotherPreludesLargeInteger() throws IOException {
-        var prelude = corePrelude();
-        var other = corePrelude();
-        Object foreignBig = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.TWO.pow(70), other);
-        assertNull(ProtosValueLookup.lookupGuardedInteger(foreignBig, "-", prelude));
-        assertNotNull(ProtosValueLookup.lookupGuardedInteger(foreignBig, "-", other));
-        // A large value whose parent is not a concrete-family prototype is rejected too.
-        assertNull(ProtosValueLookup.lookupGuardedInteger(
-                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.TWO.pow(70), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()), "-", prelude));
-    }
-
-    /**
-     * The published standard graph is frozen by Core bootstrap, so selection
-     * dependencies on Integer/Number/root Object cannot be mutated here; the
-     * ordinary-chain invalidation contract itself is covered by the
-     * lookupGuarded tests above, which share the same lookup loop.
-     */
-    @Test
-    void integerGuardedSelectionDependsOnFrozenStandardGraph() throws IOException {
-        var prelude = corePrelude();
+        assertNotSame(
+                ProtosValueLookup.lookup(small, "recognizes", prelude).orElseThrow().home(),
+                ProtosValueLookup.lookup(big, "recognizes", prelude).orElseThrow().home());
+        assertTrue(ProtosValueLookup.lookup(small, "perf016Absent", prelude).isEmpty());
         assertTrue(prelude.integerPrototype().isFrozen());
         assertTrue(prelude.smallIntegerPrototype().isFrozen());
         assertTrue(prelude.bigIntegerPrototype().isFrozen());
@@ -904,19 +765,20 @@ final class ProtosGuardedLookupTest {
     }
 
     @Test
-    void integerGuardedSelectionFallsBackForUnsupportedReceiversAndSelectors()
-            throws IOException {
+    void representedLargeIntegerRetainsItsOwnPreludeDelegation() throws IOException {
         var prelude = corePrelude();
-        assertNull(ProtosValueLookup.lookupGuardedInteger(integer(1), "perf016Absent", prelude));
-        assertNull(ProtosValueLookup.lookupGuardedInteger(integer(1), "-", null));
-        assertNull(ProtosValueLookup.lookupGuardedInteger(new ProtosFloatValue(1.5d), "-", prelude));
-        assertNull(ProtosValueLookup.lookupGuardedInteger(ProtosBooleanValue.TRUE, "-", prelude));
-        assertNull(ProtosValueLookup.lookupGuardedInteger(object(), "-", prelude));
-        assertNull(ProtosValueLookup.lookupGuardedInteger(
-                new MutableRepresentedValue(prelude.integerPrototype()), "-", prelude));
-        // The ordinary entry point and the Boolean entry point stay generic for Integer.
-        assertNull(ProtosValueLookup.lookupGuarded(integer(1), "-", prelude));
-        assertNull(ProtosValueLookup.lookupGuardedCanonicalBoolean(integer(1), "-", prelude));
+        var other = corePrelude();
+        Object foreign = ProtosNumericValueSupport.integerFromHost(BigInteger.TWO.pow(70), other);
+        assertFalse(ProtosValueLookup.isOrdinaryObject(foreign));
+        assertNull(ProtosValueLookup.selectStructural(foreign, "-"));
+        assertSame(other.bigIntegerPrototype(),
+                ProtosValueLookup.delegationParent(foreign, prelude).orElseThrow());
+        assertSame(other.integerPrototype(),
+                ProtosValueLookup.lookup(foreign, "-", prelude).orElseThrow().home());
+        Object custom = ProtosNumericValueSupport.integerWithPrototype(
+                BigInteger.TWO.pow(70), object());
+        assertNull(ProtosValueLookup.selectStructural(custom, "-"));
+        assertTrue(ProtosValueLookup.lookup(custom, "-", prelude).isEmpty());
     }
 
     private static final class MutableRepresentedValue implements ProtosRepresentedValue {

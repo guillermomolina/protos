@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -172,27 +171,62 @@ final class ProtosPerf006B4ATransferSubstrateTest {
     }
 
     @Test
-    void unselectedControlFlowExceptionIsNeverConvertedByAPreparedOwner() {
+    void unselectedControlFlowExceptionIsNeverConvertedByAPreparedOwner()
+            throws Exception {
+        ProtosActivation caller = module();
         ProtosReturnHome home = new ProtosReturnHome();
-        ProtosPreparedCalls.PreparedClosureCall immediate =
-                ProtosPreparedCalls.PreparedClosureCall.immediateResult(
-                        ProtosNullValue.INSTANCE);
+
         ControlFlowException foreign = new ControlFlowException();
-        assertSame(
-                foreign,
+
+        ProtosClosureValue foreignBody =
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            throw foreign;
+                        });
+
+        ControlFlowException observedForeign =
                 assertThrows(
                         ControlFlowException.class,
-                        () -> immediate.handleControlTransfer(foreign)));
+                        () -> ProtosTestExecutionSupport.callEntered(
+                                () -> ProtosFunctionCallDispatchers
+                                        .callFunctionUncached(
+                                                foreignBody,
+                                                new Object[0],
+                                                caller)));
+
+        assertSame(
+                foreign,
+                observedForeign,
+                "the shared dispatcher must preserve foreign control identity");
 
         ProtosNonLocalReturnException nonLocalReturn =
-                new ProtosNonLocalReturnException(home, ProtosNullValue.INSTANCE);
-        assertSame(
-                nonLocalReturn,
+                new ProtosNonLocalReturnException(
+                        home, ProtosNullValue.INSTANCE);
+
+        ProtosClosureValue nonLocalBody =
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            throw nonLocalReturn;
+                        });
+
+        ProtosNonLocalReturnException observedReturn =
                 assertThrows(
                         ProtosNonLocalReturnException.class,
-                        () -> immediate.handleControlTransfer(nonLocalReturn)),
-                "a call owning no home propagates the original transfer object");
-        assertTrue(home.isActive());
+                        () -> ProtosTestExecutionSupport.callEntered(
+                                () -> ProtosFunctionCallDispatchers
+                                        .callFunctionUncached(
+                                                nonLocalBody,
+                                                new Object[0],
+                                                caller)));
+
+        assertSame(
+                nonLocalReturn,
+                observedReturn,
+                "the original non-local return transfer must be preserved");
+
+        assertTrue(
+                home.isActive(),
+                "an unrelated invocation must not close this ReturnHome");
 
         System.out.println("PLAT070_FOREIGN_CONTROL_CONVERTED=NO");
         System.out.println("PLAT070_ORIGINAL_CFE_IDENTITY=PRESERVED");
@@ -208,9 +242,6 @@ final class ProtosPerf006B4ATransferSubstrateTest {
     }
 
     private static long integer(Object value) {
-        if (value instanceof ProtosIntegerValue integer) {
-            return integer.longValue();
-        }
         return assertInstanceOf(Long.class, value);
     }
 

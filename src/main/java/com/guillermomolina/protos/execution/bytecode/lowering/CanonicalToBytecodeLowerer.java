@@ -1288,6 +1288,15 @@ final class CanonicalToBytecodeLowerer {
         ProtosBytecodeRootNode result = builder.endRoot();
         result.markSemanticActivationRoot();
         if (activationDefinition != null) {
+            // A rest parameter constructs a Core Array during parameter binding.
+            // Declare its caller Prelude dependency before the first invocation.
+            for (CanonicalParameter parameter : activationDefinition.parameters()) {
+                if (parameter.rest()) {
+                    result.requestCallerNeed(
+                            ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE);
+                    break;
+                }
+            }
             result.recordReturnHomeProvenUnobservable(
                     !compilationFacts.mayObserveReturnHome(activationDefinition));
         }
@@ -2879,7 +2888,7 @@ final class CanonicalToBytecodeLowerer {
                 || currentInlineClosureCallBody
                 || !currentNormalCallbackScalarLocals.isEmpty()
                 || send.arguments().size() != 1
-                || hasSpreadArgument(send.arguments())
+                || hasVectorArgument(send.arguments())
                 || primitiveNumericSendCandidate(send)) {
             return false;
         }
@@ -3110,7 +3119,7 @@ final class CanonicalToBytecodeLowerer {
             CanonicalExpression receiver,
             String selector,
             java.util.List<CanonicalExpression> arguments) {
-        if (arguments.size() != 1 || hasSpreadArgument(arguments)
+        if (arguments.size() != 1 || hasVectorArgument(arguments)
                 || !i115DirectUnaryOperand(arguments.get(0))) {
             return false;
         }
@@ -3142,7 +3151,7 @@ final class CanonicalToBytecodeLowerer {
     private static boolean i115DirectIndexedRead(CanonicalSend send) {
         return "at".equals(send.message())
                 && send.arguments().size() == 1
-                && !hasSpreadArgument(send.arguments());
+                && !hasVectorArgument(send.arguments());
     }
 
     // I115: GraalPy GetLen for a direct lexical Array receiver.
@@ -3493,7 +3502,12 @@ final class CanonicalToBytecodeLowerer {
                     childResult,
                     resumeValue);
 
-            if (argument instanceof CanonicalSpread) {
+            if (argument instanceof CanonicalNamedArgument named) {
+                builder.beginAppendNamedSuppliedArgument(named.name());
+                builder.emitLoadLocal(suppliedVector);
+                builder.emitLoadLocal(value);
+                builder.endAppendNamedSuppliedArgument();
+            } else if (argument instanceof CanonicalSpread) {
                 {
                     builder.beginAppendSpreadSuppliedArgument();
                 }
@@ -3540,7 +3554,12 @@ final class CanonicalToBytecodeLowerer {
                     childResult,
                     resumeValue);
 
-            if (argument instanceof CanonicalSpread) {
+            if (argument instanceof CanonicalNamedArgument named) {
+                builder.beginAppendNamedSuppliedArgument(named.name());
+                builder.emitLoadLocal(suppliedVector);
+                builder.emitLoadLocal(value);
+                builder.endAppendNamedSuppliedArgument();
+            } else if (argument instanceof CanonicalSpread) {
                 {
                     builder.beginAppendSpreadSuppliedArgument();
                 }
@@ -5558,7 +5577,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        if (send.contextual()) {
+        if (send.contextual() && !hasNamedArgument(send.arguments())) {
             emitI115ContextualControl(
                     builder, send, result,
                     scratch, childResult, resumeValue, false);
@@ -5681,8 +5700,11 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
 
+        boolean namedInvocation = hasNamedArgument(arguments);
         I115Control control =
-                shape == InvocationShape.SEND ? I115Control.of(selector, arguments) : null;
+                shape == InvocationShape.SEND && !namedInvocation
+                        ? I115Control.of(selector, arguments)
+                        : null;
         I115StaticControl staticControl =
                 classifyI115StaticControl(control, receiver, arguments);
         if (staticControl != null) {
@@ -5734,23 +5756,37 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
 
         BytecodeLocal callable = builder.createLocal("invocationCallable", null);
+        BytecodeLocal receiverValue = null;
+
         switch (shape) {
-            case CALL -> stageOperand(builder, receiver, callable, scratch, childResult, resumeValue, stager);
+            case CALL ->
+                    stageOperand(
+                            builder, receiver, callable,
+                            scratch, childResult, resumeValue, stager);
+
             case SEND -> {
-                BytecodeLocal receiverValue = builder.createLocal("invocationReceiver", null);
-                stageOperand(builder, receiver, receiverValue, scratch, childResult, resumeValue, stager);
-                emitGetMethod(builder, selector, receiverValue, callable);
+                receiverValue = builder.createLocal("invocationReceiver", null);
+                stageOperand(
+                        builder, receiver, receiverValue,
+                        scratch, childResult, resumeValue, stager);
+
+                if (!namedInvocation) {
+                    emitGetMethod(builder, selector, receiverValue, callable);
+                }
             }
+
             case SUPER_SEND -> {
-                builder.beginStoreLocal(callable);
-                builder.emitGetSuperMethod(selector);
-                builder.endStoreLocal();
+                if (!namedInvocation) {
+                    builder.beginStoreLocal(callable);
+                    builder.emitGetSuperMethod(selector);
+                    builder.endStoreLocal();
+                }
             }
         }
 
         BytecodeLocal suppliedVector = null;
         java.util.List<BytecodeLocal> argumentValues = new java.util.ArrayList<>(arguments.size());
-        if (hasSpreadArgument(arguments)) {
+        if (hasVectorArgument(arguments)) {
             suppliedVector = builder.createLocal("suppliedArgumentVector", null);
             spreadStager.stage(builder, arguments, suppliedVector, scratch, childResult, resumeValue);
         } else {
@@ -5761,8 +5797,31 @@ final class CanonicalToBytecodeLowerer {
             }
         }
 
-        emitDispatchedCall(builder, callable, argumentValues, suppliedVector, childResult, result,
-                resumeValue, primitiveCarrierResult);
+        if (namedInvocation) {
+            // D237: selected implementation must reflect every effect
+            // of argument evaluation before name association begins.
+            if (shape == InvocationShape.SEND) {
+                emitGetMethod(builder, selector, receiverValue, callable);
+            } else if (shape == InvocationShape.SUPER_SEND) {
+                builder.beginStoreLocal(callable);
+                builder.emitGetSuperMethod(selector);
+                builder.endStoreLocal();
+            }
+
+            emitDispatchedNamedCall(
+                    builder,
+                    callable,
+                    suppliedVector,
+                    childResult,
+                    result,
+                    resumeValue,
+                    primitiveCarrierResult);
+        } else {
+            emitDispatchedCall(
+                    builder, callable, argumentValues, suppliedVector,
+                    childResult, result, resumeValue,
+                    primitiveCarrierResult);
+        }
 
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
@@ -5818,7 +5877,7 @@ final class CanonicalToBytecodeLowerer {
         /** The row of a structurally recognized control send, or {@code null}. */
         static I115Control of(
                 String selector, java.util.List<CanonicalExpression> arguments) {
-            if (selector == null || hasSpreadArgument(arguments)) {
+            if (selector == null || hasVectorArgument(arguments)) {
                 return null;
             }
             for (I115Control control : values()) {
@@ -6848,6 +6907,53 @@ final class CanonicalToBytecodeLowerer {
                 false);
         builder.emitLoadLocal(receiver);
         builder.endGetMethod();
+        builder.endStoreLocal();
+    }
+
+    /**
+     * D237 / I115: one cold, name-bearing invocation.
+     *
+     * The selected callable and the complete P,K packet are passed to
+     * the shared named dispatcher. It associates labels against the
+     * actually selected implementation. No named metadata enters the
+     * positional Call*Method operations or their B5 headers.
+     */
+    private void emitDispatchedNamedCall(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal callable,
+            BytecodeLocal suppliedVector,
+            BytecodeLocal outcome,
+            BytecodeLocal result,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        if (suppliedVector == null) {
+            throw new AssertionError(
+                    "named invocation requires an evaluated argument vector");
+        }
+
+        builder.beginStoreLocal(outcome);
+        builder.beginCallNamedMethod();
+        builder.emitLoadLocal(callable);
+        builder.emitLoadLocal(suppliedVector);
+        builder.endCallNamedMethod();
+        builder.endStoreLocal();
+
+        emitDispatchedContinuationComposition(
+                builder, outcome, resumeValue);
+
+        if (result == null) {
+            return;
+        }
+
+        builder.beginStoreLocal(result);
+        if (primitiveCarrierResult) {
+            builder.emitLoadLocal(outcome);
+        } else {
+            builder.beginMaterializePrimitiveNumericCarrier();
+            builder.emitLoadLocal(outcome);
+            builder.emitLoadConstant(true);
+            builder.endMaterializePrimitiveNumericCarrier();
+        }
         builder.endStoreLocal();
     }
 
@@ -8182,7 +8288,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
-        if (send.contextual()) {
+        if (send.contextual() && !hasNamedArgument(send.arguments())) {
             emitI115ContextualControl(
                     builder, send, result,
                     scratch, childResult, resumeValue,

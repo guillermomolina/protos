@@ -72,7 +72,7 @@ final class ProtosLongRepresentationTest {
     }
 
     @Test
-    void largeIntegersAreFrozenOrdinaryObjectsDelegatingToTheBigIntegerPrototype() {
+    void largeIntegersAreFrozenValuesDelegatingToTheBigIntegerPrototype() {
         ProtosLargeIntegerValue large = assertInstanceOf(
                 ProtosLargeIntegerValue.class,
                 ProtosNumericValueSupport.integer(ABOVE_LONG, prelude));
@@ -83,7 +83,7 @@ final class ProtosLongRepresentationTest {
         assertTrue(large.isFrozen());
         assertTrue(large.localSlotsSnapshot().isEmpty());
         assertTrue(ProtosNumericValueSupport.isCurrentInteger(large));
-        assertTrue(ProtosValueLookup.isInteger(large));
+        assertFalse(ProtosValueLookup.isOrdinaryObject(large));
         assertThrows(RuntimeException.class,
                 () -> large.createLocalSlot("mutated", ProtosNullValue.INSTANCE));
         assertThrows(NullPointerException.class,
@@ -257,7 +257,7 @@ final class ProtosLongRepresentationTest {
         assertSmall(-1L, ProtosNumericValueSupport.quotientIntegers(negative, positive, prelude));
         assertEquals(hugeNegative.toString(),
                 ProtosNumericValueSupport.integerDecimalText(negative));
-        assertTrue(ProtosValueLookup.isInteger(negative));
+        assertTrue(ProtosNumericValueSupport.isCurrentInteger(negative));
     }
 
     @Test

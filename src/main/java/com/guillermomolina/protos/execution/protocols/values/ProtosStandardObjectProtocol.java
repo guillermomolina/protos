@@ -329,12 +329,19 @@ public final class ProtosStandardObjectProtocol {
         }
         ProtosObjectValue instance =
                 new ProtosObjectValue(prototype);
-        ProtosInvocation.invokeMessage(
-                instance,
-                "init",
-                supplied,
-                activation);
-        return instance;
+        ProtosCallRequest initializer =
+                ProtosCallRequest.send(
+                        instance,
+                        "init",
+                        activation,
+                        supplied);
+
+        Object outcome = initializer.callUncached();
+
+        // D239-C1: init's normal value is ignored, but its
+        // suspension, Error and control transfers are preserved.
+        return ProtosTailCallContinuation.afterSuccessfulChild(
+                outcome, instance);
     }
 
     /*

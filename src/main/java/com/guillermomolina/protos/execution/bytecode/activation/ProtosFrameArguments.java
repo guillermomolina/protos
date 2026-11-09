@@ -290,18 +290,13 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * I115-B: {@link #compactDirectClosureCallOneNoHome(ProtosClosureValue,
-     * ProtosActivation, Object)} with the caller passed as the terminal
-     * operation's caller reference: the caller's published activation, or
-     * the caller's own still-compact B5 frame arguments. The reference is
-     * stored as is; nothing is resolved, materialized or copied here.
-     *
-     * <p>Only the admitted terminal direct Call1 uses this form, for a
-     * PROVEN or an UNKNOWN target alike, after its guards proved the
-     * canonical {@code call} selection and the unobservable ReturnHome of
-     * {@code closure}. The
-     * deferred caller is resolved to the caller invocation's single
-     * activation only when a reader needs it ({@link #resolveExactCaller}).
+     * Validated B5+ Call1 construction. Slot 3 accepts exactly null, a
+     * transported {@link ProtosPrelude}, or the exact {@link ProtosActivation}.
+     * The source dispatcher transports the state requested by the effective
+     * callee root: no need gives null, NEEDS_CALLER_PRELUDE gives a Prelude,
+     * and NEEDS_EXACT_ACTIVATION gives the exact caller. No caller frame
+     * arguments or wrapper are retained. Cold exact recovery requires an
+     * active guest caller; a synthetic off-stack header cannot supply it.
      */
     static Object[] compactDirectClosureCallOneNoHome(
             ProtosClosureValue closure,
@@ -320,15 +315,11 @@ final class ProtosFrameArguments {
 
 
     /**
-     * I115-D: trusted B5+ construction for the already admitted
-     * direct terminal specialization.
-     *
-     * The receiver and executable have passed the direct-call
-     * guards. callerReference(frame) supplies either the exact
-     * published activation or the caller's own B5 argument array.
-     * No validation, caller publication or array copy occurs here.
-     *
-     * The general Object-caller constructor retains its validation.
+     * Trusted B5+ construction after direct-call admission. The caller payload
+     * is already null, a Prelude, or an exact Activation, according to callee
+     * needs. This skips validation but does not broaden the legal ABI. No
+     * caller publication or copy occurs here; no ancestral argument array is
+     * stored. The Object-overload retains validation for untrusted inputs.
      */
     static Object[] compactAdmittedTerminalClosureCallOneNoHome(
             ProtosClosureValue closure,
@@ -504,7 +495,7 @@ final class ProtosFrameArguments {
      * PERF038-I: trusted B5+ construction for the admitted direct tier of
      * InvokeMethodOneTail: an immediate method call (slots 1 and 2 hold the
      * receiver and the selected method home) whose caller slot carries the
-     * I115-B deferred caller reference. The guarded selection already proved
+     * demand-selected null, Prelude, or exact Activation. The guarded selection proved
      * a source Closure with an unobservable ReturnHome; the primitive-result
      * accepting marker lets the callee return a numeric carrier, which the
      * caller root's return epilogue projects. No validation, caller
@@ -527,39 +518,11 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * I115-B: the exact caller activation a caller slot or caller reference
-     * denotes. A {@link ProtosActivation} is returned unchanged. A deferred
-     * caller (the caller invocation's own B5 frame arguments) yields the
-     * activation already published in its argument 0, or materializes and
-     * publishes exactly that invocation's activation, as {@link
-     * #activation(Object[])} does when the caller root observes itself. Any
-     * other representation is rejected; no substitute activation is created.
-     *
-     * <p>Temporal equivalence. Resolving later than the call (during the
-     * callee, after its suspension, or after it returned) selects exactly
-     * what materializing the caller at the call selected, because every
-     * input of {@link #materializeCompactActivation} is fixed before the
-     * caller can call anything:
-     * <ul>
-     *   <li>prelude, actor module state, module key and execution domain
-     *       come from the immutable B5 slots, the Closure, and the caller's
-     *       own caller, whose fields are final;</li>
-     *   <li>an explicit Task is the immutable slot 2;</li>
-     *   <li>an inherited Task, deferred C-prime operation or release, and
-     *       direct dynamic-control state of a published activation are each
-     *       written once, at creation, before that activation runs guest
-     *       code ({@code attachTask} and the C-prime attachments are only
-     *       applied to activations being created or entered, and {@code
-     *       ProtosActivation#dynamicControlState} creates a direct state only
-     *       for the {@code handle}/{@code ensure} invocation's own activation
-     *       before it invokes its body). An activation that is the caller of
-     *       a call therefore never changes which authority it hands down;
-     *       only the contents of a shared state evolve, by reference, as
-     *       before;</li>
-     *   <li>a deferred caller of a deferred caller follows by induction,
-     *       since each is published at most once, into its own argument
-     *       0.</li>
-     * </ul>
+     * Returns an already transported exact caller Activation unchanged.
+     * Null and Prelude payloads contain insufficient information and are
+     * rejected here, as are arrays and wrappers. Cold recovery is performed
+     * by {@link #resolveCallerSlot} only while the guest caller is active;
+     * it registers exact-activation demand for later calls.
      */
     static ProtosActivation resolveExactCaller(Object callerReference) {
         if (callerReference instanceof ProtosActivation activation) {
@@ -580,23 +543,22 @@ final class ProtosFrameArguments {
 
 
     /**
-     * I115: a caller reference transporting the effective {@code prelude} of
-     * the running root whose own admitted call header is {@code
-     * callerArguments}. Stored in its callee's slot 3 only when the callee
-     * root requested the caller prelude.
-     */
-
-
-    /*
-     * I115-B: the caller slot of {@code arguments}, resolved. A deferred
-     * caller that is this same array (directly or through a reference)
-     * would be a self-reference and is rejected.
+     * Resolves this invocation's legal B5[3] payload. An exact Activation
+     * answers directly; null or Prelude requires cold active-stack recovery,
+     * which records NEEDS_EXACT_ACTIVATION on the callee. The current frame's
+     * arguments identify the invocation in that walk and are never retained
+     * by another invocation.
      */
     private static ProtosActivation resolveCallerSlot(Object[] arguments) {
         Object callerReference = arguments[CALLER_INDEX];
-        if (callerReference == null) {
+
+        // A transported Prelude is only partial caller information.
+        // Recover the exact activation on first demand, then let the
+        // callee register NEEDS_EXACT_ACTIVATION for subsequent calls.
+        if (callerReference == null || callerReference instanceof ProtosPrelude) {
             return ProtosReadCallerFrameNode.resolve(arguments);
         }
+
         return resolveExactCaller(callerReference);
     }
 
@@ -606,30 +568,10 @@ final class ProtosFrameArguments {
 
 
 
-    /*
-     * I115-B: publishes the activation of a still-compact deferred caller. The
-     * whole unpublished chain is collected and validated first, with an
-     * identity set rejecting any cycle, so a malformed chain throws before
-     * anything is published. It is then published deepest first, iteratively,
-     * so each materialization finds its own caller already published and no
-     * recursion proportional to the chain depth is needed. Each invocation is
-     * materialized at most once: its argument 0 is replaced by the published
-     * activation, which every later resolution returns.
-     */
-
-
-
-
-
     /**
-     * PERF038-H: final zero-argument method frame for a guarded
-     * source call with a proven unobservable ReturnHome.
-     */
-    /**
-     * PERF038-H / I115-H7-R2: admitted synchronous Send0 with the B5 caller
-     * slot holding either the published activation or a deferred caller.
-     * The supplied caller reference has already been selected by the
-     * producer; constructing this header never publishes it.
+     * Admitted Send0 with a proven unobservable ReturnHome. The caller
+     * payload is null, a Prelude, or an exact Activation, as selected by the
+     * producer from callee demand. Construction does not publish a caller.
      */
     static Object[] compactImmediateMethodCallZeroNoHome(
             ProtosClosureValue closure,
@@ -788,8 +730,8 @@ final class ProtosFrameArguments {
                 (ProtosClosureValue) arguments[CLOSURE_INDEX];
 
         /*
-         * I115-B: a deferred caller is resolved here, so materializing this
-         * invocation publishes its caller's single activation first.
+         * Resolve the exact transported caller, or recover it on the active
+         * guest stack. Publication changes only this invocation's slot 0.
          */
         ProtosActivation caller = resolveCallerSlot(arguments);
         ProtosReturnHome returnHome = normalizedReturnHome(arguments[RETURN_HOME_INDEX]);
@@ -970,11 +912,12 @@ final class ProtosFrameArguments {
 
 
     /**
-     * I115: {@link #preludeOrNull} of an admitted call header (the running
-     * root's own frame arguments), with the same precedence (published
-     * activation, the Closure's own prelude, the caller's prelude) but
-     * without re-validating the header the root was entered with. Any other
-     * shape takes the general {@link #preludeOrNull}.
+     * Reads the running root's own admitted B5 header without publishing it.
+     * A published activation or the Closure's own Prelude takes precedence;
+     * otherwise slot 3 supplies a Prelude or an exact Activation's Prelude.
+     * Null means no transported Prelude. The dispatcher registers inherited
+     * Prelude demand when needed so later source calls transport it. This
+     * accessor does not recover an exact caller from a synthetic header.
      */
     static ProtosPrelude admittedPreludeOrNull(Object[] arguments) {
         if (arguments.length >= HEADER_LENGTH) {
@@ -1081,6 +1024,28 @@ final class ProtosFrameArguments {
     }
 
     /**
+     * D237 / I115: presence of a supplied formal parameter.
+     *
+     * Positional compact calls retain the B5 suffix-count test.
+     * Published named calls use their association presence mask;
+     * an explicitly supplied canonical null is still present.
+     */
+    static boolean hasSuppliedParameter(
+            Object[] arguments, int index) {
+        if (index < 0) {
+            throw new IllegalArgumentException(
+                    "negative formal parameter index");
+        }
+
+        if (hasPublishedActivation(arguments)) {
+            return publishedActivation(arguments)
+                    .hasSuppliedParameterForRuntime(index);
+        }
+
+        return suppliedArgumentCount(arguments) > index;
+    }
+
+    /**
      * I115: the value of a rest parameter, read from the B5 supplied suffix:
      * the frozen Array of the supplied arguments after the first {@code
      * positionalParametersBeforeRest}, as guest values.
@@ -1168,11 +1133,9 @@ final class ProtosFrameArguments {
      * The exact caller when the activation of the invoked Closure has the
      * caller's prelude (the Closure has none of its own, or the same one),
      * else {@code null}. PERF038-E: reads the nullable prelude directly, so
-     * no {@code Optional} is built. I115-B: the prelude relation is decided
-     * without resolving a deferred caller; the caller is resolved only when
-     * it is returned. I115: {@code admitted} selects the admitted caller
-     * prelude walk for an admitted Closure root's own header; otherwise the
-     * general, validating walk decides.
+     * no {@code Optional} is built. Only an exact Activation in slot 3
+     * answers this relation; partial null/Prelude payloads return null
+     * without attempting cold recovery.
      */
     private static ProtosActivation callerIfPreludeInherited(
             Object[] arguments) {
@@ -1224,9 +1187,9 @@ final class ProtosFrameArguments {
     /**
      * PERF038-F: the caller slot of a B5 header. Precondition: {@link
      * #isUnmaterializedInheritingFullHeader}; every such header was built
-     * with a non-null caller, and that slot is never rewritten. I115-B: a
-     * deferred caller is resolved to the caller invocation's exact
-     * activation; an already published one is returned without a boundary.
+     * with a caller payload that is never rewritten. An exact Activation
+     * answers directly; partial null/Prelude information requires cold
+     * recovery from the active guest stack.
      */
     static ProtosActivation unmaterializedFullHeaderCaller(Object[] arguments) {
         Object caller = arguments[CALLER_INDEX];
@@ -1284,20 +1247,21 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * The exact caller of a compact call. I115-B: a deferred caller is
-     * resolved (and thereby published) by {@link #resolveExactCaller}.
+     * The exact caller of this invocation. Slot 3 holds null, a Prelude, or
+     * an exact Activation; only the latter answers directly. Cold recovery
+     * for partial payloads requires an active guest stack and registers the
+     * callee's exact-activation demand. No linked argument arrays are followed.
      */
     static ProtosActivation compactCaller(Object[] arguments) {
         return resolveCallerSlot(arguments);
     }
 
     /**
-     * The Task the callee activation of a compact call belongs to (or
-     * {@code null}), without materializing that activation. I115-B: nor its
-     * deferred caller's: a chain of deferred callers is followed
-     * iteratively, each answering exactly as its materialized activation
-     * would (its explicit Task, else its own caller's Task). Every deferred
-     * link is validated; this is the contract for arbitrary representations.
+     * Reads the invocation's Task without materialization. A published
+     * activation answers directly; otherwise an explicit Task in slot 2 wins,
+     * then an exact Activation in slot 3 supplies its Task. A null or Prelude
+     * caller payload supplies no Task. No ancestral frame arrays are retained
+     * or traversed.
      */
     static ProtosTask compactTask(Object[] arguments) {
         if (hasPublishedActivation(arguments)) {
@@ -1338,7 +1302,7 @@ final class ProtosFrameArguments {
     }
 
 
-    /* I115: a link the admitted Task walk does not admit; see admittedCompactTask. */
+    /* Non-admitted headers use the general Task accessor. */
 
 
     /** The explicit owning Task of a direct Closure call, or {@code null}. */
@@ -1371,9 +1335,8 @@ final class ProtosFrameArguments {
 
     /**
      * Full validation of an unpublished B5 header (slow and carrier paths
-     * only). I115-B: the caller slot is an activation, or a deferred caller
-     * that structurally is another invocation's B5 frame arguments; a
-     * deferred caller is not resolved here.
+     * only). The caller slot must be null, a Prelude, or an exact Activation.
+     * Structural validation does not attempt cold stack recovery.
      */
     private static boolean hasCompactHeader(Object[] arguments) {
         return arguments != null

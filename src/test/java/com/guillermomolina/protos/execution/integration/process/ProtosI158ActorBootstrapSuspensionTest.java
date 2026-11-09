@@ -1089,7 +1089,7 @@ final class ProtosI158ActorBootstrapSuspensionTest {
             assertEquals(1, gate.observerCountForTesting());
             assertEquals(0L, slot(module, "after"));
 
-            assertTrue(gate.resolve(new com.guillermomolina.protos.runtime.ProtosIntegerValue(41), null));
+            assertTrue(gate.resolve(Long.valueOf(41), null));
             assertEquals(42L, first.await(), "synchronous from the host's point of view");
             assertEquals(1L, slot(module, "before"), "no effect before the await is repeated");
             assertEquals(1L, slot(module, "after"));

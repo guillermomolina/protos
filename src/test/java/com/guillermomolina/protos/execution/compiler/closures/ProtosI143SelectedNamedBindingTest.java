@@ -226,6 +226,40 @@ class ProtosI143SelectedNamedBindingTest {
     }
 
     @Test
+    void namedPacketFreezesValuesAndRejectsPositionalSnapshot() {
+        PreparedArgumentVector supplied =
+                new PreparedArgumentVector();
+
+        supplied.append(7L);
+        supplied.appendNamed("value", ProtosNullValue.INSTANCE);
+
+        ProtosPreparedCalls.NamedArgumentPacket packet =
+                supplied.namedPacket();
+
+        supplied.append(9L);
+        supplied.appendNamed("other", 11L);
+
+        assertEquals(List.of(7L), packet.positional());
+        assertEquals(1, packet.named().size());
+        assertEquals("value", packet.named().get(0).name());
+        assertSame(
+                ProtosNullValue.INSTANCE,
+                packet.named().get(0).value());
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> supplied.snapshot());
+
+        assertThrows(
+                UnsupportedOperationException.class,
+                () -> packet.positional().add(12L));
+
+        assertThrows(
+                UnsupportedOperationException.class,
+                () -> packet.named().clear());
+    }
+
+    @Test
     void positionalOnlySitesCannotEnterNamedClassification() {
         ProtosClosureValue selected = sourceClosure("(a) => a");
         PreparedArgumentVector arguments = new PreparedArgumentVector();

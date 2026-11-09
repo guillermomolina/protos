@@ -21,7 +21,6 @@ import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -54,7 +53,7 @@ final class ProtosByteIoReadDeliveryTest {
         Fixture x = Fixture.create();
         x.backend.inline = new byte[] {5};
 
-        ProtosFutureValue read = x.flow.read(x.activation, new ProtosIntegerValue(4));
+        ProtosFutureValue read = x.flow.read(x.activation, Long.valueOf(4));
 
         assertEquals(ProtosFutureValue.State.RESOLVED, read.state());
         assertFalse(x.domain().hasTargetedRuntimeCompletionForRuntime());
@@ -64,7 +63,7 @@ final class ProtosByteIoReadDeliveryTest {
     @Test
     void duplicateLateCallbacksHaveOneSemanticEffect() throws Exception {
         Fixture x = Fixture.create();
-        ProtosFutureValue read = x.flow.read(x.activation, new ProtosIntegerValue(4));
+        ProtosFutureValue read = x.flow.read(x.activation, Long.valueOf(4));
         ProtosByteIoFlow.ReadCompletion completion = x.backend.reads.pollFirst();
 
         onOtherThread(
@@ -86,8 +85,8 @@ final class ProtosByteIoReadDeliveryTest {
     @Test
     void readOrderIsKeptAndTheQueueAdvancesOnce() throws Exception {
         Fixture x = Fixture.create();
-        ProtosFutureValue first = x.flow.read(x.activation, new ProtosIntegerValue(1));
-        ProtosFutureValue second = x.flow.read(x.activation, new ProtosIntegerValue(1));
+        ProtosFutureValue first = x.flow.read(x.activation, Long.valueOf(1));
+        ProtosFutureValue second = x.flow.read(x.activation, Long.valueOf(1));
         assertEquals(1, x.backend.started, "the second read waits for the first");
 
         ProtosByteIoFlow.ReadCompletion firstCompletion = x.backend.reads.pollFirst();
@@ -107,7 +106,7 @@ final class ProtosByteIoReadDeliveryTest {
     @Test
     void aCompletionAfterTerminationBeganIsDiscardedWithoutGuestWork() throws Exception {
         Fixture x = Fixture.create();
-        ProtosFutureValue read = x.flow.read(x.activation, new ProtosIntegerValue(4));
+        ProtosFutureValue read = x.flow.read(x.activation, Long.valueOf(4));
         ProtosByteIoFlow.ReadCompletion completion = x.backend.reads.pollFirst();
 
         x.domain().actorTerminationBegun();
@@ -120,7 +119,7 @@ final class ProtosByteIoReadDeliveryTest {
     @Test
     void aReusedBackendBufferCannotChangeThePublishedRead() throws Exception {
         Fixture x = Fixture.create();
-        ProtosFutureValue read = x.flow.read(x.activation, new ProtosIntegerValue(4));
+        ProtosFutureValue read = x.flow.read(x.activation, Long.valueOf(4));
         ProtosByteIoFlow.ReadCompletion completion = x.backend.reads.pollFirst();
         byte[] buffer = {1, 2, 3};
 
@@ -141,7 +140,7 @@ final class ProtosByteIoReadDeliveryTest {
     @Test
     void cancellationBeforeAdmissionKeepsTheBytesForTheNextRead() throws Exception {
         Fixture x = Fixture.create();
-        ProtosFutureValue read = x.flow.read(x.activation, new ProtosIntegerValue(4));
+        ProtosFutureValue read = x.flow.read(x.activation, Long.valueOf(4));
         ProtosByteIoFlow.ReadCompletion completion = x.backend.reads.pollFirst();
 
         assertTrue(read.cancelRequest(), "an uncommitted read is cancellable");
@@ -152,7 +151,7 @@ final class ProtosByteIoReadDeliveryTest {
 
         assertEquals(ProtosFutureValue.State.CANCELLED, read.state());
         // The uncommitted bytes are not lost: the next read observes them first.
-        ProtosFutureValue next = x.flow.read(x.activation, new ProtosIntegerValue(4));
+        ProtosFutureValue next = x.flow.read(x.activation, Long.valueOf(4));
         assertEquals(ProtosFutureValue.State.RESOLVED, next.state());
         assertEquals(List.of(4, 5), bytes(next));
     }

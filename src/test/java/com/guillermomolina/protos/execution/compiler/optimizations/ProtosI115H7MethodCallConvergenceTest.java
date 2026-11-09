@@ -1204,7 +1204,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
                                 com.oracle.truffle.api.strings.TruffleString.fromJavaStringUncached(
                                         "identity",
                                         com.oracle.truffle.api.strings.TruffleString.Encoding.UTF_16))
-                        .currentValue(),
+                        .read(),
                         "the cached selection is installed without a prelude");
                 assertSame(receiver, bound.receiver());
                 assertSame(receiver, bound.methodHome());

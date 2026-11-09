@@ -87,9 +87,9 @@ final class ProtosTcpAcceptorActorDelegationTest {
         ProtosTcpConnectionValue c = connection(accepted);
         assertEquals(List.of(x.w1.executionDomain()), x.materializedDomains());
         assertNotNull(c.remoteEndpointForRuntime());
-        assertEquals(ProtosFutureValue.State.PENDING, c.readForRuntime(x.w1a, new ProtosIntegerValue(1)).state());
-        assertThrows(IllegalArgumentException.class, () -> c.readForRuntime(x.owner, new ProtosIntegerValue(1)));
-        assertThrows(IllegalArgumentException.class, () -> c.readForRuntime(x.w2a, new ProtosIntegerValue(1)));
+        assertEquals(ProtosFutureValue.State.PENDING, c.readForRuntime(x.w1a, Long.valueOf(1)).state());
+        assertThrows(IllegalArgumentException.class, () -> c.readForRuntime(x.owner, Long.valueOf(1)));
+        assertThrows(IllegalArgumentException.class, () -> c.readForRuntime(x.w2a, Long.valueOf(1)));
     }
 
     @Test
@@ -160,8 +160,8 @@ final class ProtosTcpAcceptorActorDelegationTest {
         assertEquals(ProtosFutureValue.State.RESOLVED, close.state());
 
         assertSame(c, accepted.resolvedValue().orElseThrow());
-        assertEquals(ProtosFutureValue.State.PENDING, c.readForRuntime(x.w1a, new ProtosIntegerValue(1)).state());
-        assertThrows(IllegalArgumentException.class, () -> c.readForRuntime(x.owner, new ProtosIntegerValue(1)));
+        assertEquals(ProtosFutureValue.State.PENDING, c.readForRuntime(x.w1a, Long.valueOf(1)).state());
+        assertThrows(IllegalArgumentException.class, () -> c.readForRuntime(x.owner, Long.valueOf(1)));
         assertEquals(0, released.get());
     }
 

@@ -163,16 +163,19 @@ final class ProtosI109ASharedLocalEachLoweringTest {
         assertEquals(1, occurrences(
                 region, "builder.endWhile();"));
 
+        // I115: callbacks use the shared CallRequest dispatcher.
         assertEquals(1, occurrences(
-                region, "builder.beginTryFinally("));
-        assertEquals(1, occurrences(
-                region, "builder.endTryFinally();"));
+                region, "emitCallRequest("));
 
-        assertEquals(1, occurrences(
+        // No historical prepared-call lifecycle is recreated.
+        assertEquals(0, occurrences(
+                region, "emitScopedPreparedInvocation("));
+
+        assertEquals(0, occurrences(
                 region, "builder.beginCompleteClosureCall();"));
 
-        assertEquals(1, occurrences(
-                region, "emitScopedPreparedInvocation("));
+        assertEquals(0, occurrences(
+                region, "builder.beginTryFinally("));
 
         for (String family : FAMILIES) {
             assertFalse(source.contains(
@@ -192,7 +195,7 @@ final class ProtosI109ASharedLocalEachLoweringTest {
             "builder.beginWhile();",
             "builder.beginStructuredHasNext(ProtosStructuredPhase.STEP);",
             "builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);",
-            "emitScopedPreparedInvocation(",
+            "emitCallRequest(",
             "builder.beginStructuredAdvance(ProtosStructuredPhase.STEP);",
             "builder.endWhile();",
             "builder.beginStructuredFinish();"
@@ -230,12 +233,15 @@ final class ProtosI109ASharedLocalEachLoweringTest {
 
         assertTrue(admission.contains("kind.admits(prepared)"));
         assertTrue(admission.contains(
+                "StructuredNativeInvocation prepared"));
+
+        assertFalse(admission.contains(
                 "OrdinarySourceCall prepared"));
-        assertTrue(admission.contains(
+        assertFalse(admission.contains(
                 "NativeCall prepared"));
-        assertTrue(admission.contains(
+        assertFalse(admission.contains(
                 "ImmediateResultCall prepared"));
-        assertTrue(admission.contains(
+        assertFalse(admission.contains(
                 "ModuleInitializationCall prepared"));
     }
 

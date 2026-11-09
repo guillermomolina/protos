@@ -151,7 +151,7 @@ final class ProtosI115HStaticClosureCallTest {
 
     /**
      * The admitted unary call uses the existing B5+ contract: the five-slot
-     * header with the Closure in slot 0, the deferred caller reference, the
+     * header with the Closure in slot 0, the exact module caller in slot 3, the
      * primitive-accepting ReturnHome marker and the supplied argument at
      * {@link ProtosFrameArguments#SUPPLIED_ARGUMENT_OFFSET}.
      */
@@ -162,16 +162,10 @@ final class ProtosI115HStaticClosureCallTest {
             ProtosClosureValue closure = assertInstanceOf(
                     ProtosClosureValue.class,
                     module.context().readLocalSlot("identity").orElseThrow());
-            Object outerSupplied = ProtosNumericValueSupport.integer(1);
-            Object[] callerArguments =
-                    ProtosFrameArguments.compactAdmittedTerminalClosureCallOneNoHome(
-                            closure, module, outerSupplied);
-            ProtosCallerFrameReference caller =
-                    ProtosFrameArguments.callerFrameReference(callerArguments, null);
             Object supplied = ProtosNumericValueSupport.integer(42);
             Object[] arguments =
                     ProtosFrameArguments.compactAdmittedTerminalClosureCallOneNoHome(
-                            closure, caller, supplied);
+                            closure, module, supplied);
 
             assertEquals(5, ProtosFrameArguments.HEADER_LENGTH);
             assertEquals(5, ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET);
@@ -182,11 +176,13 @@ final class ProtosI115HStaticClosureCallTest {
                     ProtosFrameArguments.compactSuppliedArgumentOrNull(arguments, 1));
             assertTrue(ProtosFrameArguments.isUnmaterializedCompactCall(arguments));
             assertSame(closure, ProtosFrameArguments.compactClosure(arguments));
-            assertSame(caller, arguments[3]);
-            assertSame(callerArguments, caller.callerArguments());
-            ProtosActivation resolved = ProtosFrameArguments.resolveAdmittedCaller(caller);
-            assertNotNull(resolved);
-            assertSame(resolved, ProtosFrameArguments.resolveAdmittedCaller(caller));
+            assertSame(closure, arguments[0]);
+            assertSame(ProtosFrameArguments.compactDirectClosureCallOne(
+                    closure, module, null, supplied)[1], arguments[1]);
+            assertSame(null, arguments[2]);
+            assertSame(module, arguments[3]);
+            assertSame(ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(), arguments[4]);
+            assertSame(module, ProtosFrameArguments.compactCaller(arguments));
             assertTrue(ProtosFrameArguments.acceptsPrimitiveResult(arguments));
             assertSame(ProtosReturnHome.unobservable(),
                     ProtosFrameArguments.compactReturnHome(arguments));
@@ -194,6 +190,13 @@ final class ProtosI115HStaticClosureCallTest {
             RootCallTarget target = closure.executionPlan().orElseThrow()
                     .bytecodeActivationTargetForComposition();
             assertInteger(42, ProtosNumericValueSupport.guestValue(target.call(arguments)));
+            Object[] beforePublication = arguments.clone();
+            ProtosActivation published = ProtosFrameArguments.activation(arguments);
+            assertSame(published, arguments[0]);
+            assertSame(module, arguments[3]);
+            for (int i = 1; i < arguments.length; i++) {
+                assertSame(beforePublication[i], arguments[i]);
+            }
         });
     }
 

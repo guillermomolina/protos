@@ -79,12 +79,22 @@ final class ProtosBuiltinCallRootNode extends RootNode {
             closeOwnedHome(activation);
             throw failure;
         }
-        if (ProtosTailCallContinuation.isPending(result)) {
-            return result;
-        }
         if (ProtosTailCallContinuation.isSuspended(result)) {
-            return ProtosTailCallContinuation.defer(result);
+            ProtosReturnHome ownedHome =
+                    activation.ownsReturnHome()
+                            ? activation.returnHomeOrNullForRuntime()
+                            : null;
+
+            if (ownedHome != null) {
+                return ProtosTailCallContinuation.deferOwned(
+                        result, ownedHome);
+            }
+
+            return ProtosTailCallContinuation.isPending(result)
+                    ? result
+                    : ProtosTailCallContinuation.defer(result);
         }
+
         closeOwnedHome(activation);
         return result;
     }

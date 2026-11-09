@@ -54,525 +54,235 @@ import org.graalvm.polyglot.Engine;
 import org.junit.jupiter.api.Test;
 
 /**
- * I115-B: the converged terminal direct Call1 ({@code InvokeClosureOneTail}).
- *
- * <p>The B5+ header of an admitted, proven non-suspending terminal call may
- * carry the caller's own compact frame arguments in slot 3 instead of a
- * materialized caller activation. These tests prove, on real
- * guest-materialized Closures, that cheap readers answer without publishing
- * that caller, that every reader needing the exact caller resolves the one
- * activation of that invocation (publishing it into the caller's argument
- * 0), that the other B5 producers keep their activation contract, and that
- * guest call sites keep their D013 {@code call} selection, captures and
- * Context projection through both cache tiers. Suspension, cancellation,
- * {@code ensure}, errors and nonlocal returns through the unchanged UNKNOWN
- * transport remain covered by {@code ProtosI112TailContinuationTest}.
+ * B5[3] is exactly null, a transported Prelude, or the exact caller Activation.
+ * Cold recovery can observe caller frames only while guest calls are active;
+ * no invocation retains another invocation's argument array. Caller needs are
+ * registered per root and their Assumptions converge after first observation.
+ * Guest regressions retain captures, control, suspension and Context projection.
  */
 final class ProtosI115BDeferredCallerTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final int PAST_CACHE_LIMITS = 12;
     private static final Object SUPPLIED = ProtosNullValue.INSTANCE;
 
-    // ---- A, B, F. A deferred caller is resolved only when observed ------------------
+    // ---- Legal B5 payloads and publication ----------------------------------------
 
     @Test
-    void deferredCallerIsPublishedOnlyWhenObserved() throws Exception {
+    void b5LayoutAcceptsExactlyTheThreeCallerPayloadForms() throws Exception {
         withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115b-a-define.protos", module);
-            ProtosClosureValue outer = closure("make()\n", module);
-            ProtosClosureValue inner = closure("make()\n", module);
-
-            Object[] callerArguments =
-                    ProtosFrameArguments.compactDirectClosureCallOne(outer, module, null, SUPPLIED);
-            Object[] calleeArguments =
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                            inner, (Object) callerArguments, SUPPLIED);
-
-            // A: the fixed B5 layout, with the caller's own frame arguments in slot 3.
-            assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, calleeArguments.length);
-            assertSame(inner, calleeArguments[0]);
-            assertSame(callerArguments, calleeArguments[3]);
-            assertTrue(ProtosFrameArguments.acceptsPrimitiveResult(calleeArguments));
-            assertSame(SUPPLIED, ProtosFrameArguments.compactSuppliedArgument(calleeArguments, 0));
-
-            // F: provenance answered without resolving the deferred caller.
-            assertSame(
-                    module.prelude().orElse(null),
-                    ProtosFrameArguments.preludeOrNull(calleeArguments));
-            assertSame(
-                    module.task().orElse(null),
-                    ProtosFrameArguments.compactTask(calleeArguments));
-            assertUnpublished(callerArguments);
-            assertUnpublished(calleeArguments);
-
-            // B: the first observer publishes the caller's single activation.
-            ProtosActivation caller = ProtosFrameArguments.compactCaller(calleeArguments);
-            assertSame(caller, callerArguments[0]);
-            assertSame(caller, ProtosFrameArguments.activation(callerArguments));
-            assertSame(caller, ProtosFrameArguments.resolveExactCaller(callerArguments));
-            assertSame(caller, ProtosFrameArguments.compactCaller(calleeArguments));
-            assertUnpublished(calleeArguments);
-            assertSameProvenance(module, caller);
-
-            ProtosActivation callee = ProtosFrameArguments.activation(calleeArguments);
-            assertSame(callee, calleeArguments[0]);
-            assertSame(callerArguments, calleeArguments[3], "slot 3 is never rewritten");
-            assertNotSame(caller, callee);
-            assertSameProvenance(module, callee);
-            assertSame(callee, ProtosFrameArguments.activation(calleeArguments));
-        });
-    }
-
-    @Test
-    void materializingTheCalleeFirstPublishesTheCallerExactlyOnce() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115b-b-define.protos", module);
-            Object[] callerArguments =
-                    ProtosFrameArguments.compactDirectClosureCallOne(
-                            closure("make()\n", module), module, null, SUPPLIED);
-            Object[] calleeArguments =
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                            closure("make()\n", module), (Object) callerArguments, SUPPLIED);
-
-            ProtosActivation callee = ProtosFrameArguments.activation(calleeArguments);
-            ProtosActivation caller =
-                    assertInstanceOf(ProtosActivation.class, callerArguments[0]);
-            assertSame(caller, ProtosFrameArguments.activation(callerArguments));
-            assertSame(caller, ProtosFrameArguments.resolveExactCaller(callerArguments));
-            assertSame(caller, ProtosFrameArguments.compactCaller(calleeArguments));
-            assertSameProvenance(caller, callee);
-        });
-    }
-
-    @Test
-    void admittedTerminalB5HeaderMatchesValidatedConstructor()
-            throws Exception {
-        withCore(module -> {
-            evaluate(
-                    "make: () => { (value) => { value } }\n",
-                    "i115d-b5-define.protos",
-                    module);
-
-            ProtosClosureValue closure =
-                    closure("make()\n", module);
-
-            // Published caller: every B5 slot is identical.
-            Object[] validated =
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                            closure, (Object) module, SUPPLIED);
-
-            Object[] admitted =
-                    ProtosFrameArguments
-                            .compactAdmittedTerminalClosureCallOneNoHome(
-                                    closure, module, SUPPLIED);
-
-            assertEquals(validated.length, admitted.length);
-            for (int i = 0; i < validated.length; i++) {
-                assertSame(validated[i], admitted[i]);
+            ProtosClosureValue callee = closure("(value) => { value }\n", module);
+            Object[] payloads = {module, module.prelude().orElseThrow(), null};
+            for (Object payload : payloads) {
+                Object[] header = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                        callee, payload, SUPPLIED);
+                assertEquals(6, header.length);
+                assertSame(callee, header[0]);
+                assertSame(ProtosFrameArguments.compactDirectClosureCallOne(
+                        callee, module, null, SUPPLIED)[1], header[1]);
+                assertSame(null, header[2]);
+                assertSame(payload, header[3]);
+                assertSame(ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(), header[4]);
+                assertSame(SUPPLIED, header[5]);
+                assertTrue(ProtosFrameArguments.acceptsPrimitiveResult(header));
+                assertUnpublished(header);
             }
-
-            assertSame(
-                    module,
-                    ProtosFrameArguments.compactCaller(admitted));
-
-            // Deferred caller: preserve the original B5 array
-            // by reference, without publishing its activation.
-            Object[] callerArguments =
-                    ProtosFrameArguments.compactDirectClosureCallOne(
-                            closure, module, null, SUPPLIED);
-
-            Object[] deferred =
-                    ProtosFrameArguments
-                            .compactAdmittedTerminalClosureCallOneNoHome(
-                                    closure, callerArguments, SUPPLIED);
-
-            assertEquals(
-                    ProtosFrameArguments.HEADER_LENGTH + 1,
-                    deferred.length);
-            assertSame(closure, deferred[0]);
-            assertSame(callerArguments, deferred[3]);
-            assertSame(SUPPLIED, deferred[5]);
-            assertTrue(
-                    ProtosFrameArguments.acceptsPrimitiveResult(deferred));
-
-            assertSame(
-                    module.prelude().orElse(null),
-                    ProtosFrameArguments.preludeOrNull(deferred));
-            assertSame(
-                    module.task().orElse(null),
-                    ProtosFrameArguments.compactTask(deferred));
-
-            assertUnpublished(callerArguments);
-            assertUnpublished(deferred);
-
-            // General construction still rejects invalid callers.
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> ProtosFrameArguments
-                            .compactDirectClosureCallOneNoHome(
-                                    closure, (Object) "invalid", SUPPLIED));
-        });
-    }
-
-    // ---- C, K. Published callers and the other B5 producers ---------------------------
-
-    @Test
-    void publishedCallersAndOtherProducersKeepTheActivationSlot() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115b-c-define.protos", module);
-            ProtosClosureValue inner = closure("make()\n", module);
-
-            Object[] published =
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                            inner, (Object) module, SUPPLIED);
-            assertSame(module, published[3]);
             assertSame(module, ProtosFrameArguments.resolveExactCaller(module));
-            assertSame(module, ProtosFrameArguments.compactCaller(published));
-
-            // A caller already published in its own frame arguments resolves to it.
-            Object[] callerArguments =
-                    ProtosFrameArguments.compactDirectClosureCallOne(inner, module, null, SUPPLIED);
-            ProtosActivation caller = ProtosFrameArguments.activation(callerArguments);
-            Object[] afterPublication =
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                            inner, (Object) callerArguments, SUPPLIED);
-            assertSame(caller, ProtosFrameArguments.compactCaller(afterPublication));
-            assertSame(caller, ProtosFrameArguments.unmaterializedFullHeaderCaller(afterPublication));
-
-            // K: every other producer still writes the exact caller activation.
-            assertSame(module,
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(inner, module, SUPPLIED)[3]);
-            assertSame(module,
-                    ProtosFrameArguments.compactDirectClosureCallZeroNoHome(inner, module)[3]);
-            assertSame(module,
-                    ProtosFrameArguments.compactDirectClosureCall(
-                            inner, module, null, new Object[] {SUPPLIED, SUPPLIED})[3]);
-            assertSame(module,
-                    ProtosFrameArguments.compactImmediateMethodCall(
-                            inner, inner, ProtosObjectValue.rootObject(), module,
-                            new Object[] {SUPPLIED})[3]);
-            Object[] method =
-                    ProtosFrameArguments.compactImmediateMethodCallOne(
-                            inner, inner, ProtosObjectValue.rootObject(), module,
-                            inner.invocationReturnHomeForRuntime(), SUPPLIED);
-            assertSame(module, ProtosFrameArguments.compactCaller(method));
-            assertSame(module, ProtosFrameArguments.unmaterializedInheritedProvenanceCaller(method));
-        });
-    }
-
-    // ---- D. Reentrant chains keep one identity per invocation ------------------------
-
-    @Test
-    void chainOfDeferredCallersPublishesOneActivationPerInvocation() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115b-d-define.protos", module);
-            Object[] first =
-                    ProtosFrameArguments.compactDirectClosureCallOne(
-                            closure("make()\n", module), module, null, SUPPLIED);
-            Object[] second =
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                            closure("make()\n", module), (Object) first, SUPPLIED);
-            Object[] third =
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                            closure("make()\n", module), (Object) second, SUPPLIED);
-
-            assertSame(module.prelude().orElse(null), ProtosFrameArguments.preludeOrNull(third));
-            assertSame(module.task().orElse(null), ProtosFrameArguments.compactTask(third));
-            assertUnpublished(first);
-            assertUnpublished(second);
-            assertUnpublished(third);
-
-            ProtosActivation thirdActivation = ProtosFrameArguments.activation(third);
-            ProtosActivation secondActivation =
-                    assertInstanceOf(ProtosActivation.class, second[0]);
-            ProtosActivation firstActivation =
-                    assertInstanceOf(ProtosActivation.class, first[0]);
-            assertNotSame(firstActivation, secondActivation);
-            assertNotSame(secondActivation, thirdActivation);
-            assertNotSame(firstActivation, thirdActivation);
-            assertSame(secondActivation, ProtosFrameArguments.compactCaller(third));
-            assertSame(firstActivation, ProtosFrameArguments.resolveExactCaller(first));
-            assertSame(secondActivation, ProtosFrameArguments.activation(second));
-            assertSameProvenance(module, firstActivation);
-            assertSameProvenance(module, secondActivation);
-            assertSameProvenance(module, thirdActivation);
+            Object[] valid = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    callee, (Object) module, SUPPLIED);
+            for (Object invalid : new Object[] {"invalid", new Object(), new Object[0], valid}) {
+                assertThrows(IllegalArgumentException.class,
+                        () -> ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                                callee, invalid, SUPPLIED));
+            }
+            for (Object unavailable : new Object[] {null, module.prelude().orElseThrow(), new Object[0]}) {
+                assertThrows(IllegalStateException.class,
+                        () -> ProtosFrameArguments.resolveExactCaller(unavailable));
+            }
+            assertUnpublished(valid);
         });
     }
 
     @Test
-    void invalidCallerRepresentationsAreRejected() throws Exception {
+    void publishedExactCallerRetainsHeaderAndOneIdentity() throws Exception {
         withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115b-invalid-define.protos", module);
-            ProtosClosureValue inner = closure("make()\n", module);
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                            inner, (Object) "caller", SUPPLIED));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.resolveExactCaller("caller"));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.resolveExactCaller(new Object[] {SUPPLIED}));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.resolveExactCaller(
-                            new Object[] {SUPPLIED, null, null, module, null}));
-
-            Object[] arbitrary =
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                            inner, (Object) new Object[] {inner}, SUPPLIED);
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.compactCaller(arbitrary));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.activation(arbitrary));
-
-            Object[] selfReferential =
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                            inner, (Object) module, SUPPLIED);
-            selfReferential[3] = selfReferential;
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.compactCaller(selfReferential));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.activation(selfReferential));
-            assertUnpublished(selfReferential);
+            ProtosClosureValue callee = closure("(value) => { value }\n", module);
+            Object[] header = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    callee, (Object) module, SUPPLIED);
+            Object[] before = header.clone();
+            ProtosActivation child = ProtosFrameArguments.activation(header);
+            assertNotSame(module, child);
+            assertSame(child, header[0]);
+            assertSame(child, ProtosFrameArguments.activation(header));
+            assertSame(child, ProtosFrameArguments.publishedActivation(header));
+            assertSame(module, ProtosFrameArguments.compactCaller(header));
+            for (int i = 1; i < header.length; i++) {
+                assertSame(before[i], header[i]);
+            }
+            assertSameProvenance(module, child);
+            assertSame(ProtosFrameArguments.compactReturnHome(header), child.returnHome().orElseThrow());
+            assertNotNull(ProtosCoreErrors.newError(child));
+            assertSame(child, ProtosFrameArguments.activation(header));
         });
     }
 
     @Test
-    void cyclicDeferredCallerChainsAreRejectedWithoutPublication() throws Exception {
+    void preludeOnlyHeaderIsReadWithoutPublishingExactCaller() throws Exception {
         withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115b-cycle-define.protos", module);
-            ProtosClosureValue template = closure("make()\n", module);
-            for (int links : new int[] {2, 3}) {
-                Object[][] chain = new Object[links][];
-                chain[0] = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                        preludeFree(template), (Object) module, SUPPLIED);
-                for (int i = 1; i < links; i++) {
-                    chain[i] = deferredCall(preludeFree(template), chain[i - 1]);
-                }
-                chain[0][3] = chain[links - 1];
-                Object[] entry = chain[links - 1];
-                String label = links + "-link cycle";
+            ProtosClosureValue callee = preludeFree(closure("(value) => { value }\n", module));
+            ProtosPrelude prelude = module.prelude().orElseThrow();
+            Object[] header = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    callee, (Object) prelude, SUPPLIED);
+            assertSame(prelude, header[3]);
+            assertSame(prelude, ProtosFrameArguments.preludeOrNull(header));
+            assertSame(prelude, ProtosFrameArguments.admittedPreludeOrNull(header));
+            assertSame(null, ProtosFrameArguments.compactTask(header));
+            assertSame(null, ProtosFrameArguments.admittedCompactTask(header));
+            assertFalse(ProtosFrameArguments.hasPublishedActivation(header));
+        });
+    }
 
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.compactTask(entry), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.preludeOrNull(entry), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.compactCaller(entry), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.resolveExactCaller(entry), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.unmaterializedInheritedProvenanceCaller(entry),
-                        label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.activation(entry), label);
-                for (Object[] link : chain) {
-                    assertUnpublished(link);
-                }
+    @Test
+    void closureOwnPreludeTakesPrecedenceOverTransportedPrelude() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue template = closure("(value) => { value }\n", module);
+            ProtosPrelude own = module.prelude().orElseThrow();
+            ProtosPrelude other = otherPreludeModule().prelude().orElseThrow();
+            assertNotSame(own, other);
+            Object[] owning = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    ownPrelude(template, own), (Object) other, SUPPLIED);
+            Object[] inherited = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    preludeFree(template), (Object) other, SUPPLIED);
+            Object[] absent = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    preludeFree(template), (Object) null, SUPPLIED);
+            assertSame(own, ProtosFrameArguments.preludeOrNull(owning));
+            assertSame(own, ProtosFrameArguments.admittedPreludeOrNull(owning));
+            assertSame(other, inherited[3]);
+            assertSame(other, ProtosFrameArguments.preludeOrNull(inherited));
+            assertSame(other, ProtosFrameArguments.admittedPreludeOrNull(inherited));
+            assertSame(null, ProtosFrameArguments.preludeOrNull(absent));
+            assertSame(null, ProtosFrameArguments.admittedPreludeOrNull(absent));
+            for (Object[] header : List.of(owning, inherited, absent)) {
+                assertUnpublished(header);
             }
         });
     }
 
     @Test
-    void malformedHeadersAreNotAcceptedAsDeferredCallers() throws Exception {
+    void explicitAndInheritedTaskStayExact() throws Exception {
         withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115b-malformed-define.protos", module);
-            ProtosClosureValue inner = closure("make()\n", module);
-            ProtosReturnHome home = ProtosReturnHome.unobservable();
-            ProtosObjectValue root = ProtosObjectValue.rootObject();
-            List<Object[]> malformed = List.of(
-                    // Published activation in [0], but the rest is not a B5 header.
-                    new Object[] {module, null, null, null, null},
-                    new Object[] {module, SUPPLIED, null, module, home},
-                    new Object[] {module, SUPPLIED, root, module, SUPPLIED},
-                    new Object[] {module, SUPPLIED, root, SUPPLIED, home},
-                    // Compact Closure in [0] with invalid kind, task, caller or home slots.
-                    new Object[] {inner, null, null, module, home},
-                    new Object[] {inner, SUPPLIED, null, module, home},
-                    new Object[] {inner, SUPPLIED, root, null, home},
-                    new Object[] {inner, SUPPLIED, root, module, null});
-            for (Object[] bad : malformed) {
-                String label = java.util.Arrays.toString(bad);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.resolveExactCaller(bad), label);
-                Object[] callee = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                        inner, (Object) bad, SUPPLIED);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.compactCaller(callee), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.compactTask(callee), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.preludeOrNull(callee), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.activation(callee), label);
-                assertUnpublished(callee);
-            }
-
-            // Positive controls: well-formed published and compact headers.
-            Object[] compact = ProtosFrameArguments.compactImmediateMethodCall(
-                    inner, inner, root, module, new Object[] {SUPPLIED});
-            Object[] viaCompact = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                    inner, (Object) compact, SUPPLIED);
-            ProtosActivation compactCaller = ProtosFrameArguments.compactCaller(viaCompact);
-            assertSame(compactCaller, compact[0]);
-            Object[] viaPublished = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                    inner, (Object) compact, SUPPLIED);
-            assertSame(compactCaller, ProtosFrameArguments.compactCaller(viaPublished));
-        });
-    }
-
-    // ---- Inherited Task and dynamic-control authority of a deferred chain -----------
-
-    @Test
-    void deferredChainInheritsTheTaskOfItsEntry() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115b-task-define.protos", module);
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-            ProtosTask task = domain.createTask(null, current -> {});
+            ProtosTask inherited = domain.createTask(null, current -> {});
+            ProtosTask explicit = domain.createTask(null, current -> {});
             ProtosActivation owner = domainModule(module, domain);
-            owner.attachTask(task);
-
-            // Inherited from the published owner through two deferred links.
-            Object[] first =
-                    ProtosFrameArguments.compactDirectClosureCallOne(
-                            closure("make()\n", module), owner, null, SUPPLIED);
-            Object[] second = deferredCall(closure("make()\n", module), first);
-            Object[] third = deferredCall(closure("make()\n", module), second);
-            assertSame(task, ProtosFrameArguments.compactTask(third));
-            assertUnpublished(first);
-            assertUnpublished(second);
-            ProtosActivation thirdActivation = ProtosFrameArguments.activation(third);
-            assertSame(task, thirdActivation.task().orElse(null));
-            assertSame(task, assertInstanceOf(ProtosActivation.class, second[0]).task().orElse(null));
-            assertSame(task, assertInstanceOf(ProtosActivation.class, first[0]).task().orElse(null));
-
-            // An explicit Task in the entry's own slot 2 is inherited the same way.
-            Object[] explicit =
-                    ProtosFrameArguments.compactDirectClosureCallOne(
-                            closure("make()\n", module), module, task, SUPPLIED);
-            Object[] child = deferredCall(closure("make()\n", module), explicit);
-            assertSame(task, ProtosFrameArguments.compactTask(child));
-            assertUnpublished(explicit);
-            assertSame(task, ProtosFrameArguments.activation(child).task().orElse(null));
-            assertSame(task, assertInstanceOf(ProtosActivation.class, explicit[0]).task().orElse(null));
+            owner.attachTask(inherited);
+            ProtosClosureValue callee = closure("(value) => { value }\n", module);
+            for (ProtosTask supplied : new ProtosTask[] {null, explicit}) {
+                Object[] header = ProtosFrameArguments.compactDirectClosureCallOne(
+                        callee, owner, supplied, SUPPLIED);
+                ProtosTask expected = supplied == null ? inherited : explicit;
+                assertSame(owner, header[3]);
+                assertSame(expected, ProtosFrameArguments.compactTask(header));
+                assertSame(expected, ProtosFrameArguments.admittedCompactTask(header));
+                assertUnpublished(header);
+                assertSame(expected, ProtosFrameArguments.activation(header).task().orElseThrow());
+                assertSame(owner, header[3]);
+            }
         });
     }
 
-    /**
-     * The direct dynamic-control state an activation hands down is fixed
-     * before it calls anything (a {@code handle}/{@code ensure} activation
-     * creates it on entry, before its body), so a chain published late shares
-     * exactly that state object, and a chain entered without one has none.
-     */
     @Test
-    void deferredChainKeepsTheDynamicControlAuthorityOfItsEntry() throws Exception {
+    void dynamicControlAndReturnHomeFollowExactActivation() throws Exception {
         withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115b-dynamic-define.protos", module);
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-
-            ProtosActivation protectedOwner = domainModule(module, domain);
-            ProtosDynamicControlState state = protectedOwner.dynamicControlState();
-            Object[] first =
-                    ProtosFrameArguments.compactDirectClosureCallOne(
-                            closure("make()\n", module), protectedOwner, null, SUPPLIED);
-            Object[] second = deferredCall(closure("make()\n", module), first);
-            ProtosActivation secondActivation = ProtosFrameArguments.activation(second);
-            assertSame(state, secondActivation.dynamicControlStateIfPresent().orElse(null));
-            assertSame(
-                    state,
-                    assertInstanceOf(ProtosActivation.class, first[0])
-                            .dynamicControlStateIfPresent().orElse(null));
-            assertSame(null, secondActivation.task().orElse(null));
-
-            ProtosActivation plainOwner = domainModule(module, domain);
-            Object[] plainFirst =
-                    ProtosFrameArguments.compactDirectClosureCallOne(
-                            closure("make()\n", module), plainOwner, null, SUPPLIED);
-            Object[] plainSecond = deferredCall(closure("make()\n", module), plainFirst);
-            ProtosActivation plainActivation = ProtosFrameArguments.activation(plainSecond);
-            assertTrue(plainActivation.dynamicControlStateIfPresent().isEmpty());
-            assertTrue(assertInstanceOf(ProtosActivation.class, plainFirst[0])
-                    .dynamicControlStateIfPresent().isEmpty());
+            ProtosActivation owner = domainModule(module, domain);
+            ProtosDynamicControlState state = owner.dynamicControlState();
+            ProtosClosureValue callee = closure("(value) => { value }\n", module);
+            Object[] first = ProtosFrameArguments.compactDirectClosureCallOne(
+                    callee, owner, null, SUPPLIED);
+            Object firstHome = first[4];
+            ProtosActivation child = ProtosFrameArguments.activation(first);
+            assertSame(state, child.dynamicControlStateIfPresent().orElseThrow());
+            assertSame(firstHome, child.returnHome().orElseThrow());
+            ProtosActivation unrelated = domainModule(module, domain);
+            Object[] second = ProtosFrameArguments.compactDirectClosureCallOne(
+                    callee, unrelated, null, SUPPLIED);
+            ProtosActivation other = ProtosFrameArguments.activation(second);
+            assertNotSame(child, other);
+            assertTrue(other.dynamicControlStateIfPresent().isEmpty());
+            assertSame(owner, first[3]);
+            assertSame(unrelated, second[3]);
+            assertSame(child, first[0]);
+            assertSame(other, second[0]);
+            assertSame(firstHome, first[4]);
         });
     }
 
-    // ---- Late publication: Error, capture and tooling observe one identity ---------
-
     @Test
-    void latePublicationByErrorOrToolingYieldsOneIdentity() throws Exception {
+    void realGuestCallRegistersExactCallerNeedOnlyOnce() throws Exception {
         withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115b-late-define.protos", module);
-            Object[] callerArguments =
-                    ProtosFrameArguments.compactDirectClosureCallOne(
-                            closure("make()\n", module), module, null, SUPPLIED);
-            Object[] calleeArguments = deferredCall(closure("make()\n", module), callerArguments);
-
-            // An Error created in the callee publishes the callee, then its caller.
-            ProtosActivation callee = ProtosFrameArguments.activation(calleeArguments);
-            assertNotNull(ProtosCoreErrors.newError(callee));
-            ProtosActivation caller = assertInstanceOf(ProtosActivation.class, callerArguments[0]);
-
-            // Tooling-style observations afterwards see exactly the same identities.
-            assertTrue(ProtosFrameArguments.hasPublishedActivation(callerArguments));
-            assertSame(caller, ProtosFrameArguments.publishedActivation(callerArguments));
-            assertSame(caller, ProtosFrameArguments.compactCaller(calleeArguments));
-            assertSame(caller, ProtosFrameArguments.resolveExactCaller(callerArguments));
-            assertSame(callee, ProtosFrameArguments.activation(calleeArguments));
-            assertNotNull(ProtosCoreErrors.newError(callee));
-            assertSame(caller, callerArguments[0]);
-            assertSame(callee, calleeArguments[0]);
+            evaluate("""
+                    callee: (value) => { context.hasSlot("value"); value }
+                    caller: (value) => { callee(value) }
+                    """, "i115-exact-define.protos", module);
+            ProtosBytecodeRootNode root = functionRoot("callee", module);
+            enterCachedTier("caller", module);
+            root.getBytecodeNode().setUncachedThreshold(0);
+            int need = ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION;
+            boolean alreadyNeeded = root.hasCallerNeed(need);
+            var before = root.callerNeedsStability();
+            assertInteger(9, evaluate("caller(9)\n", "i115-exact.protos", module));
+            assertTrue(root.hasCallerNeed(need));
+            var registered = root.callerNeedsStability();
+            if (!alreadyNeeded) {
+                assertFalse(before.isValid());
+                assertNotSame(before, registered);
+            }
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(9, evaluate("caller(9)\n", "i115-exact-repeat.protos", module));
+            }
+            assertSame(registered, root.callerNeedsStability());
+            assertTrue(registered.isValid());
         });
     }
 
-    // ---- PROVEN and UNKNOWN entries both carry the deferred caller -----------------
-
     @Test
-    void unknownSynchronousEntryLeavesItsCompactCallerUnpublished() throws Exception {
+    void provenAndUnknownEntriesUseLegalCallerPayloads() throws Exception {
         withCore(module -> {
             evaluate("""
                     helper: (value) => { value }
-                    make: () => { (value) => { helper(value) } }
-                    """, "i115b-unknown-sync-define.protos", module);
-            ProtosClosureValue callee = closure("make()\n", module);
-            RootCallTarget target = directTarget(callee);
-            assertFalse(provenNonSuspending(target), "UNKNOWN fixture");
-            ((ProtosBytecodeRootNode) target.getRootNode()).getBytecodeNode().setUncachedThreshold(0);
-
-            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
-                Object[] callerArguments =
-                        ProtosFrameArguments.compactDirectClosureCallOne(
-                                closure("make()\n", module), module, null, SUPPLIED);
-                Object[] calleeArguments =
-                        ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                                callee, (Object) callerArguments, evaluate("5\n", "i115b-five.protos", module));
-                assertInteger(5, ProtosNumericValueSupport.guestValue(target.call(calleeArguments)));
-                assertUnpublished(callerArguments);
+                    proven: () => { (value) => { value } }
+                    unknown: () => { (value) => { helper(value) } }
+                    """, "i115-entry-payloads.protos", module);
+            for (String maker : List.of("proven()\n", "unknown()\n")) {
+                ProtosClosureValue callee = closure(maker, module);
+                RootCallTarget target = directTarget(callee);
+                assertEquals(maker.startsWith("proven"), provenNonSuspending(target));
+                Object[] header = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                        callee, (Object) module, 6L);
+                assertTrue(ProtosFrameArguments.acceptsPrimitiveResult(header));
+                assertInteger(6, ProtosNumericValueSupport.guestValue(target.call(header)));
+                assertSame(module, header[3]);
+                assertUnpublished(header);
+                ProtosActivation observed = ProtosFrameArguments.activation(header);
+                assertSame(observed, ProtosFrameArguments.publishedActivation(header));
+                assertSame(module, header[3]);
             }
         });
     }
 
     @Test
-    void provenEntryCallerIsStillPublishedWhenObservedAfterReturn() throws Exception {
+    void malformedPayloadIsRejectedBeforePublication() throws Exception {
         withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115b-proven-define.protos", module);
-            ProtosClosureValue callee = closure("make()\n", module);
-            RootCallTarget target = directTarget(callee);
-            assertTrue(provenNonSuspending(target), "PROVEN fixture");
-
-            Object[] callerArguments =
-                    ProtosFrameArguments.compactDirectClosureCallOne(
-                            closure("make()\n", module), module, null, SUPPLIED);
-            Object[] calleeArguments =
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                            callee, (Object) callerArguments, evaluate("6\n", "i115b-six.protos", module));
-            assertInteger(6, ProtosNumericValueSupport.guestValue(target.call(calleeArguments)));
-            assertUnpublished(callerArguments);
-
-            ProtosActivation observed = ProtosFrameArguments.activation(calleeArguments);
-            ProtosActivation caller = assertInstanceOf(ProtosActivation.class, callerArguments[0]);
-            assertSame(caller, ProtosFrameArguments.compactCaller(calleeArguments));
-            assertSame(observed, ProtosFrameArguments.activation(calleeArguments));
-            assertSameProvenance(module, caller);
-            assertSameProvenance(caller, observed);
+            ProtosClosureValue callee = closure("(value) => { value }\n", module);
+            for (Object invalid : new Object[] {"invalid", new Object(), new Object[0]}) {
+                assertThrows(IllegalArgumentException.class,
+                        () -> ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                                callee, invalid, SUPPLIED));
+            }
+            for (Object missing : new Object[] {null, module.prelude().orElseThrow(), new Object[0]}) {
+                assertThrows(IllegalStateException.class,
+                        () -> ProtosFrameArguments.resolveExactCaller(missing));
+            }
         });
     }
 
@@ -913,480 +623,9 @@ final class ProtosI115BDeferredCallerTest {
     // ---- I115. Admitted B5 accessors (GraalPy PArguments / ReadFrameNode) ------------
 
     /**
-     * The admitted accessors answer exactly what the general, validating
-     * accessors answer, for a published and an unpublished caller, through
-     * deferred chains of depth 1, 2 and 5, and never publish anything.
+     * Both source-entry classifications retain their exact caller, Prelude
+     * and Task without changing the caller payload.
      */
-    @Test
-    void admittedPreludeAndTaskAgreeWithTheGeneralAccessorsAtEveryDepth() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-admitted-define.protos", module);
-            ProtosClosureValue owning = closure("make()\n", module);
-            ProtosClosureValue template = closure("make()\n", module);
-            assertSame(null, preludeFree(template).preludeOrNullForRuntime(), "inherited fixture");
-
-            for (int depth : new int[] {1, 2, 5}) {
-                String label = "depth " + depth;
-                // Unpublished entry: a compact header whose caller is the module.
-                Object[] entry = ProtosFrameArguments.compactDirectClosureCallOne(
-                        preludeFree(template), module, null, SUPPLIED);
-                Object[][] chain = new Object[depth + 1][];
-                chain[0] = entry;
-                for (int i = 1; i <= depth; i++) {
-                    chain[i] = deferredCall(preludeFree(template), chain[i - 1]);
-                }
-                Object[] leaf = chain[depth];
-
-                // Inherited prelude and Task.
-                assertSame(ProtosFrameArguments.preludeOrNull(leaf),
-                        ProtosFrameArguments.admittedPreludeOrNull(leaf), label);
-                assertSame(module.prelude().orElse(null),
-                        ProtosFrameArguments.admittedPreludeOrNull(leaf), label);
-                assertSame(ProtosFrameArguments.compactTask(leaf),
-                        ProtosFrameArguments.admittedCompactTask(leaf), label);
-
-                // A guest Closure on top of the chain: same answer as the general accessor.
-                Object[] owner = deferredCall(owning, leaf);
-                assertSame(ProtosFrameArguments.preludeOrNull(owner),
-                        ProtosFrameArguments.admittedPreludeOrNull(owner), label);
-                for (Object[] link : chain) {
-                    assertUnpublished(link);
-                }
-                assertUnpublished(owner);
-
-                // A published link answers with its activation, without walking further.
-                ProtosActivation published = ProtosFrameArguments.activation(chain[0]);
-                assertSame(published.prelude().orElse(null),
-                        ProtosFrameArguments.admittedPreludeOrNull(leaf), label);
-                assertSame(published.task().orElse(null),
-                        ProtosFrameArguments.admittedCompactTask(leaf), label);
-                for (int i = 1; i <= depth; i++) {
-                    assertUnpublished(chain[i]);
-                }
-            }
-        });
-    }
-
-    @Test
-    void admittedTaskWalkKeepsExplicitAndInheritedTasks() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-task-define.protos", module);
-            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-            ProtosTask inherited = domain.createTask(null, current -> {});
-            ProtosTask explicit = domain.createTask(null, current -> {});
-            ProtosActivation owner = domainModule(module, domain);
-            owner.attachTask(inherited);
-
-            Object[] first = ProtosFrameArguments.compactDirectClosureCallOne(
-                    closure("make()\n", module), owner, null, SUPPLIED);
-            Object[] third = deferredCall(closure("make()\n", module),
-                    deferredCall(closure("make()\n", module), first));
-            assertSame(inherited, ProtosFrameArguments.admittedCompactTask(third));
-
-            Object[] explicitEntry = ProtosFrameArguments.compactDirectClosureCallOne(
-                    closure("make()\n", module), owner, explicit, SUPPLIED);
-            Object[] child = deferredCall(closure("make()\n", module), explicitEntry);
-            assertSame(explicit, ProtosFrameArguments.admittedCompactTask(child));
-            assertSame(explicit, ProtosFrameArguments.admittedCompactTask(explicitEntry));
-            assertUnpublished(first);
-            assertUnpublished(explicitEntry);
-
-            // A method-call header never carries an explicit Task: it inherits.
-            Object[] method = ProtosFrameArguments.compactImmediateMethodCall(
-                    closure("make()\n", module), module, ProtosObjectValue.rootObject(),
-                    owner, new Object[] {SUPPLIED});
-            assertSame(inherited, ProtosFrameArguments.admittedCompactTask(
-                    deferredCall(closure("make()\n", module), method)));
-            assertUnpublished(method);
-        });
-    }
-
-    /** Late observation publishes one activation per invocation, by the existing mechanism. */
-    @Test
-    void admittedCallerResolutionPublishesOneActivationPerInvocation() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-resolve-define.protos", module);
-            Object[] first = ProtosFrameArguments.compactDirectClosureCallOne(
-                    closure("make()\n", module), module, null, SUPPLIED);
-            Object[] second = deferredCall(closure("make()\n", module), first);
-            Object[] third = deferredCall(closure("make()\n", module), second);
-
-            assertSame(module, ProtosFrameArguments.resolveAdmittedCaller(module));
-            ProtosActivation resolved = ProtosFrameArguments.resolveAdmittedCaller(third);
-            assertSame(resolved, third[0]);
-            assertSame(resolved, ProtosFrameArguments.resolveAdmittedCaller(third));
-            assertSame(resolved, ProtosFrameArguments.resolveExactCaller(third));
-            ProtosActivation secondActivation =
-                    assertInstanceOf(ProtosActivation.class, second[0]);
-            ProtosActivation firstActivation =
-                    assertInstanceOf(ProtosActivation.class, first[0]);
-            assertSame(secondActivation, ProtosFrameArguments.compactCaller(third));
-            assertSame(firstActivation, ProtosFrameArguments.resolveAdmittedCaller(first));
-            assertSame(second, third[3], "slot 3 is never rewritten");
-            assertSameProvenance(module, resolved);
-            assertSameProvenance(module, firstActivation);
-        });
-    }
-
-    /** Admitted walks keep cycle detection, and unadmitted shapes still take the validating path. */
-    @Test
-    void admittedAccessorsRejectCyclesAndUnadmittedShapes() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-cycle-define.protos", module);
-            ProtosClosureValue template = closure("make()\n", module);
-            for (int links : new int[] {1, 2, 3}) {
-                Object[][] chain = new Object[links][];
-                chain[0] = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                        preludeFree(template), (Object) module, SUPPLIED);
-                for (int i = 1; i < links; i++) {
-                    chain[i] = deferredCall(preludeFree(template), chain[i - 1]);
-                }
-                chain[0][3] = chain[links - 1];
-                Object[] entry = chain[links - 1];
-                String label = links + "-link cycle";
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.admittedPreludeOrNull(entry), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.admittedCompactTask(entry), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.resolveAdmittedCaller(entry), label);
-                for (Object[] link : chain) {
-                    assertUnpublished(link);
-                }
-            }
-
-            ProtosClosureValue inner = preludeFree(template);
-            Object[] arbitrary = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                    inner, (Object) new Object[] {inner}, SUPPLIED);
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.admittedPreludeOrNull(arbitrary));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.admittedCompactTask(arbitrary));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.resolveAdmittedCaller("caller"));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.resolveAdmittedCaller(new Object[] {SUPPLIED}));
-            assertUnpublished(arbitrary);
-        });
-    }
-
-    /**
-     * A malformed B5 header as the second deferred link: the general
-     * accessors validate every link of an arbitrary chain, so they reject it
-     * without publishing anything.
-     */
-    @Test
-    void generalAccessorsRejectAMalformedSecondDeferredLink() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-second-link-define.protos", module);
-            ProtosClosureValue inner = preludeFree(closure("make()\n", module));
-            ProtosReturnHome home = ProtosReturnHome.unobservable();
-            ProtosObjectValue root = ProtosObjectValue.rootObject();
-            List<Object[]> malformed = List.of(
-                    new Object[] {module, null, null, null, null},
-                    new Object[] {module, SUPPLIED, null, module, home},
-                    new Object[] {module, SUPPLIED, root, module, SUPPLIED},
-                    new Object[] {module, SUPPLIED, root, SUPPLIED, home},
-                    new Object[] {inner, null, null, module, home},
-                    new Object[] {inner, SUPPLIED, null, module, home},
-                    new Object[] {inner, SUPPLIED, root, null, home},
-                    new Object[] {inner, SUPPLIED, root, module, null});
-            for (Object[] bad : malformed) {
-                String label = java.util.Arrays.toString(bad);
-                Object[] firstLink = deferredCall(preludeFree(inner), bad);
-                Object[] leaf = deferredCall(preludeFree(inner), firstLink);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.preludeOrNull(leaf), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.compactTask(leaf), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.compactCaller(leaf), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.activation(leaf), label);
-                assertUnpublished(firstLink);
-                assertUnpublished(leaf);
-            }
-        });
-    }
-
-    // ---- I115. Admitted prelude reads of untransported chains (former W2 path) -------
-
-    /**
-     * A published caller answers by identity: directly as the caller
-     * reference, or as argument 0 of a deferred header, whatever the
-     * Closure it replaced would have answered. Nothing new is published.
-     */
-    @Test
-    void admittedPreludeAnswersPublishedCallersByIdentity() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-w2-published-define.protos", module);
-            ProtosActivation other = otherPreludeModule();
-            ProtosPrelude otherPrelude = other.prelude().orElseThrow();
-            ProtosClosureValue template = closure("make()\n", module);
-
-            Object[] direct = ProtosFrameArguments.compactDirectClosureCallOne(
-                    preludeFree(template), other, null, SUPPLIED);
-            assertSame(otherPrelude, ProtosFrameArguments.admittedPreludeOrNull(direct));
-            assertUnpublished(direct);
-
-            Object[] link = ProtosFrameArguments.compactDirectClosureCallOne(
-                    preludeFree(template), other, null, SUPPLIED);
-            ProtosActivation published = ProtosFrameArguments.activation(link);
-            Object[] leaf = deferredCall(preludeFree(template), link);
-            for (int i = 0; i < 2; i++) {
-                assertSame(published.prelude().orElse(null),
-                        ProtosFrameArguments.admittedPreludeOrNull(link));
-                assertSame(published.prelude().orElse(null),
-                        ProtosFrameArguments.admittedPreludeOrNull(leaf));
-                assertSame(published, link[0]);
-                assertUnpublished(leaf);
-            }
-        });
-    }
-
-    /**
-     * A Closure's own prelude prevails over the inherited one at every
-     * link, a published link answers with its activation's prelude, and the
-     * query rewrites neither argument 0 nor the caller slot of any header.
-     */
-    @Test
-    void admittedPreludeKeepsOwnOverInheritedPrecedence() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-w2-own-define.protos", module);
-            ProtosPrelude modulePrelude = module.prelude().orElseThrow();
-            ProtosActivation other = otherPreludeModule();
-            ProtosPrelude otherPrelude = other.prelude().orElseThrow();
-            ProtosClosureValue owning = ownPrelude(closure("make()\n", module), modulePrelude);
-            assertNotSame(modulePrelude, otherPrelude, "distinct prelude fixture");
-            assertSame(modulePrelude, owning.preludeOrNullForRuntime(), "own prelude fixture");
-
-            assertSame(modulePrelude, ProtosFrameArguments.admittedPreludeOrNull(
-                    ProtosFrameArguments.compactDirectClosureCallOne(owning, other, null, SUPPLIED)));
-            assertSame(otherPrelude, ProtosFrameArguments.admittedPreludeOrNull(
-                    ProtosFrameArguments.compactDirectClosureCallOne(
-                            preludeFree(owning), other, null, SUPPLIED)));
-
-            // An own prelude in a deferred link, before the published activation is reached.
-            Object[] first = ProtosFrameArguments.compactDirectClosureCallOne(
-                    preludeFree(owning), other, null, SUPPLIED);
-            Object[] middle = deferredCall(owning, first);
-            Object[] leaf = deferredCall(preludeFree(owning), middle);
-            Object leafClosure = leaf[0];
-            assertSame(modulePrelude, ProtosFrameArguments.admittedPreludeOrNull(leaf));
-            assertSame(leafClosure, leaf[0]);
-            assertSame(owning, middle[0]);
-            assertSame(middle, leaf[3]);
-            assertSame(first, middle[3]);
-            assertUnpublished(first);
-            assertUnpublished(middle);
-            assertUnpublished(leaf);
-
-            // Publishing the first link does not override the middle link's own prelude.
-            ProtosActivation published = ProtosFrameArguments.activation(first);
-            assertSame(otherPrelude, published.prelude().orElse(null));
-            assertSame(modulePrelude, ProtosFrameArguments.admittedPreludeOrNull(leaf));
-            assertSame(otherPrelude, ProtosFrameArguments.admittedPreludeOrNull(
-                    deferredCall(preludeFree(owning), first)));
-            assertUnpublished(middle);
-            assertUnpublished(leaf);
-        });
-    }
-
-    /**
-     * Valid untransported chains of 1, 2, 3 and 5 deferred links (the former
-     * W2 fixed-path depths): every depth is recovered through the general
-     * walker, with the same identity on every repetition and nothing
-     * published. A Closure with its own prelude at the entry still prevails.
-     */
-    @Test
-    void admittedPreludeFollowsFixedAndDeepChains() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-w2-depth-define.protos", module);
-            ProtosPrelude modulePrelude = module.prelude().orElseThrow();
-            ProtosActivation other = otherPreludeModule();
-            ProtosPrelude otherPrelude = other.prelude().orElseThrow();
-            ProtosClosureValue owning = ownPrelude(closure("make()\n", module), modulePrelude);
-
-            for (int depth : new int[] {1, 2, 3, 5}) {
-                for (boolean ownAtEntry : new boolean[] {false, true}) {
-                    String label = "depth " + depth + (ownAtEntry ? ", own prelude at entry" : "");
-                    Object[][] chain = new Object[depth + 1][];
-                    chain[0] = ProtosFrameArguments.compactDirectClosureCallOne(
-                            ownAtEntry ? owning : preludeFree(owning), other, null, SUPPLIED);
-                    for (int i = 1; i <= depth; i++) {
-                        chain[i] = deferredCall(preludeFree(owning), chain[i - 1]);
-                    }
-                    Object[] leaf = chain[depth];
-                    ProtosPrelude expected = ownAtEntry ? modulePrelude : otherPrelude;
-                    for (int repeat = 0; repeat < 2; repeat++) {
-                        assertSame(expected, ProtosFrameArguments.admittedPreludeOrNull(leaf), label);
-                        assertSame(expected, ProtosFrameArguments.preludeOrNull(leaf), label);
-                        for (int i = 0; i <= depth; i++) {
-                            assertUnpublished(chain[i]);
-                        }
-                        for (int i = 1; i <= depth; i++) {
-                            assertSame(chain[i - 1], chain[i][3], label);
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    /**
-     * The general walker validates every link of an arbitrary chain and
-     * rejects malformed headers and cycles of length 1, 2 and 3 without
-     * publishing anything; a valid 64-link chain is accepted. A malformed
-     * link in an untransported chain is rejected by the admitted path too,
-     * because its recovery is the general walker.
-     */
-    @Test
-    void generalPreludeWalkerValidatesArbitraryChains() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-w2-general-define.protos", module);
-            ProtosClosureValue inner = preludeFree(closure("make()\n", module));
-            ProtosReturnHome home = ProtosReturnHome.unobservable();
-            ProtosObjectValue root = ProtosObjectValue.rootObject();
-            List<Object[]> malformed = List.of(
-                    // Too short.
-                    new Object[] {inner, SUPPLIED, root, module},
-                    // Invalid argument 0.
-                    new Object[] {SUPPLIED, SUPPLIED, root, module, home},
-                    // Invalid kind and Task slots.
-                    new Object[] {inner, null, null, module, home},
-                    new Object[] {inner, SUPPLIED, null, module, home},
-                    // Invalid ReturnHome.
-                    new Object[] {inner, SUPPLIED, root, module, null},
-                    // Invalid caller.
-                    new Object[] {inner, SUPPLIED, root, null, home},
-                    new Object[] {inner, SUPPLIED, root, SUPPLIED, home});
-            for (Object[] bad : malformed) {
-                String label = java.util.Arrays.toString(bad);
-                Object[] firstLink = deferredCall(preludeFree(inner), bad);
-                Object[] leaf = deferredCall(preludeFree(inner), firstLink);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.preludeOrNull(leaf), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.resolveExactCaller(leaf), label);
-                assertUnpublished(firstLink);
-                assertUnpublished(leaf);
-
-                Object[] deep = bad;
-                List<Object[]> links = new ArrayList<>();
-                for (int i = 0; i < 4; i++) {
-                    deep = deferredCall(preludeFree(inner), deep);
-                    links.add(deep);
-                }
-                Object[] deepLeaf = deep;
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.admittedPreludeOrNull(deepLeaf), label);
-                for (Object[] link : links) {
-                    assertUnpublished(link);
-                }
-            }
-
-            for (int links : new int[] {1, 2, 3}) {
-                Object[][] chain = new Object[links][];
-                chain[0] = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                        preludeFree(inner), (Object) module, SUPPLIED);
-                for (int i = 1; i < links; i++) {
-                    chain[i] = deferredCall(preludeFree(inner), chain[i - 1]);
-                }
-                chain[0][3] = chain[links - 1];
-                Object[] leaf = deferredCall(preludeFree(inner), chain[links - 1]);
-                String label = links + "-link cycle";
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.preludeOrNull(leaf), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.admittedPreludeOrNull(leaf), label);
-                assertThrows(IllegalStateException.class,
-                        () -> ProtosFrameArguments.resolveExactCaller(leaf), label);
-                for (Object[] link : chain) {
-                    assertUnpublished(link);
-                }
-                assertUnpublished(leaf);
-            }
-
-            Object[] deep = ProtosFrameArguments.compactDirectClosureCallOne(
-                    preludeFree(inner), module, null, SUPPLIED);
-            List<Object[]> deepChain = new ArrayList<>();
-            deepChain.add(deep);
-            for (int i = 0; i < 64; i++) {
-                deep = deferredCall(preludeFree(inner), deep);
-                deepChain.add(deep);
-            }
-            assertSame(module.prelude().orElse(null), ProtosFrameArguments.preludeOrNull(deep));
-            assertSame(module.prelude().orElse(null), ProtosFrameArguments.admittedPreludeOrNull(deep));
-            for (Object[] link : deepChain) {
-                assertUnpublished(link);
-            }
-        });
-    }
-
-    /**
-     * Prelude queries leave Task inheritance and explicit resolution
-     * unchanged: an inherited and an explicit Task, one activation per
-     * invocation, stable identities on repeated resolution, callee-first
-     * materialization, and untouched ReturnHome slots.
-     */
-    @Test
-    void preludeQueriesPreserveTaskAndExactCallerResolution() throws Exception {
-        withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-w2-task-define.protos", module);
-            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-            ProtosTask inherited = domain.createTask(null, current -> {});
-            ProtosTask explicit = domain.createTask(null, current -> {});
-            ProtosActivation owner = domainModule(module, domain);
-            owner.attachTask(inherited);
-
-            Object[] first = ProtosFrameArguments.compactDirectClosureCallOne(
-                    closure("make()\n", module), owner, null, SUPPLIED);
-            Object[] second = deferredCall(closure("make()\n", module), first);
-            Object[] third = deferredCall(closure("make()\n", module), second);
-            Object[] leaf = deferredCall(closure("make()\n", module), deferredCall(
-                    closure("make()\n", module), third));
-            Object firstHome = first[4];
-            Object thirdHome = third[4];
-            ProtosFrameArguments.admittedPreludeOrNull(leaf);
-            assertSame(inherited, ProtosFrameArguments.admittedCompactTask(leaf));
-            assertSame(inherited, ProtosFrameArguments.compactTask(leaf));
-            assertUnpublished(first);
-            assertUnpublished(third);
-
-            Object[] explicitEntry = ProtosFrameArguments.compactDirectClosureCallOne(
-                    closure("make()\n", module), owner, explicit, SUPPLIED);
-            Object[] explicitChild = deferredCall(closure("make()\n", module), explicitEntry);
-            ProtosFrameArguments.admittedPreludeOrNull(explicitChild);
-            assertSame(explicit, ProtosFrameArguments.admittedCompactTask(explicitChild));
-
-            // Callee-first materialization, then explicit resolution of each caller.
-            ProtosActivation thirdActivation = ProtosFrameArguments.activation(third);
-            ProtosActivation secondActivation =
-                    assertInstanceOf(ProtosActivation.class, second[0]);
-            ProtosActivation firstActivation =
-                    assertInstanceOf(ProtosActivation.class, first[0]);
-            assertSame(inherited, firstActivation.task().orElse(null));
-            assertSame(firstActivation.task().orElse(null),
-                    ProtosFrameArguments.admittedCompactTask(deferredCall(
-                            closure("make()\n", module), first)));
-            for (int i = 0; i < 2; i++) {
-                assertSame(thirdActivation, ProtosFrameArguments.resolveExactCaller(third));
-                assertSame(secondActivation, ProtosFrameArguments.resolveExactCaller(second));
-                assertSame(firstActivation, ProtosFrameArguments.resolveExactCaller(first));
-                assertSame(secondActivation, ProtosFrameArguments.compactCaller(third));
-            }
-            assertSame(firstActivation.prelude().orElse(null),
-                    ProtosFrameArguments.admittedPreludeOrNull(leaf));
-            assertSame(firstHome, first[4]);
-            assertSame(thirdHome, third[4]);
-            assertSame(second, third[3], "slot 3 is never rewritten");
-            assertSameProvenance(firstActivation, thirdActivation);
-            assertSame(owner.dynamicControlStateIfPresent().orElse(null),
-                    thirdActivation.dynamicControlStateIfPresent().orElse(null));
-        });
-    }
-
-    /** PROVEN and UNKNOWN entries leave the deferred caller readable by the admitted accessors. */
     @Test
     void admittedAccessorsReadTheCallerOfProvenAndUnknownEntries() throws Exception {
         withCore(module -> {
@@ -1402,17 +641,15 @@ final class ProtosI115BDeferredCallerTest {
                         .setUncachedThreshold(0);
                 assertEquals(maker.startsWith("proven"),
                         provenNonSuspending(target), maker);
-                Object[] callerArguments = ProtosFrameArguments.compactDirectClosureCallOne(
-                        closure("proven()\n", module), module, null, SUPPLIED);
                 Object[] calleeArguments = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                        callee, (Object) callerArguments, evaluate("8\n", "i115-eight.protos", module));
+                        callee, (Object) module, evaluate("8\n", "i115-eight.protos", module));
                 assertInteger(8, ProtosNumericValueSupport.guestValue(target.call(calleeArguments)));
-                assertUnpublished(callerArguments);
+                assertSame(module, calleeArguments[3]);
                 assertSame(module.prelude().orElse(null),
                         ProtosFrameArguments.admittedPreludeOrNull(calleeArguments), maker);
                 assertSame(module.task().orElse(null),
                         ProtosFrameArguments.admittedCompactTask(calleeArguments), maker);
-                assertUnpublished(callerArguments);
+                assertSame(module, calleeArguments[3]);
             }
         });
     }
@@ -1542,145 +779,91 @@ final class ProtosI115BDeferredCallerTest {
         });
     }
 
-    // ---- I115. Caller frame references (GraalPy PFrame.Reference / CallContext) -----
+    // ---- Caller demand, transport and active guest recovery -----------------------
 
-    /**
-     * A producer prepares nothing for a callee that has not requested the
-     * caller prelude; once requested, it transports the caller's prelude
-     * with the caller's own header, except for a published caller or a
-     * Closure with its own prelude. Nothing is published.
-     */
     @Test
-    void callerArgumentPreparesOnlyWhatTheCalleeRequested() throws Exception {
+    void callerNeedControlsLegalPayloadKindsInRealGuestCalls() throws Exception {
         withCore(module -> {
             evaluate("""
-                    first: (value) => { value }
-                    second: (value) => { value }
-                    make: () => { (value) => { value } }
-                    """, "i115-ref-prepare-define.protos", module);
-            ProtosBytecodeRootNode callerRoot = functionRoot("first", module);
-            ProtosBytecodeRootNode callee = functionRoot("second", module);
-            ProtosPrelude modulePrelude = module.prelude().orElseThrow();
-            ProtosClosureValue inherited = preludeFree(closure("make()\n", module));
-            ProtosClosureValue owning = ownPrelude(closure("make()\n", module), modulePrelude);
-            Object[] callerArguments = ProtosFrameArguments.compactDirectClosureCallOne(
-                    preludeFree(inherited), module, null, SUPPLIED);
-            int need = ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE;
-            assertFalse(callee.hasCallerNeed(need), "a fresh callee has no caller need");
-
-            assertSame(callerArguments, ProtosFunctionCallDispatchers.callerArgument(
-                    callerRoot, callee, inherited, callerArguments));
-            assertSame(module, ProtosFunctionCallDispatchers.callerArgument(
-                    callerRoot, callee, inherited, module));
-            assertUnpublished(callerArguments);
-
-            callee.requestCallerNeed(need);
-            assertSame(module, ProtosFunctionCallDispatchers.callerArgument(
-                    callerRoot, callee, inherited, module), "a published caller answers already");
-            assertSame(callerArguments, ProtosFunctionCallDispatchers.callerArgument(
-                    callerRoot, callee, owning, callerArguments), "an own prelude is never inherited");
-
-            ProtosCallerFrameReference reference = assertInstanceOf(
-                    ProtosCallerFrameReference.class,
-                    ProtosFunctionCallDispatchers.callerArgument(
-                            callerRoot, callee, inherited, callerArguments));
-            assertSame(callerArguments, reference.callerArguments());
-            assertSame(modulePrelude, reference.transportedPrelude());
-            assertSame(null, reference.publishedActivationOrNull());
-
-            assertUnpublished(callerArguments);
-
-            // The caller read its prelude from an activation caller: no need of its own.
-            assertFalse(callerRoot.hasCallerNeed(need));
-            assertFalse(callerRoot.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
+                    callee: (value) => { value }
+                    caller: (value) => { callee(value) }
+                    observer: (value) => { context.hasSlot("value"); value }
+                    observe: (value) => { observer(value) }
+                    """, "i115-need-kinds.protos", module);
+            ProtosBytecodeRootNode callee = functionRoot("callee", module);
+            int preludeNeed = ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE;
+            int exactNeed = ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION;
+            assertFalse(callee.hasCallerNeed(preludeNeed));
+            assertFalse(callee.hasCallerNeed(exactNeed));
+            assertInteger(11, evaluate("caller(11)\n", "i115-no-need.protos", module));
+            var before = callee.callerNeedsStability();
+            callee.requestCallerNeed(preludeNeed);
+            assertFalse(before.isValid());
+            assertInteger(11, evaluate("caller(11)\n", "i115-prelude-need.protos", module));
+            ProtosClosureValue template = closure("callee\n", module);
+            Object[] transported = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    preludeFree(template), (Object) module.prelude().orElseThrow(), SUPPLIED);
+            assertSame(module.prelude().orElseThrow(),
+                    ProtosFrameArguments.admittedPreludeOrNull(transported));
+            var preludeStable = callee.callerNeedsStability();
+            callee.requestCallerNeed(exactNeed);
+            assertFalse(preludeStable.isValid());
+            assertInteger(11, evaluate("caller(11)\n", "i115-exact-need.protos", module));
+            assertInteger(13, evaluate("observe(13)\n", "i115-exact-observe.protos", module));
+            assertTrue(functionRoot("observer", module).hasCallerNeed(exactNeed));
+            var stable = callee.callerNeedsStability();
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(11, evaluate("caller(11)\n", "i115-needs-repeat.protos", module));
+            }
+            assertTrue(callee.hasCallerNeed(preludeNeed));
+            assertTrue(callee.hasCallerNeed(exactNeed));
+            assertSame(stable, callee.callerNeedsStability());
+            assertTrue(stable.isValid());
         });
     }
 
-    /**
-     * Transitive propagation over A → B → C → D, where A owns its prelude,
-     * B and C inherit it and D requests it. The first preparation of each
-     * hop recovers an untransported prelude and registers the need on the
-     * intermediate root that had to compute it (C, then B), never on A.
-     * Once registered, every hop transports a reference, no header of the
-     * chain inherits an untransported prelude, and no root's Assumption is
-     * invalidated again.
-     */
     @Test
     void callerPreludeNeedPropagatesTransitivelyAndConverges() throws Exception {
         withCore(module -> {
             evaluate("""
-                    a: (value) => { value }
-                    b: (value) => { value }
-                    c: (value) => { value }
+                    a: (value) => { b(value) }
+                    b: (value) => { c(value) }
+                    c: (value) => { d(value) }
                     d: (value) => { value }
-                    make: () => { (value) => { value } }
-                    """, "i115-ref-transitive-define.protos", module);
-            ProtosBytecodeRootNode rootA = functionRoot("a", module);
-            ProtosBytecodeRootNode rootB = functionRoot("b", module);
-            ProtosBytecodeRootNode rootC = functionRoot("c", module);
-            ProtosBytecodeRootNode rootD = functionRoot("d", module);
-            int need = ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE;
-            ProtosPrelude modulePrelude = module.prelude().orElseThrow();
-            ProtosActivation other = otherPreludeModule();
-            ProtosClosureValue template = closure("make()\n", module);
-            // A owns modulePrelude; its own caller has a different prelude.
-            ProtosClosureValue closureA = ownPrelude(template, modulePrelude);
-            ProtosClosureValue closureB = preludeFree(template);
-            ProtosClosureValue closureC = preludeFree(template);
-            ProtosClosureValue closureD = preludeFree(template);
-            rootD.requestCallerNeed(need);
-            for (ProtosBytecodeRootNode root : List.of(rootA, rootB, rootC)) {
-                assertFalse(root.hasCallerNeed(need), "fresh intermediate root");
+                    """, "i115-transitive.protos", module);
+            List<ProtosBytecodeRootNode> roots = List.of(functionRoot("a", module),
+                    functionRoot("b", module), functionRoot("c", module), functionRoot("d", module));
+            int preludeNeed = ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE;
+            int exactNeed = ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION;
+            boolean[] preludeBefore = new boolean[4];
+            boolean[] exactBefore = new boolean[4];
+            for (int i = 0; i < roots.size(); i++) {
+                preludeBefore[i] = roots.get(i).hasCallerNeed(preludeNeed);
+                exactBefore[i] = roots.get(i).hasCallerNeed(exactNeed);
             }
-
-            // First execution: nothing transported yet.
-            Object[] a1 = ProtosFrameArguments.compactDirectClosureCallOne(closureA, other, null, SUPPLIED);
-            Object[] b1 = deferredCall(closureB, a1);
-            Object[] c1 = deferredCall(closureC, b1);
-            com.oracle.truffle.api.Assumption cBefore = rootC.callerNeedsStability();
-            ProtosCallerFrameReference toC = assertInstanceOf(ProtosCallerFrameReference.class,
-                    ProtosFunctionCallDispatchers.callerArgument(rootC, rootD, closureD, c1));
-            assertSame(modulePrelude, toC.transportedPrelude());
-            assertTrue(rootC.hasCallerNeed(need), "C computed an inherited untransported prelude");
-            assertFalse(cBefore.isValid());
-            assertFalse(rootB.hasCallerNeed(need), "B is registered only when it must compute");
-
-            // Next execution: C now requests it, so B's preparation registers B.
-            com.oracle.truffle.api.Assumption bBefore = rootB.callerNeedsStability();
-            Object[] a2 = ProtosFrameArguments.compactDirectClosureCallOne(closureA, other, null, SUPPLIED);
-            Object[] b2 = deferredCall(closureB, a2);
-            ProtosCallerFrameReference toB2 = assertInstanceOf(ProtosCallerFrameReference.class,
-                    ProtosFunctionCallDispatchers.callerArgument(rootB, rootC, closureC, b2));
-            assertSame(modulePrelude, toB2.transportedPrelude());
-            assertTrue(rootB.hasCallerNeed(need));
-            assertFalse(bBefore.isValid());
-            assertFalse(rootA.hasCallerNeed(need), "A reads its own prelude");
-
-            // Converged executions: every hop transports, no recovery, no invalidation.
-            com.oracle.truffle.api.Assumption aSettled = rootA.callerNeedsStability();
-            com.oracle.truffle.api.Assumption bSettled = rootB.callerNeedsStability();
-            com.oracle.truffle.api.Assumption cSettled = rootC.callerNeedsStability();
+            assertInteger(17, evaluate("a(17)\n", "i115-transitive-first.protos", module));
+            for (int i = 0; i < roots.size(); i++) {
+                assertTrue(!preludeBefore[i] || roots.get(i).hasCallerNeed(preludeNeed));
+                assertTrue(!exactBefore[i] || roots.get(i).hasCallerNeed(exactNeed));
+                preludeBefore[i] = roots.get(i).hasCallerNeed(preludeNeed);
+                exactBefore[i] = roots.get(i).hasCallerNeed(exactNeed);
+            }
+            roots.get(3).requestCallerNeed(preludeNeed);
+            assertInteger(17, evaluate("a(17)\n", "i115-transitive-request.protos", module));
+            assertTrue(roots.get(3).hasCallerNeed(preludeNeed));
+            List<com.oracle.truffle.api.Assumption> stable = new ArrayList<>();
+            for (int i = 0; i < roots.size(); i++) {
+                assertTrue(!preludeBefore[i] || roots.get(i).hasCallerNeed(preludeNeed));
+                assertTrue(!exactBefore[i] || roots.get(i).hasCallerNeed(exactNeed));
+                stable.add(roots.get(i).callerNeedsStability());
+            }
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
-                Object[] a = ProtosFrameArguments.compactDirectClosureCallOne(closureA, other, null, SUPPLIED);
-                Object[] b = ProtosFrameArguments.compactDirectClosureCallOneNoHome(closureB,
-                        ProtosFunctionCallDispatchers.callerArgument(rootA, rootB, closureB, a), SUPPLIED);
-                Object[] c = ProtosFrameArguments.compactDirectClosureCallOneNoHome(closureC,
-                        ProtosFunctionCallDispatchers.callerArgument(rootB, rootC, closureC, b), SUPPLIED);
-                Object[] d = ProtosFrameArguments.compactDirectClosureCallOneNoHome(closureD,
-                        ProtosFunctionCallDispatchers.callerArgument(rootC, rootD, closureD, c), SUPPLIED);
-                for (Object[] link : List.of(b, c, d)) {
-                    assertInstanceOf(ProtosCallerFrameReference.class, link[3]);
-                    assertFalse(ProtosFrameArguments.inheritsUntransportedCallerPrelude(link));
-                    assertSame(modulePrelude, ProtosFrameArguments.admittedPreludeOrNull(link));
-                }
-                for (Object[] link : List.of(a, b, c, d)) {
-                    assertUnpublished(link);
-                }
+                assertInteger(17, evaluate("a(17)\n", "i115-transitive-repeat.protos", module));
             }
-            assertSame(aSettled, rootA.callerNeedsStability());
-            assertSame(bSettled, rootB.callerNeedsStability());
-            assertSame(cSettled, rootC.callerNeedsStability());
-            assertFalse(rootA.hasCallerNeed(need));
+            for (int i = 0; i < roots.size(); i++) {
+                assertSame(stable.get(i), roots.get(i).callerNeedsStability());
+                assertTrue(stable.get(i).isValid());
+            }
         });
     }
 
@@ -1694,8 +877,7 @@ final class ProtosI115BDeferredCallerTest {
      * roots that genuinely request an inherited prelude. With the
      * cached H7 method selections, D does not request one, so C has
      * nothing to transport to D and B has nothing to transport to C.
-     * I115-H7-R2 preserves the deferred B5 caller across admitted Send0
-     * instead of publishing A merely for method selection.
+     * Admitted Send0 selection does not require caller publication.
      * A does not request an inherited caller prelude. Once the needs
      * settle, later calls transport the requested Prelude without
      * repeated invalidation or unnecessary caller publication.
@@ -1790,7 +972,7 @@ final class ProtosI115BDeferredCallerTest {
     /**
      * I115-H7-R3: a compact H7 callee that requested nothing from its caller
      * receives a null caller slot from CallBinaryMethod. Neither the caller
-     * activation is published nor a ProtosCallerFrameReference is built.
+     * activation is published nor caller information is requested.
      */
     @Test
     void directMethodCallWithoutCalleeNeedsTransportsNoCaller() throws Exception {
@@ -1826,383 +1008,200 @@ final class ProtosI115BDeferredCallerTest {
             assertFalse(sender.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION),
                     "the sender never published its own activation");
 
-            /*
-             * No need registered: entering the callee with a valid B5 header
-             * (the real Closure, an unpublished caller header in slot 3) neither
-             * publishes the callee nor resolves the deferred caller, and builds
-             * no caller frame reference.
-             */
-            Object[] callerArguments = ProtosFrameArguments.compactDirectClosureCallOne(
-                    closure("(value) => { value }\n", module), module, null, SUPPLIED);
             Object[] header = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                    identity, (Object) callerArguments, SUPPLIED);
+                    identity, (Object) null, SUPPLIED);
             assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, header.length);
             assertSame(identity, header[0]);
-            assertSame(callerArguments, header[3], "the deferred caller header by identity");
+            assertSame(null, header[3]);
             assertSame(SUPPLIED, header[ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET]);
             assertSame(SUPPLIED, ProtosFrameArguments.compactSuppliedArgumentOrNull(header, 0));
-            // A valid invocation header is an activation carrier, yet unpublished.
             assertTrue(ProtosFrameArguments.hasActivation(header));
             assertFalse(ProtosFrameArguments.hasPublishedActivation(header));
-            assertFalse(ProtosFrameArguments.hasPublishedActivation(callerArguments));
-
-            assertSame(SUPPLIED, ProtosNumericValueSupport.guestValue(
-                    directTarget(identity).call(header)));
-            assertFalse(ProtosFrameArguments.hasPublishedActivation(header),
-                    "the callee requested no activation");
-            assertFalse(ProtosFrameArguments.hasPublishedActivation(callerArguments),
-                    "the deferred caller was never resolved");
-            assertSame(callerArguments, header[3], "slot 3 is never rewritten");
-            assertFalse(header[3] instanceof ProtosCallerFrameReference);
+            assertSame(SUPPLIED, ProtosNumericValueSupport.guestValue(directTarget(identity).call(header)));
+            assertFalse(ProtosFrameArguments.hasPublishedActivation(header));
+            assertSame(null, header[3]);
             assertFalse(callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
             assertFalse(callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
-
-            // A published activation is a different state, observed separately.
-            ProtosActivation published = ProtosFrameArguments.activation(callerArguments);
-            assertTrue(ProtosFrameArguments.hasPublishedActivation(callerArguments));
-            assertSame(published, callerArguments[0]);
         });
     }
 
-    /**
-     * The first read of an untransported inherited prelude registers
-     * NEEDS_CALLER_PRELUDE with one Assumption replacement and answers
-     * through the general walker; repeated reads do not invalidate again,
-     * and a transported, published or own prelude is not a request.
-     */
     @Test
     void firstUntransportedPreludeReadRegistersTheNeedOnceAndRecovers() throws Exception {
         withCore(module -> {
             evaluate("""
                     first: (value) => { value }
-                    make: () => { (value) => { value } }
-                    """, "i115-ref-first-define.protos", module);
+                    caller: (value) => { first(value) }
+                    """, "i115-first-prelude.protos", module);
             ProtosBytecodeRootNode root = functionRoot("first", module);
-            ProtosPrelude modulePrelude = module.prelude().orElseThrow();
+            ProtosClosureValue template = closure("first\n", module);
             int need = ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE;
-            assertFalse(root.hasCallerNeed(need), "a fresh root has no caller need");
-            com.oracle.truffle.api.Assumption before = root.callerNeedsStability();
-
-            ProtosClosureValue template = closure("make()\n", module);
-            Object[] entry = ProtosFrameArguments.compactDirectClosureCallOne(
-                    preludeFree(template), module, null, SUPPLIED);
-            Object[] middle = deferredCall(preludeFree(template), entry);
-            Object[] leaf = deferredCall(preludeFree(template), middle);
-            assertFalse(ProtosFrameArguments.inheritsUntransportedCallerPrelude(entry));
-            assertTrue(ProtosFrameArguments.inheritsUntransportedCallerPrelude(leaf));
-
-            assertSame(modulePrelude, ProtosFunctionCallDispatchers.admittedCallerPrelude(root, leaf));
+            assertFalse(root.hasCallerNeed(need));
+            var before = root.callerNeedsStability();
+            // This is the observed root's own header, never a callee's slot 3.
+            Object[] currentFrameArguments = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    preludeFree(template), (Object) null, SUPPLIED);
+            assertSame(null, ProtosFunctionCallDispatchers.admittedCallerPrelude(root, currentFrameArguments));
             assertTrue(root.hasCallerNeed(need));
-            assertFalse(before.isValid(), "the first need invalidates once");
-            com.oracle.truffle.api.Assumption registered = root.callerNeedsStability();
+            assertFalse(before.isValid());
+            var registered = root.callerNeedsStability();
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
-                assertSame(modulePrelude, ProtosFunctionCallDispatchers.admittedCallerPrelude(root, leaf));
+                assertInteger(19, evaluate("caller(19)\n", "i115-prelude-entry.protos", module));
+                assertSame(null,
+                        ProtosFunctionCallDispatchers.admittedCallerPrelude(root, currentFrameArguments));
             }
-            assertSame(registered, root.callerNeedsStability(), "no repeated invalidation");
+            Object[] transported = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    preludeFree(template), (Object) module.prelude().orElseThrow(), SUPPLIED);
+            assertSame(module.prelude().orElseThrow(),
+                    ProtosFunctionCallDispatchers.admittedCallerPrelude(root, transported));
+            assertSame(registered, root.callerNeedsStability());
             assertTrue(registered.isValid());
-            assertFalse(root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION),
-                    "needs are registered independently");
-
-            assertFalse(ProtosFrameArguments.inheritsUntransportedCallerPrelude(
-                    referencedCall(preludeFree(template), middle, modulePrelude)));
-            assertFalse(ProtosFrameArguments.inheritsUntransportedCallerPrelude(
-                    deferredCall(ownPrelude(template, modulePrelude), middle)));
-            assertUnpublished(entry);
-            assertUnpublished(middle);
-            assertUnpublished(leaf);
+            assertFalse(root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
+            assertUnpublished(currentFrameArguments);
+            assertUnpublished(transported);
         });
     }
 
-    /**
-     * A transported prelude is answered without walking, including a
-     * transported null (a value, not an absence); an own prelude still
-     * prevails; two distinct preludes of one Context stay distinct. Past a
-     * reference the admitted read follows nothing, while the general
-     * accessors still validate the referenced header and reject it.
-     */
     @Test
     void transportedPreludeAnswersWithoutWalkingAndKeepsPrecedence() throws Exception {
         withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-ref-read-define.protos", module);
-            ProtosPrelude modulePrelude = module.prelude().orElseThrow();
+            ProtosClosureValue template = closure("(value) => { value }\n", module);
+            ProtosPrelude own = module.prelude().orElseThrow();
             ProtosActivation other = otherPreludeModule();
-            ProtosPrelude otherPrelude = other.prelude().orElseThrow();
-            assertNotSame(modulePrelude, otherPrelude, "distinct prelude fixture");
-            ProtosClosureValue template = closure("make()\n", module);
-            ProtosClosureValue owning = ownPrelude(template, modulePrelude);
-
-            Object[] otherEntry = ProtosFrameArguments.compactDirectClosureCallOne(
-                    preludeFree(template), other, null, SUPPLIED);
-            Object[] moduleEntry = ProtosFrameArguments.compactDirectClosureCallOne(
-                    preludeFree(template), module, null, SUPPLIED);
-            Object[] fromOther = referencedCall(preludeFree(template), otherEntry, otherPrelude);
-            Object[] fromModule = referencedCall(preludeFree(template), moduleEntry, modulePrelude);
-            assertSame(otherPrelude, ProtosFrameArguments.admittedPreludeOrNull(fromOther));
-            assertSame(otherPrelude, ProtosFrameArguments.preludeOrNull(fromOther));
-            assertSame(modulePrelude, ProtosFrameArguments.admittedPreludeOrNull(fromModule));
-            assertSame(modulePrelude, ProtosFrameArguments.preludeOrNull(fromModule));
-
-            Object[] transportedNull = referencedCall(preludeFree(template), otherEntry, null);
-            assertSame(null, ProtosFrameArguments.admittedPreludeOrNull(transportedNull));
-            assertFalse(ProtosFrameArguments.inheritsUntransportedCallerPrelude(transportedNull));
-            assertSame(otherPrelude, ProtosFrameArguments.admittedPreludeOrNull(
-                    deferredCall(preludeFree(template), otherEntry)), "not transported: recovered");
-
-            assertSame(modulePrelude, ProtosFrameArguments.admittedPreludeOrNull(
-                    referencedCall(owning, otherEntry, otherPrelude)));
-            assertSame(modulePrelude, ProtosFrameArguments.preludeOrNull(
-                    referencedCall(owning, otherEntry, otherPrelude)));
-
-            Object[] loop = deferredCall(preludeFree(template), otherEntry);
-            loop[3] = loop;
-            Object[] past = referencedCall(preludeFree(template), loop, otherPrelude);
-            assertSame(otherPrelude, ProtosFrameArguments.admittedPreludeOrNull(past),
-                    "the admitted read does not walk past a transported prelude");
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.preludeOrNull(past));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.compactTask(past));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.compactCaller(past));
-            assertUnpublished(otherEntry);
-            assertUnpublished(moduleEntry);
-            assertUnpublished(loop);
-            assertUnpublished(past);
+            ProtosPrelude transported = other.prelude().orElseThrow();
+            assertNotSame(own, transported);
+            for (Object payload : new Object[] {transported, other}) {
+                for (boolean owns : new boolean[] {false, true}) {
+                    Object[] header = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                            owns ? ownPrelude(template, own) : preludeFree(template), payload, SUPPLIED);
+                    ProtosPrelude expected = owns ? own : transported;
+                    assertSame(expected, ProtosFrameArguments.preludeOrNull(header));
+                    assertSame(expected, ProtosFrameArguments.admittedPreludeOrNull(header));
+                    assertSame(payload, header[3]);
+                    assertUnpublished(header);
+                }
+            }
         });
     }
 
-    /**
-     * Exact resolution through a reference publishes each invocation once,
-     * in its own argument 0, and later resolutions return the same identity;
-     * Task inheritance, explicit Tasks and ReturnHome slots are unchanged,
-     * and the reference itself is never rewritten.
-     */
     @Test
-    void referencesPublishOnceAndKeepTaskAndReturnHome() throws Exception {
+    void independentHeadersPublishOnceAndKeepTaskAndReturnHome() throws Exception {
         withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-ref-publish-define.protos", module);
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-            ProtosTask inherited = domain.createTask(null, current -> {});
-            ProtosTask explicit = domain.createTask(null, current -> {});
             ProtosActivation owner = domainModule(module, domain);
-            owner.attachTask(inherited);
-            ProtosPrelude prelude = owner.prelude().orElse(null);
-
-            Object[] first = ProtosFrameArguments.compactDirectClosureCallOne(
-                    closure("make()\n", module), owner, null, SUPPLIED);
-            Object[] second = referencedCall(closure("make()\n", module), first, prelude);
-            Object[] third = referencedCall(closure("make()\n", module), second, prelude);
-            ProtosCallerFrameReference toSecond =
-                    assertInstanceOf(ProtosCallerFrameReference.class, third[3]);
-            Object firstHome = first[4];
-            Object thirdHome = third[4];
-
-            assertSame(inherited, ProtosFrameArguments.admittedCompactTask(third));
-            assertSame(inherited, ProtosFrameArguments.compactTask(third));
-            assertSame(null, toSecond.publishedActivationOrNull());
-            assertUnpublished(first);
+            ProtosTask task = domain.createTask(null, current -> {});
+            owner.attachTask(task);
+            ProtosDynamicControlState state = owner.dynamicControlState();
+            ProtosClosureValue callee = closure("(value) => { value }\n", module);
+            Object[] first = ProtosFrameArguments.compactDirectClosureCallOne(callee, owner, null, SUPPLIED);
+            Object[] second = ProtosFrameArguments.compactDirectClosureCallOne(callee, owner, null, SUPPLIED);
+            ProtosActivation firstActivation = ProtosFrameArguments.activation(first);
             assertUnpublished(second);
-
-            ProtosActivation secondActivation = ProtosFrameArguments.compactCaller(third);
-            assertSame(secondActivation, second[0]);
-            assertSame(secondActivation, toSecond.publishedActivationOrNull());
-            ProtosActivation firstActivation = assertInstanceOf(ProtosActivation.class, first[0]);
-            for (int i = 0; i < 2; i++) {
-                assertSame(secondActivation, ProtosFrameArguments.resolveExactCaller(toSecond));
-                assertSame(secondActivation, ProtosFrameArguments.resolveAdmittedCaller(toSecond));
-                assertSame(secondActivation, ProtosFrameArguments.compactCaller(third));
-                assertSame(firstActivation, ProtosFrameArguments.resolveExactCaller(first));
+            ProtosActivation secondActivation = ProtosFrameArguments.activation(second);
+            assertNotSame(firstActivation, secondActivation);
+            for (Object[] header : List.of(first, second)) {
+                ProtosActivation activation = ProtosFrameArguments.activation(header);
+                assertSame(activation, ProtosFrameArguments.publishedActivation(header));
+                assertSame(owner, header[3]);
+                assertSame(owner, ProtosFrameArguments.resolveExactCaller(header[3]));
+                assertSame(owner, ProtosFrameArguments.resolveAdmittedCaller(header[3]));
+                assertSame(task, ProtosFrameArguments.compactTask(header));
+                assertSame(task, ProtosFrameArguments.admittedCompactTask(header));
+                assertSame(task, activation.task().orElseThrow());
+                assertSame(header[4], activation.returnHome().orElseThrow());
+                assertSame(state, activation.dynamicControlStateIfPresent().orElseThrow());
+                assertSameProvenance(owner, activation);
             }
-            assertUnpublished(third);
-            ProtosActivation thirdActivation = ProtosFrameArguments.activation(third);
-            assertSame(thirdActivation, third[0]);
-            assertSame(toSecond, third[3], "slot 3 is never rewritten");
-            assertSame(firstHome, first[4]);
-            assertSame(thirdHome, third[4]);
-            assertSame(inherited, thirdActivation.task().orElse(null));
-            assertSameProvenance(firstActivation, thirdActivation);
-
-            Object[] explicitEntry = ProtosFrameArguments.compactDirectClosureCallOne(
-                    closure("make()\n", module), owner, explicit, SUPPLIED);
-            Object[] child = referencedCall(closure("make()\n", module), explicitEntry, prelude);
-            assertSame(explicit, ProtosFrameArguments.admittedCompactTask(child));
-            assertSame(explicit, ProtosFrameArguments.compactTask(child));
-            assertUnpublished(explicitEntry);
         });
     }
 
-    /**
-     * A valid chain of 64 references: both prelude accessors answer at the
-     * leaf, Task queries follow it, and resolving the leaf's caller
-     * publishes exactly one distinct activation per invocation.
-     */
     @Test
-    void deepReferenceChainResolvesOneActivationPerInvocation() throws Exception {
+    void deepRealGuestChainPreservesResultAndStableCallerNeeds() throws Exception {
         withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-ref-deep-define.protos", module);
-            ProtosPrelude modulePrelude = module.prelude().orElseThrow();
-            ProtosClosureValue template = closure("make()\n", module);
-            List<Object[]> chain = new ArrayList<>();
-            chain.add(ProtosFrameArguments.compactDirectClosureCallOne(
-                    preludeFree(template), module, null, SUPPLIED));
+            StringBuilder source = new StringBuilder();
             for (int i = 0; i < 64; i++) {
-                chain.add(referencedCall(preludeFree(template), chain.get(i), modulePrelude));
+                source.append("hop").append(i).append(": (value) => { hop")
+                        .append(i + 1).append("(value) }\n");
             }
-            Object[] leaf = chain.get(64);
-            assertSame(modulePrelude, ProtosFrameArguments.admittedPreludeOrNull(leaf));
-            assertSame(modulePrelude, ProtosFrameArguments.preludeOrNull(leaf));
-            assertSame(module.task().orElse(null), ProtosFrameArguments.compactTask(leaf));
-            assertSame(module.task().orElse(null), ProtosFrameArguments.admittedCompactTask(leaf));
-            for (Object[] link : chain) {
-                assertUnpublished(link);
+            source.append("hop64: (value) => { value }\n");
+            evaluate(source.toString(), "i115-deep-source.protos", module);
+            int prelude = ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE;
+            int exact = ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION;
+            boolean[] previousPrelude = new boolean[65];
+            boolean[] previousExact = new boolean[65];
+            for (int run = 0; run < 2; run++) {
+                assertInteger(37, evaluate("hop0(37)\n", "i115-deep-call.protos", module));
+                for (int i = 0; i <= 64; i++) {
+                    ProtosBytecodeRootNode root = functionRoot("hop" + i, module);
+                    assertTrue(!previousPrelude[i] || root.hasCallerNeed(prelude));
+                    assertTrue(!previousExact[i] || root.hasCallerNeed(exact));
+                    previousPrelude[i] = root.hasCallerNeed(prelude);
+                    previousExact[i] = root.hasCallerNeed(exact);
+                }
             }
-
-            ProtosActivation caller = ProtosFrameArguments.resolveExactCaller(leaf[3]);
-            assertSame(caller, chain.get(63)[0]);
-            java.util.Set<ProtosActivation> identities =
-                    java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-            for (int i = 0; i < 64; i++) {
-                identities.add(assertInstanceOf(ProtosActivation.class, chain.get(i)[0]));
-            }
-            assertEquals(64, identities.size(), "one activation per invocation");
-            assertSame(caller, ProtosFrameArguments.resolveExactCaller(leaf[3]));
-            assertUnpublished(leaf);
-            assertSameProvenance(module, caller);
         });
     }
 
-    /**
-     * Cycles through references, and a reference to its own header, are
-     * rejected by the general walkers (Prelude included: a transported
-     * prelude never ends the general walk), by the admitted recovery and by
-     * publication, which publishes nothing.
-     */
     @Test
-    void cyclicAndSelfReferencesAreRejectedWithoutPublication() throws Exception {
+    void illegalCallerPayloadsCannotBeConstructed() throws Exception {
         withCore(module -> {
-            evaluate("make: () => { (value) => { value } }\n", "i115-ref-cycle-define.protos", module);
-            ProtosPrelude modulePrelude = module.prelude().orElseThrow();
-            ProtosClosureValue template = closure("make()\n", module);
-            Object[] entry = ProtosFrameArguments.compactDirectClosureCallOne(
-                    preludeFree(template), module, null, SUPPLIED);
-            Object[] a = deferredCall(preludeFree(template), entry);
-            Object[] b = referencedCall(preludeFree(template), a, modulePrelude);
-            a[3] = ProtosFrameArguments.callerFrameReference(b, modulePrelude);
-            Object[] leaf = deferredCall(preludeFree(template), b);
-            assertTrue(ProtosFrameArguments.inheritsUntransportedCallerPrelude(leaf));
+            ProtosClosureValue callee = closure("(value) => { value }\n", module);
+            Object[] self = new Object[1];
+            self[0] = self;
+            Object[] valid = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    callee, (Object) module, SUPPLIED);
+            for (Object invalid : new Object[] {self, valid, new Object[0], new Object(), "invalid"}) {
+                assertThrows(IllegalArgumentException.class,
+                        () -> ProtosFrameArguments.compactDirectClosureCallOneNoHome(callee, invalid, SUPPLIED));
+                assertThrows(IllegalStateException.class,
+                        () -> ProtosFrameArguments.resolveExactCaller(invalid));
+            }
+            assertThrows(IllegalStateException.class, () -> ProtosFrameArguments.resolveExactCaller(null));
             assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.preludeOrNull(leaf));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.admittedPreludeOrNull(leaf),
-                    "the admitted recovery is the general walker");
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.compactTask(leaf));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.admittedCompactTask(leaf));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.resolveExactCaller(leaf[3]));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.activation(leaf));
-            assertUnpublished(a);
-            assertUnpublished(b);
-            assertUnpublished(leaf);
-
-            Object[] self = deferredCall(preludeFree(template), entry);
-            self[3] = ProtosFrameArguments.callerFrameReference(self, modulePrelude);
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.preludeOrNull(self));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.compactCaller(self));
-            assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.resolveExactCaller(
-                            ProtosFrameArguments.callerFrameReference(
-                                    new Object[] {SUPPLIED}, modulePrelude)));
-            assertUnpublished(self);
-            assertUnpublished(entry);
+                    () -> ProtosFrameArguments.resolveExactCaller(module.prelude().orElseThrow()));
+            assertUnpublished(valid);
+            assertSame(module, valid[3]);
         });
     }
 
-    /**
-     * Guest path: a non-capturing Closure (no own prelude) whose terminal
-     * send is an H7 GetMethod/CallBinaryMethod. I115-H7-R3 (RECORDED
-     * DIVERGENCE): that selection reads no caller prelude, so entries with
-     * an untransported compact caller register nothing and invalidate
-     * nothing (formerly the first read registered NEEDS_CALLER_PRELUDE).
-     * Once the need is registered explicitly, the producer prepares it (a
-     * reference transporting the prelude), the callee converges without
-     * another invalidation, and every result is unchanged. A published caller never registers it: a guest
-     * call from top-level code enters through a published activation, which
-     * answers the prelude directly.
-     */
     @Test
     void terminalSendRegistersTheCallerPreludeNeedOnceAndConverges() throws Exception {
         withCore(module -> {
             evaluate("""
                     receiver: { identity: (value) => { value } }
                     make: () => { (target) => { target.identity(7) } }
-                    first: (value) => { value }
-                    """, "i115-ref-guest-define.protos", module);
-            Object receiver = module.context().readLocalSlot("receiver").orElseThrow();
-            ProtosClosureValue inner = closure("make()\n", module);
-            assertSame(null, inner.preludeOrNullForRuntime(),
-                    "non-capturing fixture inherits its prelude");
-            RootCallTarget target = directTarget(inner);
-            ProtosBytecodeRootNode innerRoot =
-                    assertInstanceOf(ProtosBytecodeRootNode.class, target.getRootNode());
-            innerRoot.getBytecodeNode().setUncachedThreshold(0);
-            ProtosBytecodeRootNode callerRoot = functionRoot("first", module);
+                    inner: make()
+                    callInner: (target) => { inner(target) }
+                    """, "i115-terminal-send.protos", module);
+            ProtosClosureValue inner = closure("inner\n", module);
+            assertSame(null, inner.preludeOrNullForRuntime());
+            ProtosBytecodeRootNode root = functionRoot("inner", module);
+            root.getBytecodeNode().setUncachedThreshold(0);
             int need = ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE;
-
-            // A published caller answers the prelude: nothing is requested.
-            assertInteger(7, ProtosNumericValueSupport.guestValue(target.call(
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                            inner, (Object) module, receiver))));
-            assertFalse(innerRoot.hasCallerNeed(need), "a published caller registers nothing");
-            com.oracle.truffle.api.Assumption before = innerRoot.callerNeedsStability();
-
-            // Untransported compact caller: the H7 selection registers nothing.
+            assertFalse(root.hasCallerNeed(need));
+            var before = root.callerNeedsStability();
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
-                Object[] callerArguments = ProtosFrameArguments.compactDirectClosureCallOne(
-                        closure("make()\n", module), module, null, SUPPLIED);
-                assertInteger(7, ProtosNumericValueSupport.guestValue(target.call(
-                        ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                                inner, (Object) callerArguments, receiver))));
-                assertUnpublished(callerArguments);
+                assertInteger(7, evaluate("callInner(receiver)\n", "i115-terminal-warm.protos", module));
             }
-            assertFalse(innerRoot.hasCallerNeed(need), "the H7 selection reads no prelude");
-            assertSame(before, innerRoot.callerNeedsStability());
-            assertTrue(before.isValid(), "nothing was invalidated");
-
-            innerRoot.requestCallerNeed(need);
-            assertFalse(before.isValid(), "one registration, one invalidation");
-            com.oracle.truffle.api.Assumption settled = innerRoot.callerNeedsStability();
-
-            // The producer now transports it, and the callee converges.
+            assertFalse(root.hasCallerNeed(need));
+            assertSame(before, root.callerNeedsStability());
+            assertTrue(before.isValid());
+            root.requestCallerNeed(need);
+            assertTrue(root.hasCallerNeed(need));
+            assertFalse(before.isValid());
+            var stable = root.callerNeedsStability();
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
-                Object[] callerArguments = ProtosFrameArguments.compactDirectClosureCallOne(
-                        closure("make()\n", module), module, null, SUPPLIED);
-                Object prepared = ProtosFunctionCallDispatchers.callerArgument(
-                        callerRoot, innerRoot, inner, callerArguments);
-                assertInstanceOf(ProtosCallerFrameReference.class, prepared);
-                assertInteger(7, ProtosNumericValueSupport.guestValue(target.call(
-                        ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                                inner, prepared, receiver))));
-                assertUnpublished(callerArguments);
+                assertInteger(7, evaluate("callInner(receiver)\n", "i115-terminal-repeat.protos", module));
             }
-            assertSame(settled, innerRoot.callerNeedsStability(), "no repeated invalidation");
-            assertTrue(settled.isValid());
+            Object[] header = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    inner, (Object) module.prelude().orElseThrow(), SUPPLIED);
+            assertSame(module.prelude().orElseThrow(), header[3]);
+            assertSame(module.prelude().orElseThrow(), ProtosFrameArguments.admittedPreludeOrNull(header));
+            assertSame(stable, root.callerNeedsStability());
+            assertTrue(stable.isValid());
         });
     }
 
-    /**
-     * A callee root that has registered the caller-prelude need and
-     * suspends inside an UNKNOWN terminal entry resumes with its own state
-     * and its exact result. The top-level guest call enters callOne already
-     * published, so this entry passes an activation, not a reference: it
-     * proves that a registered need does not disturb suspension, while the
-     * immutability of a suspended reference is covered structurally by
-     * referencesPublishOnceAndKeepTaskAndReturnHome.
-     */
+    /** Registered caller demand preserves the real task suspension and resumed result. */
     @Test
     void transportedCallerSurvivesSuspensionAndResumption() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
@@ -2345,20 +1344,6 @@ final class ProtosI115BDeferredCallerTest {
                 template.methodHome().orElse(null),
                 template.returnHome().orElse(null),
                 prelude);
-    }
-
-    private static Object[] deferredCall(ProtosClosureValue closure, Object[] callerArguments) {
-        return ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                closure, (Object) callerArguments, SUPPLIED);
-    }
-
-    /** A terminal Call1 header whose caller slot transports {@code prelude} (I115 reference). */
-    private static Object[] referencedCall(
-            ProtosClosureValue closure, Object[] callerArguments, ProtosPrelude prelude) {
-        return ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                closure,
-                (Object) ProtosFrameArguments.callerFrameReference(callerArguments, prelude),
-                SUPPLIED);
     }
 
     /** A module of a second, independently bootstrapped prelude in the current Context. */

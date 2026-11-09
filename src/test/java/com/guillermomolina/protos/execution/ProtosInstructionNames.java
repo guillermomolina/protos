@@ -42,9 +42,8 @@ public final class ProtosInstructionNames {
                     ProtosResultKind.CONTINUATION, "IsContinuation")),
             Map.entry("Identity", Map.of(false, "Identity", true, "NotIdentity")),
             Map.entry("MutateLocalSlot", Map.of(
-                    ProtosSlotMutation.CREATE, "CreateLocalSlot",
-                    ProtosSlotMutation.ASSIGN, "AssignLocalSlot",
-                    ProtosSlotMutation.ASSIGN_RESOLVED, "AssignResolvedLexicalTarget")),
+                    ProtosSlotMutation.ASSIGN_RESOLVED,
+                    "AssignResolvedLexicalTarget")),
             Map.entry("AccessNamedLexical", Map.of(
                     ProtosNamedLexicalAccess.LOOKUP, "Lookup",
                     ProtosNamedLexicalAccess.RESOLVE_WRITE, "ResolveWritableLexicalTarget")),

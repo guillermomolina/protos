@@ -22,7 +22,6 @@ import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosHostCompletionThread;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -54,7 +53,7 @@ final class ProtosFileFlowReadDeliveryTest {
     @Test
     void aReusedBackendBufferCannotChangeThePublishedRead() throws Exception {
         Fixture x = Fixture.create();
-        ProtosFutureValue read = x.flow.read(x.activation, new ProtosIntegerValue(4));
+        ProtosFutureValue read = x.flow.read(x.activation, Long.valueOf(4));
         ProtosFileFlow.ReadCompletion completion = x.resource.reads.pollFirst();
         byte[] buffer = {1, 2, 3};
 
@@ -75,7 +74,7 @@ final class ProtosFileFlowReadDeliveryTest {
     @Test
     void cancellationBeforeAdmissionPublishesNothingAndKeepsTheCursor() throws Exception {
         Fixture x = Fixture.create();
-        ProtosFutureValue read = x.flow.read(x.activation, new ProtosIntegerValue(4));
+        ProtosFutureValue read = x.flow.read(x.activation, Long.valueOf(4));
         ProtosFileFlow.ReadCompletion completion = x.resource.reads.pollFirst();
 
         boolean cancelled = read.cancelRequest();
@@ -87,14 +86,14 @@ final class ProtosFileFlowReadDeliveryTest {
         assertTrue(cancelled, "an uncommitted read is cancellable");
         assertEquals(ProtosFutureValue.State.CANCELLED, read.state());
         // The cancelled read moved nothing: the next read starts again at position 0.
-        x.flow.read(x.activation, new ProtosIntegerValue(1));
+        x.flow.read(x.activation, Long.valueOf(1));
         assertEquals(0L, x.resource.positions.get(x.resource.positions.size() - 1));
     }
 
     @Test
     void terminationBeforeAdmissionDiscardsTheReadWithoutGuestWork() throws Exception {
         Fixture x = Fixture.create();
-        ProtosFutureValue read = x.flow.read(x.activation, new ProtosIntegerValue(4));
+        ProtosFutureValue read = x.flow.read(x.activation, Long.valueOf(4));
         ProtosFileFlow.ReadCompletion completion = x.resource.reads.pollFirst();
 
         x.domain().actorTerminationBegun();
@@ -107,7 +106,7 @@ final class ProtosFileFlowReadDeliveryTest {
     @Test
     void duplicateCallbacksHaveOneSemanticEffect() throws Exception {
         Fixture x = Fixture.create();
-        ProtosFutureValue read = x.flow.read(x.activation, new ProtosIntegerValue(4));
+        ProtosFutureValue read = x.flow.read(x.activation, Long.valueOf(4));
         ProtosFileFlow.ReadCompletion completion = x.resource.reads.pollFirst();
 
         onHostCompletionThread(
@@ -122,15 +121,15 @@ final class ProtosFileFlowReadDeliveryTest {
         }
 
         assertEquals(List.of(1, 2), bytes(read));
-        x.flow.read(x.activation, new ProtosIntegerValue(1));
+        x.flow.read(x.activation, Long.valueOf(1));
         assertEquals(2L, x.resource.positions.get(x.resource.positions.size() - 1), "cursor moved once");
     }
 
     @Test
     void readsStayInFifoOrderAndTheQueueAdvancesOnlyOnAdmission() throws Exception {
         Fixture x = Fixture.create();
-        ProtosFutureValue first = x.flow.read(x.activation, new ProtosIntegerValue(2));
-        ProtosFutureValue second = x.flow.read(x.activation, new ProtosIntegerValue(2));
+        ProtosFutureValue first = x.flow.read(x.activation, Long.valueOf(2));
+        ProtosFutureValue second = x.flow.read(x.activation, Long.valueOf(2));
         assertEquals(List.of(0L), x.resource.positions, "the second read waits for the first");
 
         ProtosFileFlow.ReadCompletion firstCompletion = x.resource.reads.pollFirst();

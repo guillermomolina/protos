@@ -677,7 +677,7 @@ final class ProtosSemanticTransferFamilyTest {
         // This is an expected existing limitation, not Candidate C acceptance:
         // the standard identity machinery still treats rich objects by reference.
         assertFalse(ProtosIdentity.identical(first, second));
-        assertFalse(ProtosValueLookup.isInteger(first));
+        assertFalse(ProtosNumericValueSupport.isCurrentNumber(first));
         assertThrows(
                 IllegalArgumentException.class,
                 () -> ProtosStandardNumberEqualityProtocol.numericEquals(

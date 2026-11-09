@@ -807,9 +807,6 @@ final class ProtosPerf006B4CStructuredEnsureTest {
     }
 
     private static long integer(Object value) {
-        if (value instanceof ProtosIntegerValue integer) {
-            return integer.longValue();
-        }
         return assertInstanceOf(Long.class, value);
     }
 

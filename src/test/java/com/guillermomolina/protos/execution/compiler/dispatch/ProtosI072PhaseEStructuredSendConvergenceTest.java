@@ -288,11 +288,8 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
             ProtosActivation module = activation(prelude, new ProtosActorExecutionDomain());
-            String[] selectors = {"ifTrue", "ifFalse", "ifTrueIfFalse", "and", "or"};
+            String[] selectors = {"and", "or"};
             ProtosStandardBooleanProtocol.StructuredCallbackKind[] kinds = {
-                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE,
-                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_FALSE,
-                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE_IF_FALSE,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.AND,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.OR
             };
@@ -314,6 +311,13 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
                             kinds[i],
                             ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(
                                     send.callable()));
+                }
+                for (String retired : List.of("ifTrue", "ifFalse", "ifTrueIfFalse")) {
+                    var selected = ProtosValueLookup.lookup(receiver, retired, prelude);
+                    assertTrue(selected.isEmpty()
+                            || ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(
+                                    assertInstanceOf(ProtosClosureValue.class,
+                                            selected.orElseThrow().value())) == null);
                 }
                 // Not a Boolean callback: no structured Boolean classification.
                 assertNull(ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(
@@ -355,7 +359,7 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
                                 return ProtosBooleanValue.TRUE;
                             }));
             ProtosBytecodeRootNode site =
-                    lowerRoot(scope.language(), "flag.ifTrue(callback)",
+                    lowerRoot(scope.language(), "flag.and(callback)",
                             "perf015-boolean-warm.protos");
 
             for (int i = 0; i < 4; i++) {
@@ -367,14 +371,17 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
             ProtosBoundMethod warmed = assertInstanceOf(
                     ProtosBoundMethod.class,
                     ProtosExperimentalGetMethodNode.select(
-                            ProtosBooleanValue.TRUE, "ifTrue", null, module));
-            var guarded = ProtosValueLookup.lookupGuardedSlotSelection(root, "ifTrue", null);
+                            ProtosBooleanValue.TRUE, "and", null, module));
+            var guarded = ProtosValueLookup.selectStructural(root, "and");
             assertNotNull(guarded);
+            var generic = ProtosValueLookup.lookup(root, "and", prelude).orElseThrow();
+            assertSame(generic.value(), guarded.read());
+            assertSame(generic.home(), guarded.home());
             assertTrue(root.isFrozen());
             assertThrows(
                     IllegalStateException.class,
-                    () -> root.assignLocalSlot("ifTrue", warmed.callable()));
-            assertTrue(guarded.stability().isValid());
+                    () -> root.assignLocalSlot("and", warmed.callable()));
+            assertTrue(guarded.isValid());
             assertSame(ProtosBooleanValue.TRUE, site.getCallTarget().call(module));
             assertEquals(5, callbackCalls.get());
         }

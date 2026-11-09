@@ -596,9 +596,7 @@ final class ProtosPerf006B4ECancellationUnwindTest {
             Object result = execution.task().result().orElseThrow();
             assertEquals(
                     5L,
-                    result instanceof com.guillermomolina.protos.runtime.ProtosIntegerValue integer
-                            ? integer.longValue()
-                            : result);
+                    result);
             assertEquals(ProtosFutureValue.State.PENDING, bodyWait.state());
             assertFalse(domain.dispatchOne(), "cancellation must not be redelivered");
         }

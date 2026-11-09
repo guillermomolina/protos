@@ -360,22 +360,20 @@ final class ProtosPreparedCalls {
 
             Object receiver = activation.receiver();
             if (receiver instanceof ProtosClosureValue targetClosure) {
-                return PreparedStandardObjectCall.closure(
+                return PreparedStandardObjectCall.forward(
                         ProtosCallRequest.call(
                                 targetClosure,
                                 supplied,
                                 activation));
             }
-            if (receiver instanceof ProtosObjectValue prototype
+            if (receiver instanceof ProtosObjectValue
                     && !ProtosNumericValueSupport.isCurrentNumber(receiver)) {
-                ProtosObjectValue instance = new ProtosObjectValue(prototype);
-                return PreparedStandardObjectCall.construction(
+                return PreparedStandardObjectCall.forward(
                         ProtosCallRequest.send(
-                                instance,
-                                "init",
+                                receiver,
+                                "construct",
                                 activation,
-                                supplied),
-                        instance);
+                                supplied));
             }
             throw ProtosCoreErrors.signal(
                     activation,
@@ -660,6 +658,32 @@ final class ProtosPreparedCalls {
         }
     }
 
+    /**
+     * D237 / I115: immutable evaluated positional/named packet.
+     *
+     * Constructed only for a name-bearing call. Evaluation and spread
+     * expansion have already completed in original source order.
+     * Neither parameter association nor selection occurs here.
+     */
+    static record NamedArgumentPacket(
+            List<Object> positional,
+            List<ProtosNamedArgumentAssociation.NamedValue> named) {
+
+        NamedArgumentPacket {
+            positional = List.copyOf(
+                    java.util.Objects.requireNonNull(
+                            positional, "positional"));
+            named = List.copyOf(
+                    java.util.Objects.requireNonNull(
+                            named, "named"));
+
+            if (named.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "named packet requires at least one label");
+            }
+        }
+    }
+
     static final class PreparedArgumentVector {
         private final ArrayList<Object> values = new ArrayList<>();
 
@@ -681,6 +705,12 @@ final class ProtosPreparedCalls {
 
         List<ProtosNamedArgumentAssociation.NamedValue> namedSnapshot() {
             return namedValues == null ? List.of() : List.copyOf(namedValues);
+        }
+
+        NamedArgumentPacket namedPacket() {
+            return new NamedArgumentPacket(
+                    positionalSnapshot(),
+                    namedSnapshot());
         }
 
         List<Object> positionalSnapshot() {

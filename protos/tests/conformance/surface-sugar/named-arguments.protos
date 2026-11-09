@@ -218,6 +218,94 @@ tests: [
         Assertions.require(produced.value == 6)
         Assertions.require(produced.parent() === aliased)
     }),
+    Test("named Closure invocation selects an overridden call slot", () => {
+        target: (original) => original + 100
+        target.call: (selected) => selected + 1
+
+        Assertions.require(target(selected: 8) == 9)
+        Assertions.signals(Error, () => { target(original: 8) })
+    }),
+    Test("copied standard call on a Closure forwards names to its body", () => {
+        target: (value: 10) => value
+        target.call: Object.call
+
+        Assertions.require(target(value: 24) == 24)
+        Assertions.require(target() == 10)
+    }),
+    Test("named send observes method replacement during argument evaluation", () => {
+        receiver: {
+            read: (previous) => previous
+        }
+        replace: () => {
+            receiver.read = (selected) => selected + 1
+            41
+        }
+
+        Assertions.require(receiver.read(selected: replace()) == 42)
+        Assertions.signals(Error, () => {
+            receiver.read(previous: 2)
+        })
+    }),
+    Test("named standard native arguments reject after evaluating values", () => {
+        trace: { count: 0 }
+        once: () => {
+            trace.count = trace.count + 1
+            trace.count
+        }
+
+        Assertions.signals(Error, () => {
+            Array(element: once())
+        })
+        Assertions.require(trace.count == 1)
+    }),
+    Test("named init suspension preserves the instance and executes once", () => {
+        trace: { inits: 0 }
+        Thing: {
+            init: (input) => {
+                trace.inits = trace.inits + 1
+                this.answer: input.value()
+            }
+        }
+
+        made: (() => {
+            Thing(input: (() => 17).future())
+        }).future().value()
+
+        Assertions.require(made.parent() === Thing)
+        Assertions.require(made.answer == 17)
+        Assertions.require(trace.inits == 1)
+    }),
+    Test("duplicate positional binding fails before defaults or body", () => {
+        trace: { defaults: 0, bodies: 0 }
+        defaultValue: () => {
+            trace.defaults = trace.defaults + 1
+            2
+        }
+        f: (first, second: defaultValue()) => {
+            trace.bodies = trace.bodies + 1
+            second
+        }
+        Assertions.signals(Error, () => { f(1, first: 9) })
+        Assertions.require(trace.defaults == 0)
+        Assertions.require(trace.bodies == 0)
+    }),
+    Test("failure in the first supplied argument stops later evaluation", () => {
+        trace: { later: 0, bodies: 0 }
+        failure: Error()
+        fail: () => { failure.signal() }
+        later: () => {
+            trace.later = trace.later + 1
+            2
+        }
+        f: (first, second) => {
+            trace.bodies = trace.bodies + 1
+            first
+        }
+        observed: Assertions.signals(Error, () => { f(first: fail(), second: later()) })
+        Assertions.require(observed === failure)
+        Assertions.require(trace.later == 0)
+        Assertions.require(trace.bodies == 0)
+    }),
     Test("a named callback preserves the captured non-local return home", () => {
         outer: () => {
             apply: (action) => action()

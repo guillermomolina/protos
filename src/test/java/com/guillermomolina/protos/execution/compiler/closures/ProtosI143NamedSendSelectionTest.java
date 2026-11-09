@@ -17,238 +17,120 @@
 
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.OrdinarySourceCall;
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedArgumentVector;
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.oracle.truffle.api.nodes.IndirectCallNode;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
-/** I143: D013 dynamic source-method selection before named association. */
+/**
+ * I115 / D237 / D239-C1: observable named-call semantics
+ * through the current Bytecode DSL and shared dispatcher.
+ * No historical prepared-call implementation is recreated.
+ */
 class ProtosI143NamedSendSelectionTest {
 
     @Test
-    void namedSendUsesActualReceiverAndMethodHome() {
-        ProtosActivation caller = moduleActivation();
-
-        ProtosClosureValue method =
-                closure("(value) => value", caller);
-
-        ProtosObjectValue receiver =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        receiver.createLocalSlot("execute", method);
-
-        ProtosObjectValue argument =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.appendNamed("value", argument);
-
-        Object result = ProtosTestExecutionSupport.callEntered(() -> {
-            PreparedClosureCall prepared =
-                    ProtosBytecodeRootNode.PrepareSendVector.perform(
-                            receiver, "execute", caller, supplied);
-
-            assertSame(receiver, prepared.activation().receiver());
-            assertSame(
-                    receiver,
-                    prepared.activation().methodHome().orElseThrow());
-
-            return enter(prepared);
-        });
-
-        assertSame(argument, result);
+    void namedSendUsesActualReceiverAndMethodHome() throws Exception {
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                evaluate("""
+                base: {
+                    read: (value) => this.marker + value
+                }
+                receiver: base { marker: 7 }
+                receiver.read(value: 3) == 10
+                """));
     }
 
     @Test
-    void sourceDefaultsRunOnlyForAbsentFormals() {
-        ProtosActivation caller = moduleActivation();
-
-        ProtosClosureValue method =
-                closure("(a: false, b: true, c: false) => b", caller);
-
-        ProtosObjectValue receiver =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        receiver.createLocalSlot("execute", method);
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.appendNamed("c", ProtosBooleanValue.TRUE);
-
-        Object result = ProtosTestExecutionSupport.callEntered(
-                () -> enter(
-                        ProtosBytecodeRootNode.PrepareSendVector.perform(
-                                receiver, "execute", caller, supplied)));
-
-        assertSame(ProtosBooleanValue.TRUE, result);
+    void sourceDefaultsRunOnlyForAbsentFormals() throws Exception {
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                evaluate("""
+                receiver: {
+                    read: (a: 10, b: 20) => a * 10 + b
+                }
+                receiver.read(b: 4) == 104
+                """));
     }
 
     @Test
-    void superUsesTheInheritedMethodNotTheCurrentOverride() {
-        ProtosActivation module = moduleActivation();
-
-        ProtosClosureValue inherited =
-                closure("(target) => target", module);
-        ProtosClosureValue overridden =
-                closure("(other) => other", module);
-
-        ProtosObjectValue parent =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        parent.createLocalSlot("execute", inherited);
-
-        ProtosObjectValue home = new ProtosObjectValue(parent);
-        home.createLocalSlot("execute", overridden);
-
-        ProtosObjectValue receiver = new ProtosObjectValue(home);
-
-        ProtosActivation caller =
-                ProtosActivation.forImmediateMethodInvocation(
-                        overridden,
-                        java.util.List.of(),
-                        receiver,
-                        home,
-                        module.prelude().orElseThrow(),
-                        module.actorModuleState(),
-                        module.currentModuleKey().orElse(null),
-                        module.executionDomain());
-
-        ProtosObjectValue argument =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.appendNamed("target", argument);
-
-        Object result = ProtosTestExecutionSupport.callEntered(() -> {
-            PreparedClosureCall prepared =
-                    ProtosBytecodeRootNode.PrepareClosureCallVector.perform(
-                            true, "execute", caller, supplied);
-
-            assertSame(receiver, prepared.activation().receiver());
-            assertSame(
-                    parent,
-                    prepared.activation().methodHome().orElseThrow());
-
-            return enter(prepared);
-        });
-
-        assertSame(argument, result);
+    void superUsesTheInheritedMethodNotTheCurrentOverride() throws Exception {
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                evaluate("""
+                base: {
+                    read: (value) => this.marker + value
+                }
+                middle: base {
+                    read: () => super.read(value: 2)
+                }
+                leaf: middle { marker: 40 }
+                leaf.read() == 42
+                """));
     }
 
     @Test
-    void selectedCustomCallBindsItsOwnNames() {
-        ProtosActivation caller = moduleActivation();
-
-        ProtosObjectValue receiver =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        receiver.createLocalSlot(
-                "call",
-                closure("(label) => label", caller));
-
-        ProtosObjectValue argument =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.appendNamed("label", argument);
-
-        Object result = ProtosTestExecutionSupport.callEntered(
-                () -> enter(
-                        ProtosBytecodeRootNode.PrepareSendVector.perform(
-                                receiver, "call", caller, supplied)));
-
-        assertSame(argument, result);
+    void selectedCustomCallBindsItsOwnNames() throws Exception {
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                evaluate("""
+                receiver: { call: (arg) => arg + 1 }
+                receiver(arg: 41) == 42
+                """));
     }
 
     @Test
-    void unknownNameFailsAgainstSelectedMethod() {
-        ProtosActivation caller = moduleActivation();
-
-        ProtosObjectValue receiver =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        receiver.createLocalSlot(
-                "execute",
-                closure("(value) => value", caller));
-
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.appendNamed("unknown", ProtosBooleanValue.TRUE);
-
-        assertThrows(
-                ProtosSignalException.class,
-                () -> ProtosBytecodeRootNode.PrepareSendVector.perform(
-                        receiver, "execute", caller, supplied));
+    void unknownNameFailsAgainstSelectedMethod() throws Exception {
+        assertGuestError(
+                """
+                receiver: { execute: (valid) => valid }
+                receiver.execute(invalid: 2)
+                """,
+                ProtosCoreErrors.StandardError.ERROR);
     }
 
     @Test
-    void missingSelectedMethodFailsBeforeNameAssociation() {
-        ProtosActivation caller = moduleActivation();
+    void missingSelectedMethodFailsBeforeNameAssociation() throws Exception {
+        assertGuestError(
+                """
+                receiver: {}
+                receiver.noSuchMethod(unknown: 2)
+                """,
+                ProtosCoreErrors.StandardError.SLOT_NOT_FOUND);
+    }
 
-        ProtosObjectValue receiver =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
 
-        PreparedArgumentVector supplied = new PreparedArgumentVector();
-        supplied.appendNamed("unknown", ProtosBooleanValue.TRUE);
+    private static Object evaluate(String source) throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(
+                        Path.of("protos", "lib", "core"));
+        return ProtosTestExecutionSupport.evaluate(
+                source, prelude.newModuleActivation());
+    }
+
+    private static void assertGuestError(
+            String source,
+            ProtosCoreErrors.StandardError expected)
+            throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(
+                        Path.of("protos", "lib", "core"));
+        ProtosActivation module = prelude.newModuleActivation();
 
         ProtosSignalException failure = assertThrows(
                 ProtosSignalException.class,
-                () -> ProtosBytecodeRootNode.PrepareSendVector.perform(
-                        receiver, "noSuchMethod", caller, supplied));
+                () -> ProtosTestExecutionSupport.evaluate(
+                        source, module));
 
         assertSame(
-                ProtosCoreErrors.prototype(
-                        caller,
-                        ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
+                ProtosCoreErrors.prototype(module, expected),
                 failure.error().parent().orElseThrow());
-    }
-
-    private static Object enter(PreparedClosureCall prepared) {
-        Object entered = ProtosBytecodeRootNode.EnterClosureCall
-                .ordinaryIndirect(
-                        assertInstanceOf(
-                                OrdinarySourceCall.class, prepared),
-                        IndirectCallNode.create());
-
-        return prepared.finish(entered);
-    }
-
-    private static ProtosClosureValue closure(
-            String source,
-            ProtosActivation caller) {
-        return assertInstanceOf(
-                ProtosClosureValue.class,
-                ProtosTestExecutionSupport.evaluate(
-                        "i143-named-selection.protos", source, caller));
-    }
-
-    private static ProtosActivation moduleActivation() {
-        ProtosObjectValue contextPrototype =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosObjectValue bindings =
-                new ProtosObjectValue(contextPrototype);
-
-        bindings.createLocalSlot("Context", contextPrototype);
-        ProtosObjectValue error =
-                new ProtosObjectValue(
-                        ProtosObjectValue.rootObject());
-        bindings.createLocalSlot("Error", error);
-        bindings.createLocalSlot(
-                "SlotNotFound",
-                new ProtosObjectValue(error));
-        bindings.createLocalSlot(
-                "Array",
-                new ProtosObjectValue(
-                        ProtosObjectValue.rootObject()));
-        bindings.freeze();
-
-        return new ProtosPrelude(
-                bindings, contextPrototype).newModuleActivation();
     }
 }

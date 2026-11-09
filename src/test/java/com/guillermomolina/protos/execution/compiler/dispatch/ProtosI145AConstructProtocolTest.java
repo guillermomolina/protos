@@ -24,15 +24,11 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
-import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardObjectCall;
-import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardObjectConstruct;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -88,45 +84,30 @@ class ProtosI145AConstructProtocolTest {
             throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation activation = prelude.newModuleActivation();
-        ProtosObjectValue factory =
-                assertInstanceOf(
-                        ProtosObjectValue.class,
-                        ProtosTestExecutionSupport.evaluate(
-                                """
-                                Factory: {
-                                    construct: () => null
-                                }
-                                Factory
-                                """,
-                                activation));
-        Object sentinel = new ProtosObjectValue(ProtosObjectValue.rootObject());
 
-        Object finished =
-                ProtosTestExecutionSupport.callEntered(() -> {
-                    PreparedClosureCall prepared =
-                            ProtosSendPreparation.prepareSend(
-                                    factory, "call", activation, List.of());
-                    assertTrue(prepared.isStructuredObjectCall());
+        Object result =
+                ProtosTestExecutionSupport.evaluate(
+                        """
+                        trace: { inits: 0 }
+                        Factory: {
+                            init: () => {
+                                trace.inits = trace.inits + 1
+                            }
+                            construct: () => null
+                        }
+                        [Factory(), trace.inits]
+                        """,
+                        activation);
 
-                    PreparedStandardObjectCall standard =
-                            prepared.prepareStructuredObjectCall();
-                    PreparedClosureCall construct = standard.child();
+        ProtosArrayValue values =
+                assertInstanceOf(ProtosArrayValue.class, result);
 
-                    assertFalse(construct.isNative());
-                    assertFalse(construct.isStructuredObjectConstruct());
-                    assertSame(factory, construct.activation().receiver());
-                    assertSame(
-                            factory,
-                            construct.activation().methodHome().orElseThrow());
-
-                    /*
-                     * The previous structured branch preallocated a child and
-                     * finished with it; the exact construct result must win.
-                     */
-                    return standard.finish(sentinel);
-                });
-
-        assertSame(sentinel, finished);
+        assertSame(ProtosNullValue.INSTANCE, values.indexedAt(0));
+        assertEquals(
+                "0",
+                ProtosNumericValueSupport.integerDecimalText(
+                        values.indexedAt(1)),
+                "custom construct must not allocate and initialize a hidden child");
     }
 
     @Test
@@ -134,52 +115,41 @@ class ProtosI145AConstructProtocolTest {
             throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation activation = prelude.newModuleActivation();
+
+        Object result =
+                ProtosTestExecutionSupport.evaluate(
+                        """
+                        Point: {
+                            init: () => {
+                                this.marker: 42
+                                99
+                            }
+                        }
+                        Point()
+                        """,
+                        activation);
+
         ProtosObjectValue prototype =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        ProtosTestExecutionSupport.evaluate(
-                                """
-                                Point: {
-                                    init: () => 42
-                                }
-                                Point
-                                """,
-                                activation));
+                        activation.context()
+                                .readLocalSlot("Point")
+                                .orElseThrow());
 
-        Object finished =
-                ProtosTestExecutionSupport.callEntered(() -> {
-                    PreparedClosureCall prepared =
-                            ProtosSendPreparation.prepareSend(
-                                    prototype, "call", activation, List.of());
-                    PreparedStandardObjectCall standard =
-                            prepared.prepareStructuredObjectCall();
-                    PreparedClosureCall constructCall = standard.child();
+        ProtosObjectValue instance =
+                assertInstanceOf(ProtosObjectValue.class, result);
 
-                    assertTrue(constructCall.isNative());
-                    assertTrue(constructCall.isStructuredObjectConstruct());
-                    assertTrue(constructCall.requiresStructuredDispatch());
-                    assertSame(prototype, constructCall.activation().receiver());
-                    assertSame(
-                            ProtosObjectValue.rootObject(),
-                            constructCall.activation().methodHome().orElseThrow());
+        assertSame(prototype, instance.parent().orElseThrow());
 
-                    PreparedStandardObjectConstruct construct =
-                            constructCall.prepareStructuredObjectConstruct();
-                    ProtosObjectValue instance =
-                            assertInstanceOf(
-                                    ProtosObjectValue.class,
-                                    construct.child().activation().receiver());
-                    assertSame(prototype, instance.parent().orElseThrow());
-                    assertSame(
-                            prototype,
-                            construct.child().activation().methodHome().orElseThrow());
+        assertEquals(
+                "42",
+                ProtosNumericValueSupport.integerDecimalText(
+                        instance.readLocalSlot("marker").orElseThrow()));
 
-                    Object result = construct.finish(ProtosBooleanValue.TRUE);
-                    assertSame(instance, result);
-                    return result;
-                });
-
-        assertInstanceOf(ProtosObjectValue.class, finished);
+        assertNotSame(
+                prototype,
+                instance,
+                "standard construct must return the new instance");
     }
 
     @Test
@@ -377,7 +347,7 @@ class ProtosI145AConstructProtocolTest {
         try (LanguageScope scope = languageScope()) {
             Harness harness = harness();
             ProtosFutureValue future = harness.future();
-            ProtosIntegerValue resolved = new ProtosIntegerValue(73);
+            Long resolved = Long.valueOf(73);
             harness.activation().context().createLocalSlot("f", future);
 
             ProtosTask task =
@@ -439,7 +409,7 @@ class ProtosI145AConstructProtocolTest {
         try (LanguageScope scope = languageScope()) {
             Harness harness = harness();
             ProtosFutureValue future = harness.future();
-            ProtosIntegerValue resolved = new ProtosIntegerValue(91);
+            Long resolved = Long.valueOf(91);
             harness.activation().context().createLocalSlot("f", future);
 
             ProtosTask task =

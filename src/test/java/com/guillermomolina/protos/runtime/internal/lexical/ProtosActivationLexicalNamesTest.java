@@ -28,7 +28,7 @@ final class ProtosActivationLexicalNamesTest {
     }
 
     @Test
-    void lexicalNamesAreNearestFirstAndReflectMutation() {
+    void lexicalScopesAreNearestFirstAndTheirLocalNamesReflectMutation() {
         ProtosObjectValue prelude = object();
         prelude.createLocalSlot("shared", ProtosNullValue.INSTANCE);
         prelude.createLocalSlot("fromPrelude", ProtosNullValue.INSTANCE);
@@ -45,31 +45,32 @@ final class ProtosActivationLexicalNamesTest {
                 current, List.of(outer, prelude), object());
 
         assertEquals(
-                List.of("shared", "local", "fromOuter", "fromPrelude"),
-                activation.lexicalBindingNamesForRuntime());
+                List.of(List.of("shared", "local"), List.of("shared", "fromOuter"),
+                        List.of("shared", "fromPrelude")),
+                scopeNames(activation));
 
+        assertEquals(List.of(current, outer, prelude),
+                ProtosLexicalEnvironment.contextsOf(activation.lexicalEnvironmentForClosureCapture()));
         current.removeLocalSlot("shared");
 
         assertEquals(
-                List.of("local", "shared", "fromOuter", "fromPrelude"),
-                activation.lexicalBindingNamesForRuntime());
+                List.of(List.of("local"), List.of("shared", "fromOuter"),
+                        List.of("shared", "fromPrelude")),
+                scopeNames(activation));
 
         outer.removeLocalSlot("shared");
 
         assertEquals(
-                List.of("local", "fromOuter", "shared", "fromPrelude"),
-                activation.lexicalBindingNamesForRuntime());
+                List.of(List.of("local"), List.of("fromOuter"),
+                        List.of("shared", "fromPrelude")),
+                scopeNames(activation));
 
         outer.createLocalSlot("newBinding", ProtosNullValue.INSTANCE);
 
         assertEquals(
-                List.of(
-                        "local",
-                        "fromOuter",
-                        "newBinding",
-                        "shared",
-                        "fromPrelude"),
-                activation.lexicalBindingNamesForRuntime());
+                List.of(List.of("local"), List.of("fromOuter", "newBinding"),
+                        List.of("shared", "fromPrelude")),
+                scopeNames(activation));
     }
 
     @Test
@@ -89,14 +90,14 @@ final class ProtosActivationLexicalNamesTest {
                 current, List.of(), receiver);
 
         assertEquals(
-                List.of("local"),
-                activation.lexicalBindingNamesForRuntime());
+                List.of(List.of("local")),
+                scopeNames(activation));
 
         assertFalse(
-                activation.lexicalBindingNamesForRuntime()
+                scopeNames(activation).stream().flatMap(List::stream).toList()
                         .contains("receiverOnly"));
         assertFalse(
-                activation.lexicalBindingNamesForRuntime()
+                scopeNames(activation).stream().flatMap(List::stream).toList()
                         .contains("delegatedOnly"));
     }
 
@@ -111,17 +112,26 @@ final class ProtosActivationLexicalNamesTest {
                 current, List.of(), object());
 
         assertEquals(
-                List.of(),
-                activation.lexicalBindingNamesForRuntime());
+                List.of(List.of()),
+                scopeNames(activation));
 
         current.createLocalSlot("present", ProtosNullValue.INSTANCE);
 
         assertEquals(
-                List.of("present"),
-                activation.lexicalBindingNamesForRuntime());
+                List.of(List.of("present")),
+                scopeNames(activation));
 
         assertFalse(
-                activation.lexicalBindingNamesForRuntime()
+                scopeNames(activation).stream().flatMap(List::stream).toList()
                         .contains("notInLexicalChain"));
     }
+
+    /** Projects each actual scope separately; no synthetic merged-name authority. */
+    private static List<List<String>> scopeNames(ProtosActivation activation) {
+        return ProtosLexicalEnvironment.contextsOf(activation.lexicalEnvironmentForClosureCapture())
+                .stream()
+                .map(context -> List.copyOf(context.localSlotsSnapshot().keySet()))
+                .toList();
+    }
+
 }
