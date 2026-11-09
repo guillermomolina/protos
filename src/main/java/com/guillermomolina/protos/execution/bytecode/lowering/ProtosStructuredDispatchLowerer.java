@@ -1272,7 +1272,7 @@ final class ProtosStructuredDispatchLowerer {
      * ResumeDispatchedContinuation}. The callee frames, never this root,
      * own their ReturnHomes.
      */
-    private static void emitCallRequest(
+    static void emitCallRequest(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal request,
@@ -1287,7 +1287,7 @@ final class ProtosStructuredDispatchLowerer {
     }
 
     /** The module body of a structured standard import, composed the same way. */
-    private static void emitModuleInitialization(
+    static void emitModuleInitialization(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal module,

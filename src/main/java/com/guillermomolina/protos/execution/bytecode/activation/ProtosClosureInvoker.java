@@ -175,7 +175,7 @@ public final class ProtosClosureInvoker {
         try {
             return complete(site, invocation);
         } finally {
-            domain.swapHostEntryExtentForRuntime(extent);
+            domain.swapHostEntryExtentForRuntime(HostEntryExtent.SUSPENDIBLE);
         }
     }
 

@@ -526,12 +526,12 @@ public final class ProtosActorBootstrap {
         // ---- C-prime root phases ---------------------------------------------------------
 
         @TruffleBoundary
-        static ProtosPreparedCalls.PreparedClosureCall prepareModuleForRuntime(Object carrier) {
+        static ProtosPreparedCalls.ModuleInitializationCall prepareModuleForRuntime(Object carrier) {
             return requireSequence(carrier).prepareModule();
         }
 
         @TruffleBoundary
-        static ProtosPreparedCalls.PreparedClosureCall prepareBindingForRuntime(
+        static ProtosCallRequest prepareBindingForRuntime(
                 Object carrier, Object module) {
             return requireSequence(carrier).prepareBinding(module);
         }
@@ -543,7 +543,7 @@ public final class ProtosActorBootstrap {
             return sequence;
         }
 
-        private ProtosPreparedCalls.PreparedClosureCall prepareModule() {
+        private ProtosPreparedCalls.ModuleInitializationCall prepareModule() {
             if (preparedModule) {
                 throw new IllegalStateException("Actor initial module was already prepared");
             }
@@ -555,10 +555,10 @@ public final class ProtosActorBootstrap {
                             actor.isRootActorForRuntime()
                                     ? rootBootstrapLocals(actor, prelude)
                                     : Map.of());
-            return ProtosPreparedCalls.PreparedClosureCall.moduleInitialization(initialModule);
+            return new ProtosPreparedCalls.ModuleInitializationCall(initialModule);
         }
 
-        private ProtosPreparedCalls.PreparedClosureCall prepareBinding(Object moduleResult) {
+        private ProtosCallRequest prepareBinding(Object moduleResult) {
             if (preparedBinding) {
                 throw new IllegalStateException("Actor bootstrap binding was already prepared");
             }
@@ -595,9 +595,8 @@ public final class ProtosActorBootstrap {
             // D242: MODULE exports are ordinary methods selected on the public object; invoking
             // the extracted Closure would discard the MODULE receiver and method home.
             return canonicalModuleKey.isModule()
-                    ? ProtosSendPreparation.prepareSend(module, bindingName, invocation, arguments)
-                    : ProtosClosureCallPreparation.prepareClosureCall(
-                            bootstrapBinding, arguments, invocation);
+                    ? ProtosCallRequest.send(module, bindingName, invocation, arguments)
+                    : ProtosCallRequest.call(bootstrapBinding, arguments, invocation);
         }
 
         // ---- terminal outcomes ----------------------------------------------------------

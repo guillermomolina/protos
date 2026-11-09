@@ -2724,6 +2724,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
 
+    // ---- Actor bootstrap using the shared I115 call paths ---------------------------
+
+    @Operation
+    public static final class PrepareActorBootstrapModule {
+        @Specialization
+        public static ProtosPreparedCalls.ModuleInitializationCall perform(Object sequence) {
+            return ProtosActorBootstrap.Sequence.prepareModuleForRuntime(sequence);
+        }
+    }
+
+    @Operation
+    public static final class FinishActorBootstrapModule {
+        @Specialization
+        public static Object perform(
+                ProtosPreparedCalls.ModuleInitializationCall module,
+                Object result) {
+            return module.finish(result);
+        }
+    }
+
+    @Operation
+    public static final class PrepareActorBootstrapBinding {
+        @Specialization
+        public static ProtosCallRequest perform(Object sequence, Object module) {
+            return ProtosActorBootstrap.Sequence.prepareBindingForRuntime(sequence, module);
+        }
+    }
+
     /**
      * I115: performs a {@link ProtosCallRequest} produced by a structured
      * protocol, Task or I/O state through the shared dispatcher. The request

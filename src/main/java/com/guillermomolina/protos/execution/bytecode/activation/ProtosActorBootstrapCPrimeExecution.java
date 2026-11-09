@@ -30,14 +30,14 @@ import java.util.Objects;
  * C-prime continuation:
  *
  * <ol>
- *   <li>the prepared initial MODULE/SOURCE initialization ({@code PreparedClosureCall
- *       .moduleInitialization}), whose finish publishes the module record READY and yields the
+ *   <li>the initial MODULE/SOURCE initialization through {@code ModuleInitializationCall},
+ *       whose finish publishes the module record READY and yields the
  *       public MODULE object or SOURCE Context;
  *   <li>the preparation of the bootstrap binding against that finished module; and
  *   <li>the prepared binding invocation, whose ordinary result is returned to the sequence.
  * </ol>
  *
- * <p>Both executable phases use the shared prepared-call dispatcher, so an explicit suspension in
+ * <p>The executable phases use I115's module execution and shared CallNode dispatcher, so an explicit suspension in
  * the module body, in a nested import or in the binding yields through this root and the retained
  * ContinuationResult resumes this same frame at the same point. Intermediate values live in
  * Bytecode locals; no phase is re-executed after a {@code Yield}. The root creates no Task, no
@@ -95,8 +95,15 @@ final class ProtosActorBootstrapCPrimeExecution {
                             builder.endPrepareActorBootstrapModule();
                             builder.endStoreLocal();
 
-                            ProtosStructuredDispatchLowerer.emitPreparedInvocationForRuntime(
+                            ProtosStructuredDispatchLowerer.emitModuleInitialization(
                                     builder, module, prepared, childResult, resumeValue);
+
+                            builder.beginStoreLocal(module);
+                            builder.beginFinishActorBootstrapModule();
+                            builder.emitLoadLocal(prepared);
+                            builder.emitLoadLocal(module);
+                            builder.endFinishActorBootstrapModule();
+                            builder.endStoreLocal();
 
                             // Phase 2: the bootstrap binding on the finished module.
                             builder.beginStoreLocal(prepared);
@@ -106,7 +113,7 @@ final class ProtosActorBootstrapCPrimeExecution {
                             builder.endPrepareActorBootstrapBinding();
                             builder.endStoreLocal();
 
-                            ProtosStructuredDispatchLowerer.emitPreparedInvocationForRuntime(
+                            ProtosStructuredDispatchLowerer.emitCallRequest(
                                     builder, result, prepared, childResult, resumeValue);
 
                             builder.beginReturn();
