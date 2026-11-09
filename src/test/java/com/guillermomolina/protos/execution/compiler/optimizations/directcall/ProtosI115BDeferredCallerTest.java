@@ -63,6 +63,136 @@ import org.junit.jupiter.api.Test;
 final class ProtosI115BDeferredCallerTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final int PAST_CACHE_LIMITS = 12;
+
+    @Test
+    void selectedCallerPayloadNeverErasesTheInvocationHome() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue callerClosure = closure("() => 0", module);
+            ProtosActivation callerActivation = ProtosActivation.forClosureInvocation(
+                    callerClosure, List.of(), module.prelude().orElseThrow());
+            for (String body : List.of("() => { unused: () => ^42\n42 }", "() => 42")) {
+                ProtosClosureValue selected = closure(body, module);
+                RootCallTarget target = directTarget(selected);
+                ProtosBytecodeRootNode root = (ProtosBytecodeRootNode) target.getRootNode();
+                var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
+                        ProtosFrameArguments.publishedInvocation(callerActivation),
+                        com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
+                for (int need : new int[] {0, ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE,
+                        ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION}) {
+                    if (need != 0) {
+                        root.requestCallerNeed(need);
+                    }
+                    Object[] arguments = ProtosFrameArguments.functionCallArguments(new Object[0]);
+                    assertInteger(42,
+                            ProtosFunctionCallDispatchersFactory.FunctionDirectInvokeNodeGen.getUncached()
+                                    .execute(frame, null,
+                                            com.oracle.truffle.api.nodes.DirectCallNode.create(target),
+                                            root, selected, arguments, null));
+                    assertSame(need == 0 ? null
+                                    : need == ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE
+                                            ? module.prelude().orElseThrow() : callerActivation,
+                            arguments[3]);
+                    ProtosReturnHome home = assertInstanceOf(ProtosReturnHome.class, arguments[4]);
+                    assertEquals(body.contains("^"), home.isMaterialized());
+                    assertFalse(home.isActive());
+                }
+            }
+            ProtosClosureValue nativeEntry = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        assertTrue(activation.returnHome().orElseThrow().isActive());
+                        return Long.valueOf(42);
+                    });
+            Object[] nativeArguments = ProtosFrameArguments.functionCallArguments(new Object[0]);
+            assertInteger(42, ProtosFunctionCallDispatchersFactory.CallNodeGen.getUncached()
+                    .execute(null, false, nativeEntry, nativeArguments, module, null));
+            assertSame(module, nativeArguments[3]);
+            assertFalse(assertInstanceOf(ProtosReturnHome.class, nativeArguments[4]).isActive());
+            ProtosActivation published = ProtosActivation.forClosureInvocation(
+                    nativeEntry, List.of(), module.prelude().orElseThrow());
+            ProtosReturnHome publishedHome = published.returnHome().orElseThrow();
+            assertTrue(publishedHome.isMaterialized());
+            assertTrue(publishedHome.isActive());
+            assertInteger(42, ProtosFunctionCallDispatchers.callPublishedUncached(nativeEntry, published));
+            assertSame(publishedHome, published.returnHome().orElseThrow());
+            assertFalse(publishedHome.isActive());
+        });
+    }
+
+    @Test
+    void nestedTaskCallsRetainReturnHomeOwnershipWithDemandDrivenCallerMaterialization() throws Exception {
+        for (boolean method : new boolean[] {false, true}) {
+            withCore(module -> {
+                var home = new java.util.concurrent.atomic.AtomicReference<ProtosReturnHome>();
+                var expectedTask = new java.util.concurrent.atomic.AtomicReference<ProtosTask>();
+                Object token = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                module.context().createLocalSlot("token", token);
+                module.context().createLocalSlot("observeHome", ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            ProtosReturnHome observed = ((ProtosClosureValue) supplied.get(0))
+                                    .returnHome().orElseThrow();
+                            assertTrue(observed.isActive());
+                            assertSame(expectedTask.get(), observed.ownerTaskForRuntime());
+                            home.set(observed);
+                            return ProtosNullValue.INSTANCE;
+                        }));
+                evaluate("""
+                        third: () => {
+                            escape: () => { ^token }
+                            observeHome(escape)
+                            escape()
+                            null
+                        }
+                        second: () => { third() }
+                        holder: { step: () => { third() } }
+                        """, "i115-task-chain.protos", module);
+                evaluate(method ? "first: () => { holder.step() }"
+                                : "first: () => { second() }",
+                        "i115-task-first.protos", module);
+                ProtosClosureValue first = closure("first", module);
+                ProtosBytecodeRootNode firstRoot = functionRoot("first", module);
+                ProtosBytecodeRootNode middleRoot = method
+                        ? closure("holder.step", module).executionPlan().orElseThrow()
+                                .bytecodeActivationRootForTesting()
+                        : functionRoot("second", module);
+                assertFalse(middleRoot.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
+                assertFalse(firstRoot.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION),
+                        "first initially has no caller-publication demand");
+                ProtosTask task = module.executionDomain().createTask(null, current -> {
+                    expectedTask.set(current);
+                    ProtosCallRequest request = ProtosCallRequest.taskEntry(first, current, List.of(), module);
+                    assertFalse(firstRoot.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION),
+                            "constructing the Task entry does not register caller-publication demand");
+                    ProtosBytecodeTaskExecution.executeRequest(current, request);
+                });
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state());
+                assertSame(token, task.result().orElseThrow());
+                assertFalse(home.get().isActive());
+                assertSame(null, home.get().ownerTaskForRuntime());
+                // Guest execution may legitimately request its own exact activation
+                // for lexical lookup or closure capture. That demand is independent
+                // of constructing and transporting the Task entry.
+            });
+        }
+    }
+
+    @Test
+    void explicitFunctionTaskWinsAndMethodHomeIsNeverOverwritten() throws Exception {
+        withCore(module -> {
+            ProtosTask explicit = module.executionDomain().createTask(null, current -> {});
+            ProtosTask inherited = module.executionDomain().createTask(null, current -> {});
+            Object[] function = ProtosFrameArguments.taskFunctionCallArguments(explicit, new Object[0]);
+            assertSame(explicit, ProtosFrameArguments.inheritInvocationTask(function, inherited));
+            assertSame(explicit, function[2]);
+            ProtosObjectValue receiver = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosObjectValue methodHome = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            Object[] method = ProtosFrameArguments.methodCallArguments(receiver, methodHome, new Object[0]);
+            assertSame(inherited, ProtosFrameArguments.inheritInvocationTask(method, inherited));
+            assertSame(methodHome, method[2]);
+            assertSame(receiver, method[1]);
+        });
+    }
+
     private static final Object SUPPLIED = ProtosNullValue.INSTANCE;
 
     // ---- Legal B5 payloads and publication ----------------------------------------
@@ -304,7 +434,7 @@ final class ProtosI115BDeferredCallerTest {
                         waiter: (value) => {
                             result: wait.value()
                             keep: (other) => { result }
-                            keep(value)
+                            ^keep(value)
                         }
                         callOne: (f, value) => { f(value) }
                         """, "i115b-suspend-define.protos", module);
@@ -1325,6 +1455,42 @@ final class ProtosI115BDeferredCallerTest {
         });
     }
 
+    @Test
+    void grandchildRetainsInheritedChainAcrossRepeatedBindingRecreation() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    makeTransitive: () => {
+                        owner: context
+                        owner.lateValue: 10
+                        middle: () => { () => { lateValue } }
+                        [middle, owner]
+                    }
+                    transitivePair: makeTransitive()
+                    transitiveMiddle: transitivePair[0]
+                    transitiveOwner: transitivePair[1]
+                    transitiveRead: transitiveMiddle()
+                    """, "i115-transitive-capture.protos", module);
+            ProtosClosureValue read = closure("transitiveRead", module);
+            ProtosObjectValue owner = assertInstanceOf(ProtosObjectValue.class,
+                    module.context().readLocalSlot("transitiveOwner").orElseThrow());
+            assertTrue(read.capturedLexicalContexts().stream().anyMatch(context -> context == owner));
+            for (int generation = 0; generation < 3; generation++) {
+                int expected = 10 + generation;
+                for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                    assertInteger(expected, evaluate("transitiveRead()",
+                            "i115-transitive-live-read.protos", module));
+                }
+                evaluate("transitiveOwner.removeSlot(\"lateValue\")",
+                        "i115-transitive-remove.protos", module);
+                assertThrows(com.guillermomolina.protos.runtime.ProtosSignalException.class,
+                        () -> evaluate("transitiveRead()", "i115-transitive-absent.protos", module));
+                evaluate("transitiveOwner.lateValue: " + (expected + 1),
+                        "i115-transitive-recreate.protos", module);
+            }
+            assertInteger(13, evaluate("transitiveRead()", "i115-transitive-final.protos", module));
+        });
+    }
+
     // ---- helpers ---------------------------------------------------------------------
 
     /** The same definition and captures, without an own prelude; never executed. */
@@ -1484,6 +1650,359 @@ final class ProtosI115BDeferredCallerTest {
         return assertInstanceOf(
                 ProtosClosureValue.class,
                 evaluate(characters, "i115b-closure.protos", activation));
+    }
+
+    /**
+     * I115 suspension seal: a pending invocation's B5 header gains its exact
+     * caller only at the suspension boundary, from the live caller frame or
+     * an explicit host caller. Partial payloads are replaced; exact payloads,
+     * published activations and every other slot are preserved; nothing is
+     * synthesized; no caller demand is registered.
+     */
+    @Test
+    void suspensionSealReplacesOnlyPartialCallerProvenance() throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.prelude().orElseThrow();
+            ProtosClosureValue callerClosure = closure("() => 0", module);
+            ProtosActivation caller = ProtosActivation.forClosureInvocation(
+                    callerClosure, List.of(), prelude);
+            ProtosActivation other = ProtosActivation.forClosureInvocation(
+                    callerClosure, List.of(), prelude);
+            Object[] liveCallerHeader = ProtosFrameArguments.publishedInvocation(caller);
+            ProtosClosureValue callee = closure("(x) => x", module);
+            ProtosBytecodeRootNode calleeRoot =
+                    (ProtosBytecodeRootNode) directTarget(callee).getRootNode();
+            boolean exactNeedBefore =
+                    calleeRoot.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
+
+            for (Object partial : new Object[] {null, prelude}) {
+                Object[] arguments = ProtosDispatchTestSupport
+                        .direct(callee, partial, SUPPLIED).targetArguments();
+                Object[] before = arguments.clone();
+
+                ProtosFrameArguments.sealSuspendedCaller(arguments, liveCallerHeader, null);
+                assertSame(caller, arguments[3], "partial B5[3] is sealed with the live caller");
+                for (int index = 0; index < arguments.length; index++) {
+                    if (index != 3) {
+                        assertSame(before[index], arguments[index], "slot " + index + " is unchanged");
+                    }
+                }
+
+                // Repeated suspension is idempotent: an exact caller is never replaced.
+                ProtosFrameArguments.sealSuspendedCaller(
+                        arguments, ProtosFrameArguments.publishedInvocation(other), other);
+                assertSame(caller, arguments[3]);
+                assertSame(caller, ProtosFrameArguments.compactCaller(arguments),
+                        "the sealed caller answers without stack recovery");
+            }
+
+            // Host/native entry: the explicit exact caller seals; nothing is synthesized.
+            Object[] hosted = ProtosDispatchTestSupport.direct(callee, null, SUPPLIED).targetArguments();
+            ProtosFrameArguments.sealSuspendedCaller(hosted, null, null);
+            assertSame(null, hosted[3], "no caller is synthesized without a live source");
+            ProtosFrameArguments.sealSuspendedCaller(hosted, null, module);
+            assertSame(module, hosted[3]);
+
+            // A published invocation already carries its own provenance.
+            Object[] published = ProtosFrameArguments.publishedInvocation(other);
+            Object publishedCaller = published[3];
+            ProtosFrameArguments.sealSuspendedCaller(published, liveCallerHeader, caller);
+            assertSame(publishedCaller, published[3]);
+            assertSame(other, published[0]);
+
+            // A Task-owned call keeps its explicit B5[2] Task.
+            ProtosTask task = module.executionDomain().createTask(null, current -> {});
+            Object[] owned = ProtosFrameArguments.taskFunctionCallArguments(task, new Object[] {SUPPLIED});
+            ProtosFrameArguments.completeDispatchedHeader(
+                    owned, callee, null, ProtosReturnHome.unobservable());
+            ProtosFrameArguments.sealSuspendedCaller(owned, liveCallerHeader, null);
+            assertSame(task, owned[2], "the explicit Task is preserved");
+            assertSame(caller, owned[3]);
+            assertSame(task, ProtosFrameArguments.compactTask(owned));
+
+            assertEquals(exactNeedBefore,
+                    calleeRoot.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION),
+                    "sealing registers no caller-publication demand");
+        });
+    }
+
+    /** A normal, non-suspending dispatched call leaves B5[3] unpublished. */
+    @Test
+    void nonSuspendingDispatchedCallDoesNotPublishItsCaller() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue callerClosure = closure("() => 0", module);
+            ProtosActivation caller = ProtosActivation.forClosureInvocation(
+                    callerClosure, List.of(), module.prelude().orElseThrow());
+            ProtosClosureValue callee = closure("(x) => x", module);
+            RootCallTarget target = directTarget(callee);
+            ProtosBytecodeRootNode root = (ProtosBytecodeRootNode) target.getRootNode();
+            var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
+                    ProtosFrameArguments.publishedInvocation(caller),
+                    com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
+            Object[] arguments = ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
+            Object outcome = ProtosFunctionCallDispatchersFactory.FunctionDirectInvokeNodeGen
+                    .getUncached()
+                    .execute(frame, null,
+                            com.oracle.truffle.api.nodes.DirectCallNode.create(target),
+                            root, callee, arguments, null);
+            assertFalse(ProtosTailCallContinuation.isSuspended(outcome));
+            if (!root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE)
+                    && !root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION)) {
+                assertSame(null, arguments[3], "an ordinary result publishes no caller");
+            }
+        });
+    }
+
+    /**
+     * A nested chain suspends below a function call, a method call and a
+     * Task-owned entry. After resumption the original callers are off-stack;
+     * the resumed frames observe their sealed callers and the owning Task.
+     */
+    @Test
+    void resumedNestedCallerChainObservesSealedProvenance() throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.prelude().orElseThrow();
+            List<ProtosTask> observed = new ArrayList<>();
+            var currentWait = new java.util.concurrent.atomic.AtomicReference<ProtosFutureValue>();
+            module.context().createLocalSlot("currentWait", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> currentWait.get()));
+            module.context().createLocalSlot("observe", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        observed.add(activation.taskForRuntime());
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            evaluate("""
+                    leaf: () => {
+                        currentWait().value()
+                        probe: () => { observe() }
+                        probe()
+                        observe()
+                        7
+                    }
+                    middle: () => { leaf() + 1 }
+                    holder: { step: () => { middle() + 1 } }
+                    outer: () => { holder.step() + 1 }
+                    """, "i115-sealed-chain.protos", module);
+            ProtosClosureValue outer = closure("outer", module);
+
+            for (int round = 0; round < 3; round++) {
+                ProtosFutureValue wait =
+                        new ProtosFutureValue(prelude.futurePrototype(), module.executionDomain());
+                currentWait.set(wait);
+                observed.clear();
+                ProtosTask task = module.executionDomain().createTask(null, current ->
+                        ProtosBytecodeTaskExecution.executeRequest(
+                                current,
+                                ProtosCallRequest.taskEntry(outer, current, List.of(), module)));
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state(), "round " + round);
+                assertTrue(wait.resolve(ProtosNullValue.INSTANCE, module));
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state(), "round " + round);
+                assertInteger(10, task.result().orElseThrow());
+                assertEquals(2, observed.size(), "each observation runs exactly once");
+                for (ProtosTask seen : observed) {
+                    assertSame(task, seen, "resumed frames keep their Task provenance");
+                }
+            }
+        });
+    }
+
+    /**
+     * PLAT070: a new source callee invoked inside a resumed source caller
+     * has a ContinuationRootNode as its immediate physical caller. Recovery
+     * reads the continuation's saved semantic source frame, so the recovered
+     * caller is the exact activation of the original source invocation, never
+     * the resumer. The callee registers its caller need once, and later rounds
+     * converge through ordinary exact transport with the same identity.
+     */
+    @Test
+    void newCalleeInsideResumedCallerRecoversTheSavedSourceActivation() throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.prelude().orElseThrow();
+            var currentWait = new java.util.concurrent.atomic.AtomicReference<ProtosFutureValue>();
+            List<ProtosActivation> marked = new ArrayList<>();
+            List<ProtosActivation> recovered = new ArrayList<>();
+            module.context().createLocalSlot("currentWait", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> currentWait.get()));
+            module.context().createLocalSlot("mark", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        marked.add(innermostSourceActivation());
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            module.context().createLocalSlot("recover", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        recovered.add(recoverInnermostSemanticCaller());
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            evaluate("""
+                    leaf: () => {
+                        mark()
+                        currentWait().value()
+                        probe: () => { recover() }
+                        probe()
+                        mark()
+                        7
+                    }
+                    outer: () => { leaf() + 1 }
+                    """, "i115-continuation-caller.protos", module);
+            ProtosClosureValue outer = closure("outer", module);
+
+            for (int round = 0; round < 3; round++) {
+                ProtosFutureValue wait =
+                        new ProtosFutureValue(prelude.futurePrototype(), module.executionDomain());
+                currentWait.set(wait);
+                marked.clear();
+                recovered.clear();
+                ProtosTask task = module.executionDomain().createTask(null, current ->
+                        ProtosBytecodeTaskExecution.executeRequest(
+                                current,
+                                ProtosCallRequest.taskEntry(outer, current, List.of(), module)));
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state(), "round " + round);
+                assertTrue(wait.resolve(ProtosNullValue.INSTANCE, module));
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state(), "round " + round);
+                assertInteger(8, task.result().orElseThrow());
+
+                assertEquals(2, marked.size(), "round " + round);
+                assertEquals(1, recovered.size(), "round " + round);
+                ProtosActivation source = marked.get(0);
+                assertSame(source, marked.get(1),
+                        "the resumed source invocation keeps its published identity");
+                assertSame(source, recovered.get(0),
+                        "the new callee recovers the saved source activation, not the resumer");
+            }
+        });
+    }
+
+    /**
+     * Test-only: the exact activation of the innermost source invocation on
+     * the active stack. A resumed invocation executes under its
+     * ContinuationRootNode, whose saved source frame carries that activation
+     * (same normalization as ProtosPerf025's sourceFrame helper).
+     */
+    private static ProtosActivation innermostSourceActivation() {
+        ProtosActivation found = com.oracle.truffle.api.Truffle.getRuntime().iterateFrames(
+                instance -> {
+                    var frame = instance.getFrame(
+                            com.oracle.truffle.api.frame.FrameInstance.FrameAccess.READ_ONLY);
+                    var root = ((RootCallTarget) instance.getCallTarget()).getRootNode();
+                    if (root instanceof com.oracle.truffle.api.bytecode.ContinuationRootNode
+                            continuation) {
+                        root = ((ProtosBytecodeRootNode) continuation.getSourceRootNode());
+                    }
+                    if (!(root instanceof ProtosBytecodeRootNode semantic)
+                            || !semantic.isSemanticActivationRoot()) {
+                        return null;
+                    }
+                    if (frame.getFrameDescriptor() != semantic.getFrameDescriptor()) {
+                        for (Object argument : frame.getArguments()) {
+                            if (argument instanceof com.oracle.truffle.api.frame.Frame candidate
+                                    && candidate.getFrameDescriptor()
+                                            == semantic.getFrameDescriptor()) {
+                                return ProtosFrameArguments.activation(candidate);
+                            }
+                        }
+                        return null;
+                    }
+                    return ProtosFrameArguments.activation(frame);
+                });
+        assertNotNull(found, "a source invocation is active");
+        return found;
+    }
+
+    /**
+     * Cold, test-only probe: from inside a native body, locate the innermost
+     * semantic source invocation on the active stack and run the production
+     * caller recovery for it without registering demand.
+     */
+    private static ProtosActivation recoverInnermostSemanticCaller() {
+        Object[] calleeArguments = com.oracle.truffle.api.Truffle.getRuntime().iterateFrames(
+                instance -> {
+                    if (((RootCallTarget) instance.getCallTarget()).getRootNode()
+                                    instanceof ProtosBytecodeRootNode semantic
+                            && semantic.isSemanticActivationRoot()) {
+                        return instance.getFrame(
+                                com.oracle.truffle.api.frame.FrameInstance.FrameAccess.READ_ONLY)
+                                .getArguments();
+                    }
+                    return null;
+                });
+        assertNotNull(calleeArguments, "a semantic callee is active");
+        return ProtosReadCallerFrameNode.resolve(calleeArguments, false);
+    }
+
+    /**
+     * A structured {@link ProtosCallRequest} supplies its exact caller
+     * explicitly. Even when the dispatch executes under a VirtualFrame that
+     * carries another activation, the explicit caller is transported.
+     */
+    @Test
+    void structuredRequestExactCallerWinsOverThePresentFrame() throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.prelude().orElseThrow();
+            ProtosActivation frameActivation = ProtosActivation.forClosureInvocation(
+                    closure("() => 0", module), List.of(), prelude);
+            ProtosActivation requested = ProtosActivation.forClosureInvocation(
+                    closure("() => 1", module), List.of(), prelude);
+            ProtosClosureValue callee = closure("(x) => x", module);
+            RootCallTarget target = directTarget(callee);
+            ProtosBytecodeRootNode root = (ProtosBytecodeRootNode) target.getRootNode();
+            var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
+                    ProtosFrameArguments.publishedInvocation(frameActivation),
+                    com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
+
+            for (boolean exactNeed : new boolean[] {false, true}) {
+                if (exactNeed) {
+                    root.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
+                }
+                Object[] arguments =
+                        ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
+                Object outcome = ProtosFunctionCallDispatchersFactory.FunctionDirectInvokeNodeGen
+                        .getUncached()
+                        .execute(frame, null,
+                                com.oracle.truffle.api.nodes.DirectCallNode.create(target),
+                                root, callee, arguments, requested);
+                assertFalse(ProtosTailCallContinuation.isSuspended(outcome));
+                assertSame(requested, arguments[3],
+                        "the explicit structured caller is transported (need=" + exactNeed + ")");
+            }
+        });
+    }
+
+    /**
+     * Ordinary source dispatch without an explicit caller keeps selective
+     * transport: no caller unless the callee needs one, and once the exact
+     * need is registered the frame's own activation is transported.
+     */
+    @Test
+    void ordinarySourceDispatchKeepsSelectiveCallerTransport() throws Exception {
+        withCore(module -> {
+            ProtosActivation caller = ProtosActivation.forClosureInvocation(
+                    closure("() => 0", module), List.of(), module.prelude().orElseThrow());
+            ProtosClosureValue callee = closure("(x) => x", module);
+            RootCallTarget target = directTarget(callee);
+            ProtosBytecodeRootNode root = (ProtosBytecodeRootNode) target.getRootNode();
+            var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
+                    ProtosFrameArguments.publishedInvocation(caller),
+                    com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
+            var callNode = com.oracle.truffle.api.nodes.DirectCallNode.create(target);
+
+            Object[] first = ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
+            ProtosFunctionCallDispatchersFactory.FunctionDirectInvokeNodeGen.getUncached()
+                    .execute(frame, null, callNode, root, callee, first, null);
+            if (!root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE)
+                    && !root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION)) {
+                assertSame(null, first[3], "no need: no caller is transported or published");
+            }
+
+            root.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
+            Object[] second = ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
+            ProtosFunctionCallDispatchersFactory.FunctionDirectInvokeNodeGen.getUncached()
+                    .execute(frame, null, callNode, root, callee, second, null);
+            assertSame(caller, second[3], "registered need transports the frame's exact caller");
+        });
     }
 
     private static void assertInteger(long expected, Object actual) {

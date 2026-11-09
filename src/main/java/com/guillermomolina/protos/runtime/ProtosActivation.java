@@ -253,7 +253,7 @@ public final class ProtosActivation {
             throw new IllegalStateException("Closure invocation requires an owning Core prelude");
         }
         boolean ownsReturnHome = closure.returnHome().isEmpty();
-        ProtosReturnHome invocationHome = closure.invocationReturnHomeForRuntime();
+        ProtosReturnHome invocationHome = richInvocationReturnHome(closure);
 
         return withCapturedCells(
                 new ProtosActivation(
@@ -270,6 +270,21 @@ public final class ProtosActivation {
                         lexicalInvocationModuleKey(closure, currentModuleKey),
                         Objects.requireNonNull(executionDomain, "executionDomain")),
                 closure);
+    }
+
+    /** Deferred preparation belongs to rich entry, before publication. */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private static ProtosReturnHome richInvocationReturnHome(ProtosClosureValue closure) {
+        if (closure.returnHome().isPresent() || closure.hasNativeBody()
+                || closure.definition() == null) {
+            return closure.invocationReturnHomeUnderTemplateProofForRuntime(false);
+        }
+        var plan = closure.preparedExecutionPlanOrNullForRuntime();
+        if (plan == null && closure.executionPlanRematerializerForParallelRuntime().isPresent()) {
+            plan = closure.executionPlanForRuntimeInvocation();
+        }
+        return closure.invocationReturnHomeUnderTemplateProofForRuntime(
+                plan != null && plan.returnHomeProvenUnobservableForRuntime());
     }
 
     public static ProtosActivation forImmediateMethodInvocation(
@@ -292,7 +307,7 @@ public final class ProtosActivation {
             throw new IllegalStateException("Closure invocation requires an owning Core prelude");
         }
         boolean ownsReturnHome = closure.returnHome().isEmpty();
-        ProtosReturnHome invocationHome = closure.invocationReturnHomeForRuntime();
+        ProtosReturnHome invocationHome = richInvocationReturnHome(closure);
 
         return withCapturedCells(
                 new ProtosActivation(

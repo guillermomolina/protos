@@ -34,7 +34,19 @@ test011DefaultHome: (trace) => {
     0
 }
 
+testI115FailingOwner: (trace, failure) => {
+    trace.escape = () => { ^42 }
+    failure.signal()
+}
+
 tests: [
+    Test("Error departure closes the captured owner home", () => {
+        trace: { escape: null }
+        failure: Error()
+        caught: Assertions.signals(Error, () => { testI115FailingOwner(trace, failure) })
+        Assertions.require(caught === failure)
+        Assertions.signals(InvalidReturn, () => { trace.escape() })
+    }),
     Test("non-local return escaping to a different Task signals InvalidReturn", () => {
         Assertions.signals(InvalidReturn, () => {
             outer: (targetFuture, dependency) => {

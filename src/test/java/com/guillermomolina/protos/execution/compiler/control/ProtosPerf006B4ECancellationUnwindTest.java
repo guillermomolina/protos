@@ -2,7 +2,7 @@
  * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
  * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
  * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
  * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
  * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
  * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
@@ -12,7 +12,7 @@
  *
  * Software distributed under the License is distributed on an "AS IS" basis,
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the LICENSE.
+ * the specific language governing rights and limitations under the License.
  */
 
 package com.guillermomolina.protos.execution;
@@ -59,6 +59,8 @@ final class ProtosPerf006B4ECancellationUnwindTest {
             ProtosActivation module = activation(prelude, domain);
             ProtosFutureValue bodyWait = new ProtosFutureValue(prelude.futurePrototype(), domain);
             AtomicInteger bodyPrefix = new AtomicInteger();
+            AtomicReference<com.guillermomolina.protos.runtime.control.ProtosReturnHome> ownedHome =
+                    new AtomicReference<>();
             AtomicInteger bodyAfter = new AtomicInteger();
             AtomicInteger cleanups = new AtomicInteger();
 
@@ -68,6 +70,8 @@ final class ProtosPerf006B4ECancellationUnwindTest {
                     nativeClosure(
                             (activation, supplied) -> {
                                 bodyPrefix.incrementAndGet();
+                                ownedHome.set(((ProtosClosureValue) supplied.get(0))
+                                        .returnHome().orElseThrow());
                                 return ProtosNullValue.INSTANCE;
                             }));
             module.context().createLocalSlot(
@@ -89,7 +93,7 @@ final class ProtosPerf006B4ECancellationUnwindTest {
                     sourceClosure(
                             scope.language(),
                             module,
-                            "() => { bodyProbe()\nbodyWait.value()\nbodyAfterProbe() }",
+                            "() => { bodyProbe(() => ^0)\nbodyWait.value()\nbodyAfterProbe() }",
                             "perf006-b4e-cancel-body.protos"));
 
             Execution execution =
@@ -99,11 +103,13 @@ final class ProtosPerf006B4ECancellationUnwindTest {
                             module,
                             lowerRoot(
                                     scope.language(),
-                                    "body.ensure(cleanup)",
+                                    "entryB: () => { body.ensure(cleanup) }\nentryA: () => { entryB() }\nentryA()",
                                     "perf006-b4e-cancel-top.protos"));
 
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.SUSPENDED, execution.task().state());
+            assertTrue(ownedHome.get().isActive());
+            assertSame(execution.task(), ownedHome.get().ownerTaskForRuntime());
             assertEquals(1, bodyPrefix.get());
             assertEquals(0, bodyAfter.get());
             assertEquals(0, cleanups.get());
@@ -113,6 +119,8 @@ final class ProtosPerf006B4ECancellationUnwindTest {
             assertTrue(domain.dispatchOne());
 
             assertEquals(ProtosTask.State.CANCELLED, execution.task().state());
+            assertFalse(ownedHome.get().isActive());
+            org.junit.jupiter.api.Assertions.assertNull(ownedHome.get().ownerTaskForRuntime());
             assertEquals(ProtosFutureValue.State.CANCELLED, execution.future().state());
             assertEquals(ProtosTask.CancellationPhase.TERMINAL, execution.task().cancellationPhase());
             assertEquals(1, bodyPrefix.get());
@@ -218,6 +226,122 @@ final class ProtosPerf006B4ECancellationUnwindTest {
         System.out.println("PERF006_B4E_CLEANUP_SUSPENSION=PASS");
         System.out.println("PERF006_B4E_SAME_REQUEST_REDELIVERY=NO");
         System.out.println("PERF006_B4E_CLEANUP_PREFIX_REPLAY=NO");
+    }
+
+    /**
+     * I115: a cancellation cleanup suspends, resumes with its original caller
+     * off-stack, and calls a source helper twice (first entry and a re-entered
+     * dispatch site). The first helper call suspends again (a nested
+     * continuation) and its nested Closure observes the current activation and
+     * Task after resumption. Caller provenance comes from the suspension seal.
+     */
+    @Test
+    void resumedCancellationCleanupCallsSourceClosuresWithSealedCallers()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosFutureValue bodyWait = new ProtosFutureValue(prelude.futurePrototype(), domain);
+            ProtosFutureValue cleanupWait = new ProtosFutureValue(prelude.futurePrototype(), domain);
+            ProtosFutureValue helperWait = new ProtosFutureValue(prelude.futurePrototype(), domain);
+            List<ProtosTask.CancellationPhase> phases = new ArrayList<>();
+            AtomicInteger cleanupPrefix = new AtomicInteger();
+            AtomicInteger helperAfter = new AtomicInteger();
+            AtomicInteger cleanupAfter = new AtomicInteger();
+
+            module.context().createLocalSlot("bodyWait", bodyWait);
+            module.context().createLocalSlot("cleanupWait", cleanupWait);
+            module.context().createLocalSlot("helperWait", helperWait);
+            module.context().createLocalSlot("phase", phaseProbe(phases));
+            module.context().createLocalSlot(
+                    "cleanupProbe",
+                    nativeClosure((activation, supplied) -> {
+                        cleanupPrefix.incrementAndGet();
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            module.context().createLocalSlot(
+                    "helperAfterProbe",
+                    nativeClosure((activation, supplied) -> {
+                        helperAfter.incrementAndGet();
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            module.context().createLocalSlot(
+                    "cleanupAfterProbe",
+                    nativeClosure((activation, supplied) -> {
+                        cleanupAfter.incrementAndGet();
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            module.context().createLocalSlot(
+                    "helper",
+                    sourceClosure(
+                            scope.language(),
+                            module,
+                            "() => { helperWait.value()\ninner: () => { phase() }\ninner()\nhelperAfterProbe() }",
+                            "i115-b4e-sealed-helper.protos"));
+            module.context().createLocalSlot(
+                    "body",
+                    sourceClosure(
+                            scope.language(),
+                            module,
+                            "() => bodyWait.value()",
+                            "i115-b4e-sealed-body.protos"));
+            module.context().createLocalSlot(
+                    "cleanup",
+                    sourceClosure(
+                            scope.language(),
+                            module,
+                            "() => { cleanupProbe()\ncleanupWait.value()\n"
+                                    + "helper()\nhelper()\ncleanupAfterProbe() }",
+                            "i115-b4e-sealed-cleanup.protos"));
+
+            Execution execution =
+                    executeWithFuture(
+                            domain,
+                            prelude,
+                            module,
+                            lowerRoot(
+                                    scope.language(),
+                                    "body.ensure(cleanup)",
+                                    "i115-b4e-sealed-top.protos"));
+
+            assertTrue(domain.dispatchOne());
+            assertEquals(ProtosTask.State.SUSPENDED, execution.task().state());
+
+            assertTrue(execution.future().cancelRequest());
+            assertTrue(domain.dispatchOne());
+            assertEquals(ProtosTask.State.SUSPENDED, execution.task().state());
+            assertEquals(ProtosTask.CancellationPhase.UNWINDING, execution.task().cancellationPhase());
+            assertEquals(1, cleanupPrefix.get());
+
+            // Resume the cleanup; its first helper call suspends again.
+            assertTrue(cleanupWait.resolve(ProtosNullValue.INSTANCE, module));
+            assertTrue(domain.dispatchOne());
+            assertEquals(ProtosTask.State.SUSPENDED, execution.task().state());
+            assertEquals(ProtosTask.CancellationPhase.UNWINDING, execution.task().cancellationPhase());
+            assertEquals(ProtosFutureValue.State.PENDING, execution.future().state());
+            assertEquals(0, helperAfter.get());
+
+            // Cancellation requested again during the cleanup is not redelivered.
+            assertTrue(execution.future().cancelRequest());
+            assertEquals(0, domain.runnableCount());
+
+            assertTrue(helperWait.resolve(ProtosNullValue.INSTANCE, module));
+            assertTrue(domain.dispatchOne());
+
+            assertEquals(ProtosTask.State.CANCELLED, execution.task().state());
+            assertEquals(ProtosFutureValue.State.CANCELLED, execution.future().state());
+            assertEquals(1, cleanupPrefix.get(), "the cleanup prefix is not replayed");
+            assertEquals(2, helperAfter.get(), "each helper call completes exactly once");
+            assertEquals(1, cleanupAfter.get(), "the cleanup completes exactly once");
+            assertEquals(
+                    List.of(ProtosTask.CancellationPhase.UNWINDING,
+                            ProtosTask.CancellationPhase.UNWINDING),
+                    phases);
+        }
+
+        System.out.println("I115_B4E_RESUMED_CLEANUP_SEALED_CALLER=PASS");
+        System.out.println("I115_B4E_RESUMED_STACK_RECOVERY=NO");
     }
 
     @Test
@@ -549,6 +673,16 @@ final class ProtosPerf006B4ECancellationUnwindTest {
             ProtosActivation module = activation(prelude, domain);
             ProtosFutureValue bodyWait = new ProtosFutureValue(prelude.futurePrototype(), domain);
             List<ProtosTask.CancellationPhase> phases = new ArrayList<>();
+            AtomicReference<com.guillermomolina.protos.runtime.control.ProtosReturnHome> outerHome =
+                    new AtomicReference<>();
+            module.context().createLocalSlot("homeProbe", nativeClosure((activation, supplied) -> {
+                if (!supplied.isEmpty()) {
+                    outerHome.set(((ProtosClosureValue) supplied.get(0)).returnHome().orElseThrow());
+                }
+                assertTrue(outerHome.get().isActive(), "cleanup retains the live outer home");
+                assertSame(activation.taskForRuntime(), outerHome.get().ownerTaskForRuntime());
+                return ProtosNullValue.INSTANCE;
+            }));
 
             module.context().createLocalSlot("bodyWait", bodyWait);
             module.context().createLocalSlot("phaseProbe", phaseProbe(phases));
@@ -569,13 +703,17 @@ final class ProtosPerf006B4ECancellationUnwindTest {
                                     scope.language(),
                                     """
                                     m: () => {
+                                        homeProbe(() => ^0)
                                         body.ensure(() => {
                                             phaseProbe()
+                                            homeProbe()
                                             ^5
                                         })
                                         0
                                     }
-                                    r: m()
+                                    enter: () => { m() }
+                                    middle: () => { enter() }
+                                    r: middle()
                                     phaseProbe()
                                     r
                                     """,
@@ -583,8 +721,12 @@ final class ProtosPerf006B4ECancellationUnwindTest {
 
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.SUSPENDED, execution.task().state());
+            assertTrue(outerHome.get().isActive());
+            assertSame(execution.task(), outerHome.get().ownerTaskForRuntime());
             assertTrue(execution.future().cancelRequest());
             assertTrue(domain.dispatchOne());
+            assertFalse(outerHome.get().isActive());
+            org.junit.jupiter.api.Assertions.assertNull(outerHome.get().ownerTaskForRuntime());
 
             assertEquals(
                     List.of(
@@ -603,6 +745,30 @@ final class ProtosPerf006B4ECancellationUnwindTest {
 
         System.out.println("PLAT070_CANCELLATION_SUPERSESSION=TRY_FINALLY_BASED");
         System.out.println("PLAT070_ESCAPING_NLR_SUPERSEDES_CANCELLATION=PASS");
+    }
+
+    @Test
+    void foreignTaskReturnRemainsInvalidAcrossMinimalCallerChains() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActivation module = prelude.newModuleActivation();
+            ProtosExecutionOutcome outcome = ProtosTestExecutionSupport.execute(
+                    "i115-foreign-task-chain.protos", """
+                    owner: () => {
+                        escape: () => { ^42 }
+                        foreign: (() => {
+                            Error.handle(() => { escape() }, (caught) => { caught })
+                        }).future()
+                        foreign.value()
+                    }
+                    middle: () => { owner() }
+                    entry: () => { middle() }
+                    entry()
+                    """, module);
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+            assertSame(prelude.invalidReturnPrototype(),
+                    ((ProtosObjectValue) outcome.value()).parent().orElseThrow());
+        }
     }
 
     @Test

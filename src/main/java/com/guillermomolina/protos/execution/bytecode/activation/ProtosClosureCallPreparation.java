@@ -71,6 +71,24 @@ final class ProtosClosureCallPreparation {
         return closure.executionPlanForRuntimeInvocation();
     }
 
+    /**
+     * Legacy rich/Task preparation resolves a deferred executable before it
+     * chooses a home. Ordinary compact dispatcher nodes already hold that
+     * target and never enter this cold preparation seam.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    static com.guillermomolina.protos.runtime.control.ProtosReturnHome invocationHomeForColdEntry(
+            ProtosClosureValue closure) {
+        if (closure.returnHome().isPresent() || closure.hasNativeBody()) {
+            return closure.invocationReturnHomeUnderTemplateProofForRuntime(false);
+        }
+        RootCallTarget target = functionCallTarget(
+                closure, ProtosLanguageContext.currentIfEnteredForRuntime());
+        ProtosBytecodeRootNode root = ProtosFunctionCallDispatchers.calleeRootOrNull(target);
+        return closure.invocationReturnHomeUnderTemplateProofForRuntime(
+                root != null && root.returnHomeProvenUnobservable());
+    }
+
     static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {
         return target == null ? null : DirectCallNode.create(target);
     }

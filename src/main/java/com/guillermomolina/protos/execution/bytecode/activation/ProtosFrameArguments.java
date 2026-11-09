@@ -39,7 +39,8 @@ final class ProtosFrameArguments {
      * [0] invoked Closure or published activation
      * [1] receiver or direct-call marker
      * [2] method home or explicit Task
-     * [3] null, caller Prelude or caller Activation, by callee need
+     * [3] null, caller Prelude or caller Activation, by callee need, method Task provenance
+     *     or the cold suspension seal (sealSuspendedCaller)
      * [4] return home
      * [5...] supplied positional arguments
      * No B5 argument array or wrapper is retained by another invocation.
@@ -79,7 +80,7 @@ final class ProtosFrameArguments {
                 receiver,
                 methodHome,
                 caller,
-                closure.invocationReturnHomeForRuntime(),
+                ProtosClosureCallPreparation.invocationHomeForColdEntry(closure),
                 supplied);
     }
 
@@ -156,7 +157,7 @@ final class ProtosFrameArguments {
         Objects.requireNonNull(closure, "closure");
         Objects.requireNonNull(caller, "caller");
         Objects.requireNonNull(supplied, "supplied");
-        ProtosReturnHome returnHome = closure.invocationReturnHomeForRuntime();
+        ProtosReturnHome returnHome = ProtosClosureCallPreparation.invocationHomeForColdEntry(closure);
         bindOwnedReturnHome(
                 closure, returnHome, task != null ? task : caller.taskForRuntime());
         if (supplied.length == 0) {
@@ -209,7 +210,7 @@ final class ProtosFrameArguments {
             Object supplied0) {
         Objects.requireNonNull(closure, "closure");
         Objects.requireNonNull(caller, "caller");
-        ProtosReturnHome returnHome = closure.invocationReturnHomeForRuntime();
+        ProtosReturnHome returnHome = ProtosClosureCallPreparation.invocationHomeForColdEntry(closure);
         bindOwnedReturnHome(
                 closure, returnHome, task != null ? task : caller.taskForRuntime());
         return new Object[] {
@@ -230,9 +231,10 @@ final class ProtosFrameArguments {
      * (Task-free invocation) is never bound. Ordinary-call cost: one field read and, for a fresh
      * home, one write; no activation, Context or caller chain is materialized.
      */
-    private static void bindOwnedReturnHome(
+    static void bindOwnedReturnHome(
             ProtosClosureValue closure, ProtosReturnHome returnHome, ProtosTask task) {
-        if (task != null && closure.ownsInvocationReturnHomeForRuntime()) {
+        if (task != null && returnHome.isMaterialized()
+                && closure.ownsInvocationReturnHomeForRuntime()) {
             returnHome.bindOwnerTaskForRuntime(task);
         }
     }
@@ -250,7 +252,12 @@ final class ProtosFrameArguments {
         if (first instanceof ProtosClosureValue closure
                 && arguments.length > RETURN_HOME_INDEX
                 && arguments[RETURN_HOME_INDEX] instanceof ProtosReturnHome home) {
-            bindOwnedReturnHome(closure, home, task);
+            ProtosTask entryTask = isFunctionCall(arguments)
+                    ? inheritInvocationTask(arguments, task) : admittedCompactTask(arguments);
+            if (!isFunctionCall(arguments) && task != null && entryTask != task) {
+                throw new IllegalArgumentException("method Task entry requires its exact Task-owning caller");
+            }
+            bindOwnedReturnHome(closure, home, entryTask);
         }
     }
 
@@ -439,6 +446,25 @@ final class ProtosFrameArguments {
         return arguments[RECEIVER_INDEX] == DIRECT_CLOSURE_CALL;
     }
 
+    /**
+     * Carries Task provenance independently of caller publication. A function's
+     * explicit Task wins; a method keeps its methodHome and transports its Task
+     * through the exact caller instead. No caller chains are traversed.
+     */
+    static ProtosTask inheritInvocationTask(Object[] arguments, ProtosTask inherited) {
+        if (isFunctionCall(arguments)) {
+            Object explicit = arguments[TASK_INDEX];
+            if (explicit instanceof ProtosTask task) {
+                return task;
+            }
+            if (explicit != null) {
+                throw new IllegalArgumentException("function Task slot has an invalid representation");
+            }
+            arguments[TASK_INDEX] = inherited;
+        }
+        return inherited;
+    }
+
     /** Writes the receiver and methodHome of a selected method (GraalPy PMethod). */
     static void bindMethod(Object[] arguments, Object receiver, ProtosObjectValue methodHome) {
         arguments[RECEIVER_INDEX] = receiver;
@@ -453,7 +479,7 @@ final class ProtosFrameArguments {
             ProtosReturnHome returnHome) {
         arguments[CLOSURE_INDEX] = closure;
         arguments[CALLER_INDEX] = callerReference;
-        arguments[RETURN_HOME_INDEX] = returnHome;
+        arguments[RETURN_HOME_INDEX] = Objects.requireNonNull(returnHome, "returnHome");
     }
 
     /** The receiver slot value of an unbound function call. */
@@ -550,16 +576,89 @@ final class ProtosFrameArguments {
      * by another invocation.
      */
     private static ProtosActivation resolveCallerSlot(Object[] arguments) {
+        return resolveCallerSlot(arguments, true);
+    }
+
+    private static ProtosActivation resolveCallerSlot(
+            Object[] arguments, boolean registerCallerDemand) {
         Object callerReference = arguments[CALLER_INDEX];
 
         // A transported Prelude is only partial caller information.
         // Recover the exact activation on first demand, then let the
         // callee register NEEDS_EXACT_ACTIVATION for subsequent calls.
         if (callerReference == null || callerReference instanceof ProtosPrelude) {
-            return ProtosReadCallerFrameNode.resolve(arguments);
+            return ProtosReadCallerFrameNode.resolve(arguments, registerCallerDemand);
         }
 
         return resolveExactCaller(callerReference);
+    }
+
+    /**
+     * I115 cold suspension-boundary caller seal.
+     *
+     * <p>Called by the dispatcher only after the invocation described by
+     * {@code calleeArguments} returned a suspended outcome, while the caller
+     * frame is still live. The pending continuation retains this exact B5
+     * array; once resumed, the original caller frame is no longer on the
+     * active stack, so {@link ProtosReadCallerFrameNode} cannot answer it.
+     * Sealing replaces an insufficient null or Prelude B5[3] with the exact
+     * caller Activation established now.
+     *
+     * <p>A published B5[0] already carries its provenance, and an exact
+     * B5[3] is kept, so repeated suspension is idempotent. B5[0], B5[1],
+     * B5[2], B5[4] and the supplied arguments are never touched. The caller
+     * comes only from the live caller frame arguments or the explicit
+     * host/native caller; nothing is synthesized and the Task is never a
+     * substitute. No caller demand is registered on either root: the
+     * ordinary non-suspending path keeps its compact header unchanged.
+     *
+     * @param callerFrameArguments the live caller frame's arguments, or
+     *     {@code null} for a frame-less host/native entry
+     * @param explicitCaller the explicit caller of a host/native entry: an
+     *     exact Activation, the live caller root's own header, or other
+     *     partial information that is not used
+     */
+    @TruffleBoundary
+    static void sealSuspendedCaller(
+            Object[] calleeArguments,
+            Object[] callerFrameArguments,
+            Object explicitCaller) {
+        if (calleeArguments == null
+                || calleeArguments.length < HEADER_LENGTH
+                || calleeArguments[CLOSURE_INDEX] instanceof ProtosActivation
+                || calleeArguments[CALLER_INDEX] instanceof ProtosActivation
+                || !isCompactCall(calleeArguments)) {
+            return;
+        }
+        ProtosActivation caller = null;
+        if (callerFrameArguments != null) {
+            caller = liveCallerActivation(callerFrameArguments);
+        } else if (explicitCaller instanceof ProtosActivation activation) {
+            caller = activation;
+        } else if (explicitCaller instanceof Object[] liveCallerHeader) {
+            caller = liveCallerActivation(liveCallerHeader);
+        }
+        if (caller != null) {
+            calleeArguments[CALLER_INDEX] = caller;
+        }
+    }
+
+    /*
+     * The exact Activation of a live caller frame: its published B5[0], or
+     * the materialization of its compact header. A caller that was itself
+     * resumed was sealed when it suspended, so any cold recovery here runs
+     * only for a caller whose own caller is still active. Materialization
+     * publishes only the caller's own slot 0 and registers no demand.
+     */
+    private static ProtosActivation liveCallerActivation(Object[] callerArguments) {
+        if (callerArguments.length > CLOSURE_INDEX
+                && callerArguments[CLOSURE_INDEX] instanceof ProtosActivation activation) {
+            return activation;
+        }
+        if (!isCompactCall(callerArguments)) {
+            return null;
+        }
+        return materializeCompactActivation(callerArguments, false);
     }
 
 
@@ -710,7 +809,7 @@ final class ProtosFrameArguments {
                 && arguments[0] instanceof ProtosActivation activation) {
             return activation;
         }
-        return materializeCompactActivation(arguments);
+        return materializeCompactActivation(arguments, true);
     }
 
     /*
@@ -720,7 +819,8 @@ final class ProtosFrameArguments {
      * that may consult the current activation (several hundred nodes per site).
      */
     @TruffleBoundary
-    private static ProtosActivation materializeCompactActivation(Object[] arguments) {
+    private static ProtosActivation materializeCompactActivation(
+            Object[] arguments, boolean registerCallerDemand) {
         if (!isCompactCall(arguments)) {
             throw new IllegalStateException(
                     "Execution node requires a Protos activation or compact source-call ABI");
@@ -733,7 +833,7 @@ final class ProtosFrameArguments {
          * Resolve the exact transported caller, or recover it on the active
          * guest stack. Publication changes only this invocation's slot 0.
          */
-        ProtosActivation caller = resolveCallerSlot(arguments);
+        ProtosActivation caller = resolveCallerSlot(arguments, registerCallerDemand);
         ProtosReturnHome returnHome = normalizedReturnHome(arguments[RETURN_HOME_INDEX]);
         /*
          * The supplied values stay backed by this frame-argument array: the
@@ -791,10 +891,10 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * I092: capture one ordinary Closure without materializing a compact
-     * root's activation. The lowerer admits this only in a genuine root
-     * that declares no frame-owned lexical bindings; every other root
-     * retains MaterializeClosure's exact activation-based path.
+     * Capture a compact root with no frame-owned lexical bindings. A creator
+     * capture publishes its exact activation while caller provenance is still
+     * available, but leaves its guest Context deferred. An inherited-only
+     * capture reuses the existing lexical chain without publishing this root.
      *
      * <p>I115 / PLAT066-C: when {@code capturesCreatorContext} is false the
      * lowering classified {@code definition} as not capturing its creator's
@@ -805,7 +905,7 @@ final class ProtosFrameArguments {
      * capture of {@code CALLABLES.md}, pending an owner decision.
      *
      * <p>I115-H (EXPERIMENTAL): when the definition also cannot observe its
-     * ReturnHome ({@code mayObserveReturnHome == false}), such a Closure is the
+     * ReturnHome and needs no inherited environment, such a Closure is the
      * lightweight {@link ProtosClosureValue#experimentalNonCapturing}
      * representation; the creator's Closure, environment, receiver,
      * methodHome, ReturnHome and Prelude are not consulted. A definition that
@@ -817,8 +917,9 @@ final class ProtosFrameArguments {
             CanonicalClosure definition,
             ProtosClosureExecutionPlanCell executionPlanCell,
             boolean capturesCreatorContext,
+            boolean requiresInheritedLexicalEnvironment,
             boolean mayObserveReturnHome) {
-        if (!capturesCreatorContext && !mayObserveReturnHome) {
+        if (!capturesCreatorContext && !requiresInheritedLexicalEnvironment && !mayObserveReturnHome) {
             return ProtosClosureValue.experimentalNonCapturing(
                     definition,
                     executionPlanCell.plan());
@@ -834,8 +935,7 @@ final class ProtosFrameArguments {
         ProtosLexicalEnvironment environment = capturesCreatorContext
                 ? ProtosLexicalEnvironment.deferredCompactOwner(
                         arguments,
-                        COMPACT_CAPTURE_OWNER,
-                        currentClosure.capturedLexicalEnvironmentForRuntime())
+                        COMPACT_CAPTURE_OWNER)
                 : currentClosure.capturedLexicalEnvironmentForRuntime();
         return new ProtosClosureValue(
                 definition,
@@ -1215,15 +1315,12 @@ final class ProtosFrameArguments {
         return normalizedReturnHome(arguments[RETURN_HOME_INDEX]);
     }
 
-    /*
-     * A no-home fast call only needs a semantic home if its activation escapes
-     * into the slow materialization path. Do not create a marker on entry.
-     */
+    /* Only the primitive-result ABI marker is normalized. Missing home
+     * information is never a certificate for a completed invocation. */
     private static ProtosReturnHome normalizedReturnHome(Object home) {
-        return home == null
-                || home == ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime()
+        return home == ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime()
                 ? ProtosReturnHome.unobservable()
-                : (ProtosReturnHome) home;
+                : (ProtosReturnHome) Objects.requireNonNull(home, "invocation returnHome");
     }
 
     /**
@@ -1265,7 +1362,7 @@ final class ProtosFrameArguments {
      */
     static ProtosTask compactTask(Object[] arguments) {
         if (hasPublishedActivation(arguments)) {
-            return publishedActivation(arguments).task().orElse(null);
+            return publishedActivation(arguments).taskForRuntime();
         }
         requireCompactCall(arguments);
         ProtosTask explicit = explicitDirectTask(arguments);
@@ -1274,7 +1371,7 @@ final class ProtosFrameArguments {
         }
         Object caller = arguments[CALLER_INDEX];
         return caller instanceof ProtosActivation activation
-                ? activation.task().orElse(null)
+                ? activation.taskForRuntime()
                 : null;
     }
 
@@ -1284,7 +1381,7 @@ final class ProtosFrameArguments {
         if (arguments.length >= HEADER_LENGTH) {
             Object first = arguments[CLOSURE_INDEX];
             if (first instanceof ProtosActivation activation) {
-                return activation.task().orElse(null);
+                return activation.taskForRuntime();
             }
             if (first instanceof ProtosClosureValue) {
                 if (arguments[RECEIVER_INDEX] == DIRECT_CLOSURE_CALL
@@ -1293,7 +1390,7 @@ final class ProtosFrameArguments {
                 }
                 Object caller = arguments[CALLER_INDEX];
                 return caller instanceof ProtosActivation activation
-                        ? activation.task().orElse(null)
+                        ? activation.taskForRuntime()
                         : null;
             }
         }

@@ -380,6 +380,25 @@ public final class ProtosClosureValue extends ProtosObjectValue {
     }
 
     /**
+     * Selects a home under the proof of the exact executable selected by the
+     * caller. This does not prepare a deferred plan or change lexical capture.
+     * A missing proof is conservative, even if another plan was prepared.
+     */
+    public ProtosReturnHome invocationReturnHomeUnderTemplateProofForRuntime(
+            boolean templateProvenUnobservable) {
+        if (returnHome != null) {
+            return returnHome;
+        }
+        if (nativeBody == null
+                && definition != null
+                && hasUnobservableReturnHomeUnderTemplateProofForRuntime(
+                        templateProvenUnobservable)) {
+            return ProtosReturnHome.unobservable();
+        }
+        return new ProtosReturnHome();
+    }
+
+    /**
      * PLAT070: whether an invocation of this Closure owns the home {@link
      * #invocationReturnHomeForRuntime} answers, i.e. the Closure captured none.
      */

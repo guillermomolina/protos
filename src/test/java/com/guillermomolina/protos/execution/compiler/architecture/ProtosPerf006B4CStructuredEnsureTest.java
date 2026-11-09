@@ -12,7 +12,7 @@
  *
  * Software distributed under the License is distributed on an "AS IS" basis,
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the LICENSE.
+ * the specific language governing rights and limitations under the License.
  */
 
 package com.guillermomolina.protos.execution;
@@ -100,6 +100,8 @@ final class ProtosPerf006B4CStructuredEnsureTest {
             ProtosActivation module = activation(prelude, domain);
             ProtosFutureValue future = new ProtosFutureValue(prelude.futurePrototype(), domain);
             AtomicInteger bodyPrefix = new AtomicInteger();
+            java.util.concurrent.atomic.AtomicReference<ProtosReturnHome> ownedHome =
+                    new java.util.concurrent.atomic.AtomicReference<>();
             AtomicInteger cleanups = new AtomicInteger();
             ProtosObjectValue resolved = new ProtosObjectValue(ProtosObjectValue.rootObject());
 
@@ -109,8 +111,17 @@ final class ProtosPerf006B4CStructuredEnsureTest {
                     nativeClosure(
                             (activation, supplied) -> {
                                 bodyPrefix.incrementAndGet();
+                                ownedHome.set(((ProtosClosureValue) supplied.get(0))
+                                        .returnHome().orElseThrow());
                                 return ProtosNullValue.INSTANCE;
                             }));
+            module.context().createLocalSlot("resumeProbe", nativeClosure((activation, supplied) -> {
+                ProtosReturnHome resumed = ((ProtosClosureValue) supplied.get(0)).returnHome().orElseThrow();
+                assertSame(ownedHome.get(), resumed);
+                assertTrue(resumed.isActive());
+                assertSame(activation.taskForRuntime(), resumed.ownerTaskForRuntime());
+                return ProtosNullValue.INSTANCE;
+            }));
             module.context().createLocalSlot(
                     "cleanup",
                     nativeClosure(
@@ -123,7 +134,7 @@ final class ProtosPerf006B4CStructuredEnsureTest {
                     sourceClosure(
                             scope.language(),
                             module,
-                            "() => { bodyProbe()\nf.value() }",
+                            "() => { bodyProbe(() => ^0)\nresult: f.value()\nresumeProbe(() => ^0)\n^result }",
                             "perf006-b4c-body-suspend-body.protos"));
 
             ProtosTask task =
@@ -132,18 +143,23 @@ final class ProtosPerf006B4CStructuredEnsureTest {
                             module,
                             lowerRoot(
                                     scope.language(),
-                                    "body.ensure(cleanup)",
+                                    "entryB: () => { body.ensure(cleanup) }\nentryA: () => { entryB() }\nentryA()",
                                     "perf006-b4c-body-suspend-top.protos"));
 
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.SUSPENDED, task.state());
             assertEquals(1, bodyPrefix.get());
             assertEquals(0, cleanups.get(), "suspension is not ensure scope exit");
+            assertTrue(ownedHome.get().isMaterialized());
+            assertTrue(ownedHome.get().isActive());
+            assertSame(task, ownedHome.get().ownerTaskForRuntime());
 
             assertTrue(future.resolve(resolved, module));
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.COMPLETED, task.state());
             assertSame(resolved, task.result().orElseThrow());
+            org.junit.jupiter.api.Assertions.assertFalse(ownedHome.get().isActive());
+            org.junit.jupiter.api.Assertions.assertNull(ownedHome.get().ownerTaskForRuntime());
             assertEquals(1, bodyPrefix.get(), "completed body prefix must not replay");
             assertEquals(1, cleanups.get());
         }
@@ -788,6 +804,124 @@ final class ProtosPerf006B4CStructuredEnsureTest {
         assertEquals(List.of(1L, 2L, 3L), marks);
 
         System.out.println("PLAT070_ENSURE_LIFO_EXACTLY_ONCE=PASS");
+    }
+
+    /**
+     * I115: after each resumption the original caller frames have returned. The
+     * resumed body and both nested cleanups then call a source helper whose
+     * nested Closure and native call require the current activation; their
+     * caller provenance was sealed at the suspension boundary, never recovered
+     * from the resumer's stack. Every suspension uses a fresh pending Future.
+     * Marks: 1 body, 5/6 helper, 2/4 inner cleanup, 7 outer cleanup, 9 handler, 3 after.
+     */
+    @Test
+    void resumedBodyAndCleanupsCallSourceClosuresWithSealedCallers() throws Exception {
+        ProtosPrelude prelude = core();
+        String template =
+                """
+                pause: () => { (() => { 1 }).future().value() }
+                helper: () => {
+                    inner: () => { mark(5) }
+                    inner()
+                    Error.handle(() => { mark(6) }, (caught) => { caught })
+                }
+                m: () => {
+                    r: Error.handle(() => {
+                        (() => {
+                            (() => {
+                                mark(1)
+                                pause()
+                                helper()
+                                BODY
+                            }).ensure(() => {
+                                mark(2)
+                                pause()
+                                helper()
+                                mark(4)
+                            })
+                        }).ensure(() => {
+                            pause()
+                            helper()
+                            mark(7)
+                        })
+                    }, (caught) => {
+                        mark(9)
+                        caught
+                    })
+                    mark(3)
+                    r
+                }
+                m()
+                """;
+        List<Long> prefix = List.of(1L, 5L, 6L, 2L, 5L, 6L, 4L, 5L, 6L, 7L);
+        for (BodyOutcome body : BodyOutcome.values()) {
+            ProtosActivation module = prelude.newModuleActivation();
+            ProtosObjectValue bodyError = ProtosCoreErrors.newError(module);
+            List<Long> marks = new ArrayList<>();
+            module.context().createLocalSlot("bodyError", bodyError);
+            module.context().createLocalSlot("mark", marker(marks));
+            String label = "resumed sealed callers " + body;
+
+            ProtosExecutionOutcome outcome =
+                    ProtosTestExecutionSupport.execute(
+                            "i115-ensure-sealed-caller-" + body + ".protos",
+                            template.replace("BODY", body.source),
+                            module);
+
+            assertCompleted(outcome, label);
+            List<Long> expected = new ArrayList<>(prefix);
+            switch (body) {
+                case NORMAL -> {
+                    assertEquals(10L, integer(outcome.value()), label);
+                    expected.add(3L);
+                }
+                case RETURN -> assertEquals(20L, integer(outcome.value()), label);
+                case ERROR -> {
+                    assertSame(bodyError, outcome.value(), label);
+                    expected.add(9L);
+                    expected.add(3L);
+                }
+            }
+            assertEquals(expected, marks, label);
+        }
+
+        System.out.println("I115_ENSURE_RESUMED_SEALED_CALLER=PASS");
+        System.out.println("I115_ENSURE_RESUMED_STACK_RECOVERY=NO");
+    }
+
+    @Test
+    void abandonmentClosesTheOwnerOfARealSuspendedFrame() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosFutureValue wait = new ProtosFutureValue(prelude.futurePrototype(), domain);
+            module.context().createLocalSlot("wait", wait);
+            ProtosClosureValue source = sourceClosure(scope.language(), module,
+                    "() => { unused: () => ^42\nwait.value() }", "i115-abandon-owner.protos");
+            java.util.concurrent.atomic.AtomicReference<Object> pending =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            java.util.concurrent.atomic.AtomicReference<ProtosReturnHome> home =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            ProtosTask task = domain.createTask(null, current -> {
+                ProtosActivation caller = activation(prelude, domain);
+                caller.attachTask(current);
+                var entry = ProtosDispatchTestSupport.direct(source, caller);
+                home.set(ProtosFrameArguments.compactReturnHome(entry.targetArguments()));
+                // Execute the real Future.value suspension and retain its owning frame.
+                pending.set(ProtosDispatchTestSupport.enterRaw(entry));
+                assertTrue(ProtosTailCallContinuation.isSuspended(pending.get()));
+                assertTrue(current.suspend(
+                        ProtosTailCallContinuation.nativeSuspensionLeaf(pending.get()).dependency()));
+            });
+            assertTrue(domain.dispatchOne());
+            assertEquals(ProtosTask.State.SUSPENDED, task.state());
+            assertTrue(home.get().isActive());
+            ProtosTailCallContinuation.abandon(pending.get());
+            org.junit.jupiter.api.Assertions.assertFalse(home.get().isActive());
+            org.junit.jupiter.api.Assertions.assertNull(home.get().ownerTaskForRuntime());
+            ProtosTailCallContinuation.abandon(pending.get());
+        }
     }
 
     private static void assertCompleted(ProtosExecutionOutcome outcome, String label) {

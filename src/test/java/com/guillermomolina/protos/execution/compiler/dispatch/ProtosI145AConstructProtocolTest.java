@@ -62,6 +62,25 @@ class ProtosI145AConstructProtocolTest {
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
+    void initializerCapturesOuterHomeAndConstructionDoesNotCloseIt() throws IOException {
+        ProtosActivation module = corePrelude().newModuleActivation();
+        Object result = ProtosTestExecutionSupport.evaluate("""
+                owner: () => {
+                    Thing: {
+                        init: (value) => {
+                            this.escape: () => { ^value }
+                        }
+                    }
+                    made: Thing(42)
+                    made.escape()
+                    0
+                }
+                owner()
+                """, module);
+        assertEquals("42", ProtosNumericValueSupport.integerDecimalText(result));
+    }
+
+    @Test
     void rootPublishesDistinctFrozenStandardConstruct() throws IOException {
         corePrelude();
         ProtosObjectValue root = ProtosObjectValue.rootObject();

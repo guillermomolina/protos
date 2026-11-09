@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.api.nodes.ControlFlowException;
 import java.util.Objects;
 
 /**
@@ -51,9 +52,10 @@ public final class ProtosDispatchTestSupport {
 
     /** A function call of {@code closure} by {@code caller} (activation or caller header). */
     public static DirectEntry direct(ProtosClosureValue closure, Object caller, Object... supplied) {
+        RootCallTarget target = target(closure);
         Object[] arguments = ProtosFrameArguments.functionCallArguments(supplied);
-        ProtosFrameArguments.completeDispatchedHeader(arguments, closure, caller, homeFor(closure));
-        return new DirectEntry(target(closure), arguments);
+        ProtosFrameArguments.completeDispatchedHeader(arguments, closure, caller, homeFor(closure, target, caller));
+        return new DirectEntry(target, arguments);
     }
 
     /** A selected method call, with receiver and methodHome in the header. */
@@ -63,9 +65,10 @@ public final class ProtosDispatchTestSupport {
             ProtosObjectValue methodHome,
             Object caller,
             Object... supplied) {
+        RootCallTarget target = target(closure);
         Object[] arguments = ProtosFrameArguments.methodCallArguments(receiver, methodHome, supplied);
-        ProtosFrameArguments.completeDispatchedHeader(arguments, closure, caller, homeFor(closure));
-        return new DirectEntry(target(closure), arguments);
+        ProtosFrameArguments.completeDispatchedHeader(arguments, closure, caller, homeFor(closure, target, caller));
+        return new DirectEntry(target, arguments);
     }
 
     /** An entry whose activation is already materialized and published. */
@@ -76,18 +79,36 @@ public final class ProtosDispatchTestSupport {
     /** Enters the CallTarget; the result is projected to the guest domain. */
     public static Object enter(DirectEntry entry) {
         return ProtosNumericValueSupport.guestValue(
-                entry.target().call(entry.targetArguments()));
+                enterRaw(entry));
     }
 
     /** As {@link #enter}, without projecting the raw callee result. */
     public static Object enterRaw(DirectEntry entry) {
-        return entry.target().call(entry.targetArguments());
+        ProtosReturnHome owned =
+                ProtosFrameArguments.ownedReturnHomeOrNull(entry.targetArguments());
+        if (owned == null) {
+            return entry.target().call(entry.targetArguments());
+        }
+        try {
+            return entry.target().call(entry.targetArguments());
+        } catch (ControlFlowException transfer) {
+            return ProtosFunctionCallDispatchers.completeOwnedTransfer(owned, transfer);
+        }
     }
 
     /* The dispatcher's ReturnHome selection (ProtosFunctionCallDispatchers). */
-    private static ProtosReturnHome homeFor(ProtosClosureValue closure) {
-        return closure.hasUnobservableInvocationReturnHomeForRuntime()
-                ? ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime()
-                : closure.invocationReturnHomeForRuntime();
+    private static ProtosReturnHome homeFor(
+            ProtosClosureValue closure, RootCallTarget target, Object caller) {
+        ProtosBytecodeRootNode root = ProtosFunctionCallDispatchers.calleeRootOrNull(target);
+        ProtosReturnHome home = closure.invocationReturnHomeUnderTemplateProofForRuntime(
+                root != null && root.returnHomeProvenUnobservable());
+        var task = caller instanceof ProtosActivation activation
+                ? activation.taskForRuntime()
+                : caller instanceof Object[] arguments
+                        ? ProtosFrameArguments.admittedCompactTask(arguments) : null;
+        ProtosFrameArguments.bindOwnedReturnHome(closure, home, task);
+        // Preserve the existing low-level primitive-result test convention.
+        return home == ProtosReturnHome.unobservable()
+                ? ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime() : home;
     }
 }

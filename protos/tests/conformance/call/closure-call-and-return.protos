@@ -34,7 +34,16 @@ test011NestedCallReturn: (trace) => {
     0
 }
 
+testI115NamedReturn: (value: null) => { ^value }
+testI115IndirectReturn: (f, value) => { f(value) }
+testI115DirectReturn: (value) => { ^value }
+
 tests: [
+    Test("named and indirect calls preserve return operand identity", () => {
+        token: {}
+        Assertions.require(testI115NamedReturn(value: token) === token)
+        Assertions.require(testI115IndirectReturn(testI115DirectReturn, token) === token)
+    }),
     Test("plain closure call", () => {
         tool009LegacyCase: () => {
             identity: (x) => x

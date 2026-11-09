@@ -71,6 +71,8 @@ class ProtosNonLocalReturnTest {
                         () -> ProtosClosureInvoker.invoke(nested, List.of()));
 
         assertSame(capturedHome, transfer.target());
+        assertEquals("42", com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                .integerDecimalText(transfer.value()));
         assertTrue(capturedHome.isActive());
     }
 
@@ -400,6 +402,60 @@ class ProtosNonLocalReturnTest {
                 assertInstanceOf(ProtosObjectValue.class, taskFree).parent().orElseThrow(),
                 "a released owner never makes a completed home pass as a Task-free one");
         System.out.println("PLAT070_ESCAPED_RELEASED_HOME_INVALID_RETURN=PASS");
+    }
+
+    @Test
+    void recursiveOwnersAndIndirectReturnsPreserveOperandIdentity() throws IOException {
+        ProtosActivation module = corePrelude().newModuleActivation();
+        ProtosObjectValue token = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        module.context().createLocalSlot("token", token);
+        assertSame(token, completed(ProtosTestExecutionSupport.execute(
+                "i115-recursive-return.protos", """
+                invoke: (f) => { f() }
+                recurse: (depth) => {
+                    (depth == 0).ifTrue(() => { ^token })
+                    inner: recurse(depth - 1)
+                    invoke(() => { ^inner })
+                    null
+                }
+                recurse(4)
+                """, module)));
+    }
+
+    @Test
+    void defaultAndGuestErrorDepartureCloseTheCapturedOwner() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        for (String body : List.of(
+                "(arg: failure.signal()) => { bodyReached = true }",
+                "() => { failure.signal() }",
+                "() => { consume: (arg) => arg\nconsume(failure.signal()) }")) {
+            ProtosActivation module = prelude.newModuleActivation();
+            ProtosObjectValue failure = new ProtosObjectValue(prelude.errorPrototype());
+            module.context().createLocalSlot("failure", failure);
+            Object result = completed(ProtosTestExecutionSupport.execute(
+                    "i115-failed-entry.protos", """
+                    escaped: null
+                    bodyReached: false
+                    owner: () => {
+                        escaped = () => { ^42 }
+                        fail: BODY
+                        fail()
+                        bodyReached = true
+                    }
+                    caught: Error.handle(() => { owner() }, (error) => { error })
+                    escaped
+                    """.replace("BODY", body), module));
+            ProtosClosureValue escaped = assertInstanceOf(ProtosClosureValue.class, result);
+            assertFalse(escaped.returnHome().orElseThrow().isActive());
+            assertSame(failure, module.context().readLocalSlot("caught").orElseThrow());
+            assertSame(com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE,
+                    module.context().readLocalSlot("bodyReached").orElseThrow());
+            Object invalid = ProtosTestExecutionSupport.evaluate(
+                    "i115-failed-entry-escaped.protos",
+                    "Error.handle(() => { escaped() }, (error) => { error })", sibling(module));
+            assertSame(prelude.invalidReturnPrototype(),
+                    assertInstanceOf(ProtosObjectValue.class, invalid).parent().orElseThrow());
+        }
     }
 
     /** A fresh module activation sharing {@code module}'s context, domain and module state. */

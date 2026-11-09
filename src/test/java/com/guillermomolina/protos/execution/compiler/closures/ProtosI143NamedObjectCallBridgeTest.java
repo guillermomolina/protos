@@ -140,6 +140,23 @@ class ProtosI143NamedObjectCallBridgeTest {
     }
 
 
+    @Test
+    void namedReturnAndCapturedInitializerLeaveOuterHomeLive() throws Exception {
+        assertSame(ProtosBooleanValue.TRUE, evaluate("""
+                named: (value: false) => { ^value }
+                owner: () => {
+                    Thing: {
+                        init: (value: false) => { this.saved: value }
+                    }
+                    made: Thing(value: named(value: true))
+                    escape: () => { ^made.saved }
+                    escape()
+                    false
+                }
+                owner() === true
+                """));
+    }
+
     private static Object evaluate(String source) throws Exception {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap().bootstrap(

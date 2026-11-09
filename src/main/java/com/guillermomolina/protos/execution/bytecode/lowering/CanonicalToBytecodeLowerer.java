@@ -7313,23 +7313,26 @@ final class CanonicalToBytecodeLowerer {
         if (currentActivationLocal == null) {
             /*
              * I115 invariant of the compactCapture operand: it answers whether
-             * capturing the creator may defer its activation instead of
-             * materializing it. Under the I115 storage model the creator's
+             * capturing the creator may keep its guest Context deferred.
+             * Under the I115 storage model the creator's
              * frame never holds lexical state a captured context must expose:
              * LOCAL bindings are invisible to captures, CELL bindings are
              * transported explicitly by CaptureClosureCells, and NAME bindings
-             * already live in the creator's context object. The deferred owner
-             * keeps the B5 header (argument 0, ReturnHome, prelude) and resolves
-             * that same activation on demand, so the answer is statically true
+             * already live in the creator's context object. A captured owner
+             * is resolved while its frame is live; its guest Context remains
+             * deferred, so the answer is statically true
              * for every root-level creation; only an inline object region,
              * which has an explicit activation, uses MaterializeClosure. The
              * operation's other modes are thereby unreachable from lowering.
              *
-             * I115-H: the ReturnHome fact gates the lightweight representation.
+             * I115-H: both the ReturnHome and transitive inherited-environment
+             * facts gate the lightweight representation.
              */
             builder.beginMaterializeCurrentClosure(
                     COMPACT_ROOT_CLOSURE_CAPTURE,
                     CanonicalCompilationFacts.capturesCreatorContext(
+                            closure, currentRootAnalysis),
+                    CanonicalCompilationFacts.requiresInheritedLexicalEnvironment(
                             closure, currentRootAnalysis),
                     compilationFacts.mayObserveReturnHome(closure));
         } else {

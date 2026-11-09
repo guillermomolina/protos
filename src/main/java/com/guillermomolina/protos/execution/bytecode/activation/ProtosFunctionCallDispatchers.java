@@ -18,6 +18,9 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
+import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
+import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -42,6 +45,7 @@ import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.ReportPolymorphism.Megamorphic;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
@@ -55,7 +59,7 @@ import com.oracle.truffle.api.nodes.RootNode;
  * a B5 argument array whose receiver/methodHome slots ({@code [1]}, {@code
  * [2]}) and positional arguments ({@code [5..]}) were written by the call
  * operation; the dispatcher writes the Closure ({@code [0]}), the caller
- * reference ({@code [3]}) and a null return-home slot ({@code [4]})
+ * reference ({@code [3]}) and the exact invocation home ({@code [4]})
  * on direct and indirect calls. That array is the callee frame's
  * arguments: no intermediate array exists.
  *
@@ -73,7 +77,7 @@ import com.oracle.truffle.api.nodes.RootNode;
  * </ul>
  *
  * <p>I115 divergence: direct and indirect invocations do not prepare
- * historical ReturnHome metadata, translate terminal suspension transport,
+ * rich activation metadata, translate terminal suspension transport,
  * or project numeric carriers before the actual consumer boundary.
  */
 final class ProtosFunctionCallDispatchers {
@@ -703,6 +707,15 @@ final class ProtosFunctionCallDispatchers {
             return explicitCaller;
         }
 
+        /*
+         * A structured call request (CallRequest.perform) supplies its
+         * authoritative caller explicitly. The current frame may be a
+         * continuation or resumer frame, never a substitute for it.
+         */
+        if (explicitCaller instanceof ProtosActivation) {
+            return explicitCaller;
+        }
+
         if (callee.hasCallerNeed(
                 ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION)) {
             return ProtosFrameArguments.activation(frame);
@@ -715,6 +728,75 @@ final class ProtosFunctionCallDispatchers {
         }
 
         return null;
+    }
+
+    /** Select from the actual executable, never a cached Closure's plan. */
+    private static ProtosReturnHome invocationHome(
+            ProtosClosureValue closure, ProtosBytecodeRootNode effectiveRoot) {
+        return closure.invocationReturnHomeUnderTemplateProofForRuntime(
+                !closure.hasNativeBody()
+                        && effectiveRoot != null
+                        && effectiveRoot.returnHomeProvenUnobservable());
+    }
+
+    /** Preserve Task reachability even when the callee needs no caller state. */
+    private static ProtosTask prepareInvocationTask(
+            VirtualFrame frame, Object[] arguments, Object explicitCaller) {
+        ProtosTask inherited = frame != null
+                ? ProtosFrameArguments.admittedCompactTask(frame.getArguments())
+                : explicitCaller instanceof ProtosActivation activation
+                        ? activation.taskForRuntime() : null;
+        ProtosTask task = ProtosFrameArguments.inheritInvocationTask(arguments, inherited);
+        if (task != null && !ProtosFrameArguments.isFunctionCall(arguments)) {
+            // Methods use slot 2 for methodHome. Only a Task-owned method
+            // needs an exact caller in slot 3 to retain its Task provenance.
+            if (!(arguments[3] instanceof ProtosActivation caller)
+                    || caller.taskForRuntime() != task) {
+                arguments[3] = frame != null
+                        ? ProtosFrameArguments.activation(frame) : explicitCaller;
+            }
+        }
+        return task;
+    }
+
+    /**
+     * Cold departure from an invocation that owns a physical home. Captured
+     * homes must never be passed here. PLAT070 unwinds finally regions before
+     * this boundary consumes a return; unrelated transfers retain identity.
+     */
+    static Object completeOwnedTransfer(
+            ProtosReturnHome owned, ControlFlowException transfer) {
+        if (owned != null && owned.isMaterialized()) {
+            if (transfer instanceof ProtosNonLocalReturnException returned
+                    && returned.target() == owned && owned.isActive()) {
+                owned.closeOwned();
+                return returned.value();
+            }
+            owned.closeOwned();
+        }
+        throw transfer;
+    }
+
+    /**
+     * I115: a suspended outcome leaves this boundary with the callee's B5
+     * header retained by the pending continuation. The caller frame is still
+     * live here, so its exact provenance is sealed into the callee's B5[3]
+     * before the pending outcome is returned. Ordinary results and
+     * exceptional transfers are returned or propagated unchanged, without
+     * reading or publishing the caller.
+     */
+    private static Object sealIfSuspended(
+            VirtualFrame frame,
+            Object[] arguments,
+            Object explicitCaller,
+            Object outcome) {
+        if (ProtosTailCallContinuation.isSuspended(outcome)) {
+            ProtosFrameArguments.sealSuspendedCaller(
+                    arguments,
+                    frame == null ? null : frame.getArguments(),
+                    explicitCaller);
+        }
+        return outcome;
     }
 
     /** GraalPy {@code CallDispatchers.FunctionDirectInvokeNode}. */
@@ -746,10 +828,23 @@ final class ProtosFunctionCallDispatchers {
                     prepareCallerForCallee(
                             frame, callee, explicitCaller);
 
+            ProtosReturnHome home = invocationHome(closure, callee);
             ProtosFrameArguments.completeDispatchedHeader(
-                    arguments, closure, transportedCaller, null);
+                    arguments, closure, transportedCaller, home);
+            ProtosTask task = prepareInvocationTask(frame, arguments, explicitCaller);
+            ProtosFrameArguments.bindOwnedReturnHome(closure, home, task);
 
-            return callNode.call(arguments);
+            Object outcome;
+            if (!home.isMaterialized() || closure.returnHome().isPresent()) {
+                outcome = callNode.call(arguments);
+            } else {
+                try {
+                    outcome = callNode.call(arguments);
+                } catch (ControlFlowException transfer) {
+                    return completeOwnedTransfer(home, transfer);
+                }
+            }
+            return sealIfSuspended(frame, arguments, explicitCaller, outcome);
         }
     }
 
@@ -783,10 +878,23 @@ final class ProtosFunctionCallDispatchers {
                     prepareCallerForCallee(
                             frame, callee, explicitCaller);
 
+            ProtosReturnHome home = invocationHome(closure, calleeRootOrNull(target));
             ProtosFrameArguments.completeDispatchedHeader(
-                    arguments, closure, transportedCaller, null);
+                    arguments, closure, transportedCaller, home);
+            ProtosTask task = prepareInvocationTask(frame, arguments, explicitCaller);
+            ProtosFrameArguments.bindOwnedReturnHome(closure, home, task);
 
-            return callNode.call(target, arguments);
+            Object outcome;
+            if (!home.isMaterialized() || closure.returnHome().isPresent()) {
+                outcome = callNode.call(target, arguments);
+            } else {
+                try {
+                    outcome = callNode.call(target, arguments);
+                } catch (ControlFlowException transfer) {
+                    return completeOwnedTransfer(home, transfer);
+                }
+            }
+            return sealIfSuspended(frame, arguments, explicitCaller, outcome);
         }
     }
 
@@ -928,11 +1036,20 @@ final class ProtosFunctionCallDispatchers {
             throw new IllegalStateException("Closure invocation requires an entered Protos Context");
         }
 
-            if (closure.nativeBody().isPresent()) {
-                return context.builtinCallTarget(nativeBody(closure)).call(activation, closure);
-            }
-            return functionCallTargetOrFail(closure, context)
-                    .call(ProtosFrameArguments.publishedInvocation(activation));
+        if (closure.nativeBody().isPresent()) {
+            return context.builtinCallTarget(nativeBody(closure)).call(activation, closure);
+        }
+        RootCallTarget target = functionCallTargetOrFail(closure, context);
+        Object[] arguments = ProtosFrameArguments.publishedInvocation(activation);
+        ProtosReturnHome owned = ProtosFrameArguments.ownedReturnHomeOrNull(arguments);
+        if (owned == null) {
+            return target.call(arguments);
+        }
+        try {
+            return target.call(arguments);
+        } catch (ControlFlowException transfer) {
+            return completeOwnedTransfer(owned, transfer);
+        }
 
     }
 

@@ -62,6 +62,205 @@ final class ProtosI115ARuntimeAdmissionTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final int PAST_CACHE_LIMITS = 12;
 
+    @Test
+    void dispatchedHeadersUseEffectiveProofAndBindOnlyFreshOwners() throws Exception {
+        withCore(module -> {
+            var task = module.executionDomain().createTask(null, current -> {});
+            ProtosClosureValue plain = closure("() => 42", module);
+            ProtosClosureValue returning = closure("() => ^42", module);
+            for (ProtosClosureValue selected : List.of(plain, returning)) {
+                selected.requireContextLocalExecutionProjectionForRuntime();
+                Object[] arguments = ProtosFrameArguments.taskFunctionCallArguments(task, new Object[0]);
+                assertInteger(42, ProtosFunctionCallDispatchersFactory.CallNodeGen.getUncached()
+                        .execute(null, false, selected, arguments, module, null));
+                ProtosReturnHome home = assertInstanceOf(ProtosReturnHome.class, arguments[4]);
+                if (selected == plain) {
+                    assertSame(ProtosReturnHome.unobservable(), home);
+                } else {
+                    assertTrue(home.isMaterialized());
+                    assertFalse(home.isActive());
+                    assertNull(home.ownerTaskForRuntime());
+                }
+            }
+
+            java.util.concurrent.atomic.AtomicInteger probes = new java.util.concurrent.atomic.AtomicInteger();
+            module.context().createLocalSlot("probeHome", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        ProtosReturnHome home = ((ProtosClosureValue) supplied.get(0))
+                                .returnHome().orElseThrow();
+                        assertTrue(home.isActive());
+                        assertSame(task, home.ownerTaskForRuntime());
+                        probes.incrementAndGet();
+                        return Long.valueOf(42);
+                    }));
+            ProtosClosureValue template = closure("() => { probeHome(() => ^42) }", module);
+            ProtosClosureValue deferred = template.parallelProjectionDeferred(
+                    template.capturedLexicalContexts(), template.capturedReceiver(),
+                    module.prelude().orElseThrow(), () -> template.executionPlan().orElseThrow());
+            Object[] deferredHeader = ProtosFrameArguments.taskFunctionCallArguments(task, new Object[0]);
+            assertInteger(42, ProtosFunctionCallDispatchersFactory.CallNodeGen.getUncached()
+                    .execute(null, false, deferred, deferredHeader, module, null));
+            assertEquals(1, probes.get());
+            assertTrue(assertInstanceOf(ProtosReturnHome.class, deferredHeader[4]).isMaterialized());
+            assertFalse(((ProtosReturnHome) deferredHeader[4]).isActive());
+
+            ProtosReturnHome captured = new ProtosReturnHome();
+            captured.bindOwnerTaskForRuntime(task);
+            ProtosClosureValue child = new ProtosClosureValue(
+                    plain.definition(), plain.capturedLexicalContexts(), plain.capturedReceiver(),
+                    null, captured, module.prelude().orElseThrow(), plain.executionPlan().orElseThrow());
+            Object[] arguments = ProtosFrameArguments.functionCallArguments(new Object[0]);
+            assertInteger(42, ProtosFunctionCallDispatchersFactory.CallNodeGen.getUncached()
+                    .execute(null, false, child, arguments, module, null));
+            assertSame(captured, arguments[4]);
+            assertTrue(captured.isActive());
+            assertSame(task, captured.ownerTaskForRuntime());
+        });
+    }
+
+    @Test
+    void nonLocalReturnPayloadIdentitySurvivesCachedAndIndirectDispatch() throws Exception {
+        withCore(module -> {
+            Object token = new com.guillermomolina.protos.runtime.ProtosObjectValue(
+                    com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
+            module.context().createLocalSlot("returnToken", token);
+            ProtosClosureValue parent = closure("() => 42", module);
+            var dispatch = new HeaderDispatchRoot(
+                    ProtosLanguageContext.current().languageForRuntime(), module)
+                    .getCallTarget();
+            ProtosClosureValue cached = closure("() => ^returnToken", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS * 2; i++) {
+                ProtosClosureValue selected = i < PAST_CACHE_LIMITS ? cached
+                        : closure("() => { unused: " + i + "\n^returnToken }", module);
+                Object[] header = ProtosFrameArguments.functionCallArguments(new Object[0]);
+                Object[] caller = ProtosFrameArguments.compactDirectClosureCall(
+                        parent, module, null, new Object[] {selected, header});
+                caller[3] = null;
+                assertSame(token, dispatch.call(caller));
+                ProtosReturnHome home = assertInstanceOf(ProtosReturnHome.class, header[4]);
+                assertFalse(home.isActive());
+                assertNull(home.ownerTaskForRuntime());
+            }
+        });
+    }
+
+    @Test
+    void taskHeadersKeepIndependentCallerAndHomeContractsAcrossPicTiers() throws Exception {
+        withCore(module -> {
+            var task = module.executionDomain().createTask(null, current -> {});
+            ProtosClosureValue parent = closure("() => 42", module);
+            ProtosClosureValue template = closure("() => { unused: () => ^42\n42 }", module);
+            var dispatch = new HeaderDispatchRoot(ProtosLanguageContext.current().languageForRuntime())
+                    .getCallTarget();
+            ProtosReturnHome previous = null;
+            for (int tier = 0; tier < 3; tier++) {
+                ProtosClosureValue same = null;
+                for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                    ProtosClosureValue body = tier == 2
+                            ? closure("() => { unused: () => ^" + i + "\n42 }", module) : template;
+                    ProtosClosureValue selected = tier == 0 && same != null ? same
+                            : new ProtosClosureValue(body.definition(), body.capturedLexicalContexts(),
+                                    body.capturedReceiver(), null, null,
+                                    module.prelude().orElseThrow(), body.executionPlan().orElseThrow());
+                    same = selected;
+                    if (tier == 2) {
+                        selected.requireContextLocalExecutionProjectionForRuntime();
+                    }
+                    Object[] header = ProtosFrameArguments.functionCallArguments(new Object[0]);
+                    Object[] caller = ProtosFrameArguments.compactDirectClosureCall(
+                            parent, module, task, new Object[] {selected, header});
+                    caller[3] = null;
+                    assertInteger(42, dispatch.call(caller));
+                    assertSame(parent, caller[0], "Task-only function transport does not publish");
+                    assertNull(header[3]);
+                    assertSame(task, header[2]);
+                    ProtosReturnHome home = assertInstanceOf(ProtosReturnHome.class, header[4]);
+                    assertTrue(home.isMaterialized());
+                    assertNotSame(previous, home);
+                    assertFalse(home.isActive());
+                    assertNull(home.ownerTaskForRuntime());
+                    previous = home;
+                }
+            }
+            ProtosClosureValue plain = closure("() => 42", module);
+            ProtosReturnHome captured = new ProtosReturnHome();
+            captured.bindOwnerTaskForRuntime(task);
+            for (ProtosReturnHome capture : new ProtosReturnHome[] {null, captured}) {
+                ProtosClosureValue selected = new ProtosClosureValue(
+                        plain.definition(), plain.capturedLexicalContexts(), plain.capturedReceiver(),
+                        null, capture, module.prelude().orElseThrow(), plain.executionPlan().orElseThrow());
+                Object[] header = ProtosFrameArguments.functionCallArguments(new Object[0]);
+                Object[] caller = ProtosFrameArguments.compactDirectClosureCall(
+                        parent, module, task, new Object[] {selected, header});
+                caller[3] = null;
+                assertInteger(42, dispatch.call(caller));
+                assertNull(header[3]);
+                assertSame(task, header[2]);
+                assertSame(capture == null ? ProtosReturnHome.unobservable() : captured, header[4]);
+            }
+            assertTrue(captured.isActive());
+            assertSame(task, captured.ownerTaskForRuntime());
+            Object[] taskFree = ProtosFrameArguments.functionCallArguments(new Object[0]);
+            Object[] taskFreeCaller = ProtosFrameArguments.compactDirectClosureCall(
+                    parent, module, null, new Object[] {plain, taskFree});
+            taskFreeCaller[3] = null;
+            assertInteger(42, dispatch.call(taskFreeCaller));
+            assertSame(parent, taskFreeCaller[0]);
+            assertNull(taskFree[2]);
+            assertNull(taskFree[3]);
+            assertSame(ProtosReturnHome.unobservable(), taskFree[4]);
+        });
+    }
+
+    /** Component fixture exercising one adopted shared-dispatch site. */
+    private static final class HeaderDispatchRoot extends com.oracle.truffle.api.nodes.RootNode {
+        @Child private ProtosFunctionCallDispatchers.CallNode dispatch =
+                ProtosFunctionCallDispatchersFactory.CallNodeGen.create();
+
+        private final ProtosActivation hostCaller;
+
+        HeaderDispatchRoot(ProtosLanguage language) {
+            this(language, null);
+        }
+
+        HeaderDispatchRoot(ProtosLanguage language, ProtosActivation hostCaller) {
+            super(language);
+            this.hostCaller = hostCaller;
+        }
+
+        @Override
+        public Object execute(com.oracle.truffle.api.frame.VirtualFrame frame) {
+            Object[] caller = frame.getArguments();
+            // This fixture is not a semantic source root, so host entries
+            // supply their caller explicitly rather than asking for stack recovery.
+            return dispatch.execute(hostCaller == null ? frame : null,
+                    false, caller[5], (Object[]) caller[6], hostCaller, null);
+        }
+    }
+
+    @Test
+    void nonLocalReturnsSurviveAllDispatcherTiers() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    invoke: (f, value) => { f(value) }
+                    same: (value) => { ^value }
+                    owner: (value) => {
+                        invoke((v) => { ^v }, value)
+                        0
+                    }
+                    """, "i115-home-tiers.protos", module);
+            closure("invoke", module).executionPlan().orElseThrow()
+                    .bytecodeActivationRootForTesting().getBytecodeNode().setUncachedThreshold(0);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(42, evaluate("invoke(same, 42)", "i115-home-identity.protos", module));
+                assertInteger(42, evaluate("owner(42)", "i115-home-captured.protos", module));
+                assertInteger(42, evaluate("invoke((v) => { ^v }, 42)",
+                        "i115-home-distinct-" + i + ".protos", module));
+            }
+        });
+    }
+
+
     /**
      * I115: one call site through the shared dispatcher's three tiers
      * (FunctionCachedCallNode): a repeated Closure (identity), fresh Closures
@@ -169,6 +368,28 @@ final class ProtosI115ARuntimeAdmissionTest {
                     ProtosNullValue.INSTANCE,
                     evaluate("false.ifTrue(() => { 42 })\n",
                             "i115-literal-false.protos", module));
+        });
+    }
+
+    @Test
+    void completedCreatorCapturesShareOneDeferredOwnerContext() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    makeDurable: (seed) => { (value) => { seed + value } }
+                    durable: makeDurable(7)
+                    """, "i115a-durable-owner.protos", module);
+            ProtosClosureValue escaped = closure("durable", module);
+            var environment = escaped.capturedLexicalEnvironmentForRuntime();
+            assertNotNull(environment);
+            assertTrue(environment.isDeferredForRuntime());
+            ProtosActivation owner = environment.deferredOwnerForRuntime();
+            assertNull(owner.materializedContextOrNullForRuntime());
+            assertSame(environment, owner.lexicalEnvironmentForClosureCapture());
+            ProtosObjectValue observed = environment.context();
+            assertSame(observed, owner.context());
+            assertSame(observed, escaped.capturedLexicalContexts().get(0));
+            assertSame(observed, environment.context());
+            assertInteger(12, evaluate("durable(5)", "i115a-durable-read.protos", module));
         });
     }
 

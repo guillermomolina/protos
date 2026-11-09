@@ -59,8 +59,6 @@ import java.util.function.Function;
  */
 public final class ProtosLexicalEnvironment {
     private ProtosActivation deferredOwner;
-    private Object[] deferredOwnerArguments;
-    private Function<Object[], ProtosActivation> deferredOwnerResolver;
     private ProtosObjectValue context;
     private final ProtosLexicalEnvironment outer;
 
@@ -74,32 +72,23 @@ public final class ProtosLexicalEnvironment {
     }
 
     /**
-     * I092: compact root capture retains its frame argument authority without
-     * constructing a rich activation merely to create a Closure literal.
-     * Every later observer resolves the same activation published in argument 0.
-     * This form is used only for roots with no frame-owned lexical slots.
+     * Resolve the exact compact owner while its invocation is still live.
+     * The activation-owned node is shared by all captures and leaves the guest
+     * Context deferred. Retaining only arguments plus a future stack resolver
+     * would lose caller provenance as soon as the creator returns.
      */
     public static ProtosLexicalEnvironment deferredCompactOwner(
             Object[] arguments,
-            Function<Object[], ProtosActivation> resolver,
-            ProtosLexicalEnvironment outer) {
-        ProtosLexicalEnvironment environment =
-                new ProtosLexicalEnvironment(null, null, outer);
-        environment.deferredOwnerArguments = Objects.requireNonNull(arguments, "arguments");
-        environment.deferredOwnerResolver = Objects.requireNonNull(resolver, "resolver");
-        return environment;
+            Function<Object[], ProtosActivation> resolver) {
+        ProtosActivation owner = Objects.requireNonNull(
+                Objects.requireNonNull(resolver, "resolver")
+                        .apply(Objects.requireNonNull(arguments, "arguments")),
+                "resolved owner");
+        return owner.lexicalEnvironmentForClosureCapture();
     }
 
     private ProtosActivation resolveDeferredOwner() {
-        ProtosActivation owner = deferredOwner;
-        if (owner == null) {
-            owner = Objects.requireNonNull(deferredOwnerResolver, "deferred owner")
-                    .apply(deferredOwnerArguments);
-            deferredOwner = Objects.requireNonNull(owner, "resolved owner");
-            deferredOwnerArguments = null;
-            deferredOwnerResolver = null;
-        }
-        return owner;
+        return Objects.requireNonNull(deferredOwner, "deferred owner");
     }
 
     /** A node whose context object already exists. */
@@ -173,8 +162,6 @@ public final class ProtosLexicalEnvironment {
         ProtosObjectValue materialized = resolveDeferredOwner().context();
         context = materialized;
         deferredOwner = null;
-        deferredOwnerArguments = null;
-        deferredOwnerResolver = null;
         return materialized;
     }
 

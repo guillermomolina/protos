@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.callables.ProtosSuspensionCapableNativ
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.RootNode;
 import java.util.List;
@@ -70,11 +71,24 @@ final class ProtosBuiltinCallRootNode extends RootNode {
             closure = (ProtosClosureValue) arguments[1];
         } else {
             closure = ProtosFrameArguments.compactClosure(arguments);
-            activation = ProtosFrameArguments.activation(arguments);
+            try {
+                activation = ProtosFrameArguments.activation(arguments);
+            } catch (RuntimeException | Error failure) {
+                ProtosReturnHome owned = ProtosFrameArguments.ownedReturnHomeOrNull(arguments);
+                if (owned != null) {
+                    owned.closeOwned();
+                }
+                throw failure;
+            }
         }
         Object result;
         try {
             result = executeBody(closure, activation);
+        } catch (ControlFlowException transfer) {
+            return ProtosFunctionCallDispatchers.completeOwnedTransfer(
+                    activation.ownsReturnHome()
+                            ? activation.returnHomeOrNullForRuntime() : null,
+                    transfer);
         } catch (RuntimeException | Error failure) {
             closeOwnedHome(activation);
             throw failure;
@@ -85,7 +99,7 @@ final class ProtosBuiltinCallRootNode extends RootNode {
                             ? activation.returnHomeOrNullForRuntime()
                             : null;
 
-            if (ownedHome != null) {
+            if (ownedHome != null && ownedHome.isMaterialized()) {
                 return ProtosTailCallContinuation.deferOwned(
                         result, ownedHome);
             }

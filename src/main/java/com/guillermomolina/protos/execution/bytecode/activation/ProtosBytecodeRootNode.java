@@ -549,12 +549,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             int bytecodeIndex)
             throws Throwable {
         /*
-         * I115 (TruffleRuby RubyMethodRootNode / ReturnID, TruffleSqueak
-         * home-context identity): a non-local return aimed by identity at the
-         * still-active ReturnHome this activation owns is captured here, in
-         * the owning root. Any other transfer leaving this activation closes
-         * only the home this activation owns and keeps unwinding with its
-         * target unchanged.
+         * PLAT070-configured unwindExceptions bypass this interceptor and
+         * exceptional epilogues. Bytecode TryFinally performs their unwinding;
+         * the external owning invocation boundary (including continuation
+         * resumption) consumes an exact-home return. Retain interception for
+         * other control transfers that legitimately reach this hook.
          */
         ProtosReturnHome owned =
                 ProtosFrameArguments.ownedReturnHomeOrNull(frame.getArguments());
@@ -586,8 +585,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             VirtualFrame frame,
             BytecodeNode bytecodeNode,
             int bytecodeIndex) {
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // closeOwnedReturnHome(frame, null);
+        closeOwnedReturnHome(frame, null);
         return t;
     }
 
@@ -672,7 +670,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             // A suspended invocation retains its owned ReturnHome.
             // Normal completion closes only the home owned by this root.
-            closeOwnedReturnHome(frame, value);
+            if (!root.returnHomeProvenUnobservable()) {
+                closeOwnedReturnHome(frame, value);
+            } else if (ProtosFrameArguments.hasPublishedActivation(frame.getArguments())) {
+                closePublishedReturnHome(frame.getArguments(), value);
+            }
             return value;
         }
     }
@@ -695,7 +697,25 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             // A guest Error definitively leaves this invocation.
             // Captured ReturnHomes remain owned by their outer roots.
-            closeOwnedReturnHome(frame, null);
+            if (!root.returnHomeProvenUnobservable()) {
+                closeOwnedReturnHome(frame, null);
+            } else if (ProtosFrameArguments.hasPublishedActivation(frame.getArguments())) {
+                closePublishedReturnHome(frame.getArguments(), null);
+            }
+        }
+    }
+
+    /**
+     * Published entries can retain a conservatively selected physical home.
+     * Compact entries select from the executing root's proof before entry;
+     * publication of those entries preserves that exact home. Keep the rich
+     * compatibility case out of the compact no-home lifecycle path.
+     */
+    @TruffleBoundary
+    private static void closePublishedReturnHome(Object[] arguments, Object result) {
+        ProtosReturnHome owned = ProtosFrameArguments.ownedReturnHomeOrNull(arguments);
+        if (owned != null && (result == null || !ProtosTailCallContinuation.isSuspended(result))) {
+            owned.closeOwned();
         }
     }
 
@@ -706,14 +726,21 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * and the unobservable marker are never owned; closing is idempotent.
      */
     static void closeOwnedReturnHome(VirtualFrame frame, Object result) {
-        if (result != null && ProtosTailCallContinuation.isSuspended(result)) {
-            return;
-        }
         ProtosReturnHome owned =
                 ProtosFrameArguments.ownedReturnHomeOrNull(frame.getArguments());
-        if (owned != null) {
-            owned.closeOwned();
+        if (owned == null) {
+            return;
         }
+        if (result != null && suspendedOwnedResult(result)) {
+            return;
+        }
+        owned.closeOwned();
+    }
+
+    /** Physical owners alone need the full continuation classification. */
+    @TruffleBoundary
+    private static boolean suspendedOwnedResult(Object result) {
+        return ProtosTailCallContinuation.isSuspended(result);
     }
 
     @Operation
@@ -729,6 +756,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * CurrentCallerReference) an unpublished frame answers its compact
          * arguments instead of materializing; otherwise both specializations
          * return exactly what ProtosFrameArguments.activation returns.
+         *
+         * I115: a resumed continuation frame reads the caller its
+         * dispatcher sealed into B5[3] at suspension; it never relies on
+         * active-stack recovery of a returned caller frame.
          */
         @Specialization(guards = "hasPublishedActivation(frame)")
         public static Object published(boolean callerReference, @Bind VirtualFrame frame) {
@@ -1556,7 +1587,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
              * destination is an InvalidReturn Error; the target identity is
              * never replaced while propagating.
              */
-            if (target == null || !target.isMaterialized() || !target.isActive()) {
+            if (target == null || !target.isMaterialized() || !target.isActive()
+                    || target.ownerTaskForRuntime() != activation.taskForRuntime()) {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newInvalidReturn(activation));
             }
@@ -1615,11 +1647,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * Root-level Closure creation (I092, I112). The creating activation is
      * this root's own frame argument 0, bound from the frame rather than
      * loaded as a Bytecode operand. A published activation is captured
-     * unchanged; a still-compact root captures without materializing only
-     * when {@code compactCapture} (the I092 admission: a genuine root that
-     * declares no frame-owned lexical bindings) holds, and otherwise
-     * materializes and publishes its exact activation first, exactly as
-     * {@link CurrentActivation} followed by {@link MaterializeClosure}.
+     * unchanged. A creator-context capture publishes its exact activation
+     * before its frame can return. With {@code compactCapture} (the I092
+     * admission for a root with no frame-owned lexical bindings), the guest
+     * Context remains deferred; other roots use {@link CurrentActivation}
+     * followed by {@link MaterializeClosure}.
      *
      * <p>I115 / PLAT066-C: {@code capturesCreatorContext} is the lowering's
      * classification of this exact Closure ({@code
@@ -1633,17 +1665,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      *
      * <p>I115-H (EXPERIMENTAL): when {@code mayObserveReturnHome} (the
      * lowering's {@code CanonicalCompilationFacts#mayObserveReturnHome}) is
-     * also false, the single {@code nonCapturing} specialization builds the
+     * also false and the complete lexical subtree is proven independent,
+     * the {@code nonCapturing} specializations build the
      * lightweight {@link ProtosClosureValue#experimentalNonCapturing}
      * representation without binding the frame, so neither the creator's
      * activation nor its frame arguments are consulted. A
      * definition that may observe its ReturnHome ({@code ^}) keeps the I115-G
-     * construction with the creator's ReturnHome. The capturing
-     * specializations are unchanged.
+     * construction with the creator's ReturnHome. Inherited-only captures
+     * retain the existing chain without creating a new creator context.
      */
     @Operation
     @ConstantOperand(type = boolean.class, name = "compactCapture")
     @ConstantOperand(type = boolean.class, name = "capturesCreatorContext")
+    @ConstantOperand(type = boolean.class, name = "requiresInheritedLexicalEnvironment")
     @ConstantOperand(type = boolean.class, name = "mayObserveReturnHome")
     public static final class MaterializeCurrentClosure {
         /*
@@ -1656,6 +1690,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization(
                 guards = {
                     "!capturesCreatorContext",
+                    "!requiresInheritedLexicalEnvironment",
                     "!mayObserveReturnHome",
                     "executionPlanCell == cachedCell"
                 },
@@ -1663,6 +1698,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosClosureValue nonCapturingCached(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean requiresInheritedLexicalEnvironment,
                 boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
@@ -1675,12 +1711,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization(
                 guards = {
                     "!capturesCreatorContext",
+                    "!requiresInheritedLexicalEnvironment",
                     "!mayObserveReturnHome"
                 },
                 replaces = "nonCapturingCached")
         public static ProtosClosureValue nonCapturing(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean requiresInheritedLexicalEnvironment,
                 boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell) {
@@ -1690,11 +1728,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(guards = {
                 "!capturesCreatorContext",
-                "mayObserveReturnHome",
+                "requiresInheritedLexicalEnvironment || mayObserveReturnHome",
                 "hasPublishedActivation(frame)"})
         public static ProtosClosureValue publishedWithoutCreatorContext(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean requiresInheritedLexicalEnvironment,
                 boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
@@ -1708,23 +1747,25 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation.methodHomeOrNullForRuntime(),
                     activation.returnHomeOrNullForRuntime(),
                     activation.preludeOrNullForRuntime(),
-                    executionPlanCell.plan());
+                    executionPlanCell.plan(),
+                    activation.currentModuleKey().orElse(null));
         }
 
         @Specialization(guards = {
                 "!capturesCreatorContext",
-                "mayObserveReturnHome",
+                "requiresInheritedLexicalEnvironment || mayObserveReturnHome",
                 "!hasPublishedActivation(frame)"})
         public static ProtosClosureValue compactWithoutCreatorContext(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean requiresInheritedLexicalEnvironment,
                 boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {
             return ProtosFrameArguments.materializeCompactClosure(
                     frame.getArguments(), definition, executionPlanCell,
-                    false, mayObserveReturnHome);
+                    false, requiresInheritedLexicalEnvironment, mayObserveReturnHome);
         }
 
         @Specialization(guards = {
@@ -1734,6 +1775,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosClosureValue publishedMaterialized(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean requiresInheritedLexicalEnvironment,
                 boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
@@ -1758,6 +1800,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosClosureValue publishedGeneral(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean requiresInheritedLexicalEnvironment,
                 boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
@@ -1782,13 +1825,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosClosureValue compact(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean requiresInheritedLexicalEnvironment,
                 boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {
             return ProtosFrameArguments.materializeCompactClosure(
                     frame.getArguments(), definition, executionPlanCell,
-                    true, mayObserveReturnHome);
+                    true, requiresInheritedLexicalEnvironment, mayObserveReturnHome);
         }
 
         @Specialization(guards = {
@@ -1798,6 +1842,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosClosureValue rich(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean requiresInheritedLexicalEnvironment,
                 boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
@@ -2862,7 +2907,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("create(cachedRoot.getCallTarget())")
                         DirectCallNode node) {
 
-                return node.call(result.getFrame(), resumeValue);
+                try {
+                    return node.call(result.getFrame(), resumeValue);
+                } catch (ControlFlowException transfer) {
+                    // Direct unwind bypasses the resumed root's exceptional epilogue.
+                    return ProtosFunctionCallDispatchers.completeOwnedTransfer(
+                            ProtosFrameArguments.ownedReturnHomeOrNull(
+                                    result.getFrame().getArguments()),
+                            transfer);
+                }
 
         }
 
@@ -2872,10 +2925,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object resumeValue,
                 @Cached IndirectCallNode node) {
 
-                return node.call(
-                        result.getContinuationCallTarget(),
-                        result.getFrame(),
-                        resumeValue);
+                try {
+                    return node.call(
+                            result.getContinuationCallTarget(),
+                            result.getFrame(),
+                            resumeValue);
+                } catch (ControlFlowException transfer) {
+                    return ProtosFunctionCallDispatchers.completeOwnedTransfer(
+                            ProtosFrameArguments.ownedReturnHomeOrNull(
+                                    result.getFrame().getArguments()),
+                            transfer);
+                }
 
         }
 

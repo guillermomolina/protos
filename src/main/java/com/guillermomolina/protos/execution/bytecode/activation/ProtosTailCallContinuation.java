@@ -44,10 +44,16 @@ import java.util.Objects;
  *
  * <p>I115 (TruffleRuby): the transport owns no invocation. The ReturnHome of
  * a suspended activation stays in that activation's frame and is captured and
- * closed by its own root when it completes (see {@link
- * ProtosBytecodeRootNode#interceptControlFlowException}); this transport only
- * propagates results and transfers. On abandonment it closes, innermost
+ * closed by its selective root epilogues on completion. On resumption this
+ * boundary consumes PLAT070 unwind transfers targeted at the saved frame's
+ * exact owned home; captured homes continue unwinding. On abandonment it closes, innermost
  * first, the homes the abandoned frames own.
+ *
+ * <p>I115 caller provenance: every suspended frame retained here (directly or
+ * through a nested {@link ContinuationResult} or transport) had its exact
+ * caller sealed into its B5[3] by the dispatcher at its original suspension
+ * boundary ({@link ProtosFrameArguments#sealSuspendedCaller}). Resumption
+ * never recovers that caller by walking the resumer's stack.
  *
  * <p>Like a Bytecode root, the transport reports a control transfer leaving it
  * directly as {@link ControlFlowException}.
@@ -272,7 +278,14 @@ final class ProtosTailCallContinuation implements TruffleObject {
             return transport.resumeOwned(resumeValue);
         }
         if (pending instanceof ContinuationResult continuation) {
-            return continuation.continueWith(resumeValue);
+            try {
+                return continuation.continueWith(resumeValue);
+            } catch (ControlFlowException transfer) {
+                return ProtosFunctionCallDispatchers.completeOwnedTransfer(
+                        ProtosFrameArguments.ownedReturnHomeOrNull(
+                                continuation.getFrame().getArguments()),
+                        transfer);
+            }
         }
         return resumeLeaf(pending, resumeValue);
     }
@@ -317,8 +330,11 @@ final class ProtosTailCallContinuation implements TruffleObject {
         } else if (pending instanceof ProtosTailCallContinuation transport) {
             transport.abandonOwned();
         } else if (pending instanceof ContinuationResult continuation) {
-            abandon(continuation.getResult());
-            closeOwnedHome(continuation);
+            try {
+                abandon(continuation.getResult());
+            } finally {
+                closeOwnedHome(continuation);
+            }
         }
     }
 
@@ -352,8 +368,8 @@ final class ProtosTailCallContinuation implements TruffleObject {
                     "resumed terminal Closure continuation returned null");
         } catch (ControlFlowException transfer) {
             state = State.DONE;
-            closeOwnedHome();
-            throw transfer;
+            pending = null;
+            return ProtosFunctionCallDispatchers.completeOwnedTransfer(ownedHome, transfer);
         } catch (AbstractTruffleException failure) {
             state = State.DONE;
             ProtosDiagnosticTraceCapture.recordResumedTerminalCaller(

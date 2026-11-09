@@ -55,7 +55,24 @@ test011EnsureCleanupPending: (trace) => {
     0
 }
 
+testI115InvokeCleanup: (callback) => { callback() }
+testI115IndirectCleanupReturn: (trace, token) => {
+    (() => { ^null }).ensure(() => {
+        trace.cleaned = true
+        testI115InvokeCleanup(() => { ^token })
+    })
+    trace.after = true
+    null
+}
+
 tests: [
+    Test("indirect cleanup return preserves the live outer home", () => {
+        trace: { cleaned: false; after: false }
+        token: {}
+        Assertions.require(testI115IndirectCleanupReturn(trace, token) === token)
+        Assertions.require(trace.cleaned)
+        Assertions.require(trace.after == false)
+    }),
     Test("ensure body nonlocal return runs cleanup", () => {
         trace: { order: 0; afterEnsure: false }
 

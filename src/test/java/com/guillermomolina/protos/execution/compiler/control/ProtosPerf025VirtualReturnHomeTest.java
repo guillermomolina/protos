@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -298,6 +299,196 @@ final class ProtosPerf025VirtualReturnHomeTest {
             evaluate("late.removeSlot(\"call\")\n", module);
             assertInteger(7, evaluate("callOne(late, 7)\n", module));
             assertInteger(7, evaluate("escape()\n", module));
+        });
+    }
+
+    @Test
+    void deferredRichEntryEstablishesProofBeforeSelectingHome() throws Exception {
+        withCore(module -> {
+            for (String source : List.of("() => 42", "() => ^42")) {
+                ProtosClosureValue template = parsedClosure(source, module);
+                java.util.concurrent.atomic.AtomicInteger preparations =
+                        new java.util.concurrent.atomic.AtomicInteger();
+                ProtosClosureValue deferred = template.parallelProjectionDeferred(
+                        template.capturedLexicalContexts(), template.capturedReceiver(),
+                        module.prelude().orElseThrow(), () -> {
+                            preparations.incrementAndGet();
+                            return planOf(template);
+                        });
+                assertTrue(deferred.executionPlan().isEmpty());
+                ProtosActivation invocation = ProtosActivation.forClosureInvocation(
+                        deferred, List.of(), module.prelude().orElseThrow());
+                var task = module.executionDomain().createTask(null, current -> {});
+                invocation.attachTask(task);
+                assertEquals(1, preparations.get());
+                ProtosReturnHome home = invocation.returnHome().orElseThrow();
+                if (source.contains("^")) {
+                    assertTrue(home.isMaterialized());
+                    assertTrue(home.isActive());
+                    assertSame(task, home.ownerTaskForRuntime());
+                } else {
+                    assertSame(ProtosReturnHome.unobservable(), home);
+                    assertSame(null, home.ownerTaskForRuntime());
+                }
+                assertInteger(42, ProtosFunctionCallDispatchers.callPublishedUncached(
+                        deferred, invocation));
+                assertFalse(home.isActive());
+                assertSame(null, home.ownerTaskForRuntime());
+            }
+        });
+    }
+
+    @Test
+    void owningInvocationsAreDistinctAndSiblingCapturesAreIdentical() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue direct = parsedClosure("() => ^42", module);
+            DirectEntry first = fastDirect(direct, module);
+            DirectEntry second = fastDirect(direct, module);
+            ProtosReturnHome firstHome = assertPhysicalActiveHome(first);
+            ProtosReturnHome secondHome = assertPhysicalActiveHome(second);
+            assertNotSame(firstHome, secondHome);
+            assertInteger(42, enter(first));
+            assertFalse(firstHome.isActive());
+            assertTrue(secondHome.isActive());
+            assertInteger(42, enter(second));
+            assertFalse(secondHome.isActive());
+
+            ProtosClosureValue siblings = parsedClosure(
+                    "() => { [() => ^41, () => ^42] }", module);
+            DirectEntry owner = fastDirect(siblings, module);
+            ProtosReturnHome home = assertPhysicalActiveHome(owner);
+            var children = assertInstanceOf(
+                    com.guillermomolina.protos.runtime.ProtosArrayValue.class, enter(owner));
+            assertSame(home, assertInstanceOf(ProtosClosureValue.class,
+                    children.indexedSnapshot().get(0)).returnHome().orElseThrow());
+            assertSame(home, assertInstanceOf(ProtosClosureValue.class,
+                    children.indexedSnapshot().get(1)).returnHome().orElseThrow());
+            assertFalse(home.isActive());
+        });
+    }
+
+    @Test
+    void publishedPhysicalOwnerCompletesEvenUnderNoHomeRootProof() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue source = parsedClosure("() => 42", module);
+            ProtosReturnHome physical = new ProtosReturnHome();
+            ProtosActivation activation =
+                    ProtosActivation.forDirectClosureInvocationWithReturnHomeForRuntime(
+                            source, List.of(), module.prelude().orElseThrow(),
+                            module.actorModuleState(), module.currentModuleKey().orElse(null),
+                            module.executionDomain(), physical);
+            var task = module.executionDomain().createTask(null, current -> {});
+            activation.attachTask(task);
+            assertSame(task, physical.ownerTaskForRuntime());
+            assertTrue(physical.isActive());
+            assertInteger(42, ProtosFunctionCallDispatchers.callPublishedUncached(source, activation));
+            assertSame(physical, activation.returnHome().orElseThrow());
+            assertFalse(physical.isActive());
+            assertSame(null, physical.ownerTaskForRuntime());
+
+            var failure = module.prelude().orElseThrow().newError();
+            module.context().createLocalSlot("publishedFailure", failure);
+            ProtosClosureValue throwing = parsedClosure("() => { publishedFailure.signal() }", module);
+            assertTrue(planOf(throwing).returnHomeProvenUnobservableForRuntime());
+            ProtosReturnHome failedHome = new ProtosReturnHome();
+            ProtosActivation failed =
+                    ProtosActivation.forDirectClosureInvocationWithReturnHomeForRuntime(
+                            throwing, List.of(), module.prelude().orElseThrow(),
+                            module.actorModuleState(), module.currentModuleKey().orElse(null),
+                            module.executionDomain(), failedHome);
+            var signaled = org.junit.jupiter.api.Assertions.assertThrows(
+                    com.guillermomolina.protos.runtime.ProtosSignalException.class,
+                    () -> ProtosFunctionCallDispatchers.callPublishedUncached(throwing, failed));
+            assertSame(failure, signaled.error());
+            assertFalse(failedHome.isActive());
+        });
+    }
+
+    @Test
+    void physicalCloseReleasesTaskWithoutClosingCapturedOrVirtualHomes() throws Exception {
+        withCore(module -> {
+            var task = module.executionDomain().createTask(null, current -> {});
+            ProtosReturnHome outer = new ProtosReturnHome();
+            outer.bindOwnerTaskForRuntime(task);
+            ProtosClosureValue child = withHome(parsedClosure("() => 42", module), outer,
+                    module.prelude().orElseThrow());
+            assertInteger(42, enter(fastDirect(child, module)));
+            assertTrue(outer.isActive());
+            assertSame(task, outer.ownerTaskForRuntime());
+            outer.closeOwned();
+            assertFalse(outer.isActive());
+            assertSame(null, outer.ownerTaskForRuntime());
+            outer.closeOwned();
+            assertSame(null, outer.ownerTaskForRuntime());
+            var virtual = ProtosReturnHome.unobservable();
+            virtual.bindOwnerTaskForRuntime(task);
+            virtual.closeOwned();
+            assertFalse(virtual.isActive());
+            assertSame(null, virtual.ownerTaskForRuntime());
+        });
+    }
+
+    @Test
+    void definitiveInternalFailureClosesOnlyTheOwnedPhysicalHome() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue source = parsedClosure("() => ^42", module);
+            DirectEntry entry = fastDirect(source, module);
+            ProtosReturnHome home = assertPhysicalActiveHome(entry);
+            var root = (ProtosBytecodeRootNode) entry.target().getRootNode();
+            var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
+                    entry.targetArguments(), root.getFrameDescriptor());
+            RuntimeException failure = new RuntimeException("internal failure identity");
+            assertSame(failure, root.interceptInternalException(
+                    failure, frame, root.getBytecodeNode(), 0));
+            assertFalse(home.isActive());
+
+            ProtosReturnHome captured = new ProtosReturnHome();
+            DirectEntry child = fastDirect(withHome(source, captured,
+                    module.prelude().orElseThrow()), module);
+            var childFrame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
+                    child.targetArguments(), root.getFrameDescriptor());
+            assertSame(failure, root.interceptInternalException(
+                    failure, childFrame, root.getBytecodeNode(), 0));
+            assertTrue(captured.isActive());
+        });
+    }
+
+    @Test
+    void ownerTransferCompletionPreservesPayloadAndUnrelatedTransferIdentity() throws Exception {
+        withCore(module -> {
+            var task = module.executionDomain().createTask(null, current -> {});
+            Object token = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosReturnHome owner = new ProtosReturnHome();
+            owner.bindOwnerTaskForRuntime(task);
+            var returned = new com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException(
+                    owner, token);
+            assertSame(token, ProtosFunctionCallDispatchers.completeOwnedTransfer(owner, returned));
+            assertFalse(owner.isActive());
+            assertSame(null, owner.ownerTaskForRuntime());
+
+            ProtosReturnHome inner = new ProtosReturnHome();
+            inner.bindOwnerTaskForRuntime(task);
+            ProtosReturnHome outer = new ProtosReturnHome();
+            outer.bindOwnerTaskForRuntime(task);
+            var escaping = new com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException(
+                    outer, token);
+            assertSame(escaping, org.junit.jupiter.api.Assertions.assertThrows(
+                    com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException.class,
+                    () -> ProtosFunctionCallDispatchers.completeOwnedTransfer(inner, escaping)));
+            assertFalse(inner.isActive());
+            assertSame(null, inner.ownerTaskForRuntime());
+            assertTrue(outer.isActive());
+            assertSame(task, outer.ownerTaskForRuntime());
+            outer.closeOwned();
+
+            ProtosReturnHome departing = new ProtosReturnHome();
+            departing.bindOwnerTaskForRuntime(task);
+            var unrelated = new ProtosTaskCancellationException();
+            assertSame(unrelated, org.junit.jupiter.api.Assertions.assertThrows(
+                    com.oracle.truffle.api.nodes.ControlFlowException.class,
+                    () -> ProtosFunctionCallDispatchers.completeOwnedTransfer(departing, unrelated)));
+            assertFalse(departing.isActive());
+            assertSame(null, departing.ownerTaskForRuntime());
         });
     }
 

@@ -71,6 +71,85 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
 
     @Test
+    void escapedCapturesPublishExactOwnersWithoutObservingTheirContexts() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue template = closure("() => { () => context }", module);
+            for (boolean taskOwned : new boolean[] {false, true}) {
+                ProtosTask task = taskOwned
+                        ? module.executionDomain().createTask(null, current -> {}) : null;
+                var home = new com.guillermomolina.protos.runtime.control.ProtosReturnHome();
+                if (task != null) {
+                    home.bindOwnerTaskForRuntime(task);
+                }
+                ProtosClosureValue maker = new ProtosClosureValue(
+                        template.definition(), template.capturedLexicalContexts(),
+                        template.capturedReceiver(), null, home,
+                        module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+                Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                        maker, module, task, new Object[0]);
+                Object callerPayload = arguments[3];
+                ProtosClosureValue escaped = assertInstanceOf(
+                        ProtosClosureValue.class, target(maker).call(arguments));
+                ProtosActivation owner = assertInstanceOf(ProtosActivation.class, arguments[0]);
+                assertSame(callerPayload, arguments[3]);
+                assertSame(task, owner.taskForRuntime());
+                assertSame(home, owner.returnHomeOrNullForRuntime());
+                assertSame(home, escaped.returnHome().orElseThrow());
+                assertTrue(home.isActive(), "nested invocation must not close its captured home");
+                assertNull(owner.materializedContextOrNullForRuntime());
+                var environment = escaped.capturedLexicalEnvironmentForRuntime();
+                assertSame(owner, environment.deferredOwnerForRuntime());
+                assertSame(environment, owner.lexicalEnvironmentForClosureCapture());
+                assertSame(owner.context(), environment.context());
+                assertSame(home, arguments[4]);
+            }
+        });
+    }
+
+    @Test
+    void inheritedOnlyCaptureRetainsMetadataWithoutPublishingCreator() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue creator = closure("() => 42", module);
+            ProtosClosureValue definition = closure("(value) => value", module);
+            ProtosClosureExecutionPlanCell cell = ProtosClosureExecutionPlanCell.pendingGroup();
+            cell.freeze(definition.executionPlan().orElseThrow());
+            Object receiver = newObject();
+            ProtosObjectValue methodHome = newObject();
+            Object[] arguments = ProtosFrameArguments.compactImmediateMethodCall(
+                    creator, receiver, methodHome, module, new Object[0]);
+            Object callerPayload = arguments[3];
+            ProtosClosureValue inherited = ProtosFrameArguments.materializeCompactClosure(
+                    arguments, definition.definition(), cell, false, true, false);
+            assertSame(creator, arguments[0]);
+            assertSame(callerPayload, arguments[3]);
+            assertSame(creator.capturedLexicalEnvironmentForRuntime(),
+                    inherited.capturedLexicalEnvironmentForRuntime());
+            assertSame(receiver, inherited.capturedReceiver());
+            assertSame(methodHome, inherited.methodHome().orElseThrow());
+            assertSame(ProtosFrameArguments.compactReturnHome(arguments),
+                    inherited.returnHome().orElseThrow());
+            assertSame(module.prelude().orElseThrow(), inherited.prelude().orElseThrow());
+            assertSame(cell.plan(), inherited.preparedExecutionPlanOrNullForRuntime());
+        });
+    }
+
+    @Test
+    void independentClosureLiteralKeepsItsCompactRepresentation() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue maker = closure("() => { (value) => value }", module);
+            Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                    maker, module, null, new Object[0]);
+            ProtosClosureValue independent = assertInstanceOf(
+                    ProtosClosureValue.class, target(maker).call(arguments));
+            assertSame(maker, arguments[0]);
+            assertNull(independent.capturedLexicalEnvironmentForRuntime());
+            assertTrue(independent.returnHome().isEmpty());
+            assertTrue(independent.prelude().isEmpty());
+            assertEquals("42", integerValue(enter(fastDirect(independent, module, integer(42)))));
+        });
+    }
+
+    @Test
     void identityCalleeExecutesWithoutMaterializingAnything() throws Exception {
         withCore(module -> {
             ProtosClosureValue identity = closure("(value) => { value }", module);
@@ -2137,6 +2216,109 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertTrue(module.task().isEmpty());
         });
         System.out.println("TASK_DYNAMIC_CONTROL=PASS");
+    }
+
+    @Test
+    void publicationKeepsSelectedHomeWithoutCreatingContextForClassification() throws Exception {
+        withCore(module -> {
+            for (String text : List.of("(value) => value", "(value) => ^value")) {
+                ProtosClosureValue source = closure(text, module);
+                Object token = newObject();
+                DirectEntry entry = ProtosDispatchTestSupport.direct(source, module, token);
+                Object[] arguments = entry.targetArguments();
+                var home = ProtosFrameArguments.compactReturnHome(arguments);
+                assertSame(source, arguments[0]);
+                ProtosActivation published = ProtosFrameArguments.activation(arguments);
+                assertSame(home, published.returnHome().orElseThrow());
+                assertNull(privateField(published, "context"),
+                        "home classification and publication leave guest Context lazy");
+                assertSame(token, ProtosDispatchTestSupport.enter(entry));
+                assertSame(home, ProtosFrameArguments.compactReturnHome(arguments));
+                assertFalse(home.isActive());
+
+                Object[] indirect = ProtosFrameArguments.functionCallArguments(new Object[] {token});
+                Object result = ProtosFunctionCallDispatchersFactory.FunctionIndirectInvokeNodeGen
+                        .getUncached().execute(null, null, entry.target(),
+                                (ProtosBytecodeRootNode) entry.target().getRootNode(),
+                                source, indirect, module);
+                assertSame(token, result);
+                assertInstanceOf(com.guillermomolina.protos.runtime.control.ProtosReturnHome.class,
+                        indirect[4]);
+                assertFalse(ProtosFrameArguments.compactReturnHome(indirect).isActive());
+            }
+        });
+    }
+
+    @Test
+    void compactTaskInheritanceBindsBeforeEntryAndKeepsMethodHome() throws Exception {
+        withCore(module -> {
+            ProtosTask task = module.executionDomain().createTask(null, current -> {});
+            ProtosClosureValue parent = closure("() => 42", module);
+            ProtosClosureValue template = closure("() => { () => ^42 }", module);
+            ProtosClosureValue child = new ProtosClosureValue(
+                    template.definition(), template.capturedLexicalContexts(), template.capturedReceiver(),
+                    null, null, module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            for (boolean method : new boolean[] {false, true}) {
+                Object[] parentArguments = ProtosFrameArguments.compactDirectClosureCall(
+                        parent, module, task, new Object[0]);
+                ProtosActivation published = method
+                        ? ProtosFrameArguments.activation(parentArguments) : null;
+                parentArguments[3] = null;
+                assertSame(task, ProtosFrameArguments.admittedCompactTask(parentArguments));
+                Object receiver = newObject();
+                ProtosObjectValue methodHome = newObject();
+                Object[] arguments = method
+                        ? ProtosFrameArguments.methodCallArguments(receiver, methodHome, new Object[0])
+                        : ProtosFrameArguments.functionCallArguments(new Object[0]);
+                var home = child.invocationReturnHomeUnderTemplateProofForRuntime(false);
+                ProtosFrameArguments.completeDispatchedHeader(arguments, child,
+                        method ? published : null, home);
+                ProtosTask inherited = ProtosFrameArguments.inheritInvocationTask(
+                        arguments, ProtosFrameArguments.admittedCompactTask(parentArguments));
+                ProtosFrameArguments.bindOwnedReturnHome(child, home, inherited);
+                assertTrue(home.isActive());
+                assertSame(task, home.ownerTaskForRuntime(), "bound before target entry");
+                assertSame(method ? methodHome : task, arguments[2]);
+                if (method) {
+                    assertNull(privateField(published, "context"));
+                    assertSame(receiver, arguments[1]);
+                } else {
+                    assertSame(parent, parentArguments[0], "function propagation does not publish");
+                    assertNull(arguments[3]);
+                }
+                Object returned = ProtosDispatchTestSupport.enterRaw(
+                        new ProtosDispatchTestSupport.DirectEntry(
+                                ProtosDispatchTestSupport.target(child), arguments));
+                assertSame(home, assertInstanceOf(ProtosClosureValue.class, returned)
+                        .returnHome().orElseThrow());
+                assertFalse(home.isActive());
+                assertNull(home.ownerTaskForRuntime());
+
+                Object[] dispatched = method
+                        ? ProtosFrameArguments.methodCallArguments(receiver, methodHome, new Object[0])
+                        : ProtosFrameArguments.functionCallArguments(new Object[0]);
+                var target = ProtosDispatchTestSupport.target(child);
+                VirtualFrame frame = Truffle.getRuntime().createVirtualFrame(
+                        parentArguments, FrameDescriptor.newBuilder().build());
+                Object outcome = ProtosFunctionCallDispatchersFactory.FunctionDirectInvokeNodeGen
+                        .getUncached().execute(frame, null,
+                                com.oracle.truffle.api.nodes.DirectCallNode.create(target),
+                                (ProtosBytecodeRootNode) target.getRootNode(), child, dispatched, null);
+                assertSame(method ? methodHome : task, dispatched[2]);
+                assertSame(method ? published : null, dispatched[3]);
+                var dispatchedHome = ProtosFrameArguments.compactReturnHome(dispatched);
+                assertNotSame(home, dispatchedHome);
+                assertSame(dispatchedHome, assertInstanceOf(ProtosClosureValue.class, outcome)
+                        .returnHome().orElseThrow());
+                assertFalse(dispatchedHome.isActive());
+                assertNull(dispatchedHome.ownerTaskForRuntime());
+                if (method) {
+                    assertNull(privateField(published, "context"));
+                } else {
+                    assertSame(parent, parentArguments[0]);
+                }
+            }
+        });
     }
 
     private interface CoreTest {

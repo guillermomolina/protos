@@ -50,6 +50,22 @@ import org.junit.jupiter.api.Test;
 class ProtosI143SelectedNamedBindingTest {
 
     @Test
+    void namedAssociationRetainsCapturedHomeIdentity() {
+        ProtosClosureValue source = sourceClosure("(value: 42) => { ^value }");
+        var home = new com.guillermomolina.protos.runtime.control.ProtosReturnHome();
+        ProtosClosureValue selected = new ProtosClosureValue(
+                source.definition(), source.capturedLexicalContexts(), source.capturedReceiver(),
+                null, home, null);
+        PreparedArgumentVector arguments = new PreparedArgumentVector();
+        arguments.appendNamed("value", 7);
+        SourceBinding binding = assertInstanceOf(SourceBinding.class, classify(selected, arguments));
+        assertSame(selected, binding.selected());
+        assertSame(home, selected.invocationReturnHomeUnderTemplateProofForRuntime(false));
+        assertTrue(home.isActive());
+        assertFalse(selected.ownsInvocationReturnHomeForRuntime());
+    }
+
+    @Test
     void sourceImplementationBindsItsOwnDeclaredNames() {
         ProtosClosureValue selected = sourceClosure(
                 "(a: 10, b: 20, c: 30) => a");

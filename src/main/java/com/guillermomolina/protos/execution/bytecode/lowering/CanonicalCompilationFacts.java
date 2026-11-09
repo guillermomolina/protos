@@ -754,6 +754,89 @@ final class CanonicalCompilationFacts {
                         definition.body(), definition, analysis, scope, true);
     }
 
+    /**
+     * Whether this definition or any descendant may need the inherited lexical
+     * chain. This proof is independent of creator-context and ReturnHome needs.
+     * Only references proven to belong inside the complete subtree can discard
+     * that chain; candidate presence and dynamic lookup remain conservative.
+     */
+    static boolean requiresInheritedLexicalEnvironment(
+            CanonicalClosure definition, CanonicalBindingAnalysis analysis) {
+        CanonicalLexicalScope scope = analysis == null
+                ? null : analysis.scopeOf(definition).orElse(null);
+        return scope == null || dependsOnInheritedEnvironment(definition, analysis, scope);
+    }
+
+    private static boolean dependsOnInheritedEnvironment(
+            CanonicalExpression expression,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope subtreeRoot) {
+        java.util.function.Predicate<CanonicalExpression> depends =
+                child -> dependsOnInheritedEnvironment(child, analysis, subtreeRoot);
+        return switch (expression) {
+            case CanonicalLiteral literal -> false;
+            case CanonicalIntrinsic intrinsic -> true;
+            case CanonicalLookup lookup ->
+                    !bindingInsideSubtree(analysis.resolutionOf(lookup), subtreeRoot);
+            case CanonicalClosure closure ->
+                    analysis.scopeOf(closure).isEmpty()
+                            || closure.parameters().stream().anyMatch(parameter ->
+                                    parameter.defaultValue().map(depends::test).orElse(false))
+                            || depends.test(closure.body());
+            case CanonicalSequence sequence -> sequence.expressions().stream().anyMatch(depends);
+            case CanonicalAssign assign ->
+                    (assign.target().isPresent()
+                            ? depends.test(assign.target().orElseThrow())
+                            : !bindingInsideSubtree(analysis.resolutionOf(assign), subtreeRoot))
+                            || depends.test(assign.value());
+            case CanonicalCreate create ->
+                    create.target().map(depends::test).orElse(false) || depends.test(create.value());
+            case CanonicalMultipleCreate create -> depends.test(create.value());
+            case CanonicalCall call ->
+                    depends.test(call.receiver()) || call.arguments().stream().anyMatch(depends);
+            case CanonicalSend send ->
+                    depends.test(send.receiver()) || send.arguments().stream().anyMatch(depends);
+            case CanonicalSuperSend send -> true;
+            case CanonicalMember member -> depends.test(member.receiver());
+            case CanonicalReturn returning -> depends.test(returning.value());
+            case CanonicalSpread spread -> depends.test(spread.expression());
+            case CanonicalNamedArgument named -> depends.test(named.expression());
+            case CanonicalIdentity identity -> depends.test(identity.left()) || depends.test(identity.right());
+            case CanonicalNotIdentity identity -> depends.test(identity.left()) || depends.test(identity.right());
+            case CanonicalDerivedInequality inequality ->
+                    depends.test(inequality.left()) || depends.test(inequality.right());
+            case CanonicalIndexedAssign assign -> depends.test(assign.receiver())
+                    || depends.test(assign.index()) || depends.test(assign.value());
+            case CanonicalMapConstruction map -> depends.test(map.factory())
+                    || map.entries().stream().anyMatch(entry ->
+                            depends.test(entry.key()) || depends.test(entry.value()));
+            // Construction/composition can expose lexical authority indirectly.
+            case CanonicalObject object -> true;
+            case CanonicalCompose compose -> true;
+            default -> true;
+        };
+    }
+
+    private static boolean bindingInsideSubtree(
+            Optional<CanonicalBindingResolution> resolution, CanonicalLexicalScope subtreeRoot) {
+        CanonicalBindingResolution reference = resolution.orElse(null);
+        CanonicalLexicalScope owner;
+        if (reference instanceof CanonicalBindingResolution.Resolved resolved) {
+            owner = resolved.identity().owner();
+        } else if (reference instanceof CanonicalBindingResolution.CapturedResolved captured) {
+            owner = captured.identity().owner();
+        } else {
+            // Candidate and Dynamic do not prove independence of the chain.
+            return false;
+        }
+        for (CanonicalLexicalScope scope = owner; scope != null; scope = scope.outwardScope()) {
+            if (scope == subtreeRoot) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static boolean demandsPersistentFrame(
             CanonicalExpression expression,
             CanonicalBindingAnalysis analysis,
