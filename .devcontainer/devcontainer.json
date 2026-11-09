@@ -12,20 +12,21 @@
     "vscode": {
       "extensions": [
         "vscjava.vscode-java-pack",
-        "anthropic.claude-code"
+        "anthropic.claude-code",
+        "openai.chatgpt"
       ]
     }
   },
   // Docker:
   // "runArgs": ["--userns=host"],
-
   // Podman rootless:
   "runArgs": [
     "--userns=keep-id:uid=1000,gid=1000",
     "--tmpfs=/tmp:rw,exec,mode=1777,size=256m"
   ],
-  "initializeCommand": "mkdir -p \"${localEnv:HOME}/.claude\"",
+  "initializeCommand": "mkdir -p \"${localEnv:HOME}/.claude\" \"${localEnv:HOME}/.codex\"",
   "mounts": [
-    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.codex,target=/home/vscode/.codex,type=bind,consistency=cached"
   ]
 }
