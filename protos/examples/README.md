@@ -24,6 +24,8 @@ instead.
 | Sample wall time and construct an Instant (`--allow-clock`) | `clock/current-time.protos` |
 | Hash and verify a password with explicit Argon2id entropy | `crypto/password-argon2id.protos` (requires `--allow-entropy`) |
 | Print a value | `hello-world.protos` |
+| Check that the FFM provider can call C: the SQLite version (`--foreign-provider-path`, see `ffi/README.md`) | `ffi/sqlite-version.protos` |
+| Query an in-memory SQLite database through C declarations written in Protos (`--foreign-provider-path`, see `ffi/README.md`) | `ffi/sqlite-memory-query.protos` |
 | Print the exact Rosetta Code Hello world/Text message | `basics/rosetta-hello-world-text.protos` |
 | Create and modify slots | `basics/slots.protos` |
 | Create an object | `objects/object-literal.protos` |
@@ -132,6 +134,13 @@ The HTTP `root-service-host.protos` example still uses the separate Java host
 application catalog to provide `app:root-service-handler`. Ordinary file entry
 without `--service` still only evaluates its top level.
 See the [HTTP guide](../../docs/guide/library/http.md).
+
+The two `ffi/` examples are not runnable with a plain `bin/protos <file>`:
+they require the separately built FFM provider JAR (I144), passed with
+`--foreign-provider-path`, Linux x86-64, JDK 25 and a shared SQLite library.
+They signal success with exit status 0 and no output, contain no `print`
+call, and are run by `dist/test_external_foreign_providers.py`. See
+[`ffi/README.md`](ffi/README.md).
 
 D243-C / I157 adds two explicit secure-entropy examples. Direct entry:
 `bin/protos --allow-entropy protos/examples/entropy/secure-bytes.protos`

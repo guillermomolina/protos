@@ -185,6 +185,10 @@ language-teaching progression under DOC001.
   — the public `spi.foreign` contract and `--foreign-provider-path`.
 - [The `java:` provider fixture](interop/java-provider.md) — `java:math` and
   `java:date` through the I085-B test fixture.
+- [The optional external FFM provider](interop/ffm-provider.md) — HOWTO for
+  the real `ffi:sqlite3` provider (I144): building and authorizing its JAR,
+  declaring C functions in Protos, `out` parameters, owned resources, and
+  borrowed memory.
 
 ## Current guide state
 

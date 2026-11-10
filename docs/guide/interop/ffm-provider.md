@@ -17,6 +17,113 @@ Protos distribution. See also the provider's own
 > process. Native code runs in process with full process authority; Protos
 > `Filesystem` does not confine it.
 
+Contents:
+
+1. [Architecture](#architecture)
+2. [Requirements](#requirements)
+3. [Build the provider JAR](#build-the-provider-jar)
+4. [Authorize and run](#authorize-and-run)
+5. [Protos-first flow](#protos-first-flow)
+6. [ABI descriptors and operations](#abi-descriptors-and-operations)
+7. [A first call: the SQLite version](#a-first-call-the-sqlite-version)
+8. [Output parameters](#output-parameters)
+9. [Owned resources](#owned-resources)
+10. [Borrowed memory](#borrowed-memory)
+11. [Errors](#errors)
+12. [Registration (I085)](#registration-i085), [trust boundary](#trust-boundary),
+    [resources and borrowed memory](#resources-and-borrowed-memory) (reference)
+13. [Security and limits](#security-and-limits)
+14. [Relationship to LIB028 and LIB029](#relationship-to-lib028-and-lib029)
+
+Executable material: the tutorials
+[`07-ffi-provider-basics.protos`](../../../protos/tutorials/08-language-interactions/07-ffi-provider-basics.protos)
+and
+[`04-ffi-ownership-and-borrows.protos`](../../../protos/tutorials/12-system-resources/04-ffi-ownership-and-borrows.protos),
+and the examples in [`protos/examples/ffi/`](../../../protos/examples/ffi/README.md).
+
+## Architecture
+
+```text
+Protos source
+    |
+    | import("ffi:sqlite3")
+    v
+I085 foreign provider SPI
+    |
+    v
+Optional FFM provider JAR (I144)
+    |
+    v
+Java 25 Foreign Function & Memory API
+    |
+    v
+Host-authorized libsqlite3.so.0
+```
+
+- The provider is **external and optional**. It is not part of
+  `lib/protos.jar` and is not shipped in the distribution; you build it
+  separately against the distribution's public SPI.
+- The JAR carries **no embedded authorization**. Whether it runs at all, and
+  which library it may load, is decided by the host at start-up.
+- The distributable provider accepts exactly one target, `ffi:sqlite3`. Any
+  other alias, file name, or path is refused.
+- The CLI currently has **no option channel** for providers. The absolute
+  library path option `sqlite3.path` can only be supplied by a Java host
+  through `ProtosForeignProviderConfiguration.withProviderOptions`. Without
+  it, the provider loads the library by its loader name `libsqlite3.so.0`.
+- Importing `ffi:sqlite3` does **not** mean there is a public `std:ffi`
+  library. The members of the imported module are provider-private
+  operations.
+
+## Requirements
+
+- Linux x86-64 (LP64); other platforms are rejected on first use;
+- JDK 25 (to build the JAR and to run the portable CLI);
+- the portable JVM distribution — the provider is **not** available in
+  Native Image, which cannot load providers dynamically;
+- a shared SQLite library reachable by the native loader as
+  `libsqlite3.so.0`.
+
+## Build the provider JAR
+
+1. Build the portable distribution:
+
+   ```sh
+   make dist
+   ls target/distributions/
+   ```
+
+   The archive is named after the project version in `pom.xml`, as
+   `protos-<version>-posix-jvm.zip`. Use the name actually listed; do not
+   guess it.
+
+2. Compile the provider against that distribution:
+
+   ```sh
+   python3 dist/build_ffm_provider.py \
+       target/distributions/protos-<version>-posix-jvm.zip \
+       --output target/ffm-provider
+   ```
+
+   [`dist/build_ffm_provider.py`](../../../dist/build_ffm_provider.py)
+   accepts the ZIP or an extracted installation directory, compiles
+   `providers/ffm/src/main/java` with `javac --release 25` against the
+   distribution's `lib/protos.jar`, adds the provider's `META-INF/services`
+   descriptor, and writes only `protos-ffm-provider.jar` into `--output`. The
+   distribution is never modified.
+
+## Authorize and run
+
+Building the JAR authorizes nothing. Each run authorizes it explicitly:
+
+```sh
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar program.protos
+```
+
+A JAR on `CLASSPATH`, in the working directory, or inside the installation is
+never discovered. Without `--foreign-provider-path`, `import("ffi:sqlite3")`
+fails with an ordinary resolution Error.
+
 ## Protos-first flow
 
 1. The host builds the JAR (`dist/build_ffm_provider.py`) and starts the
@@ -53,6 +160,233 @@ sqlite.release(connection)          // sqlite3_close_v2 result, unchanged
 `out` positions consume no argument; a binding with outputs answers the
 provider-private indexed value `[cResult, out0, ...]`. A non-zero C status is
 returned as data.
+
+## ABI descriptors and operations
+
+### Descriptors
+
+| Descriptor | C meaning | Protos side |
+|---|---|---|
+| `void` | no value (return only) | `null` |
+| `i32` | `int` / `int32_t` | Integer in the exact signed 32-bit range |
+| `i64` | `int64_t` / `sqlite3_int64` | Integer in the exact signed 64-bit range |
+| `f64` | `double` | Float |
+| `sizeT` | `size_t` (unsigned 64-bit) | non-negative Integer |
+| `utf8z` | `const char *` input, NUL-terminated UTF-8 | String without interior NUL (input only) |
+| `opaque(name)` | pointer to a C type of logical name `name` | opaque reference, never an address |
+| `nullable(opaque)` | the same pointer, admitting C `NULL` | reference or `null` |
+| `owned(opaque, destructorSymbol, destructorReturnType)` | pointer whose lifetime the session takes over; `destructorReturnType` is `void` or `i32` | owned reference |
+| `borrowed` | pointer to memory the C library still owns (return only) | borrowed region, read only with `copy` |
+| `out(type)` | `type *` output slot | no argument; value returned after the C result |
+
+Integers are never truncated or wrapped, and no Integer converts to a
+pointer.
+
+### Operations
+
+| Operation | Purpose |
+|---|---|
+| `signature(returnType)` | starts a signature with no parameters |
+| `param(signature, type)` | answers a new signature with one more parameter |
+| `preserving(signature)` | marks a signature whose calls do not invalidate borrowed regions |
+| `bind(symbol, signature)` | resolves `symbol` in the authorized library once; answers a callable binding |
+| `release(owned)` | releases an owned reference now; answers the destructor's C result |
+| `isLive(reference)` | whether a reference or borrowed region is still usable |
+| `copy(borrowed, length)` | bounded copy of a borrowed region into an independent indexed value of octets |
+
+Signatures are built one parameter at a time. The usual Protos-first pattern
+folds an ordinary Array of descriptors:
+
+```protos
+signature: (returns, parameters) => {
+    composed: sqlite.signature(returns)
+    parameters.each((parameter) => {
+        composed = sqlite.param(composed, parameter)
+    })
+    composed
+}
+
+prepare: sqlite.bind("sqlite3_prepare_v2", signature(
+    sqlite.i32,
+    Array(dbType, sqlite.utf8z, sqlite.i32, sqlite.out(stmt), sqlTail)))
+```
+
+The Array exists only in Protos code to make the declaration readable: it is
+never passed to the provider as a foreign argument. Only descriptor handles
+and scalars cross the SPI.
+
+## A first call: the SQLite version
+
+`int sqlite3_libversion_number(void)` needs only a return descriptor:
+
+```protos
+Assertions: import("std:test/assertions")
+sqlite: import("ffi:sqlite3")
+
+version: sqlite.bind(
+    "sqlite3_libversion_number",
+    sqlite.signature(sqlite.i32)
+)
+
+Assertions.require(version() >= 3000000)
+```
+
+```sh
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+    protos/examples/ffi/sqlite-version.protos
+```
+
+Success is exit status 0 with no output. This is
+[`protos/examples/ffi/sqlite-version.protos`](../../../protos/examples/ffi/sqlite-version.protos).
+`FFI.bind` and similar spellings belong to LIB028 and do not exist yet.
+
+## Output parameters
+
+C often returns a status and writes the real result through a pointer, as in
+`sqlite3_open_v2(filename, &db, flags, vfs)`. Declare that position with
+`out(type)`:
+
+- an `out` position consumes **no** Protos argument: `open(":memory:", 6, null)`
+  passes three arguments to a four-parameter C function;
+- the provider allocates and zero-initializes each output slot for the call;
+- a binding with `out` positions answers a provider-private indexed value
+  `[cResult, out0, out1, ...]`, read with `result[i]` and `result.size`;
+- a non-zero C result (for example `SQLITE_ERROR`) is ordinary information
+  in `result[0]`, never an automatic `ForeignError`; checking it is the
+  program's job;
+- converting that value into a final public Array is LIB028's job.
+
+## Owned resources
+
+`owned(opaque, destructorSymbol, destructorReturnType)` hands a C object's
+lifetime to the Actor's provider session:
+
+- every non-null owned result (return or `out`) enters the session's
+  **custody before it is published** to Protos code;
+- this holds even when the C function reports an error: a failed
+  `sqlite3_open_v2` still yields a handle that must be released;
+- `release` is **irreversible**: it marks the reference released first, then
+  calls the destructor, so the destructor runs **at most once**; its C result
+  is answered unchanged;
+- resources still held when the session closes (the Actor or Process ends)
+  are released then, **most recent first**;
+- closing the session invalidates every reference it issued;
+- handle identity is per session and acquisition, **not the native
+  address**: a released handle stays dead even if C reuses its address.
+
+```protos
+dbType: sqlite.opaque("sqlite3")
+db: sqlite.owned(dbType, "sqlite3_close_v2", sqlite.i32)
+vfsName: sqlite.nullable(sqlite.opaque("sqlite3_vfs_name"))
+open: sqlite.bind("sqlite3_open_v2",
+    signature(sqlite.i32, Array(sqlite.utf8z, sqlite.out(db), sqlite.i32, vfsName)))
+
+opened: open(":memory:", 6, null)
+Assertions.require(opened[0] == 0)              // SQLITE_OK
+connection: opened[1]
+// ... use the connection ...
+Assertions.require(sqlite.release(connection) == 0)  // sqlite3_close_v2
+```
+
+Release dependants before what they depend on: finalize statements before
+closing their connection. This is a low-level sequence of C calls, not a
+connection library; LIB029 will provide that.
+
+## Borrowed memory
+
+`sqlite3_column_text` and `sqlite3_column_blob` return pointers to memory
+that SQLite still owns. Declare them with `borrowed` and copy before the
+memory can change:
+
+```text
+sqlite3_column_text
+        |
+        v
+sqlite3_column_bytes (preserving)
+        |
+        v
+sqlite.copy(pointer, length)
+        |
+        v
+ordinary Protos Bytes
+```
+
+```protos
+columnText: sqlite.bind("sqlite3_column_text",
+    signature(sqlite.borrowed, Array(stmtType, sqlite.i32)))
+columnBytes: sqlite.bind("sqlite3_column_bytes",
+    sqlite.preserving(signature(sqlite.i32, Array(stmtType, sqlite.i32))))
+
+text: columnText(statement, 2)
+length: columnBytes(statement, 2)
+copied: sqlite.copy(text, length)
+
+bytes: Encoding.UTF8.encode("")
+index: 0
+while(index < copied.size) {
+    bytes.add(copied[index])
+    index = index + 1
+}
+```
+
+- **Epochs.** Each borrowed region belongs to the session's current borrow
+  epoch. Calling any binding not declared `preserving` advances the epoch
+  immediately before entering C; so do `release` and session close. A region
+  from an earlier epoch can no longer be copied.
+- **`preserving`.** It declares that a call leaves borrowed regions valid,
+  as `sqlite3_column_bytes` does after `sqlite3_column_text`. It is a
+  **trusted** ABI statement, not a physical check; a wrong one is as unsafe
+  as a wrong C signature.
+- **Bounds.** A copy is limited to 16 MiB (a provider safeguard, not a
+  Protos rule).
+- **Bytes, not text.** The copy preserves octets; Java never decodes UTF-8.
+  Protos code rebuilds `Bytes` (from `Encoding.UTF8.encode("")` and `add`)
+  and decodes if it wants a String.
+- **Zero, `NULL`, and SQL `NULL` differ.** A `borrowed` result of C `NULL`
+  is Protos `null`; zero-length data copies to an empty value. In SQLite a
+  `NULL` pointer can mean SQL `NULL` *or* an empty TEXT/BLOB, so code reading
+  untyped columns must consult the column type (`sqlite3_column_type`)
+  rather than infer SQL `NULL` from the pointer alone.
+
+### `pzTail` of `sqlite3_prepare_v2`
+
+`pzTail` would point into the `zSql` argument, whose `utf8z` storage belongs
+to the call and is gone when it returns. It is therefore never a borrowed
+region and must not be received. Declare it as an ordinary nullable pointer
+parameter of a private type and pass `null` explicitly, which tells SQLite
+not to write it:
+
+```protos
+sqlTail: sqlite.nullable(sqlite.opaque("sqlite3_sql_tail"))
+prepare: sqlite.bind("sqlite3_prepare_v2", signature(
+    sqlite.i32,
+    Array(dbType, sqlite.utf8z, sqlite.i32, sqlite.out(stmt), sqlTail)))
+
+prepared: prepare(connection, "SELECT 1", -1, null)
+```
+
+Do not declare it as `out(borrowed)` or as an opaque `out`. Recovering the
+remaining SQL belongs to LIB029, which must copy it while `zSql` is alive.
+
+## Errors
+
+| Situation | Result |
+|---|---|
+| Provider not authorized (no `--foreign-provider-path`) | ordinary resolution Error at `import` |
+| Unknown alias, file name, or path (`ffi:libc`, `ffi:/lib/...`) | ordinary Error |
+| Wrong arity | ordinary Error, before entry |
+| Wrong kind (for example an Integer for `utf8z`) | ordinary Error, before entry |
+| Integer out of the declared range | ordinary Error, before entry |
+| Released, closed-session, or wrongly typed reference; stale borrowed region | ordinary Error, before entry |
+| Native symbol cannot be resolved by `bind` | `ForeignError` |
+| Provider failure after entry (load, conversion) | `ForeignError` |
+| `SQLITE_ERROR` or any other C status | an ordinary Integer result |
+| Invalid index on a provider-private result | `ForeignError` (detected after entry, D188) |
+
+`ForeignError` payloads never contain host objects, addresses, paths, or
+stacks. The provider **cannot** turn a C crash, or the effects of a wrong
+ABI declaration, into a `ForeignError`: those can corrupt memory or end the
+process.
 
 ## Registration (I085)
 
@@ -93,8 +427,9 @@ symbol whitelist and none would be an isolation guarantee.
   before any fallible conversion: a failed conversion is a `ForeignError`, and
   the resources it could not publish are released once at session close.
 - `sqlite3_prepare_v2`'s `pzTail` points into the call's own `utf8z` input,
-  which dies with the call; it is never a borrowed region and the tests only
-  receive it as a private opaque value they never use.
+  which dies with the call; it is never a borrowed region. The tests and
+  examples declare it as a nullable opaque parameter of a private type and
+  pass `null`, so it is never received.
 - References are opaque, session-bound, and identified per acquisition, never
   by address. Owned references enter custody before they are published, are
   released at most once (`release`, or session close), and are rejected after
@@ -119,6 +454,23 @@ symbol whitelist and none would be an isolation guarantee.
   only `null` is admitted: a limited NULL-pointer adaptation, not a
   `nullable(utf8z)` extension.
 
+## Security and limits
+
+- `TRUSTED_IN_PROCESS` is **not a sandbox**: the C library executes inside
+  the host process with all of its authority.
+- A wrong ABI declaration (signature, `preserving`, destructor) can corrupt
+  memory or terminate the process.
+- `SymbolLookup.libraryLookup` also resolves symbols of the library's
+  dependencies; there is no whitelist, and none would be a security
+  isolation.
+- Not supported: callbacks/upcalls, general structs, variadic functions,
+  C++, Native Image, Windows, macOS, TEXT/BLOB input binding with
+  `SQLITE_TRANSIENT`, and pointers as Integers.
+- C calls are **synchronous**: they introduce no implicit suspension, and a
+  blocked call holds its Actor.
+- Session close waits for admitted calls, so a blocked C call can delay it.
+- No isolation of the process from arbitrary C behavior is guaranteed.
+
 ## Relationship to LIB028 and LIB029
 
 - **LIB028** (`std:ffi`) will define the public Protos API: ordinary
@@ -131,6 +483,14 @@ symbol whitelist and none would be an isolation guarantee.
 Neither exists yet. The I144 tests
 (`protos/tests/foreign-provider/ffm-*.protos`) prove only the provider and its
 ABI.
+
+| | I144 (implemented) | LIB028 (not yet) | LIB029 (not yet) |
+|---|---|---|---|
+| Owner of | external FFM provider, bounded generic ABI, I085 integration | public `std:ffi` in Protos | idiomatic SQLite library |
+| Declarations | provider-private `signature`/`param`/`bind` | `FFI.bind`, public descriptors, Array signatures | hidden behind the library |
+| Results with `out` | provider-private indexed value | final public Arrays | library values |
+| Resources | owned/borrowed custody, `release`, session/Actor control | public owned/out/release abstractions | connections, statements, `Closable` |
+| SQL | raw C calls, synchronous | — | transactions, parameterized queries, row mapping |
 
 ## Limits
 

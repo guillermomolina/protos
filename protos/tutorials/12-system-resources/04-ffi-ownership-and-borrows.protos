@@ -1,0 +1,148 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Tutorial: owned C resources and borrowed C memory through the optional FFM
+// provider (I144). It continues 08-language-interactions/07-ffi-provider-basics
+// but does not depend on running it.
+//
+// This is a low-level walk through the provider-private operations of
+// `ffi:sqlite3`, not a SQLite library: connections, statements, transactions
+// and Closable lifecycles belong to the future LIB029 library.
+//
+//   bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
+//       protos/tutorials/12-system-resources/04-ffi-ownership-and-borrows.protos
+//
+// Requires the portable JVM CLI on Linux x86-64, JDK 25, and a shared
+// libsqlite3.so.0. A successful run writes nothing to standard output and
+// exits with status 0. The database lives only in memory (`:memory:`).
+
+Assertions: import("std:test/assertions")
+sqlite: import("ffi:sqlite3")
+
+signature: (returns, parameters) => {
+    composed: sqlite.signature(returns)
+    parameters.each((parameter) => {
+        composed = sqlite.param(composed, parameter)
+    })
+    composed
+}
+
+ordinary: (body) => {
+    error: Assertions.signals(Error, body)
+    Assertions.require(error.parent() === Error)
+}
+
+SQLITE_OK: 0
+SQLITE_ROW: 100
+SQLITE_DONE: 101
+SQLITE_OPEN_READWRITE_CREATE: 6
+
+// ---- 1. Opaque and owned types
+
+// `opaque(name)` is a C pointer of a logical type that Protos code can only
+// pass back to C. `owned` adds a destructor: the provider takes custody of
+// every such reference and calls the destructor at most once.
+dbType: sqlite.opaque("sqlite3")
+db: sqlite.owned(dbType, "sqlite3_close_v2", sqlite.i32)
+
+stmtType: sqlite.opaque("sqlite3_stmt")
+stmt: sqlite.owned(stmtType, "sqlite3_finalize", sqlite.i32)
+
+// zVfs is `const char *`. There is no nullable text descriptor, so C NULL is
+// passed through a nullable pointer of a private type that no binding ever
+// produces: only `null` is admitted.
+vfsName: sqlite.nullable(sqlite.opaque("sqlite3_vfs_name"))
+
+// ---- 2. Opening a connection: an `out` parameter
+
+// int sqlite3_open_v2(const char *filename, sqlite3 **ppDb, int flags,
+//                     const char *zVfs);
+// `out(db)` consumes no Protos argument: the provider allocates the slot,
+// and the call answers the private indexed value [status, connection].
+open: sqlite.bind(
+    "sqlite3_open_v2",
+    signature(sqlite.i32, Array(sqlite.utf8z, sqlite.out(db), sqlite.i32, vfsName)))
+
+opened: open(":memory:", SQLITE_OPEN_READWRITE_CREATE, null)
+Assertions.require(opened[0] == SQLITE_OK)
+connection: opened[1]
+// The handle entered custody before it was published to this code.
+Assertions.require(sqlite.isLive(connection))
+
+// ---- 3. Preparing a statement
+
+// int sqlite3_prepare_v2(sqlite3 *db, const char *zSql, int nByte,
+//                        sqlite3_stmt **ppStmt, const char **pzTail);
+// pzTail would point into zSql, whose storage dies with the call, so it is
+// not received at all: it is an ordinary nullable parameter and `null` is
+// passed explicitly, which tells SQLite not to write it.
+sqlTail: sqlite.nullable(sqlite.opaque("sqlite3_sql_tail"))
+prepare: sqlite.bind(
+    "sqlite3_prepare_v2",
+    signature(sqlite.i32, Array(dbType, sqlite.utf8z, sqlite.i32, sqlite.out(stmt), sqlTail)))
+
+prepared: prepare(connection, "SELECT 7 * 6, 'borrowed'", -1, null)
+Assertions.require(prepared[0] == SQLITE_OK)
+statement: prepared[1]
+
+// ---- 4. Reading columns
+
+step: sqlite.bind("sqlite3_step", signature(sqlite.i32, Array(stmtType)))
+columnInt: sqlite.bind(
+    "sqlite3_column_int",
+    sqlite.preserving(signature(sqlite.i32, Array(stmtType, sqlite.i32))))
+// The text pointer is memory SQLite still owns: a `borrowed` region.
+columnText: sqlite.bind("sqlite3_column_text", signature(sqlite.borrowed, Array(stmtType, sqlite.i32)))
+// `preserving` declares that this call does not invalidate borrowed regions.
+// It is a trusted ABI statement about SQLite, not a check the provider makes.
+columnBytes: sqlite.bind(
+    "sqlite3_column_bytes",
+    sqlite.preserving(signature(sqlite.i32, Array(stmtType, sqlite.i32))))
+
+Assertions.require(step(statement) == SQLITE_ROW)
+Assertions.require(columnInt(statement, 0) == 42)
+
+// Order matters: region first, then its length (preserving), then the copy.
+// Any non-preserving call in between would end the region's borrow epoch.
+text: columnText(statement, 1)
+length: columnBytes(statement, 1)
+copied: sqlite.copy(text, length)
+
+// The copy is an independent indexed value of octets; it outlives the region.
+Assertions.require(copied.size == 8)
+Assertions.require((copied[0] == 98) && (copied[7] == 100))   // "b" ... "d"
+
+// The next non-preserving call advances the epoch: the region is gone, and
+// copying it again is refused before entry. The earlier copy is unaffected.
+Assertions.require(step(statement) == SQLITE_DONE)
+ordinary(() => sqlite.copy(text, length))
+Assertions.require(copied[0] == 98)
+
+// ---- 5. Releasing in reverse order of acquisition
+
+// The statement depends on the connection, so it is finalized first.
+// `release` marks the reference released and then runs its destructor,
+// answering the destructor's C result unchanged.
+Assertions.require(sqlite.release(statement) == SQLITE_OK)
+Assertions.require(sqlite.release(connection) == SQLITE_OK)
+
+// ---- 6. Released handles are dead
+
+// Release is irreversible: the handles are refused before entry, even if C
+// later reuses the same address for another object.
+ordinary(() => step(statement))
+ordinary(() => sqlite.release(statement))
+ordinary(() => prepare(connection, "SELECT 1", -1, null))
+ordinary(() => sqlite.release(connection))

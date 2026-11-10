@@ -18,6 +18,44 @@ Java 25 java.lang.foreign
 host-authorized native library (trusted, in process)
 ```
 
+## Quickstart (from the repository)
+
+```sh
+make dist
+ls target/distributions/        # protos-<version>-posix-jvm.zip
+python3 dist/build_ffm_provider.py target/distributions/protos-<version>-posix-jvm.zip \
+    --output target/ffm-provider
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+    protos/examples/ffi/sqlite-version.protos
+```
+
+Building the JAR and authorizing it are separate steps: the build produces an
+inert artifact, and only `--foreign-provider-path` on each run lets a host use
+it. A successful run of the example prints nothing and exits with status 0.
+
+Next steps:
+
+- tutorials [`07-ffi-provider-basics.protos`](../../protos/tutorials/08-language-interactions/07-ffi-provider-basics.protos)
+  (signatures, scalar calls, pre-entry validation) and
+  [`04-ffi-ownership-and-borrows.protos`](../../protos/tutorials/12-system-resources/04-ffi-ownership-and-borrows.protos)
+  (owned handles, `out`, borrowed memory);
+- examples in [`protos/examples/ffi/`](../../protos/examples/ffi/README.md);
+- the full HOWTO: [ABI descriptors](../../docs/guide/interop/ffm-provider.md#abi-descriptors-and-operations),
+  [output parameters](../../docs/guide/interop/ffm-provider.md#output-parameters),
+  [owned resources](../../docs/guide/interop/ffm-provider.md#owned-resources),
+  [borrowed memory](../../docs/guide/interop/ffm-provider.md#borrowed-memory),
+  [errors](../../docs/guide/interop/ffm-provider.md#errors).
+
+The Java provider knows no SQLite function. It supplies generic ABI
+descriptors and operations; every C function is declared by name and
+signature in Protos source, which also owns all control flow. Each Actor that
+imports `ffi:sqlite3` gets its own session, opened on first import and closed
+with the Actor or Process, releasing any owned resources it still holds.
+
+> **Trusted C only.** The authorized library runs inside the Protos process
+> with its full authority. Authorize only libraries you trust, and declare
+> signatures exactly: a mistake can corrupt memory or terminate the process.
+
 ## Requirements and limits
 
 - Portable JVM CLI, Java 25 (GraalVM 25), Linux x86-64 (LP64) only. Other

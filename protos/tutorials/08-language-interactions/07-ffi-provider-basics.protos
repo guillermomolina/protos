@@ -1,0 +1,106 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Tutorial: calling C functions through the optional FFM provider (I144).
+//
+// `ffi:sqlite3` is served by the external provider JAR built from
+// providers/ffm. Its members are provider-private support operations, not the
+// future public `std:ffi` library (LIB028). Every C declaration and every
+// decision below is ordinary Protos code.
+//
+// The provider must be authorized explicitly by the host (portable JVM CLI,
+// Linux x86-64, JDK 25, shared libsqlite3.so.0):
+//
+//   bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
+//       protos/tutorials/08-language-interactions/07-ffi-provider-basics.protos
+//
+// See docs/guide/interop/ffm-provider.md for building the JAR. A successful
+// run writes nothing to standard output and exits with status 0; any broken
+// expectation fails an assertion and exits non-zero.
+
+Assertions: import("std:test/assertions")
+
+// Importing the scheme opens this Actor's provider session and loads the
+// host-authorized SQLite library. Without the provider JAR this import fails.
+sqlite: import("ffi:sqlite3")
+
+// ---- 1. A signature without parameters
+
+// `signature(returnType)` starts a C signature. This one is `int f(void)`.
+noArguments: sqlite.signature(sqlite.i32)
+
+// `bind` resolves the symbol in the authorized library once and answers an
+// executable binding that is called like any Protos Closure.
+libversion: sqlite.bind("sqlite3_libversion_number", noArguments)
+
+version: libversion()
+// SQLite encodes 3.X.Y as 3000000 + X * 1000 + Y.
+Assertions.require(version >= 3000000)
+Assertions.require(version < 4000000)
+
+// ---- 2. Signatures with parameters
+
+// Parameters are added one at a time with `param`. A small Protos helper
+// folds an ordinary Array of descriptors into a signature; the Array itself
+// never crosses into the provider.
+signature: (returns, parameters) => {
+    composed: sqlite.signature(returns)
+    parameters.each((parameter) => {
+        composed = sqlite.param(composed, parameter)
+    })
+    composed
+}
+
+// int sqlite3_complete(const char *sql);
+complete: sqlite.bind("sqlite3_complete", signature(sqlite.i32, Array(sqlite.utf8z)))
+
+// int sqlite3_strnicmp(const char *, const char *, int);
+compareIgnoringCase: sqlite.bind(
+    "sqlite3_strnicmp",
+    signature(sqlite.i32, Array(sqlite.utf8z, sqlite.utf8z, sqlite.i32)))
+
+Assertions.require(compareIgnoringCase("SELECT", "select", 6) == 0)
+
+// ---- 3. C results are data
+
+// sqlite3_complete answers 1 when the text ends a complete SQL statement and
+// 0 otherwise. A zero (or any other C status) is information for Protos code
+// to interpret; the provider never turns it into an Error.
+Assertions.require(complete("SELECT 1;") == 1)
+Assertions.require(complete("SELECT 1") == 0)
+Assertions.require((compareIgnoringCase("alpha", "beta", 5) == 0) == false)
+
+// ---- 4. Invalid calls are rejected before C is entered
+
+// The provider validates every argument list against the declared signature
+// before the call. A refusal is the ordinary Protos Error, not a ForeignError,
+// and the C function never runs.
+ordinary: (body) => {
+    error: Assertions.signals(Error, body)
+    Assertions.require(error.parent() === Error)
+}
+
+// Wrong arity: one utf8z argument is declared.
+ordinary(() => complete())
+ordinary(() => complete("SELECT 1;", "extra"))
+
+// Wrong kind: an Integer is not a utf8z String.
+ordinary(() => complete(42))
+
+// Out of range: 2^31 does not fit a C int; it is never truncated or wrapped.
+ordinary(() => compareIgnoringCase("a", "a", 2147483648))
+
+// An interior NUL cannot be represented by a NUL-terminated C string.
+ordinary(() => complete("SELECT\u{0}1;"))

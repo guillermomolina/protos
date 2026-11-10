@@ -31,7 +31,10 @@ authorization. The CLI has no provider-option channel, so the SQLite-
 independent ABI fixture (``native/ffi_test.c`` through ``ffm-abi.protos``) is
 run by the Java test host ``ProtosI144FfmFixtureAbiTest``, which selects the
 fixture library with ``withProviderOptions``. Missing platform support or
-shared SQLite is reported as UNSUPPORTED, never as PASS.
+shared SQLite is reported as UNSUPPORTED, never as PASS. The I144 tutorials
+and examples (``protos/tutorials``, ``protos/examples/ffi``) run from their
+real paths against the same JAR; they validate by assertion and must exit 0
+with empty stdout and stderr.
 """
 
 from __future__ import annotations
@@ -52,6 +55,15 @@ import build_ffm_provider
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ROOT / "protos" / "tests" / "foreign-provider"
+# I144 learning material: assertion-validated, no marker, run from real paths.
+I144_LEARNING = (
+    ("I144_TUTORIAL_BASIC", ROOT / "protos" / "tutorials" / "08-language-interactions"
+     / "07-ffi-provider-basics.protos"),
+    ("I144_TUTORIAL_LIFETIME", ROOT / "protos" / "tutorials" / "12-system-resources"
+     / "04-ffi-ownership-and-borrows.protos"),
+    ("I144_EXAMPLE_VERSION", ROOT / "protos" / "examples" / "ffi" / "sqlite-version.protos"),
+    ("I144_EXAMPLE_QUERY", ROOT / "protos" / "examples" / "ffi" / "sqlite-memory-query.protos"),
+)
 SERVICE = "META-INF/services/com.guillermomolina.protos.spi.foreign.ProtosForeignProviderPlugin"
 TRACE = "I085-B-TRACE "
 OPAQUE = "i085b-opaque"
@@ -79,6 +91,10 @@ RESULT_KEYS = (
     "I144_NO_IMPLICIT_AUTHORIZATION",
     "I144_UNUSED_NO_SESSION",
     "I144_ARBITRARY_ALIAS_DENIED",
+    "I144_TUTORIAL_BASIC",
+    "I144_TUTORIAL_LIFETIME",
+    "I144_EXAMPLE_VERSION",
+    "I144_EXAMPLE_QUERY",
 )
 SQLITE_CANDIDATES = (
     "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0",
@@ -258,6 +274,24 @@ def check_ffm_program(
     check_program(runner, key, install, program, [jar], marker, [])
 
 
+def check_ffm_silent(runner: Runner, key: str, install: Path, source: Path, jar: Path) -> None:
+    """Runs one assertion-validated I144 program: exit 0, no stdout, no stderr."""
+    command = [str(install / "bin" / "protos"), "--foreign-provider-path", str(jar), str(source)]
+    label = f"{key.lower()}-{source.stem}"
+    completed = runner.run(label, command, runner.work, runner.environment())
+    problems = []
+    if completed.returncode != 0:
+        problems.append(f"exit {completed.returncode}")
+    if completed.stdout:
+        problems.append(f"stdout {completed.stdout!r}")
+    if traces(completed.stderr):
+        problems.append(f"traces {traces(completed.stderr)} != []")
+    if other_stderr(completed.stderr):
+        problems.append("unexpected stderr")
+    report(source.name, [jar], problems)
+    runner.record(key, FAIL if problems else PASS, f"{label}: {'; '.join(problems)}" if problems else None)
+
+
 def shared_sqlite() -> str | None:
     for candidate in SQLITE_CANDIDATES:
         if Path(candidate).exists():
@@ -286,13 +320,15 @@ def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
 
     sqlite = shared_sqlite()
     if sqlite is None:
-        for key in ("I144_FFM_SQLITE", "I144_FFM_DENIED"):
+        for key in ("I144_FFM_SQLITE", "I144_FFM_DENIED", *(key for key, _ in I144_LEARNING)):
             runner.record(key, UNSUPPORTED, f"no shared libsqlite3.so.0 in {SQLITE_CANDIDATES}")
     else:
         plan.append(lambda: check_ffm_program(runner, "I144_FFM_SQLITE", install, "ffm-sqlite.protos",
                       provider, "I144-FFM-SQLITE-PASS"))
         plan.append(lambda: check_ffm_program(runner, "I144_FFM_DENIED", install, "ffm-denied.protos",
                       provider, "I144-FFM-DENIED-PASS"))
+        for key, source in I144_LEARNING:
+            plan.append(lambda key=key, source=source: check_ffm_silent(runner, key, install, source, provider))
 
     # The distributable provider knows only ffi:sqlite3: the fixture program
     # (ffi-test scheme, ffi_test alias) must fail without any native access.

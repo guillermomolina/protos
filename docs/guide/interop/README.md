@@ -10,11 +10,13 @@
 
 This page explains how Protos reaches code that is not Protos source, and what
 is actually usable at the current repository revision. It is a map, not a
-tutorial. The two HOWTOs are:
+tutorial. The HOWTOs are:
 
 - [Writing and registering an external provider](custom-provider.md);
 - [The `java:` provider fixture](java-provider.md);
-- [The optional external FFM provider (`ffi:`)](ffm-provider.md).
+- [The optional external FFM provider (`ffi:`)](ffm-provider.md) — a real,
+  separately built provider: build, authorize, declare C functions in Protos,
+  and call the shared SQLite library ([examples](../../../protos/examples/ffi/README.md)).
 
 Foreign interoperability is **not** a universal bridge to arbitrary Java (or
 other) APIs. A program reaches exactly what a provider deliberately exposes,
