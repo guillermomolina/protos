@@ -1978,7 +1978,9 @@ def validate(archive: Path) -> None:
         if dist.resolve() in project.resolve().parents:
             fail("workspace proof project is inside extracted distribution")
 
-        (project / "Main.protos").write_text(
+        main_module = project / "Main"
+        main_module.mkdir()
+        (main_module / "module.protos").write_text(
             'writer: TextWriter('
             'process.stdout(), process.stdoutEncoding())\n'
             'writer.writeLine(process.args().at(0)).value()\n'
@@ -1991,9 +1993,9 @@ def validate(archive: Path) -> None:
             [str(launcher), "package", "manifest"],
             cwd=project,
             env=env,
-            expected_stdout="protos.toml: valid schema v1",
+            expected_stdout="package.toml: valid schema v1",
         )
-        if package_result.stdout != "protos.toml: valid schema v1\n":
+        if package_result.stdout != "package.toml: valid schema v1\n":
             fail(
                 "Package Tool manifest output changed:\n"
                 + package_result.stdout
