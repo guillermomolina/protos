@@ -22,14 +22,17 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalCell;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
@@ -73,6 +76,14 @@ final class ProtosI115LexicalStorageConvergenceTest {
     private static final Set<String> CELL_OPERATIONS =
             Set.of("CreateCell", "LoadCell", "StoreCell", "LoadCapturedCell", "CaptureClosureCells");
 
+    /* The first invocation precedes x's establishment in the captured module. */
+    private static final String MODULE_CANDIDATE_SOURCE =
+            "reader: (() => x)\n"
+                    + "receiver: { x: {}\n read: reader }\n"
+                    + "before: receiver.read()\n"
+                    + "x: {}\n"
+                    + "reader";
+
     @Test
     void moduleRootCreatesItsBindingsInTheModuleContext() throws Exception {
         withFixture(
@@ -86,6 +97,27 @@ final class ProtosI115LexicalStorageConvergenceTest {
                     assertTrue(names.contains("CreateCurrentLocalSlot"), names::toString);
                     assertNoRetiredSelection(names);
                     assertNoCellOperation(names);
+                });
+    }
+
+    @Test
+    void moduleRootCandidateFallsBackToPreludeBeforeEstablishment() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosBytecodeRootNode root =
+                            lower(
+                                    fixture.language,
+                                    "before: Context\nContext: {}\nafter: Context\nbefore");
+                    List<String> names = operations(root.getBytecodeNode());
+                    ProtosObjectValue preludeContext =
+                            fixture.module.prelude().orElseThrow().contextPrototype();
+
+                    assertTrue(names.contains("ReadGlobal"), names::toString);
+                    assertSame(preludeContext, root.getCallTarget().call(fixture.module));
+                    assertSame(preludeContext, slot(fixture.module, "before"));
+                    Object moduleContext = slot(fixture.module, "Context");
+                    assertNotSame(preludeContext, moduleContext);
+                    assertSame(moduleContext, slot(fixture.module, "after"));
                 });
     }
 
@@ -144,8 +176,8 @@ final class ProtosI115LexicalStorageConvergenceTest {
                     ProtosClosureValue closure = closure(fixture, "((n) => n)");
                     List<String> names = operations(activationNode(closure));
 
-                    assertTrue(names.contains("LoadSuppliedArgument"), names::toString);
-                    assertTrue(names.stream().anyMatch(name -> name.startsWith("store.local")), names::toString);
+                    assertTrue(names.contains("CopySuppliedArguments"), names::toString);
+                    assertTrue(names.stream().anyMatch(name -> name.startsWith("load.local")), names::toString);
                     assertNoRetiredSelection(names);
                     assertNoCellOperation(names);
                     assertEquals(7L, execute(fixture, closure, 7L));
@@ -257,6 +289,54 @@ final class ProtosI115LexicalStorageConvergenceTest {
     }
 
     @Test
+    void absentCapturedModuleBindingFallsBackToExactReceiverValue() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosClosureValue reader = closure(fixture, MODULE_CANDIDATE_SOURCE);
+                    List<String> names = operations(activationNode(reader));
+                    ProtosObjectValue receiver =
+                            assertInstanceOf(ProtosObjectValue.class, slot(fixture.module, "receiver"));
+
+                    assertTrue(names.contains("ReadGlobal"), names::toString);
+                    assertSame(receiver.readLocalSlot("x").orElseThrow(), slot(fixture.module, "before"));
+                });
+    }
+
+    @Test
+    void establishedCapturedModuleBindingTakesPrecedenceOverReceiver() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosClosureValue reader = closure(fixture, MODULE_CANDIDATE_SOURCE);
+                    List<String> names = operations(activationNode(reader));
+                    Object moduleValue = slot(fixture.module, "x");
+
+                    assertTrue(names.contains("ReadGlobal"), names::toString);
+                    assertNotSame(slot(fixture.module, "before"), moduleValue);
+                    assertSame(moduleValue, run(fixture, "receiver.read()"));
+                });
+    }
+
+    @Test
+    void absentCapturedModuleBindingWithoutFallbackSignalsSlotNotFound() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosSignalException failure =
+                            assertThrows(
+                                    ProtosSignalException.class,
+                                    () -> run(fixture, "reader: (() => x)\nreader()\nx: {}"));
+                    ProtosClosureValue reader =
+                            assertInstanceOf(ProtosClosureValue.class, slot(fixture.module, "reader"));
+                    List<String> names = operations(activationNode(reader));
+
+                    assertTrue(names.contains("ReadGlobal"), names::toString);
+                    assertSame(
+                            ProtosCoreErrors.prototype(
+                                    fixture.module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
+                            failure.error().parent().orElseThrow());
+                });
+    }
+
+    @Test
     void dynamicNameIsOneNameOperation() throws Exception {
         withFixture(
                 fixture -> {
@@ -277,7 +357,7 @@ final class ProtosI115LexicalStorageConvergenceTest {
                             closure(fixture, "(() => { o: { y: 0 }\n o.x: 1\n o })");
                     List<String> names = operations(activationNode(closure));
 
-                    assertTrue(names.contains("CreateLocalSlot"), names::toString);
+                    assertTrue(names.contains("CreateAttribute"), names::toString);
                     ProtosObjectValue object =
                             assertInstanceOf(ProtosObjectValue.class, execute(fixture, closure));
                     assertEquals(1L, object.readLocalSlot("x").orElseThrow());

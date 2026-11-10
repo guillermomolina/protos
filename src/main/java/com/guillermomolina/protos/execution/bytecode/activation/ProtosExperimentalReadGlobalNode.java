@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
+import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -51,8 +52,9 @@ import com.oracle.truffle.api.strings.TruffleString;
  *       context is the scope {@code n - 1} of the invoked Closure's captured
  *       environment.</li>
  * </ul>
- * It never materializes an activation to locate the binding and never
- * consults the dynamic lexical lookup.
+ * Locating a present module binding does not materialize an activation or
+ * consult dynamic lexical lookup. An absent binding resumes ordinary lookup
+ * through the invoking activation, including receiver fallback.
  *
  * <p>{@link #readOwnCached} (depth 0) is guarded by the identity of the
  * module context, and {@link #readCapturedCached} (depth {@code >= 1}) by
@@ -67,13 +69,13 @@ import com.oracle.truffle.api.strings.TruffleString;
  *
  * <p>{@code candidate} is true when the site was classified {@code
  * Candidate}: the module statically declares the name but establishment is
- * not guaranteed at this program point. An absent binding then signals the
- * unqualified-lookup Error and is never redirected to an outer binding of the
- * same name (the recorded I115 divergence of {@code CanonicalBindingResolution}).
+ * not guaranteed at this program point. Candidate classification does not
+ * terminate lookup when the selected binding is absent. If ordinary lookup
+ * also fails, the read signals the standard unqualified {@code SlotNotFound} Error.
  *
- * <p>RECORDED DIVERGENCE (owner-authorized): for an established site only the
- * statically resolved module scope and the scopes outside it are consulted;
- * no nearer-scope or receiver-slot selection is performed.
+ * <p>REMAINING RECORDED DIVERGENCE (owner-authorized): an established module
+ * binding is read directly without checking nearer dynamic lexical shadowing.
+ * The restored miss behavior does not change selection for present bindings.
  */
 @GenerateUncached
 @GenerateInline(false)
@@ -198,35 +200,22 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
             if (present.isPresent()) {
                 return present.get();
             }
-            if (!candidate) {
-                java.util.Optional<Object> outside = readOutsideModuleOrEmpty(
-                        module.capturedLexicalEnvironmentForRuntime(), javaName);
-                if (outside.isPresent()) {
-                    return outside.get();
+        } else {
+            ProtosLexicalEnvironment module = capturedModuleOrNull(arguments, lexicalDepth);
+            if (module != null) {
+                java.util.Optional<Object> present = module.readLocalSlotForRuntime(javaName);
+                if (present.isPresent()) {
+                    return present.get();
                 }
             }
-            // The unqualified-lookup Error of a module root's own NAME read.
-            throw new ProtosSignalException(ProtosCoreErrors.newUnqualifiedLookupError(module));
         }
-        ProtosLexicalEnvironment module = capturedModuleOrNull(arguments, lexicalDepth);
-        if (module != null) {
-            java.util.Optional<Object> present = module.readLocalSlotForRuntime(javaName);
-            if (present.isPresent()) {
-                return present.get();
-            }
-        }
-        if (candidate) {
-            throw new ProtosSignalException(
-                    ProtosCoreErrors.newUnqualifiedLookupError(
-                            ProtosFrameArguments.activation(arguments)));
-        }
-        java.util.Optional<Object> outside = readOutsideModuleOrEmpty(
-                module == null ? null : module.outer(), javaName);
-        if (outside.isPresent()) {
-            return outside.get();
+        ProtosActivation activation = ProtosFrameArguments.activation(arguments);
+        java.util.Optional<Object> fallback = ProtosLexicalFallback.readByName(activation, javaName);
+        if (fallback.isPresent()) {
+            return fallback.get();
         }
         throw new ProtosSignalException(
-                ProtosCoreErrors.newSlotNotFound(ProtosFrameArguments.activation(arguments)));
+                ProtosCoreErrors.newUnqualifiedLookupError(activation));
     }
 
     /*
@@ -255,17 +244,4 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
         return ProtosLexicalEnvironment.at(captured, lexicalDepth - 1);
     }
 
-    /* ABSENT in the module: only the scopes outside it (the prelude). */
-    private static java.util.Optional<Object> readOutsideModuleOrEmpty(
-            ProtosLexicalEnvironment outside, String name) {
-        for (ProtosLexicalEnvironment scope = outside;
-                scope != null;
-                scope = scope.outer()) {
-            java.util.Optional<Object> present = scope.readLocalSlotForRuntime(name);
-            if (present.isPresent()) {
-                return present;
-            }
-        }
-        return java.util.Optional.empty();
-    }
 }
