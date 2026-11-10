@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -30,6 +31,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
@@ -391,6 +393,71 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
         }
 
         System.out.println("PERF006_B2D4A_DEFAULT_COMPOSED_CALL_TARGET=PASS");
+    }
+
+    @Test
+    void executeActivationAdmitsAPublishedPhysicalOwnerBeforeEntry()
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosActivation module = moduleActivation();
+
+                String characters = "() => { 42 }";
+                Source source =
+                        Source.newBuilder(
+                                        ProtosLanguage.ID,
+                                        characters,
+                                        "i115-a4-execute-activation.protos")
+                                .build();
+                CanonicalClosure definition =
+                        closureDefinition(characters);
+                ProtosBytecodeClosureExecutionPlan plan =
+                        new ProtosBytecodeClosureExecutionPlan(
+                                definition,
+                                language,
+                                source);
+                ProtosClosureValue owner =
+                        semanticClosure(
+                                definition,
+                                ProtosClosureExecutionPlan.bytecode(
+                                        definition,
+                                        language,
+                                        source),
+                                module);
+                ProtosBytecodeRootNode root = plan.activationRootForTesting();
+                assertTrue(root.returnHomeProvenUnobservable());
+                assertFalse(root.needsPhysicalHomeCompletionInEpilogue());
+
+                ProtosReturnHome physical = new ProtosReturnHome();
+                ProtosActivation invocation =
+                        ProtosActivation.forDirectClosureInvocationWithReturnHomeForRuntime(
+                                owner,
+                                List.of(),
+                                module.prelude().orElseThrow(),
+                                module.actorModuleState(),
+                                module.currentModuleKey().orElse(null),
+                                module.executionDomain(),
+                                physical);
+                assertTrue(invocation.ownsReturnHome());
+                assertTrue(physical.isActive());
+
+                Object result = plan.executeActivation(invocation);
+
+                assertEquals(
+                        "42",
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                                .integerDecimalText(result));
+                assertTrue(root.needsPhysicalHomeCompletionInEpilogue());
+                assertFalse(physical.isActive());
+                assertTrue(root.needsPhysicalHomeCompletionInEpilogue(),
+                        "the conservative path is permanent");
+            } finally {
+                context.leave();
+            }
+        }
     }
 
     @Test

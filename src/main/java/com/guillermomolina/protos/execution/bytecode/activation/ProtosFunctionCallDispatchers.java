@@ -1148,7 +1148,7 @@ final class ProtosFunctionCallDispatchers {
             return context.builtinCallTarget(nativeBody(closure)).call(activation, closure);
         }
         RootCallTarget target = functionCallTargetOrFail(closure, context);
-        Object[] arguments = ProtosFrameArguments.publishedInvocation(activation);
+        Object[] arguments = ProtosFrameArguments.publishedInvocation(activation, target);
         ProtosReturnHome owned = ProtosFrameArguments.ownedReturnHomeOrNull(arguments);
         if (owned == null) {
             return target.call(arguments);

@@ -485,12 +485,60 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
     @CompilationFinal private transient boolean returnHomeProvenUnobservable;
 
+    /*
+     * I115-A4: valid while no published invocation owning a materialized
+     * physical ReturnHome has been admitted to this proven no-home root.
+     * Created once; invalidation is monotonic and the Assumption is never
+     * recreated, so a reparse or repeated lowering cannot restore it.
+     */
+    @CompilationFinal private transient Assumption noPublishedPhysicalOwnerAssumption;
+
     final void recordReturnHomeProvenUnobservable(boolean proven) {
         returnHomeProvenUnobservable = proven;
+        if (proven && noPublishedPhysicalOwnerAssumption == null) {
+            noPublishedPhysicalOwnerAssumption =
+                    com.oracle.truffle.api.Truffle.getRuntime()
+                            .createAssumption("Protos no published physical ReturnHome owner");
+        }
     }
 
     final boolean returnHomeProvenUnobservable() {
         return returnHomeProvenUnobservable;
+    }
+
+    /**
+     * I115-A4: cold entry admission of a published invocation. When the
+     * activation owns a materialized physical ReturnHome, this proven no-home
+     * root permanently switches its epilogues to the ordinary owned-home
+     * completion. Never creates, binds, completes or closes a home.
+     */
+    final void admitPublishedPhysicalOwner(ProtosActivation activation) {
+        if (!returnHomeProvenUnobservable()) {
+            return;
+        }
+        if (!activation.ownsReturnHome()) {
+            return;
+        }
+        ProtosReturnHome home = activation.returnHomeOrNullForRuntime();
+        if (home == null || !home.isMaterialized()) {
+            return;
+        }
+        Assumption assumption = noPublishedPhysicalOwnerAssumption;
+        if (assumption != null) {
+            assumption.invalidate();
+        }
+    }
+
+    /**
+     * I115-A4: whether the epilogues must run the owned physical-home
+     * completion. Missing state fails conservatively.
+     */
+    final boolean needsPhysicalHomeCompletionInEpilogue() {
+        if (!returnHomeProvenUnobservable()) {
+            return true;
+        }
+        Assumption assumption = noPublishedPhysicalOwnerAssumption;
+        return assumption == null || !assumption.isValid();
     }
 
     // PRUIBA DE I115, en algún momento esto volverá a funcionar
@@ -670,10 +718,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             // A suspended invocation retains its owned ReturnHome.
             // Normal completion closes only the home owned by this root.
-            if (!root.returnHomeProvenUnobservable()) {
+            if (root.needsPhysicalHomeCompletionInEpilogue()) {
                 closeOwnedReturnHome(frame, value);
-            } else if (ProtosFrameArguments.hasPublishedActivation(frame.getArguments())) {
-                closePublishedReturnHome(frame.getArguments(), value);
             }
             return value;
         }
@@ -697,25 +743,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             // A guest Error definitively leaves this invocation.
             // Captured ReturnHomes remain owned by their outer roots.
-            if (!root.returnHomeProvenUnobservable()) {
+            if (root.needsPhysicalHomeCompletionInEpilogue()) {
                 closeOwnedReturnHome(frame, null);
-            } else if (ProtosFrameArguments.hasPublishedActivation(frame.getArguments())) {
-                closePublishedReturnHome(frame.getArguments(), null);
             }
-        }
-    }
-
-    /**
-     * Published entries can retain a conservatively selected physical home.
-     * Compact entries select from the executing root's proof before entry;
-     * publication of those entries preserves that exact home. Keep the rich
-     * compatibility case out of the compact no-home lifecycle path.
-     */
-    @TruffleBoundary
-    private static void closePublishedReturnHome(Object[] arguments, Object result) {
-        ProtosReturnHome owned = ProtosFrameArguments.ownedReturnHomeOrNull(arguments);
-        if (owned != null && (result == null || !ProtosTailCallContinuation.isSuspended(result))) {
-            owned.closeOwned();
         }
     }
 

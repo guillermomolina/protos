@@ -312,7 +312,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             RootCallTarget target =
                     ProtosDispatchTestSupport.target(identity);
             // I102: a rich ordinary entry uses the B5 header with its activation published.
-            Object[] arguments = ProtosFrameArguments.publishedInvocation(activation);
+            Object[] arguments = ProtosFrameArguments.publishedInvocation(activation, target);
             assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, arguments.length);
             assertSame(supplied, ProtosFrameArguments.compactSuppliedArgument(arguments, 0));
 

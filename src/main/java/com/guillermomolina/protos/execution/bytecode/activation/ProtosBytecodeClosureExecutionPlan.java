@@ -328,6 +328,6 @@ final class ProtosBytecodeClosureExecutionPlan {
         // A control transfer leaving the call propagates as the original object.
         return ProtosNumericValueSupport.guestValue(
                 activationTarget.call(
-                        ProtosFrameArguments.publishedInvocation(activation)));
+                        ProtosFrameArguments.publishedInvocation(activation, activationTarget)));
     }
 }

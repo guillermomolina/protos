@@ -75,7 +75,8 @@ final class ProtosI115BDeferredCallerTest {
                 RootCallTarget target = directTarget(selected);
                 ProtosBytecodeRootNode root = (ProtosBytecodeRootNode) target.getRootNode();
                 var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
-                        ProtosFrameArguments.publishedInvocation(callerActivation),
+                        ProtosFrameArguments.publishedInvocation(
+                                callerActivation, directTarget(callerClosure)),
                         com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
                 for (int need : new int[] {0, ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE,
                         ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION}) {
@@ -1789,7 +1790,8 @@ final class ProtosI115BDeferredCallerTest {
                     callerClosure, List.of(), prelude);
             ProtosActivation other = ProtosActivation.forClosureInvocation(
                     callerClosure, List.of(), prelude);
-            Object[] liveCallerHeader = ProtosFrameArguments.publishedInvocation(caller);
+            Object[] liveCallerHeader = ProtosFrameArguments.publishedInvocation(
+                    caller, directTarget(callerClosure));
             ProtosClosureValue callee = closure("(x) => x", module);
             ProtosBytecodeRootNode calleeRoot =
                     (ProtosBytecodeRootNode) directTarget(callee).getRootNode();
@@ -1811,7 +1813,8 @@ final class ProtosI115BDeferredCallerTest {
 
                 // Repeated suspension is idempotent: an exact caller is never replaced.
                 ProtosFrameArguments.sealSuspendedCaller(
-                        arguments, ProtosFrameArguments.publishedInvocation(other), other);
+                        arguments, ProtosFrameArguments.publishedInvocation(
+                                other, directTarget(callerClosure)), other);
                 assertSame(caller, arguments[3]);
                 assertSame(caller, ProtosFrameArguments.compactCaller(arguments),
                         "the sealed caller answers without stack recovery");
@@ -1825,7 +1828,8 @@ final class ProtosI115BDeferredCallerTest {
             assertSame(module, hosted[3]);
 
             // A published invocation already carries its own provenance.
-            Object[] published = ProtosFrameArguments.publishedInvocation(other);
+            Object[] published = ProtosFrameArguments.publishedInvocation(
+                    other, directTarget(callerClosure));
             Object publishedCaller = published[3];
             ProtosFrameArguments.sealSuspendedCaller(published, liveCallerHeader, caller);
             assertSame(publishedCaller, published[3]);
@@ -1858,7 +1862,8 @@ final class ProtosI115BDeferredCallerTest {
             RootCallTarget target = directTarget(callee);
             ProtosBytecodeRootNode root = (ProtosBytecodeRootNode) target.getRootNode();
             var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
-                    ProtosFrameArguments.publishedInvocation(caller),
+                    ProtosFrameArguments.publishedInvocation(
+                            caller, directTarget(callerClosure)),
                     com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
             Object[] arguments = ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
             Object outcome = ProtosFunctionCallDispatchersFactory.FunctionDirectInvokeNodeGen
@@ -2063,15 +2068,17 @@ final class ProtosI115BDeferredCallerTest {
     void structuredRequestExactCallerWinsOverThePresentFrame() throws Exception {
         withCore(module -> {
             ProtosPrelude prelude = module.prelude().orElseThrow();
+            ProtosClosureValue frameClosure = closure("() => 0", module);
             ProtosActivation frameActivation = ProtosActivation.forClosureInvocation(
-                    closure("() => 0", module), List.of(), prelude);
+                    frameClosure, List.of(), prelude);
             ProtosActivation requested = ProtosActivation.forClosureInvocation(
                     closure("() => 1", module), List.of(), prelude);
             ProtosClosureValue callee = closure("(x) => x", module);
             RootCallTarget target = directTarget(callee);
             ProtosBytecodeRootNode root = (ProtosBytecodeRootNode) target.getRootNode();
             var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
-                    ProtosFrameArguments.publishedInvocation(frameActivation),
+                    ProtosFrameArguments.publishedInvocation(
+                            frameActivation, directTarget(frameClosure)),
                     com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
 
             for (boolean exactNeed : new boolean[] {false, true}) {
@@ -2100,13 +2107,15 @@ final class ProtosI115BDeferredCallerTest {
     @Test
     void ordinarySourceDispatchKeepsSelectiveCallerTransport() throws Exception {
         withCore(module -> {
+            ProtosClosureValue callerClosure = closure("() => 0", module);
             ProtosActivation caller = ProtosActivation.forClosureInvocation(
-                    closure("() => 0", module), List.of(), module.prelude().orElseThrow());
+                    callerClosure, List.of(), module.prelude().orElseThrow());
             ProtosClosureValue callee = closure("(x) => x", module);
             RootCallTarget target = directTarget(callee);
             ProtosBytecodeRootNode root = (ProtosBytecodeRootNode) target.getRootNode();
             var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
-                    ProtosFrameArguments.publishedInvocation(caller),
+                    ProtosFrameArguments.publishedInvocation(
+                            caller, directTarget(callerClosure)),
                     com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
             var callNode = com.oracle.truffle.api.nodes.DirectCallNode.create(target);
 

@@ -73,7 +73,7 @@ public final class ProtosDispatchTestSupport {
 
     /** An entry whose activation is already materialized and published. */
     public static DirectEntry rich(RootCallTarget target, ProtosActivation activation) {
-        return new DirectEntry(target, ProtosFrameArguments.publishedInvocation(activation));
+        return new DirectEntry(target, ProtosFrameArguments.publishedInvocation(activation, target));
     }
 
     /** Enters the CallTarget; the result is projected to the guest domain. */

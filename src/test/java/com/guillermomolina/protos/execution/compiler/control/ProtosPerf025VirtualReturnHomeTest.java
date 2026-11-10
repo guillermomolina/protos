@@ -370,9 +370,65 @@ final class ProtosPerf025VirtualReturnHomeTest {
     }
 
     @Test
+    void i115a4ProvenNoHomeRootStaysSpecializedForOrdinaryInvocations() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue source = parsedClosure("() => 42", module);
+            ProtosBytecodeRootNode root = rootOf(source);
+            assertTrue(root.returnHomeProvenUnobservable());
+            assertFalse(root.needsPhysicalHomeCompletionInEpilogue());
+
+            assertInteger(42, enter(fastDirect(source, module)));
+            assertFalse(root.needsPhysicalHomeCompletionInEpilogue());
+
+            ProtosActivation published =
+                    ProtosActivation.forClosureInvocation(
+                            source, List.of(), module.prelude().orElseThrow(),
+                            module.actorModuleState(), module.currentModuleKey().orElse(null),
+                            module.executionDomain());
+            assertFalse(published.returnHomeOrNullForRuntime().isMaterialized());
+            assertInteger(42, ProtosFunctionCallDispatchers.callPublishedUncached(source, published));
+            assertFalse(root.needsPhysicalHomeCompletionInEpilogue(),
+                    "an unobservable home is not a published physical owner");
+        });
+    }
+
+    @Test
+    void i115a4CapturedPhysicalHomeDoesNotActivateOwnerCompletion() throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.prelude().orElseThrow();
+            ProtosClosureValue source = parsedClosure("() => 42", module);
+            var task = module.executionDomain().createTask(null, current -> {});
+            ProtosReturnHome captured = new ProtosReturnHome();
+            captured.bindOwnerTaskForRuntime(task);
+            ProtosClosureValue child = withHome(source, captured, prelude);
+            ProtosBytecodeRootNode root = rootOf(child);
+            assertSame(rootOf(source), root);
+            assertTrue(root.returnHomeProvenUnobservable());
+            assertFalse(root.needsPhysicalHomeCompletionInEpilogue());
+
+            ProtosActivation activation =
+                    ProtosActivation.forClosureInvocation(
+                            child, List.of(), prelude,
+                            module.actorModuleState(), module.currentModuleKey().orElse(null),
+                            module.executionDomain());
+            assertFalse(activation.ownsReturnHome());
+            assertSame(captured, activation.returnHomeOrNullForRuntime());
+            assertInteger(42, ProtosFunctionCallDispatchers.callPublishedUncached(child, activation));
+            assertTrue(captured.isActive(), "a child invocation never closes a captured home");
+            assertSame(task, captured.ownerTaskForRuntime());
+            assertFalse(root.needsPhysicalHomeCompletionInEpilogue(),
+                    "a captured home is not owned by the invoked root");
+            captured.closeOwned();
+        });
+    }
+
+    @Test
     void publishedPhysicalOwnerCompletesEvenUnderNoHomeRootProof() throws Exception {
         withCore(module -> {
             ProtosClosureValue source = parsedClosure("() => 42", module);
+            ProtosBytecodeRootNode root = rootOf(source);
+            assertTrue(root.returnHomeProvenUnobservable());
+            assertFalse(root.needsPhysicalHomeCompletionInEpilogue());
             ProtosReturnHome physical = new ProtosReturnHome();
             ProtosActivation activation =
                     ProtosActivation.forDirectClosureInvocationWithReturnHomeForRuntime(
@@ -384,14 +440,25 @@ final class ProtosPerf025VirtualReturnHomeTest {
             assertSame(task, physical.ownerTaskForRuntime());
             assertTrue(physical.isActive());
             assertInteger(42, ProtosFunctionCallDispatchers.callPublishedUncached(source, activation));
+            assertTrue(root.needsPhysicalHomeCompletionInEpilogue(),
+                    "published physical ownership invalidates the root before entry");
             assertSame(physical, activation.returnHome().orElseThrow());
             assertFalse(physical.isActive());
             assertSame(null, physical.ownerTaskForRuntime());
+
+            // After invalidation an ordinary compact no-home invocation still completes.
+            DirectEntry compact = fastDirect(source, module);
+            assertVirtualHome(compact);
+            assertInteger(42, enter(compact));
+            assertTrue(root.needsPhysicalHomeCompletionInEpilogue(), "invalidation is permanent");
 
             var failure = module.prelude().orElseThrow().newError();
             module.context().createLocalSlot("publishedFailure", failure);
             ProtosClosureValue throwing = parsedClosure("() => { publishedFailure.signal() }", module);
             assertTrue(planOf(throwing).returnHomeProvenUnobservableForRuntime());
+            ProtosBytecodeRootNode throwingRoot = rootOf(throwing);
+            assertTrue(throwingRoot.returnHomeProvenUnobservable());
+            assertFalse(throwingRoot.needsPhysicalHomeCompletionInEpilogue());
             ProtosReturnHome failedHome = new ProtosReturnHome();
             ProtosActivation failed =
                     ProtosActivation.forDirectClosureInvocationWithReturnHomeForRuntime(
@@ -402,6 +469,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
                     com.guillermomolina.protos.runtime.ProtosSignalException.class,
                     () -> ProtosFunctionCallDispatchers.callPublishedUncached(throwing, failed));
             assertSame(failure, signaled.error());
+            assertTrue(throwingRoot.needsPhysicalHomeCompletionInEpilogue());
             assertFalse(failedHome.isActive());
         });
     }
@@ -562,6 +630,11 @@ final class ProtosPerf025VirtualReturnHomeTest {
         ProtosBytecodeRootNode root = ProtosFunctionCallDispatchers.calleeRootOrNull(
                 planOf(closure).bytecodeActivationTargetForComposition());
         assertSame(expected, ProtosFunctionCallDispatchers.classifyReturnHome(closure, root));
+    }
+
+    private static ProtosBytecodeRootNode rootOf(ProtosClosureValue closure) {
+        return assertInstanceOf(ProtosBytecodeRootNode.class,
+                ProtosDispatchTestSupport.target(closure).getRootNode());
     }
 
     private static ProtosClosureValue withHome(

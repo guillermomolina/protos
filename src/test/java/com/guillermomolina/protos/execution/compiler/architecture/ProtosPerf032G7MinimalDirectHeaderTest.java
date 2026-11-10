@@ -486,7 +486,9 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             // A module activation is a real activation but not a Closure invocation.
             IllegalStateException rejected =
                     assertThrows(IllegalStateException.class,
-                            () -> ProtosFrameArguments.publishedInvocation(module));
+                            () -> ProtosFrameArguments.publishedInvocation(
+                                    module,
+                                    compact.target()));
             assertTrue(rejected.getMessage().contains("return home"), rejected.getMessage());
         });
     }

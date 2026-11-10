@@ -1889,7 +1889,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
                                 anchor.prelude().orElseThrow());
 
                 Object[] published =
-                        ProtosFrameArguments.publishedInvocation(activation);
+                        ProtosFrameArguments.publishedInvocation(
+                                activation, ProtosDispatchTestSupport.target(anchor));
 
                 assertTrue(ProtosFrameArguments.hasPublishedActivation(published));
                 assertNull(
@@ -1962,7 +1963,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 ProtosActivation activation =
                         ProtosActivation.forClosureInvocation(
                                 anchor, List.of(), anchor.prelude().orElseThrow());
-                Object[] published = ProtosFrameArguments.publishedInvocation(activation);
+                Object[] published = ProtosFrameArguments.publishedInvocation(
+                        activation, ProtosDispatchTestSupport.target(anchor));
                 assertEquals(41L, ((Number) ProtosExperimentalReadGlobalNode.readModuleBinding(
                         published, utf16("target"), 1, false)).longValue(),
                         "the generic route returns the guest Integer");

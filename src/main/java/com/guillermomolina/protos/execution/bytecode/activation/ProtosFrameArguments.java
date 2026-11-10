@@ -29,6 +29,7 @@ import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.frame.Frame;
 import java.util.List;
@@ -709,8 +710,14 @@ final class ProtosFrameArguments {
      * published invocation are read from its activation. Copying the supplied
      * values reads the activation's deferred value list (or its existing
      * guest Array) and never creates the guest Array or the Context.
+     *
+     * <p>I115-A4: preparation registers a published physical ReturnHome
+     * owner with the root of {@code effectiveTarget} before the target may
+     * execute, so a proven no-home root switches to owned-home completion.
      */
-    static Object[] publishedInvocation(ProtosActivation activation) {
+    static Object[] publishedInvocation(
+            ProtosActivation activation,
+            RootCallTarget effectiveTarget) {
         Objects.requireNonNull(activation, "activation");
         /*
          * Every Closure invocation activation receives its home from
@@ -727,6 +734,11 @@ final class ProtosFrameArguments {
                                                 "ordinary Closure entry requires the invocation's"
                                                         + " return home; this activation is not a"
                                                         + " Closure invocation"));
+        ProtosBytecodeRootNode effectiveRoot =
+                ProtosFunctionCallDispatchers.calleeRootOrNull(effectiveTarget);
+        if (effectiveRoot != null) {
+            effectiveRoot.admitPublishedPhysicalOwner(activation);
+        }
         List<?> supplied = activation.suppliedArgumentsForRuntime();
         Object[] arguments = new Object[SUPPLIED_ARGUMENT_OFFSET + supplied.size()];
         arguments[CLOSURE_INDEX] = activation;
