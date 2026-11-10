@@ -1,0 +1,95 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// I144: denial paths of the external FFM provider. The provider is
+// configured, but only the host-authorized libraries exist: no file name,
+// path, or unknown alias reaches the native loader, and every rejected call
+// fails before entry with the ordinary Error.
+// Run by dist/test_external_foreign_providers.py.
+
+Assertions: import("std:test/assertions")
+
+// ---- unknown aliases, file names and paths are not targets
+
+Assertions.signals(Error, () => import("ffi:libc"))
+Assertions.signals(Error, () => import("ffi:libsqlite3.so.0"))
+Assertions.signals(Error, () => import("ffi:/lib/x86_64-linux-gnu/libc.so.6"))
+Assertions.signals(Error, () => import("ffi:../ffi_test"))
+Assertions.signals(Error, () => import("ffi:"))
+
+// ---- the fixture alias is test-only: without its host option it never loads
+
+fixtureDenied: Assertions.signals(Error, () => import("ffi:ffi_test"))
+
+ffi: import("ffi:sqlite3")
+
+ordinary: (body) => {
+    error: Assertions.signals(Error, body)
+    Assertions.require(error.parent() === Error)
+}
+
+// ---- symbols: identifiers only, and only exported by the authorized library
+
+empty: ffi.signature(ffi.i32)
+ordinary(() => ffi.bind("../libc.so.6", empty))
+ordinary(() => ffi.bind("", empty))
+ordinary(() => ffi.bind(42, empty))
+// Resolution happens after entry, in the authorized library only (no default
+// or loader lookup): an unknown symbol is a ForeignError.
+missing: Assertions.signals(ForeignError, () => ffi.bind("protos_i144_no_such_symbol", empty))
+
+// ---- malformed declarations fail before entry
+
+ordinary(() => ffi.opaque("not a name"))
+ordinary(() => ffi.out(ffi.void))
+ordinary(() => ffi.out(ffi.utf8z))
+ordinary(() => ffi.signature(ffi.utf8z))
+ordinary(() => ffi.param(empty, ffi.void))
+ordinary(() => ffi.nullable(ffi.i32))
+ordinary(() => ffi.owned(ffi.opaque("sqlite3"), "sqlite3_close_v2", ffi.i64))
+ordinary(() => ffi.copy(null, 1))
+ordinary(() => ffi.release(null))
+ordinary(() => ffi.signature())
+
+// ---- expired resources
+
+dbType: ffi.opaque("sqlite3")
+db: ffi.owned(dbType, "sqlite3_close_v2", ffi.i32)
+open: ffi.bind(
+    "sqlite3_open_v2",
+    ffi.param(
+        ffi.param(
+            ffi.param(ffi.param(ffi.signature(ffi.i32), ffi.utf8z), ffi.out(db)),
+            ffi.i32),
+        ffi.nullable(ffi.opaque("sqlite3_vfs_name"))))
+errcode: ffi.bind("sqlite3_errcode", ffi.param(ffi.signature(ffi.i32), dbType))
+opened: open(":memory:", 6, null)
+connection: opened[1]
+Assertions.require(errcode(connection) == 0)
+// The NULL-only zVfs adaptation never admits another handle as a VFS name.
+ordinary(() => open(":memory:", 6, connection))
+Assertions.require(ffi.release(connection) == 0)
+ordinary(() => errcode(connection))
+ordinary(() => ffi.release(connection))
+
+// ---- handles of a different declared type are rejected
+
+stmtType: ffi.opaque("sqlite3_stmt")
+step: ffi.bind("sqlite3_step", ffi.param(ffi.signature(ffi.i32), stmtType))
+second: open(":memory:", 6, null)[1]
+ordinary(() => step(second))
+Assertions.require(ffi.release(second) == 0)
+
+print("I144-FFM-DENIED-PASS")

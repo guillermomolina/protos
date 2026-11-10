@@ -124,6 +124,29 @@ final class ProtosForeignOperation {
         return enter(handle.session(), handle.adapter(), operation, prelude, callbacks, body);
     }
 
+    /**
+     * Pre-entry whole-execution admission (I144). Rejects a closed session without acquiring a
+     * replacement, then asks the adapter's pure {@code acceptsExecution} hook; a refusal or a
+     * failure of the hook itself is the ordinary Protos Error, never a {@code ForeignError}. The
+     * subsequent {@code enter} still re-checks session liveness to cover a concurrent close.
+     */
+    @TruffleBoundary
+    static void requireAdmissibleExecution(
+            ProtosForeignHandle handle,
+            java.util.List<ProtosForeignArgument> arguments,
+            ProtosPrelude prelude) {
+        ProtosForeignProviderSession live = requireLiveSession(handle.session(), prelude);
+        boolean admitted;
+        try {
+            admitted = handle.adapter().acceptsExecution(live, handle.target(), arguments);
+        } catch (Exception rejected) {
+            admitted = false;
+        }
+        if (!admitted) {
+            throw ordinaryError(prelude);
+        }
+    }
+
     /** The live session, or the ordinary pre-entry Error once the generation closed. */
     private static ProtosForeignProviderSession requireLiveSession(
             ProtosForeignProviderSessionBinding session, ProtosPrelude prelude) {

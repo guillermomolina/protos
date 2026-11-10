@@ -768,10 +768,9 @@ public final class ProtosStandaloneHostedExecution {
         } catch (CompletionException hostFailure) {
             throw new IOException("RootActor service bootstrap failed", hostFailure.getCause());
         }
-        ProtosActor root = process.rootActorForRuntime();
-        return ready
-                && root.lifecycleState() == ProtosActor.LifecycleState.READY
-                && root.currentBehavior().isPresent();
+        // READY is a historical bootstrap outcome, not a promise that the
+        // Actor remains alive while the host observes the result.
+        return ready;
     }
 
     static ProtosEncodingValue utf8(ProtosPrelude prelude) {

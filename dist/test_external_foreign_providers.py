@@ -22,6 +22,16 @@ the installation, and runs the ``.protos`` programs in that directory through
 the extracted ``bin/protos`` as independent OS processes. Behavioral
 assertions live in the ``.protos`` files; this runner only checks exit codes,
 markers, provider trace lines, and that the installation is left unmodified.
+
+I144 extends the same run with the optional external FFM provider
+(``providers/ffm``), built by ``dist/build_ffm_provider.py`` against the same
+extracted ``lib/protos.jar`` and passed only with ``--foreign-provider-path``:
+real shared SQLite when present, the denial cases, and the absence of implicit
+authorization. The CLI has no provider-option channel, so the SQLite-
+independent ABI fixture (``native/ffi_test.c`` through ``ffm-abi.protos``) is
+run by the Java test host ``ProtosI144FfmFixtureAbiTest``, which selects the
+fixture library with ``withProviderOptions``. Missing platform support or
+shared SQLite is reported as UNSUPPORTED, never as PASS.
 """
 
 from __future__ import annotations
@@ -37,6 +47,8 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+
+import build_ffm_provider
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ROOT / "protos" / "tests" / "foreign-provider"
@@ -61,6 +73,18 @@ RESULT_KEYS = (
     "DEFAULT_ZERO_DISCOVERY",
     "UNUSED_PROVIDER_NO_SESSION",
     "DISTRIBUTION_UNMODIFIED",
+    "I144_FFM_PROVIDER_JAR",
+    "I144_FFM_SQLITE",
+    "I144_FFM_DENIED",
+    "I144_NO_IMPLICIT_AUTHORIZATION",
+    "I144_UNUSED_NO_SESSION",
+    "I144_ARBITRARY_ALIAS_DENIED",
+)
+SQLITE_CANDIDATES = (
+    "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0",
+    "/lib/x86_64-linux-gnu/libsqlite3.so.0",
+    "/usr/lib64/libsqlite3.so.0",
+    "/usr/lib/libsqlite3.so.0",
 )
 
 
@@ -220,6 +244,70 @@ def traces(stderr: str) -> list[str]:
 
 def other_stderr(stderr: str) -> list[str]:
     return [line for line in stderr.splitlines() if line and not line.startswith(TRACE)]
+
+
+def check_ffm_program(
+    runner: Runner,
+    key: str,
+    install: Path,
+    program: str,
+    jar: Path,
+    marker: str,
+) -> None:
+    """Runs one I144 program with exactly the FFM provider JAR configured."""
+    check_program(runner, key, install, program, [jar], marker, [])
+
+
+def shared_sqlite() -> str | None:
+    for candidate in SQLITE_CANDIDATES:
+        if Path(candidate).exists():
+            return candidate
+    return None
+
+
+def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
+              native_supported: bool, native_reason: str, plan: list) -> None:
+    keys = [key for key in RESULT_KEYS if key.startswith("I144_")]
+    if not native_supported:
+        for key in keys:
+            runner.record(key, UNSUPPORTED, native_reason)
+        return
+    scratch = runner.work / "i144-build"
+    scratch.mkdir()
+    try:
+        provider = build_ffm_provider.build_provider_jar(
+            runner.tool("javac"), protos_jar, plugins / "ffm-provider.jar", scratch,
+            log=runner.evidence / "i144-compile-ffm.log")
+    except build_ffm_provider.BuildError as failure:
+        for key in keys:
+            runner.record(key, FAIL, f"provider JAR not built: {str(failure).splitlines()[0]}")
+        return
+    runner.record("I144_FFM_PROVIDER_JAR", PASS)
+
+    sqlite = shared_sqlite()
+    if sqlite is None:
+        for key in ("I144_FFM_SQLITE", "I144_FFM_DENIED"):
+            runner.record(key, UNSUPPORTED, f"no shared libsqlite3.so.0 in {SQLITE_CANDIDATES}")
+    else:
+        plan.append(lambda: check_ffm_program(runner, "I144_FFM_SQLITE", install, "ffm-sqlite.protos",
+                      provider, "I144-FFM-SQLITE-PASS"))
+        plan.append(lambda: check_ffm_program(runner, "I144_FFM_DENIED", install, "ffm-denied.protos",
+                      provider, "I144-FFM-DENIED-PASS"))
+
+    # The distributable provider knows only ffi:sqlite3: the fixture program
+    # (ffi-test scheme, ffi_test alias) must fail without any native access.
+    plan.append(lambda: check_failure(runner, "I144_ARBITRARY_ALIAS_DENIED", install,
+                  ["--foreign-provider-path", str(provider), str(CASES / "ffm-abi.protos")],
+                  "i144-alias-denied", "I144-FFM-ABI-PASS", []))
+    # Configured but never imported: the program runs and nothing else happens.
+    plan.append(lambda: check_program(runner, "I144_UNUSED_NO_SESSION", install, "unused-provider.protos",
+                  [provider], "I085-B-UNUSED-PASS", []))
+    # Presence on CLASSPATH or in the working directory authorizes nothing.
+    shutil.copy2(provider, runner.work / provider.name)
+    exposed = runner.environment({"CLASSPATH": str(provider)})
+    plan.append(lambda: check_failure(runner, "I144_NO_IMPLICIT_AUTHORIZATION", install,
+                  [str(CASES / "ffm-denied.protos")], "i144-zero-discovery",
+                  "I144-FFM-DENIED-PASS", [], exposed))
 
 
 class Progress:
@@ -451,6 +539,8 @@ def main() -> int:
     else:
         runner.record("DEFAULT_ZERO_DISCOVERY", FAIL, "no plugin JAR built")
         runner.record("UNUSED_PROVIDER_NO_SESSION", FAIL, "no plugin JAR built")
+
+    plan_i144(runner, install, protos_jar, plugins, native_supported, native_reason, plan)
 
     global PROGRESS
     PROGRESS = Progress("foreign-provider", len(plan))

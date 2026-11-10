@@ -309,6 +309,69 @@ class ProtosExternalForeignProviderTest {
         }
     }
 
+    /**
+     * I144: the FFM provider sources compile against the SPI-only class path (no runtime or
+     * compiler internals), register only through an explicit I085 provider path, and neither open
+     * a session nor touch native code for an unauthorized target or before first import.
+     */
+    @Test
+    void ffmProviderUsesOnlyThePublicSpiAndExplicitRegistration() throws Exception {
+        Path root = Path.of("providers", "ffm", "src", "main").toAbsolutePath();
+        Path ffmClasses = Files.createDirectories(work.resolve("ffm-classes"));
+        List<String> arguments =
+                new ArrayList<>(
+                        List.of("--release", "25", "-proc:none", "-classpath", publicClassPath(),
+                                "-d", ffmClasses.toString()));
+        try (Stream<Path> sources = Files.walk(root.resolve("java"))) {
+            sources.filter(path -> path.toString().endsWith(".java"))
+                    .map(Path::toString)
+                    .forEach(arguments::add);
+        }
+        ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
+        assertEquals(
+                0,
+                ToolProvider.getSystemJavaCompiler()
+                        .run(null, diagnostics, diagnostics, arguments.toArray(String[]::new)),
+                diagnostics::toString);
+        String service =
+                Files.readString(root.resolve("resources").resolve(SERVICE)).strip();
+        assertEquals("com.guillermomolina.protos.ffm.FfmForeignProvider", service);
+        Path ffm = jar(work, ffmClasses, "com.guillermomolina.protos.ffm", service);
+
+        // Not configured: no ffi scheme exists, whatever JARs are around.
+        try (Fixture fixture = new Fixture(invented)) {
+            assertTrue(
+                    fixture.host.foreignProvidersForRuntime().lookupImportScheme("ffi").isEmpty());
+            assertEquals(
+                    ProtosExecutionOutcome.State.FAILED,
+                    fixture.run("import(\"ffi:sqlite3\")").state());
+        }
+        // Configured beside the I085 fixtures: routed through the common substrate, lazily.
+        try (Fixture fixture = new Fixture(invented, ffm)) {
+            ProtosForeignProviderDescriptor descriptor =
+                    fixture.host
+                            .foreignProvidersForRuntime()
+                            .lookupImportScheme("ffi")
+                            .orElseThrow();
+            assertEquals(
+                    ProtosForeignProviderExecutionProfile.TRUSTED_IN_PROCESS,
+                    descriptor.profile());
+            assertInstanceOf(ProtosForeignPluginValueAdapter.class, descriptor.values());
+            assertEquals("42", integer(fixture.eval(DEMO + "lib.double(21)")));
+            for (String rejected :
+                    List.of(
+                            "import(\"ffi:libsqlite3.so.0\")",
+                            "import(\"ffi:/usr/lib/libsqlite3.so.0\")",
+                            "import(\"ffi:ffi_test\")",
+                            "import(\"ffi:libc\")")) {
+                assertEquals(
+                        ProtosExecutionOutcome.State.FAILED, fixture.run(rejected).state(), rejected);
+            }
+            // Only the invented provider opened a session; the ffi provider never did.
+            assertEquals(1, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
     @Test
     void misconfiguredProviderPathsAreRejectedBeforeAnyHostExists() throws Exception {
         Path empty = Files.createDirectories(work.resolve("empty"));
@@ -526,9 +589,17 @@ class ProtosExternalForeignProviderTest {
 
     /** Only the core public SPI classes: neither Protos internals nor Polyglot are reachable. */
     private static String publicClassPath() throws Exception {
+        return publicClassPath(work);
+    }
+
+    /** SPI-only compilation class path materialized under {@code root} (shared with I144). */
+    static String publicClassPath(Path root) throws Exception {
+        Path spiOnly = root.resolve("spi-only");
+        if (Files.isDirectory(spiOnly)) {
+            return spiOnly.toString();
+        }
         Path protosClasses = codeSource(ProtosForeignProviderPlugin.class);
         String spi = ProtosForeignProviderPlugin.class.getPackageName().replace('.', '/');
-        Path spiOnly = work.resolve("spi-only");
         Path target = Files.createDirectories(spiOnly.resolve(spi));
         try (Stream<Path> files = Files.list(protosClasses.resolve(spi))) {
             for (Path file : files.filter(Files::isRegularFile).toList()) {
@@ -543,14 +614,23 @@ class ProtosExternalForeignProviderTest {
     }
 
     private static Path jar(Path classes, String pkg, String name) throws Exception {
-        Path jar = work.resolve(pkg + ".jar");
+        return jar(work, classes, pkg, pkg + "." + name);
+    }
+
+    /**
+     * Packages the classes of {@code pkg} (a slash- or dot-separated package) into one external
+     * provider JAR whose ServiceLoader descriptor names exactly {@code serviceClass}.
+     */
+    static Path jar(Path root, Path classes, String pkg, String serviceClass) throws Exception {
+        String folder = pkg.replace('.', '/');
+        Path jar = root.resolve(folder.replace('/', '-') + ".jar");
         try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar))) {
             out.putNextEntry(new JarEntry(SERVICE));
-            out.write((pkg + "." + name + "\n").getBytes(StandardCharsets.UTF_8));
+            out.write((serviceClass + "\n").getBytes(StandardCharsets.UTF_8));
             out.closeEntry();
-            try (Stream<Path> files = Files.list(classes.resolve(pkg))) {
+            try (Stream<Path> files = Files.list(classes.resolve(folder))) {
                 for (Path file : files.toList()) {
-                    out.putNextEntry(new JarEntry(pkg + "/" + file.getFileName()));
+                    out.putNextEntry(new JarEntry(folder + "/" + file.getFileName()));
                     out.write(Files.readAllBytes(file));
                     out.closeEntry();
                 }
@@ -569,7 +649,7 @@ class ProtosExternalForeignProviderTest {
                 | Byte.toUnsignedInt(header[7]);
     }
 
-    private static int counter(Fixture fixture, String className, String field) throws Exception {
+    static int counter(Fixture fixture, String className, String field) throws Exception {
         Class<?> type =
                 Class.forName(className, false, fixture.host.foreignProviderLoaderForTesting());
         return ((java.util.concurrent.atomic.AtomicInteger) type.getField(field).get(null)).get();
@@ -580,7 +660,7 @@ class ProtosExternalForeignProviderTest {
     }
 
     /** Hosted Process over a host configured with exactly the given external provider paths. */
-    private static final class Fixture implements AutoCloseable {
+    static final class Fixture implements AutoCloseable {
         final ProtosPrelude prelude;
         final ProtosStandaloneProcessBootstrap.Result bootstrap;
         final ProtosPolyglotRuntimeHost host;
@@ -595,12 +675,20 @@ class ProtosExternalForeignProviderTest {
         }
 
         Fixture(ProtosPolyglotRuntimeHost host) throws Exception {
+            this(host, false);
+        }
+
+        /** With {@code standardLibrary}, {@code std:} modules (such as std:interop) resolve. */
+        Fixture(ProtosPolyglotRuntimeHost host, boolean standardLibrary) throws Exception {
             this.host = host;
             prelude =
                     new ProtosCoreBootstrap()
                             .bootstrap(
                                     Path.of("protos", "lib", "core"),
-                                    new ProtosModuleRuntimeTest.MemoryResolver());
+                                    standardLibrary
+                                            ? new ProtosStandardLibraryModuleResolver(
+                                                    Path.of("protos", "lib"))
+                                            : new ProtosModuleRuntimeTest.MemoryResolver());
             bootstrap =
                     ProtosStandaloneProcessBootstrap.create(
                             prelude, List.of(), exactEnvironmentDomain(), List.of(),

@@ -44,6 +44,17 @@ interface ProtosForeignValueAdapter {
     }
 
     /**
+     * Whole-execution pre-entry admission (I144): pure validation of {@code args} against the
+     * executable {@code target}. {@code false} or a thrown exception is the ordinary pre-entry
+     * Error; {@link #execute} is not reached. The default admits everything.
+     */
+    default boolean acceptsExecution(
+            ProtosForeignProviderSession session, Object target, List<ProtosForeignArgument> args)
+            throws Exception {
+        return true;
+    }
+
+    /**
      * Whether reading member {@code name} of {@code target} is faithful to an ordinary Protos
      * member read: no material side effects incompatible with a read, and receiver binding of a
      * method-like result preserved. Readability alone is not fidelity.

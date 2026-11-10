@@ -13,7 +13,8 @@ is actually usable at the current repository revision. It is a map, not a
 tutorial. The two HOWTOs are:
 
 - [Writing and registering an external provider](custom-provider.md);
-- [The `java:` provider fixture](java-provider.md).
+- [The `java:` provider fixture](java-provider.md);
+- [The optional external FFM provider (`ffi:`)](ffm-provider.md).
 
 Foreign interoperability is **not** a universal bridge to arbitrary Java (or
 other) APIs. A program reaches exactly what a provider deliberately exposes,
@@ -94,6 +95,7 @@ release containing any of it is implied.
 | Restricted host-Java catalogue provider (`ProtosHostJavaCatalogue`, `openWithHostJava`) | Implemented (I082-G) and tested in JUnit only; same limitation as the previous row |
 | External providers in the **Native CLI** | Not available: Native Image builds offer no dynamic plugin loading |
 | Any provider shipped inside the Protos distribution | None. The `java:`, `inventado:`, and `oslib:` providers are test fixtures |
+| Optional external FFM provider `ffi:` ([guide](ffm-provider.md)) | Implemented in `providers/ffm` (I144) as a separately built JAR for the portable JVM CLI on Linux x86-64; not part of the distribution, and not the future `std:ffi` library (LIB028) |
 
 The practical consequence: today, the supported way for a Protos program to
 use a foreign provider is to build a provider JAR against the public SPI and

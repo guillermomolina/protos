@@ -100,6 +100,18 @@ final class ProtosForeignPluginValueAdapter implements ProtosForeignValueAdapter
     }
 
     @Override
+    public boolean acceptsExecution(
+            ProtosForeignProviderSession session, Object target, List<ProtosForeignArgument> args)
+            throws Exception {
+        for (ProtosForeignArgument argument : args) {
+            if (argument.isCallback()) {
+                return false;
+            }
+        }
+        return operations().acceptsExecution(plugin(session), target, publicArguments(args));
+    }
+
+    @Override
     public boolean canFaithfullyReadMember(
             ProtosForeignProviderSession session, Object target, String name) throws Exception {
         return operations().canFaithfullyReadMember(plugin(session), target, name);

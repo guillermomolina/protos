@@ -65,6 +65,14 @@ operations the provider chooses to support:
 - `acceptsArgument` is checked before entry; arguments arrive as
   `ProtosForeignArgumentValue` (Boolean, `null`, `String`, `BigInteger`,
   `Double`, or a handle of the same session);
+- `acceptsExecution(session, handle, arguments)` (I144, optional) is checked
+  before entry of `execute`, after every argument passed `acceptsArgument`.
+  It sees the executable handle and the complete ordered argument list, so it
+  can validate arity and signature-dependent types, ranges, nullability, or
+  handle state. It must be pure with respect to foreign operations (no symbol
+  resolution, library loading, foreign call, owned allocation, or handle
+  mutation). The default admits everything, so existing providers are
+  unchanged. It applies to projected `call` and to `std:interop.invoke`;
 - `describeFailure` sanitizes a thrown exception into the `ForeignError`
   payload; the default exposes nothing.
 
@@ -233,6 +241,7 @@ What happens:
 | `canonicalTarget` throws (unknown target) | `import` fails with an Error |
 | `acquireModule` throws | Failed initialization: the facade is removed from the cache; a later import may retry |
 | `acceptsArgument` rejects an argument, wrong capability, closed session | Ordinary Error **before** entry; the provider is not called |
+| `acceptsExecution` answers `false` or throws (projected `call`, `std:interop.invoke`) | Ordinary Error **before** entry; `execute` is not called |
 | `execute` (or another operation) throws | Fresh `ForeignError`; its payload contains only what `describeFailure` returns |
 
 A program that leaves such an Error unhandled exits with failure, as any other
@@ -261,6 +270,11 @@ portable distribution, compiles each fixture under
 against `lib/protos.jar` only, and runs the `.protos` programs in
 [`protos/tests/foreign-provider/`](../../../protos/tests/foreign-provider/) as
 separate processes.
+
+The same harness also builds and exercises the optional FFM provider
+(`providers/ffm`, I144); see [The FFM provider](ffm-provider.md). That
+provider is a real external artifact, unlike the `java:`, `inventado:`, and
+`oslib:` fixtures.
 
 ## References
 

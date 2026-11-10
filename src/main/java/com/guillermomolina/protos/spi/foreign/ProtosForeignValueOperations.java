@@ -50,6 +50,27 @@ public interface ProtosForeignValueOperations {
     }
 
     /**
+     * Whole-execution admission check (I144), run by Protos after every argument was exported and
+     * accepted by {@link #acceptsArgument} and before the foreign operation is entered.
+     *
+     * <p>Unlike {@link #acceptsArgument}, it sees the executable handle and the complete ordered
+     * argument list, so it can validate arity and signature-dependent types, ranges, nullability,
+     * embedded NUL, and handle/resource state. Answering {@code false}, or throwing, rejects the
+     * execution with the ordinary Protos {@code Error}: nothing is entered and {@link #execute} is
+     * not called.
+     *
+     * <p>The hook must be pure with respect to foreign operations: it resolves no symbol, opens no
+     * library, invokes no foreign code, allocates no owned resource, and mutates no handle. The
+     * default admits everything, preserving the behavior of existing providers.
+     */
+    default boolean acceptsExecution(
+            ProtosForeignPluginSession session,
+            Object handle,
+            List<ProtosForeignArgumentValue> arguments) {
+        return true;
+    }
+
+    /**
      * Whether reading member {@code name} is faithful to an ordinary Protos member read: no
      * material side effects, and receiver binding of a method-like result preserved.
      */

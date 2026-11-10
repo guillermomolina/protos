@@ -220,6 +220,7 @@ final class ProtosForeignProjectedOperations {
                 arguments.add(outbound.export(argument));
             }
             List<ProtosForeignArgument> exported = List.copyOf(arguments);
+            ProtosForeignOperation.requireAdmissibleExecution(handle, exported, prelude);
             return ProtosForeignOperation.enter(
                     handle,
                     "execute",

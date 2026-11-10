@@ -119,6 +119,9 @@ public final class ProtosForeignInteropFacility {
                 arguments.add(outbound.export(argument));
             }
             List<ProtosForeignArgument> exported = List.copyOf(arguments);
+            if (required == Capability.EXECUTABLE) {
+                ProtosForeignOperation.requireAdmissibleExecution(handle, exported, prelude);
+            }
             return ProtosForeignOperation.enter(
                     handle,
                     operation,

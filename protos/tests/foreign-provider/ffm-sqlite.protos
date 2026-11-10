@@ -1,0 +1,175 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// I144: the generic FFM provider against the real shared SQLite library
+// (libsqlite3.so.0). Every SQLite symbol is declared here, in Protos, by name
+// and signature; the provider has no SQLite-specific Java. This proves only
+// the provider and its ABI: it is not the LIB029 SQLite library. No TEXT/BLOB
+// input binding, SQLITE_TRANSIENT, or native callback is used.
+// Run by dist/test_external_foreign_providers.py.
+
+Assertions: import("std:test/assertions")
+Arrays: import("std:collections/array")
+
+sqlite: import("ffi:sqlite3")
+
+signature: (returns, parameters) => {
+    composed: sqlite.signature(returns)
+    parameters.each((parameter) => { composed = sqlite.param(composed, parameter) })
+    composed
+}
+
+declare: (symbol, returns, parameters) => {
+    sqlite.bind(symbol, signature(returns, parameters))
+}
+
+/// Same, but the call does not invalidate borrowed regions (column sizes).
+declarePreserving: (symbol, returns, parameters) => {
+    sqlite.bind(symbol, sqlite.preserving(signature(returns, parameters)))
+}
+
+/// Rebuilds ordinary Protos Bytes from the provider-private bounded copy.
+toBytes: (copy) => {
+    // Bytes is not a Core prelude binding: a fresh open empty Bytes comes
+    // from the standard encoder, then grows through the ordinary add.
+    bytes: Encoding.UTF8.encode("")
+    index: 0
+    (() => { index < copy.size }).whileTrue(() => {
+        bytes.add(copy[index])
+        index = index + 1
+    })
+    bytes
+}
+
+ordinary: (body) => {
+    error: Assertions.signals(Error, body)
+    Assertions.require(error.parent() === Error)
+}
+
+SQLITE_OK: 0
+SQLITE_ROW: 100
+SQLITE_DONE: 101
+SQLITE_OPEN_READONLY: 1
+SQLITE_OPEN_READWRITE_CREATE: 6
+
+// ---- declarations
+
+dbType: sqlite.opaque("sqlite3")
+stmtType: sqlite.opaque("sqlite3_stmt")
+// zVfs is `const char *`, not a SQLite resource. R1 has no nullable text
+// descriptor, so this test only passes C NULL through a nullable pointer of a
+// private logical type that no binding ever produces: only `null` can be
+// admitted here. This is a limited adaptation to the NULL-pointer ABI, not a
+// way to pass VFS names.
+vfsName: sqlite.nullable(sqlite.opaque("sqlite3_vfs_name"))
+db: sqlite.owned(dbType, "sqlite3_close_v2", sqlite.i32)
+stmt: sqlite.owned(stmtType, "sqlite3_finalize", sqlite.i32)
+
+libversion: declare("sqlite3_libversion_number", sqlite.i32, Array())
+open: declare(
+    "sqlite3_open_v2",
+    sqlite.i32,
+    Array(sqlite.utf8z, sqlite.out(db), sqlite.i32, vfsName))
+// pzTail points into the zSql input, whose utf8z storage belongs to the
+// per-call arena and dies when sqlite3_prepare_v2 returns: it is NOT a
+// borrowed region and is never readable afterwards. It is received only
+// through a private nullable opaque type that no other declaration accepts;
+// this test never reads, copies, or passes it on. Interpreting the remaining
+// SQL belongs to LIB029, which will need to copy while zSql is still alive.
+sqlTail: sqlite.nullable(sqlite.opaque("sqlite3_sql_tail"))
+prepare: declare(
+    "sqlite3_prepare_v2",
+    sqlite.i32,
+    Array(dbType, sqlite.utf8z, sqlite.i32, sqlite.out(stmt), sqlTail))
+step: declare("sqlite3_step", sqlite.i32, Array(stmtType))
+columnInt64: declarePreserving("sqlite3_column_int64", sqlite.i64, Array(stmtType, sqlite.i32))
+columnDouble: declarePreserving("sqlite3_column_double", sqlite.f64, Array(stmtType, sqlite.i32))
+columnText: declare("sqlite3_column_text", sqlite.borrowed, Array(stmtType, sqlite.i32))
+columnBlob: declare("sqlite3_column_blob", sqlite.borrowed, Array(stmtType, sqlite.i32))
+columnBytes: declarePreserving("sqlite3_column_bytes", sqlite.i32, Array(stmtType, sqlite.i32))
+
+// ---- version
+
+version: libversion()
+Assertions.require(version >= 3000000)
+
+// ---- open :memory:, receiving the status and the out handle together
+
+opened: open(":memory:", SQLITE_OPEN_READWRITE_CREATE, null)
+Assertions.require(opened.size == 2)
+Assertions.require(opened[0] == SQLITE_OK)
+connection: opened[1]
+Assertions.require(sqlite.isLive(connection))
+
+// ---- a failed open still yields a handle that must be released
+
+failedOpen: open("/nonexistent-protos-i144/none.db", SQLITE_OPEN_READONLY, null)
+Assertions.require((failedOpen[0] == SQLITE_OK) == false)
+Assertions.require((failedOpen[1] === null) == false)
+Assertions.require(sqlite.release(failedOpen[1]) == SQLITE_OK)
+ordinary(() => sqlite.release(failedOpen[1]))
+
+// ---- empty preparation: SQLITE_OK with no statement
+
+emptyPrepared: prepare(connection, "   ", -1, null)
+Assertions.require(emptyPrepared[0] == SQLITE_OK)
+Assertions.require(emptyPrepared[1] === null)
+
+// ---- numeric values, text and blob through the bounded copy
+
+prepared: prepare(connection, "SELECT 40 + 2, 1.5 * 2, 'h\u{E9}', x'00ff10', NULL", -1, null)
+Assertions.require(prepared[0] == SQLITE_OK)
+statement: prepared[1]
+Assertions.require(step(statement) == SQLITE_ROW)
+Assertions.require(columnInt64(statement, 0) == 42)
+Assertions.require(columnDouble(statement, 1) == 3.0)
+
+// Region first, its length immediately (preserving), then the copy.
+text: columnText(statement, 2)
+textLength: columnBytes(statement, 2)
+textBytes: toBytes(sqlite.copy(text, textLength))
+Assertions.require(textBytes.size() == 3)
+Assertions.require((textBytes[0] == 104) && (textBytes[1] == 195) && (textBytes[2] == 169))
+
+blob: columnBlob(statement, 3)
+blobLength: columnBytes(statement, 3)
+blobBytes: toBytes(sqlite.copy(blob, blobLength))
+Assertions.require(blobBytes.size() == 3)
+Assertions.require((blobBytes[0] == 0) && (blobBytes[1] == 255) && (blobBytes[2] == 16))
+// Another column access invalidated the earlier text region: no stale read.
+ordinary(() => sqlite.copy(text, textLength))
+
+// A NULL column is a NULL pointer, distinct from empty data.
+Assertions.require(columnBlob(statement, 4) === null)
+
+Assertions.require(step(statement) == SQLITE_DONE)
+
+// ---- finalization and close; released handles are never reused
+
+Assertions.require(sqlite.release(statement) == SQLITE_OK)
+ordinary(() => step(statement))
+ordinary(() => sqlite.release(statement))
+Assertions.require(sqlite.release(connection) == SQLITE_OK)
+ordinary(() => prepare(connection, "SELECT 1", -1, null))
+ordinary(() => sqlite.release(connection))
+
+// ---- pre-entry validation of SQLite declarations
+
+ordinary(() => open(":memory:", 6))
+ordinary(() => open("a\u{0}b", 6, null))
+ordinary(() => open(":memory:", 2147483648, null))
+ordinary(() => step(null))
+
+print("I144-FFM-SQLITE-PASS")

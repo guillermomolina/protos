@@ -1,0 +1,308 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// I144: generic ABI checks of the FFM backend against the SQLite-independent
+// fixture library native/ffi_test.c. The test-only registration ffi-test:
+// (plugins/ffm-fixture) reuses the generic backend; the Java test host
+// ProtosI144FfmFixtureAbiTest selects the compiled library with
+// withProviderOptions. Every declaration and all control flow are Protos
+// source; there is no fixture-specific Java. The provider's own private
+// values (descriptors, bindings, results, copies) are kept apart from the
+// Arrays and Bytes rebuilt here in Protos. Under the distributable provider
+// this program must fail (dist/test_external_foreign_providers.py).
+
+Assertions: import("std:test/assertions")
+Arrays: import("std:collections/array")
+Interop: import("std:interop")
+
+ffi: import("ffi-test:ffi_test")
+
+// ---- Protos-side helpers over the provider-private operations
+
+/// Builds a signature from a return descriptor and a Protos Array of
+/// parameter descriptors, one parameter at a time: no Array crosses the SPI.
+signature: (returns, parameters) => {
+    composed: ffi.signature(returns)
+    parameters.each((parameter) => { composed = ffi.param(composed, parameter) })
+    composed
+}
+
+declare: (symbol, returns, parameters) => {
+    ffi.bind(symbol, signature(returns, parameters))
+}
+
+/// Rebuilds an ordinary Protos Array from a provider-private indexed result.
+toArray: (result) => {
+    elements: Array()
+    index: 0
+    (() => { index < result.size }).whileTrue(() => {
+        elements = Arrays.append(elements, result[index])
+        index = index + 1
+    })
+    elements
+}
+
+/// Rebuilds ordinary Protos Bytes from a provider-private bounded copy.
+toBytes: (copy) => {
+    // Bytes is not a Core prelude binding: a fresh open empty Bytes comes
+    // from the standard encoder, then grows through the ordinary add.
+    bytes: Encoding.UTF8.encode("")
+    index: 0
+    (() => { index < copy.size }).whileTrue(() => {
+        bytes.add(copy[index])
+        index = index + 1
+    })
+    bytes
+}
+
+// Every check carries its source line, so a failure names its location
+// (the Java host reports the `line` slot of the CheckFailure).
+CheckFailure: Error {}
+
+check: (at, condition) => {
+    (condition === true).ifFalse(() => {
+        failure: CheckFailure { line: at }
+        failure.signal()
+    })
+    null
+}
+
+caught: (prototype, body) => {
+    result: null
+    prototype.handle(body, (error) => {
+        result = error
+        error
+    })
+    result
+}
+
+/// The ordinary pre-entry Error, never a ForeignError.
+ordinary: (at, body) => {
+    error: caught(Error, body)
+    check(at, (error === null) == false)
+    check(at, error.parent() === Error)
+}
+
+/// A ForeignError signalled after entry.
+foreign: (at, body) => {
+    error: caught(ForeignError, body)
+    check(at, (error === null) == false)
+}
+
+// ---- i32
+
+add: declare("ffi_test_add_i32", ffi.i32, Array(ffi.i32, ffi.i32))
+i32: declare("ffi_test_i32_identity", ffi.i32, Array(ffi.i32))
+check(108, add(40, 2) == 42)
+check(109, add(-5, 3) == -2)
+check(110, i32(2147483647) == 2147483647)
+check(111, i32(-2147483648) == -2147483648)
+// Repeated invocations reuse the same linked binding.
+check(113, add(1, 1) == 2)
+check(114, declare("ffi_test_add_i32", ffi.i32, Array(ffi.i32, ffi.i32)) === add)
+ordinary(115, () => i32(2147483648))
+ordinary(116, () => i32(-2147483649))
+ordinary(117, () => i32(1.5))
+ordinary(118, () => i32("1"))
+ordinary(119, () => i32(null))
+ordinary(120, () => i32())
+ordinary(121, () => add(1))
+ordinary(122, () => add(1, 2, 3))
+// std:interop.invoke shares the same pre-entry boundary as ordinary call.
+check(124, Interop.invoke(add, 40, 2) == 42)
+ordinary(125, () => Interop.invoke(add, 1))
+ordinary(126, () => Interop.invoke(i32, 2147483648))
+ordinary(127, () => Interop.invoke(i32, null))
+ordinary(128, () => Interop.invoke(i32, "1"))
+
+// ---- i64
+
+i64: declare("ffi_test_i64_identity", ffi.i64, Array(ffi.i64))
+check(133, i64(9223372036854775807) == 9223372036854775807)
+check(134, i64(-9223372036854775808) == -9223372036854775808)
+ordinary(135, () => i64(9223372036854775808))
+ordinary(136, () => i64(-9223372036854775809))
+
+// ---- sizeT: unsigned 64-bit, values above the signed range included
+
+size: declare("ffi_test_size_identity", ffi.sizeT, Array(ffi.sizeT))
+sizeMax: declare("ffi_test_size_max", ffi.sizeT, Array())
+check(142, size(0) == 0)
+check(143, size(9223372036854775808) == 9223372036854775808)
+check(144, size(18446744073709551615) == 18446744073709551615)
+check(145, sizeMax() == 18446744073709551615)
+ordinary(146, () => size(-1))
+ordinary(147, () => size(18446744073709551616))
+
+// ---- f64
+
+scale: declare("ffi_test_scale", ffi.f64, Array(ffi.f64, ffi.f64))
+check(152, scale(1.5, 4.0) == 6.0)
+ordinary(153, () => scale(1, 4.0))
+
+// ---- void and absence
+
+touch: declare("ffi_test_touch", ffi.void, Array())
+touchCount: declare("ffi_test_touch_count", ffi.i32, Array())
+before: touchCount()
+check(160, touch() === null)
+check(161, touchCount() == before + 1)
+
+// ---- utf8z
+
+length: declare("ffi_test_utf8_length", ffi.sizeT, Array(ffi.utf8z))
+octets: declare("ffi_test_octet_sum", ffi.i64, Array(ffi.utf8z))
+check(167, length("protos") == 6)
+check(168, length("") == 0)
+check(169, length("\u{E9}") == 2)
+check(170, octets("\u{E9}") == 195 + 169)
+ordinary(171, () => length("a\u{0}b"))
+ordinary(172, () => length(null))
+
+// ---- out parameters: no Protos argument, zeroed, captured in signature order
+
+divmod: declare(
+    "ffi_test_divmod", ffi.i32, Array(ffi.i32, ffi.i32, ffi.out(ffi.i32), ffi.out(ffi.i32)))
+outcome: divmod(17, 5)
+check(179, outcome.size == 3)
+values: toArray(outcome)
+check(181, values.size() == 3)
+check(182, (values[0] == 0) && (values[1] == 3) && (values[2] == 2))
+// An invalid index is detected inside the entered provider operation: per
+// the general D188 rule it is a ForeignError, not a pre-entry Error.
+foreign(185, () => outcome[3])
+foreign(186, () => outcome[-1])
+// A non-zero C status is data, not an Error.
+check(188, divmod(1, 0)[0] == 1)
+ordinary(189, () => divmod(17, 5, 0))
+zeroed: declare("ffi_test_out_was_zero", ffi.i32, Array(ffi.out(ffi.i64)))
+check(191, zeroed()[0] == 1)
+check(192, zeroed()[1] == 77)
+
+// ---- opaque owned resources
+
+counterType: ffi.opaque("ffi_test_counter")
+owned: ffi.owned(counterType, "ffi_test_counter_free", ffi.i32)
+newCounter: declare("ffi_test_counter_new", owned, Array(ffi.i64))
+increment: declare("ffi_test_counter_increment", ffi.i64, Array(counterType))
+open: declare("ffi_test_counter_open", ffi.i32, Array(ffi.i64, ffi.i32, ffi.out(owned)))
+openNone: declare("ffi_test_counter_open_none", ffi.i32, Array(ffi.out(owned)))
+isNull: declare("ffi_test_is_null", ffi.i32, Array(ffi.nullable(counterType)))
+live: declare("ffi_test_live_count", ffi.i32, Array())
+destroyed: declare("ffi_test_destroyed_count", ffi.i32, Array())
+
+initialLive: live()
+initialDestroyed: destroyed()
+counter: newCounter(10)
+check(209, ffi.isLive(counter))
+check(210, increment(counter) == 11)
+check(211, increment(counter) == 12)
+check(212, isNull(counter) == 0)
+check(213, isNull(null) == 1)
+ordinary(214, () => increment(null))
+check(215, live() == initialLive + 1)
+// The destructor result is the C result, unchanged.
+check(217, ffi.release(counter) == 0)
+check(218, ffi.isLive(counter) == false)
+check(219, destroyed() == initialDestroyed + 1)
+// A released handle is never used again, even if C reuses the address.
+ordinary(221, () => increment(counter))
+ordinary(222, () => ffi.release(counter))
+check(223, destroyed() == initialDestroyed + 1)
+
+// Error status together with a non-null resource: custody is taken anyway.
+failed: open(5, 1)
+check(227, failed[0] == 7)
+check(228, ffi.isLive(failed[1]))
+check(229, ffi.release(failed[1]) == 0)
+none: openNone()
+check(231, (none[0] == 3) && (none[1] === null))
+succeeded: open(1, 0)
+check(233, (succeeded[0] == 0) && (increment(succeeded[1]) == 2))
+// Left owned on purpose: session close releases it exactly once.
+
+// Regression: every owned result of one call enters custody before any
+// conversion can fail. The first out is NULL under a non-nullable opaque
+// declaration, so conversion fails after entry (ForeignError); the owned
+// second out was nevertheless adopted. Protos never sees it and does not
+// adopt it again: it stays in session custody, and the Java host checks
+// that session close destroys it exactly once
+// (ProtosI144FfmFixtureAbiTest).
+openPair: declare(
+    "ffi_test_counter_open_pair", ffi.i32, Array(ffi.out(counterType), ffi.out(owned), ffi.i64))
+liveBeforePair: live()
+foreign(246, () => openPair(9))
+check(247, live() == liveBeforePair + 1)
+check(248, destroyed() == initialDestroyed + 2)
+
+// ---- borrowed memory: bounded copy before any invalidating call
+
+bytesOf: declare("ffi_test_bytes", ffi.borrowed, Array(ffi.i32))
+bytesLength: declare("ffi_test_bytes_length", ffi.i32, Array())
+preservingLength: ffi.bind("ffi_test_bytes_length", ffi.preserving(signature(ffi.i32, Array())))
+clobber: declare("ffi_test_bytes_clobber", ffi.void, Array())
+nullBytes: declare("ffi_test_null_bytes", ffi.borrowed, Array())
+
+region: bytesOf(4)
+// A preserving declaration keeps the region valid (the SQLite column pattern).
+count: preservingLength()
+check(261, count == 4)
+copied: ffi.copy(region, count)
+check(263, copied.size == 4)
+bytes: toBytes(copied)
+check(265, bytes.size() == 4)
+check(266, (bytes[0] == 250) && (bytes[1] == 253) && (bytes[2] == 0) && (bytes[3] == 3))
+// The copy is independent of the native memory.
+clobber()
+check(269, copied[0] == 250)
+// Any non-preserving call invalidates the region: no read after it.
+check(271, ffi.isLive(region) == false)
+ordinary(272, () => ffi.copy(region, 4))
+region2: bytesOf(2)
+check(274, bytesLength() == 2)
+ordinary(275, () => ffi.copy(region2, 2))
+// release (a destructor call) is invalidating as well.
+transient: newCounter(1)
+region3: bytesOf(3)
+check(279, preservingLength() == 3)
+check(280, ffi.isLive(region3))
+check(281, ffi.release(transient) == 0)
+check(282, ffi.isLive(region3) == false)
+ordinary(283, () => ffi.copy(region3, 3))
+// Regression: calls rejected before entry never advance the borrow epoch;
+// a preserving call keeps it; the region a call returns stays usable until
+// the next invalidating operation.
+kept: bytesOf(2)
+ordinary(288, () => add(1))
+ordinary(289, () => i32(2147483648))
+ordinary(290, () => Interop.invoke(add, 1))
+ordinary(291, () => ffi.release(counter))
+ordinary(292, () => ffi.copy(kept, 16777217))
+check(293, ffi.isLive(kept))
+check(294, preservingLength() == 2)
+check(295, ffi.isLive(kept))
+check(296, ffi.copy(kept, 2).size == 2)
+check(297, ffi.copy(kept, 2)[1] == 253)
+check(298, add(1, 1) == 2)
+check(299, ffi.isLive(kept) == false)
+ordinary(300, () => ffi.copy(kept, 2))
+// NULL, empty, and zero-length data stay distinct.
+check(302, nullBytes() === null)
+empty: bytesOf(0)
+check(304, ffi.copy(empty, 0).size == 0)
+ordinary(305, () => ffi.copy(bytesOf(1), -1))
+ordinary(306, () => ffi.copy(bytesOf(1), 16777217))
+
+print("I144-FFM-ABI-PASS")

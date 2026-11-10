@@ -7,6 +7,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.460-SNAPSHOT
+
+- `I144` (D238-B1-SQL-R1): implement the optional external Java 25 FFM provider.
+  - Add the optional `acceptsExecution` hook to the I085 SPI. It validates the
+    whole argument list before entry of projected `call` and
+    `std:interop.invoke`. A refusal is the ordinary Error; the default keeps
+    every existing provider's behavior.
+  - Add `providers/ffm`, an external `ffi:` provider built against the public
+    SPI only and packaged by `dist/build_ffm_provider.py`. Its only target is
+    `sqlite3`, authorized exclusively by the host through
+    `--foreign-provider-path` and provider options. It loads nothing until
+    first import.
+  - Generic, Protos-composed declarations: `i32`, `i64`, `f64`, `sizeT`,
+    `utf8z`, opaque and nullable references, owned references with a declared
+    destructor, `out` positions, and borrowed memory with a bounded copy. No
+    SQLite-specific Java.
+  - Session-scoped custody. Every owned result of a call is adopted before any
+    fallible conversion, released at most once, and cleaned up in reverse
+    order at close. Address-independent identity; borrowed regions are revoked
+    by epoch before each non-preserving C entry.
+  - Add a SQLite-independent C fixture run by a Java test host through a
+    test-only registration of the same backend, real-SQLite and denial
+    programs, the `I144_*` harness keys, and developer documentation.
+    `std:ffi` (LIB028) and the SQLite library (LIB029) remain future work.
+
 ## 0.3.459-SNAPSHOT
 
 - `I163` (D253-C1): implement explicit Core wall-clock nanoseconds authority.
