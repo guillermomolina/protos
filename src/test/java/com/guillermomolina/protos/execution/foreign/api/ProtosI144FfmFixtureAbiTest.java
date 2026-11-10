@@ -144,6 +144,65 @@ class ProtosI144FfmFixtureAbiTest {
     }
 
     @Test
+    void publicFfiProgramKeepsCustodyAndReleasesPendingResultsExactlyOnce() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = fixture(authorized())) {
+            ProtosActivation observer = fixture.newActorActivation();
+            int liveBaseline = nativeCount(fixture, observer, "ffi_test_live_count");
+            int destroyedBaseline = destroyedCount(fixture, observer);
+            ProtosExecutionOutcome outcome =
+                    fixture.run(Files.readString(CASES.resolve("ffm-public-api.protos")));
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(),
+                    () -> "ffm-public-api.protos failed with " + describe(fixture, outcome.error()));
+            assertEquals(liveBaseline + 2, nativeCount(fixture, observer, "ffi_test_live_count"));
+            int destroyed = destroyedCount(fixture, observer);
+            assertEquals(destroyedBaseline + 3, destroyed);
+            ProtosObjectValue published = (ProtosObjectValue) outcome.value();
+            Object retained = published.readLocalSlot("retained").orElseThrow();
+            org.junit.jupiter.api.Assertions.assertInstanceOf(
+                    com.guillermomolina.protos.runtime.ProtosClosureValue.class,
+                    published.readLocalSlot("increment").orElseThrow());
+            Object otherIncrement = fixture.eval(observer,
+                    "FFI: import(\"std:ffi\")\n"
+                            + "native: import(\"ffi-test:ffi_test\")\n"
+                            + "counter: FFI.opaque(native, \"ffi_test_counter\")\n"
+                            + "FFI.bind(native, \"ffi_test_counter_increment\", FFI.i64, Array(counter))");
+            assertOrdinary(fixture, invoke(fixture, otherIncrement, retained));
+            Object otherRelease = fixture.eval(observer, "import(\"std:ffi\").release");
+            assertOrdinary(fixture, invoke(fixture, otherRelease, retained));
+
+            // A library from another Actor/session cannot be used
+            // by this MODULE's binding or release dispatch metadata.
+            Object otherLibrary = fixture.eval(observer, IMPORT + "ffi");
+            Object bind = fixture.eval("import(\"std:ffi\").bind");
+            Object descriptor = fixture.eval(
+                    "FFI: import(\"std:ffi\")\n"
+                            + "FFI.opaque(import(\"ffi-test:ffi_test\"), \"ffi_test_counter\")");
+            // Exercise session mismatch with a retained root descriptor.
+            Object symbol = fixture.eval("\"ffi_test_counter_new\"");
+            Object parameters = fixture.eval("Array(import(\"std:ffi\").i64)");
+            assertOrdinary(fixture, invoke(fixture, bind, otherLibrary, symbol, descriptor, parameters));
+
+            ProtosForeignModuleFacadeValue facade =
+                    (ProtosForeignModuleFacadeValue) fixture.eval(IMPORT + "ffi");
+            ProtosForeignProviderSessionBinding session =
+                    facade.attachmentForRuntime().orElseThrow().session();
+            session.closeForRuntime();
+            session.closeForRuntime();
+            assertEquals(destroyed + 2, destroyedCount(fixture, observer));
+            assertEquals(liveBaseline, nativeCount(fixture, observer, "ffi_test_live_count"));
+        }
+    }
+
+    @Test
+    void publicDeclarationsDoNotOpenAConfiguredProviderSession() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = fixture(authorized())) {
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED,
+                    fixture.run("FFI: import(\"std:ffi\")\nFFI.out(FFI.i32)").state());
+            assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    @Test
     void withoutTheHostOptionTheFixtureNeverLoads() throws Exception {
         for (Map<String, String> options :
                 List.of(

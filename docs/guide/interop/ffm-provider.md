@@ -2,7 +2,8 @@
 
 > **Status:** Non-normative developer guide (I144). The provider operations
 > described here are external support machinery, not the public `std:ffi`
-> library, which LIB028 will define in Protos.
+> library implemented in Protos by LIB028. Start with the
+> [public API guide](../library/interop.md#public-c-declarations-stdffi).
 
 The FFM provider (`providers/ffm`) is an external I085 provider that calls C
 functions of host-authorized shared libraries through the Java 25 Foreign
@@ -44,9 +45,9 @@ and the examples in [`protos/examples/ffi/`](../../../protos/examples/ffi/README
 ## Architecture
 
 ```text
-Protos source
+Protos application -> std:ffi (ordinary descriptors, Closures, Arrays)
     |
-    | import("ffi:sqlite3")
+    | private operations on import("ffi:sqlite3")
     v
 I085 foreign provider SPI
     |
@@ -71,9 +72,8 @@ Host-authorized libsqlite3.so.0
   library path option `sqlite3.path` can only be supplied by a Java host
   through `ProtosForeignProviderConfiguration.withProviderOptions`. Without
   it, the provider loads the library by its loader name `libsqlite3.so.0`.
-- Importing `ffi:sqlite3` does **not** mean there is a public `std:ffi`
-  library. The members of the imported module are provider-private
-  operations.
+- `std:ffi` is the public Protos layer. Importing it grants no authority;
+  the members of `ffi:sqlite3` remain provider-private operations.
 
 ## Requirements
 
@@ -238,7 +238,8 @@ bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
 
 Success is exit status 0 with no output. This is
 [`protos/examples/ffi/sqlite-version.protos`](../../../protos/examples/ffi/sqlite-version.protos).
-`FFI.bind` and similar spellings belong to LIB028 and do not exist yet.
+`FFI.bind` and the other public operations belong to LIB028; the examples
+below retain the private I144 contract for backend documentation.
 
 ## Output parameters
 
@@ -254,7 +255,7 @@ C often returns a status and writes the real result through a pointer, as in
 - a non-zero C result (for example `SQLITE_ERROR`) is ordinary information
   in `result[0]`, never an automatic `ForeignError`; checking it is the
   program's job;
-- converting that value into a final public Array is LIB028's job.
+- LIB028 converts that value into a fresh ordinary public Array.
 
 ## Owned resources
 
@@ -473,18 +474,19 @@ symbol whitelist and none would be an isolation guarantee.
 
 ## Relationship to LIB028 and LIB029
 
-- **LIB028** (`std:ffi`) will define the public Protos API: ordinary
+- **LIB028** (`std:ffi`) defines the public Protos API: ordinary
   descriptor values, Array-based signatures, `FFI.bind/opaque/owned/out/release`,
   and construction of final Arrays from provider results, implemented in
   Protos over these provider operations.
 - **LIB029** (SQLite) will provide the idiomatic library: connections,
   statements, transactions, `Closable` lifecycle, and row projection.
 
-Neither exists yet. The I144 tests
-(`protos/tests/foreign-provider/ffm-*.protos`) prove only the provider and its
-ABI.
+LIB029 remains separate work. `ffm-public-api.protos` exercises the public
+LIB028 layer with the existing I144 fixture host; `ffm-abi.protos` retains
+private backend and borrowed-memory regression coverage. Public R1 has no
+borrowed-memory descriptor or copying operation.
 
-| | I144 (implemented) | LIB028 (not yet) | LIB029 (not yet) |
+| | I144 (implemented) | LIB028 (implemented) | LIB029 (not yet) |
 |---|---|---|---|
 | Owner of | external FFM provider, bounded generic ABI, I085 integration | public `std:ffi` in Protos | idiomatic SQLite library |
 | Declarations | provider-private `signature`/`param`/`bind` | `FFI.bind`, public descriptors, Array signatures | hidden behind the library |

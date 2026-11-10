@@ -303,6 +303,30 @@ class ProtosStandardLibraryModuleResolverTest {
     }
 
     @Test
+    void ffiIsAnOrdinaryModuleWithPrivateMetadataAndNoProviderRequirement() throws Exception {
+        ProtosStandardLibraryModuleResolver resolver =
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        ProtosModuleKey key = resolver.resolve("std:ffi", Optional.empty());
+        assertEquals(ProtosModuleKey.module("std:ffi"), key);
+        assertEquals(
+                STANDARD_LIBRARY.resolve("ffi/module.protos").toRealPath(),
+                resolver.loadSource(key).physicalPath().orElseThrow().toRealPath());
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+        ProtosObjectValue module = (ProtosObjectValue)
+                ProtosTestExecutionSupport.evaluate("import(\"std:ffi\")", actor);
+        assertEquals(12, module.localSlotsSnapshot().size());
+        for (String name : List.of("void", "i32", "i64", "f64", "sizeT", "utf8z",
+                "opaque", "nullable", "owned", "out", "bind", "release")) {
+            org.junit.jupiter.api.Assertions.assertTrue(module.hasLocalSlot(name), name);
+        }
+        for (String name : List.of("descriptors", "owners", "Interop", "Arrays", "nativeType")) {
+            assertFalse(module.hasLocalSlot(name), name);
+        }
+        assertSame(module, ProtosTestExecutionSupport.evaluate("import(\"std:ffi\")", actor));
+    }
+
+    @Test
     void missingStandardModuleBecomesTheExistingCoreImportError() throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(libraryRoot);
@@ -330,7 +354,7 @@ class ProtosStandardLibraryModuleResolverTest {
                         "std:cli/command_line", "std:tls/client", "std:http/server",
                         "std:http/url_client", "std:http/internal/host_worker",
                         "std:test/assertions", "std:test/test", "std:runtime",
-                        "std:inspect", "std:interop")) {
+                        "std:inspect", "std:interop", "std:ffi")) {
             ProtosModuleKey key = resolver.resolve(route, Optional.empty());
             assertEquals(ProtosModuleKey.module(route), key);
             assertNotNull(resolver.loadSource(key).physicalPath().orElseThrow());

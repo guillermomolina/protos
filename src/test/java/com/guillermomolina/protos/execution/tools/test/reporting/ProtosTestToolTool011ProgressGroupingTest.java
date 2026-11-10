@@ -155,7 +155,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
 
         assertEquals(expected, actual);
         // LIB025: the subdivided HTTP leaf presents no group without retained Cases.
-        assertEquals(39, actual.values().stream().mapToInt(List::size).sum());
+        assertEquals(40, actual.values().stream().mapToInt(List::size).sum());
     }
 
     @Test
@@ -174,9 +174,9 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                                         + "Arrays.map(Array(detached, ...reversed), (leaf) => "
                                         + "Array(leaf.id, RepositorySuite.progressGroupNames(leaf, Array())))"));
 
-        assertEquals(33, pairs.indexedSize());
+        assertEquals(34, pairs.indexedSize());
         List<String> order = new ArrayList<>();
-        for (int index = 0; index < 33; index++) {
+        for (int index = 0; index < 34; index++) {
             ProtosArrayValue pair = arrayAt(pairs, index);
             String id = stringAt(pair, 0);
             List<String> names = strings(arrayAt(pair, 1));
@@ -188,8 +188,9 @@ final class ProtosTestToolTool011ProgressGroupingTest {
             }
         }
         assertEquals("protos/actor", order.get(0));
-        assertEquals("protos/package-tool/project-projection", order.get(1));
-        assertEquals("protos/conformance", order.get(32));
+        assertEquals("protos/library/ffi", order.get(1));
+        assertEquals("protos/package-tool/project-projection", order.get(2));
+        assertEquals("protos/conformance", order.get(33));
     }
 
     @Test
@@ -460,7 +461,8 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                         "package-tool/resolution-input-lock",
                         "package-tool/resolution-root",
                         "package-tool/execution-plan",
-                        "package-tool/project-projection")) {
+                        "package-tool/project-projection",
+                        "library/ffi")) {
             groups.put("protos/" + name, name);
         }
         return groups;

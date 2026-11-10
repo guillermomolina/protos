@@ -957,6 +957,9 @@ public final class ProtosCli {
                                         "protos/corpus/library/crypto/sha256",
                                         libraryRoot),
                                 new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/library/ffi",
+                                        libraryRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
                                         "protos/corpus/library/crypto/hmac_sha256",
                                         libraryRoot),
                                 new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(

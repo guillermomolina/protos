@@ -100,7 +100,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
                                         + "SuiteGraph.flattenLeafIds(RepositorySuite.root)"));
 
-        assertEquals(32, flattened.indexedSize());
+        assertEquals(33, flattened.indexedSize());
         assertTrue(flattened.isFrozen());
         assertLeafId(flattened, 0, "protos/conformance");
         assertLeafId(flattened, 1, "protos/process-snapshot");
@@ -135,6 +135,7 @@ final class ProtosTestToolSuiteGraphTest {
         assertLeafId(flattened, 29, "protos/package-tool/resolution-root");
         assertLeafId(flattened, 30, "protos/package-tool/execution-plan");
         assertLeafId(flattened, 31, "protos/package-tool/project-projection");
+        assertLeafId(flattened, 32, "protos/library/ffi");
     }
 
     @Test
@@ -147,7 +148,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
                                         + "SuiteGraph.flattenLeaves(RepositorySuite.root)"));
 
-        assertEquals(32, leaves.indexedSize());
+        assertEquals(33, leaves.indexedSize());
         assertTrue(leaves.isFrozen());
         assertLeafCorpus(leaves, 0, "protos/conformance", "protos/corpus/conformance");
         assertLeafCorpus(leaves, 1, "protos/process-snapshot", "protos/corpus/process-snapshot");
@@ -182,6 +183,7 @@ final class ProtosTestToolSuiteGraphTest {
         assertLeafCorpus(leaves, 29, "protos/package-tool/resolution-root", "protos/corpus/package-tool/resolution-root");
         assertLeafCorpus(leaves, 30, "protos/package-tool/execution-plan", "protos/corpus/package-tool/execution-plan");
         assertLeafCorpus(leaves, 31, "protos/package-tool/project-projection", "protos/corpus/package-tool/project-projection");
+        assertLeafCorpus(leaves, 32, "protos/library/ffi", "protos/corpus/library/ffi");
     }
 
     @Test
@@ -194,7 +196,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"./RepositorySuite.protos\")\n"
                                         + "SuiteGraph.flattenLeaves(RepositorySuite.root)"));
 
-        assertEquals(32, leaves.indexedSize());
+        assertEquals(33, leaves.indexedSize());
         assertTrue(leaves.isFrozen());
         assertLeafRequirement(leaves, 0, "protos/conformance", "protos/test/ordinary");
         assertLeafRequirement(leaves, 1, "protos/process-snapshot", "protos/test/process-snapshot");
@@ -229,6 +231,7 @@ final class ProtosTestToolSuiteGraphTest {
         assertLeafRequirement(leaves, 29, "protos/package-tool/resolution-root", "protos/test/package");
         assertLeafRequirement(leaves, 30, "protos/package-tool/execution-plan", "protos/test/package");
         assertLeafRequirement(leaves, 31, "protos/package-tool/project-projection", "protos/test/package");
+        assertLeafRequirement(leaves, 32, "protos/library/ffi", "protos/test/ordinary");
     }
 
     @Test

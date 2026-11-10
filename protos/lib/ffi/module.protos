@@ -1,0 +1,184 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Protos-first synchronous FFI R1 (D238-B1-SQL-R1).
+//! Import grants no authority. Native libraries must be supplied by the host.
+//! ABI declarations are trusted: a wrong signature can terminate the process.
+
+Interop: import("std:interop")
+Arrays: import("std:collections/array")
+descriptors: IdentityMap()
+owners: IdentityMap()
+
+fail: () => Error().signal()
+requireString: (value) => {
+    String.recognizes(value).ifFalse(() => fail())
+}
+
+// Only foreign member access is used at this boundary: a local object with
+// similarly named slots cannot impersonate a provider library.
+operation: (library, name, ...arguments) => {
+    Interop.invoke(Interop.readMember(library, name), ...arguments)
+}
+metadata: (descriptor) => {
+    descriptors.containsKey(descriptor).ifFalse(() => fail())
+    descriptors.at(descriptor)
+}
+make: (kind, library, native, target) => {
+    descriptor: {}
+    descriptor.freeze()
+    record: {
+        kind: kind
+        library: library
+        native: native
+        target: target
+    }
+    record.freeze()
+    descriptors[descriptor] = record
+    descriptor
+}
+scalar: (name) => make(name, null, null, null)
+/// Immutable void return descriptor; calls without outputs answer null.
+this.void: scalar("void")
+/// Immutable signed 32-bit Integer descriptor; inputs must fit exactly.
+this.i32: scalar("i32")
+/// Immutable signed 64-bit Integer descriptor; inputs must fit exactly.
+this.i64: scalar("i64")
+/// Immutable IEEE binary64 Float descriptor; no Integer coercion is performed.
+this.f64: scalar("f64")
+/// Immutable unsigned 64-bit Integer descriptor for the initial LP64 profile.
+this.sizeT: scalar("sizeT")
+/// Immutable input-only strict UTF-8 String descriptor; interior NUL is rejected.
+this.utf8z: scalar("utf8z")
+
+nativeType: (library, descriptor) => {
+    record: metadata(descriptor)
+    if(record.library !== null) {
+        (record.library === library).ifFalse(() => fail())
+        ^record.native
+    }
+    if(record.kind == "out") {
+        ^operation(library, "out", nativeType(library, record.target))
+    }
+    Interop.readMember(library, record.kind)
+}
+
+/// Declare a logical opaque reference type in the supplied authorized library.
+this.opaque: (library, nativeTypeName, ...extra) => {
+    (extra.size() == 0).ifFalse(() => fail())
+    requireString(nativeTypeName)
+    native: operation(library, "opaque", nativeTypeName)
+    make("opaque", library, native, null)
+}
+
+/// Admit null in addition to references of a plain opaque descriptor.
+this.nullable: (opaqueDescriptor, ...extra) => {
+    (extra.size() == 0).ifFalse(() => fail())
+    record: metadata(opaqueDescriptor)
+    (record.kind == "opaque").ifFalse(() => fail())
+    native: operation(record.library, "nullable", record.native)
+    make("nullable", record.library, native, opaqueDescriptor)
+}
+
+/// Declare result custody with a destructor returning void or i32.
+/// This declaration resolves the destructor; it does not acquire a resource.
+this.owned: (opaqueDescriptor, releaseSymbol, releaseReturnDescriptor, ...extra) => {
+    (extra.size() == 0).ifFalse(() => fail())
+    record: metadata(opaqueDescriptor)
+    returns: metadata(releaseReturnDescriptor)
+    (record.kind == "opaque").ifFalse(() => fail())
+    ((returns.kind == "void") || (returns.kind == "i32")).ifFalse(() => fail())
+    requireString(releaseSymbol)
+    native: operation(record.library, "owned", record.native, releaseSymbol,
+        nativeType(record.library, releaseReturnDescriptor))
+    make("owned", record.library, native, opaqueDescriptor)
+}
+
+/// Declare a zero-initialized output position, consuming no call argument.
+this.out: (descriptor, ...extra) => {
+    (extra.size() == 0).ifFalse(() => fail())
+    record: metadata(descriptor)
+    if((record.kind == "void") || (record.kind == "utf8z") || (record.kind == "out")) {
+        fail()
+    }
+    make("out", null, null, descriptor)
+}
+
+// Dispatch metadata only. Provider custody predates publication, including
+// results never published because a later native-result conversion fails.
+publish: (library, descriptor, value) => {
+    record: metadata(descriptor)
+    if((record.kind == "owned") && (value !== null)) {
+        owners[value] = library
+    }
+    value
+}
+
+/// Bind a trusted ABI declaration and answer a fresh ordinary Closure.
+/// Parameters are snapshotted. Results with outs are fresh ordinary Arrays
+/// ordered [nativeReturn, out0, ...]; a C error status remains ordinary data.
+this.bind: (library, symbol, returnDescriptor, argumentDescriptors, ...extra) => {
+    (extra.size() == 0).ifFalse(() => fail())
+    requireString(symbol)
+    Array.recognizes(argumentDescriptors).ifFalse(() => fail())
+    parameters: Array(...argumentDescriptors)
+    returns: metadata(returnDescriptor)
+    if((returns.kind == "out") || (returns.kind == "utf8z")) { fail() }
+    // Validate the entire public declaration before composing provider values.
+    for(parameter in parameters) {
+        record: metadata(parameter)
+        if((record.kind == "void") || (record.kind == "owned")) { fail() }
+    }
+    signature: operation(library, "signature", nativeType(library, returnDescriptor))
+    outputs: Array(returnDescriptor)
+    for(parameter in parameters) {
+        signature = operation(library, "param", signature, nativeType(library, parameter))
+        record: metadata(parameter)
+        if(record.kind == "out") {
+            outputs = Arrays.append(outputs, record.target)
+        }
+    }
+    parameters.freeze()
+    outputs.freeze()
+    binding: operation(library, "bind", symbol, signature)
+    (...arguments) => {
+        // Forward the exact vector; I085 admission owns arity, scalar ranges,
+        // resource type/session/generation/liveness and UTF-8 checks.
+        result: Interop.invoke(binding, ...arguments)
+        answer: null
+        if(outputs.size() == 1) {
+            answer = publish(library, returnDescriptor, result)
+        }
+        if(outputs.size() > 1) {
+            answer = Array()
+            index: 0
+            for(descriptor in outputs) {
+                answer = Arrays.append(answer, publish(library, descriptor, result[index]))
+                index = index + 1
+            }
+        }
+        answer
+    }
+}
+
+/// Retire an owned handle before attempting its destructor, without retries.
+/// Answers the exact native destructor result, including an error status.
+this.release: (ownedHandle, ...extra) => {
+    (extra.size() == 0).ifFalse(() => fail())
+    owners.containsKey(ownedHandle).ifFalse(() => fail())
+    library: owners.at(ownedHandle)
+    owners.remove(ownedHandle)
+    operation(library, "release", ownedHandle)
+}

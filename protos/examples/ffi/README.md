@@ -1,12 +1,13 @@
 # FFM provider examples (`ffi:sqlite3`)
 
-These two programs call C functions of the real shared SQLite library from
+These programs call C functions of the real shared SQLite library from
 Protos through the optional external FFM provider (I144). Every C declaration
 and all control flow are Protos source; the provider contains no
 SQLite-specific Java.
 
 | Example | Purpose |
 | --- | --- |
+| [`sqlite-version-public.protos`](sqlite-version-public.protos) | Recommended LIB028 example: `FFI.bind`, ordinary descriptors and a Closure call, without opening a connection |
 | [`sqlite-version.protos`](sqlite-version.protos) | Smallest possible check that the provider is built, authorized and able to call C: `sqlite3_libversion_number` |
 | [`sqlite-memory-query.protos`](sqlite-memory-query.protos) | Open an in-memory database, prepare and step one `SELECT`, read Integer, Float, text and blob columns, then finalize and close |
 
@@ -38,12 +39,12 @@ Details: [Build the provider JAR](../../../docs/guide/interop/ffm-provider.md#bu
 
 ```sh
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
-    protos/examples/ffi/sqlite-version.protos
+    protos/examples/ffi/sqlite-version-public.protos
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
     protos/examples/ffi/sqlite-memory-query.protos
 ```
 
-Both programs validate their results with `std:test/assertions`. Success means
+All programs validate their results with `std:test/assertions`. Success means
 **exit status 0 and no standard output**. A broken expectation fails an
 assertion and exits non-zero with a diagnostic on standard error.
 
@@ -60,12 +61,13 @@ only: the C library itself runs with the whole process's authority.
 
 ## What these examples are (and are not)
 
-They use the provider-private I144 operations directly: `signature`, `param`,
+The two original examples use the provider-private I144 operations directly: `signature`, `param`,
 `preserving`, `bind`, `opaque`, `nullable`, `owned`, `out`, `borrowed`,
 `copy` and `release`. These are support machinery, not a stable API:
 
-- the public `std:ffi` library (`FFI.bind`, ordinary descriptors, final
-  Array results) is LIB028 and does not exist yet;
+- `sqlite-version-public.protos` uses LIB028 `std:ffi`: ordinary frozen
+  descriptors, Closure bindings and ordinary result Arrays. Import alone
+  grants no authority. R1 has no public borrowed-memory copy method;
 - an idiomatic SQLite library (connections, statements, transactions,
   parameter binding, row mapping, `Closable` lifecycle) is LIB029 and does
   not exist yet.

@@ -101,6 +101,16 @@ this.x: value
 creates `x` as an own slot of the public module object.
 
 Runtime-provisioned facilities that a host or the Standard Library installs before an initializer executes are installed into the MODULE's private initializer context (or into a SOURCE's `moduleContext`). They never become public members of a MODULE unless its initializer publishes them with ordinary slot creation.
+## Standard Library FFI MODULE (LIB028)
+
+`std:ffi` is a source-backed Standard Library MODULE with a public object and
+separate private initializer context under D242. Its public declarations and
+private Actor-local adaptation metadata follow `FFI.md`. Importing `std:ffi`
+loads no native library and creates no FFM session or native authority.
+An independently host-authorized `ffi:` acquisition follows the existing
+foreign-module facade, Actor-local lifecycle and canonical `ModuleKey` rules;
+this library changes none of those rules.
+
 ## Module Loading, Identity, and Cycles
 
 The importable unit is the **module instance**, the Actor-local ordinary object that `import` returns:

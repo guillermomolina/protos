@@ -48,6 +48,7 @@ final class ProtosTestToolFileSelectionWiringTest {
             "protos/corpus/actor",
             "protos/corpus/group",
             "protos/corpus/package-toml",
+            "protos/corpus/library/ffi",
             "protos/corpus/library/uri",
             "protos/corpus/library/csv",
             "protos/corpus/library/cli",
@@ -84,7 +85,7 @@ final class ProtosTestToolFileSelectionWiringTest {
         }
 
         assertEquals(
-                32,
+                33,
                 occurrences(
                         source,
                         "new ProtosTestToolFileSelectionFacility.CorpusSourceRoot("));

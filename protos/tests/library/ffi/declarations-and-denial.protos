@@ -1,0 +1,84 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+FFI: import("std:ffi")
+Arrays: import("std:collections/array")
+
+tests: [
+    Test("import is authority free and cached", () => {
+        Assertions.require(FFI === import("std:ffi"))
+        Assertions.signals(Error, () => import("ffi:sqlite3"))
+    }),
+    Test("scalar descriptors are stable ordinary frozen objects", () => {
+        values: Array(FFI.void, FFI.i32, FFI.i64, FFI.f64, FFI.sizeT, FFI.utf8z)
+        Assertions.require(FFI.i32 === FFI.i32)
+        Assertions.require(FFI.i32 !== FFI.i64)
+        for(value in values) {
+            Assertions.require(value.parent() === Object)
+            Assertions.signals(Error, () => { value.extra: 1 })
+        }
+        null
+    }),
+    Test("public surface contains exactly the approved members", () => {
+        expected: Array("void", "i32", "i64", "f64", "sizeT", "utf8z",
+            "opaque", "nullable", "owned", "out", "bind", "release")
+        names: FFI.slotNames()
+        Assertions.require(names.size() == expected.size())
+        for(name in expected) {
+            Assertions.require(Arrays.contains(names, name))
+        }
+        null
+    }),
+    Test("descriptor constructors reject incompatible domains", () => {
+        for(value in Array(null, false, 1, "i32", {}, Array(), FFI.i32)) {
+            Assertions.signals(Error, () => FFI.nullable(value))
+            Assertions.signals(Error, () => FFI.owned(value, "free", FFI.void))
+        }
+        for(value in Array(null, false, {}, FFI.void, FFI.utf8z, FFI.out(FFI.i32))) {
+            Assertions.signals(Error, () => FFI.out(value))
+        }
+        Assertions.signals(Error, () => FFI.out(FFI.i32, FFI.i64))
+    }),
+    Test("local library impersonation is rejected", () => {
+        fake: {
+            opaque: (name) => {}
+            signature: (returns) => {}
+        }
+        for(library in Array(null, false, 7, "sqlite3", {}, fake)) {
+            Assertions.signals(Error, () => FFI.opaque(library, "counter"))
+            Assertions.signals(Error, () => FFI.bind(library, "symbol", FFI.i32, Array()))
+        }
+        Assertions.signals(Error, () => FFI.opaque(fake, 1))
+    }),
+    Test("parameter sequences and descriptors are validated", () => {
+        for(parameters in Array(null, false, {}, "i32")) {
+            Assertions.signals(Error, () => FFI.bind(null, "f", FFI.i32, parameters))
+        }
+        for(parameters in Array(Array({}), Array(FFI.void), Array(null))) {
+            Assertions.signals(Error, () => FFI.bind(null, "f", FFI.i32, parameters))
+        }
+        Assertions.signals(Error, () => FFI.bind(null, 1, FFI.i32, Array()))
+        Assertions.signals(Error, () => FFI.bind(null, "f", {}, Array()))
+    }),
+    Test("release accepts only active published owned handles", () => {
+        for(value in Array(null, false, 1, {}, Array(), FFI.i32, FFI.out(FFI.i32))) {
+            Assertions.signals(Error, () => FFI.release(value))
+        }
+        null
+    })
+]
+tests.freeze()

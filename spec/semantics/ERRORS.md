@@ -489,3 +489,11 @@ conventions explicitly with ordinary objects and handlers.
 This rule does not undo effects already performed before either Error was
 signaled. It fixes only which control transfer continues after the cleanup
 attempt.
+
+## Standard Library FFI failures (LIB028)
+
+`FFI.md` applies the existing D188 boundary of `VALUES_AND_COLLECTIONS.md`
+(Foreign failures): public validation and provider admission refusal before
+entry are ordinary Errors, while failures of entered foreign operations are
+`ForeignError`. Native status codes are data. No additional Error prototype
+is introduced by `std:ffi`.

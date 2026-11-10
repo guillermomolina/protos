@@ -57,6 +57,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CASES = ROOT / "protos" / "tests" / "foreign-provider"
 # I144 learning material: assertion-validated, no marker, run from real paths.
 I144_LEARNING = (
+    ("I144_LIB028_PUBLIC_VERSION", ROOT / "protos" / "examples" / "ffi" / "sqlite-version-public.protos"),
     ("I144_TUTORIAL_BASIC", ROOT / "protos" / "tutorials" / "08-language-interactions"
      / "07-ffi-provider-basics.protos"),
     ("I144_TUTORIAL_LIFETIME", ROOT / "protos" / "tutorials" / "12-system-resources"
@@ -85,6 +86,7 @@ RESULT_KEYS = (
     "DEFAULT_ZERO_DISCOVERY",
     "UNUSED_PROVIDER_NO_SESSION",
     "DISTRIBUTION_UNMODIFIED",
+    "I144_LIB028_PUBLIC_VERSION",
     "I144_FFM_PROVIDER_JAR",
     "I144_FFM_SQLITE",
     "I144_FFM_DENIED",

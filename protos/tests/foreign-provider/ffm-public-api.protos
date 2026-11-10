@@ -1,0 +1,233 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// LIB028 public ABI regression; authorized by the existing I144 fixture host.
+FFI: import("std:ffi")
+native: import("ffi-test:ffi_test")
+declare: (symbol, returns, parameters) => FFI.bind(native, symbol, returns, parameters)
+
+// Every check carries its source line, so a failure names its location
+// (the Java host reports the `line` slot of the CheckFailure).
+CheckFailure: Error {}
+
+check: (at, condition) => {
+    (condition === true).ifFalse(() => {
+        failure: CheckFailure { line: at }
+        failure.signal()
+    })
+    null
+}
+
+caught: (prototype, body) => {
+    result: null
+    prototype.handle(body, (error) => {
+        result = error
+        error
+    })
+    result
+}
+
+/// The ordinary pre-entry Error, never a ForeignError.
+ordinary: (at, body) => {
+    error: caught(Error, body)
+    check(at, (error === null) == false)
+    check(at, error.parent() === Error)
+}
+
+/// A ForeignError signalled after entry.
+foreign: (at, body) => {
+    error: caught(ForeignError, body)
+    check(at, (error === null) == false)
+}
+
+// ---- i32
+
+add: declare("ffi_test_add_i32", FFI.i32, Array(FFI.i32, FFI.i32))
+i32: declare("ffi_test_i32_identity", FFI.i32, Array(FFI.i32))
+check(59, add(40, 2) == 42)
+check(60, add(-5, 3) == -2)
+check(61, i32(2147483647) == 2147483647)
+check(62, i32(-2147483648) == -2147483648)
+// Repeated invocations reuse the same linked binding.
+check(64, add(1, 1) == 2)
+check(65, declare("ffi_test_add_i32", FFI.i32, Array(FFI.i32, FFI.i32)) !== add)
+ordinary(66, () => i32(2147483648))
+ordinary(67, () => i32(-2147483649))
+ordinary(68, () => i32(1.5))
+ordinary(69, () => i32("1"))
+ordinary(70, () => i32(null))
+ordinary(71, () => i32())
+ordinary(72, () => add(1))
+ordinary(73, () => add(1, 2, 3))
+// ---- i64
+
+i64: declare("ffi_test_i64_identity", FFI.i64, Array(FFI.i64))
+check(77, i64(9223372036854775807) == 9223372036854775807)
+check(78, i64(-9223372036854775808) == -9223372036854775808)
+ordinary(79, () => i64(9223372036854775808))
+ordinary(80, () => i64(-9223372036854775809))
+
+// ---- sizeT: unsigned 64-bit, values above the signed range included
+
+size: declare("ffi_test_size_identity", FFI.sizeT, Array(FFI.sizeT))
+sizeMax: declare("ffi_test_size_max", FFI.sizeT, Array())
+check(86, size(0) == 0)
+check(87, size(9223372036854775808) == 9223372036854775808)
+check(88, size(18446744073709551615) == 18446744073709551615)
+check(89, sizeMax() == 18446744073709551615)
+ordinary(90, () => size(-1))
+ordinary(91, () => size(18446744073709551616))
+
+// ---- f64
+
+scale: declare("ffi_test_scale", FFI.f64, Array(FFI.f64, FFI.f64))
+check(96, scale(1.5, 4.0) == 6.0)
+ordinary(97, () => scale(1, 4.0))
+
+// ---- void and absence
+
+touch: declare("ffi_test_touch", FFI.void, Array())
+touchCount: declare("ffi_test_touch_count", FFI.i32, Array())
+before: touchCount()
+check(104, touch() === null)
+check(105, touchCount() == before + 1)
+ordinary(106, () => touch(1))
+check(107, touchCount() == before + 1)
+
+// ---- utf8z
+
+length: declare("ffi_test_utf8_length", FFI.sizeT, Array(FFI.utf8z))
+octets: declare("ffi_test_octet_sum", FFI.i64, Array(FFI.utf8z))
+check(113, length("protos") == 6)
+check(114, length("") == 0)
+check(115, length("\u{E9}") == 2)
+check(116, octets("\u{E9}") == 195 + 169)
+ordinary(117, () => length("a\u{0}b"))
+ordinary(118, () => length(null))
+
+// ---- out parameters: no Protos argument, zeroed, captured in signature order
+
+divmod: declare(
+    "ffi_test_divmod", FFI.i32, Array(FFI.i32, FFI.i32, FFI.out(FFI.i32), FFI.out(FFI.i32)))
+outcome: divmod(17, 5)
+check(125, Array.recognizes(outcome) && (outcome.size() == 3))
+values: outcome
+check(127, values.size() == 3)
+check(128, (values[0] == 0) && (values[1] == 3) && (values[2] == 2))
+// Public results are ordinary Arrays with ordinary bounds errors.
+ordinary(130, () => outcome[3])
+ordinary(131, () => outcome[-1])
+// A non-zero C status is data, not an Error.
+check(133, divmod(1, 0)[0] == 1)
+ordinary(134, () => divmod(17, 5, 0))
+zeroed: declare("ffi_test_out_was_zero", FFI.i32, Array(FFI.out(FFI.i64)))
+check(136, zeroed()[0] == 1)
+check(137, zeroed()[1] == 77)
+
+// ---- opaque owned resources
+
+counterType: FFI.opaque(native, "ffi_test_counter")
+owned: FFI.owned(counterType, "ffi_test_counter_free", FFI.i32)
+newCounter: declare("ffi_test_counter_new", owned, Array(FFI.i64))
+increment: declare("ffi_test_counter_increment", FFI.i64, Array(counterType))
+open: declare("ffi_test_counter_open", FFI.i32, Array(FFI.i64, FFI.i32, FFI.out(owned)))
+openNone: declare("ffi_test_counter_open_none", FFI.i32, Array(FFI.out(owned)))
+isNull: declare("ffi_test_is_null", FFI.i32, Array(FFI.nullable(counterType)))
+live: declare("ffi_test_live_count", FFI.i32, Array())
+destroyed: declare("ffi_test_destroyed_count", FFI.i32, Array())
+
+initialLive: live()
+initialDestroyed: destroyed()
+counter: newCounter(10)
+check(154, Integer.recognizes(counter) == false)
+check(155, increment(counter) == 11)
+check(156, increment(counter) == 12)
+check(157, isNull(counter) == 0)
+check(158, isNull(null) == 1)
+ordinary(159, () => increment(null))
+check(160, live() == initialLive + 1)
+// The destructor result is the C result, unchanged.
+check(162, FFI.release(counter) == 0)
+ordinary(163, () => increment(counter))
+check(164, destroyed() == initialDestroyed + 1)
+// A released handle is never used again, even if C reuses the address.
+ordinary(166, () => increment(counter))
+ordinary(167, () => FFI.release(counter))
+check(168, destroyed() == initialDestroyed + 1)
+
+// Error status together with a non-null resource: custody is taken anyway.
+failed: open(5, 1)
+check(172, failed[0] == 7)
+check(173, failed[1] !== null)
+check(174, FFI.release(failed[1]) == 0)
+none: openNone()
+check(176, (none[0] == 3) && (none[1] === null))
+succeeded: open(1, 0)
+check(178, (succeeded[0] == 0) && (increment(succeeded[1]) == 2))
+// Left owned on purpose: session close releases it exactly once.
+
+// Regression: every owned result of one call enters custody before any
+// conversion can fail. The first out is NULL under a non-nullable opaque
+// declaration, so conversion fails after entry (ForeignError); the owned
+// second out was nevertheless adopted. Protos never sees it and does not
+// adopt it again: it stays in session custody, and the Java host checks
+// that session close destroys it exactly once
+// (ProtosI144FfmFixtureAbiTest).
+openPair: declare(
+    "ffi_test_counter_open_pair", FFI.i32, Array(FFI.out(counterType), FFI.out(owned), FFI.i64))
+liveBeforePair: live()
+foreign(191, () => openPair(9))
+check(192, live() == liveBeforePair + 1)
+check(193, destroyed() == initialDestroyed + 2)
+
+// Mutating the declaration Array cannot change a retained binding.
+parameters: Array(FFI.i32)
+snapshotCall: FFI.bind(native, "ffi_test_i32_identity", FFI.i32, parameters)
+parameters[0] = FFI.f64
+check(199, snapshotCall(42) == 42)
+first: divmod(17, 5)
+second: divmod(19, 5)
+check(202, first !== second)
+first[1] = 99
+check(204, second[1] == 3)
+check(205, add.parent() === Object)
+secondAdd: declare("ffi_test_add_i32", FFI.i32, Array(FFI.i32, FFI.i32))
+check(207, secondAdd !== add)
+check(208, secondAdd(20, 22) == add(20, 22))
+
+// Descriptor forgery and incompatible type declarations never reach C.
+ordinary(211, () => FFI.bind(native, "ffi_test_touch", {}, Array()))
+ordinary(212, () => FFI.bind(native, "ffi_test_touch", FFI.void, Array(owned)))
+ordinary(213, () => FFI.nullable(owned))
+ordinary(214, () => FFI.owned(FFI.nullable(counterType), "ffi_test_counter_free", FFI.i32))
+ordinary(215, () => FFI.owned(counterType, "ffi_test_counter_free", FFI.i64))
+otherType: FFI.opaque(native, "other_counter")
+wrongIncrement: declare("ffi_test_counter_increment", FFI.i64, Array(otherType))
+ordinary(218, () => wrongIncrement(succeeded[1]))
+ordinary(219, () => increment(123))
+ordinary(220, () => FFI.release({}))
+// A non-owning admission is not added to the public release dispatch map.
+borrowedCounter: declare("ffi_test_counter_new", counterType, Array(FFI.i64))(2)
+ordinary(223, () => FFI.release(borrowedCounter))
+// Explicitly free this non-owned fixture allocation through its declared ABI.
+freeUnowned: declare("ffi_test_counter_free", FFI.i32, Array(counterType))
+check(226, freeUnowned(borrowedCounter) == 0)
+foreign(227, () => declare("ffi_test_missing_symbol", FFI.void, Array()))
+// Exactly two resources remain under provider custody, including the result
+// that could not be published after a failed conversion. The host checks close.
+{
+    retained: succeeded[1]
+    increment: increment
+}

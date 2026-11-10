@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.461-SNAPSHOT
+
+- `LIB028-S1` (D238-B1-SQL-R1): implement the Protos-first `std:ffi` R1 API
+  over the existing optional I144 FFM provider.
+  - Publish ordinary frozen scalar, opaque, nullable, owned and output
+    descriptors, fresh Closure bindings and independent ordinary output Arrays.
+  - Preserve exact scalar admission and the existing Error/ForeignError
+    boundary, with no native authority or provider session acquired by import.
+  - Dispatch owned-handle release through private Actor-local identity metadata;
+    retain provider custody, original session checks and irreversible release.
+  - Add authority-free declaration and denial tests, public ABI fixture
+    integration, Test Tool corpus registration and a public SQLite-version
+    example exercised by the existing distribution harness.
+  - Add the normative FFI contract and public documentation. Borrowed-memory
+    operations remain provider-private; the SQLite library remains LIB029 work.
+
 ## 0.3.460-SNAPSHOT
 
 - `I144` (D238-B1-SQL-R1): implement the optional external Java 25 FFM provider.

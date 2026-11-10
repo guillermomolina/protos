@@ -2500,3 +2500,11 @@ parents, atomically with `NonTransferableValue`. No Actor inherits `clock`.
 Completed Integer samples remain ordinary transferable values. A RootActor may
 provide sampled values through normal messaging without transferring authority.
 The existing Process and TcpAcceptor transfer contracts are unchanged.
+
+## Standard Library native resources (LIB028)
+
+`../semantics/FFI.md` owns the session, acquisition/generation and release rules
+of `std:ffi`. Live native resources and library/session authority have no
+automatic Actor transfer contract. An Actor neither inherits nor automatically
+delegates FFI authority by importing this ordinary MODULE. Native invocation
+is synchronous; it adds no implicit suspension or parallel execution.

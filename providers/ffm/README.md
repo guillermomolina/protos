@@ -8,8 +8,11 @@ I085 SPI (`com.guillermomolina.protos.spi.foreign`) only, and is never part of
 `lib/protos.jar`.
 
 ```text
-Protos code and declarations
-    |  (LIB028: future public std:ffi, written in Protos)
+Ordinary Protos application
+    | import("std:ffi")
+    v
+Protos descriptors, Closures and Arrays (LIB028)
+    | private provider operations
     v
 I085 external SPI           <- this provider: module ffi:<library>
     v
@@ -26,7 +29,7 @@ ls target/distributions/        # protos-<version>-posix-jvm.zip
 python3 dist/build_ffm_provider.py target/distributions/protos-<version>-posix-jvm.zip \
     --output target/ffm-provider
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
-    protos/examples/ffi/sqlite-version.protos
+    protos/examples/ffi/sqlite-version-public.protos
 ```
 
 Building the JAR and authorizing it are separate steps: the build produces an
@@ -114,7 +117,7 @@ No symbol whitelist is provided, and none would be a security isolation.
 ## Private provider contract (not `std:ffi`)
 
 `import("ffi:<library>")` answers a module handle whose members are
-provider-private support operations for a future Protos-source `std:ffi`
+provider-private support operations for Protos-source `std:ffi`
 (LIB028). They are not a normative or stable public API.
 
 | Member | Meaning |

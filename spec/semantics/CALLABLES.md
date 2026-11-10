@@ -1023,3 +1023,11 @@ Core v0.1 does not define a combined object-construction form in which
 that token sequence is valid under trailing-closure syntax, the braces denote a
 parameterless trailing Closure appended to the invocation arguments: the form
 desugars as `Point(args, () => { ... })`.
+
+## Standard Library FFI bindings (LIB028)
+
+`FFI.bind` (`FFI.md`) answers a fresh ordinary Closure. It introduces no Core
+`NativeFunction` value. Argument evaluation, dynamic `call` selection, receiver
+binding, invocation and Error/control propagation remain the ordinary rules of
+this document. The captured foreign binding uses the existing D188 entrance;
+FFI admission and result adaptation are owned by `FFI.md`.

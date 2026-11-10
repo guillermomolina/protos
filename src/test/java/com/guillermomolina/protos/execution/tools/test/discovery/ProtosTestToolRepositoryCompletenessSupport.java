@@ -111,7 +111,8 @@ final class ProtosTestToolRepositoryCompletenessSupport {
                     packageTool("resolution-input-lock", "project-tree"),
                     packageTool("resolution-root", "project-tree"),
                     packageTool("execution-plan", "project-tree"),
-                    packageTool("project-projection", "project-tree"));
+                    packageTool("project-projection", "project-tree"),
+                    library("ffi"));
 
     /** Trees whose sources declaring the suite-native surface are production-owned. */
     private static final List<String> PRODUCTION_TREES =

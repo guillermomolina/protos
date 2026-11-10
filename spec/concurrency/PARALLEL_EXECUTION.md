@@ -1059,3 +1059,11 @@ A Clock grant (`../io/CLOCK.md`) cannot be captured, passed, returned or copied
 into isolated parallel execution, including through nested graphs or delegation
 parents. Admission fails with `NonParallelValue`; read-only observation grants
 no exception. Completed Integer samples remain ordinary P-compatible numbers.
+
+## Standard Library native resources (LIB028)
+
+Live FFI sessions, resources and bindings capturing native authority follow
+`../semantics/FFI.md` and are not automatically transferable to P. Importing
+`std:ffi` does not inherit or delegate host authority. A native call creates no
+implicit P execution or suspension; existing non-transferable-value rejection
+continues to apply to payloads containing native authority.

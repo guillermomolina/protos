@@ -23,6 +23,21 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.502] - 2026-11-10
+
+### D238-B1-SQL-R1 / LIB028-S1 — Protos-first Standard Library FFI R1
+- `semantics/FFI.md` (new): ordinary immutable descriptors, Closure bindings,
+  exact ABI admission, fresh output Arrays, owned-resource custody and irreversible
+  release, borrowed-memory public boundary, host authority and initial platform limits.
+- `semantics/MODULES.md`: source MODULE/private context and authority-free import;
+  preserve foreign facade lifecycle and ModuleKey identity.
+- `semantics/VALUES_AND_COLLECTIONS.md`: link descriptors, Arrays and opaque
+  references without a new Core family or changes to D188 identity/projection.
+- `semantics/CALLABLES.md`: ordinary public binding Closures and invocation.
+- `semantics/ERRORS.md`: existing pre-entry Error / entered ForeignError boundary.
+- `concurrency/ACTORS.md`, `concurrency/PARALLEL_EXECUTION.md`: native resource
+  non-transferability and no implicit authority inheritance, suspension or parallelism.
+
 ## [0.1.501] - 2026-11-09
 
 ### D253-C1 / I163 — Explicit Core wall-clock nanoseconds
