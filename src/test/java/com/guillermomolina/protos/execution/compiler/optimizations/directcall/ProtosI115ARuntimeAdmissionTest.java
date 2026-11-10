@@ -783,13 +783,13 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertNotNull(first);
             assertTrue(first.isValid());
             assertSame(ProtosObjectValue.rootObject().getShape(), first.rootShape());
-            assertTrue(first.callLocationFinal().isValid());
+            assertTrue(first.callSelectionStable().isValid());
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 var next = ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime();
                 assertNotNull(next);
                 assertTrue(next.isValid());
                 assertSame(first.rootShape(), next.rootShape());
-                assertSame(first.callLocationFinal(), next.callLocationFinal());
+                assertSame(first.callSelectionStable(), next.callSelectionStable());
                 assertTrue(ProtosStandardObjectProtocol.isCanonicalRootCallSelectionForRuntime());
             }
 
@@ -1002,8 +1002,8 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertNotNull(a);
             assertTrue(a.isValid());
             assertSame(root.getShape(), a.rootShape());
-            assertTrue(a.callLocationFinal().isValid());
-            assertSame(a.callLocationFinal(), certificate().callLocationFinal());
+            assertTrue(a.callSelectionStable().isValid());
+            assertSame(a.callSelectionStable(), certificate().callSelectionStable());
             assertNull(functionSelection(sourceShaped));
 
             root.assignLocalSlot("call", ProtosNullValue.INSTANCE);
@@ -1013,11 +1013,15 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertNull(functionSelection(sourceShaped));
 
             root.assignLocalSlot("call", standardCall);
-            assertNull(certificate(), "overwriting cannot restore location finality");
+            var b = certificate();
+            assertNotNull(b, "restoring the canonical selection must rebuild its proof");
+            assertTrue(b.isValid());
+            assertNotSame(a, b);
             assertFalse(a.isValid());
 
             root.removeLocalSlot("call");
             assertFalse(a.isValid());
+            assertFalse(b.isValid());
             assertNull(certificate());
             assertNull(functionSelection(sourceShaped));
 
@@ -1028,11 +1032,18 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertNotSame(a, c);
             assertFalse(a.isValid());
 
-            // Assigning even the identical value invalidates value dependencies.
+            // Assigning even the identical value invalidates the old proof.
+            // A canonical selection can establish a new independent proof.
             root.assignLocalSlot("call", standardCall);
             assertFalse(c.isValid());
-            assertFalse(c.callLocationFinal().isValid());
-            assertNull(certificate());
+            assertFalse(c.callSelectionStable().isValid());
+
+            var d = certificate();
+            assertNotNull(d, "canonical selection must rebuild after identical assignment");
+            assertTrue(d.isValid());
+            assertNotSame(c, d);
+            assertSame(root.getShape(), d.rootShape());
+            assertTrue(d.callSelectionStable().isValid());
             assertNull(functionSelection(sourceShaped));
         }
 

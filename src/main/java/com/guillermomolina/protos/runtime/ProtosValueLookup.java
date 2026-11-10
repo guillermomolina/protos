@@ -148,7 +148,8 @@ public final class ProtosValueLookup {
         ArrayList<Shape> shapes = new ArrayList<>();
         Object current = origin;
         while (current instanceof ProtosObjectValue object
-                && object.usesObjectStorageForRuntime()) {
+                && object.usesObjectStorageForRuntime()
+                && !ProtosNumericValueSupport.isCurrentNumber(object)) {
             Shape shape = object.getShape();
             chain.add(object);
             shapes.add(shape);

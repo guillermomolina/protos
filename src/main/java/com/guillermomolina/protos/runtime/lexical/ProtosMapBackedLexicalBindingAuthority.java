@@ -159,12 +159,30 @@ final class ProtosMapBackedLexicalBindingAuthority
     @Override
     public void putBinding(String name, Object value) {
         Objects.requireNonNull(value, "value");
+        if (storage == ProtosObjectValue.rootObject() && "call".equals(name)) {
+            synchronized (storage) {
+                ProtosObjectValue.invalidateRootCallSelectionForRuntime();
+                DynamicObject.PutNode.getUncached().execute(storage, key(name), value);
+            }
+            return;
+        }
         DynamicObject.PutNode.getUncached().execute(storage, key(name), value);
     }
 
     @Override
     public Object removeBinding(String name) {
         String key = key(name);
+        if (storage == ProtosObjectValue.rootObject() && "call".equals(name)) {
+            synchronized (storage) {
+                Object previous = DynamicObject.GetNode.getUncached()
+                        .execute(storage, key, null);
+                if (previous != null) {
+                    ProtosObjectValue.invalidateRootCallSelectionForRuntime();
+                    DynamicObject.RemoveKeyNode.getUncached().execute(storage, key);
+                }
+                return previous;
+            }
+        }
         Object previous = DynamicObject.GetNode.getUncached().execute(storage, key, null);
         if (previous != null) {
             DynamicObject.RemoveKeyNode.getUncached().execute(storage, key);

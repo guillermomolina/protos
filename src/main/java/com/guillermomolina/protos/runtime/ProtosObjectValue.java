@@ -131,6 +131,10 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
 
     private static final ProtosObjectValue ROOT = new ProtosObjectValue();
 
+    // Selector dependency only. The authoritative value remains in ROOT's
+    // lexical binding authority. No additional guest binding is stored here.
+    private static volatile com.oracle.truffle.api.Assumption rootCallSelectionStable;
+
     private final Object parent;
     /**
      * The single authority for this object's lexical local-slot bindings
@@ -177,6 +181,29 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
 
     public static ProtosObjectValue rootObject() {
         return ROOT;
+    }
+
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    public static com.oracle.truffle.api.Assumption rootCallSelectionAssumptionForRuntime() {
+        synchronized (ROOT) {
+            var current = rootCallSelectionStable;
+            if (current == null || !current.isValid()) {
+                current = com.oracle.truffle.api.Truffle.getRuntime()
+                        .createAssumption("canonical Object.call selection");
+                rootCallSelectionStable = current;
+            }
+            return current;
+        }
+    }
+
+    static void invalidateRootCallSelectionForRuntime() {
+        synchronized (ROOT) {
+            var previous = rootCallSelectionStable;
+            rootCallSelectionStable = null;
+            if (previous != null) {
+                previous.invalidate();
+            }
+        }
     }
 
     public boolean isRootObject() {

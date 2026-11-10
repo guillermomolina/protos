@@ -80,16 +80,15 @@ public final class ProtosStandardObjectProtocol {
      * root Object, following GraalPy: the root's observed {@code Shape}
      * protects the structure the property was selected in (removal,
      * recreation and any other structural change are {@code Shape}
-     * transitions), and the final assumption of the property's
-     * {@link com.oracle.truffle.api.object.Location} protects its value
-     * against rewrites. A consumer must check both; when either fails it
+     * transitions), and the root selector's independently invalidated Assumption protects
+     * its value against rewrites, including writes that retain the same Shape. A consumer must check both; when either fails it
      * takes the generic path. No value is held here.
      */
-    public record CanonicalRootCallSelection(Shape rootShape, Assumption callLocationFinal) {
+    public record CanonicalRootCallSelection(Shape rootShape, Assumption callSelectionStable) {
         /** Whether the root still has the observed Shape and the call location was not rewritten. */
         public boolean isValid() {
             return rootShape.check(ProtosObjectValue.rootObject())
-                    && callLocationFinal.isValid();
+                    && callSelectionStable.isValid();
         }
     }
 
@@ -105,26 +104,25 @@ public final class ProtosStandardObjectProtocol {
     /**
      * The current canonical {@code Object.call} selection of the root Object,
      * or {@code null} when the root's {@code call} property is absent, is not
-     * exactly {@link #STANDARD_CALL}, or its location's final assumption is
-     * already invalid. A location rewritten once may stay non-final forever;
+     * exactly {@link #STANDARD_CALL}, or its selector-stability assumption is invalid. A location rewritten once may stay non-final forever;
      * that is not retried here, and callers then use generic selection.
      * Specialization-time only.
      */
     @TruffleBoundary
     public static CanonicalRootCallSelection canonicalRootCallSelectionOrNullForRuntime() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
-        Shape shape = root.getShape();
-        Property call = shape.getProperty("call");
-        if (call == null
-                || DynamicObject.GetNode.getUncached().execute(root, "call", null)
-                        != STANDARD_CALL) {
-            return null;
+        synchronized (root) {
+            Shape shape = root.getShape();
+            Property call = shape.getProperty("call");
+            if (call == null
+                    || DynamicObject.GetNode.getUncached().execute(root, "call", null)
+                            != STANDARD_CALL) {
+                return null;
+            }
+            Assumption stability =
+                    ProtosObjectValue.rootCallSelectionAssumptionForRuntime();
+            return new CanonicalRootCallSelection(shape, stability);
         }
-        Assumption callLocationFinal = call.getLocation().getFinalAssumption();
-        if (!callLocationFinal.isValid()) {
-            return null;
-        }
-        return new CanonicalRootCallSelection(shape, callLocationFinal);
     }
 
     static boolean isStandardCallImplementation(

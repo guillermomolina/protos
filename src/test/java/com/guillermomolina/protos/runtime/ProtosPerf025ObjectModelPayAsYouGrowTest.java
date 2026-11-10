@@ -65,13 +65,15 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         assertTrue(first.hasLocalBindingsForRuntime());
         assertFalse(second.hasLocalBindingsForRuntime());
         assertSame(value, first.readLocalSlot("value").orElseThrow());
-        assertTrue(privateField(mapAuthority, "bindings") instanceof java.util.LinkedHashMap);
+        assertSame(first, mapAuthority.storage());
+        assertEquals(1, first.getShape().getPropertyCount());
+        assertNotNull(first.getShape().getProperty("value"));
 
         assertSame(value, first.removeLocalSlot("value"));
         assertFalse(first.hasLocalBindingsForRuntime());
-        assertNull(
-                privateField(mapAuthority, "bindings"),
-                "empty map-backed authority releases its optional backing map");
+        assertSame(first, mapAuthority.storage());
+        assertEquals(0, first.getShape().getPropertyCount(),
+                "removing the final binding leaves no physical properties");
     }
 
     /*
@@ -87,10 +89,19 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         object.createLocalSlot("unread", unread);
         object.createLocalSlot("selected", selected);
 
-        java.util.Map<?, ?> bindings =
-                (java.util.Map<?, ?>) privateField(lexicalAuthority(object), "bindings");
-        assertNull(bindings.get("unread"));
-        assertNull(bindings.get("selected"));
+        var authority = assertInstanceOf(
+                ProtosMapBackedLexicalBindingAuthority.class,
+                lexicalAuthority(object));
+        assertSame(object, authority.storage());
+
+        var initialShape = object.getShape();
+        assertNotNull(initialShape.getProperty("unread"));
+        assertNotNull(initialShape.getProperty("selected"));
+
+        var physicalRead =
+                com.oracle.truffle.api.object.DynamicObject.GetNode.getUncached();
+        assertSame(unread, physicalRead.execute(object, "unread", null));
+        assertSame(selected, physicalRead.execute(object, "selected", null));
         assertSame(unread, object.readLocalSlot("unread").orElseThrow());
         assertSame(selected, object.readLocalSlot("selected").orElseThrow());
 
@@ -98,10 +109,17 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         assertNotNull(selectedSlot);
         assertTrue(selectedSlot.isValid());
         assertSame(selected, selectedSlot.read());
-        assertSame(bindings, privateField(lexicalAuthority(object), "bindings"));
-        assertNull(bindings.get("unread"));
-        assertNull(bindings.get("selected"));
-        assertEquals(List.of("unread", "selected"), List.copyOf(bindings.keySet()));
+        assertSame(authority, lexicalAuthority(object));
+        assertSame(object, authority.storage());
+        assertSame(initialShape, object.getShape(),
+                "structural reads must not transition the Shape");
+        assertSame(unread, physicalRead.execute(object, "unread", null));
+        assertSame(selected, physicalRead.execute(object, "selected", null));
+        assertEquals(
+                List.of("unread", "selected"),
+                java.util.Arrays.asList(
+                        com.oracle.truffle.api.object.DynamicObject
+                                .GetKeyArrayNode.getUncached().execute(object)));
         assertSame(selected, object.readLocalSlot("selected").orElseThrow());
         assertSame(selected, object.localSlotsSnapshot().get("selected"));
     }
@@ -258,13 +276,17 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
                         authority);
 
         assertSame(authority, context.lexicalBindingAuthorityForRuntime());
-        assertNull(privateField(authority, "bindings"));
+        assertNotSame(context, authority.storage());
+        assertEquals(0, authority.storage().getShape().getPropertyCount());
 
         Object value = new Object();
         context.createLocalSlot("x", value);
 
         assertSame(authority, context.lexicalBindingAuthorityForRuntime());
         assertSame(value, context.readLocalSlot("x").orElseThrow());
+        assertNotNull(authority.storage().getShape().getProperty("x"));
+        assertNull(context.getShape().getProperty("x"),
+                "context bindings must remain in their dedicated authority");
     }
 
     @Test

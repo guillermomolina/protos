@@ -108,17 +108,18 @@ final class ProtosPerf025VirtualReturnHomeTest {
             ProtosClosureValue child =
                     assertInstanceOf(ProtosClosureValue.class, enter(prepared));
 
-            // PLAT044 admits a literal callback by its captured home provenance;
-            // the child still shares (rather than owns) its creator's home.
-            assertSame(ProtosReturnHome.unobservable(), child.returnHome().orElseThrow());
+            // I115 experimental: the child does not retain its creator's
+            // unobservable home; its invocation owns the virtual home.
+            assertTrue(child.returnHome().isEmpty());
             ProtosActivation childInvocation =
                     ProtosActivation.forClosureInvocation(
-                            child, List.of(), child.prelude().orElseThrow());
-            assertFalse(childInvocation.ownsReturnHome());
-            assertSame(child.returnHome().orElseThrow(), childInvocation.returnHome().orElseThrow());
+                            child, List.of(), module.prelude().orElseThrow());
+            assertTrue(childInvocation.ownsReturnHome());
+            assertSame(ProtosReturnHome.unobservable(),
+                    childInvocation.returnHome().orElseThrow());
         });
         System.out.println("NLR_DEAD_DESCENDANT_OWNER_HOME_MATERIALIZED=NO");
-        System.out.println("NLR_DEAD_DESCENDANT_HOME_PROVENANCE=SHARED");
+        System.out.println("NLR_DEAD_DESCENDANT_HOME_PROVENANCE=NOT_CAPTURED");
     }
 
     @Test
@@ -295,7 +296,8 @@ final class ProtosPerf025VirtualReturnHomeTest {
                 assertInteger(7, evaluate("escape()\n", module));
             }
             evaluate("late.call: (value) => { 100 + value }\n", module);
-            assertInteger(107, evaluate("callOne(late, 7)\n", module));
+            // I115 experimental: source Closure dispatch ignores local call.
+            assertInteger(7, evaluate("callOne(late, 7)\n", module));
             evaluate("late.removeSlot(\"call\")\n", module);
             assertInteger(7, evaluate("callOne(late, 7)\n", module));
             assertInteger(7, evaluate("escape()\n", module));
