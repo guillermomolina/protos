@@ -329,17 +329,21 @@ final class ProtosPerf033CanonicalCallableInteropTest {
         System.out.println("I115_H6_COMPACT_SESSION_ENTRY=PASS");
     }
 
-    /** I115-H6: the admitted source-backed contract is zero or one supplied argument. */
+    /**
+     * PERF033-A: a session-prepared executable accepts exactly zero arguments; a supplied argument
+     * is an arity error and leaves the executable usable.
+     */
     @Test
-    void zeroAndOneArgumentSourceBackedPathIsAdmitted() throws Exception {
+    void sessionExecutableAdmitsOnlyZeroArguments() throws Exception {
         try (ProtosStandaloneHostedSession session = open(new RecordingStream())) {
             Value run = session.prepareTopLevel("run").executable();
             Value identity = session.prepareTopLevel("identity").executable();
             assertEquals(1, run.execute().asInt());
-            assertEquals(11, identity.execute(11).asInt());
-            assertEquals(-3, identity.execute(-3L).asInt());
+            assertThrows(IllegalArgumentException.class, () -> identity.execute(11));
+            assertThrows(IllegalArgumentException.class, () -> run.execute(-3L));
+            assertEquals(1, run.execute().asInt());
         }
-        System.out.println("I115_H6_CALL0_CALL1_ADMITTED=PASS");
+        System.out.println("SESSION_EXECUTABLE_ZERO_ARGUMENTS_ONLY=PASS");
     }
 
     @Test

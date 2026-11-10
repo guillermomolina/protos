@@ -231,9 +231,14 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         static Object sourceZero(
                 ProtosHostExecutableClosure receiver,
                 Object[] arguments,
-                @Cached ProtosFunctionCallDispatchers.CallNode callNode) {
+                @Bind("$node") Node inliningTarget,
+                @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode callNode) {
+            // This host adapter has a prepared source-backed target; the
+            // generic CallNode source/native classification is redundant.
+            // Keep the entered Context, caller provenance and B5 ABI unchanged.
             Object outcome = callNode.execute(
                     null,
+                    inliningTarget,
                     false,
                     receiver.closure,
                     ProtosFrameArguments.dispatchedCall0(
@@ -243,7 +248,8 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                             null,
                             null),
                     receiver.caller,
-                    null);
+                    null,
+                    ProtosFunctionCallDispatchers.currentContext(inliningTarget));
             /*
              * I115 experimental zero-argument fast path:
              * return the exact guest outcome without the general
