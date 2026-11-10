@@ -1388,6 +1388,114 @@ final class ProtosI115BDeferredCallerTest {
         }
     }
 
+    /**
+     * I115-A: one warm call site mixes the three ReturnHome routes inside a
+     * Task-owned invocation. The owner's physical home is bound to the Task,
+     * shared by its sibling captures, never closed by the captured route,
+     * crossed unchanged by the virtual route, and closed only by its owner.
+     */
+    @Test
+    void identityRoutesKeepCapturedHomeTaskAndReturnOwnershipIndependent() throws Exception {
+        withCore(module -> {
+            List<ProtosReturnHome> observed = new ArrayList<>();
+            var expectedTask = new java.util.concurrent.atomic.AtomicReference<ProtosTask>();
+            module.context().createLocalSlot("observeHome", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        ProtosReturnHome home = ((ProtosClosureValue) supplied.get(0))
+                                .capturedReturnHomeOrNullForRuntime();
+                        assertTrue(home.isMaterialized());
+                        assertTrue(home.isActive(), "the captured route never closes the owner's home");
+                        assertSame(expectedTask.get(), home.ownerTaskForRuntime());
+                        observed.add(home);
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            evaluate("""
+                    callOne: (f) => { f() }
+                    plain: () => { 40 }
+                    owner: () => {
+                        escape: () => { ^(callOne(plain) + 2) }
+                        callOne(() => { observeHome(escape) })
+                        callOne(() => { observeHome(escape) })
+                        callOne(escape)
+                        0
+                    }
+                    """, "i115a-routes-define.protos", module);
+            enterCachedTier("callOne", module);
+            ProtosClosureValue owner = closure("owner", module);
+            ProtosReturnHome previous = null;
+            for (int round = 0; round < 4; round++) {
+                observed.clear();
+                ProtosTask task = module.executionDomain().createTask(null, current -> {
+                    expectedTask.set(current);
+                    ProtosBytecodeTaskExecution.executeRequest(
+                            current, ProtosCallRequest.taskEntry(owner, current, List.of(), module));
+                });
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state());
+                assertInteger(42, task.result().orElseThrow());
+                assertEquals(2, observed.size());
+                ProtosReturnHome home = observed.get(0);
+                assertSame(home, observed.get(1), "sibling captures share one home identity");
+                assertNotSame(previous, home, "each owner invocation has its own home");
+                assertFalse(home.isActive(), "the owner closed its home after consuming the return");
+                assertSame(null, home.ownerTaskForRuntime(), "closing released the Task");
+                previous = home;
+            }
+        });
+    }
+
+    /**
+     * I115-A: a Closure dispatched through the captured route suspends while
+     * its owner's physical home is live. Suspension neither closes that home
+     * nor drops the Task, so after resumption its ^ still reaches the owner.
+     */
+    @Test
+    void capturedRouteSuspensionKeepsTheOwnerHomeForTheResumedReturn() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+                ProtosActivation module =
+                        prelude.newModuleActivation(
+                                new ProtosActorModuleState(), null, prelude.newExecutionContext(), domain);
+                ProtosFutureValue wait = new ProtosFutureValue(prelude.futurePrototype(), domain);
+                ProtosObjectValue resolved = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                module.context().createLocalSlot("wait", wait);
+                evaluate("""
+                        callOne: (f, value) => { f(value) }
+                        owner: (future) => {
+                            callOne((ignored) => {
+                                result: future.value()
+                                ^result
+                            }, 0)
+                            0
+                        }
+                        """, "i115a-captured-suspend-define.protos", module);
+                enterCachedTier("callOne", module);
+                CallTarget top = ProtosLanguageContext.current().parsePublic(
+                        Source.newBuilder(ProtosLanguage.ID, "owner(wait)\n",
+                                        "i115a-captured-suspend-top.protos")
+                                .mimeType(ProtosLanguage.MIME_TYPE)
+                                .build());
+
+                ProtosTask task = domain.createTask(
+                        null, current -> ProtosBytecodeTaskExecution.execute(current, top, module));
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state(), "really suspended");
+
+                assertTrue(wait.resolve(resolved, module));
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state(), () -> "failure=" + task.failure());
+                assertSame(resolved, task.result().orElseThrow(),
+                        "the resumed ^ reached the still-active owner home");
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
     /** Caller needs belong to one Context's root: registering in one leaves the other unchanged. */
     @Test
     void callerNeedsAreIsolatedBetweenContexts() throws Exception {

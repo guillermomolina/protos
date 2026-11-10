@@ -212,6 +212,195 @@ final class ProtosI115ARuntimeAdmissionTest {
         });
     }
 
+    /**
+     * I115-A: the identity PIC mode is decided by the captured home first,
+     * then by the proof of the supplied effective root; never by the
+     * Closure's own plan, a Task or the lifecycle state of the home.
+     */
+    @Test
+    void returnHomeModeFollowsCapturedHomeThenTheEffectiveRootProof() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue plain = closure("() => 42", module);
+            ProtosClosureValue returning = closure("() => { unused: () => ^42\n42 }", module);
+            ProtosBytecodeRootNode plainRoot = effectiveRoot(plain);
+            ProtosBytecodeRootNode returningRoot = effectiveRoot(returning);
+            assertTrue(plainRoot.returnHomeProvenUnobservable());
+            assertFalse(returningRoot.returnHomeProvenUnobservable());
+
+            assertNull(plain.capturedReturnHomeOrNullForRuntime());
+            assertSame(ProtosFunctionCallDispatchers.ReturnHomeMode.UNOBSERVABLE,
+                    ProtosFunctionCallDispatchers.classifyReturnHome(plain, plainRoot));
+            assertSame(ProtosFunctionCallDispatchers.ReturnHomeMode.OWNED_PHYSICAL,
+                    ProtosFunctionCallDispatchers.classifyReturnHome(returning, returningRoot));
+            // The proof is the supplied effective root's, not the Closure plan's.
+            assertSame(ProtosFunctionCallDispatchers.ReturnHomeMode.OWNED_PHYSICAL,
+                    ProtosFunctionCallDispatchers.classifyReturnHome(plain, returningRoot));
+            assertSame(ProtosFunctionCallDispatchers.ReturnHomeMode.OWNED_PHYSICAL,
+                    ProtosFunctionCallDispatchers.classifyReturnHome(plain, null));
+
+            ProtosReturnHome physical = new ProtosReturnHome();
+            ProtosClosureValue captured = withCapturedHome(plain, physical, module);
+            ProtosClosureValue marker =
+                    withCapturedHome(returning, ProtosReturnHome.unobservable(), module);
+            for (ProtosBytecodeRootNode root : java.util.Arrays.asList(plainRoot, returningRoot, null)) {
+                // A proven root never turns a captured physical home into a virtual one.
+                assertSame(ProtosFunctionCallDispatchers.ReturnHomeMode.CAPTURED,
+                        ProtosFunctionCallDispatchers.classifyReturnHome(captured, root));
+                // A captured marker is kept even when the root proof is absent.
+                assertSame(ProtosFunctionCallDispatchers.ReturnHomeMode.UNOBSERVABLE,
+                        ProtosFunctionCallDispatchers.classifyReturnHome(marker, root));
+            }
+            assertSame(physical, captured.capturedReturnHomeOrNullForRuntime());
+            assertSame(ProtosReturnHome.unobservable(), marker.capturedReturnHomeOrNullForRuntime());
+            assertTrue(physical.isActive());
+            assertNull(physical.ownerTaskForRuntime());
+
+            physical.closeOwned();
+            assertSame(ProtosFunctionCallDispatchers.ReturnHomeMode.CAPTURED,
+                    ProtosFunctionCallDispatchers.classifyReturnHome(captured, plainRoot),
+                    "an inactive captured home is still captured");
+            ProtosClosureValue primitiveMarker = withCapturedHome(plain,
+                    ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(), module);
+            assertSame(ProtosFunctionCallDispatchers.ReturnHomeMode.CAPTURED,
+                    ProtosFunctionCallDispatchers.classifyReturnHome(primitiveMarker, plainRoot),
+                    "only the canonical marker selects the virtual route");
+        });
+    }
+
+    /**
+     * I115-A: one warm identity PIC entry per Closure keeps its mode's exact
+     * header and lifecycle on every call; the Task travels in every mode.
+     */
+    @Test
+    void identityPicKeepsEachReturnHomeModeAcrossRepeatedCalls() throws Exception {
+        withCore(module -> {
+            var task = module.executionDomain().createTask(null, current -> {});
+            java.util.concurrent.atomic.AtomicInteger probes =
+                    new java.util.concurrent.atomic.AtomicInteger();
+            module.context().createLocalSlot("probeOwnedHome", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        ProtosReturnHome home = ((ProtosClosureValue) supplied.get(0))
+                                .capturedReturnHomeOrNullForRuntime();
+                        assertTrue(home.isMaterialized());
+                        assertTrue(home.isActive());
+                        assertSame(task, home.ownerTaskForRuntime());
+                        probes.incrementAndGet();
+                        return Long.valueOf(42);
+                    }));
+            ProtosClosureValue parent = closure("() => 42", module);
+            ProtosClosureValue virtual = closure("() => 42", module);
+            ProtosClosureValue owned = closure("() => { probeOwnedHome(() => ^42) }", module);
+            ProtosClosureValue template = closure("() => { unused: () => ^42\n42 }", module);
+            ProtosReturnHome outer = new ProtosReturnHome();
+            outer.bindOwnerTaskForRuntime(task);
+            ProtosClosureValue captured = withCapturedHome(template, outer, module);
+            ProtosClosureValue marker =
+                    withCapturedHome(template, ProtosReturnHome.unobservable(), module);
+            for (ProtosClosureValue selected : List.of(virtual, owned, captured, marker)) {
+                // Host-caller mode: an owning callee that materializes its own
+                // Activation needs an explicit caller, not stack recovery.
+                var dispatch = new HeaderDispatchRoot(
+                        ProtosLanguageContext.current().languageForRuntime(), module)
+                        .getCallTarget();
+                ProtosReturnHome previous = null;
+                for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                    Object[] header =
+                            ProtosFrameArguments.taskFunctionCallArguments(task, new Object[0]);
+                    Object[] caller = ProtosFrameArguments.compactDirectClosureCall(
+                            parent, module, null, new Object[] {selected, header});
+                    caller[3] = null;
+                    assertInteger(42, dispatch.call(caller));
+                    if (selected == owned) {
+                        // The capturing body publishes its own Activation into
+                        // slot 0 only; the Task and home slots are unchanged.
+                        assertInstanceOf(ProtosActivation.class, header[0]);
+                    } else {
+                        assertSame(selected, header[0], "an ordinary call publishes nothing");
+                    }
+                    assertSame(task, header[2], "the Task travels in every mode");
+                    assertSame(parent, caller[0], "the caller is not published");
+                    ProtosReturnHome home = assertInstanceOf(ProtosReturnHome.class, header[4]);
+                    if (selected == owned) {
+                        assertTrue(home.isMaterialized());
+                        assertNotSame(previous, home, "each owning invocation has its own home");
+                        assertFalse(home.isActive());
+                        assertNull(home.ownerTaskForRuntime());
+                    } else if (selected == captured) {
+                        assertSame(outer, home);
+                    } else {
+                        assertSame(ProtosReturnHome.unobservable(), home);
+                    }
+                    previous = home;
+                }
+            }
+            assertEquals(PAST_CACHE_LIMITS, probes.get());
+            assertTrue(outer.isActive(), "the inner Closure never closes its owner's home");
+            assertSame(task, outer.ownerTaskForRuntime());
+        });
+    }
+
+    /**
+     * I115-A: Closures sharing one CallTarget but capturing different homes
+     * saturate the identity PIC and reach the target tier, and distinct
+     * definitions reach the megamorphic tier; neither reuses the mode of the
+     * first Closure.
+     */
+    @Test
+    void targetAndMegamorphicTiersSelectTheHomePerClosure() throws Exception {
+        for (boolean distinctDefinitions : new boolean[] {false, true}) {
+            withCore(module -> {
+                var task = module.executionDomain().createTask(null, current -> {});
+                ProtosClosureValue parent = closure("() => 42", module);
+                ProtosClosureValue template = closure("() => { unused: () => ^42\n42 }", module);
+                ProtosReturnHome outer = new ProtosReturnHome();
+                outer.bindOwnerTaskForRuntime(task);
+                ProtosReturnHome[] captures = {outer, null, ProtosReturnHome.unobservable()};
+                var dispatch = new HeaderDispatchRoot(
+                        ProtosLanguageContext.current().languageForRuntime()).getCallTarget();
+                ProtosReturnHome previous = null;
+                for (int i = 0; i < PAST_CACHE_LIMITS * 2; i++) {
+                    ProtosClosureValue body = distinctDefinitions
+                            ? closure("() => { unused: () => ^" + i + "\n42 }", module) : template;
+                    ProtosReturnHome capture = captures[i % captures.length];
+                    ProtosClosureValue selected = withCapturedHome(body, capture, module);
+                    Object[] header = ProtosFrameArguments.functionCallArguments(new Object[0]);
+                    Object[] caller = ProtosFrameArguments.compactDirectClosureCall(
+                            parent, module, task, new Object[] {selected, header});
+                    caller[3] = null;
+                    assertInteger(42, dispatch.call(caller));
+                    assertSame(task, header[2]);
+                    ProtosReturnHome home = assertInstanceOf(ProtosReturnHome.class, header[4]);
+                    if (capture == null) {
+                        assertTrue(home.isMaterialized());
+                        assertNotSame(previous, home);
+                        assertNotSame(outer, home);
+                        assertFalse(home.isActive());
+                        assertNull(home.ownerTaskForRuntime());
+                    } else {
+                        assertSame(capture, home);
+                    }
+                    previous = home;
+                }
+                assertTrue(outer.isActive());
+                assertSame(task, outer.ownerTaskForRuntime());
+            });
+        }
+    }
+
+    private static ProtosBytecodeRootNode effectiveRoot(ProtosClosureValue closure) {
+        return assertInstanceOf(ProtosBytecodeRootNode.class,
+                ProtosClosureCallPreparation.functionCallTarget(
+                        closure, ProtosLanguageContext.current()).getRootNode());
+    }
+
+    private static ProtosClosureValue withCapturedHome(
+            ProtosClosureValue template, ProtosReturnHome home, ProtosActivation module) {
+        return new ProtosClosureValue(
+                template.definition(), template.capturedLexicalContexts(),
+                template.capturedReceiver(), null, home, module.prelude().orElseThrow(),
+                template.executionPlan().orElseThrow());
+    }
+
     /** Component fixture exercising one adopted shared-dispatch site. */
     private static final class HeaderDispatchRoot extends com.oracle.truffle.api.nodes.RootNode {
         @Child private ProtosFunctionCallDispatchers.CallNode dispatch =
@@ -929,6 +1118,17 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertNull(dispatchFacts(overridden, context));
             assertEquals(0, rematerializations[0]);
 
+            // I115-A: the mode selector reads only the captured home and the
+            // supplied root; it never prepares the deferred plan itself.
+            ProtosBytecodeRootNode preparedRoot = ProtosFunctionCallDispatchers.calleeRootOrNull(
+                    plan.bytecodeActivationTargetForComposition());
+            assertSame(ProtosFunctionCallDispatchers.ReturnHomeMode.OWNED_PHYSICAL,
+                    ProtosFunctionCallDispatchers.classifyReturnHome(deferred, null));
+            assertSame(ProtosFunctionCallDispatchers.ReturnHomeMode.UNOBSERVABLE,
+                    ProtosFunctionCallDispatchers.classifyReturnHome(deferred, preparedRoot));
+            assertNull(deferred.preparedExecutionPlanOrNullForRuntime());
+            assertEquals(0, rematerializations[0]);
+
             // Lazy rematerialization still happens when an invocation needs it.
             assertSame(plan, deferred.executionPlanForRuntimeInvocation());
             assertEquals(1, rematerializations[0]);
@@ -958,6 +1158,15 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertSame(context.languageForRuntime(), facts.effectivePlan().language().orElseThrow());
             assertNotSame(foreignTarget, facts.target());
             assertSame(facts.effectivePlan().bytecodeActivationTargetForComposition(), facts.target());
+
+            // I115-A: the mode proof comes from the entered Context's root.
+            ProtosBytecodeRootNode effectiveRoot =
+                    ProtosFunctionCallDispatchers.calleeRootOrNull(facts.target());
+            assertSame(context.languageForRuntime(),
+                    effectiveRoot.getLanguage(ProtosLanguage.class));
+            assertNotSame(foreignTarget.getRootNode(), effectiveRoot);
+            assertSame(ProtosFunctionCallDispatchers.ReturnHomeMode.UNOBSERVABLE,
+                    ProtosFunctionCallDispatchers.classifyReturnHome(foreign, effectiveRoot));
 
             DispatchFacts again =
                     dispatchFacts(foreign, context);

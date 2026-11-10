@@ -494,6 +494,76 @@ final class ProtosPerf025VirtualReturnHomeTest {
         });
     }
 
+    /**
+     * I115-A: each dispatcher ReturnHome mode matches the lifecycle of the
+     * home written into the B5 header, independently of the call's result:
+     * the virtual marker never materializes, a captured home is neither closed
+     * nor rebound by the inner invocation, and an owned physical home is fresh,
+     * active during the call and closed when the call really ends.
+     */
+    @Test
+    void i115aReturnHomeModesMatchTheLifecycleOfTheWrittenHome() throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.prelude().orElseThrow();
+            var task = module.executionDomain().createTask(null, current -> {});
+
+            ProtosClosureValue constant = parsedClosure("() => 42", module);
+            assertMode(ProtosFunctionCallDispatchers.ReturnHomeMode.UNOBSERVABLE, constant);
+            DirectEntry virtual = fastDirect(constant, module);
+            assertVirtualHome(virtual);
+            assertInteger(42, enter(virtual));
+            assertFalse(ProtosReturnHome.unobservable().isMaterialized());
+
+            ProtosClosureValue template = parsedClosure("() => {\n    unused: () => ^1\n    42\n}", module);
+            ProtosReturnHome outer = new ProtosReturnHome();
+            outer.bindOwnerTaskForRuntime(task);
+            for (ProtosClosureValue body : List.of(constant, template)) {
+                ProtosClosureValue captured = withHome(body, outer, prelude);
+                assertMode(ProtosFunctionCallDispatchers.ReturnHomeMode.CAPTURED, captured);
+                DirectEntry inner = fastDirect(captured, module);
+                assertSame(outer, ProtosFrameArguments.compactReturnHome(inner.targetArguments()));
+                assertFalse(ProtosFrameArguments.compactOwnsReturnHome(inner.targetArguments()));
+                assertInteger(42, enter(inner));
+                assertTrue(outer.isActive(), "an inner Closure never closes its owner's home");
+                assertSame(task, outer.ownerTaskForRuntime());
+            }
+
+            ProtosClosureValue marker = withHome(template, ProtosReturnHome.unobservable(), prelude);
+            assertMode(ProtosFunctionCallDispatchers.ReturnHomeMode.UNOBSERVABLE, marker);
+            DirectEntry markerEntry = fastDirect(marker, module);
+            assertSame(ProtosReturnHome.unobservable(),
+                    ProtosFrameArguments.compactReturnHome(markerEntry.targetArguments()));
+            assertInteger(42, enter(markerEntry));
+
+            ProtosClosureValue direct = parsedClosure("() => ^42", module);
+            assertMode(ProtosFunctionCallDispatchers.ReturnHomeMode.OWNED_PHYSICAL, direct);
+            DirectEntry first = fastDirect(direct, module);
+            DirectEntry second = fastDirect(direct, module);
+            ProtosReturnHome firstHome = assertPhysicalActiveHome(first);
+            ProtosReturnHome secondHome = assertPhysicalActiveHome(second);
+
+            assertNotSame(firstHome, secondHome);
+
+            assertInteger(42, enter(first));
+            assertFalse(firstHome.isActive());
+
+            assertInteger(42, enter(second));
+            assertFalse(secondHome.isActive());
+
+            firstHome.closeOwned();
+            assertFalse(firstHome.isActive(), "closing stays idempotent");
+            assertSame(null, firstHome.ownerTaskForRuntime());
+            assertSame(null, secondHome.ownerTaskForRuntime());
+        });
+    }
+
+    private static void assertMode(
+            ProtosFunctionCallDispatchers.ReturnHomeMode expected, ProtosClosureValue closure) {
+        ProtosBytecodeRootNode root = ProtosFunctionCallDispatchers.calleeRootOrNull(
+                planOf(closure).bytecodeActivationTargetForComposition());
+        assertSame(expected, ProtosFunctionCallDispatchers.classifyReturnHome(closure, root));
+    }
+
     private static ProtosClosureValue withHome(
             ProtosClosureValue prepared, ProtosReturnHome home, ProtosPrelude prelude) {
         return new ProtosClosureValue(

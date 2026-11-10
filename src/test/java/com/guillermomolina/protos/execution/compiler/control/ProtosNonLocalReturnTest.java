@@ -458,6 +458,77 @@ class ProtosNonLocalReturnTest {
         }
     }
 
+    /**
+     * I115-A: a return issued through a warm site that dispatches a captured
+     * Closure via a callee proven not to own a home crosses both boundaries,
+     * runs the crossed ensure cleanup first, and is consumed only by its owner
+     * with the payload computed before cleanup. It never becomes local.
+     */
+    @Test
+    void ensureCleanupRunsBeforeTheOwnerConsumesAReturnAcrossSpecializedRoutes()
+            throws IOException {
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        "i115a-ensure-before-owner.protos",
+                        """
+                        cleaned: 0
+                        invoke: (f) => { f() }
+                        owner: (v) => {
+                            (() => {
+                                invoke(() => { ^(v + cleaned) })
+                            }).ensure(() => { cleaned = cleaned + 1 })
+                            0
+                        }
+                        a: owner(10)
+                        b: owner(20)
+                        c: owner(30)
+                        a + b + c + (cleaned * 1000)
+                        """,
+                        corePrelude().newModuleActivation());
+
+        // 10 + 21 + 32 payloads, three cleanups.
+        assertEquals(3063L, integer(completed(outcome)));
+    }
+
+    /**
+     * EXECUTION_AND_CONTROL "Pending transfer and cleanup precedence": a valid
+     * return initiated by cleanup supersedes the pending one, whether it
+     * targets the same owner or an outer owner that the inner owner must let
+     * pass unchanged.
+     */
+    @Test
+    void cleanupReturnSupersedesThePendingTransfer() throws IOException {
+        ProtosExecutionOutcome sameOwner =
+                ProtosTestExecutionSupport.execute(
+                        "i115a-cleanup-same-owner.protos",
+                        """
+                        owner: () => {
+                            (() => { ^1 }).ensure(() => { ^2 })
+                            0
+                        }
+                        owner() + owner()
+                        """,
+                        corePrelude().newModuleActivation());
+        assertEquals(4L, integer(completed(sameOwner)));
+
+        ProtosExecutionOutcome outerOwner =
+                ProtosTestExecutionSupport.execute(
+                        "i115a-cleanup-outer-owner.protos",
+                        """
+                        outer: () => {
+                            escape: () => { ^3 }
+                            inner: () => {
+                                (() => { ^1 }).ensure(() => { escape() })
+                                0
+                            }
+                            inner() + 100
+                        }
+                        outer() + outer()
+                        """,
+                        corePrelude().newModuleActivation());
+        assertEquals(6L, integer(completed(outerOwner)));
+    }
+
     /** A fresh module activation sharing {@code module}'s context, domain and module state. */
     private static ProtosActivation sibling(ProtosActivation module) {
         return module.prelude().orElseThrow().newModuleActivation(

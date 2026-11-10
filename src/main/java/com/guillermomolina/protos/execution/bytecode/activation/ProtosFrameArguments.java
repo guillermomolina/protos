@@ -507,7 +507,7 @@ final class ProtosFrameArguments {
             home = activation.returnHomeOrNullForRuntime();
         } else if (owner instanceof ProtosClosureValue closure
                 && arguments[RETURN_HOME_INDEX] instanceof ProtosReturnHome slot) {
-            if (closure.returnHome().isPresent()) {
+            if (closure.capturedReturnHomeOrNullForRuntime() != null) {
                 return null;
             }
             home = slot;

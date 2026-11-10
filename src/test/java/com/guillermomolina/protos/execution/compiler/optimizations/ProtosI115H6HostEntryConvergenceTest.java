@@ -116,6 +116,28 @@ final class ProtosI115H6HostEntryConvergenceTest {
     }
 
     /**
+     * I115-A: a source Closure whose root proves its home unobservable keeps
+     * its exact results through repeated Task-free Polyglot entries, and the
+     * entry creates no implicit Task.
+     */
+    @Test
+    void hostEntryOfProvenUnobservableClosureKeepsResultsWithoutATask() {
+        try (Context context = newContext()) {
+            context.eval(ProtosLanguage.ID, """
+                    make: (seed) => { (value) => { seed + value } }
+                    adder: make(40)
+                    0
+                    """);
+            ProtosActorExecutionDomain domain = embedded(context).rootExecutionDomain();
+            Value adder = context.getBindings(ProtosLanguage.ID).getMember("adder");
+            for (int index = 0; index < 12; index++) {
+                assertEquals(42L + index, adder.execute(2 + index).asLong());
+            }
+            assertEquals(0, domain.liveTaskCount());
+        }
+    }
+
+    /**
      * The experimental entry neither acquires, releases, nor rejects on RootActor ownership: with
      * the token already held it still runs, and leaves the token and host-entry extent untouched.
      */

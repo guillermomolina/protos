@@ -359,6 +359,19 @@ public final class ProtosClosureValue extends ProtosObjectValue {
     }
 
     /**
+     * I115-A: exactly {@link #returnHome()}'s value, or {@code null} when this
+     * Closure captured no home, without allocating an {@code Optional}. The
+     * field is final, so call specialization may classify it once. This never
+     * selects or creates a home, prepares a plan, consults a Context or
+     * publishes an Activation; the identity is exact, including the internal
+     * unobservable markers. A non-null answer is a captured home, owned by
+     * another invocation, never one owned by an invocation of this Closure.
+     */
+    public ProtosReturnHome capturedReturnHomeOrNullForRuntime() {
+        return returnHome;
+    }
+
+    /**
      * The return home an invocation of this Closure runs under: the captured
      * home when one is captured; otherwise a home the invocation owns. PERF025:
      * an owned home of a source-backed Closure whose prepared plan proves it

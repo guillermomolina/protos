@@ -79,7 +79,7 @@ final class ProtosClosureCallPreparation {
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     static com.guillermomolina.protos.runtime.control.ProtosReturnHome invocationHomeForColdEntry(
             ProtosClosureValue closure) {
-        if (closure.returnHome().isPresent() || closure.hasNativeBody()) {
+        if (closure.capturedReturnHomeOrNullForRuntime() != null || closure.hasNativeBody()) {
             return closure.invocationReturnHomeUnderTemplateProofForRuntime(false);
         }
         RootCallTarget target = functionCallTarget(

@@ -440,10 +440,29 @@ final class ProtosFunctionCallDispatchers {
                         ProtosBytecodeRootNode cachedCallee,
                 @Cached("cachedCallee.callerNeedsStability()")
                         Assumption cachedCallerNeedsStable,
+                @Cached("classifyReturnHome(cachedClosure, cachedCallee)")
+                        ReturnHomeMode cachedHomeMode,
                 @Cached FunctionDirectInvokeNode invoke) {
+            /*
+             * I115-A: the mode is a per-entry constant of this identity PIC,
+             * so partial evaluation keeps exactly one of the three routes.
+             */
+            if (cachedHomeMode == ReturnHomeMode.UNOBSERVABLE) {
+                return invokeUnobservableHome(
+                        frame, callNode, cachedCallee, closure, arguments, callerReference);
+            }
+            if (cachedHomeMode == ReturnHomeMode.CAPTURED) {
+                return invokeCapturedHome(
+                        frame, callNode, cachedCallee, closure, arguments, callerReference);
+            }
             return invoke.execute(
                     frame, inliningTarget, callNode, cachedCallee,
                     closure, arguments, callerReference);
+        }
+
+        static ReturnHomeMode classifyReturnHome(
+                ProtosClosureValue closure, ProtosBytecodeRootNode effectiveRoot) {
+            return ProtosFunctionCallDispatchers.classifyReturnHome(closure, effectiveRoot);
         }
 
         /*
@@ -454,6 +473,10 @@ final class ProtosFunctionCallDispatchers {
          * A deferred plan or Context-local projection must go through the
          * general resolver; a plan from another language/Context must not be
          * entered by this direct node. No rematerialization runs in a guard.
+         *
+         * I115-A: Closures sharing this target may capture different homes,
+         * so no ReturnHome mode is cached here; the general invocation
+         * selects the home per call.
          */
         @Specialization(
                 guards = {
@@ -739,6 +762,90 @@ final class ProtosFunctionCallDispatchers {
                         && effectiveRoot.returnHomeProvenUnobservable());
     }
 
+    /**
+     * I115-A: how the identity PIC entry of one exact Closure and its
+     * effective callee root treats the invocation's ReturnHome. Only stable
+     * data decides it: the Closure's final captured home and the proof the
+     * lowering recorded once on the effective root. It is never derived from
+     * the Task, the caller or the lifecycle state of a home.
+     */
+    enum ReturnHomeMode {
+        /** The shared non-materialized marker; no lifecycle, no transfer target. */
+        UNOBSERVABLE,
+        /** A home captured from, and owned by, another invocation. */
+        CAPTURED,
+        /** A fresh physical home owned by this invocation. */
+        OWNED_PHYSICAL
+    }
+
+    /**
+     * I115-A: pure classification, the same precedence as {@link
+     * #invocationHome}: a captured canonical marker, then any other captured
+     * home (exact identity retained), then the effective root's proof. It
+     * never creates a home, prepares a plan or consults a Context; {@code
+     * effectiveRoot} must be the root of the cached effective CallTarget.
+     */
+    static ReturnHomeMode classifyReturnHome(
+            ProtosClosureValue closure, ProtosBytecodeRootNode effectiveRoot) {
+        ProtosReturnHome captured = closure.capturedReturnHomeOrNullForRuntime();
+        if (captured == ProtosReturnHome.unobservable()) {
+            return ReturnHomeMode.UNOBSERVABLE;
+        }
+        if (captured != null) {
+            return ReturnHomeMode.CAPTURED;
+        }
+        if (!closure.hasNativeBody()
+                && closure.definition() != null
+                && effectiveRoot != null
+                && effectiveRoot.returnHomeProvenUnobservable()) {
+            return ReturnHomeMode.UNOBSERVABLE;
+        }
+        return ReturnHomeMode.OWNED_PHYSICAL;
+    }
+
+    /**
+     * I115-A UNOBSERVABLE route: no physical home exists, so nothing is bound,
+     * closed or consumed here and no non-local return handler is installed;
+     * transfers crossing the CallTarget propagate unchanged. The Task is still
+     * inherited, and a Task-free invocation may still suspend and is sealed.
+     */
+    private static Object invokeUnobservableHome(
+            VirtualFrame frame,
+            DirectCallNode callNode,
+            ProtosBytecodeRootNode callee,
+            ProtosClosureValue closure,
+            Object[] arguments,
+            Object explicitCaller) {
+        Object transportedCaller = prepareCallerForCallee(frame, callee, explicitCaller);
+        ProtosFrameArguments.completeDispatchedHeader(
+                arguments, closure, transportedCaller, ProtosReturnHome.unobservable());
+        prepareInvocationTask(frame, arguments, explicitCaller);
+        Object outcome = callNode.call(arguments);
+        return sealIfSuspended(frame, arguments, explicitCaller, outcome);
+    }
+
+    /**
+     * I115-A CAPTURED route: B5[4] carries the exact captured home. Its owner
+     * invocation binds its Task and closes it; a return targeting it is
+     * consumed only by that owner, after PLAT070 unwinds intermediate ensure
+     * regions, so this boundary neither binds, closes nor catches anything.
+     */
+    private static Object invokeCapturedHome(
+            VirtualFrame frame,
+            DirectCallNode callNode,
+            ProtosBytecodeRootNode callee,
+            ProtosClosureValue closure,
+            Object[] arguments,
+            Object explicitCaller) {
+        Object transportedCaller = prepareCallerForCallee(frame, callee, explicitCaller);
+        ProtosFrameArguments.completeDispatchedHeader(
+                arguments, closure, transportedCaller,
+                closure.capturedReturnHomeOrNullForRuntime());
+        prepareInvocationTask(frame, arguments, explicitCaller);
+        Object outcome = callNode.call(arguments);
+        return sealIfSuspended(frame, arguments, explicitCaller, outcome);
+    }
+
     /** Preserve Task reachability even when the callee needs no caller state. */
     private static ProtosTask prepareInvocationTask(
             VirtualFrame frame, Object[] arguments, Object explicitCaller) {
@@ -836,7 +943,7 @@ final class ProtosFunctionCallDispatchers {
             ProtosFrameArguments.bindOwnedReturnHome(closure, home, task);
 
             Object outcome;
-            if (!home.isMaterialized() || closure.returnHome().isPresent()) {
+            if (!home.isMaterialized() || closure.capturedReturnHomeOrNullForRuntime() != null) {
                 outcome = callNode.call(arguments);
             } else {
                 try {
@@ -886,7 +993,7 @@ final class ProtosFunctionCallDispatchers {
             ProtosFrameArguments.bindOwnedReturnHome(closure, home, task);
 
             Object outcome;
-            if (!home.isMaterialized() || closure.returnHome().isPresent()) {
+            if (!home.isMaterialized() || closure.capturedReturnHomeOrNullForRuntime() != null) {
                 outcome = callNode.call(target, arguments);
             } else {
                 try {
