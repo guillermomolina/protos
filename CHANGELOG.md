@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.77-SNAPSHOT
+
+- **I115-V96 — historical replay.**
+  - Restore an omitted ReturnHome ownership/suspension call-dispatch operation in the shared dispatcher.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** This one-line historical repair is preserved without treating it as proof that all call arities and suspension paths are correct. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved except for the explicitly authorized whitespace correction described below.
+  - No test files are added or modified by this historical commit. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 0 added, 1 modified, 0 deleted (rename detection disabled for exact path accounting). All 1 historical path transitions preserve original modes and deletion state. Blob and parent identity checks allow only the explicitly authorized one-byte whitespace correction introduced in I115-V91: `tools/i115_gate_cases/primitive-if-true.protos:20`, original blob `b29428dbbee0f06243f105627c0a7ba472abea5a`, corrected blob `06420027434dabfae0edb537abfca37225e710aa`. All other payload blobs match exactly. Root `pom.xml` and `CHANGELOG.md` receive version/record metadata edits.
+  - Original implementation: `2c93c2508715ed5552ef1c0f7723a9be1cd1c482`.
+
 ## 0.4.76-SNAPSHOT
 
 - **I115-V95 — historical replay.**

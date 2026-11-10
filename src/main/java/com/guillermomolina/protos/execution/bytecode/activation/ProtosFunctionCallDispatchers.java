@@ -831,6 +831,7 @@ final class ProtosFunctionCallDispatchers {
             ProtosReturnHome home = invocationHome(closure, callee);
             ProtosFrameArguments.completeDispatchedHeader(
                     arguments, closure, transportedCaller, home);
+
             ProtosTask task = prepareInvocationTask(frame, arguments, explicitCaller);
             ProtosFrameArguments.bindOwnedReturnHome(closure, home, task);
 
