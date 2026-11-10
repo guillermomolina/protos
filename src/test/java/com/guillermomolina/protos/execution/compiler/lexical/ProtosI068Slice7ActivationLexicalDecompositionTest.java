@@ -20,13 +20,16 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
@@ -77,7 +80,7 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
 
                     List<String> instructions = instructionNames(root);
 
-                    assertContains(instructions, "ReadRootFrameLocal");
+                    assertContains(instructions, "ReadGlobal");
                     assertNotContains(instructions, "Lookup");
 
                     root.getCallTarget().call(module);
@@ -109,14 +112,10 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
                                     plan.bytecodeActivationRootForTesting());
 
                     /*
-                     * PERF013 Slice B1: the module root and this Closure are
-                     * lowered into the same shared BytecodeRootNodes group
-                     * (Slice A), so this proven capture now takes the direct
-                     * MaterializedLocalAccessor fast path instead of the
-                     * runtime frame-lexical-binding-authority path.
+                     * I115-R6: a captured module binding reads its module
+                     * context through ReadGlobal at its physical depth.
                      */
-                    assertContains(instructions, "SelectCapturedMaterializedOwnerFrame");
-                    assertContains(instructions, "load.local.mat");
+                    assertContains(instructions, "ReadGlobal");
                     assertNotContains(instructions, "Lookup");
                 });
     }
@@ -165,6 +164,72 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
                             outerValue,
                             plan.executeBytecodeActivationForTesting(invocation));
                 });
+    }
+
+    @Test
+    void candidateReadWithoutOuterBindingSignalsSlotNotFound()
+            throws Exception {
+        withEnteredLanguage(
+                (language, module) -> {
+                    ProtosSignalException failure =
+                            assertThrows(
+                                    ProtosSignalException.class,
+                                    () -> executeClosure(
+                                            language,
+                                            module,
+                                            "() => { before: x\nx: 1\nbefore }",
+                                            "i115-s1a-absent.protos"));
+
+                    assertSame(
+                            ProtosCoreErrors.prototype(
+                                    module,
+                                    ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
+                            failure.error().parent().orElseThrow());
+                });
+    }
+
+    @Test
+    void readAfterLocalCreationSelectsNewLocalBinding()
+            throws Exception {
+        withEnteredLanguage(
+                (language, module) -> {
+                    ProtosObjectValue outerValue =
+                            new ProtosObjectValue(ProtosObjectValue.rootObject());
+                    ProtosObjectValue localValue =
+                            new ProtosObjectValue(ProtosObjectValue.rootObject());
+                    module.context().createLocalSlot("x", outerValue);
+                    module.context().createLocalSlot("replacement", localValue);
+
+                    assertSame(
+                            localValue,
+                            executeClosure(
+                                    language,
+                                    module,
+                                    "() => { before: x\nx: replacement\nx }",
+                                    "i115-s1a-established.protos"));
+                });
+    }
+
+    private static Object executeClosure(
+            ProtosLanguage language,
+            ProtosActivation module,
+            String characters,
+            String sourceName) {
+        ProtosClosureValue closure =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        lowerRoot(language, characters, sourceName)
+                                .getCallTarget().call(module));
+        ProtosActivation invocation =
+                ProtosActivation.forClosureInvocation(
+                        closure,
+                        List.of(),
+                        module.prelude().orElseThrow(),
+                        module.actorModuleState(),
+                        module.currentModuleKey().orElse(null),
+                        module.executionDomain());
+        return closure.executionPlan().orElseThrow()
+                .executeBytecodeActivationForTesting(invocation);
     }
 
     @Test

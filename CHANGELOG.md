@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.83-SNAPSHOT
+
+- **I115-V102 — historical replay.**
+  - Restore ordinary lexical fallback for LOCAL Candidate reads before binding establishment while keeping established local reads optimized.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** Assignment destination selection remains separate; other dynamic binding-presence and nearer-scope cases are not certified by this change. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved except for the explicitly authorized whitespace correction described below.
+  - Tests added or modified (not executed): `ProtosI068Slice7ActivationLexicalDecompositionTest.java`. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 0 added, 2 modified, 0 deleted (rename detection disabled for exact path accounting). All 2 historical path transitions preserve original modes and deletion state. Blob and parent identity checks allow only the explicitly authorized one-byte whitespace correction introduced in I115-V91: `tools/i115_gate_cases/primitive-if-true.protos:20`, original blob `b29428dbbee0f06243f105627c0a7ba472abea5a`, corrected blob `06420027434dabfae0edb537abfca37225e710aa`. All other payload blobs match exactly. Root `pom.xml` and `CHANGELOG.md` receive version/record metadata edits.
+  - Original implementation: `a9b56ef7066b555942ccfe8f8babd71f2f854f2d`.
+
 ## 0.4.82-SNAPSHOT
 
 - **I115-V101 — historical replay.**

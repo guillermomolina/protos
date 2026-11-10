@@ -2502,8 +2502,8 @@ final class CanonicalToBytecodeLowerer {
      * binding point. A LOCAL binding is never referenced across a Closure
      * boundary, so a {@code Candidate} (not yet established at this program
      * point) of LOCAL storage executes in place, strictly before the binding
-     * point: the access is statically the uninitialized-binding Error. It is
-     * never redirected to another binding or storage.
+     * point. Reads use ordinary lexical lookup because this local binding is
+     * still absent; assignment destination handling remains separate.
      */
     private boolean isUninitializedLocalAccess(
             CanonicalBindingResolution resolution,
@@ -7470,8 +7470,10 @@ final class CanonicalToBytecodeLowerer {
      * carried as a free cell), {@code ReadGlobal} for a module binding
      * (in the module root itself or captured by a Closure root), and
      * otherwise one {@code AccessNamedLexical} name operation (a dynamic name,
-     * or a read inside an inline object-construction body). No access is ever
-     * followed by another storage when it does not find the binding.
+     * a LOCAL Candidate before binding establishment, or a read inside an
+     * inline object-construction body). A LOCAL Candidate follows ordinary
+     * lexical lookup while its local binding is absent; established LOCAL
+     * reads retain the optimized local path.
      *
      * <p>I091: carrierOperand is true only for an operand of the guarded
      * primitive numeric chain, which may then receive a local-retained
@@ -7515,7 +7517,10 @@ final class CanonicalToBytecodeLowerer {
                 return;
             }
             if (isUninitializedLocalAccess(resolution, identity)) {
-                builder.emitUninitializedBinding();
+                builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.LOOKUP);
+                emitCurrentActivation(builder);
+                builder.emitLoadConstant(lookup.name());
+                builder.endAccessNamedLexical();
                 return;
             }
             BytecodeLocal local = ownLocalOrNull(identity);
