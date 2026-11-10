@@ -4,7 +4,8 @@
 # See LICENSE.TXT at the repository root.
 """I115 autonomous semantic + structural gate; no protos-benchmarks dependency.
 
-The tracked baseline belongs to the original verified 54-capture matrix.
+The default tracked baseline is the verified c58b28f0 structural checkpoint;
+the original b1f4c053 baseline is archived and selectable with --baseline.
 Candidate observations use only the local Protos JVM and tracked Protos fixtures.
 An unverifiable metric is a failure, never an assumed zero or a PASS.
 """
@@ -27,7 +28,8 @@ BASELINE = ROOT / "tools/baselines/i115-graal25.5.json"
 CASES_DIR = ROOT / "tools/i115_gate_cases"
 JAVA_DIR = ROOT / "tools/i115_gate_java"
 GRAAL_VERSION = "25.5.5.0.3"
-BASELINE_REVISION = "b1f4c05387e7e2143d3660c9834716e8383124f7"
+BASELINE_REVISION = "c58b28f0c5141e20ad0397c7776389f6b6fd7508"
+HISTORICAL_BASELINE_REVISION = "b1f4c05387e7e2143d3660c9834716e8383124f7"
 HOST = "org.graalvm.polyglot.Value<ProtosHostExecutableClosure>.execute"
 CASES = (
     "fibonacci", "factorial", "method-call", "integer-loop",
@@ -147,7 +149,7 @@ def compare(reference: dict, candidate: dict) -> list[str]:
 # frozen graph fingerprint; the old source hash need not match a separately
 # copied hardcoded identifier. For multi-root cases, the explicit historical
 # source-order map is still required to avoid ambiguous root swaps.
-BASELINE_TIER_COUNTS = {
+HISTORICAL_BASELINE_TIER_COUNTS = {
     "bubble-sort": ((239, 496), ((531, 376),)),
     "factorial": ((239, 421), ((174, 336), (143, 281))),
     "fibonacci": ((239, 1129), ((207, 1199), (143, 989))),
@@ -166,6 +168,32 @@ BASELINE_TIER_COUNTS = {
     "primitive-while-counted": ((239, 207), ((177, 70),)),
     "primitive-while-once": ((239, 206), ((177, 69),)),
     "primitive-while-zero": ((239, 144), ((104, 47),)),
+}
+CHECKPOINT_BASELINE_TIER_COUNTS = {
+    "bubble-sort": ((244, 500), ((532, 377),)),
+    "factorial": ((244, 531), ((172, 394), (208, 440))),
+    "fibonacci": ((244, 1575), ((172, 1438), (270, 1654))),
+    "integer-loop": ((244, 217), ((184, 76),)),
+    "method-call": ((244, 311), ((107, 50), (302, 174))),
+    "primitive-closure-call": ((244, 240), ((106, 49), (181, 103))),
+    "primitive-if-false": ((244, 170), ((105, 48),)),
+    "primitive-if-true": ((244, 170), ((105, 48),)),
+    "primitive-integer-add": ((244, 170), ((105, 48),)),
+    "primitive-local-read": ((244, 170), ((105, 48),)),
+    "primitive-local-write": ((244, 170), ((105, 48),)),
+    "primitive-method-call": ((244, 262), ((107, 50), (201, 125))),
+    "primitive-object-slot-read": ((244, 190), ((125, 68),)),
+    "primitive-object-slot-write": ((244, 228), ((152, 93),)),
+    "primitive-return-literal": ((244, 170), ((105, 48),)),
+    "primitive-while-counted": ((244, 212), ((178, 71),)),
+    "primitive-while-once": ((244, 211), ((178, 70),)),
+    "primitive-while-zero": ((244, 170), ((105, 48),)),
+}
+# Frozen per-revision graph signatures. A baseline file is accepted only when
+# its declared revision is listed here and every count matches exactly.
+BASELINE_TIER_COUNTS = {
+    BASELINE_REVISION: CHECKPOINT_BASELINE_TIER_COUNTS,
+    HISTORICAL_BASELINE_REVISION: HISTORICAL_BASELINE_TIER_COUNTS,
 }
 
 
@@ -216,7 +244,8 @@ def historical_guest_labels(case: str, entries: dict) -> tuple[str, ...]:
 
 def read_baseline(path: Path) -> dict:
     b = read_json(path)
-    if (b.get("schema") != 1 or b.get("baseline_protos_revision") != BASELINE_REVISION
+    signatures = BASELINE_TIER_COUNTS.get(b.get("baseline_protos_revision"))
+    if (b.get("schema") != 1 or signatures is None
             or b.get("expected_graalvm_ce") != GRAAL_VERSION
             or b.get("workload_count") != len(CASES) or b.get("root_count") != 41):
         raise GateError("BASELINE_METADATA_INVALID")
@@ -245,7 +274,7 @@ def read_baseline(path: Path) -> dict:
                 if state not in ("UNCACHED", "CACHED"):
                     raise GateError(f"BASELINE_STATE_INVALID: {case}/{name}/{state}")
                 required_int(count, f"baseline/{case}/{name}/DSL/{state}")
-        host_pair, expected_guests = BASELINE_TIER_COUNTS[case]
+        host_pair, expected_guests = signatures[case]
         observed_host = (entries[HOST]["tier1_nodes"], entries[HOST]["tier2_nodes"])
         observed_guests = sorted(
             (v["tier1_nodes"], v["tier2_nodes"])
@@ -608,7 +637,7 @@ def run_command(args: argparse.Namespace) -> None:
         raise GateError(f"OUTPUT_ALREADY_EXISTS: {out}")
     out.mkdir(parents=True)
     report: dict = {
-        "schema": 2, "status": "STARTED", "baseline_revision": BASELINE_REVISION,
+        "schema": 2, "status": "STARTED", "baseline_revision": baseline["baseline_protos_revision"],
         "runtime_graalvm": GRAAL_VERSION, "provenance": git_data(),
         "measurement_method": "local Protos Polyglot Value.execute; IR after TruffleTier; BytecodeRootNode instructions",
         "semantic_gate": "NOT_RUN", "cases": {},
