@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.79-SNAPSHOT
+
+- **I115-V98 — historical replay.**
+  - Apply ReturnHome mode specialization to unary and SEND1 identity PICs.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** The added fixed-arity paths inherit the historical ownership assumptions; no invocation regression suite was executed. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved except for the explicitly authorized whitespace correction described below.
+  - No test files are added or modified by this historical commit. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 0 added, 3 modified, 0 deleted (rename detection disabled for exact path accounting). All 3 historical path transitions preserve original modes and deletion state. Blob and parent identity checks allow only the explicitly authorized one-byte whitespace correction introduced in I115-V91: `tools/i115_gate_cases/primitive-if-true.protos:20`, original blob `b29428dbbee0f06243f105627c0a7ba472abea5a`, corrected blob `06420027434dabfae0edb537abfca37225e710aa`. All other payload blobs match exactly. Root `pom.xml` and `CHANGELOG.md` receive version/record metadata edits.
+  - Original implementation: `fb3db48c379fd2b9221614cb3fdba5ffd7ad8004`.
+
 ## 0.4.78-SNAPSHOT
 
 - **I115-V97 — historical replay.**

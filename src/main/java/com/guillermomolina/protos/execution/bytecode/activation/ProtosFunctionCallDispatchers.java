@@ -809,7 +809,7 @@ final class ProtosFunctionCallDispatchers {
      * transfers crossing the CallTarget propagate unchanged. The Task is still
      * inherited, and a Task-free invocation may still suspend and is sealed.
      */
-    private static Object invokeUnobservableHome(
+    static Object invokeUnobservableHome(
             VirtualFrame frame,
             DirectCallNode callNode,
             ProtosBytecodeRootNode callee,
@@ -830,7 +830,7 @@ final class ProtosFunctionCallDispatchers {
      * consumed only by that owner, after PLAT070 unwinds intermediate ensure
      * regions, so this boundary neither binds, closes nor catches anything.
      */
-    private static Object invokeCapturedHome(
+    static Object invokeCapturedHome(
             VirtualFrame frame,
             DirectCallNode callNode,
             ProtosBytecodeRootNode callee,

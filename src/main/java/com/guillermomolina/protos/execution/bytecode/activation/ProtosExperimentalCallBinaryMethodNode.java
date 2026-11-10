@@ -93,13 +93,28 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                     ProtosBytecodeRootNode cachedCallee,
             @Cached("cachedCallee.callerNeedsStability()")
                     Assumption cachedCallerNeedsStable,
+            @Cached("classifyReturnHome(cachedCallable, cachedCallee)")
+                    ProtosFunctionCallDispatchers.ReturnHomeMode cachedHomeMode,
             @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, receiver, receiverHomeOrNull(receiver),
                 null, null, a0);
+        if (cachedHomeMode == ProtosFunctionCallDispatchers.ReturnHomeMode.UNOBSERVABLE) {
+            return ProtosFunctionCallDispatchers.invokeUnobservableHome(
+                    frame, callNode, cachedCallee, callable, arguments, null);
+        }
+        if (cachedHomeMode == ProtosFunctionCallDispatchers.ReturnHomeMode.CAPTURED) {
+            return ProtosFunctionCallDispatchers.invokeCapturedHome(
+                    frame, callNode, cachedCallee, callable, arguments, null);
+        }
         return invoke.execute(
                 frame, inliningTarget, callNode, cachedCallee,
                 callable, arguments, null);
+    }
+
+    static ProtosFunctionCallDispatchers.ReturnHomeMode classifyReturnHome(
+            ProtosClosureValue closure, ProtosBytecodeRootNode callee) {
+        return ProtosFunctionCallDispatchers.classifyReturnHome(closure, callee);
     }
 
     @Specialization(guards = {"!methodSend", "isSourceFunction(callable)"})
