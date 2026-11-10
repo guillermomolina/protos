@@ -66,7 +66,7 @@ is not a module; import `std:datetime/date`, `std:datetime/instant`, and so on.
 | [Explicit networking and name resolution](networking.md) | `std:network/resolvers` | Host-granted `resolver` lookups, choosing an `IpAddress`, and connecting to a numeric `IpEndpoint` |
 | [Command-line specifications](cli.md) | `std:cli/command_line` | Named-parameter options and positionals, command trees, argument parsing, and help text |
 | [TLS client](tls.md) | `std:tls/client` | Authenticating a connected duplex with explicit trust and the original hostname |
-| [Public C declarations](interop.md#public-c-declarations-stdffi) | `std:ffi` | Ordinary frozen ABI descriptors, Closure bindings, output Arrays and owned-resource release over an explicitly authorized provider |
+| [Native C declarations](ffi.md) | `std:ffi` | Public ABI descriptors, ordinary Closure bindings, output parameters and owned-resource release over an explicitly authorized provider |
 | [Explicit foreign operations](interop.md) | `std:interop` | `invoke`, `instantiate`, `readMember`, and `writeMember` on foreign values |
 | [Runtime metadata](runtime.md) | `std:runtime` | Four read-only String fields: `implementation`, `implementationVersion`, `engineVersion`, `platform` (no Context mode) |
 | [Runtime inspection](inspect.md) | `std:inspect` | Host-authorized diagnostics of value representations, Closures, Bytecode and Truffle trees |
@@ -119,9 +119,12 @@ signals an ordinary `Error` (see [Runtime inspection](inspect.md)):
 embedded in the Native executable, so `import("std:regex/regex")` works in both
 distributions.
 
-The modules whose usefulness differs are `std:interop` and `std:ffi`: they act only on
-foreign values, and foreign values come from external providers that only the
-portable JVM CLI can load. See [Explicit foreign operations](interop.md).
+The modules whose usefulness differs are `std:interop` and `std:ffi`: they act
+on foreign values from external providers that only the portable JVM CLI can
+load. The `std:ffi` MODULE is public and importable, but it does not authorize
+or load native libraries; the host must separately authorize the external
+provider and its logical library alias. See [Explicit foreign operations](interop.md)
+and the [public `std:ffi` guide](ffi.md).
 
 See [Try Protos](../00-try-protos.md) for downloading and running either
 distribution.

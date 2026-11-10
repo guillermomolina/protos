@@ -36,6 +36,17 @@ Building the JAR and authorizing it are separate steps: the build produces an
 inert artifact, and only `--foreign-provider-path` on each run lets a host use
 it. A successful run of the example prints nothing and exits with status 0.
 
+## For Protos application authors
+
+For application code that declares C functions supported by R1, start with the
+[public `std:ffi` guide](../../docs/guide/library/ffi.md). `FFI.bind` accepts an
+authorized library facade, a symbol, a return descriptor and an Array of public
+parameter descriptors; declarations and control flow remain ordinary Protos.
+
+The provider's `signature`/`param`/`bind` contract documented below is private
+I144 backend machinery. It remains relevant to provider implementers and the
+retained low-level examples, but it is not the recommended application API.
+
 Next steps:
 
 - tutorials [`07-ffi-provider-basics.protos`](../../protos/tutorials/08-language-interactions/07-ffi-provider-basics.protos)

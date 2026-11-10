@@ -10,16 +10,20 @@
 
 This page explains how Protos reaches code that is not Protos source, and what
 is actually usable at the current repository revision. It is a map, not a
-tutorial. The HOWTOs are:
+tutorial. The surfaces and guides are:
 
-- [Public C declarations with `std:ffi`](../library/interop.md#public-c-declarations-stdffi)
-  (LIB028), ordinary Protos descriptors and Closures over the private `ffi:`
-  backend; importing it alone grants no native authority;
-- [Writing and registering an external provider](custom-provider.md);
-- [The `java:` provider fixture](java-provider.md);
-- [The optional external FFM provider (`ffi:`)](ffm-provider.md) — a real,
-  separately built provider: build, authorize, declare C functions in Protos,
-  and call the shared SQLite library ([examples](../../../protos/examples/ffi/README.md)).
+- **Public API:** [`std:ffi`](../library/ffi.md), ordinary Protos descriptors,
+  Closures, output Arrays and owned resources (LIB028).
+- **Generic backend:** the separately built external I144 `ffi:` provider;
+  its private operations are documented in the [FFM provider guide](ffm-provider.md).
+- **General foreign operations:** [`std:interop`](../library/interop.md),
+  explicit invocation, construction and member access on foreign values.
+- **Custom providers:** the public I085 SPI, covered by
+  [writing and registering an external provider](custom-provider.md); the
+  [`java:` fixture](java-provider.md) is a separate example.
+
+The FFM provider example catalog is
+[`protos/examples/ffi/README.md`](../../../protos/examples/ffi/README.md).
 
 Foreign interoperability is **not** a universal bridge to arbitrary Java (or
 other) APIs. A program reaches exactly what a provider deliberately exposes,
@@ -85,8 +89,9 @@ The exact rules are in the normative owners listed at the top of this page.
 
 ## Availability at this revision
 
-Verified scope: this repository's `0.3.312-SNAPSHOT` development revision. No
-release containing any of it is implied.
+Verified scope: the published baseline is `0.3.461-SNAPSHOT` with
+specification `0.1.502`; the DOC023 changes add learning material, not another
+implementation of `std:ffi`.
 
 | Surface | State |
 |---|---|
@@ -100,7 +105,9 @@ release containing any of it is implied.
 | Restricted host-Java catalogue provider (`ProtosHostJavaCatalogue`, `openWithHostJava`) | Implemented (I082-G) and tested in JUnit only; same limitation as the previous row |
 | External providers in the **Native CLI** | Not available: Native Image builds offer no dynamic plugin loading |
 | Any provider shipped inside the Protos distribution | None. The `java:`, `inventado:`, and `oslib:` providers are test fixtures |
-| Optional external FFM provider `ffi:` ([guide](ffm-provider.md)) | Implemented in `providers/ffm` (I144) as a separately built JAR for the portable JVM CLI on Linux x86-64; not part of the distribution; the public `std:ffi` layer (LIB028) is supplied separately as Protos Standard Library source |
+| Optional external FFM provider `ffi:` ([guide](ffm-provider.md)) | Implemented in `providers/ffm` (I144) as a separately built JAR for the portable JVM CLI on Linux x86-64; not part of the distribution |
+| Public C declaration MODULE `std:ffi` ([guide](../library/ffi.md)) | Implemented (LIB028) as Protos Standard Library source over the external provider |
+| Public `std:ffi` learning path (DOC023) | New documentation and examples for the already implemented LIB028 API; no new implementation |
 
 The practical consequence: today, the supported way for a Protos program to
 use a foreign provider is to build a provider JAR against the public SPI and

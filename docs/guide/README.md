@@ -163,6 +163,8 @@ language-teaching progression under DOC001.
   `network`, `std:network/resolvers`, `IpAddress`, and `IpEndpoint`.
 - [TLS client](library/tls.md) — `std:tls/client`, explicit trust, and
   reference identity.
+- [Native C declarations](library/ffi.md) — optional, explicitly authorized
+  `std:ffi` interoperability through an external provider.
 - [Vectors and matrices](library/linear-algebra.md) — `std:math/linear_algebra`.
 - [Explicit foreign operations](library/interop.md) — `std:interop`.
 - [Numeric functions](library/README.md) — `std:math/math` and `std:math/integer`;

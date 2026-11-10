@@ -48,6 +48,12 @@ private context (`context`) while its receiver (`this`) is a **different public
 module object**. The public object delegates to ordinary `Object` and its own
 slots are the published interface.
 
+The public [`std:ffi` MODULE](library/ffi.md) is ordinary Protos code too. Its
+public descriptors and methods do not expose private construction or custody
+maps. Importing it does not authorize or load a native library; native
+authority enters only through a foreign module separately authorized by the
+host.
+
 ```protos
 // Prices/module.protos — executed by a MODULE-aware host, such as protos run
 Rules: import("./Rules.protos")

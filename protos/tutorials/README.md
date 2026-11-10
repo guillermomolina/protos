@@ -140,6 +140,22 @@ call, so the ordinary tutorial sweep, which runs without any provider, skips
 them; `dist/test_external_foreign_providers.py` runs them instead. See the
 [FFM provider guide](../../docs/guide/interop/ffm-provider.md).
 
+The public LIB028 path starts with
+[`08-public-ffi-descriptors.protos`](08-language-interactions/08-public-ffi-descriptors.protos),
+which needs no provider and runs through the ordinary CLI tutorial path:
+`bin/protos protos/tutorials/08-language-interactions/08-public-ffi-descriptors.protos`.
+It follows the private `07` lesson but uses only `std:ffi` descriptors and
+proves that importing the public MODULE does not grant native authority.
+Continue with
+[`09-public-ffi-bindings.protos`](08-language-interactions/09-public-ffi-bindings.protos)
+for explicitly authorized C calls, then
+[`05-public-ffi-owned-out.protos`](12-system-resources/05-public-ffi-owned-out.protos)
+for output Arrays and owned handles, following the private
+[`04-ffi-ownership-and-borrows.protos`](12-system-resources/04-ffi-ownership-and-borrows.protos)
+lesson. These latter two programs require the
+authorized provider JAR and are run by the FFM harness, not the ordinary
+provider-free tutorial sweep.
+
 After the HTTP progression, the next advanced workflow reaches real hosts and
 is not a tutorial: the manual cookbook examples
 [`http-url-client.protos`](../examples/io/http-url-client.protos) (one HTTPS

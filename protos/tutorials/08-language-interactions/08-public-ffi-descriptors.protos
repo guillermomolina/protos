@@ -1,0 +1,70 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, express or implied. See the License for the
+// specific language governing rights and limitations under the License.
+
+// Tutorial: public std:ffi descriptors without native authority.
+// Run with the ordinary CLI:
+// bin/protos protos/tutorials/08-language-interactions/08-public-ffi-descriptors.protos
+// No ffi: provider, platform feature, or native library is used here.
+
+FFI: import("std:ffi")
+Assertions: import("std:test/assertions")
+
+// ---- 1. Importing the public MODULE is ordinary and repeatable
+
+FFIAgain: import("std:ffi")
+Assertions.require(FFIAgain === FFI)
+
+// ---- 2. Six scalar descriptors are distinct ordinary frozen objects
+
+scalars: Array(FFI.void, FFI.i32, FFI.i64, FFI.f64, FFI.sizeT, FFI.utf8z)
+index: 0
+while(index < scalars.size()) {
+    descriptor: scalars[index]
+    Assertions.require(descriptor.parent() === Object)
+    Assertions.signals(Error, () => {
+        descriptor.learningProbe: true
+    })
+    otherIndex: index + 1
+    while(otherIndex < scalars.size()) {
+        Assertions.require(descriptor !== scalars[otherIndex])
+        otherIndex = otherIndex + 1
+    }
+    index = index + 1
+}
+
+// The private declaration maps are not exposed as slots. An ordinary frozen
+// object with the same default parent still cannot imitate a descriptor.
+
+// ---- 3. An output descriptor describes a position, not acquired memory
+
+integerOutput: FFI.out(FFI.i32)
+Assertions.require(integerOutput.parent() === Object)
+
+// ---- 4. Unsupported and forged descriptors are rejected
+
+Assertions.signals(Error, () => FFI.out(FFI.void))
+Assertions.signals(Error, () => FFI.out(FFI.utf8z))
+Assertions.signals(Error, () => FFI.out(FFI.out(FFI.i32)))
+
+structuralLookalike: {}
+structuralLookalike.freeze()
+Assertions.require(structuralLookalike.parent() === Object)
+Assertions.signals(Error, () => FFI.out(structuralLookalike))
+Assertions.signals(Error, () => FFI.out({}))
+
+// Importing std:ffi alone creates no provider session and grants no native
+// authority. Native access starts only through a separately host-authorized
+// foreign module such as ffi:sqlite3; this tutorial deliberately imports none.
+print("Public FFI descriptors: PASS")

@@ -1,0 +1,112 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, express or implied. See the License for the
+// specific language governing rights and limitations under the License.
+
+// Tutorial: public std:ffi output positions and owned SQLite handles.
+// Authorize the external FFM provider explicitly:
+// bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
+//     protos/tutorials/12-system-resources/05-public-ffi-owned-out.protos
+// Requires the portable JVM, Linux x86-64, Java 25 and shared libsqlite3.so.0.
+// Success is an empty output stream and exit status 0.
+
+FFI: import("std:ffi")
+Assertions: import("std:test/assertions")
+sqlite: import("ffi:sqlite3")
+
+SQLITE_OK: 0
+SQLITE_ROW: 100
+SQLITE_DONE: 101
+SQLITE_OPEN_READWRITE_CREATE: 6
+
+// A plain opaque descriptor admits an input reference. The owned descriptor
+// is reserved for results and attaches one destructor to each acquisition.
+dbType: FFI.opaque(sqlite, "sqlite3")
+stmtType: FFI.opaque(sqlite, "sqlite3_stmt")
+dbOwned: FFI.owned(dbType, "sqlite3_close_v2", FFI.i32)
+stmtOwned: FFI.owned(stmtType, "sqlite3_finalize", FFI.i32)
+
+// These nullable opaque descriptors admit C NULL only; they do not declare
+// writable output storage. In particular, pzTail would point into call-local
+// utf8z storage, so this program passes null instead of receiving that pointer.
+vfsNullable: FFI.nullable(FFI.opaque(sqlite, "sqlite3_vfs_name"))
+tailNullable: FFI.nullable(FFI.opaque(sqlite, "sqlite3_sql_tail"))
+
+open: FFI.bind(
+    sqlite,
+    "sqlite3_open_v2",
+    FFI.i32,
+    Array(FFI.utf8z, FFI.out(dbOwned), FFI.i32, vfsNullable))
+prepare: FFI.bind(
+    sqlite,
+    "sqlite3_prepare_v2",
+    FFI.i32,
+    Array(dbType, FFI.utf8z, FFI.i32, FFI.out(stmtOwned), tailNullable))
+step: FFI.bind(sqlite, "sqlite3_step", FFI.i32, Array(stmtType))
+columnInt64: FFI.bind(
+    sqlite, "sqlite3_column_int64", FFI.i64, Array(stmtType, FFI.i32))
+columnDouble: FFI.bind(
+    sqlite, "sqlite3_column_double", FFI.f64, Array(stmtType, FFI.i32))
+
+ordinary: (body) => {
+    error: Assertions.signals(Error, body)
+    Assertions.require(error.parent() === Error)
+}
+
+// sqlite3_open_v2 can return a non-null owned handle even with an error code.
+// Such a handle is already in provider custody and must be released before
+// this program signals its failed status check.
+opened: open(":memory:", SQLITE_OPEN_READWRITE_CREATE, null)
+Assertions.require(Array.recognizes(opened))
+Assertions.require(opened.size() == 2)
+if(opened[0] != SQLITE_OK) {
+    if(opened[1] !== null) {
+        closeFailedOpen: FFI.release(opened[1])
+        Assertions.require(Integer.recognizes(closeFailedOpen))
+    }
+    Assertions.require(opened[0] == SQLITE_OK)
+}
+Assertions.require(opened[0] == SQLITE_OK)
+connection: opened[1]
+Assertions.require(connection !== null)
+
+// A failed prepare may likewise publish an owned statement alongside its C
+// status. Release that acquisition before the assertion signals failure.
+prepared: prepare(connection, "SELECT 42, 3.0", -1, null)
+Assertions.require(Array.recognizes(prepared))
+Assertions.require(prepared.size() == 2)
+if(prepared[0] != SQLITE_OK) {
+    if(prepared[1] !== null) {
+        finalizeFailedPrepare: FFI.release(prepared[1])
+        Assertions.require(Integer.recognizes(finalizeFailedPrepare))
+    }
+    Assertions.require(prepared[0] == SQLITE_OK)
+}
+Assertions.require(prepared[0] == SQLITE_OK)
+statement: prepared[1]
+Assertions.require(statement !== null)
+
+Assertions.require(step(statement) == SQLITE_ROW)
+integerValue: columnInt64(statement, 0)
+floatValue: columnDouble(statement, 1)
+Assertions.require(Integer.recognizes(integerValue))
+Assertions.require(Float.recognizes(floatValue))
+Assertions.require(integerValue == 42)
+Assertions.require(floatValue == 3.0)
+Assertions.require(step(statement) == SQLITE_DONE)
+
+// This explicit native lifetime order is not a Closable wrapper or a Future.
+Assertions.require(FFI.release(statement) == SQLITE_OK)
+Assertions.require(FFI.release(connection) == SQLITE_OK)
+ordinary(() => FFI.release(statement))
+ordinary(() => step(statement))

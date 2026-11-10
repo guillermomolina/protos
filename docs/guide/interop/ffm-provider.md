@@ -2,8 +2,10 @@
 
 > **Status:** Non-normative developer guide (I144). The provider operations
 > described here are external support machinery, not the public `std:ffi`
-> library implemented in Protos by LIB028. Start with the
-> [public API guide](../library/interop.md#public-c-declarations-stdffi).
+> library implemented in Protos by LIB028. Applications declaring C functions
+> supported by R1 should start with the
+> [public `std:ffi` guide](../library/ffi.md). This guide remains useful for
+> authors of the generic backend and for private operations not published by R1.
 
 The FFM provider (`providers/ffm`) is an external I085 provider that calls C
 functions of host-authorized shared libraries through the Java 25 Foreign
@@ -42,7 +44,12 @@ and
 [`04-ffi-ownership-and-borrows.protos`](../../../protos/tutorials/12-system-resources/04-ffi-ownership-and-borrows.protos),
 and the examples in [`protos/examples/ffi/`](../../../protos/examples/ffi/README.md).
 
-## Architecture
+Public application examples using only the supported `std:ffi` surface are
+[`sqlite-version-public.protos`](../../../protos/examples/ffi/sqlite-version-public.protos),
+[`sqlite-complete-public.protos`](../../../protos/examples/ffi/sqlite-complete-public.protos)
+and
+[`sqlite-numeric-query-public.protos`](../../../protos/examples/ffi/sqlite-numeric-query-public.protos).
+
 
 ```text
 Protos application -> std:ffi (ordinary descriptors, Closures, Arrays)
@@ -183,6 +190,10 @@ Integers are never truncated or wrapped, and no Integer converts to a
 pointer.
 
 ### Operations
+These `signature`, `param`, `preserving`, `bind` and `copy` operations are
+**private to the I144 provider**, retained for backend authors and boundaries
+that are not public in R1. Protos applications should use
+[`std:ffi`](../library/ffi.md) for supported C declarations.
 
 | Operation | Purpose |
 |---|---|
@@ -292,6 +303,12 @@ Assertions.require(sqlite.release(connection) == 0)  // sqlite3_close_v2
 Release dependants before what they depend on: finalize statements before
 closing their connection. This is a low-level sequence of C calls, not a
 connection library; LIB029 will provide that.
+
+`borrowed`, `preserving` and `copy` are private I144 provider machinery, not
+public `std:ffi` operations. The existing public examples deliberately avoid
+SQLite TEXT/BLOB readers; use the [public guide](../library/ffi.md) for the R1
+boundary and the
+[public examples](../../../protos/examples/ffi/README.md) for supported calls.
 
 ## Borrowed memory
 

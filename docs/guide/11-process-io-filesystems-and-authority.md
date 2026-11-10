@@ -68,6 +68,14 @@ This yields a general rule:
 > Data that describes a resource and authority to access a resource are separate
 > values.
 
+The same boundary applies to native code: `import("std:ffi")` composes public
+declarations without acquiring native authority, while
+`import("ffi:sqlite3")` explicitly enters an external provider and logical
+library that the host has authorized. This is trusted in-process C execution,
+not a `Filesystem` capability: `Filesystem` does not confine native code. See
+the [public `std:ffi` guide](library/ffi.md#security-and-limits) and its
+[authority model](library/ffi.md#imports-and-authority).
+
 That distinction keeps ordinary data transferable and easy to reason about while
 making access boundaries visible.
 

@@ -58,6 +58,14 @@ CASES = ROOT / "protos" / "tests" / "foreign-provider"
 # I144 learning material: assertion-validated, no marker, run from real paths.
 I144_LEARNING = (
     ("I144_LIB028_PUBLIC_VERSION", ROOT / "protos" / "examples" / "ffi" / "sqlite-version-public.protos"),
+    ("I144_DOC023_PUBLIC_BINDINGS", ROOT / "protos" / "tutorials" / "08-language-interactions"
+     / "09-public-ffi-bindings.protos"),
+    ("I144_DOC023_PUBLIC_OWNERSHIP", ROOT / "protos" / "tutorials" / "12-system-resources"
+     / "05-public-ffi-owned-out.protos"),
+    ("I144_DOC023_PUBLIC_COMPLETE", ROOT / "protos" / "examples" / "ffi"
+     / "sqlite-complete-public.protos"),
+    ("I144_DOC023_PUBLIC_NUMERIC_QUERY", ROOT / "protos" / "examples" / "ffi"
+     / "sqlite-numeric-query-public.protos"),
     ("I144_TUTORIAL_BASIC", ROOT / "protos" / "tutorials" / "08-language-interactions"
      / "07-ffi-provider-basics.protos"),
     ("I144_TUTORIAL_LIFETIME", ROOT / "protos" / "tutorials" / "12-system-resources"
@@ -87,6 +95,10 @@ RESULT_KEYS = (
     "UNUSED_PROVIDER_NO_SESSION",
     "DISTRIBUTION_UNMODIFIED",
     "I144_LIB028_PUBLIC_VERSION",
+    "I144_DOC023_PUBLIC_BINDINGS",
+    "I144_DOC023_PUBLIC_OWNERSHIP",
+    "I144_DOC023_PUBLIC_COMPLETE",
+    "I144_DOC023_PUBLIC_NUMERIC_QUERY",
     "I144_FFM_PROVIDER_JAR",
     "I144_FFM_SQLITE",
     "I144_FFM_DENIED",

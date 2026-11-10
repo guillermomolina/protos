@@ -5,11 +5,29 @@ Protos through the optional external FFM provider (I144). Every C declaration
 and all control flow are Protos source; the provider contains no
 SQLite-specific Java.
 
+## Public `std:ffi` examples
+
+Use these programs to learn or apply the public LIB028 API:
+
 | Example | Purpose |
 | --- | --- |
-| [`sqlite-version-public.protos`](sqlite-version-public.protos) | Recommended LIB028 example: `FFI.bind`, ordinary descriptors and a Closure call, without opening a connection |
-| [`sqlite-version.protos`](sqlite-version.protos) | Smallest possible check that the provider is built, authorized and able to call C: `sqlite3_libversion_number` |
-| [`sqlite-memory-query.protos`](sqlite-memory-query.protos) | Open an in-memory database, prepare and step one `SELECT`, read Integer, Float, text and blob columns, then finalize and close |
+| [`sqlite-version-public.protos`](sqlite-version-public.protos) | Query the SQLite version with public descriptors and an ordinary Closure. |
+| [`sqlite-complete-public.protos`](sqlite-complete-public.protos) | Check complete and incomplete SQL with `sqlite3_complete`. |
+| [`sqlite-numeric-query-public.protos`](sqlite-numeric-query-public.protos) | Bind numeric parameters, read one numeric row and release owned handles. |
+
+See the [public `std:ffi` guide](../../../docs/guide/library/ffi.md) for the
+declaration, authority, ownership and safety model.
+
+## Low-level I144 provider examples
+
+These retained programs exercise private backend operations and remain useful
+for understanding I144 or its unpublished borrowed-memory boundary. They are
+not the public application learning path:
+
+| Example | Purpose |
+| --- | --- |
+| [`sqlite-version.protos`](sqlite-version.protos) | Low-level provider check that resolves and calls `sqlite3_libversion_number`. |
+| [`sqlite-memory-query.protos`](sqlite-memory-query.protos) | Low-level in-memory query, including the historical borrowed TEXT/BLOB copying path. |
 
 Unlike most examples in this tree, they do **not** run with a plain
 `bin/protos <file>`: the provider must be passed explicitly.
@@ -40,6 +58,10 @@ Details: [Build the provider JAR](../../../docs/guide/interop/ffm-provider.md#bu
 ```sh
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
     protos/examples/ffi/sqlite-version-public.protos
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+    protos/examples/ffi/sqlite-complete-public.protos
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+    protos/examples/ffi/sqlite-numeric-query-public.protos
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
     protos/examples/ffi/sqlite-memory-query.protos
 ```

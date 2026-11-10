@@ -24,8 +24,11 @@ instead.
 | Sample wall time and construct an Instant (`--allow-clock`) | `clock/current-time.protos` |
 | Hash and verify a password with explicit Argon2id entropy | `crypto/password-argon2id.protos` (requires `--allow-entropy`) |
 | Print a value | `hello-world.protos` |
-| Check that the FFM provider can call C: the SQLite version (`--foreign-provider-path`, see `ffi/README.md`) | `ffi/sqlite-version.protos` |
-| Query an in-memory SQLite database through C declarations written in Protos (`--foreign-provider-path`, see `ffi/README.md`) | `ffi/sqlite-memory-query.protos` |
+| Query the SQLite version with public `std:ffi` (`--foreign-provider-path`, see `ffi/README.md` and the [public guide](../../docs/guide/library/ffi.md)) | `ffi/sqlite-version-public.protos` |
+| Check whether a SQL statement is complete with public `std:ffi` (`--foreign-provider-path`) | `ffi/sqlite-complete-public.protos` |
+| Run a parameterized numeric SQLite query with public `std:ffi` (`--foreign-provider-path`) | `ffi/sqlite-numeric-query-public.protos` |
+| Check the I144 backend's ability to call C: the SQLite version (`--foreign-provider-path`, low-level provider example) | `ffi/sqlite-version.protos` |
+| Query SQLite through the low-level I144 backend example (`--foreign-provider-path`) | `ffi/sqlite-memory-query.protos` |
 | Print the exact Rosetta Code Hello world/Text message | `basics/rosetta-hello-world-text.protos` |
 | Create and modify slots | `basics/slots.protos` |
 | Create an object | `objects/object-literal.protos` |
@@ -135,12 +138,14 @@ application catalog to provide `app:root-service-handler`. Ordinary file entry
 without `--service` still only evaluates its top level.
 See the [HTTP guide](../../docs/guide/library/http.md).
 
-The two `ffi/` examples are not runnable with a plain `bin/protos <file>`:
+The five `ffi/` examples are not runnable with a plain `bin/protos <file>`:
 they require the separately built FFM provider JAR (I144), passed with
 `--foreign-provider-path`, Linux x86-64, JDK 25 and a shared SQLite library.
 They signal success with exit status 0 and no output, contain no `print`
-call, and are run by `dist/test_external_foreign_providers.py`. See
-[`ffi/README.md`](ffi/README.md).
+call, and are run by `dist/test_external_foreign_providers.py`. The public
+examples use LIB028 `std:ffi`; the two original examples remain low-level I144
+backend material. See [`ffi/README.md`](ffi/README.md) and the
+[public `std:ffi` guide](../../docs/guide/library/ffi.md).
 
 D243-C / I157 adds two explicit secure-entropy examples. Direct entry:
 `bin/protos --allow-entropy protos/examples/entropy/secure-bytes.protos`

@@ -89,71 +89,34 @@ only, and even there no public API registers foreign providers; see
 
 ## Public C declarations: `std:ffi`
 
-LIB028 supplies a separate Protos-first MODULE over the optional I144 FFM
-provider. `std:interop` operates explicitly on existing foreign values;
-`ffi:` supplies private backend operations and native authority granted by the
-host; `std:ffi` composes public descriptors, ordinary Closures and result Arrays.
-Its normative owner is [FFI.md](../../../spec/semantics/FFI.md).
+`std:interop` operates explicitly on existing foreign values; `std:ffi` is the
+separate Protos-first MODULE for public C declarations. The external `ffi:`
+provider supplies private backend operations and native authority only when
+the host authorizes it. Importing `std:ffi` alone opens no native session and
+grants no authority.
 
-Authorize the provider explicitly on the portable JVM CLI (Linux x86-64,
-JDK 25 / supported GraalVM 25.5):
+Run the program by explicitly authorizing the provider on the portable JVM CLI:
 
 ```sh
 bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
-    protos/examples/ffi/sqlite-version-public.protos
+  protos/examples/ffi/sqlite-version-public.protos
 ```
 
 ```protos
-FFI: import("std:ffi")            // no native authority or session
-sqlite: import("ffi:sqlite3")     // separately authorized by the host
+FFI: import("std:ffi")
+sqlite: import("ffi:sqlite3")
 version: FFI.bind(sqlite, "sqlite3_libversion_number", FFI.i32, Array())
 number: version()
 ```
 
-Use `FFI.void` for a void return, `i32` and `i64` for signed exact Integers,
-`sizeT` for an unsigned LP64 Integer, `f64` for Float, and `utf8z` for input
-String without interior NUL. Numeric coercion, truncation and wrapping are
-rejected. `utf8z` is input-only; native pointer addresses are never Integers.
-`bind` snapshots its parameter Array and answers a fresh ordinary Closure.
-All invocation arguments are passed in order through the existing I085 admission
-checks. A void function without outputs returns `null`.
+For descriptor domains, Closure bindings, `out` result Arrays, owned resources,
+security boundaries and runnable public examples, see the dedicated
+[Native C declarations with `std:ffi` guide](ffi.md). The public contract is
+defined by [`spec/semantics/FFI.md`](../../../spec/semantics/FFI.md).
 
-`FFI.opaque(library, nativeTypeName)` declares a non-null logical reference;
-`FFI.nullable(opaque)` additionally admits `null`.
-`FFI.owned(opaque, releaseSymbol, releaseReturnDescriptor)` declares result
-custody with a one-reference destructor returning `FFI.void` or `FFI.i32`.
-The opaque descriptor must be plain, and retains its original library/session.
-Use the opaque input descriptor to pass an owned handle to another function;
-the owned declaration itself is for results.
-
-`FFI.out(descriptor)` declares an output position consuming no Protos argument.
-Each native invocation allocates its zero-initialized output storage.
-The call returns a fresh ordinary Array
-`[nativeReturn, out0, ...]`. Outputs support numeric and opaque/owned types,
-not `void`, `utf8z`, or nested `out`. Nonzero C status codes remain data.
-An owned output remains under custody even when the accompanying status is an
-error or conversion of another result fails.
-
-`FFI.release(handle)` uses private identity-based origin metadata: no library
-argument is needed. It retires that entry before delegating to the provider,
-returns the exact destructor result, and never retries after a failure or error
-status. Duplicate release, arbitrary objects and retired handles are rejected.
-The provider releases outstanding owned acquisitions when their session ends.
-
-Validation before native entry signals an ordinary Error; an entered provider
-operation failure signals `ForeignError`, following D188. There is no new Error
-hierarchy. Calls are synchronous, and native resources/authority cannot silently
-cross Actors or P. Importing this module does not inherit native authority.
-
-R1 exposes no `FFI.copy`, `FFI.borrowed` or `FFI.preserving`. Borrowed-memory
-copying remains private I144 machinery for later LIB029 work, bounded to 16 MiB
-and the provider's borrow epoch. Public `bind` does not publish borrowed-memory
-wrappers. There is no public TEXT/BLOB input binding or SQLite connection API.
-
-The ABI is trusted: a wrong signature can corrupt memory or terminate the
-process. C runs with process authority, unconstrained by `Filesystem`, and
-arbitrary native faults are not recoverable by promise. No pointer arithmetic,
-numeric pointers, structs, callbacks/upcalls, variadic calls, C++ ABI,
-`SQLITE_TRANSIENT`, arbitrary library paths or Native Image external plugins
-are supported. See the [provider guide](../interop/ffm-provider.md) for host
-configuration and the retained private low-level examples.
+Continue with the [descriptor tutorial](../../../protos/tutorials/08-language-interactions/08-public-ffi-descriptors.protos),
+[binding tutorial](../../../protos/tutorials/08-language-interactions/09-public-ffi-bindings.protos),
+[owned/out tutorial](../../../protos/tutorials/12-system-resources/05-public-ffi-owned-out.protos),
+[SQLite version example](../../../protos/examples/ffi/sqlite-version-public.protos),
+[SQL completeness example](../../../protos/examples/ffi/sqlite-complete-public.protos)
+or [numeric query example](../../../protos/examples/ffi/sqlite-numeric-query-public.protos).
