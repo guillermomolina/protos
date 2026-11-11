@@ -1,0 +1,74 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// LIB029: real Closable Futures, dependency cleanup and isolation rejection.
+Assertions: import("std:test/assertions")
+SQLite: import("std:sqlite")
+db: SQLite.openMemory()
+first: db.prepare("SELECT 1")
+closing: first.close()
+closing.cancel()
+Assertions.require(closing.value() === first)
+again: first.close()
+Assertions.require(again !== closing)
+Assertions.require(again.value() === first)
+Assertions.signals(IOLifecycleError, () => first.step())
+Assertions.signals(IOLifecycleError, () => first.bind(1, 2))
+Assertions.signals(IOLifecycleError, () => first.row())
+child: db.prepare("SELECT 2")
+Assertions.require(child.step())
+// Public method replacement cannot revoke the parent's private release custody.
+child.close = () => Error().signal()
+// P projects ordinary wrapper objects and their source Closures, discarding
+// caller captures (PARALLEL_EXECUTION.md 71.14). No native handle or private
+// state crosses: the projected methods cannot find their Actor-local helpers.
+projectedConnection: ((value) => value.prepare("SELECT 1")).parallel(db)
+Assertions.signals(SlotNotFound, () => projectedConnection.value())
+projectedStatement: ((value) => value.step()).parallel(child)
+Assertions.signals(SlotNotFound, () => projectedStatement.value())
+// Projection did not mutate or retire the originating Statement.
+Assertions.require(child.column(0) == 2)
+// Destination Actors import and acquire their own sessions. A returned live
+// Statement cannot cross the reply boundary; an incoming Connection cannot
+// cross the argument boundary either.
+marker: db.prepare("CREATE TABLE private_marker (n INTEGER)")
+Assertions.require(marker.step() === false)
+marker.close().value()
+worker: Actor.spawn("std:sqlite", "openMemory")
+(() => {
+    Assertions.signals(NonTransferableValue, () => worker.request("prepare", db))
+    Assertions.signals(NonTransferableValue, () => worker.request("prepare", "SELECT 1").value())
+    // This accepted request raises an unhandled SQL Error in the destination.
+    // It terminates that Actor, so test it last. request reports the missing
+    // normal reply as RequestOutcomeUncertain, not as a transferred SQL Error.
+    Assertions.signals(RequestOutcomeUncertain,
+        () => worker.request("prepare", "SELECT * FROM private_marker").value())
+}).ensure(() => worker.stop())
+// Distinct in-memory databases do not share schema or wrapper identity.
+other: SQLite.openMemory()
+(() => {
+    Assertions.require(other !== db)
+    Assertions.signals(SQLite.SQLiteError, () => other.prepare("SELECT * FROM private_marker"))
+}).ensure(() => other.close().value())
+end: db.close()
+end.cancel()
+Assertions.require(end.value() === db)
+Assertions.signals(IOLifecycleError, () => db.prepare("SELECT 3"))
+Assertions.signals(IOLifecycleError, () => child.step())
+Assertions.signals(IOLifecycleError, () => child.column(0))
+endAgain: db.close()
+Assertions.require(endAgain !== end)
+Assertions.require(endAgain.value() === db)
+print("LIB029-LIFECYCLE-PASS")

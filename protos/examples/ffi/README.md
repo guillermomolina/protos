@@ -5,6 +5,15 @@ Protos through the optional external FFM provider (I144). Every C declaration
 and all control flow are Protos source; the provider contains no
 SQLite-specific Java.
 
+## Public `std:sqlite` example
+
+| Example | Purpose |
+| --- | --- |
+| [`sqlite-library.protos`](sqlite-library.protos) | Public `std:sqlite` table creation, numeric inserts, copied rows and deterministic cleanup. |
+
+See the [SQLite library guide](../../../docs/guide/library/sqlite.md) for the
+bounded LIB029 API and its validation evidence.
+
 ## Public `std:ffi` examples
 
 Use these programs to learn or apply the public LIB028 API:
@@ -57,6 +66,8 @@ Details: [Build the provider JAR](../../../docs/guide/interop/ffm-provider.md#bu
 
 ```sh
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+    protos/examples/ffi/sqlite-library.protos
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
     protos/examples/ffi/sqlite-version-public.protos
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
     protos/examples/ffi/sqlite-complete-public.protos
@@ -90,12 +101,16 @@ The two original examples use the provider-private I144 operations directly: `si
 - `sqlite-version-public.protos` uses LIB028 `std:ffi`: ordinary frozen
   descriptors, Closure bindings and ordinary result Arrays. Import alone
   grants no authority. R1 has no public borrowed-memory copy method;
-- an idiomatic SQLite library (connections, statements, transactions,
-  parameter binding, row mapping, `Closable` lifecycle) is LIB029 and does
-  not exist yet.
+- `sqlite-library.protos` uses LIB029 `std:sqlite`, which owns connections,
+  statements, numeric/NULL parameters, copied rows and `Closable` lifecycle.
+  SQL must contain no semicolon or NUL. TEXT/BLOB input binding and transaction
+  abstractions remain outside this bounded surface.
 
-A real application should prefer LIB029 once it is available instead of
-copying these low-level declarations.
+Applications can use the [SQLite library](../../../docs/guide/library/sqlite.md)
+without copying low-level declarations. The maintainer reports **34/34 PASS**
+for the complete external foreign-provider integration, including the LIB029
+real SQLite cases and this public example. The final integrated `make test`
+outcome has not yet been reported.
 
 ## Limitations and security
 

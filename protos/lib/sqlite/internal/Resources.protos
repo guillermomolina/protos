@@ -1,0 +1,255 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! SQLite resources and state transitions. All native policy lives here.
+Arrays: import("std:collections/array")
+
+// SQL admission deliberately rejects every semicolon, including quoted and
+// commented ones. NUL is rejected before utf8z admission as well. Without
+// separators SQLite cannot leave a second supported statement behind pzTail.
+admitSql: (sql) => {
+    String.recognizes(sql).ifFalse(() => Error().signal())
+    for(octet in Encoding.UTF8.encode(sql)) {
+        if((octet == 59) || (octet == 0)) { Error().signal() }
+    }
+    sql
+}
+
+// The ABI and terminal-Future facility are injected privately. This also lets
+// deterministic Protos fixtures exercise acquisition and destructor failures.
+openMemory: (abi, terminal, SQLiteError) => {
+    failure: (operation, code) => SQLiteError {
+        operation: operation
+        code: code
+    }
+    check: (operation, code) => {
+        if(code != abi.SQLITE_OK) { failure(operation, code).signal() }
+    }
+    // Attempts cleanup without replacing an already established primary error.
+    discard: (handle) => {
+        if(handle !== null) {
+            Error.handle(() => abi.release(handle), (error) => null)
+        }
+    }
+    opened: abi.open(":memory:", abi.SQLITE_OPEN_READWRITE + abi.SQLITE_OPEN_CREATE + abi.SQLITE_OPEN_MEMORY, null)
+    native: opened[1]
+    published: false
+    (() => {
+        if(opened[0] != abi.SQLITE_OK) {
+            primary: failure("open", opened[0])
+            primary.signal()
+        }
+        if(native === null) { failure("open", abi.SQLITE_OK).signal() }
+
+        closing: false
+        closeError: null
+        children: Array()
+        connection: null
+        requireOpen: () => {
+            if(closing) { IOLifecycleError().signal() }
+        }
+        observe: (receiver, error) => {
+            if(error === null) { terminal.resolved(receiver) } else { terminal.failed(error) }
+        }
+        retire: (handle, operation) => {
+            error: null
+            Error.handle(
+                () => check(operation, abi.release(handle)),
+                (caught) => { error = caught }
+            )
+            error
+        }
+
+        prepare: (sql) => {
+            requireOpen()
+            admitSql(sql)
+            prepared: abi.prepare(native, sql, -1, null)
+            handle: prepared[1]
+            admitted: false
+            (() => {
+                if(prepared[0] != abi.SQLITE_OK) {
+                    primary: failure("prepare", prepared[0])
+                    primary.signal()
+                }
+                statement: null
+                if(handle !== null) {
+                    closed: false
+                    terminalError: null
+                    rowAvailable: false
+                    finished: false
+                    failed: false
+                    usable: () => {
+                        requireOpen()
+                        if(closed) { IOLifecycleError().signal() }
+                    }
+                    close: () => {
+                        if((!closed && !closing) && !terminal.closeAllowed()) {
+                            terminal.failed(IOLifecycleError())
+                        } else {
+                            if(!closed) {
+                                // Cutover and retirement precede the native release, which may
+                                // fail after retiring the provider token. Never retry it.
+                                closed = true
+                                rowAvailable = false
+                                retired: handle
+                                handle = null
+                                terminalError = retire(retired, "finalize")
+                                // Unregistration may fail independently; it must never prevent
+                                // native finalization or replace an earlier release failure.
+                                Error.handle(
+                                    () => { children = Arrays.filter(children, (child) => child !== close) },
+                                    (error) => {
+                                        if(terminalError === null) { terminalError = error }
+                                    }
+                                )
+                            }
+                            observe(statement, terminalError)
+                        }
+                    }
+                    bind: (index, value) => {
+                        usable()
+                        if(finished || failed || rowAvailable) { Error().signal() }
+                        Integer.recognizes(index).ifFalse(() => Error().signal())
+                        if((index < 1) || (index > 2147483647)) { Error().signal() }
+                        code: null
+                        if(value === null) { code = abi.bindNull(handle, index) }
+                        if(Integer.recognizes(value)) {
+                            if((value < -9223372036854775808) || (value > 9223372036854775807)) {
+                                Error().signal()
+                            }
+                            code = abi.bindInteger(handle, index, value)
+                        }
+                        if(Float.recognizes(value)) { code = abi.bindFloat(handle, index, value) }
+                        if(code === null) { Error().signal() }
+                        check("bind", code)
+                        statement
+                    }
+                    // These helpers are also invoked as lexical blocks by each/row.
+                    // They must not use ^: their captured prepare return home has ended.
+                    step: () => {
+                        usable()
+                        rowAvailable = false
+                        if(failed) { Error().signal() }
+                        if(!finished) {
+                            // An entered provider failure may leave an uncertain execution
+                            // position; do not permit another step to replay that work.
+                            failed = true
+                            code: abi.step(handle)
+                            if(code == abi.SQLITE_ROW) {
+                                failed = false
+                                rowAvailable = true
+                            }
+                            if(code == abi.SQLITE_DONE) {
+                                failed = false
+                                finished = true
+                            }
+                            if(failed) { failure("step", code).signal() }
+                        }
+                        rowAvailable
+                    }
+                    column: (index) => {
+                        usable()
+                        if(!rowAvailable) { Error().signal() }
+                        Integer.recognizes(index).ifFalse(() => Error().signal())
+                        count: abi.columnCount(handle)
+                        if((index < 0) || (index >= count)) { Error().signal() }
+                        kind: abi.columnType(handle, index)
+                        value: null
+                        known: false
+                        if(kind == abi.SQLITE_INTEGER) {
+                            value = abi.columnInteger(handle, index)
+                            known = true
+                        }
+                        if(kind == abi.SQLITE_FLOAT) {
+                            value = abi.columnFloat(handle, index)
+                            known = true
+                        }
+                        if(kind == abi.SQLITE_NULL) { known = true }
+                        if((kind == abi.SQLITE_TEXT) || (kind == abi.SQLITE_BLOB)) {
+                            value = abi.copyColumn(native, handle, index, kind == abi.SQLITE_TEXT,
+                                (code) => failure("column", code))
+                            known = true
+                        }
+                        if(!known) { failure("column", kind).signal() }
+                        value
+                    }
+                    row: () => {
+                        usable()
+                        if(!rowAvailable) { Error().signal() }
+                        count: abi.columnCount(handle)
+                        result: Array()
+                        index: 0
+                        while(index < count) {
+                            result = Arrays.append(result, column(index))
+                            index = index + 1
+                        }
+                        result
+                    }
+                    statement = {
+                        /// Binds an Integer, Float or null at SQLite's one-based index.
+                        bind: bind
+                        /// Synchronously advances; true means row, false means done.
+                        step: step
+                        /// Copies a zero-based current column into ordinary Protos data.
+                        column: column
+                        /// Copies all current columns into a fresh ordinary Array.
+                        row: row
+                        /// Invokes an ordinary callback only after the complete row is copied.
+                        each: (callback) => {
+                            while(step()) { callback(row()) }
+                            statement
+                        }
+                        /// Retires once; each call answers a fresh terminal standard Future.
+                        close: close
+                    }
+                    children = Arrays.append(children, close)
+                    admitted = true
+                }
+                statement
+            }).ensure(() => {
+                if(!admitted) { discard(handle) }
+            })
+        }
+        connection = {
+            /// Prepares one semicolon-free SQL statement; blank/comment SQL yields null.
+            prepare: prepare
+            /// Closes every child and then the database, preserving the first failure.
+            close: () => {
+                if(!closing && !terminal.closeAllowed()) {
+                    terminal.failed(IOLifecycleError())
+                } else {
+                    if(!closing) {
+                        closing = true
+                        // Iterate a snapshot: child close unregisters itself.
+                        for(child in Array(...children)) {
+                            Error.handle(() => child().value(), (error) => {
+                                if(closeError === null) { closeError = error }
+                            })
+                        }
+                        retired: native
+                        native = null
+                        parentError: retire(retired, "close")
+                        if(closeError === null) { closeError = parentError }
+                    }
+                    observe(connection, closeError)
+                }
+            }
+        }
+        published = true
+        connection
+    }).ensure(() => {
+        if(!published) { discard(native) }
+    })
+}

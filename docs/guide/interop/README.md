@@ -14,6 +14,8 @@ tutorial. The surfaces and guides are:
 
 - **Public API:** [`std:ffi`](../library/ffi.md), ordinary Protos descriptors,
   Closures, output Arrays and owned resources (LIB028).
+- **SQLite library:** [`std:sqlite`](../library/sqlite.md), ordinary Protos
+  connections, numeric/NULL bindings, copied rows and Closable lifecycle (LIB029).
 - **Generic backend:** the separately built external I144 `ffi:` provider;
   its private operations are documented in the [FFM provider guide](ffm-provider.md).
 - **General foreign operations:** [`std:interop`](../library/interop.md),

@@ -1,0 +1,81 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// LIB029: public API; run only with the explicitly authorized real provider.
+Assertions: import("std:test/assertions")
+SQLite: import("std:sqlite")
+ordinary: (body) => Assertions.signals(Error, body)
+db: SQLite.openMemory()
+(() => {
+    Assertions.require(db.prepare("") === null)
+    Assertions.require(db.prepare("  \n\t ") === null)
+    Assertions.require(db.prepare(" \n-- only a comment\n/* still empty */") === null)
+    for(sql in Array("SELECT 1; SELECT 2", "SELECT 1;", "SELECT ';'", "SELECT 1 -- ;", "SELECT 1\u{0}SELECT 2")) {
+        ordinary(() => db.prepare(sql))
+    }
+    ordinary(() => db.prepare(42))
+    Assertions.signals(SQLite.SQLiteError, () => db.prepare("SELECT FROM"))
+    create: db.prepare("CREATE TABLE numbers (n INTEGER, f REAL, missing)")
+    Assertions.require(create.step() === false)
+    Assertions.require(create.step() === false)
+    create.close().value()
+    insert: db.prepare("INSERT INTO numbers VALUES (?1, ?2, ?3)")
+    (() => {
+        for(index in Array(0, -1, 1.0, 2147483648, "1")) {
+            ordinary(() => insert.bind(index, 1))
+        }
+        for(value in Array("text", true, 1 / 2, 9223372036854775808, -9223372036854775809)) {
+            ordinary(() => insert.bind(1, value))
+        }
+        Assertions.signals(SQLite.SQLiteError, () => insert.bind(4, 1))
+        insert.bind(1, 42).bind(2, 1.5).bind(3, null)
+        Assertions.require(insert.step() === false)
+    }).ensure(() => insert.close().value())
+    query: db.prepare("SELECT n, f, missing, 'caf\u{E9}' AS \"quoted name\" FROM numbers /* comment */ -- tail")
+    (() => {
+        ordinary(() => query.row())
+        ordinary(() => query.column(0))
+        Assertions.require(query.step() === true)
+        row: query.row()
+        Assertions.require(row.size() == 4)
+        Assertions.require(Integer.recognizes(row[0]) && (row[0] == 42))
+        Assertions.require(Float.recognizes(row[1]) && (row[1] == 1.5))
+        Assertions.require(row[2] === null)
+        Assertions.require(row[3] == "caf\u{E9}")
+        for(index in Array(-1, 4, 0.0, null)) { ordinary(() => query.column(index)) }
+        ordinary(() => query.bind(1, 2))
+        Assertions.require(query.step() === false)
+        ordinary(() => query.row())
+        ordinary(() => query.column(0))
+        Assertions.require(row[0] == 42)
+    }).ensure(() => query.close().value())
+    endpoints: db.prepare("SELECT ?1, ?2")
+    (() => {
+        endpoints.bind(1, -9223372036854775808).bind(2, 9223372036854775807)
+        Assertions.require(endpoints.step())
+        Assertions.require(endpoints.column(0) == -9223372036854775808)
+        Assertions.require(endpoints.column(1) == 9223372036854775807)
+    }).ensure(() => endpoints.close().value())
+    // SQLITE_ERROR at step (integer overflow), distinct from DONE.
+    broken: db.prepare("SELECT abs(-9223372036854775808)")
+    Assertions.signals(SQLite.SQLiteError, () => broken.step())
+    ordinary(() => broken.step())
+    first: broken.close()
+    firstError: Assertions.signals(SQLite.SQLiteError, () => first.value())
+    second: broken.close()
+    Assertions.require(first !== second)
+    Assertions.require(Assertions.signals(SQLite.SQLiteError, () => second.value()) === firstError)
+}).ensure(() => db.close().value())
+print("LIB029-QUERY-PASS")

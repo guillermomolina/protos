@@ -126,13 +126,16 @@ an explicitly injected test Bytes key, an explicit Instant, structured JSON
 claims and HS256 issue/verify. Authentication does not itself grant account
 permissions. See the [strict JWT guide](../../docs/guide/library/jwt.md).
 
-Two lessons use the optional external FFM provider (I144) and the shared SQLite
+Three lessons use the optional external FFM provider (I144) and the shared SQLite
 library:
 [`08-language-interactions/07-ffi-provider-basics.protos`](08-language-interactions/07-ffi-provider-basics.protos)
 (importing `ffi:sqlite3`, building signatures, scalar C calls, C results as
 data, pre-entry rejection) and
 [`12-system-resources/04-ffi-ownership-and-borrows.protos`](12-system-resources/04-ffi-ownership-and-borrows.protos)
-(owned handles, `out` parameters, borrowed memory, release order). Both need
+(owned handles, `out` parameters, borrowed memory, release order), followed by
+[`12-system-resources/05-sqlite-protos-first.protos`](12-system-resources/05-sqlite-protos-first.protos)
+(public `std:sqlite`, numeric/NULL binding, copied rows and Closable cleanup).
+All three need
 the provider JAR authorized explicitly with
 `bin/protos --foreign-provider-path <protos-ffm-provider.jar> <file>`, on
 Linux x86-64 with JDK 25. They validate with assertions and contain no `print`

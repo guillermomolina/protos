@@ -1,0 +1,88 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// LIB029: exact copies, strict text, empty BLOB and row lifetime.
+Assertions: import("std:test/assertions")
+SQLite: import("std:sqlite")
+// Define the visitor at module scope: its invocation owns the return home.
+// A visitor captured by the test body would return from that entire body and
+// could skip the assertion that is meant to check the non-local return.
+visit: (db) => {
+    local: db.prepare("SELECT 7 UNION ALL SELECT 8")
+    (() => { local.each((row) => { ^row[0] }) }).ensure(() => local.close().value())
+    0
+}
+db: SQLite.openMemory()
+(() => {
+    query: db.prepare("SELECT '', x'', x'0061ff00', CAST(x'610062' AS TEXT), '\u{1F642}', NULL UNION ALL SELECT 'later', x'01', x'02', 'later', 'later', NULL")
+    (() => {
+        Assertions.require(query.step())
+        first: query.row()
+        Assertions.require(first[0] == "")
+        Assertions.require(first[1] !== null)
+        Assertions.require(first[1].size() == 0)
+        Assertions.require(first[2].size() == 4)
+        Assertions.require((first[2][0] == 0) && (first[2][2] == 255) && (first[2][3] == 0))
+        Assertions.require(first[3] == "a\u{0}b")
+        Assertions.require(first[4] == "\u{1F642}")
+        Assertions.require(first[5] === null)
+        copy: query.row()
+        Assertions.require(copy !== first)
+        Assertions.require(copy[2] !== first[2])
+        copy[2][0] = 99
+        Assertions.require(first[2][0] == 0)
+        Assertions.require(query.step())
+        Assertions.require(query.column(0) == "later")
+        Assertions.require(query.step() === false)
+        Assertions.require(first[3] == "a\u{0}b")
+        Assertions.require(first[2][2] == 255)
+    }).ensure(() => query.close().value())
+    invalid: db.prepare("SELECT CAST(x'80' AS TEXT)")
+    (() => {
+        Assertions.require(invalid.step())
+        Assertions.signals(Error, () => invalid.row())
+    }).ensure(() => invalid.close().value())
+    bom: db.prepare("SELECT CAST(x'efbbbf61' AS TEXT), CAST(x'efbbbfefbbbf' AS TEXT)")
+    (() => {
+        Assertions.require(bom.step())
+        Assertions.require(bom.column(0) == "\u{FEFF}a")
+        Assertions.require(bom.column(1) == "\u{FEFF}\u{FEFF}")
+    }).ensure(() => bom.close().value())
+    oversized: db.prepare("SELECT zeroblob(16777217)")
+    (() => {
+        Assertions.require(oversized.step())
+        Assertions.signals(SQLite.SQLiteError, () => oversized.row())
+    }).ensure(() => oversized.close().value())
+    rows: db.prepare("SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3")
+    sum: 0
+    (() => {
+        rows.each((row) => { sum = sum + row[0] })
+        Assertions.require(sum == 6)
+    }).ensure(() => rows.close().value())
+    callback: db.prepare("SELECT x'00ff' UNION ALL SELECT x'01'")
+    held: null
+    failure: Error()
+    (() => {
+        observed: Assertions.signals(Error, () => callback.each((row) => {
+            held = row
+            failure.signal()
+        }))
+        Assertions.require(observed === failure)
+        Assertions.require(callback.step())
+        Assertions.require(held[0][1] == 255)
+    }).ensure(() => callback.close().value())
+    Assertions.require(visit(db) == 7)
+}).ensure(() => db.close().value())
+print("LIB029-ROWS-PASS")

@@ -1,0 +1,111 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Deterministic private-adapter lifetime/order and NULL/allocation failures.
+// The production Borrowed source is loaded by ProtosLib029SqliteLifecycleTest.
+Assertions: import("std:test/assertions")
+data: Array()
+reported: 0
+nullPointer: false
+errorCode: 0
+phase: 0
+copies: 0
+region: {}
+library: {
+    i32: {}
+    borrowed: {}
+    opaque: (name) => name
+    signature: (returns) => {
+        { preserves: false }
+    }
+    param: (signature, parameter) => signature
+    preserving: (signature) => {
+        signature.preserves = true
+        signature
+    }
+    bind: (symbol, signature) => {
+        if((symbol == "sqlite3_column_text") || (symbol == "sqlite3_column_blob")) {
+            Assertions.require(signature.preserves === false)
+            ^(statement, index) => {
+                phase = 1
+                if(nullPointer) { null } else { region }
+            }
+        }
+        if(symbol == "sqlite3_column_bytes") {
+            Assertions.require(signature.preserves)
+            ^(statement, index) => {
+                Assertions.require(phase == 1)
+                phase = 2
+                reported
+            }
+        }
+        Assertions.require(symbol == "sqlite3_errcode")
+        Assertions.require(signature.preserves)
+        (connection) => {
+            Assertions.require(phase == 1)
+            errorCode
+        }
+    }
+    copy: (pointer, count) => {
+        Assertions.require(phase == 2)
+        Assertions.require(pointer === region)
+        Assertions.require(count == data.size())
+        copies = copies + 1
+        phase = 3
+        Array(...data)
+    }
+}
+read: columnReader(library)
+fault: Error()
+fail: (code) => fault
+configure: (bytes, isNull, length, code) => {
+    data = bytes
+    nullPointer = isNull
+    reported = length
+    errorCode = code
+    phase = 0
+}
+configure(Array(97, 0, 98), false, 3, 0)
+Assertions.require(read(null, null, 0, true, fail) == "a\u{0}b")
+configure(Array(0, 255), false, 2, 0)
+blob: read(null, null, 0, false, fail)
+Assertions.require((blob[0] == 0) && (blob[1] == 255))
+configure(Array(), true, 0, 0)
+empty: read(null, null, 0, false, fail)
+Assertions.require((empty !== null) && (empty.size() == 0))
+Assertions.require(blob[1] == 255)
+before: copies
+// NULL TEXT is a failed conversion, including SQLite's zero-length OOM case.
+for(code in Array(0, 7)) {
+    configure(Array(), true, 0, code)
+    Assertions.require(Assertions.signals(Error, () => read(null, null, 0, true, fail)) === fault)
+}
+// NULL empty BLOB is accepted only with a non-error connection status.
+configure(Array(), true, 0, 7)
+Assertions.require(Assertions.signals(Error, () => read(null, null, 0, false, fail)) === fault)
+configure(Array(), true, 2, 0)
+Assertions.require(Assertions.signals(Error, () => read(null, null, 0, false, fail)) === fault)
+for(size in Array(-1, 16777217)) {
+    configure(Array(), false, size, 0)
+    Assertions.require(Assertions.signals(Error, () => read(null, null, 0, false, fail)) === fault)
+}
+Assertions.require(copies == before)
+configure(Array(128), false, 1, 0)
+Assertions.signals(Error, () => read(null, null, 0, true, fail))
+
+configure(Array(239, 187, 191, 97), false, 4, 0)
+Assertions.require(read(null, null, 0, true, fail) == "\u{FEFF}a")
+configure(Array(239, 187, 191, 239, 187, 191), false, 6, 0)
+Assertions.require(read(null, null, 0, true, fail) == "\u{FEFF}\u{FEFF}")

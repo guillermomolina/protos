@@ -49,6 +49,10 @@ retained low-level examples, but it is not the recommended application API.
 
 Next steps:
 
+- the [Protos-first SQLite library](../../docs/guide/library/sqlite.md) and its
+  [public example](../../protos/examples/ffi/sqlite-library.protos):
+  `std:sqlite` owns connections, statements, numeric binds and copied rows;
+
 - tutorials [`07-ffi-provider-basics.protos`](../../protos/tutorials/08-language-interactions/07-ffi-provider-basics.protos)
   (signatures, scalar calls, pre-entry validation) and
   [`04-ffi-ownership-and-borrows.protos`](../../protos/tutorials/12-system-resources/04-ffi-ownership-and-borrows.protos)
@@ -201,8 +205,10 @@ payload never contains host objects, addresses, paths, or stacks.
 call's own arena and is gone when the call returns. It is therefore never a
 borrowed region: the tests receive it only as a private nullable opaque type
 that no other declaration accepts, and never read or pass it on.
-Interpreting the remaining SQL is LIB029's, which must copy it while `zSql`
-is still alive.
+LIB029 passes NULL for `pzTail` and rejects every semicolon-containing SQL
+String before native entry. It never dereferences expired input storage, adds
+pointer arithmetic or silently discards a second statement. See the
+[admitted SQL subset](../../docs/guide/library/sqlite.md#sql-admission).
 
 ## `sqlite3_open_v2` and `zVfs`
 

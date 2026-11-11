@@ -1,0 +1,72 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Narrow SQLite borrowed-column adaptation. No public std:ffi extension.
+UTF8: import("std:text/utf8")
+
+columnReader: (library) => {
+    statement: library.opaque("sqlite3_stmt")
+    database: library.opaque("sqlite3")
+    declare: (symbol, returns, parameters, preserving) => {
+        signature: library.signature(returns)
+        for(parameter in parameters) {
+            signature = library.param(signature, parameter)
+        }
+        if(preserving) { signature = library.preserving(signature) }
+        library.bind(symbol, signature)
+    }
+    text: declare("sqlite3_column_text", library.borrowed, Array(statement, library.i32), false)
+    blob: declare("sqlite3_column_blob", library.borrowed, Array(statement, library.i32), false)
+    length: declare("sqlite3_column_bytes", library.i32, Array(statement, library.i32), true)
+    status: declare("sqlite3_errcode", library.i32, Array(database), true)
+    (connection, handle, index, isText, failure) => {
+        region: null
+        if(isText) { region = text(handle, index) } else { region = blob(handle, index) }
+        // SQLite requires errcode immediately after a suspect NULL accessor,
+        // before another SQLite interface (including column_bytes) is called.
+        // errcode preserves both the SQLite storage and the provider epoch.
+        if(region === null) {
+            code: status(connection)
+            if(isText || (((code != 0) && (code != 100)) && (code != 101))) {
+                failure(code).signal()
+            }
+        }
+        count: length(handle, index)
+        if((count < 0) || (count > 16777216)) { failure(0).signal() }
+        if((region === null) && (count != 0)) { failure(0).signal() }
+        bytes: UTF8.encode("")
+        if(region !== null) {
+            copied: library.copy(region, count)
+            position: 0
+            while(position < count) {
+                bytes.add(copied[position])
+                position = position + 1
+            }
+        }
+        // Strict UTF-8 failure retains the standard Encoding error semantics.
+        if(isText) {
+            decoded: UTF8.decode(bytes)
+            // The standard decoder consumes an initial BOM. In a SQLite TEXT
+            // value U+FEFF is stored content, so restore that scalar after the
+            // existing strict decoder has validated the complete byte sequence.
+            if(count >= 3) {
+                if(((bytes[0] == 239) && (bytes[1] == 187)) && (bytes[2] == 191)) {
+                    decoded = "\u{FEFF}" + decoded
+                }
+            }
+            decoded
+        } else { bytes }
+    }
+}

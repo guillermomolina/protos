@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
@@ -125,6 +126,31 @@ public final class ProtosHttpAsyncFacility {
         operation(facility, "startService", 1, ProtosHttpAsyncFacility::startService);
         operation(facility, "enterService", 0, ProtosHttpAsyncFacility::enterService);
         return facility.freeze();
+    }
+
+    /**
+     * Reuses terminal Future construction and D121 admission for source-owned synchronous
+     * lifecycles. No service Task, native resource, authority or library policy is introduced.
+     * The caller must perform its first-close cutover and complete release without suspension;
+     * an admitted parent close owns its dependent release sequence.
+     */
+    static ProtosObjectValue createTerminalFacility() {
+        ProtosObjectValue facility = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        operation(facility, "failed", 1, ProtosHttpAsyncFacility::failed);
+        operation(facility, "resolved", 1, ProtosHttpAsyncFacility::resolved);
+        operation(facility, "closeAllowed", 0, ProtosHttpAsyncFacility::closeAllowed);
+        return facility.freeze();
+    }
+
+    /** D121 provenance check for a first, non-suspending source close. */
+    private static Object closeAllowed(ProtosActivation activation, List<?> supplied) {
+        ProtosActor actor = activation.executionDomain().currentActorForRuntime().orElse(null);
+        if (actor == null) return ProtosBooleanValue.TRUE;
+        return bool(switch (actor.lifecycleState()) {
+            case INITIALIZING, READY -> true;
+            case TERMINATING -> activation.terminationCleanupAuthorizedForRuntime();
+            case TERMINATED -> false;
+        });
     }
 
     private static void operation(

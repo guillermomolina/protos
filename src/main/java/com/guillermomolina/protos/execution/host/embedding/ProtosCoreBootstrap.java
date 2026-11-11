@@ -702,6 +702,12 @@ public final class ProtosCoreBootstrap {
                         Map.of(
                                 ProtosInspectFacility.BOOTSTRAP_SLOT,
                                 ProtosInspectFacility::createFacility)),
+                // LIB029: generic synchronous lifecycle support; SQLite policy stays in Protos.
+                Map.entry(
+                        ProtosModuleKey.module("std:sqlite"),
+                        Map.of(
+                                "_terminalFutureFacility",
+                                ProtosHttpAsyncFacility::createTerminalFacility)),
                 // LIB025: the private asynchronous bridge of std:http/server.
                 Map.entry(
                         ProtosHttpAsyncFacility.MODULE_KEY,

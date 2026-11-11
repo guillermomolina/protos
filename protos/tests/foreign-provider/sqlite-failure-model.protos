@@ -1,0 +1,234 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Deterministic ABI double. The Java host supplies only the existing generic
+// terminal-Future facility and evaluates the production Resources source.
+// No C implementation or SQLite-specific Java backend is substituted.
+Assertions: import("std:test/assertions")
+SQLiteError: Error {}
+model: () => {
+    dbToken: {}
+    statementTokens: Array()
+    releases: Array()
+    openCode: 0
+    openNull: false
+    prepareCode: 0
+    prepareNull: false
+    releaseCodes: IdentityMap()
+    releaseErrors: IdentityMap()
+    abi: {
+        SQLITE_OK: 0
+        SQLITE_ROW: 100
+        SQLITE_DONE: 101
+        SQLITE_OPEN_READWRITE: 2
+        SQLITE_OPEN_CREATE: 4
+        SQLITE_OPEN_MEMORY: 128
+        open: (name, flags, vfs) => {
+            Assertions.require(name == ":memory:")
+            Assertions.require(flags == 134)
+            Assertions.require(vfs === null)
+            token: dbToken
+            if(openNull) { token = null }
+            Array(openCode, token)
+        }
+        prepare: (db, sql, length, tail) => {
+            Assertions.require(db === dbToken)
+            Assertions.require(length == -1)
+            Assertions.require(tail === null)
+            token: null
+            if(!prepareNull) {
+                token = {}
+                statementTokens = Array(...statementTokens, token)
+            }
+            Array(prepareCode, token)
+        }
+        release: (token) => {
+            // Fail immediately if the wrapper retries any destructor.
+            for(previous in releases) { Assertions.require(previous !== token) }
+            releases = Array(...releases, token)
+            if(releaseErrors.containsKey(token)) { releaseErrors.at(token).signal() }
+            result: 0
+            if(releaseCodes.containsKey(token)) { result = releaseCodes.at(token) }
+            result
+        }
+    }
+    {
+        abi: abi
+        database: dbToken
+        statements: () => statementTokens
+        releases: () => releases
+        openResult: (code, isNull) => {
+            openCode = code
+            openNull = isNull
+        }
+        prepareResult: (code, isNull) => {
+            prepareCode = code
+            prepareNull = isNull
+        }
+        failRelease: (token, code) => { releaseCodes[token] = code }
+        signalRelease: (token, error) => { releaseErrors[token] = error }
+    }
+}
+// Failure with a live output: one release, no published Connection, even if
+// release itself fails. The original open status remains the primary error.
+failed: model()
+failed.openResult(14, false)
+failed.failRelease(failed.database, 7)
+published: null
+primary: Assertions.signals(SQLiteError, () => {
+    published = openMemory(failed.abi, terminal, SQLiteError)
+})
+Assertions.require(published === null)
+Assertions.require((primary.operation == "open") && (primary.code == 14))
+Assertions.require(failed.releases().size() == 1)
+for(code in Array(0, 14)) {
+    none: model()
+    none.openResult(code, true)
+    Assertions.signals(SQLiteError, () => openMemory(none.abi, terminal, SQLiteError))
+    Assertions.require(none.releases().size() == 0)
+}
+// Failed prepare with a non-null output must retire it, not publish it.
+preparing: model()
+db: openMemory(preparing.abi, terminal, SQLiteError)
+preparing.prepareResult(1, false)
+prepared: null
+Assertions.signals(SQLiteError, () => { prepared = db.prepare("invalid") })
+Assertions.require(prepared === null)
+Assertions.require(preparing.releases()[0] === preparing.statements()[0])
+preparing.prepareResult(0, true)
+Assertions.require(db.prepare("-- empty") === null)
+Assertions.require(preparing.releases().size() == 1)
+db.close().value()
+Assertions.require(preparing.releases().size() == 2)
+// All children are finalized before close_v2, even after two failures. The
+// first exact Error survives repeated close observations and cancellation.
+cleanup: model()
+connection: openMemory(cleanup.abi, terminal, SQLiteError)
+first: connection.prepare("one")
+second: connection.prepare("two")
+firstToken: cleanup.statements()[0]
+secondToken: cleanup.statements()[1]
+backendError: ForeignError()
+cleanup.signalRelease(firstToken, backendError)
+cleanup.failRelease(secondToken, 19)
+cleanup.failRelease(cleanup.database, 5)
+closing: connection.close()
+closing.cancel()
+Assertions.require(Assertions.signals(Error, () => closing.value()) === backendError)
+Assertions.require(cleanup.releases().size() == 3)
+Assertions.require(cleanup.releases()[0] === firstToken)
+Assertions.require(cleanup.releases()[1] === secondToken)
+Assertions.require(cleanup.releases()[2] === cleanup.database)
+again: connection.close()
+Assertions.require(again !== closing)
+Assertions.require(Assertions.signals(Error, () => again.value()) === backendError)
+Assertions.require(Assertions.signals(Error, () => first.close().value()) === backendError)
+Assertions.signals(SQLiteError, () => second.close().value())
+Assertions.require(cleanup.releases().size() == 3)
+Assertions.signals(IOLifecycleError, () => connection.prepare("later"))
+Assertions.signals(IOLifecycleError, () => first.step())
+// Native C-error finalization is retired once; repeated Future observations
+// preserve the first wrapper Error identity, not only the numeric status.
+finalizing: model()
+parent: openMemory(finalizing.abi, terminal, SQLiteError)
+child: parent.prepare("one")
+finalizing.failRelease(finalizing.statements()[0], 19)
+a: child.close()
+error: Assertions.signals(SQLiteError, () => a.value())
+b: child.close()
+Assertions.require(a !== b)
+Assertions.require(Assertions.signals(SQLiteError, () => b.value()) === error)
+Assertions.require(finalizing.releases().size() == 1)
+parent.close().value()
+Assertions.require(finalizing.releases().size() == 2)
+
+// An Error after successful native prepare but before registration/publication
+// must release that output and preserve the construction Error.
+registration: model()
+registrationParent: openMemory(registration.abi, terminal, SQLiteError)
+registrationError: Error()
+savedAppend: Arrays.append
+Arrays.append = (array, value) => registrationError.signal()
+(() => {
+    Assertions.require(Assertions.signals(Error,
+        () => registrationParent.prepare("one")) === registrationError)
+}).ensure(() => { Arrays.append = savedAppend })
+Assertions.require(registration.releases().size() == 1)
+Assertions.require(registration.releases()[0] === registration.statements()[0])
+registrationParent.close().value()
+Assertions.require(registration.releases().size() == 2)
+
+// A failing unregistration cannot skip finalize. If both fail, the native
+// release Error is already established and remains primary. Parent close must
+// still retire the next child and its database, with no second finalize.
+unregistration: model()
+unregistrationParent: openMemory(unregistration.abi, terminal, SQLiteError)
+unregistrationFirst: unregistrationParent.prepare("one")
+unregistrationSecond: unregistrationParent.prepare("two")
+unregistration.failRelease(unregistration.statements()[0], 19)
+unregistrationError: Error()
+savedFilter: Arrays.filter
+unregistrationOutcome: null
+Arrays.filter = (array, predicate) => unregistrationError.signal()
+(() => {
+    unregistrationOutcome = unregistrationFirst.close()
+}).ensure(() => { Arrays.filter = savedFilter })
+unregistrationPrimary: Assertions.signals(SQLiteError, () => unregistrationOutcome.value())
+Assertions.require(unregistrationPrimary.code == 19)
+Assertions.require(unregistration.releases().size() == 1)
+Assertions.require(Assertions.signals(SQLiteError,
+    () => unregistrationFirst.close().value()) === unregistrationPrimary)
+Assertions.require(Assertions.signals(SQLiteError,
+    () => unregistrationParent.close().value()) === unregistrationPrimary)
+Assertions.require(unregistration.releases().size() == 3)
+Assertions.require(unregistration.releases()[0] === unregistration.statements()[0])
+Assertions.require(unregistration.releases()[1] === unregistration.statements()[1])
+Assertions.require(unregistration.releases()[2] === unregistration.database)
+Assertions.require(unregistrationSecond.close().value() === unregistrationSecond)
+Assertions.require(unregistration.releases().size() == 3)
+
+// Admission refusal precedes close cutover and every native release. A parent
+// admitted before a later cutover still owns its entire dependent cleanup.
+// This models the source-side admission protocol; Actor state/provenance is
+// checked by the generic runtime facility, not simulated as native behavior.
+allowed: false
+gateChecks: 0
+gatedTerminal: {
+    closeAllowed: () => {
+        gateChecks = gateChecks + 1
+        result: allowed
+        allowed = false
+        result
+    }
+    resolved: (value) => terminal.resolved(value)
+    failed: (error) => terminal.failed(error)
+}
+admission: model()
+admissionParent: openMemory(admission.abi, gatedTerminal, SQLiteError)
+admissionChild: admissionParent.prepare("one")
+Assertions.signals(IOLifecycleError, () => admissionChild.close().value())
+Assertions.signals(IOLifecycleError, () => admissionParent.close().value())
+Assertions.require(admission.releases().size() == 0)
+Assertions.require(gateChecks == 2)
+allowed = true
+Assertions.require(admissionParent.close().value() === admissionParent)
+Assertions.require(gateChecks == 3)
+Assertions.require(admission.releases().size() == 2)
+Assertions.require(admission.releases()[0] === admission.statements()[0])
+Assertions.require(admission.releases()[1] === admission.database)
+Assertions.require(admissionChild.close().value() === admissionChild)
+Assertions.require(admissionParent.close().value() === admissionParent)
+Assertions.require(gateChecks == 3)
+Assertions.require(admission.releases().size() == 2)

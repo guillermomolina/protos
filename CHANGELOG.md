@@ -7,6 +7,19 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.462-SNAPSHOT
+
+- `LIB029-S1` (D238-B1-SQL-R1): add the Protos-first `std:sqlite` in-memory
+  Connection/Statement API over `std:ffi`, with numeric/NULL binding,
+  semicolon-free single-statement admission, strict copied TEXT/BLOB rows,
+  ordinary callbacks and idempotent Closable cleanup. Reuse only the generic
+  terminal-Future bridge in Java; SQLite policy and ABI declarations are Protos.
+  Add native-provider acceptance cases, deterministic Protos failure fixtures,
+  an example, a tutorial and focused library documentation. The maintainer
+  reports `make check` PASS, `make test` PASS, focused Java tests PASS and
+  34/34 PASS in the complete external foreign-provider integration, including
+  the LIB029 real SQLite cases.
+
 ## 0.3.461-SNAPSHOT
 
 - `LIB028-S1` (D238-B1-SQL-R1): implement the Protos-first `std:ffi` R1 API

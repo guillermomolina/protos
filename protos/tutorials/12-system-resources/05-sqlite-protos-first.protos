@@ -1,0 +1,44 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// The host explicitly authorizes the external FFM provider and ffi:sqlite3.
+// std:ffi supplies reusable declarations and owned release; std:sqlite owns
+// SQL validation, connections, statements, rows, error handling and cleanup.
+// :memory: acquires no Protos Filesystem grant. The trusted in-process C
+// library still has process authority: this is not a native-code sandbox.
+// Numeric/NULL input binds are supported; TEXT/BLOB inputs await a separately
+// approved native lifetime policy. SQL must contain no semicolon or NUL.
+Assertions: import("std:test/assertions")
+SQLite: import("std:sqlite")
+db: SQLite.openMemory()
+(() => {
+    statement: db.prepare("SELECT ?1, ?2, ?3, 'copied text', x'00ff'")
+    (() => {
+        statement.bind(1, 42).bind(2, 2.5).bind(3, null)
+        held: null
+        statement.each((row) => {
+            // No borrowed pointer survives into this ordinary Protos callback.
+            // The complete row is independent before the callback starts.
+            held = row
+        })
+        Assertions.require(held[0] == 42)
+        Assertions.require(held[1] == 2.5)
+        Assertions.require(held[2] === null)
+        Assertions.require(held[3] == "copied text")
+        Assertions.require(held[4][1] == 255)
+    }).ensure(() => statement.close().value())
+    // Statements close before their parent. Closing the connection also
+    // retires any remaining statements; neither native release is retried.
+}).ensure(() => db.close().value())
