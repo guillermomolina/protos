@@ -159,6 +159,22 @@ lesson. These latter two programs require the
 authorized provider JAR and are run by the FFM harness, not the ordinary
 provider-free tutorial sweep.
 
+The public SQLite path builds on `std:sqlite` and is distinct from both the
+private I144 provider lessons (`07-ffi-provider-basics`,
+`04-ffi-ownership-and-borrows`) and the DOC023 public `std:ffi` lessons
+above. The LIB029 introduction
+[`05-sqlite-protos-first.protos`](12-system-resources/05-sqlite-protos-first.protos)
+shows one prepared query with copied rows. The DOC024 practical lesson
+[`06-sqlite-query-lifecycle.protos`](12-system-resources/06-sqlite-query-lifecycle.protos)
+introduces no new API: it combines the same operations into a table, numeric
+inserts with fresh Statements, ordered `each` traversal, bounded error cases
+and Statement/Connection close semantics. Both require explicit provider
+authorization (`bin/protos --foreign-provider-path <protos-ffm-provider.jar> <file>`),
+contain no `print` call, and are run by
+`dist/test_external_foreign_providers.py` rather than the ordinary
+provider-free tutorial sweep. See the
+[SQLite guide](../../docs/guide/library/sqlite.md).
+
 After the HTTP progression, the next advanced workflow reaches real hosts and
 is not a tutorial: the manual cookbook examples
 [`http-url-client.protos`](../examples/io/http-url-client.protos) (one HTTPS

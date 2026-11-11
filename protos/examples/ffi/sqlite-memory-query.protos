@@ -17,9 +17,11 @@
 // provider (I144). Every C function is declared below in Protos; the provider
 // contains no SQLite-specific Java.
 //
-// This is a demonstration of the low-level provider operations, not a
-// SQLite library: a real application should prefer the future LIB029
-// library (connections, statements, transactions) once it exists.
+// This remains a low-level private-provider exercise from I144, not a
+// SQLite library. The public std:sqlite library (LIB029) is now implemented,
+// and ordinary applications should use it instead (docs/guide/library/
+// sqlite.md). This sample stays useful for studying FFM ABI declarations
+// and borrowed-memory copying.
 //
 //   bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
 //       protos/examples/ffi/sqlite-memory-query.protos

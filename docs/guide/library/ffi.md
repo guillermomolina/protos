@@ -238,8 +238,12 @@ that private contract is not an application API.
 
 R1 also does not expose a SQLite connection abstraction, TEXT/BLOB input
 binding, callbacks, structs, variadic calls, C++, arbitrary allocators or
-`SQLITE_TRANSIENT`. An idiomatic SQLite library is separate work and is not
-available here.
+`SQLITE_TRANSIENT`. Public `std:ffi` itself has no SQLite Connection or
+Statement objects. Those abstractions are implemented separately in ordinary
+Protos by LIB029 as [`std:sqlite`](sqlite.md), which application developers
+should use for SQLite. Its SQLite-specific borrowed-memory adaptation remains
+private to that library: it adds no public `FFI.copy`, `FFI.borrowed` or
+`FFI.preserving`, and TEXT/BLOB input binding remains unsupported there too.
 
 ## Security and limits
 

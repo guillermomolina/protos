@@ -302,7 +302,8 @@ Assertions.require(sqlite.release(connection) == 0)  // sqlite3_close_v2
 
 Release dependants before what they depend on: finalize statements before
 closing their connection. This is a low-level sequence of C calls, not a
-connection library; LIB029 will provide that.
+connection library; LIB029 now provides that as
+[`std:sqlite`](../library/sqlite.md).
 
 `borrowed`, `preserving` and `copy` are private I144 provider machinery, not
 public `std:ffi` operations. The existing public examples deliberately avoid
@@ -384,7 +385,8 @@ prepared: prepare(connection, "SELECT 1", -1, null)
 ```
 
 Do not declare it as `out(borrowed)` or as an opaque `out`. Recovering the
-remaining SQL belongs to LIB029, which must copy it while `zSql` is alive.
+remaining SQL would have to copy it while `zSql` is alive; LIB029 `std:sqlite`
+instead rejects every semicolon and never reads `pzTail`.
 
 ## Errors
 
@@ -495,21 +497,25 @@ symbol whitelist and none would be an isolation guarantee.
   descriptor values, Array-based signatures, `FFI.bind/opaque/owned/out/release`,
   and construction of final Arrays from provider results, implemented in
   Protos over these provider operations.
-- **LIB029** (SQLite) will provide the idiomatic library: connections,
-  statements, transactions, `Closable` lifecycle, and row projection.
+- **LIB029** (`std:sqlite`) provides the idiomatic in-memory SQLite library
+  in ordinary Protos: connections, statements, numeric/NULL parameters,
+  copied rows and `Closable` lifecycle. It has no transaction abstraction.
+  Application developers should start with the
+  [SQLite guide](../library/sqlite.md) rather than this backend reference.
 
-LIB029 remains separate work. `ffm-public-api.protos` exercises the public
+LIB029 is implemented above LIB028 and this provider; its borrowed-memory
+adaptation is private to `std:sqlite`. `ffm-public-api.protos` exercises the public
 LIB028 layer with the existing I144 fixture host; `ffm-abi.protos` retains
 private backend and borrowed-memory regression coverage. Public R1 has no
 borrowed-memory descriptor or copying operation.
 
-| | I144 (implemented) | LIB028 (implemented) | LIB029 (not yet) |
+| | I144 (implemented) | LIB028 (implemented) | LIB029 (implemented) |
 |---|---|---|---|
 | Owner of | external FFM provider, bounded generic ABI, I085 integration | public `std:ffi` in Protos | idiomatic SQLite library |
 | Declarations | provider-private `signature`/`param`/`bind` | `FFI.bind`, public descriptors, Array signatures | hidden behind the library |
 | Results with `out` | provider-private indexed value | final public Arrays | library values |
 | Resources | owned/borrowed custody, `release`, session/Actor control | public owned/out/release abstractions | connections, statements, `Closable` |
-| SQL | raw C calls, synchronous | — | transactions, parameterized queries, row mapping |
+| SQL | raw C calls, synchronous | — | semicolon-free statements, numeric/NULL parameters, copied rows |
 
 ## Limits
 

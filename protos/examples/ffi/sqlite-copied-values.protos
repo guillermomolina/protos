@@ -1,0 +1,68 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// DOC024 cookbook: read independent SQLite TEXT/BLOB results safely.
+// Host: --foreign-provider-path <protos-ffm-provider.jar>; Linux x86-64 JVM/JDK25.
+// All TEXT/BLOB data comes from SQL literals: std:sqlite binds only Integer,
+// Float and null. Results are copied before the row is published, so no
+// borrowed native memory is ever visible to this program.
+Assertions: import("std:test/assertions")
+SQLite: import("std:sqlite")
+db: SQLite.openMemory()
+first: null
+second: null
+(() => {
+    query: db.prepare("SELECT 'plain', 'caf\u{E9} \u{1F642}', CAST(x'610062' AS TEXT), x'00ff7f', '', x'', NULL UNION ALL SELECT 'second', '', '', x'01', '', x'', NULL")
+    (() => {
+        Assertions.require(query.step())
+        first = query.row()
+        // TEXT becomes an ordinary String, decoded as strict UTF-8.
+        Assertions.require(String.recognizes(first[0]) && (first[0] == "plain"))
+        Assertions.require(first[1] == "caf\u{E9} \u{1F642}")
+        // Embedded NUL survives in returned TEXT.
+        Assertions.require(first[2] == "a\u{0}b")
+        // BLOB becomes fresh Bytes: exact size and octets, including 00 and ff.
+        Assertions.require(!String.recognizes(first[3]))
+        Assertions.require(first[3].size() == 3)
+        Assertions.require((first[3][0] == 0) && (first[3][1] == 255) && (first[3][2] == 127))
+        // Empty TEXT, empty BLOB and SQL NULL stay distinct.
+        Assertions.require(first[4] == "")
+        Assertions.require(first[5] !== null)
+        Assertions.require(first[5].size() == 0)
+        Assertions.require(first[6] === null)
+
+        // Each materialization makes independent mutable Bytes.
+        copy: query.row()
+        Assertions.require(copy[3] !== first[3])
+        copy[3][0] = 99
+        Assertions.require(first[3][0] == 0)
+        Assertions.require(query.column(3)[0] == 0)
+
+        // Advancing does not disturb rows already copied.
+        Assertions.require(query.step())
+        second = query.row()
+        Assertions.require(second[0] == "second")
+        Assertions.require((second[3].size() == 1) && (second[3][0] == 1))
+        Assertions.require(second[6] === null)
+        Assertions.require(query.step() === false)
+        Assertions.require(first[1] == "caf\u{E9} \u{1F642}")
+        Assertions.require(first[3][1] == 255)
+    }).ensure(() => query.close().value())
+}).ensure(() => db.close().value())
+
+// Copied data stays readable after the Statement and Connection are closed.
+Assertions.require(first[2] == "a\u{0}b")
+Assertions.require(first[3][2] == 127)
+Assertions.require(second[0] == "second")

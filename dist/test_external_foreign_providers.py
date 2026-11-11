@@ -85,6 +85,14 @@ LIB029_LEARNING = (
     ("LIB029_EXAMPLE", ROOT / "protos/examples/ffi/sqlite-library.protos"),
     ("LIB029_TUTORIAL", ROOT / "protos/tutorials/12-system-resources/05-sqlite-protos-first.protos"),
 )
+# DOC024 public std:sqlite learning programs: silent, assertion-validated,
+# run from their real paths through the same authorized provider JAR.
+DOC024_LEARNING = (
+    ("DOC024_TUTORIAL_SQLITE_LIFECYCLE",
+     ROOT / "protos/tutorials/12-system-resources/06-sqlite-query-lifecycle.protos"),
+    ("DOC024_EXAMPLE_NUMERIC", ROOT / "protos/examples/ffi/sqlite-prepared-numeric.protos"),
+    ("DOC024_EXAMPLE_COPIED_VALUES", ROOT / "protos/examples/ffi/sqlite-copied-values.protos"),
+)
 SERVICE = "META-INF/services/com.guillermomolina.protos.spi.foreign.ProtosForeignProviderPlugin"
 TRACE = "I085-B-TRACE "
 OPAQUE = "i085b-opaque"
@@ -124,6 +132,7 @@ RESULT_KEYS = (
     "LIB029_MISSING",
     *(key for key, _, _ in LIB029_CASES),
     *(key for key, _ in LIB029_LEARNING),
+    *(key for key, _ in DOC024_LEARNING),
 )
 SQLITE_CANDIDATES = (
     "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0",
@@ -333,7 +342,8 @@ def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
     plan.append(lambda: check_program(runner, "LIB029_MISSING", install, "sqlite-missing.protos",
                                      [], "LIB029-MISSING-PASS", []))
     keys = [key for key in RESULT_KEYS
-            if key.startswith("I144_") or (key.startswith("LIB029_") and key != "LIB029_MISSING")]
+            if key.startswith(("I144_", "DOC024_"))
+            or (key.startswith("LIB029_") and key != "LIB029_MISSING")]
     if not native_supported:
         for key in keys:
             runner.record(key, UNSUPPORTED, native_reason)
@@ -353,7 +363,8 @@ def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
     sqlite = shared_sqlite()
     if sqlite is None:
         for key in ("I144_FFM_SQLITE", "I144_FFM_DENIED", *(key for key, _ in I144_LEARNING),
-                    *(key for key, _, _ in LIB029_CASES), *(key for key, _ in LIB029_LEARNING)):
+                    *(key for key, _, _ in LIB029_CASES), *(key for key, _ in LIB029_LEARNING),
+                    *(key for key, _ in DOC024_LEARNING)):
             runner.record(key, UNSUPPORTED, f"no shared libsqlite3.so.0 in {SQLITE_CANDIDATES}")
     else:
         plan.append(lambda: check_ffm_program(runner, "I144_FFM_SQLITE", install, "ffm-sqlite.protos",
@@ -367,6 +378,9 @@ def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
             plan.append(lambda key=key, program=program, marker=marker: check_ffm_program(
                 runner, key, install, program, provider, marker))
         for key, source in LIB029_LEARNING:
+            plan.append(lambda key=key, source=source: check_ffm_silent(
+                runner, key, install, source, provider))
+        for key, source in DOC024_LEARNING:
             plan.append(lambda key=key, source=source: check_ffm_silent(
                 runner, key, install, source, provider))
 

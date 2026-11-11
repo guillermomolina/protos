@@ -18,8 +18,11 @@
 // but does not depend on running it.
 //
 // This is a low-level walk through the provider-private operations of
-// `ffi:sqlite3`, not a SQLite library: connections, statements, transactions
-// and Closable lifecycles belong to the future LIB029 library.
+// `ffi:sqlite3`, not a SQLite library. Connections, statements and Closable
+// lifecycles are provided by the public std:sqlite library (LIB029), now
+// implemented in ordinary Protos. Applications should use std:sqlite; the
+// provider-private borrowed/preserving/copy machinery taught here stays
+// private and is not part of any public API.
 //
 //   bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
 //       protos/tutorials/12-system-resources/04-ffi-ownership-and-borrows.protos

@@ -12,12 +12,16 @@ This page explains how Protos reaches code that is not Protos source, and what
 is actually usable at the current repository revision. It is a map, not a
 tutorial. The surfaces and guides are:
 
-- **Public API:** [`std:ffi`](../library/ffi.md), ordinary Protos descriptors,
-  Closures, output Arrays and owned resources (LIB028).
-- **SQLite library:** [`std:sqlite`](../library/sqlite.md), ordinary Protos
-  connections, numeric/NULL bindings, copied rows and Closable lifecycle (LIB029).
-- **Generic backend:** the separately built external I144 `ffi:` provider;
-  its private operations are documented in the [FFM provider guide](ffm-provider.md).
+- **Application-level SQLite:** [`std:sqlite`](../library/sqlite.md), ordinary
+  Protos connections, numeric/NULL bindings, copied rows and Closable lifecycle
+  (LIB029). It exposes no native pointers, handles or callbacks. Start with the
+  practical guide and, for example,
+  [`sqlite-prepared-numeric.protos`](../../../protos/examples/ffi/sqlite-prepared-numeric.protos).
+- **Protos-authored C declarations:** [`std:ffi`](../library/ffi.md), ordinary
+  Protos descriptors, Closures, output Arrays and owned resources (LIB028).
+- **Backend implementation and native lifetime details:** the separately built
+  external I144 `ffi:` provider; its private operations are documented in the
+  [FFM provider guide](ffm-provider.md).
 - **General foreign operations:** [`std:interop`](../library/interop.md),
   explicit invocation, construction and member access on foreign values.
 - **Custom providers:** the public I085 SPI, covered by

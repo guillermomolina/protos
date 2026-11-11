@@ -17,8 +17,9 @@
 //
 // `ffi:sqlite3` is served by the external provider JAR built from
 // providers/ffm. Its members are provider-private support operations, not the
-// future public `std:ffi` library (LIB028). Every C declaration and every
-// decision below is ordinary Protos code.
+// public `std:ffi` library (LIB028, see docs/guide/library/ffi.md); this
+// lesson intentionally teaches the private I144 provider layer. Every C
+// declaration and every decision below is ordinary Protos code.
 //
 // The provider must be authorized explicitly by the host (portable JVM CLI,
 // Linux x86-64, JDK 25, shared libsqlite3.so.0):

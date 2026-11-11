@@ -1,0 +1,132 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// DOC024: a practical std:sqlite query and lifecycle lesson. It builds on
+// 05-sqlite-protos-first.protos and introduces no new API: it combines the
+// same public operations into a complete table/insert/query/cleanup sequence.
+//
+// The host must explicitly authorize the optional FFM provider, for example:
+//   bin/protos --foreign-provider-path <protos-ffm-provider.jar> <this file>
+// Importing std:sqlite alone loads no native library. Behavior without the
+// provider is exercised separately by protos/tests/foreign-provider/
+// sqlite-missing.protos, which runs with no provider at all; this lesson
+// never tries to disable the provider mid-program.
+//
+// Every assertion passing means the program finishes silently.
+Assertions: import("std:test/assertions")
+SQLite: import("std:sqlite")
+
+// Step A: open the Connection and establish its cleanup before any SQL work.
+db: SQLite.openMemory()
+(() => {
+    // Step B: a command Statement completes on its first step: false, no row.
+    create: db.prepare("CREATE TABLE measurements (id INTEGER, reading REAL, optional INTEGER)")
+    (() => {
+        Assertions.require(create.step() === false)
+    }).ensure(() => create.close().value())
+
+    // Step C: bind one-based numeric parameters, then execute exactly once.
+    // A Statement cannot be reset or rebound after it has started executing,
+    // so each further insert prepares a fresh Statement.
+    insert: (id, reading, optional) => {
+        statement: db.prepare("INSERT INTO measurements VALUES (?1, ?2, ?3)")
+        (() => {
+            statement.bind(1, id).bind(2, reading).bind(3, optional)
+            Assertions.require(statement.step() === false)
+        }).ensure(() => statement.close().value())
+    }
+    insert(1, 1.25, null)
+    insert(2, 2.5, 7)
+    insert(3, 0.75, null)
+
+    // Step D: each copies every row into an ordinary Array before calling the
+    // ordinary Protos Closure, which updates ordinary local variables.
+    query: db.prepare("SELECT id, reading, optional FROM measurements ORDER BY id")
+    seen: 0
+    total: 0.0
+    (() => {
+        query.each((row) => {
+            seen = seen + 1
+            Assertions.require(row[0] == seen)
+            Assertions.require(Float.recognizes(row[1]))
+            if(row[0] == 2) {
+                Assertions.require(row[2] == 7)
+            } else {
+                Assertions.require(row[2] === null)
+            }
+            total = total + row[1]
+        })
+    }).ensure(() => query.close().value())
+    Assertions.require(seen == 3)
+    Assertions.require(total == 4.5)
+
+    // Step E: each error case owns a bounded Statement and its own cleanup.
+    // Ordinary argument errors are plain Errors; SQLite status failures are
+    // SQLite.SQLiteError with operation and code slots.
+    Assertions.signals(Error, () => db.prepare("SELECT 1;"))
+    Assertions.signals(Error, () => db.prepare("SELECT ';'"))
+    Assertions.signals(Error, () => db.prepare("SELECT 1\u{0}"))
+    syntax: Assertions.signals(SQLite.SQLiteError, () => db.prepare("SELECT FROM"))
+    Assertions.require(syntax.operation == "prepare")
+
+    parameters: db.prepare("SELECT ?1")
+    (() => {
+        Assertions.signals(Error, () => parameters.bind(0, 1))
+        // SQLite itself rejects a position beyond the declared parameters.
+        range: Assertions.signals(SQLite.SQLiteError, () => parameters.bind(2, 1))
+        Assertions.require(range.operation == "bind")
+        Assertions.require(Integer.recognizes(range.code))
+        // No implicit coercion: Strings and Fractions are not bindable.
+        Assertions.signals(Error, () => parameters.bind(1, "1"))
+        Assertions.signals(Error, () => parameters.bind(1, 1 / 2))
+    }).ensure(() => parameters.close().value())
+
+    rows: db.prepare("SELECT 1")
+    (() => {
+        Assertions.signals(Error, () => rows.row())
+        Assertions.require(rows.step())
+        Assertions.require(rows.column(0) == 1)
+        Assertions.require(rows.step() === false)
+        Assertions.signals(Error, () => rows.row())
+        Assertions.signals(Error, () => rows.column(0))
+    }).ensure(() => rows.close().value())
+
+    // Step F: close is a permanent cutover. Every close answers a fresh
+    // terminal Future that observes the same recorded outcome.
+    retired: db.prepare("SELECT 2")
+    (() => {
+        first: retired.close()
+        Assertions.require(first.value() === retired)
+        again: retired.close()
+        Assertions.require(again !== first)
+        Assertions.require(again.value() === retired)
+        Assertions.signals(IOLifecycleError, () => retired.step())
+        Assertions.signals(IOLifecycleError, () => retired.bind(1, 1))
+    }).ensure(() => retired.close().value())
+}).ensure(() => db.close().value())
+
+// Step F, continued: a fresh Connection whose close retires a still-live
+// Statement. Statement cleanup remains in place and is harmless afterwards.
+other: SQLite.openMemory()
+(() => {
+    child: other.prepare("SELECT 5")
+    (() => {
+        Assertions.require(child.step())
+        Assertions.require(other.close().value() === other)
+        Assertions.signals(IOLifecycleError, () => child.column(0))
+        Assertions.signals(IOLifecycleError, () => other.prepare("SELECT 6"))
+        Assertions.require(child.close().value() === child)
+    }).ensure(() => child.close().value())
+}).ensure(() => other.close().value())

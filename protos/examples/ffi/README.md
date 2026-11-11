@@ -9,10 +9,12 @@ SQLite-specific Java.
 
 | Example | Purpose |
 | --- | --- |
-| [`sqlite-library.protos`](sqlite-library.protos) | Public `std:sqlite` table creation, numeric inserts, copied rows and deterministic cleanup. |
+| [`sqlite-library.protos`](sqlite-library.protos) | Public `std:sqlite` introduction: one table, one numeric insert, one query and deterministic cleanup. |
+| [`sqlite-prepared-numeric.protos`](sqlite-prepared-numeric.protos) | Query and filter numeric records: several inserts with fresh Statements, a parameterized numeric predicate and deterministic ordered `each` traversal with Float and NULL checks. |
+| [`sqlite-copied-values.protos`](sqlite-copied-values.protos) | Read independent TEXT/BLOB results: multibyte and NUL-containing TEXT, BLOB octets, empty TEXT/BLOB versus NULL, and copies that survive stepping and close. |
 
 See the [SQLite library guide](../../../docs/guide/library/sqlite.md) for the
-bounded LIB029 API and its validation evidence.
+bounded LIB029 API and its practical learning path.
 
 ## Public `std:ffi` examples
 
@@ -68,6 +70,10 @@ Details: [Build the provider JAR](../../../docs/guide/interop/ffm-provider.md#bu
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
     protos/examples/ffi/sqlite-library.protos
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+    protos/examples/ffi/sqlite-prepared-numeric.protos
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+    protos/examples/ffi/sqlite-copied-values.protos
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
     protos/examples/ffi/sqlite-version-public.protos
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
     protos/examples/ffi/sqlite-complete-public.protos
@@ -109,8 +115,12 @@ The two original examples use the provider-private I144 operations directly: `si
 Applications can use the [SQLite library](../../../docs/guide/library/sqlite.md)
 without copying low-level declarations. The maintainer reports **34/34 PASS**
 for the complete external foreign-provider integration, including the LIB029
-real SQLite cases and this public example. The final integrated `make test`
-outcome has not yet been reported.
+real SQLite cases and `sqlite-library.protos`; `make check` and `make test`
+also passed as maintainer-reported for the published LIB029 implementation
+`90fd4ece800f6d0e007aa9a2c735ee2f7659919a`. The DOC024 programs
+`sqlite-prepared-numeric.protos` and `sqlite-copied-values.protos` are
+registered in the same harness; their validation is pending until the
+maintainer runs it.
 
 ## Limitations and security
 

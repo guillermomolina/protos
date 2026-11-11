@@ -27,6 +27,8 @@ need authority that already exists:
   pass it a connected duplex and an explicit `Trust`; see [TLS client](tls.md).
 - `std:sqlite` acquires no authority by import; `openMemory()` requires the
   host-authorized `ffi:sqlite3` provider. See [In-memory SQLite](sqlite.md).
+  Application developers who want SQLite should use `std:sqlite`; use
+  [`std:ffi`](ffi.md) only to declare your own supported C functions.
 - `std:inspect` requires authority the host must already have granted to the
   Context (the `protos.Inspect` option). Without it, the import itself signals
   an ordinary `Error`; importing never creates that authority.
@@ -68,7 +70,7 @@ is not a module; import `std:datetime/date`, `std:datetime/instant`, and so on.
 | [Explicit networking and name resolution](networking.md) | `std:network/resolvers` | Host-granted `resolver` lookups, choosing an `IpAddress`, and connecting to a numeric `IpEndpoint` |
 | [Command-line specifications](cli.md) | `std:cli/command_line` | Named-parameter options and positionals, command trees, argument parsing, and help text |
 | [TLS client](tls.md) | `std:tls/client` | Authenticating a connected duplex with explicit trust and the original hostname |
-| [In-memory SQLite](sqlite.md) | `std:sqlite` | Protos-owned connections, statements, numeric/NULL binding, copied rows and Closable lifecycle over the explicitly authorized FFM provider |
+| [In-memory SQLite](sqlite.md) | `std:sqlite` | Protos-owned connections, statements, numeric/NULL binding, copied rows and Closable lifecycle over the explicitly authorized FFM provider; practical examples: [numeric queries](../../../protos/examples/ffi/sqlite-prepared-numeric.protos), [copied TEXT/BLOB values](../../../protos/examples/ffi/sqlite-copied-values.protos) |
 | [Native C declarations](ffi.md) | `std:ffi` | Public ABI descriptors, ordinary Closure bindings, output parameters and owned-resource release over an explicitly authorized provider |
 | [Explicit foreign operations](interop.md) | `std:interop` | `invoke`, `instantiate`, `readMember`, and `writeMember` on foreign values |
 | [Runtime metadata](runtime.md) | `std:runtime` | Four read-only String fields: `implementation`, `implementationVersion`, `engineVersion`, `platform` (no Context mode) |

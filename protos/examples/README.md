@@ -27,6 +27,8 @@ instead.
 | Query the SQLite version with public `std:ffi` (`--foreign-provider-path`, see `ffi/README.md` and the [public guide](../../docs/guide/library/ffi.md)) | `ffi/sqlite-version-public.protos` |
 | Check whether a SQL statement is complete with public `std:ffi` (`--foreign-provider-path`) | `ffi/sqlite-complete-public.protos` |
 | Run a parameterized numeric SQLite query with public `std:ffi` (`--foreign-provider-path`) | `ffi/sqlite-numeric-query-public.protos` |
+| Query and filter numeric SQLite records with prepared parameters (`std:sqlite`, `--foreign-provider-path`, see the [SQLite guide](../../docs/guide/library/sqlite.md)) | `ffi/sqlite-prepared-numeric.protos` |
+| Read independent SQLite TEXT/BLOB results safely (`std:sqlite`, `--foreign-provider-path`) | `ffi/sqlite-copied-values.protos` |
 | Check the I144 backend's ability to call C: the SQLite version (`--foreign-provider-path`, low-level provider example) | `ffi/sqlite-version.protos` |
 | Query SQLite through the low-level I144 backend example (`--foreign-provider-path`) | `ffi/sqlite-memory-query.protos` |
 | Print the exact Rosetta Code Hello world/Text message | `basics/rosetta-hello-world-text.protos` |
