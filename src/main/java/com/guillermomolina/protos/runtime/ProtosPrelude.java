@@ -899,7 +899,11 @@ public final class ProtosPrelude {
 
     /**
      * Runtime-only direct construction for a deferred execution Context whose
-     * definitive lexical authority already exists.
+     * definitive lexical authority already exists (I115-S1c-L: the
+     * frame-backed authority of a genuine Closure activation). The Context
+     * has the standard Context prototype as its delegation parent, exactly
+     * like {@link #newExecutionContext()}; no guest-visible constructor or
+     * object category is introduced.
      */
     ProtosExecutionContextValue newExecutionContextForRuntime(
             ProtosLexicalBindingAuthority lexicalBindingAuthority) {

@@ -27,7 +27,36 @@ import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.util.Objects;
 
 public final class ProtosStandardStringProtocol {
+    /*
+     * I115: the standard String '+' behavior is one shared constant, like
+     * the standard Array indexed behaviors, so the Bytecode DSL addition
+     * admission can execute String concatenation directly only when the
+     * behavior actually selected on the receiver is exactly this one.
+     */
+    private static final ProtosClosureValue STANDARD_CONCATENATION =
+            ProtosClosureValue.nativeClosure(ProtosStandardStringProtocol::concatenate);
+
     private ProtosStandardStringProtocol() {}
+
+    /**
+     * I115: whether {@code behavior} is exactly the standard String
+     * {@code +} behavior. Identity only: a program-defined, wrapping or
+     * otherwise overriding {@code +} is never standard, whatever it does.
+     */
+    public static boolean isStandardConcatenationBehavior(Object behavior) {
+        return behavior == STANDARD_CONCATENATION;
+    }
+
+    private static Object concatenate(
+            com.guillermomolina.protos.runtime.ProtosActivation activation,
+            java.util.List<?> supplied) {
+        ProtosStringValue receiver = requireStringReceiver(activation);
+        requireArity(activation, supplied.size(), 1);
+        if (!(supplied.get(0) instanceof ProtosStringValue right)) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        }
+        return ProtosStringValue.concatenateForRuntime(receiver, right);
+    }
 
     public static void install(ProtosObjectValue stringPrototype) {
         Objects.requireNonNull(stringPrototype, "stringPrototype");
@@ -79,17 +108,7 @@ public final class ProtosStandardStringProtocol {
                             return scalar;
                         }));
 
-        stringPrototype.createLocalSlot(
-                "+",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosStringValue receiver = requireStringReceiver(activation);
-                            requireArity(activation, supplied.size(), 1);
-                            if (!(supplied.get(0) instanceof ProtosStringValue right)) {
-                                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
-                            }
-                            return ProtosStringValue.concatenateForRuntime(receiver, right);
-                        }));
+        stringPrototype.createLocalSlot("+", STANDARD_CONCATENATION);
 
         stringPrototype.createLocalSlot(
                 "concat",

@@ -18,11 +18,9 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
 import com.oracle.truffle.api.bytecode.OperationProxy;
@@ -47,10 +45,13 @@ import com.oracle.truffle.api.strings.TruffleString;
  * <p>The lowering emits it before the right-hand side and keeps the selected
  * {@link ProtosModuleBindingLocation}, which fixes the exact module context
  * and binding key. The {@code WriteGlobal} operation then assigns through
- * that location only, without resolving the name again. The binding must be
- * present when it is selected: an absent binding signals the slot-not-found
- * Error before the right-hand side runs. Nothing else is searched and no
- * binding is ever created.
+ * that location only, without resolving the name again.
+ *
+ * <p>I115-S1c-L: when the module binding is absent at selection time it is not
+ * the selected destination; {@link ProtosLexicalSelectionNode} selects the
+ * exact writable destination instead (or signals {@code SlotNotFound}), still
+ * before the right-hand side runs, and {@code WriteGlobal} assigns through
+ * that destination. No binding is ever created.
  *
  * <p>{@link #selectOwnCached} is guarded by the identity of the module
  * context, {@link #selectCapturedCached} by the identity of the invoked
@@ -68,7 +69,8 @@ import com.oracle.truffle.api.strings.TruffleString;
 @ConstantOperand(type = int.class, name = "lexicalDepth")
 abstract class ProtosExperimentalWriteGlobalNode extends Node {
 
-    abstract ProtosModuleBindingLocation execute(
+    /** The selected destination: a {@link ProtosModuleBindingLocation} or a selected target. */
+    abstract Object execute(
             VirtualFrame frame, TruffleString name, int lexicalDepth);
 
     @Specialization(
@@ -80,7 +82,7 @@ abstract class ProtosExperimentalWriteGlobalNode extends Node {
                 "location != null"
             },
             limit = "3")
-    static ProtosModuleBindingLocation selectOwnCached(
+    static Object selectOwnCached(
             VirtualFrame frame,
             TruffleString name,
             int lexicalDepth,
@@ -90,7 +92,7 @@ abstract class ProtosExperimentalWriteGlobalNode extends Node {
                     ProtosModuleBindingLocation location,
             @Cached DynamicObject.GetNode getNode) {
         if (!location.isPresent(getNode)) {
-            throw slotNotFound(frame.getArguments());
+            return selectLexically(frame.getArguments(), name);
         }
         return location;
     }
@@ -104,7 +106,7 @@ abstract class ProtosExperimentalWriteGlobalNode extends Node {
                 "location != null"
             },
             limit = "3")
-    static ProtosModuleBindingLocation selectCapturedCached(
+    static Object selectCapturedCached(
             VirtualFrame frame,
             TruffleString name,
             int lexicalDepth,
@@ -114,13 +116,13 @@ abstract class ProtosExperimentalWriteGlobalNode extends Node {
                     ProtosModuleBindingLocation location,
             @Cached DynamicObject.GetNode getNode) {
         if (!location.isPresent(getNode)) {
-            throw slotNotFound(frame.getArguments());
+            return selectLexically(frame.getArguments(), name);
         }
         return location;
     }
 
     @Specialization(replaces = {"selectOwnCached", "selectCapturedCached"})
-    static ProtosModuleBindingLocation selectGeneric(
+    static Object selectGeneric(
             VirtualFrame frame, TruffleString name, int lexicalDepth) {
         return selectModuleBinding(frame.getArguments(), name, lexicalDepth);
     }
@@ -146,7 +148,7 @@ abstract class ProtosExperimentalWriteGlobalNode extends Node {
     }
 
     @TruffleBoundary
-    static ProtosModuleBindingLocation selectModuleBinding(
+    static Object selectModuleBinding(
             Object[] arguments, TruffleString name, int lexicalDepth) {
         ProtosObjectValue context;
         if (lexicalDepth == 0) {
@@ -162,14 +164,15 @@ abstract class ProtosExperimentalWriteGlobalNode extends Node {
                         ? null
                         : ProtosModuleBindingLocation.ofOrNull(context, name.toJavaStringUncached());
         if (location == null) {
-            throw slotNotFound(arguments);
+            return selectLexically(arguments, name);
         }
         return location;
     }
 
+    /* The absent module binding was not selected: live lexical write-target selection. */
     @TruffleBoundary
-    private static ProtosSignalException slotNotFound(Object[] arguments) {
-        return new ProtosSignalException(
-                ProtosCoreErrors.newSlotNotFound(ProtosFrameArguments.activation(arguments)));
+    private static Object selectLexically(Object[] arguments, TruffleString name) {
+        return ProtosLexicalSelectionNode.writeTargetOrThrow(
+                ProtosFrameArguments.activation(arguments), name.toJavaStringUncached());
     }
 }

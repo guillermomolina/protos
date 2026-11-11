@@ -17,42 +17,33 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
-
 /**
  * I113 / I115: the name-keyed lexical accesses of an
- * {@code AccessNamedLexical} instruction: a dynamic name, or an access
- * inside an inline object-construction body, whose lookup also observes the
- * object under construction. A statically resolved module binding uses
- * {@code ReadGlobal}/{@code SelectWriteGlobal} at every physical depth, and
- * LOCAL/CELL bindings never reach this access. Each constant
- * carries its own body, so the call on the builder-fixed constant
- * devirtualizes under partial evaluation.
+ * {@code AccessNamedLexical} instruction: a dynamic name, a site whose
+ * actual nearest binding is not proven by its physical binding identity, or
+ * an access inside an inline object-construction body, whose lookup also
+ * observes the object under construction.
+ *
+ * <p>I115-S1c-L: both accesses are performed by {@link
+ * ProtosLexicalSelectionNode}, the single runtime implementation of live
+ * lexical selection; the constant only chooses read or write-target
+ * selection, so the choice folds under partial evaluation.
  */
 public enum ProtosNamedLexicalAccess {
     /** The unqualified lookup; signals the lookup Error on absence. */
-    LOOKUP {
-        @Override
-        Object access(ProtosActivation activation, String name) {
-            return ProtosLexicalFallback.readByName(activation, name)
-                    .orElseThrow(
-                            () ->
-                                    new ProtosSignalException(
-                                            ProtosCoreErrors.newUnqualifiedLookupError(
-                                                    activation)));
-        }
-    },
+    LOOKUP(false),
 
-    /** The generic write-target resolution; its assignment is a separate instruction. */
-    RESOLVE_WRITE {
-        @Override
-        Object access(ProtosActivation activation, String name) {
-            return ProtosFrameLocalBindings.resolveWritableLexicalTarget(activation, name);
-        }
-    };
+    /** The write-target selection; its assignment is a separate instruction. */
+    RESOLVE_WRITE(true);
 
-    abstract Object access(ProtosActivation activation, String name);
+    private final boolean write;
+
+    ProtosNamedLexicalAccess(boolean write) {
+        this.write = write;
+    }
+
+    /** Whether this access selects a write destination instead of a value. */
+    boolean write() {
+        return write;
+    }
 }

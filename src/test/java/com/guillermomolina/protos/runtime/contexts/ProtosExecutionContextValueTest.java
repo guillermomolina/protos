@@ -18,7 +18,9 @@
 package com.guillermomolina.protos.runtime.contexts;
 
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
+import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -101,5 +103,67 @@ class ProtosExecutionContextValueTest {
 
         assertSame("value", ordinary.removeLocalSlot("x"));
         assertTrue(!ordinary.hasLocalSlot("x"));
+    }
+
+    // ---- I115-S1c-L one active lexical authority -------------------------------
+
+    @Test
+    void frameAuthorityHandoffKeepsIdentityAndExistingBindings() {
+        ProtosExecutionContextValue context =
+                new ProtosExecutionContextValue(ProtosObjectValue.rootObject());
+        context.createLocalSlot("dynamic", "value");
+        ProtosLexicalBindingAuthority frame = ProtosLexicalBindingAuthority.newMapBackedForRuntime();
+
+        context.installFrameLexicalBindingAuthority(frame);
+
+        assertSame(frame, context.lexicalBindingAuthorityForRuntime());
+        assertSame("value", context.readLocalSlot("dynamic").orElseThrow());
+        assertSame("value", frame.readBinding("dynamic").orElseThrow());
+    }
+
+    @Test
+    void installedFrameAuthorityIsTheAuthoritativeStoreNotASynchronizedCopy() {
+        ProtosExecutionContextValue context =
+                new ProtosExecutionContextValue(ProtosObjectValue.rootObject());
+        ProtosLexicalBindingAuthority previous = context.lexicalBindingAuthorityForRuntime();
+        ProtosLexicalBindingAuthority frame = ProtosLexicalBindingAuthority.newMapBackedForRuntime();
+        context.installFrameLexicalBindingAuthority(frame);
+
+        frame.putBinding("x", "physical");
+        assertSame("physical", context.readLocalSlot("x").orElseThrow());
+        context.assignLocalSlot("x", "assigned");
+        assertSame("assigned", frame.readBinding("x").orElseThrow());
+        assertFalse(previous.containsBinding("x"));
+    }
+
+    @Test
+    void frameAuthorityInstallationIsIdempotentAndRejectsAnotherOwner() {
+        ProtosExecutionContextValue context =
+                new ProtosExecutionContextValue(ProtosObjectValue.rootObject());
+        ProtosLexicalBindingAuthority frame = ProtosLexicalBindingAuthority.newMapBackedForRuntime();
+        context.installFrameLexicalBindingAuthority(frame);
+
+        context.installFrameLexicalBindingAuthority(frame);
+        assertSame(frame, context.lexicalBindingAuthorityForRuntime());
+        assertThrows(
+                IllegalStateException.class,
+                () -> context.installFrameLexicalBindingAuthority(
+                        ProtosLexicalBindingAuthority.newMapBackedForRuntime()));
+        assertSame(frame, context.lexicalBindingAuthorityForRuntime());
+    }
+
+    @Test
+    void openClosedAndFrozenRulesAreUnchangedAfterHandoff() {
+        ProtosExecutionContextValue context =
+                new ProtosExecutionContextValue(ProtosObjectValue.rootObject());
+        context.installFrameLexicalBindingAuthority(ProtosLexicalBindingAuthority.newMapBackedForRuntime());
+        context.createLocalSlot("x", "value");
+        context.close();
+        context.assignLocalSlot("x", "second");
+        assertThrows(IllegalStateException.class, () -> context.createLocalSlot("y", "late"));
+        assertThrows(IllegalStateException.class, () -> context.removeLocalSlot("x"));
+        context.freeze();
+        assertThrows(IllegalStateException.class, () -> context.assignLocalSlot("x", "third"));
+        assertSame("second", context.readLocalSlot("x").orElseThrow());
     }
 }

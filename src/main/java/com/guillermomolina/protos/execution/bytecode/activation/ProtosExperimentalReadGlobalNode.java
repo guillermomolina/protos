@@ -19,12 +19,9 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
-import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
 import com.oracle.truffle.api.bytecode.OperationProxy;
@@ -54,7 +51,8 @@ import com.oracle.truffle.api.strings.TruffleString;
  * </ul>
  * Locating a present module binding does not materialize an activation or
  * consult dynamic lexical lookup. An absent binding resumes ordinary lookup
- * through the invoking activation, including receiver fallback.
+ * through the invoking activation with {@link ProtosLexicalSelectionNode},
+ * including receiver fallback.
  *
  * <p>{@link #readOwnCached} (depth 0) is guarded by the identity of the
  * module context, and {@link #readCapturedCached} (depth {@code >= 1}) by
@@ -73,9 +71,15 @@ import com.oracle.truffle.api.strings.TruffleString;
  * terminate lookup when the selected binding is absent. If ordinary lookup
  * also fails, the read signals the standard unqualified {@code SlotNotFound} Error.
  *
- * <p>REMAINING RECORDED DIVERGENCE (owner-authorized): an established module
- * binding is read directly without checking nearer dynamic lexical shadowing.
- * The restored miss behavior does not change selection for present bindings.
+ * <p>I115-S1c-L nearer shadowing: the lowering emits {@code ReadGlobal} only
+ * when the module binding is the actual nearest selected binding whenever it
+ * is PRESENT: no Closure scope between the site and the module may hold a
+ * nearer binding of the name, because none of them declares it and none of
+ * them can have its Context observed (a dynamic binding can only be created
+ * through an observed Context). Every other site uses live lexical selection
+ * instead, so a present module binding never hides a nearer dynamic one. The
+ * module context's identity and its fixed store guard the cached location;
+ * removal and recreation are observed through that store.
  */
 @GenerateUncached
 @GenerateInline(false)
@@ -209,13 +213,10 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
                 }
             }
         }
-        ProtosActivation activation = ProtosFrameArguments.activation(arguments);
-        java.util.Optional<Object> fallback = ProtosLexicalFallback.readByName(activation, javaName);
-        if (fallback.isPresent()) {
-            return fallback.get();
-        }
-        throw new ProtosSignalException(
-                ProtosCoreErrors.newUnqualifiedLookupError(activation));
+        // I115-S1c-L: the absent module binding was not selected; live
+        // lexical selection continues the ordinary lookup from the start.
+        return ProtosLexicalSelectionNode.readOrThrow(
+                ProtosFrameArguments.activation(arguments), javaName);
     }
 
     /*

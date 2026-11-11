@@ -50,33 +50,51 @@ package com.guillermomolina.protos.runtime;
  * so structural attribute caches never admit it.
  */
 public final class ProtosExecutionContextValue extends ProtosObjectValue {
+    /*
+     * I115-S1c-L: the frame-backed authority this Context was created with or
+     * handed over to, or null. There is exactly one active authority: the
+     * previous one stops being a data source at the handoff.
+     */
+    private ProtosLexicalBindingAuthority frameAuthority;
+
     public ProtosExecutionContextValue(Object parent) {
         super(parent, ProtosLexicalBindingAuthority.newMapBackedForRuntime());
     }
 
     /**
      * Backend-private construction path for a context whose definitive
-     * lexical authority is already known before the semantic Context object
-     * becomes observable.
+     * frame-backed lexical authority is already known before the semantic
+     * Context object becomes observable. No handoff ever happens for it.
      */
     ProtosExecutionContextValue(
             Object parent,
             ProtosLexicalBindingAuthority lexicalBindingAuthority) {
         super(parent, lexicalBindingAuthority);
+        frameAuthority = lexicalBindingAuthority;
     }
 
     /**
-     * PLAT036 Candidate D, Slice 3 backend-private hook: a genuine {@code
-     * ROOT}/{@code CLOSURE} Bytecode lowering unit calls this exactly once, as
-     * its own first executed operation, to replace the context's default
-     * independent authority with one backed by that unit's own Truffle
-     * Bytecode DSL frame/local layout. Bindings established before root
-     * execution are migrated during the authority handoff, preserving their
-     * insertion order and values; the previous authority then stops being a
-     * data source, and nothing is copied into this object's own properties.
+     * I115-S1c-L backend-private one-time handoff to the frame-backed
+     * authority of the genuine Closure activation owning this Context. The
+     * Context keeps its identity; bindings already established in the
+     * previous authority (only names outside the compiled frame layout can
+     * exist there) are migrated once and the previous authority is retired.
+     * Installing the identical authority again is a no-op; a different
+     * frame-backed authority is rejected.
+     *
+     * @throws IllegalStateException when another frame-backed authority is
+     *     already installed
      */
     public void installFrameLexicalBindingAuthority(ProtosLexicalBindingAuthority frameBackedAuthority) {
+        java.util.Objects.requireNonNull(frameBackedAuthority, "frameBackedAuthority");
+        if (frameAuthority == frameBackedAuthority) {
+            return;
+        }
+        if (frameAuthority != null) {
+            throw new IllegalStateException("execution context already has a frame-backed authority");
+        }
         replaceLexicalBindingAuthorityPreservingBindings(frameBackedAuthority);
+        frameAuthority = frameBackedAuthority;
     }
 
     /**

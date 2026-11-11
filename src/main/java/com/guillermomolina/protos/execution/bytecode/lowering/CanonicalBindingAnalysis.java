@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * PLAT036 Candidate D, Slice 1 immutable result of one {@link
@@ -53,6 +54,46 @@ final class CanonicalBindingAnalysis {
     private final Map<CanonicalCreate, CanonicalBindingIdentity> createIdentities;
     private final Map<CanonicalMultipleCreate, List<CanonicalBindingIdentity>> multipleCreateIdentities;
     private final Map<CanonicalParameter, CanonicalBindingIdentity> parameterIdentities;
+    private final Map<CanonicalLookup, LexicalAccess> lookupAccesses;
+    private final Map<CanonicalAssign, LexicalAccess> assignAccesses;
+    private final Set<Object> presenceCheckedCreates;
+    private final Map<CanonicalLookup, CanonicalLexicalScope> lookupSites;
+    private final Map<CanonicalAssign, CanonicalLexicalScope> assignSites;
+
+    /**
+     * I115-S1c-L: how a bare read or assignment site accesses its binding at
+     * run time, decided once after the complete analysis walk from the site's
+     * static resolution and the final per-scope facts. It is a property of
+     * the site's physical access, never a second semantic resolution: the
+     * {@link CanonicalBindingResolution} remains the binding identity.
+     */
+    enum LexicalAccess {
+        /**
+         * The owner's binding is the actual nearest binding and is PRESENT
+         * whenever the site executes: an established binding whose owner's
+         * Context can never be observed, reached through no scope whose
+         * Context can be observed. The site accesses the physical storage
+         * directly ({@code LoadLocal}/{@code StoreLocal}, the plain cell
+         * operations, or the module {@code ReadGlobal}/{@code WriteGlobal},
+         * which observe module membership themselves).
+         */
+        DIRECT,
+        /**
+         * The owner's binding is the nearest possible binding, but it may be
+         * ABSENT at run time (a {@code Candidate}, or a binding of a scope
+         * whose Context can be observed): the site accesses the physical
+         * storage while it is PRESENT and otherwise continues with live
+         * lexical selection.
+         */
+        PRESENCE_CHECKED,
+        /**
+         * The actual nearest binding is not proven by any physical binding
+         * identity (a {@code Dynamic} name, or a scope between the site and
+         * the owner whose Context can be observed and may hold a dynamically
+         * created nearer binding): the site uses live lexical selection.
+         */
+        SELECTED
+    }
 
     CanonicalBindingAnalysis(
             CanonicalLexicalScope topScope,
@@ -62,7 +103,12 @@ final class CanonicalBindingAnalysis {
             Map<CanonicalAssign, CanonicalBindingResolution> assignResolutions,
             Map<CanonicalCreate, CanonicalBindingIdentity> createIdentities,
             Map<CanonicalMultipleCreate, List<CanonicalBindingIdentity>> multipleCreateIdentities,
-            Map<CanonicalParameter, CanonicalBindingIdentity> parameterIdentities) {
+            Map<CanonicalParameter, CanonicalBindingIdentity> parameterIdentities,
+            Map<CanonicalLookup, LexicalAccess> lookupAccesses,
+            Map<CanonicalAssign, LexicalAccess> assignAccesses,
+            Set<Object> presenceCheckedCreates,
+            Map<CanonicalLookup, CanonicalLexicalScope> lookupSites,
+            Map<CanonicalAssign, CanonicalLexicalScope> assignSites) {
         this.topScope = Objects.requireNonNull(topScope, "topScope");
         this.closureScopes = copyOfIdentity(closureScopes);
         this.objectScopes = copyOfIdentity(objectScopes);
@@ -71,6 +117,23 @@ final class CanonicalBindingAnalysis {
         this.createIdentities = copyOfIdentity(createIdentities);
         this.multipleCreateIdentities = copyOfIdentity(multipleCreateIdentities);
         this.parameterIdentities = copyOfIdentity(parameterIdentities);
+        this.lookupAccesses = copyOfIdentity(lookupAccesses);
+        this.assignAccesses = copyOfIdentity(assignAccesses);
+        Set<Object> checked = Collections.newSetFromMap(new IdentityHashMap<>());
+        checked.addAll(Objects.requireNonNull(presenceCheckedCreates, "presenceCheckedCreates"));
+        this.presenceCheckedCreates = Collections.unmodifiableSet(checked);
+        this.lookupSites = copyOfIdentity(lookupSites);
+        this.assignSites = copyOfIdentity(assignSites);
+    }
+
+    /* I115-S1c-L: the scope of each bare read site (rematerialization validation only). */
+    Map<CanonicalLookup, CanonicalLexicalScope> lookupSiteScopes() {
+        return lookupSites;
+    }
+
+    /* I115-S1c-L: the scope of each bare assignment site (rematerialization validation only). */
+    Map<CanonicalAssign, CanonicalLexicalScope> assignSiteScopes() {
+        return assignSites;
     }
 
     private static <K, V> Map<K, V> copyOfIdentity(Map<K, V> source) {
@@ -361,6 +424,48 @@ final class CanonicalBindingAnalysis {
         return Optional.ofNullable(parameterIdentities.get(parameter));
     }
 
+    /**
+     * I115-S1c-L: the run-time access of a bare read site of this analysis.
+     * Every analyzed site has a recorded decision; a missing one is an
+     * internal invariant failure, never an implicit {@code DIRECT} proof.
+     */
+    LexicalAccess accessOf(CanonicalLookup lookup) {
+        return requireAccess(lookupAccesses.get(lookup), lookup.name());
+    }
+
+    /** I115-S1c-L: the run-time access of a bare assignment's destination. */
+    LexicalAccess accessOf(CanonicalAssign assign) {
+        return requireAccess(assignAccesses.get(assign), assign.name());
+    }
+
+    private static LexicalAccess requireAccess(LexicalAccess access, String name) {
+        if (access == null) {
+            throw new IllegalStateException(
+                    "I115-S1c-L: lexical site without a recorded run-time access: " + name);
+        }
+        return access;
+    }
+
+    /**
+     * I115-S1c-L: whether a target-less creation of a Closure-owned binding
+     * may find its binding PRESENT or its Context CLOSED/FROZEN at run time
+     * (the scope's Context may be observed, or the same scope already
+     * established the name earlier), so it must apply the ordinary {@code :}
+     * creation rules instead of storing directly. Normatively every
+     * creation applies those rules; the direct store elsewhere is only the
+     * proven-equivalent fast path, except for creations inside contextual
+     * control operands, which are withheld as a known unresolved
+     * implementation divergence (I115-S1c-D, see CanonicalBindingAnalyzer).
+     */
+    boolean requiresPresenceCheckedCreation(CanonicalCreate create) {
+        return presenceCheckedCreates.contains(create);
+    }
+
+    /** I115-S1c-L: the multiple-creation counterpart of {@link #requiresPresenceCheckedCreation}. */
+    boolean requiresPresenceCheckedCreation(CanonicalMultipleCreate create) {
+        return presenceCheckedCreates.contains(create);
+    }
+
     /** I115: the lowering-time storage of {@code identity}. */
     static CanonicalLexicalScope.Storage storageOf(CanonicalBindingIdentity identity) {
         return identity.owner().storageOf(identity.name());
@@ -450,6 +555,26 @@ final class CanonicalBindingAnalysis {
         IdentityHashMap<CanonicalLexicalScope, CanonicalLexicalScope>
                 reparsedByOriginal = reparsedScopesByOriginal(reparsed);
 
+        /*
+         * I115-S1c-L: a restored CapturedResolved site keeps the access the
+         * original whole-tree analysis decided for it, because only that
+         * analysis saw every scope between the site and its owner.
+         */
+        Map<CapturedSiteKey, LexicalAccess> oldLookupAccesses = new java.util.HashMap<>();
+        for (CanonicalLookup lookup : lookupResolutions.keySet()) {
+            oldLookupAccesses.put(CapturedSiteKey.lookup(lookup), accessOf(lookup));
+        }
+        Map<CapturedSiteKey, LexicalAccess> oldAssignAccesses = new java.util.HashMap<>();
+        for (CanonicalAssign assign : assignResolutions.keySet()) {
+            oldAssignAccesses.put(CapturedSiteKey.assign(assign), accessOf(assign));
+        }
+        IdentityHashMap<CanonicalLookup, LexicalAccess> remappedLookupAccesses =
+                new IdentityHashMap<>(reparsed.lookupAccesses);
+        Map<CanonicalLookup, CanonicalLexicalScope> reparsedLookupSites = reparsed.lookupSiteScopes();
+        Map<CanonicalAssign, CanonicalLexicalScope> reparsedAssignSites = reparsed.assignSiteScopes();
+        IdentityHashMap<CanonicalAssign, LexicalAccess> remappedAssignAccesses =
+                new IdentityHashMap<>(reparsed.assignAccesses);
+
         for (CanonicalLookup lookup
                 : reparsed.lookupResolutions.keySet()) {
             CanonicalBindingResolution.CapturedResolved previous =
@@ -462,6 +587,13 @@ final class CanonicalBindingAnalysis {
                         portableCapturedResolution(
                                 previous,
                                 portableOwnerLayouts));
+                remappedLookupAccesses.put(
+                        lookup,
+                        revalidatedCapturedAccess(
+                                oldLookupAccesses.get(CapturedSiteKey.lookup(lookup)),
+                                previous.identity().owner(),
+                                reparsedLookupSites.get(lookup),
+                                lookup.name()));
             }
         }
 
@@ -477,6 +609,13 @@ final class CanonicalBindingAnalysis {
                         portableCapturedResolution(
                                 previous,
                                 portableOwnerLayouts));
+                remappedAssignAccesses.put(
+                        assign,
+                        revalidatedCapturedAccess(
+                                oldAssignAccesses.get(CapturedSiteKey.assign(assign)),
+                                previous.identity().owner(),
+                                reparsedAssignSites.get(assign),
+                                assign.name()));
             }
         }
 
@@ -490,7 +629,50 @@ final class CanonicalBindingAnalysis {
                 remappedAssigns,
                 reparsed.createIdentities,
                 reparsed.multipleCreateIdentities,
-                reparsed.parameterIdentities);
+                reparsed.parameterIdentities,
+                remappedLookupAccesses,
+                remappedAssignAccesses,
+                reparsed.presenceCheckedCreates,
+                reparsed.lookupSites,
+                reparsed.assignSites);
+    }
+
+    /*
+     * I115-S1c-L: a restored CapturedResolved site keeps the original
+     * whole-tree access only while the facts behind it still hold. The
+     * original owner's Context-observation fact is unchanged by a reparse;
+     * the intervening scopes inside the reparsed Closure are re-checked
+     * against their fresh analysis. A proof contradicted by either is an
+     * internal invariant failure: the original lowering already relied on it
+     * (for example by not binding outer frames to views), so silently
+     * weakening or strengthening it here could not be made correct.
+     */
+    private static LexicalAccess revalidatedCapturedAccess(
+            LexicalAccess original,
+            CanonicalLexicalScope originalOwner,
+            CanonicalLexicalScope reparsedSite,
+            String name) {
+        if (original == null || reparsedSite == null) {
+            throw new IllegalStateException(
+                    "I115-S1c-L: rematerialized captured site without its original access: " + name);
+        }
+        if (original == LexicalAccess.SELECTED) {
+            return original;
+        }
+        boolean ownerMayRemove = originalOwner.kind() == CanonicalLexicalScope.Kind.CLOSURE
+                && originalOwner.observesContext();
+        if (ownerMayRemove && original == LexicalAccess.DIRECT) {
+            throw new IllegalStateException(
+                    "I115-S1c-L: direct access to a removable captured binding: " + name);
+        }
+        for (CanonicalLexicalScope scope = reparsedSite; scope != null; scope = scope.outwardScope()) {
+            if (scope.kind() == CanonicalLexicalScope.Kind.CLOSURE && scope.observesContext()) {
+                throw new IllegalStateException(
+                        "I115-S1c-L: rematerialized scope observes its Context between a "
+                                + "captured site and its owner: " + name);
+            }
+        }
+        return original;
     }
 
     private IdentityHashMap<CanonicalLexicalScope, CanonicalLexicalScope>
@@ -542,6 +724,13 @@ final class CanonicalBindingAnalysis {
                         if (original.needsCell(name)) {
                             copy.markCell(name);
                         }
+                    }
+                    // I115-S1c-L: the owner's physical facts are part of its layout.
+                    if (original.observesContext()) {
+                        copy.markObservesContext();
+                    }
+                    if (original.requiresLexicalView()) {
+                        copy.markRequiresLexicalView();
                     }
                     return copy;
                 });

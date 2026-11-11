@@ -27,6 +27,14 @@ import java.util.Optional;
 
 public final class ProtosActivation {
     private ProtosObjectValue context;
+    /*
+     * I115-S1c-L: the frame-backed lexical authority of a genuine Closure
+     * activation whose frame escaped, installed at most once. It is the
+     * authority of the guest Context when that Context exists, and answers
+     * lexical membership while the Context is still deferred. Never a copy of
+     * any binding value.
+     */
+    private ProtosLexicalBindingAuthority frameLexicalAuthority;
     private final ProtosLexicalEnvironment capturedEnvironment;
     private ProtosLexicalEnvironment currentEnvironment;
     private final Object receiver;
@@ -573,17 +581,48 @@ public final class ProtosActivation {
     }
 
     /**
-     * The guest execution context, materialized on first observation.
-     *
-     * <p>KNOWN I115 SEMANTIC DIVERGENCE: the context of a Closure activation
-     * holds only NAME bindings; its LOCAL and CELL bindings live in Bytecode
-     * DSL locals and cells and are not projected into it.
+     * The single guest execution context, materialized on first observation.
+     * When the frame-backed lexical authority of a Closure activation is
+     * already installed, the Context is created directly with it, so its
+     * LOCAL and CELL bindings are those of the live frame.
      */
     public ProtosObjectValue context() {
         if (context == null) {
-            context = prelude.newExecutionContext();
+            context = frameLexicalAuthority == null
+                    ? prelude.newExecutionContext()
+                    : prelude.newExecutionContextForRuntime(frameLexicalAuthority);
         }
         return context;
+    }
+
+    /**
+     * I115-S1c-L: installs the frame-backed lexical authority of this genuine
+     * Closure activation without materializing its guest Context. Idempotent
+     * for the identical authority; a conflicting authority is rejected. An
+     * already existing Context keeps its identity and hands its bindings over
+     * once to the frame-backed authority.
+     */
+    public void installPublishedClosureLexicalAuthorityForRuntime(
+            ProtosLexicalBindingAuthority authority) {
+        Objects.requireNonNull(authority, "authority");
+        if (frameLexicalAuthority == authority) {
+            return;
+        }
+        if (frameLexicalAuthority != null || construction) {
+            throw new IllegalStateException("conflicting Closure lexical authority");
+        }
+        if (context != null) {
+            if (!(context instanceof ProtosExecutionContextValue executionContext)) {
+                throw new IllegalStateException("a Closure activation requires an execution context");
+            }
+            executionContext.installFrameLexicalBindingAuthority(authority);
+        }
+        frameLexicalAuthority = authority;
+    }
+
+    /** The installed frame-backed lexical authority, or {@code null}; never materializes. */
+    public ProtosLexicalBindingAuthority publishedClosureLexicalAuthorityForRuntime() {
+        return frameLexicalAuthority;
     }
 
     /**
@@ -607,7 +646,10 @@ public final class ProtosActivation {
      */
     public boolean currentContextHasLocalSlotForRuntime(String name) {
         Objects.requireNonNull(name, "name");
-        return context != null && context.hasLocalSlot(name);
+        if (context != null) {
+            return context.hasLocalSlot(name);
+        }
+        return frameLexicalAuthority != null && frameLexicalAuthority.containsBinding(name);
     }
 
     /**
@@ -619,10 +661,18 @@ public final class ProtosActivation {
         return context != null && context.isFrozen();
     }
 
-    /** Reads a current NAME binding without materializing the guest Context. */
+    /**
+     * Reads a current lexical binding without materializing the guest
+     * Context: the Context's own binding, else the frame-backed authority's.
+     */
     public Optional<Object> readCurrentLocalSlotForRuntime(String name) {
         Objects.requireNonNull(name, "name");
-        return context != null ? context.readLocalSlot(name) : Optional.empty();
+        if (context != null) {
+            return context.readLocalSlot(name);
+        }
+        return frameLexicalAuthority != null
+                ? frameLexicalAuthority.readBinding(name)
+                : Optional.empty();
     }
 
     /** Establishes a current NAME binding in the execution context. */
@@ -641,6 +691,17 @@ public final class ProtosActivation {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(value, "value");
 
+        if (context == null && frameLexicalAuthority != null) {
+            /*
+             * A deferred Context is OPEN and unfrozen, so only presence
+             * restricts the assignment; the Context is not materialized.
+             */
+            if (!frameLexicalAuthority.containsBinding(name)) {
+                throw new IllegalStateException("local slot does not exist: " + name);
+            }
+            frameLexicalAuthority.putBinding(name, value);
+            return;
+        }
         context().assignLocalSlot(name, value);
     }
 
@@ -970,6 +1031,11 @@ public final class ProtosActivation {
      * <p>An object body is not a lexical capture scope
      * ({@code EXECUTION_AND_CONTROL.md} §4): a construction activation hands
      * on its enclosing environment unchanged.
+     *
+     * <p>I115-S1c-L: while the Context is deferred, the node names this exact
+     * activation as its owner, so a capturing Closure reaches the
+     * frame-backed authority installed here, before or after the capture,
+     * without materializing the Context.
      */
     public ProtosLexicalEnvironment lexicalEnvironmentForClosureCapture() {
         if (construction) {

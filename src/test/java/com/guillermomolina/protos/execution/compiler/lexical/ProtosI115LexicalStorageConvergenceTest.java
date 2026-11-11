@@ -71,10 +71,31 @@ final class ProtosI115LexicalStorageConvergenceTest {
                     "ReadFrameLocal",
                     "ReadCapturedFrameLocalAtRoot",
                     "EnsureLiveFrameLexicalAuthority",
-                    "PromoteFrameLexicalAuthority");
+                    "PromoteFrameLexicalAuthority",
+                    // I115-S1c-L: no legacy frame-authority or captured-access
+                    // operation and no uninitialized-binding shortcut reappears.
+                    "UninitializedBinding",
+                    "ReadCapturedFrameLocal",
+                    "ResolveCapturedWritableLexicalTarget",
+                    "SelectCapturedMaterializedOwnerFrame",
+                    "ResolveCapturedMaterializedWritableLexicalTarget",
+                    "ReadInlineCapturedFrameLocal");
 
     private static final Set<String> CELL_OPERATIONS =
-            Set.of("CreateCell", "LoadCell", "StoreCell", "LoadCapturedCell", "CaptureClosureCells");
+            Set.of(
+                    "CreateCell",
+                    "LoadCell",
+                    "StoreCell",
+                    "LoadCapturedCell",
+                    "CaptureClosureCells",
+                    "LoadLexicalCell",
+                    "SelectLexicalCellWrite",
+                    "AssignLexicalCell",
+                    "CreateLexicalCell");
+
+    /* I115-S1c-L operations that bind or project an escaped frame. */
+    private static final Set<String> FRAME_PUBLICATION =
+            Set.of("EnsureCurrentClosureLexicalView", "PublishCurrentClosureContext");
 
     /* The first invocation precedes x's establishment in the captured module. */
     private static final String MODULE_CANDIDATE_SOURCE =
@@ -380,7 +401,7 @@ final class ProtosI115LexicalStorageConvergenceTest {
     }
 
     @Test
-    void observedContextDoesNotHoldLocalBindings() throws Exception {
+    void observedContextHoldsEstablishedLocalBindings() throws Exception {
         withFixture(
                 fixture -> {
                     ProtosObjectValue observed =
@@ -389,11 +410,332 @@ final class ProtosI115LexicalStorageConvergenceTest {
                                     execute(fixture, closure(fixture, "(() => { x: 1\n context })")));
 
                     /*
-                     * KNOWN I115 SEMANTIC DIVERGENCE: a Closure's LOCAL binding
-                     * lives only in its Bytecode DSL local; the observed context
-                     * does not show it, and no synchronization projects it.
+                     * I115-S1c-L: the observed Context is the live frame-backed
+                     * view of the Closure activation, so its established LOCAL
+                     * binding is a binding of the Context (formerly recorded as
+                     * a KNOWN I115 SEMANTIC DIVERGENCE).
                      */
-                    assertFalse(observed.hasLocalSlot("x"));
+                    assertTrue(observed.hasLocalSlot("x"));
+                    assertEquals(1L, observed.readLocalSlot("x").orElseThrow());
+                });
+    }
+
+    // ---- I115-S1c-L: live frame projection and physical access -------------
+
+    @Test
+    void observedContextSharesTheExactPhysicalValueOfALocal() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosObjectValue value = newObject();
+                    ProtosClosureValue closure =
+                            closure(fixture, "((v) => { x: v\n context })");
+                    ProtosObjectValue observed =
+                            assertInstanceOf(ProtosObjectValue.class, execute(fixture, closure, value));
+
+                    assertSame(value, observed.readLocalSlot("x").orElseThrow());
+                    List<String> names = operations(activationNode(closure));
+                    assertTrue(names.contains("PublishCurrentClosureContext"), names::toString);
+                    assertNoRetiredSelection(names);
+                });
+    }
+
+    @Test
+    void capturedCellKeepsOneIdentityAcrossSiblingsAndContextMutation() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosObjectValue observed =
+                            assertInstanceOf(
+                                    ProtosObjectValue.class,
+                                    execute(
+                                            fixture,
+                                            closure(
+                                                    fixture,
+                                                    "(() => { a: 1\n"
+                                                            + " first: (() => a)\n"
+                                                            + " second: (() => a)\n"
+                                                            + " context })")));
+                    ProtosClosureValue first =
+                            assertInstanceOf(ProtosClosureValue.class, observed.readLocalSlot("first").orElseThrow());
+                    ProtosClosureValue second =
+                            assertInstanceOf(ProtosClosureValue.class, observed.readLocalSlot("second").orElseThrow());
+                    ProtosLexicalCell cell = first.capturedCellsForRuntime()[0];
+                    assertSame(cell, second.capturedCellsForRuntime()[0]);
+
+                    observed.assignLocalSlot("a", 9L);
+                    assertEquals(9L, execute(fixture, first));
+                    assertEquals(9L, execute(fixture, second));
+                    assertSame(cell, first.capturedCellsForRuntime()[0]);
+                });
+    }
+
+    @Test
+    void removalAndRecreationChangeActualMembershipOfLocalAndCell() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosObjectValue observed =
+                            assertInstanceOf(
+                                    ProtosObjectValue.class,
+                                    execute(
+                                            fixture,
+                                            closure(
+                                                    fixture,
+                                                    "(() => { local: 1\n captured: 2\n"
+                                                            + " reader: (() => captured)\n"
+                                                            + " context })")));
+                    ProtosClosureValue reader =
+                            assertInstanceOf(ProtosClosureValue.class, observed.readLocalSlot("reader").orElseThrow());
+                    ProtosLexicalCell cell = reader.capturedCellsForRuntime()[0];
+
+                    assertEquals(1L, observed.removeLocalSlot("local"));
+                    assertEquals(2L, observed.removeLocalSlot("captured"));
+                    assertFalse(observed.hasLocalSlot("local"));
+                    assertFalse(observed.hasLocalSlot("captured"));
+                    assertFalse(cell.isPresentForRuntime());
+
+                    observed.createLocalSlot("local", 3L);
+                    observed.createLocalSlot("captured", 4L);
+                    assertEquals(3L, observed.readLocalSlot("local").orElseThrow());
+                    assertSame(cell, reader.capturedCellsForRuntime()[0]);
+                    assertEquals(4L, execute(fixture, reader));
+                });
+    }
+
+    @Test
+    void unobservedLocalReadStaysADirectLocalRead() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosClosureValue closure = closure(fixture, "(() => { x: 1\n y: x\n y })");
+                    List<String> names = operations(activationNode(closure));
+
+                    assertTrue(names.stream().anyMatch(name -> name.startsWith("load.local")), names::toString);
+                    assertFalse(names.contains("LoadLexicalLocal"), names::toString);
+                    assertFalse(names.contains("Lookup"), names::toString);
+                    assertTrue(names.stream().noneMatch(FRAME_PUBLICATION::contains), names::toString);
+                    assertFalse(names.contains("CurrentActivation"), names::toString);
+                    assertEquals(1L, execute(fixture, closure));
+                });
+    }
+
+    @Test
+    void admittedModuleReadKeepsReadGlobal() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosClosureValue reader = closure(fixture, "x: 5\n(() => x)");
+                    List<String> names = operations(activationNode(reader));
+
+                    assertTrue(names.contains("ReadGlobal"), names::toString);
+                    assertFalse(names.contains("Lookup"), names::toString);
+                    assertTrue(names.stream().noneMatch(FRAME_PUBLICATION::contains), names::toString);
+                    assertEquals(5L, execute(fixture, reader));
+                });
+    }
+
+    @Test
+    void ordinaryLocalAndCellReadsAreNeverNamedLexicalAccesses() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosClosureValue closure =
+                            closure(
+                                    fixture,
+                                    "(() => { a: 1\n b: 2\n get: (() => b)\n a + get() })");
+                    List<String> names = operations(activationNode(closure));
+                    ProtosClosureValue reader =
+                            assertInstanceOf(
+                                    ProtosClosureValue.class,
+                                    execute(fixture, closure(fixture, "(() => { b: 2\n (() => b) })")));
+                    List<String> readerNames = operations(activationNode(reader));
+
+                    assertFalse(names.contains("Lookup"), names::toString);
+                    assertFalse(readerNames.contains("Lookup"), readerNames::toString);
+                    assertTrue(readerNames.contains("LoadCell"), readerNames::toString);
+                    assertNoRetiredSelection(names);
+                    assertNoRetiredSelection(readerNames);
+                    assertEquals(3L, execute(fixture, closure));
+                });
+    }
+
+    @Test
+    void objectMemberReadingAnEnclosingParameterKeepsTheFastPath() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosObjectValue value = newObject();
+                    ProtosClosureValue make =
+                            closure(fixture, "((name) => { d: { label: name }\n d.label })");
+                    List<String> names = operations(activationNode(make));
+
+                    assertSame(value, execute(fixture, make, value));
+                    assertTrue(names.stream().noneMatch(FRAME_PUBLICATION::contains), names::toString);
+                    assertNoRetiredSelection(names);
+                });
+    }
+
+    @Test
+    void sameNameMemberReadsTheEnclosingParameterBeforeItIsCreated() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosObjectValue value = newObject();
+                    ProtosClosureValue make =
+                            closure(fixture, "((name) => { d: { name: name }\n d.name })");
+                    List<String> names = operations(activationNode(make));
+
+                    assertSame(value, execute(fixture, make, value));
+                    assertTrue(names.contains("EnsureCurrentClosureLexicalView"), names::toString);
+                    assertNoRetiredSelection(names);
+                });
+    }
+
+    @Test
+    void readAfterMemberEstablishmentSelectsTheNewMember() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosObjectValue value = newObject();
+                    ProtosObjectValue built =
+                            assertInstanceOf(
+                                    ProtosObjectValue.class,
+                                    execute(
+                                            fixture,
+                                            closure(
+                                                    fixture,
+                                                    "((name) => { d: { before: name\n"
+                                                            + " name: 7\n"
+                                                            + " after: name }\n d })"),
+                                            value));
+
+                    assertSame(value, built.readLocalSlot("before").orElseThrow());
+                    assertEquals(7L, built.readLocalSlot("name").orElseThrow());
+                    assertEquals(7L, built.readLocalSlot("after").orElseThrow());
+                });
+    }
+
+    @Test
+    void successiveInvocationsDoNotShareConstructionLexicalStorage() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosObjectValue first = newObject();
+                    ProtosObjectValue second = newObject();
+                    ProtosClosureValue make =
+                            closure(fixture, "((name) => { d: { name: name }\n d })");
+
+                    ProtosObjectValue firstBuilt =
+                            assertInstanceOf(ProtosObjectValue.class, execute(fixture, make, first));
+                    ProtosObjectValue secondBuilt =
+                            assertInstanceOf(ProtosObjectValue.class, execute(fixture, make, second));
+
+                    assertNotSame(firstBuilt, secondBuilt);
+                    assertSame(first, firstBuilt.readLocalSlot("name").orElseThrow());
+                    assertSame(second, secondBuilt.readLocalSlot("name").orElseThrow());
+                });
+    }
+
+    @Test
+    void capturedCellIsReadBeforeTheSameNameMemberIsCreated() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosObjectValue value = newObject();
+                    ProtosClosureValue make =
+                            closure(
+                                    fixture,
+                                    "((name) => { reader: (() => name)\n"
+                                            + " d: { name: name }\n"
+                                            + " d.name })");
+                    List<String> names = operations(activationNode(make));
+
+                    assertSame(value, execute(fixture, make, value));
+                    assertTrue(names.contains("CreateCell"), names::toString);
+                    assertTrue(names.contains("EnsureCurrentClosureLexicalView"), names::toString);
+                });
+    }
+
+    @Test
+    void nestedConstructionKeepsTheGenuineEnclosingLexicalContext() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosObjectValue value = newObject();
+                    ProtosObjectValue outer =
+                            assertInstanceOf(
+                                    ProtosObjectValue.class,
+                                    execute(
+                                            fixture,
+                                            closure(
+                                                    fixture,
+                                                    "((name) => { outer: { name: 1\n"
+                                                            + " inner: { name: name } }\n outer })"),
+                                            value));
+                    ProtosObjectValue inner =
+                            assertInstanceOf(ProtosObjectValue.class, outer.readLocalSlot("inner").orElseThrow());
+
+                    // The enclosing object under construction is not a lexical scope.
+                    assertSame(value, inner.readLocalSlot("name").orElseThrow());
+                    assertEquals(1L, outer.readLocalSlot("name").orElseThrow());
+                });
+    }
+
+    @Test
+    void absentMemberWithoutEnclosingBindingSignalsTheLookupError() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosClosureValue make = closure(fixture, "(() => { d: { name: name }\n d })");
+
+                    assertThrows(ProtosSignalException.class, () -> execute(fixture, make));
+                });
+    }
+
+    @Test
+    void closureCreatedInsideAnObjectDoesNotCaptureItsMembers() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosObjectValue value = newObject();
+                    ProtosObjectValue built =
+                            assertInstanceOf(
+                                    ProtosObjectValue.class,
+                                    execute(
+                                            fixture,
+                                            closure(
+                                                    fixture,
+                                                    "((name) => { d: { name: 7\n get: (() => name) }\n d })"),
+                                            value));
+                    ProtosClosureValue get =
+                            assertInstanceOf(ProtosClosureValue.class, built.readLocalSlot("get").orElseThrow());
+
+                    assertSame(value, execute(fixture, get));
+                });
+    }
+
+    @Test
+    void progressGroupDescriptorShapeResolvesEveryEnclosingParameter() throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosObjectValue name = newObject();
+                    ProtosObjectValue subtrees = newObject();
+                    ProtosObjectValue directories = newObject();
+                    ProtosObjectValue subdivided = newObject();
+                    ProtosClosureValue progressGroupDescriptor =
+                            closure(
+                                    fixture,
+                                    "((name, subtreeValues, directoryValues, subdivided) => {\n"
+                                            + "    descriptor: {\n"
+                                            + "        name: name\n"
+                                            + "        subtrees: subtreeValues\n"
+                                            + "        directories: directoryValues\n"
+                                            + "        subdivided: subdivided\n"
+                                            + "    }\n"
+                                            + "    descriptor\n"
+                                            + "})");
+                    ProtosObjectValue descriptor =
+                            assertInstanceOf(
+                                    ProtosObjectValue.class,
+                                    execute(
+                                            fixture,
+                                            progressGroupDescriptor,
+                                            name,
+                                            subtrees,
+                                            directories,
+                                            subdivided));
+
+                    assertSame(name, descriptor.readLocalSlot("name").orElseThrow());
+                    assertSame(subtrees, descriptor.readLocalSlot("subtrees").orElseThrow());
+                    assertSame(directories, descriptor.readLocalSlot("directories").orElseThrow());
+                    assertSame(subdivided, descriptor.readLocalSlot("subdivided").orElseThrow());
                 });
     }
 

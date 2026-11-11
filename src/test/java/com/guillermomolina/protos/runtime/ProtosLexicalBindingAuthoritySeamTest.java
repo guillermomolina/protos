@@ -163,4 +163,36 @@ class ProtosLexicalBindingAuthoritySeamTest {
         parentContext.assignLocalSlot("outer", "updatedOuterValue");
         assertEquals("updatedOuterValue", child.lookupSlot("outer").orElseThrow().value());
     }
+
+    // ---- I115-S1c-L ------------------------------------------------------------
+
+    @Test
+    void contextCreatedWithAKnownAuthorityHasExactlyThatOneAuthority() {
+        ProtosLexicalBindingAuthority frame = ProtosLexicalBindingAuthority.newMapBackedForRuntime();
+        frame.putBinding("x", "live");
+        ProtosExecutionContextValue context =
+                new ProtosExecutionContextValue(ProtosObjectValue.rootObject(), frame);
+
+        assertSame(frame, context.lexicalBindingAuthorityForRuntime());
+        assertSame("live", context.readLocalSlot("x").orElseThrow());
+        context.installFrameLexicalBindingAuthority(frame);
+        assertSame(frame, context.lexicalBindingAuthorityForRuntime());
+        assertThrows(
+                IllegalStateException.class,
+                () -> context.installFrameLexicalBindingAuthority(
+                        ProtosLexicalBindingAuthority.newMapBackedForRuntime()));
+    }
+
+    @Test
+    void cellRemovalAndRecreationKeepTheCellIdentityAndPresenceState() {
+        ProtosLexicalCell cell = new ProtosLexicalCell();
+        assertFalse(cell.isPresentForRuntime());
+        cell.setForRuntime(ProtosNullValue.INSTANCE);
+        assertTrue(cell.isPresentForRuntime());
+        cell.clearForRuntime();
+        assertFalse(cell.isPresentForRuntime());
+        assertSame(null, cell.valueOrNullForRuntime());
+        cell.setForRuntime("recreated");
+        assertSame("recreated", cell.valueOrNullForRuntime());
+    }
 }

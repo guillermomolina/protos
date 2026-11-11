@@ -903,10 +903,17 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * Capture a compact root with no frame-owned lexical bindings. A creator
-     * capture publishes its exact activation while caller provenance is still
-     * available, but leaves its guest Context deferred. An inherited-only
-     * capture reuses the existing lexical chain without publishing this root.
+     * Capture by a compact root. A creator capture publishes its exact
+     * activation while caller provenance is still available, but leaves its
+     * guest Context deferred. An inherited-only capture reuses the existing
+     * lexical chain without publishing this root.
+     *
+     * <p>I115-S1c-L: when this invocation's exact activation is already
+     * published (for example because its frame was bound to a frame-backed
+     * lexical view), that activation is reused as the one owner: the Closure
+     * captures its lexical environment node, so it reaches the same live
+     * physical bindings as the creator, and keeps its receiver, method home,
+     * ReturnHome, Prelude and module key. No second owner is reconstructed.
      *
      * <p>I115 / PLAT066-C: when {@code capturesCreatorContext} is false the
      * lowering classified {@code definition} as not capturing its creator's
@@ -935,6 +942,20 @@ final class ProtosFrameArguments {
             return ProtosClosureValue.experimentalNonCapturing(
                     definition,
                     executionPlanCell.plan());
+        }
+        if (hasPublishedActivation(arguments)) {
+            ProtosActivation owner = publishedActivation(arguments);
+            return new ProtosClosureValue(
+                    definition,
+                    capturesCreatorContext
+                            ? owner.lexicalEnvironmentForClosureCapture()
+                            : owner.capturedLexicalEnvironmentForRuntime(),
+                    owner.receiver(),
+                    owner.methodHomeOrNullForRuntime(),
+                    owner.returnHomeOrNullForRuntime(),
+                    owner.preludeOrNullForRuntime(),
+                    executionPlanCell.plan(),
+                    owner.currentModuleKey().orElse(null));
         }
         ProtosClosureValue currentClosure = compactClosure(arguments);
         boolean direct = isDirectClosureCall(arguments);

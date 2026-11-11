@@ -187,6 +187,22 @@ public final class ProtosLexicalEnvironment {
         return context == null;
     }
 
+    /**
+     * I115-S1c-L: whether this scope can hold any binding visible to name
+     * selection: its Context exists, or its deferred owner has a Context or a
+     * frame-backed authority. A scope that cannot hold bindings needs no
+     * membership query. Reads only fields; never materializes anything.
+     */
+    public boolean mayHoldBindingsForRuntime() {
+        if (context != null) {
+            return true;
+        }
+        ProtosActivation owner = deferredOwner;
+        return owner != null
+                && (owner.materializedContextOrNullForRuntime() != null
+                        || owner.publishedClosureLexicalAuthorityForRuntime() != null);
+    }
+
     public boolean hasLocalSlotForRuntime(String name) {
         ProtosObjectValue existing = context;
         if (existing != null) {
@@ -201,6 +217,23 @@ public final class ProtosLexicalEnvironment {
             return existing.readLocalSlot(name);
         }
         return resolveDeferredOwner().readCurrentLocalSlotForRuntime(name);
+    }
+
+    /**
+     * Assigns an existing binding of this scope without materializing a
+     * deferred guest context: a materialized context applies its ordinary
+     * object rules; a deferred one is answered by its owning activation.
+     *
+     * @throws IllegalStateException when the binding is absent or the
+     *     context rejects the mutation
+     */
+    public void assignLocalSlotForRuntime(String name, Object value) {
+        ProtosObjectValue existing = context;
+        if (existing != null) {
+            existing.assignLocalSlot(name, value);
+            return;
+        }
+        resolveDeferredOwner().assignCurrentLocalSlotForRuntime(name, value);
     }
 
     /** An unmaterialized execution context cannot have been frozen by guest code. */

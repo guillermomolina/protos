@@ -90,10 +90,19 @@ import java.util.Objects;
  * owned by an outer Closure selects that owner's cell; no reference is ever
  * classified as "cell or lookup".
  *
- * <p>KNOWN I115 SEMANTIC DIVERGENCE (D179): a reference statically
- * classified to a cell no longer observes a later dynamic redirection of the
- * name (a nearer late creation, or removeSlot followed by a lookup that would
- * reach an outer binding). There is deliberately no runtime fallback.
+ * <p>I115-S1c-L: static identity is not runtime presence. After the walk,
+ * {@link #finishLexicalAccessPlan} decides for every bare read and assignment
+ * site how it accesses its binding at run time ({@link
+ * CanonicalBindingAnalysis.LexicalAccess}): directly when the owner's
+ * binding is provably the PRESENT nearest binding, presence-checked when it
+ * may be ABSENT (a {@code Candidate}, or a binding of a scope whose Context
+ * may be observed and therefore removed), and by live lexical selection when
+ * a nearer dynamically created binding is possible. A site that may continue
+ * past its owner marks every further Closure declaring the same name as
+ * requiring a frame-backed view, so live selection can reach that binding;
+ * a captured cell may therefore exist long before its value becomes PRESENT.
+ *
+
  */
 final class CanonicalBindingAnalyzer {
     private final Map<CanonicalClosure, CanonicalLexicalScope> closureScopes = new IdentityHashMap<>();
@@ -105,6 +114,27 @@ final class CanonicalBindingAnalyzer {
             new IdentityHashMap<>();
     private final Map<CanonicalParameter, CanonicalBindingIdentity> parameterIdentities = new IdentityHashMap<>();
 
+    /*
+     * I115-S1c-L analysis-time facts, never part of the result: the scope in
+     * which each bare read and assignment site occurs, and the creation sites
+     * whose binding may already be PRESENT when they execute.
+     */
+    private final Map<CanonicalLookup, CanonicalLexicalScope> lookupSites = new IdentityHashMap<>();
+    private final Map<CanonicalAssign, CanonicalLexicalScope> assignSites = new IdentityHashMap<>();
+    private final Map<Object, CreationSite> creationSites = new IdentityHashMap<>();
+    private final Map<CanonicalLookup, CanonicalBindingAnalysis.LexicalAccess> lookupAccesses =
+            new IdentityHashMap<>();
+    private final Map<CanonicalAssign, CanonicalBindingAnalysis.LexicalAccess> assignAccesses =
+            new IdentityHashMap<>();
+    private final java.util.Set<Object> presenceCheckedCreates =
+            java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+    /*
+     * Creation-site presence is determined within its genuine lexical
+     * owner. A contextual callback is a separate Closure activation.
+     */
+    private record CreationSite(
+            CanonicalLexicalScope scope, boolean alreadyEstablished) {}
+
     private CanonicalBindingAnalyzer() {}
 
     /** Analyzes a whole module/program root sequence as the {@code ROOT} scope. */
@@ -114,6 +144,7 @@ final class CanonicalBindingAnalyzer {
         CanonicalLexicalScope root = new CanonicalLexicalScope(CanonicalLexicalScope.Kind.ROOT, null);
         analyzer.collectDeclaredNames(moduleRoot, root);
         analyzer.walkSequence(moduleRoot, root);
+        analyzer.finishLexicalAccessPlan();
         return analyzer.toAnalysis(root);
     }
 
@@ -131,6 +162,7 @@ final class CanonicalBindingAnalyzer {
         Objects.requireNonNull(closure, "closure");
         CanonicalBindingAnalyzer analyzer = new CanonicalBindingAnalyzer();
         analyzer.walkClosure(closure, null);
+        analyzer.finishLexicalAccessPlan();
         CanonicalLexicalScope topScope = analyzer.closureScopes.get(closure);
         return analyzer.toAnalysis(topScope);
     }
@@ -144,7 +176,12 @@ final class CanonicalBindingAnalyzer {
                 assignResolutions,
                 createIdentities,
                 multipleCreateIdentities,
-                parameterIdentities);
+                parameterIdentities,
+                lookupAccesses,
+                assignAccesses,
+                presenceCheckedCreates,
+                lookupSites,
+                assignSites);
     }
 
     // ---- Phase 1: order-independent same-scope declaration discovery ----
@@ -180,16 +217,9 @@ final class CanonicalBindingAnalyzer {
                 }
             }
             case CanonicalSend send -> {
-                if (send.contextual()) {
-                    collectContextualOperand(send.receiver(), scope);
-                    for (CanonicalExpression argument : send.arguments()) {
-                        collectContextualOperand(argument, scope);
-                    }
-                } else {
-                    collectDeclaredNames(send.receiver(), scope);
-                    for (CanonicalExpression argument : send.arguments()) {
-                        collectDeclaredNames(argument, scope);
-                    }
+                collectDeclaredNames(send.receiver(), scope);
+                for (CanonicalExpression argument : send.arguments()) {
+                    collectDeclaredNames(argument, scope);
                 }
             }
             case CanonicalCall call -> {
@@ -248,9 +278,16 @@ final class CanonicalBindingAnalyzer {
 
     private void walk(CanonicalExpression expression, CanonicalLexicalScope scope) {
         switch (expression) {
-            case CanonicalLookup lookup -> lookupResolutions.put(lookup, resolve(lookup.name(), scope));
+            case CanonicalLookup lookup -> {
+                lookupResolutions.put(lookup, resolve(lookup.name(), scope));
+                lookupSites.put(lookup, scope);
+            }
             case CanonicalLiteral ignored -> {}
-            case CanonicalIntrinsic ignored -> {}
+            case CanonicalIntrinsic intrinsic -> {
+                if (intrinsic.kind() == CanonicalIntrinsic.Kind.CONTEXT) {
+                    scope.markObservesContext();
+                }
+            }
             case CanonicalMember member -> walk(member.receiver(), scope);
             case CanonicalReturn returnExpression -> walk(returnExpression.value(), scope);
             case CanonicalSpread spread -> walk(spread.expression(), scope);
@@ -270,16 +307,9 @@ final class CanonicalBindingAnalyzer {
             }
             case CanonicalSequence sequence -> walkSequence(sequence, scope);
             case CanonicalSend send -> {
-                if (send.contextual()) {
-                    walkContextualOperand(send.receiver(), scope);
-                    for (CanonicalExpression argument : send.arguments()) {
-                        walkContextualOperand(argument, scope);
-                    }
-                } else {
-                    walk(send.receiver(), scope);
-                    for (CanonicalExpression argument : send.arguments()) {
-                        walk(argument, scope);
-                    }
+                walk(send.receiver(), scope);
+                for (CanonicalExpression argument : send.arguments()) {
+                    walk(argument, scope);
                 }
             }
             case CanonicalCall call -> {
@@ -313,32 +343,6 @@ final class CanonicalBindingAnalyzer {
         }
     }
 
-    /*
-     * I115 / GraalPy: while and if bodies do not introduce function
-     * scopes. The synthetic CanonicalClosure is only a legacy carrier
-     * of the source block; its declarations and references are resolved
-     * in the surrounding function scope.
-     */
-    private void collectContextualOperand(
-            CanonicalExpression expression,
-            CanonicalLexicalScope scope) {
-        if (expression instanceof CanonicalClosure closure) {
-            collectDeclaredNames(closure.body(), scope);
-        } else {
-            collectDeclaredNames(expression, scope);
-        }
-    }
-
-    private void walkContextualOperand(
-            CanonicalExpression expression,
-            CanonicalLexicalScope scope) {
-        if (expression instanceof CanonicalClosure closure) {
-            walkSequence(closure.body(), scope);
-        } else {
-            walk(expression, scope);
-        }
-    }
-
     private void walkCreate(CanonicalCreate create, CanonicalLexicalScope scope) {
         if (create.target().isPresent()) {
             /* Explicit member target: dynamic object-member creation, not a lexical binding. */
@@ -348,12 +352,24 @@ final class CanonicalBindingAnalyzer {
         }
         walk(create.value(), scope);
         CanonicalBindingIdentity identity = scope.declare(create.name());
+        creationSites.put(
+                create,
+                new CreationSite(
+                        scope, scope.isEstablished(create.name())));
         scope.markEstablished(create.name());
         createIdentities.put(create, identity);
     }
 
     private void walkMultipleCreate(CanonicalMultipleCreate create, CanonicalLexicalScope scope) {
         walk(create.value(), scope);
+        boolean alreadyEstablished = false;
+        for (String name : create.names()) {
+            alreadyEstablished |= scope.declaresName(name) && scope.isEstablished(name);
+        }
+        // A repeated name inside one multiple creation is itself a duplicate.
+        alreadyEstablished |= new java.util.HashSet<>(create.names()).size() != create.names().size();
+        creationSites.put(
+                create, new CreationSite(scope, alreadyEstablished));
         List<CanonicalBindingIdentity> identities = new ArrayList<>(create.names().size());
         for (String name : create.names()) {
             CanonicalBindingIdentity identity = scope.declare(name);
@@ -373,6 +389,7 @@ final class CanonicalBindingAnalyzer {
         /* Destination is resolved before the RHS evaluates, matching the runtime
          * ResolveWritableLexicalTarget-before-value ordering this slice must preserve. */
         assignResolutions.put(assign, resolve(assign.name(), scope));
+        assignSites.put(assign, scope);
         walk(assign.value(), scope);
     }
 
@@ -422,14 +439,14 @@ final class CanonicalBindingAnalyzer {
     }
 
     /*
-     * I115: identity is purely lexical. The nearest declaring scope owns the
-     * reference whether or not its binding point has executed; establishment
-     * only distinguishes Resolved/CapturedResolved from Candidate and never
-     * moves the reference to an outer binding. The owner's LOCAL or CELL
-     * storage signals the uninitialized-binding Error on an early access.
-     *
-     * KNOWN I115 SEMANTIC DIVERGENCE (D179): a read before the binding point
-     * no longer reaches an outer binding of the same name.
+     * I115: identity is purely lexical. The nearest declaring scope is the
+     * reference's static owner whether or not its binding point has executed;
+     * establishment only distinguishes Resolved/CapturedResolved from
+     * Candidate. A Candidate is a possible owner, not a promise: when its
+     * binding is ABSENT at run time, the site continues ordinary lookup with
+     * live lexical selection and may reach an outer binding or the receiver
+     * (see finishLexicalAccessPlan). The owner's cell is classified here even
+     * before establishment, because it must exist before its value is PRESENT.
      */
     private CanonicalBindingResolution resolve(String name, CanonicalLexicalScope referenceScope) {
         CanonicalLexicalScope scope = referenceScope;
@@ -479,6 +496,155 @@ final class CanonicalBindingAnalyzer {
         owner.markCell(identity.name());
         for (CanonicalLexicalScope closureScope : crossed) {
             closureScope.addFreeCell(identity);
+        }
+    }
+
+    // ---- I115-S1c-L: run-time access plan --------------------------------------
+
+    /*
+     * Completed once after the walk, when every scope's final facts (its
+     * declarations, cells and Context observation) are known. Decides every
+     * bare read/assignment site's access, marks the Closure scopes whose
+     * bindings live selection may need to reach by name, and the creations
+     * that must apply the ordinary ':' presence rules.
+     */
+    private void finishLexicalAccessPlan() {
+        for (Map.Entry<CanonicalLookup, CanonicalBindingResolution> entry : lookupResolutions.entrySet()) {
+            CanonicalLexicalScope site = lookupSites.get(entry.getKey());
+            lookupAccesses.put(
+                    entry.getKey(),
+                    planSite(entry.getValue(), site, entry.getKey().name()));
+        }
+        for (Map.Entry<CanonicalAssign, CanonicalBindingResolution> entry : assignResolutions.entrySet()) {
+            CanonicalLexicalScope site = assignSites.get(entry.getKey());
+            assignAccesses.put(
+                    entry.getKey(),
+                    planSite(entry.getValue(), site, entry.getKey().name()));
+        }
+        for (Map.Entry<Object, CreationSite> entry : creationSites.entrySet()) {
+            CreationSite creation = entry.getValue();
+            if (creation.scope().kind() == CanonicalLexicalScope.Kind.CLOSURE
+                    && (creation.alreadyEstablished() || creation.scope().observesContext())) {
+                presenceCheckedCreates.add(entry.getKey());
+            }
+        }
+    }
+
+    private CanonicalBindingAnalysis.LexicalAccess planSite(
+            CanonicalBindingResolution resolution, CanonicalLexicalScope site, String name) {
+        CanonicalBindingAnalysis.LexicalAccess access = lexicalAccessOf(resolution, site);
+        CanonicalLexicalScope owner = ownerOrNull(resolution);
+        if (owner != null && access == CanonicalBindingAnalysis.LexicalAccess.SELECTED) {
+            markLexicalViews(owner, site, name);
+            markEnclosingFrameViewForConstruction(owner, site, name);
+        } else if (owner != null && access == CanonicalBindingAnalysis.LexicalAccess.PRESENCE_CHECKED) {
+            markLexicalViews(owner.outwardScope(), site, name);
+            markEnclosingFrameViewForConstruction(owner.outwardScope(), site, name);
+        }
+        return access;
+    }
+
+    /*
+     * I115-S1c-L (OBJECT_MODEL.md §20): a selecting site inside an inline
+     * object body searches the object under construction, then the actual
+     * bindings of the enclosing genuine lexical contexts. When the nearest
+     * enclosing Closure scope (the root in whose frame the construction is
+     * emitted inline) lies on the selection path and declares the name, its
+     * LOCAL/CELL binding is reachable by name only through the frame-backed
+     * view, so every object body from the site out to that root is recorded
+     * as requiring the view before its construction activation captures the
+     * enclosing environment. Nothing is recorded for a body whose selection
+     * cannot reach a binding of that root, so unrelated frames stay compact.
+     */
+    private static void markEnclosingFrameViewForConstruction(
+            CanonicalLexicalScope from, CanonicalLexicalScope site, String name) {
+        if (site == null || site.kind() != CanonicalLexicalScope.Kind.OBJECT_BODY || from == null) {
+            return;
+        }
+        CanonicalLexicalScope enclosingRoot = site.outwardScope();
+        if (enclosingRoot == null
+                || enclosingRoot.kind() != CanonicalLexicalScope.Kind.CLOSURE
+                || !enclosingRoot.declaresName(name)
+                || !onSelectionPath(from, enclosingRoot)) {
+            return;
+        }
+        for (CanonicalLexicalScope scope = site;
+                scope != null && scope != enclosingRoot;
+                scope = scope.lexicalParent()) {
+            if (scope.kind() == CanonicalLexicalScope.Kind.OBJECT_BODY) {
+                scope.markRequiresEnclosingFrameView();
+            }
+        }
+    }
+
+    /* Whether {@code target} is {@code from} or one of its outward scopes. */
+    private static boolean onSelectionPath(CanonicalLexicalScope from, CanonicalLexicalScope target) {
+        for (CanonicalLexicalScope scope = from; scope != null; scope = scope.outwardScope()) {
+            if (scope == target) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static CanonicalLexicalScope ownerOrNull(CanonicalBindingResolution resolution) {
+        if (resolution instanceof CanonicalBindingResolution.Resolved resolved) {
+            return resolved.identity().owner();
+        }
+        if (resolution instanceof CanonicalBindingResolution.CapturedResolved captured) {
+            return captured.identity().owner();
+        }
+        if (resolution instanceof CanonicalBindingResolution.Candidate candidate) {
+            return candidate.identity().owner();
+        }
+        return null;
+    }
+
+    /*
+     * The access of one site. A Closure scope from the site (inclusive) to
+     * the owner (exclusive) whose Context may be observed can hold a nearer
+     * dynamically created binding, so the site is SELECTED. Otherwise the
+     * owner's binding is the nearest possible one; it is PRESENCE_CHECKED
+     * when it may be ABSENT (Candidate, or a Closure owner whose Context may
+     * be observed), else DIRECT. A module owner observes its own membership
+     * through ReadGlobal/WriteGlobal, so it never needs the presence check.
+     */
+    private static CanonicalBindingAnalysis.LexicalAccess lexicalAccessOf(
+            CanonicalBindingResolution resolution, CanonicalLexicalScope site) {
+        CanonicalLexicalScope owner = ownerOrNull(resolution);
+        if (owner == null || site == null) {
+            return CanonicalBindingAnalysis.LexicalAccess.SELECTED;
+        }
+        for (CanonicalLexicalScope scope = site;
+                scope != null && scope != owner;
+                scope = scope.outwardScope()) {
+            if (scope.kind() == CanonicalLexicalScope.Kind.CLOSURE && scope.observesContext()) {
+                return CanonicalBindingAnalysis.LexicalAccess.SELECTED;
+            }
+        }
+        if (resolution instanceof CanonicalBindingResolution.Candidate) {
+            return CanonicalBindingAnalysis.LexicalAccess.PRESENCE_CHECKED;
+        }
+        if (owner.kind() == CanonicalLexicalScope.Kind.CLOSURE && owner.observesContext()) {
+            return CanonicalBindingAnalysis.LexicalAccess.PRESENCE_CHECKED;
+        }
+        return CanonicalBindingAnalysis.LexicalAccess.DIRECT;
+    }
+
+    /*
+     * Every Closure scope from {@code from} outward that declares {@code name}
+     * (other than the site's own scope, whose frame the site reaches directly)
+     * may hold the binding live selection selects, so its frame must be bound
+     * to a frame-backed view before it creates a capturing Closure.
+     */
+    private static void markLexicalViews(
+            CanonicalLexicalScope from, CanonicalLexicalScope site, String name) {
+        for (CanonicalLexicalScope scope = from; scope != null; scope = scope.outwardScope()) {
+            if (scope != site
+                    && scope.kind() == CanonicalLexicalScope.Kind.CLOSURE
+                    && scope.declaresName(name)) {
+                scope.markRequiresLexicalView();
+            }
         }
     }
 }

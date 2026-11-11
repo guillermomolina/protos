@@ -149,7 +149,11 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
                             instructionNames(
                                     plan.bytecodeActivationRootForTesting());
 
-                    assertContains(instructions, "Lookup");
+                    // I115-S1c-L: the Candidate own LOCAL read is the
+                    // presence-aware physical read, which continues with live
+                    // lexical selection while the binding is ABSENT.
+                    assertContains(instructions, "LoadLexicalLocal");
+                    assertNotContains(instructions, "Lookup");
 
                     ProtosActivation invocation =
                             ProtosActivation.forClosureInvocation(
@@ -207,6 +211,83 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
                                     module,
                                     "() => { before: x\nx: replacement\nx }",
                                     "i115-s1a-established.protos"));
+                });
+    }
+
+    // ---- I115-S1c-L ------------------------------------------------------------
+
+    @Test
+    void removedBindingContinuesToOuterBindingThenReceiver()
+            throws Exception {
+        withEnteredLanguage(
+                (language, module) -> {
+                    ProtosObjectValue outerValue =
+                            new ProtosObjectValue(ProtosObjectValue.rootObject());
+                    module.context().createLocalSlot("x", outerValue);
+
+                    assertSame(
+                            outerValue,
+                            executeClosure(
+                                    language,
+                                    module,
+                                    "() => { x: 1\nsaved: context\nsaved.removeSlot(\"x\")\nx }",
+                                    "i115-s1cl-removed-outer.protos"));
+
+                    ProtosSignalException failure =
+                            assertThrows(
+                                    ProtosSignalException.class,
+                                    () -> executeClosure(
+                                            language,
+                                            module,
+                                            "() => { y: 1\nsaved: context\nsaved.removeSlot(\"y\")\ny }",
+                                            "i115-s1cl-removed-absent.protos"));
+                    assertSame(
+                            ProtosCoreErrors.prototype(
+                                    module,
+                                    ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
+                            failure.error().parent().orElseThrow());
+                });
+    }
+
+    @Test
+    void assignmentDestinationIsFixedBeforeTheRightHandSide()
+            throws Exception {
+        withEnteredLanguage(
+                (language, module) -> {
+                    ProtosObjectValue outerValue =
+                            new ProtosObjectValue(ProtosObjectValue.rootObject());
+                    module.context().createLocalSlot("x", outerValue);
+
+                    // The RHS removes the selected own binding; the assignment
+                    // must fail instead of selecting the outer x afterwards.
+                    assertThrows(
+                            ProtosSignalException.class,
+                            () -> executeClosure(
+                                    language,
+                                    module,
+                                    "() => { x: 1\nsaved: context\nx = saved.removeSlot(\"x\") }",
+                                    "i115-s1cl-fixed-destination.protos"));
+                    assertSame(outerValue, module.context().readLocalSlot("x").orElseThrow());
+                });
+    }
+
+    @Test
+    void capturedBindingKeepsIdentityAfterContextObservation()
+            throws Exception {
+        withEnteredLanguage(
+                (language, module) -> {
+                    ProtosObjectValue replacement =
+                            new ProtosObjectValue(ProtosObjectValue.rootObject());
+                    module.context().createLocalSlot("replacement", replacement);
+
+                    assertSame(
+                            replacement,
+                            executeClosure(
+                                    language,
+                                    module,
+                                    "() => { x: 1\nreader: () => x\nsaved: context\n"
+                                            + "saved.x = replacement\nreader() }",
+                                    "i115-s1cl-captured-identity.protos"));
                 });
     }
 

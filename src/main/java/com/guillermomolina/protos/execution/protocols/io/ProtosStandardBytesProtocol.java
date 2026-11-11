@@ -37,7 +37,67 @@ public final class ProtosStandardBytesProtocol {
     private static final ProtosClosureValue STANDARD_EACH =
             ProtosClosureValue.nativeClosure(STANDARD_EACH_BODY);
 
+    /*
+     * I115: the standard indexed behaviors are shared constants, like
+     * STANDARD_EACH, so the Bytecode DSL indexed operations can admit
+     * their direct Bytes path only when the behavior actually selected on
+     * the receiver is exactly this standard one.
+     */
+    private static final ProtosClosureValue STANDARD_SIZE =
+            ProtosClosureValue.nativeClosure(ProtosStandardBytesProtocol::size);
+    private static final ProtosClosureValue STANDARD_AT =
+            ProtosClosureValue.nativeClosure(ProtosStandardBytesProtocol::at);
+    private static final ProtosClosureValue STANDARD_AT_PUT =
+            ProtosClosureValue.nativeClosure(ProtosStandardBytesProtocol::atPut);
+
     private ProtosStandardBytesProtocol() {}
+
+    /**
+     * I115: whether {@code behavior} is the standard Bytes behavior of the
+     * indexed selector {@code at}, {@code atPut} or {@code size}.
+     */
+    public static boolean isStandardIndexedBehavior(String selector, Object behavior) {
+        return switch (selector) {
+            case "at" -> behavior == STANDARD_AT;
+            case "atPut" -> behavior == STANDARD_AT_PUT;
+            case "size" -> behavior == STANDARD_SIZE;
+            default -> false;
+        };
+    }
+
+    private static Object size(ProtosActivation activation, List<?> supplied) {
+        ProtosBytesValue bytes = requireBytesReceiver(activation);
+        if (!supplied.isEmpty()) {
+            return fail(activation);
+        }
+        return ProtosNumericValueSupport.integer(bytes.indexedSize());
+    }
+
+    private static Object at(ProtosActivation activation, List<?> supplied) {
+        ProtosBytesValue bytes = requireBytesReceiver(activation);
+        if (supplied.size() != 1) {
+            return fail(activation);
+        }
+        int index =
+                requireExistingIndex(
+                        supplied.get(0), bytes.indexedSize(), activation);
+        return bytes.indexedAt(index);
+    }
+
+    private static Object atPut(ProtosActivation activation, List<?> supplied) {
+        ProtosBytesValue bytes = requireBytesReceiver(activation);
+        if (bytes.isFrozen()) {
+            return fail(activation);
+        }
+        if (supplied.size() != 2) {
+            return fail(activation);
+        }
+        int index =
+                requireExistingIndex(
+                        supplied.get(0), bytes.indexedSize(), activation);
+        requireOctet(supplied.get(1), activation);
+        return bytes.indexedPut(index, supplied.get(1));
+    }
 
     static boolean isStandardEachImplementation(ProtosClosureValue closure) {
         return closure.nativeBody().orElse(null) == STANDARD_EACH_BODY;
@@ -87,48 +147,9 @@ public final class ProtosStandardBytesProtocol {
                             return new ProtosBytesValue(prototype);
                         }));
 
-        bytesFactory.createLocalSlot(
-                "size",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosBytesValue bytes = requireBytesReceiver(activation);
-                            if (!supplied.isEmpty()) {
-                                return fail(activation);
-                            }
-                            return ProtosNumericValueSupport.integer(bytes.indexedSize());
-                        }));
-
-        bytesFactory.createLocalSlot(
-                "at",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosBytesValue bytes = requireBytesReceiver(activation);
-                            if (supplied.size() != 1) {
-                                return fail(activation);
-                            }
-                            int index =
-                                    requireExistingIndex(
-                                            supplied.get(0), bytes.indexedSize(), activation);
-                            return bytes.indexedAt(index);
-                        }));
-
-        bytesFactory.createLocalSlot(
-                "atPut",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosBytesValue bytes = requireBytesReceiver(activation);
-                            if (bytes.isFrozen()) {
-                                return fail(activation);
-                            }
-                            if (supplied.size() != 2) {
-                                return fail(activation);
-                            }
-                            int index =
-                                    requireExistingIndex(
-                                            supplied.get(0), bytes.indexedSize(), activation);
-                            requireOctet(supplied.get(1), activation);
-                            return bytes.indexedPut(index, supplied.get(1));
-                        }));
+        bytesFactory.createLocalSlot("size", STANDARD_SIZE);
+        bytesFactory.createLocalSlot("at", STANDARD_AT);
+        bytesFactory.createLocalSlot("atPut", STANDARD_AT_PUT);
 
         bytesFactory.createLocalSlot("each", STANDARD_EACH);
 

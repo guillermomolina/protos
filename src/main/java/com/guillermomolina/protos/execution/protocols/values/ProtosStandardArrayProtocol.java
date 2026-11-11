@@ -49,7 +49,70 @@ public final class ProtosStandardArrayProtocol {
     private static final ProtosClosureValue STANDARD_MATCH =
             ProtosClosureValue.nativeClosure(STANDARD_MATCH_BODY);
 
+    /*
+     * I115: the standard indexed behaviors are shared constants, like
+     * STANDARD_EACH, so the Bytecode DSL indexed operations can admit
+     * their direct Array path only when the behavior actually selected on
+     * the receiver is exactly this standard one.
+     */
+    private static final ProtosClosureValue STANDARD_AT =
+            ProtosClosureValue.nativeClosure(ProtosStandardArrayProtocol::at);
+    private static final ProtosClosureValue STANDARD_AT_PUT =
+            ProtosClosureValue.nativeClosure(ProtosStandardArrayProtocol::atPut);
+    private static final ProtosClosureValue STANDARD_SIZE =
+            ProtosClosureValue.nativeClosure(ProtosStandardArrayProtocol::size);
+
     private ProtosStandardArrayProtocol() {}
+
+    /**
+     * I115: whether {@code behavior} is the standard Array behavior of the
+     * indexed selector {@code at}, {@code atPut} or {@code size}.
+     */
+    public static boolean isStandardIndexedBehavior(String selector, Object behavior) {
+        return switch (selector) {
+            case "at" -> behavior == STANDARD_AT;
+            case "atPut" -> behavior == STANDARD_AT_PUT;
+            case "size" -> behavior == STANDARD_SIZE;
+            default -> false;
+        };
+    }
+
+    private static Object at(ProtosActivation activation, List<?> supplied) {
+        ProtosArrayValue array = requireArrayReceiver(activation);
+        if (supplied.size() != 1) {
+            throw invalid(activation);
+        }
+        int index =
+                requireExistingIndex(
+                        activation,
+                        supplied.get(0),
+                        array.indexedSize());
+        return array.indexedAt(index);
+    }
+
+    private static Object atPut(ProtosActivation activation, List<?> supplied) {
+        ProtosArrayValue array = requireArrayReceiver(activation);
+        if (array.isFrozen()) {
+            throw invalid(activation);
+        }
+        if (supplied.size() != 2) {
+            throw invalid(activation);
+        }
+        int index =
+                requireExistingIndex(
+                        activation,
+                        supplied.get(0),
+                        array.indexedSize());
+        return array.indexedPut(index, supplied.get(1));
+    }
+
+    private static Object size(ProtosActivation activation, List<?> supplied) {
+        ProtosArrayValue array = requireArrayReceiver(activation);
+        if (!supplied.isEmpty()) {
+            throw invalid(activation);
+        }
+        return ProtosNumericValueSupport.integer(array.indexedSize());
+    }
 
     static boolean isStandardEachImplementation(ProtosClosureValue closure) {
         return closure.nativeBody().orElse(null) == STANDARD_EACH_BODY;
@@ -118,51 +181,9 @@ public final class ProtosStandardArrayProtocol {
                             return new ProtosArrayValue(prototype, supplied);
                         }));
 
-        arrayPrototype.createLocalSlot(
-                "at",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosArrayValue array = requireArrayReceiver(activation);
-                            if (supplied.size() != 1) {
-                                throw invalid(activation);
-                            }
-                            int index =
-                                    requireExistingIndex(
-                                            activation,
-                                            supplied.get(0),
-                                            array.indexedSize());
-                            return array.indexedAt(index);
-                        }));
-
-        arrayPrototype.createLocalSlot(
-                "atPut",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosArrayValue array = requireArrayReceiver(activation);
-                            if (array.isFrozen()) {
-                                throw invalid(activation);
-                            }
-                            if (supplied.size() != 2) {
-                                throw invalid(activation);
-                            }
-                            int index =
-                                    requireExistingIndex(
-                                            activation,
-                                            supplied.get(0),
-                                            array.indexedSize());
-                            return array.indexedPut(index, supplied.get(1));
-                        }));
-
-        arrayPrototype.createLocalSlot(
-                "size",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosArrayValue array = requireArrayReceiver(activation);
-                            if (!supplied.isEmpty()) {
-                                throw invalid(activation);
-                            }
-                            return ProtosNumericValueSupport.integer(array.indexedSize());
-                        }));
+        arrayPrototype.createLocalSlot("at", STANDARD_AT);
+        arrayPrototype.createLocalSlot("atPut", STANDARD_AT_PUT);
+        arrayPrototype.createLocalSlot("size", STANDARD_SIZE);
 
         arrayPrototype.createLocalSlot("each", STANDARD_EACH);
         arrayPrototype.createLocalSlot("match", STANDARD_MATCH);

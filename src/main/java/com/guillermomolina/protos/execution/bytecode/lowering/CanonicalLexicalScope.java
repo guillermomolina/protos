@@ -57,6 +57,19 @@ import java.util.Set;
  * the ordered list of outer cell bindings its Closure value must carry
  * ({@link #freeCells()}). {@link CanonicalBindingAnalyzer} completes both
  * before any Bytecode is emitted; lowering only reads them.
+ *
+ * <p>I115-S1c-L: three distinct facts are kept apart. Static owner identity
+ * ({@link #identity}) says which declaration a name refers to;
+ * compile-time establishment ({@link #isEstablished}) is a property of a
+ * program point during the analysis walk only; runtime membership is never
+ * represented here. Two further compile-time facts drive the physical
+ * frame layout and publication: whether the scope's own body may observe its
+ * execution Context ({@link #observesContext()}), in which case its bindings
+ * may be removed, recreated or shadowed by dynamically created names at run
+ * time; and whether a nested site may have to select one of its bindings by
+ * name ({@link #requiresLexicalView()}), in which case its frame is bound to
+ * a frame-backed view before it creates a capturing Closure. Neither is a
+ * runtime mutable binding table.
  */
 final class CanonicalLexicalScope {
     enum Kind {
@@ -84,6 +97,9 @@ final class CanonicalLexicalScope {
     private final Set<String> establishedSoFar = new HashSet<>();
     private final Set<String> cellNames = new HashSet<>();
     private final Set<CanonicalBindingIdentity> freeCells = new LinkedHashSet<>();
+    private boolean observesContext;
+    private boolean requiresLexicalView;
+    private boolean requiresEnclosingFrameView;
 
     CanonicalLexicalScope(Kind kind, CanonicalLexicalScope lexicalParent) {
         this.kind = Objects.requireNonNull(kind, "kind");
@@ -101,6 +117,11 @@ final class CanonicalLexicalScope {
      * enclosing scope is known (the module root, or a scope analyzed in
      * isolation via {@link CanonicalBindingAnalyzer#analyzeClosure}).
      */
+    /** The immediately enclosing scope, object construction scopes included. */
+    CanonicalLexicalScope lexicalParent() {
+        return lexicalParent;
+    }
+
     CanonicalLexicalScope outwardScope() {
         CanonicalLexicalScope candidate = lexicalParent;
         while (candidate != null && candidate.kind == Kind.OBJECT_BODY) {
@@ -145,8 +166,68 @@ final class CanonicalLexicalScope {
         establishedSoFar.add(name);
     }
 
+    /**
+     * Whether this scope has established {@code name} at the current point
+     * of the analysis walk. A compile-time fact of one program point only:
+     * never a claim of permanent runtime presence.
+     */
     boolean isEstablished(String name) {
         return establishedSoFar.contains(name);
+    }
+
+    /**
+     * I115-S1c-L: records that this scope's own body evaluates the
+     * {@code context} intrinsic, so its execution Context may be observed.
+     */
+    void markObservesContext() {
+        observesContext = true;
+    }
+
+    /**
+     * I115-S1c-L: whether this scope's execution Context may be observed, so
+     * that its bindings may be removed, recreated, frozen or shadowed by a
+     * dynamically created name at run time.
+     */
+    boolean observesContext() {
+        return observesContext;
+    }
+
+    /**
+     * I115-S1c-L: records that a nested site may select one of this {@code
+     * CLOSURE} scope's frame bindings by name.
+     */
+    void markRequiresLexicalView() {
+        if (kind != Kind.CLOSURE) {
+            throw new IllegalStateException("only Closure scopes own frame bindings");
+        }
+        requiresLexicalView = true;
+    }
+
+    /**
+     * I115-S1c-L: whether this {@code CLOSURE} scope binds its frame to a
+     * frame-backed view before creating a Closure that captures it.
+     */
+    boolean requiresLexicalView() {
+        return requiresLexicalView;
+    }
+
+    /**
+     * I115-S1c-L: records that a site in this {@code OBJECT_BODY} scope (or
+     * in an object body nested in it) may select, by name, a binding of the
+     * genuine Closure root in which this construction is emitted inline, so
+     * that root's frame must be bound to its frame-backed view before the
+     * construction activation captures the enclosing lexical environment.
+     */
+    void markRequiresEnclosingFrameView() {
+        if (kind != Kind.OBJECT_BODY) {
+            throw new IllegalStateException("only object construction scopes publish an enclosing frame");
+        }
+        requiresEnclosingFrameView = true;
+    }
+
+    /** I115-S1c-L: see {@link #markRequiresEnclosingFrameView()}. */
+    boolean requiresEnclosingFrameView() {
+        return requiresEnclosingFrameView;
     }
 
     /**

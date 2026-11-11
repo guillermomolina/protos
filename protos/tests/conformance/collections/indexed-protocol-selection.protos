@@ -1,0 +1,114 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+
+// I115: bracket indexing and size select the receiver's actual at, atPut and
+// size behaviors, including program-defined and overriding ones.
+tests: [
+    Test("map bracket insertion replacement and lookup", () => {
+        m: Map()
+        m["key"] = 7
+        m["key"] = 8
+        m["other"] = 1
+        Assertions.require((m["key"] == 8) && (m.size() == 2))
+    }),
+    Test("map bracket missing key error", () => {
+        Assertions.signals(Error, () => {
+            m: Map()
+            m["missing"]
+        })
+    }),
+    Test("identity map bracket identity keys", () => {
+        a: { value: 1 }
+        b: { value: 1 }
+        visiting: IdentityMap()
+        visiting[a] = true
+        visiting[b] = false
+        visiting[a] = 3
+        Assertions.require(
+            (visiting.size() == 2) &&
+                (visiting[a] == 3) &&
+                (visiting[b] === false))
+    }),
+    Test("bracket assignment yields rhs not atPut result", () => {
+        log: { value: 0 }
+        box: {
+            atPut: (index, value) => {
+                log.value = index * 100 + value
+                999
+            }
+        }
+        written: (box[3] = 5)
+        Assertions.require((written == 5) && (log.value == 305))
+    }),
+    Test("custom at and size", () => {
+        box: {
+            at: (index) => { index * 2 }
+            size: () => { 7 }
+        }
+        Assertions.require((box[21] == 42) && (box.size() == 7))
+    }),
+    Test("derived array overrides indexed behaviors", () => {
+        log: { value: 0 }
+        Special: Array {
+            at: (index) => { 42 }
+            atPut: (index, value) => {
+                log.value = value
+                0
+            }
+            size: () => { 99 }
+        }
+        s: Special(1, 2, 3)
+        s[0] = 5
+        Assertions.require(
+            (s[0] == 42) && (s.size() == 99) && (log.value == 5))
+    }),
+    Test("custom indexed errors propagate", () => {
+        Assertions.signals(Error, () => {
+            box: { atPut: (index, value) => { Error().signal() } }
+            box[1] = 2
+        })
+    }),
+    Test("receiver without atPut signals", () => {
+        Assertions.signals(Error, () => {
+            box: {}
+            box[1] = 2
+        })
+    }),
+    Test("suspending atPut preserves rhs and order", () => {
+        work: () => {
+            trace: { value: 0 }
+            step: (digit, value) => {
+                trace.value = trace.value * 10 + digit
+                value
+            }
+            store: { value: 0 }
+            box: {
+                atPut: (index, value) => {
+                    dependency: (() => 4).future()
+                    trace.value = trace.value * 10 + dependency.value()
+                    store.value = value
+                    999
+                }
+            }
+            written: (step(1, box)[step(2, 0)] = step(3, 7))
+            (trace.value * 100) + (written * 10) + store.value
+        }
+        Assertions.require(work.future().value() == 123477)
+    })
+]
+tests.freeze()

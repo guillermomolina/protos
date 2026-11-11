@@ -45,6 +45,7 @@ import com.guillermomolina.protos.execution.ProtosFrameLocalBindings.ResolvedLex
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
 // PRUIBA DE I115, en algún momento esto volverá a funcionar
 // import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -54,6 +55,7 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
@@ -64,9 +66,11 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
+import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.bytecode.ContinuationRootNode;
@@ -350,15 +354,70 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /*
-     * I115: the declared names of a Closure root's LOCAL/CELL bindings, with
-     * the offsets of their Bytecode DSL locals and whether each local holds a
-     * cell, or null. Read only by tooling scope projection, which receives
-     * the live frame; never consulted by guest execution.
+    /**
+     * I115-S1c-L: the single immutable physical layout of a Closure root's
+     * declared LOCAL/CELL bindings: each binding's name, the offset and
+     * {@link LocalAccessor} of its Bytecode DSL local, and whether that local
+     * holds a shared {@link ProtosLexicalCell} (the physical storage, so a
+     * capture promoted to a plain local by the inline storage plan is a
+     * LOCAL). Both tooling scope projection and the lazy guest Context
+     * projection ({@link ProtosBytecodeLexicalFrameView}) read the live frame
+     * through it; there is no second layout.
      */
-    private transient String[] toolingBindingNames;
-    private transient int[] toolingBindingOffsets;
-    private transient boolean[] toolingBindingCells;
+    static final class LexicalFrameLayout {
+        private final String[] names;
+        private final int[] offsets;
+        private final boolean[] cells;
+        private final LocalAccessor[] accessors;
+
+        LexicalFrameLayout(String[] names, int[] offsets, boolean[] cells, LocalAccessor[] accessors) {
+            if (names.length != offsets.length
+                    || names.length != cells.length
+                    || names.length != accessors.length) {
+                throw new IllegalArgumentException("inconsistent lexical frame layout");
+            }
+            this.names = names.clone();
+            this.offsets = offsets.clone();
+            this.cells = cells.clone();
+            this.accessors = accessors.clone();
+        }
+
+        int size() {
+            return names.length;
+        }
+
+        String name(int index) {
+            return names[index];
+        }
+
+        int offset(int index) {
+            return offsets[index];
+        }
+
+        boolean isCell(int index) {
+            return cells[index];
+        }
+
+        LocalAccessor accessor(int index) {
+            return accessors[index];
+        }
+
+        /** The layout index of {@code name}, or {@code -1} for a name outside the layout. */
+        int indexOf(String name) {
+            for (int index = 0; index < names.length; index++) {
+                if (names[index].equals(name)) {
+                    return index;
+                }
+            }
+            return -1;
+        }
+    }
+
+    private static final LexicalFrameLayout EMPTY_LEXICAL_FRAME_LAYOUT =
+            new LexicalFrameLayout(new String[0], new int[0], new boolean[0], new LocalAccessor[0]);
+
+    /* The layout of a genuine Closure root, or null for any other root. */
+    private transient LexicalFrameLayout lexicalFrameLayout;
 
     /*
      * TEST009-V: the exact root span, recorded by the lowerer only while the diagnostic stable
@@ -544,19 +603,29 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     // PRUIBA DE I115, en algún momento esto volverá a funcionar
     // Removed per-root numeric return-projection state.
 
-    final void recordToolingBindings(String[] names, int[] offsets, boolean[] cells) {
-        this.toolingBindingNames = names;
-        this.toolingBindingOffsets = offsets;
-        this.toolingBindingCells = cells;
+    /**
+     * I115-S1c-L: records the physical layout of this genuine Closure root,
+     * once per parse, before the root is published. A Closure root without
+     * declared bindings records the empty layout, so its escaped frame still
+     * has one frame-backed authority (for dynamically created names).
+     */
+    final void recordLexicalFrameLayout(LexicalFrameLayout layout) {
+        this.lexicalFrameLayout = layout == null ? EMPTY_LEXICAL_FRAME_LAYOUT : layout;
+    }
+
+    /** The recorded layout, or {@code null} when this is not a genuine Closure root. */
+    final LexicalFrameLayout lexicalFrameLayoutOrNull() {
+        return lexicalFrameLayout;
     }
 
     /**
      * PLAT067-B / I115 tooling-only read of this root's established LOCAL
      * and CELL bindings at {@code bytecodeIndex} of {@code frame}, in
      * declaration order, or {@code null} when this root records none. An
-     * unestablished local or cell is ABSENT and omitted; a primitive carrier
-     * is answered as its guest value. Nothing is installed, published or
-     * retained: the activation and its Context are left unchanged.
+     * unestablished or removed local or cell is ABSENT and omitted; a
+     * primitive carrier is answered as its guest value. Nothing is installed,
+     * published or retained: the activation and its Context are left
+     * unchanged.
      *
      * <p>KNOWN I115 SEMANTIC DIVERGENCE: this view is read-only; a debugger
      * write to these bindings through the scope does not reach the frame.
@@ -566,23 +635,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             BytecodeNode bytecodeNode,
             int bytecodeIndex,
             com.oracle.truffle.api.frame.MaterializedFrame materialized) {
-        if (toolingBindingNames == null) {
+        LexicalFrameLayout layout = lexicalFrameLayout;
+        if (layout == null || layout.size() == 0) {
             return null;
         }
         java.util.LinkedHashMap<String, Object> present = new java.util.LinkedHashMap<>();
-        for (int index = 0; index < toolingBindingNames.length; index++) {
+        for (int index = 0; index < layout.size(); index++) {
             Object stored =
                     bytecodeNode.getLocalValue(
-                            bytecodeIndex, materialized, toolingBindingOffsets[index]);
+                            bytecodeIndex, materialized, layout.offset(index));
             Object value = stored;
-            if (toolingBindingCells[index]) {
+            if (layout.isCell(index)) {
                 value = stored instanceof ProtosLexicalCell cell
                         ? cell.valueOrNullForRuntime()
                         : null;
             }
             if (value != null) {
                 present.put(
-                        toolingBindingNames[index],
+                        layout.name(index),
                         ProtosNumericValueSupport.guestValue(value));
             }
         }
@@ -703,7 +773,21 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     /** I115: direct return, following GraalPy's return epilogue. */
     @EpilogReturn(storeBytecodeIndex = true)
     public static final class EpilogForReturn {
+        /*
+         * I115: the primitive Boolean carrier of a native comparison or
+         * Boolean selection never escapes the physical root; the externally
+         * observable result is canonical true/false.
+         */
         @Specialization
+        public static Object doBoolean(
+                boolean value,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecodeNode) {
+            return perform(ProtosBooleanValue.of(value), frame, root, bytecodeNode);
+        }
+
+        @Specialization(replaces = "doBoolean")
         public static Object perform(
                 Object value,
                 @Bind VirtualFrame frame,
@@ -718,6 +802,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             // A suspended invocation retains its owned ReturnHome.
             // Normal completion closes only the home owned by this root.
+            if (value instanceof Boolean primitive) {
+                value = ProtosBooleanValue.of(primitive);
+            }
             if (root.needsPhysicalHomeCompletionInEpilogue()) {
                 closeOwnedReturnHome(frame, value);
             }
@@ -930,8 +1017,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * The value of a cell. A read before the binding point signals the
-     * unqualified-lookup Error at this boundary.
+     * The value of a cell whose binding the lowering proved PRESENT (an
+     * established binding whose owner's Context can never be observed). An
+     * ABSENT cell here is an internal invariant violation, answered with the
+     * unqualified-lookup Error; every other cell read uses {@link
+     * LoadLexicalCell}.
      */
     @Operation
     public static final class LoadCell {
@@ -962,18 +1052,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * An access to a LOCAL binding that the lowering proved precedes its
-     * binding point: the uninitialized-binding Error, with no lookup.
-     */
-    @Operation
-    public static final class UninitializedBinding {
-        @Specialization
-        public static Object perform(@Bind VirtualFrame frame) {
-            throw uninitializedCellError(frame.getArguments());
-        }
-    }
-
-    /**
      * Installs the creator's cells, in the Closure scope's constant
      * captured-cell order, into a Closure created by the enclosed operation.
      */
@@ -990,26 +1068,709 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    // ---- I115-S1c-L lexical frame publication and presence-aware access ------------
+
+    /*
+     * I115-S1c-L (GraalPy fast locals versus frame-locals materialization).
+     * The common unobserved path keeps LoadLocal/StoreLocal and the plain cell
+     * operations. A root whose frame must survive (its Context is observed, or
+     * a nested Closure may need to select one of its bindings by name) binds
+     * its materialized frame to its exact activation once, through
+     * ProtosBytecodeLexicalFrameView. Sites whose binding may be ABSENT use the
+     * presence-aware operations below: the direct physical access while the
+     * binding is PRESENT, and ProtosLexicalSelectionNode otherwise.
+     */
+
+    /*
+     * The activation of this frame for a cold lexical miss, an error or a
+     * publication: the published one, or this compact frame's own activation,
+     * published exactly as CurrentActivation does (a caller need of this root).
+     */
+    static ProtosActivation lexicalActivation(VirtualFrame frame, ProtosBytecodeRootNode root) {
+        Object[] arguments = frame.getArguments();
+        if (ProtosFrameArguments.hasPublishedActivation(arguments)) {
+            return ProtosFrameArguments.publishedActivation(arguments);
+        }
+        root.requestCallerNeed(NEEDS_EXACT_ACTIVATION);
+        return ProtosFrameArguments.activation(frame);
+    }
+
+    /*
+     * The guest Context of this frame's activation when it already exists,
+     * else null. A compact frame has no activation, hence no Context: it is
+     * OPEN and unfrozen. Never publishes or materializes anything.
+     */
+    static ProtosObjectValue observedContextOrNull(VirtualFrame frame) {
+        Object[] arguments = frame.getArguments();
+        return ProtosFrameArguments.hasPublishedActivation(arguments)
+                ? ProtosFrameArguments.publishedActivation(arguments)
+                        .materializedContextOrNullForRuntime()
+                : null;
+    }
+
+    /*
+     * Whether an owned LOCAL binding is PRESENT: its local is neither cleared
+     * (a removal) nor still holding the uninitialized Java null of a local
+     * whose binding point has not executed. A guest null is a PRESENT value.
+     */
+    @NonIdempotent
+    public static boolean localBindingPresent(LocalAccessor local, BytecodeNode bytecode, VirtualFrame frame) {
+        return !local.isCleared(bytecode, frame) && local.getObject(bytecode, frame) != null;
+    }
+
+    /* Whether a cell's binding is PRESENT; re-evaluated on every execution. */
+    @NonIdempotent
+    public static boolean cellBindingPresent(ProtosLexicalCell cell) {
+        return cell.isPresentForRuntime();
+    }
+
+    @TruffleBoundary
+    static ProtosSignalException lexicalMutationError(ProtosActivation activation) {
+        return new ProtosSignalException(ProtosCoreErrors.newError(activation));
+    }
+
+    /*
+     * Binds the original frame to its exact activation and this root's
+     * physical layout, once. The VirtualFrame is materialized here, before
+     * crossing the boundary, so it never escapes as a VirtualFrame.
+     */
+    final void ensureLexicalFrameView(
+            VirtualFrame frame,
+            BytecodeNode bytecode,
+            int bytecodeIndex,
+            ProtosActivation activation) {
+        LexicalFrameLayout layout = lexicalFrameLayout;
+        if (layout == null || activation.publishedClosureLexicalAuthorityForRuntime() != null) {
+            return;
+        }
+        installLexicalFrameView(frame.materialize(), bytecode, bytecodeIndex, activation, layout);
+    }
+
+    @TruffleBoundary
+    private void installLexicalFrameView(
+            MaterializedFrame frame,
+            BytecodeNode bytecode,
+            int bytecodeIndex,
+            ProtosActivation activation,
+            LexicalFrameLayout layout) {
+        ProtosBytecodeLexicalFrameView view =
+                new ProtosBytecodeLexicalFrameView(
+                        frame, bytecode.getBytecodeLocation(bytecodeIndex), layout);
+        activation.installPublishedClosureLexicalAuthorityForRuntime(view);
+        view.attachCellOwners(activation);
+    }
+
+    /**
+     * Binds this Closure frame to its activation before a capture or escape
+     * that requires its bindings to stay selectable by name. Idempotent.
+     */
+    @Operation(storeBytecodeIndex = true)
+    public static final class EnsureCurrentClosureLexicalView {
+        @Specialization
+        public static void perform(
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecode,
+                @Bind("$bytecodeIndex") int bytecodeIndex) {
+            root.ensureLexicalFrameView(
+                    frame, bytecode, bytecodeIndex, lexicalActivation(frame, root));
+        }
+    }
+
+    /**
+     * The {@code context} intrinsic of a genuine Closure root: binds the frame
+     * first, then answers the activation's single guest Context, created
+     * directly with the frame-backed authority when it does not exist yet.
+     */
+    @Operation(storeBytecodeIndex = true)
+    public static final class PublishCurrentClosureContext {
+        @Specialization
+        public static ProtosObjectValue perform(
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecode,
+                @Bind("$bytecodeIndex") int bytecodeIndex) {
+            ProtosActivation activation = lexicalActivation(frame, root);
+            root.ensureLexicalFrameView(frame, bytecode, bytecodeIndex, activation);
+            return activation.context();
+        }
+    }
+
+    /**
+     * GraalPy DeleteLocal-style reset of a physical callback local.
+     * Root scoping remains enabled; a fresh semantic callback activation
+     * must not inherit PRESENT bindings from an earlier invocation.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = LocalAccessor.class, name = "local")
+    public static final class ResetInlineCallbackLocal {
+        @Specialization
+        public static void perform(
+                LocalAccessor local,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode) {
+            local.clear(bytecodeNode, frame);
+        }
+    }
+
+    /**
+     * Presence-aware read of an owned LOCAL binding (GraalPy checked fast
+     * local load). Presence is the state of this activation's own local only:
+     * a removal in one activation never affects another activation or the
+     * specialization of this site. {@link #present} is the plain local read;
+     * {@link #absent} (a cleared or never-written local) continues with live
+     * lexical selection and is only compiled once some activation misses.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "name")
+    @ConstantOperand(type = LocalAccessor.class, name = "local")
+    public static final class LoadLexicalLocal {
+        @NonIdempotent
+        static boolean localPresent(
+                LocalAccessor local,
+                BytecodeNode bytecode,
+                VirtualFrame frame) {
+            return ProtosBytecodeRootNode.localBindingPresent(
+                    local, bytecode, frame);
+        }
+
+        @Specialization(guards = "localPresent(local, bytecode, frame)")
+        public static Object present(
+                String name,
+                LocalAccessor local,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            return local.getObject(bytecode, frame);
+        }
+
+        @Specialization(guards = "!localPresent(local, bytecode, frame)")
+        public static Object absent(
+                String name,
+                LocalAccessor local,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind ProtosBytecodeRootNode root,
+                @Cached ProtosLexicalSelectionNode selection) {
+            return selection.execute(lexicalActivation(frame, root), name, false);
+        }
+    }
+
+    /**
+     * Presence-aware read of a CELL binding (owned or captured): the cell's
+     * value while it is PRESENT, else live lexical selection, which may reach
+     * an outer binding or the receiver. Presence belongs to the cell itself.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "name")
+    public static final class LoadLexicalCell {
+        @NonIdempotent
+        static boolean cellPresent(ProtosLexicalCell cell) {
+            return ProtosBytecodeRootNode.cellBindingPresent(cell);
+        }
+
+        @Specialization(guards = "cellPresent(cell)")
+        public static Object present(String name, ProtosLexicalCell cell) {
+            return cell.valueOrNullForRuntime();
+        }
+
+        @Specialization(guards = "!cellPresent(cell)")
+        public static Object absent(
+                String name,
+                ProtosLexicalCell cell,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Cached ProtosLexicalSelectionNode selection) {
+            return selection.execute(lexicalActivation(frame, root), name, false);
+        }
+    }
+
+    /**
+     * Write-target selection of a bare assignment to an owned LOCAL binding,
+     * before its right-hand side: the binding's own local while it is
+     * PRESENT, else the destination selected by live lexical selection.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "name")
+    @ConstantOperand(type = LocalAccessor.class, name = "local")
+    public static final class SelectLexicalLocalWrite {
+        @Specialization
+        public static Object perform(
+                String name,
+                LocalAccessor local,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind ProtosBytecodeRootNode root,
+                @Cached ProtosLexicalSelectionNode selection) {
+            if (localBindingPresent(local, bytecode, frame)) {
+                return ResolvedLexicalWriteTarget.ownPhysicalBinding();
+            }
+            return selection.execute(lexicalActivation(frame, root), name, true);
+        }
+    }
+
+    /**
+     * The assignment through a destination selected by {@link
+     * SelectLexicalLocalWrite}; never selects again. The own local must still
+     * be PRESENT and its Context not FROZEN, exactly as an assignment through
+     * the Context; otherwise the assignment Error is signaled.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "name")
+    @ConstantOperand(type = LocalAccessor.class, name = "local")
+    public static final class AssignLexicalLocal {
+        @Specialization
+        public static Object perform(
+                String name,
+                LocalAccessor local,
+                Object destination,
+                Object value,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind ProtosBytecodeRootNode root) {
+            ResolvedLexicalWriteTarget target = (ResolvedLexicalWriteTarget) destination;
+            if (!target.isOwnPhysicalBinding()) {
+                return ProtosFrameLocalBindings.assignResolvedLexicalTarget(
+                        lexicalActivation(frame, root), target, name, value);
+            }
+            ProtosObjectValue context = observedContextOrNull(frame);
+            if (!localBindingPresent(local, bytecode, frame)
+                    || (context != null && context.isFrozen())) {
+                throw lexicalMutationError(lexicalActivation(frame, root));
+            }
+            local.setObject(bytecode, frame, value);
+            return value;
+        }
+    }
+
+    /**
+     * Write-target selection of a bare assignment to a CELL binding, before
+     * its right-hand side: the cell itself while its binding is PRESENT, else
+     * the destination selected by live lexical selection.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "name")
+    public static final class SelectLexicalCellWrite {
+        @Specialization
+        public static Object perform(
+                String name,
+                ProtosLexicalCell cell,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Cached ProtosLexicalSelectionNode selection) {
+            if (cell.isPresentForRuntime()) {
+                return cell;
+            }
+            return selection.execute(lexicalActivation(frame, root), name, true);
+        }
+    }
+
+    /**
+     * The assignment through a destination selected by {@link
+     * SelectLexicalCellWrite}; never selects again. A selected cell must still
+     * be PRESENT and its owner's Context not FROZEN.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "name")
+    public static final class AssignLexicalCell {
+        @Specialization
+        public static Object perform(
+                String name,
+                Object destination,
+                Object value,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root) {
+            if (destination instanceof ProtosLexicalCell cell) {
+                if (!cell.isPresentForRuntime() || cell.ownerContextFrozenForRuntime()) {
+                    throw lexicalMutationError(lexicalActivation(frame, root));
+                }
+                cell.setForRuntime(value);
+                return value;
+            }
+            return ProtosFrameLocalBindings.assignResolvedLexicalTarget(
+                    lexicalActivation(frame, root),
+                    (ResolvedLexicalWriteTarget) destination,
+                    name,
+                    value);
+        }
+    }
+
+    /**
+     * A target-less creation of an owned LOCAL binding that may find it
+     * PRESENT (a duplicate creation) or its Context CLOSED/FROZEN: the
+     * ordinary {@code :} rules, then the store into the same local.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "name")
+    @ConstantOperand(type = LocalAccessor.class, name = "local")
+    public static final class CreateLexicalLocal {
+        @Specialization
+        public static Object perform(
+                String name,
+                LocalAccessor local,
+                Object value,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind ProtosBytecodeRootNode root) {
+            ProtosObjectValue context = observedContextOrNull(frame);
+            if ((context != null && !context.isOpen())
+                    || localBindingPresent(local, bytecode, frame)) {
+                throw lexicalMutationError(lexicalActivation(frame, root));
+            }
+            local.setObject(bytecode, frame, value);
+            return value;
+        }
+    }
+
+    /**
+     * The CELL counterpart of {@link CreateLexicalLocal}: a recreation
+     * establishes the value in the same cell, which every capturing Closure
+     * keeps sharing.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "name")
+    public static final class CreateLexicalCell {
+        @Specialization
+        public static Object perform(
+                String name,
+                ProtosLexicalCell cell,
+                Object value,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root) {
+            ProtosObjectValue context = observedContextOrNull(frame);
+            if (cell.isPresentForRuntime()
+                    || (context != null && !context.isOpen())
+                    || cell.ownerContextRejectsCreationForRuntime()) {
+                throw lexicalMutationError(lexicalActivation(frame, root));
+            }
+            cell.setForRuntime(ProtosNumericValueSupport.guestValue(value));
+            return value;
+        }
+    }
+
+    /*
+     * I115: validated host index of a standard Bytes receiver; an index
+     * outside 0..size-1 (including any outside the int range) signals
+     * the standard guest Error.
+     */
+    private static int existingBytesIndex(
+            ProtosBytesValue bytes, long index, VirtualFrame frame) {
+        if (index < 0 || index >= bytes.indexedSize()) {
+            throw bytesIndexedError(frame);
+        }
+        return (int) index;
+    }
+
+    /*
+     * I115: validated host index of an Array BinarySubscript receiver;
+     * an index outside 0..size-1 signals the standard guest Error.
+     */
+    private static int existingArrayIndex(
+            ProtosArrayValue array, long index, VirtualFrame frame) {
+        if (index < 0 || index >= array.indexedSize()) {
+            throw bytesIndexedError(frame);
+        }
+        return (int) index;
+    }
+
+    /*
+     * I115: validated host index of a standard Array atPut: FROZEN first,
+     * then the signed long index against the current size, exactly as the
+     * standard Array atPut behavior, before any narrowing to a host int.
+     */
+    private static int writableArrayIndex(
+            ProtosArrayValue array, long index, VirtualFrame frame) {
+        if (array.isFrozen()) {
+            throw bytesIndexedError(frame);
+        }
+        return existingArrayIndex(array, index, frame);
+    }
+
+    private static ProtosSignalException bytesIndexedError(
+            VirtualFrame frame) {
+        ProtosActivation activation =
+                ProtosFrameArguments.activation(frame.getArguments());
+        return ProtosCoreErrors.signal(
+                activation,
+                ProtosCoreErrors.newError(activation));
+    }
+
+    /*
+     * I115: GraalPy BinarySubscript / SetItem / GetLen admission.
+     *
+     * GraalPy executes its built-in subscript/length specializations only
+     * for receivers whose selected behavior is the built-in one, and calls
+     * the selected __getitem__/__setitem__/__len__ otherwise. Protos is
+     * prototype-based, so a Java receiver type alone never proves that: an
+     * Array or Bytes receiver may own, or inherit, an overriding at/atPut/
+     * size. This operation answers whether the behavior actually selected
+     * for {@code selector} on the receiver is exactly the standard
+     * Array/Bytes behavior. The lowering takes the direct operation only
+     * then; every other receiver goes through GetMethod and Call*Method,
+     * composed with Yield/ResumeDispatchedContinuation. Nothing is invoked
+     * here.
+     *
+     * The cached path is the shared inherited structural selection used by
+     * ReadMember: the receiver's Shape proves it owns no such slot, and the
+     * selection guards every Shape along the delegation chain, so a later
+     * override, removal or reassignment misses the cache.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = String.class, name = "selector")
+    public static final class IsStandardIndexedSelection {
+        @Specialization(
+                guards = {
+                    "isStandardIndexedValue(receiver)",
+                    "receiver.usesObjectStorageForRuntime()",
+                    "receiverShape.check(receiver)",
+                    "selection != null",
+                    "hasSelectionParent(receiver, selection)",
+                    "selection.isValid()"
+                },
+                limit = "3")
+        public static boolean doCached(
+                String selector,
+                ProtosObjectValue receiver,
+                @Cached("receiver.getShape()") Shape receiverShape,
+                @Cached("selectInherited(receiver, receiverShape, selector)")
+                        ProtosValueLookup.StructuralSelection selection) {
+            return isStandardIndexedBehavior(selector, receiver, selection.read());
+        }
+
+        @Specialization(
+                guards = "isStandardIndexedValue(receiver)",
+                replaces = "doCached")
+        public static boolean doGeneric(
+                String selector,
+                ProtosObjectValue receiver,
+                @Bind VirtualFrame frame) {
+            return selectsStandard(
+                    selector,
+                    receiver,
+                    ProtosFrameArguments.admittedPreludeOrNull(
+                            frame.getArguments()));
+        }
+
+        @Fallback
+        public static boolean doOther(String selector, Object receiver) {
+            return false;
+        }
+
+        static boolean isStandardIndexedValue(Object receiver) {
+            return receiver instanceof ProtosArrayValue
+                    || receiver instanceof ProtosBytesValue;
+        }
+
+        static boolean hasSelectionParent(
+                ProtosObjectValue receiver,
+                ProtosValueLookup.StructuralSelection selection) {
+            return ProtosValueLookup.hasSelectionParent(receiver, selection);
+        }
+
+        /* Specialization-time only: null when the receiver owns the slot. */
+        @TruffleBoundary
+        static ProtosValueLookup.StructuralSelection selectInherited(
+                ProtosObjectValue receiver, Shape receiverShape, String selector) {
+            if (!receiver.usesObjectStorageForRuntime()
+                    || ProtosValueLookup.hasProperty(receiverShape, selector)) {
+                return null;
+            }
+            Object parent = receiver.parent().orElse(null);
+            if (parent == null) {
+                return null;
+            }
+            return ProtosValueLookup.selectStructural(parent, selector);
+        }
+
+        static boolean isStandardIndexedBehavior(
+                String selector, Object receiver, Object behavior) {
+            if (receiver instanceof ProtosArrayValue) {
+                return ProtosStandardArrayProtocol.isStandardIndexedBehavior(
+                        selector, behavior);
+            }
+            if (receiver instanceof ProtosBytesValue) {
+                return ProtosStandardBytesProtocol.isStandardIndexedBehavior(
+                        selector, behavior);
+            }
+            return false;
+        }
+
+        /*
+         * The complete selection, observed without invoking anything. A
+         * missing or unsupported selection is not standard: the dispatched
+         * GetMethod then raises its own Error.
+         */
+        @TruffleBoundary
+        static boolean selectsStandard(
+                String selector, ProtosObjectValue receiver, ProtosPrelude prelude) {
+            try {
+                return ProtosValueLookup.lookup(receiver, selector, prelude)
+                        .map(found -> isStandardIndexedBehavior(
+                                selector, receiver, found.value()))
+                        .orElse(false);
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                return false;
+            }
+        }
+    }
+
+    /*
+     * I115: GraalPy PyNumberAddNode admission.
+     *
+     * GraalPy's NumberAdd executes its built-in int/float/TruffleString
+     * specializations and otherwise calls the selected __add__. Protos
+     * cannot send from the synchronous NumberAdd fallback, so the lowering
+     * observes the receiver's selection first, exactly once and before the
+     * right operand is evaluated (the ordinary send selection point):
+     * <ul>
+     *   <li>numeric receivers: true. KNOWN I115 TEMPORARY SEMANTIC
+     *       DIVERGENCE retained from ProtosI115DirectNumericFallback: the
+     *       standard Number '+' is assumed, a program-redefined Number '+'
+     *       is not selected;
+     *   <li>String receivers: true only when the behavior actually
+     *       selected for '+' is exactly the standard String concatenation
+     *       ({@link ProtosStandardStringProtocol#isStandardConcatenationBehavior});
+     *   <li>anything else: false, and the lowering dispatches through
+     *       GetMethod and CallUnaryMethod.
+     * </ul>
+     * Nothing is invoked here. A String cannot own slots, so the cached
+     * selection starts at the observing Prelude's String prototype and
+     * guards every Shape along the delegation chain: a later override,
+     * removal or reassignment of '+' misses the cache.
+     */
+    @Operation(storeBytecodeIndex = false)
+    public static final class IsStandardAddSelection {
+
+        @Specialization
+        public static boolean doLong(long receiver) {
+            return true;
+        }
+
+        @Specialization
+        public static boolean doDouble(double receiver) {
+            return true;
+        }
+
+        @Specialization(
+                guards = {
+                    "stringPrototype != null",
+                    "stringPrototype == cachedStringPrototype",
+                    "selection != null",
+                    "selection.isValid()"
+                },
+                limit = "1")
+        public static boolean doStringCached(
+                ProtosStringValue receiver,
+                @Bind VirtualFrame frame,
+                @Bind("stringPrototypeOrNull(frame)") ProtosObjectValue stringPrototype,
+                @Cached("stringPrototype") ProtosObjectValue cachedStringPrototype,
+                @Cached("selectAdd(cachedStringPrototype)")
+                        ProtosValueLookup.StructuralSelection selection) {
+            return ProtosStandardStringProtocol.isStandardConcatenationBehavior(
+                    selection.read());
+        }
+
+        @Specialization(replaces = "doStringCached")
+        public static boolean doString(
+                ProtosStringValue receiver,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root) {
+            Object[] arguments = frame.getArguments();
+            ProtosPrelude prelude =
+                    ProtosFrameArguments.admittedPreludeOrNull(arguments);
+            if (prelude == null) {
+                /*
+                 * No observable Prelude: not admitted. The dispatched
+                 * GetMethod performs the real selection and its Errors.
+                 */
+                if (ProtosFrameArguments.inheritsUntransportedCallerPrelude(arguments)) {
+                    root.requestCallerNeed(NEEDS_CALLER_PRELUDE);
+                }
+                return false;
+            }
+            return selectsStandardString(receiver, prelude);
+        }
+
+        @Fallback
+        public static boolean doOther(Object receiver) {
+            return ProtosNumericValueSupport.isCurrentRealNumber(receiver);
+        }
+
+        static ProtosObjectValue stringPrototypeOrNull(VirtualFrame frame) {
+            ProtosPrelude prelude =
+                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+            return prelude == null ? null : prelude.stringPrototype();
+        }
+
+        /* Specialization-time only. */
+        @TruffleBoundary
+        static ProtosValueLookup.StructuralSelection selectAdd(
+                ProtosObjectValue stringPrototype) {
+            return ProtosValueLookup.selectStructural(stringPrototype, "+");
+        }
+
+        /*
+         * The complete selection, observed without invoking anything. A
+         * missing or unsupported selection is not standard: the dispatched
+         * GetMethod then raises its own Error.
+         */
+        @TruffleBoundary
+        static boolean selectsStandardString(
+                ProtosStringValue receiver, ProtosPrelude prelude) {
+            try {
+                return ProtosValueLookup.lookup(receiver, "+", prelude)
+                        .map(found -> ProtosStandardStringProtocol
+                                .isStandardConcatenationBehavior(found.value()))
+                        .orElse(false);
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                return false;
+            }
+        }
+    }
+
     /*
      * I115: GraalPy BinarySubscript / SetItem model.
      *
-     * The built-in Array path specializes primitive long storage.
-     * This experimental path intentionally does not restore ordinary
-     * at/atPut protocol dispatch for non-Array receivers.
+     * The built-in Array path specializes primitive long storage. These
+     * operations are emitted only behind IsStandardIndexedSelection, so the
+     * receiver's selected at/atPut is the standard Array/Bytes behavior;
+     * their fallbacks therefore signal exactly the Error that standard
+     * behavior signals for an operand outside its admitted lanes (a
+     * non-Integer or large Integer index). Other receivers are dispatched
+     * by the lowering through GetMethod and Call*Method.
      */
     @Operation(storeBytecodeIndex = true)
     public static final class BinarySubscript {
 
         @Specialization(guards = "array.hasLongStorageForRuntime()")
         public static long doLongStorage(
-                ProtosArrayValue array, long index) {
-            return array.indexedLongAt(Math.toIntExact(index));
+                ProtosArrayValue array,
+                long index,
+                @Bind VirtualFrame frame) {
+            return array.indexedLongAt(
+                    existingArrayIndex(array, index, frame));
         }
 
         @Specialization(replaces = "doLongStorage")
         public static Object doArray(
-                ProtosArrayValue array, long index) {
-            return array.indexedAt(Math.toIntExact(index));
+                ProtosArrayValue array,
+                long index,
+                @Bind VirtualFrame frame) {
+            return array.indexedAt(
+                    existingArrayIndex(array, index, frame));
+        }
+
+        /*
+         * Standard Bytes indexed read, mirroring the Bytes at protocol:
+         * the long index is validated against the current size before
+         * it is narrowed to a host index.
+         */
+        @Specialization
+        public static Object doBytes(
+                ProtosBytesValue bytes,
+                long index,
+                @Bind VirtualFrame frame) {
+            return bytes.indexedAt(
+                    existingBytesIndex(bytes, index, frame));
         }
 
         @Fallback
@@ -1029,20 +1790,53 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation(storeBytecodeIndex = true)
     public static final class SetItem {
 
+        /*
+         * Standard Array indexed write, mirroring the Array atPut
+         * protocol: FROZEN first, then the signed long index is validated
+         * against the current size before it is narrowed to a host index,
+         * so no host exception escapes as an implementation error.
+         */
         @Specialization(guards = "array.hasLongStorageForRuntime()")
         public static void doLongStorage(
                 long value,
                 ProtosArrayValue array,
-                long index) {
-            array.indexedLongPut(Math.toIntExact(index), value);
+                long index,
+                @Bind VirtualFrame frame) {
+            array.indexedLongPut(
+                    writableArrayIndex(array, index, frame), value);
         }
 
         @Specialization(replaces = "doLongStorage")
         public static void doArray(
                 Object value,
                 ProtosArrayValue array,
-                long index) {
-            array.indexedPut(Math.toIntExact(index), value);
+                long index,
+                @Bind VirtualFrame frame) {
+            array.indexedPut(
+                    writableArrayIndex(array, index, frame),
+                    ProtosNumericValueSupport.guestValue(value));
+        }
+
+        /*
+         * Standard Bytes indexed write, mirroring the Bytes atPut
+         * protocol: FROZEN first, then index, then octet 0..255.
+         */
+        @Specialization
+        public static void doBytes(
+                Object value,
+                ProtosBytesValue bytes,
+                long index,
+                @Bind VirtualFrame frame) {
+            if (bytes.isFrozen()) {
+                throw bytesIndexedError(frame);
+            }
+            int hostIndex = existingBytesIndex(bytes, index, frame);
+            Object octet = ProtosNumericValueSupport.guestValue(value);
+            if (!ProtosNumericValueSupport.isUnsignedIntegerWithin(
+                    octet, Byte.SIZE)) {
+                throw bytesIndexedError(frame);
+            }
+            bytes.indexedPut(hostIndex, octet);
         }
 
         @Fallback
@@ -1089,13 +1883,21 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     /*
      * I115: GraalPy PBytecodeDSLRootNode.GetLen.
-     * Direct Array length, without method dispatch.
+     * Direct Array/Bytes length, without method dispatch. Emitted only
+     * behind IsStandardIndexedSelection("size"); every other receiver's
+     * size is dispatched through GetMethod and CallNilaryMethod.
      */
     @Operation(storeBytecodeIndex = true)
     public static final class GetLen {
         @Specialization
         public static long doArray(ProtosArrayValue array) {
             return array.indexedSize();
+        }
+
+        /* Direct standard Bytes length, as primitive long. */
+        @Specialization
+        public static long doBytes(ProtosBytesValue bytes) {
+            return bytes.indexedSize();
         }
 
         @Fallback
@@ -1114,18 +1916,21 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     // ---- Lexical lookup and frame-backed bindings ----------------------------------
 
     /**
-     * I113: the residual name-keyed lexical accesses, selected by the
-     * builder-fixed {@link ProtosNamedLexicalAccess}: the unqualified lookup,
-     * the captured-binding fallback, or the generic write-target resolution
-     * (which stays separate from its assignment).
+     * I113 / I115-S1c-L: a name-keyed lexical access, selected by the
+     * builder-fixed {@link ProtosNamedLexicalAccess}: read selection, or
+     * write-target selection (which stays separate from its assignment).
+     * Both are performed by the single {@link ProtosLexicalSelectionNode}.
      */
     @Operation
     @ConstantOperand(type = ProtosNamedLexicalAccess.class, name = "access")
     public static final class AccessNamedLexical {
         @Specialization
         public static Object perform(
-                ProtosNamedLexicalAccess access, ProtosActivation activation, String name) {
-            return access.access(activation, name);
+                ProtosNamedLexicalAccess access,
+                ProtosActivation activation,
+                String name,
+                @Cached ProtosLexicalSelectionNode selection) {
+            return selection.execute(activation, name, access.write());
         }
     }
 
@@ -1137,6 +1942,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * result. A destination made unwritable meanwhile (a frozen context or a
      * removed binding) signals the assignment Error, exactly as the generic
      * NAME assignment does; no other owner is searched.
+     *
+     * <p>I115-S1c-L: when the module binding was not the selected binding,
+     * the destination is the one live lexical selection chose before the
+     * right-hand side; it is assigned without selecting again.
      */
     @Operation
     public static final class WriteGlobal {
@@ -1147,6 +1956,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind VirtualFrame frame) {
             assignGlobal(frame.getArguments(), destination, value);
             return value;
+        }
+
+        @Specialization
+        public static Object selected(
+                ResolvedLexicalWriteTarget destination,
+                Object value,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root) {
+            return ProtosFrameLocalBindings.assignResolvedLexicalTarget(
+                    lexicalActivation(frame, root), destination, destination.nameForRuntime(), value);
         }
 
         @TruffleBoundary
@@ -1566,9 +2385,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class Identity {
         @Specialization
         public static Object perform(boolean negated, Object left, Object right) {
-            return ProtosIdentity.identical(left, right) != negated
+            return ProtosIdentity.identical(
+                    canonicalBooleanOperand(left),
+                    canonicalBooleanOperand(right)) != negated
                     ? ProtosBooleanValue.TRUE
                     : ProtosBooleanValue.FALSE;
+        }
+
+        /*
+         * I115: a primitive Boolean carrier of a native comparison denotes
+         * the canonical guest Boolean of the same value; every other operand
+         * keeps its existing identity rule unchanged.
+         */
+        private static Object canonicalBooleanOperand(Object value) {
+            return value instanceof Boolean primitive
+                    ? ProtosBooleanValue.of(primitive)
+                    : value;
         }
     }
 
@@ -2739,6 +3571,64 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Fallback
         public static boolean doOther(
                 boolean polarity,
+                Object value,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root) {
+            root.requestCallerNeed(NEEDS_EXACT_ACTIVATION);
+            ProtosActivation activation = ProtosFrameArguments.activation(frame);
+            throw ProtosCoreErrors.signal(
+                    activation, ProtosCoreErrors.newError(activation));
+        }
+    }
+
+    /**
+     * I115: whether a staged {@code not}/{@code and}/{@code or} receiver is
+     * exactly canonical {@code true} or {@code false} (or the primitive
+     * Boolean carrier of a native comparison), so the frozen standard
+     * Boolean behavior is the one ordinary lookup selects. Any other
+     * receiver keeps ordinary method selection. Sends nothing.
+     */
+    @Operation
+    public static final class IsCanonicalBooleanOperand {
+        @Specialization
+        public static boolean doPrimitive(boolean value) {
+            return true;
+        }
+
+        @Specialization
+        public static boolean doBoolean(ProtosBooleanValue value) {
+            return true;
+        }
+
+        @Fallback
+        public static boolean doOther(Object value) {
+            return false;
+        }
+    }
+
+    /**
+     * I115: the strict result check of standard {@code and}/{@code or}
+     * (VALUES_AND_COLLECTIONS §16). A selected RHS result must be exactly
+     * canonical {@code true} or {@code false}; the primitive carrier of a
+     * native comparison is accepted and yields the canonical guest value,
+     * so no Java Boolean escapes. Any other result (no truthiness, no
+     * Future await/adoption) signals the fresh standard Error after the
+     * callback completed.
+     */
+    @Operation
+    public static final class RequireCanonicalBooleanResult {
+        @Specialization
+        public static ProtosBooleanValue doPrimitive(boolean value) {
+            return ProtosBooleanValue.of(value);
+        }
+
+        @Specialization
+        public static ProtosBooleanValue doBoolean(ProtosBooleanValue value) {
+            return value;
+        }
+
+        @Fallback
+        public static Object doOther(
                 Object value,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root) {

@@ -120,6 +120,110 @@ tests: [
             count
         }
         Assertions.require(tool009LegacyCase() == 11)
+    }),
+    Test("observed Closure Context exposes established local", () => {
+        value: {}
+        make: () => {
+            x: value
+            context
+        }
+        observed: make()
+        Assertions.require(observed.hasSlot("x"))
+        Assertions.require(observed.slotValue("x") === value)
+    }),
+    Test("captured binding and observed Context share live mutation", () => {
+        make: () => {
+            x: 1
+            observed: context
+            set: (value) => x = value
+            get: () => x
+            observed
+        }
+        observed: make()
+        observed.set(2)
+        Assertions.require(observed.x == 2)
+        observed.x = 3
+        Assertions.require(observed.get() == 3)
+    }),
+    Test("completed Closure Context retains values and original identity", () => {
+        value: {}
+        make: () => {
+            x: value
+            original: context
+            context
+        }
+        observed: make()
+        Assertions.require(observed === observed.original)
+        Assertions.require(observed.x === value)
+    }),
+    Test("removed Closure binding reveals the outer binding until recreated", () => {
+        x: 1
+        make: () => {
+            x: 2
+            observed: context
+            read: () => x
+            before: read()
+            observed.removeSlot("x")
+            after: read()
+            x: 3
+            before * 100 + after * 10 + read()
+        }
+        Assertions.require(make() == 213)
+    }),
+    Test("removed Closure binding reveals the receiver slot", () => {
+        holder: {
+            y: 7
+            probe: () => {
+                y: 1
+                observed: context
+                observed.removeSlot("y")
+                y
+            }
+        }
+        Assertions.require(holder.probe() == 7)
+    }),
+    Test("binding created through an observed Context shadows an outer binding", () => {
+        x: 1
+        make: () => {
+            observed: context
+            read: () => x
+            before: read()
+            observed.x: 2
+            before * 10 + read()
+        }
+        Assertions.require(make() == 12)
+    }),
+    Test("present null Closure binding is not an absent binding", () => {
+        x: 5
+        make: () => {
+            x: null
+            observed: context
+            present: x === null
+            observed.removeSlot("x")
+            Assertions.require(present)
+            x
+        }
+        Assertions.require(make() == 5)
+    }),
+    Test("duplicate creation of a present Closure binding fails", () => {
+        make: () => {
+            x: 1
+            x: 2
+        }
+        Assertions.signals(Error, make)
+    }),
+    Test("observed Closure Context reports slotNames in Unicode scalar order", () => {
+        make: () => {
+            zeta: 1
+            alpha: 2
+            context
+        }
+        observed: make()
+        first: observed.slotNames()
+        second: observed.slotNames()
+        Assertions.require(first[0] == "alpha")
+        Assertions.require(first[1] == "zeta")
+        Assertions.require(first !== second)
     })
 ]
 tests.freeze()

@@ -101,7 +101,6 @@ class ProtosStandardStringProtocolTest {
             com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), prelude),
             com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE), prelude),
             new ProtosFloatValue(1.0d),
-            Long.valueOf(1L),
         };
         for (Object bad : invalid) {
             assertThrows(

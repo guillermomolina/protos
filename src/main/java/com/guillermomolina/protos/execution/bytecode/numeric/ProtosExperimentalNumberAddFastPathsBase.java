@@ -94,6 +94,13 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
      * The single generic route of both operations: two semantic Integers
      * (any representation, long carriers included) are added exactly
      * without promotion loss; any other pair signals a guest Error.
+     *
+     * <p>I115: never a message send. NumberAdd is emitted only behind the
+     * {@code IsStandardAddSelection} admission, so the receiver is a
+     * standard numeric receiver or a String whose selected {@code +} is the
+     * standard one; for such a receiver every operand pair not handled by a
+     * specialization is exactly the standard behavior's Error. A receiver
+     * with any other selected {@code +} is dispatched by the lowering.
      */
     static Object genericAdd(ProtosBytecodeRootNode root, VirtualFrame frame,
             Node node, Object left, Object right) {

@@ -40,6 +40,7 @@ collections/map-core.protos	suite-native	-
 collections/map-iteration.protos	suite-native	-
 collections/map-key-semantics.protos	suite-native	-
 collections/map-mutability-state.protos	suite-native	-
+collections/indexed-protocol-selection.protos	suite-native	-
 regression/closure-capture-and-parameters.protos	suite-native	-
 regression/receiver-delegation-and-lookup.protos	suite-native	-
 regression/super-dispatch.protos	suite-native	-

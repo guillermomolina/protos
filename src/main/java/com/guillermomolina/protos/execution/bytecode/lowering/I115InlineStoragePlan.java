@@ -145,17 +145,10 @@ final class I115InlineStoragePlan {
                 walkAll(call.arguments(), materialized);
             }
             case CanonicalSend send -> {
-                if (send.contextual()) {
-                    walkContextualOperand(send.receiver(), materialized);
-                    for (CanonicalExpression argument : send.arguments()) {
-                        walkContextualOperand(argument, materialized);
-                    }
-                } else {
-                    walkOperand(send, 0, send.receiver(), materialized);
-                    List<CanonicalExpression> arguments = send.arguments();
-                    for (int index = 0; index < arguments.size(); index++) {
-                        walkOperand(send, index + 1, arguments.get(index), materialized);
-                    }
+                walkOperand(send, 0, send.receiver(), materialized);
+                List<CanonicalExpression> arguments = send.arguments();
+                for (int index = 0; index < arguments.size(); index++) {
+                    walkOperand(send, index + 1, arguments.get(index), materialized);
                 }
             }
             case CanonicalSuperSend send -> walkAll(send.arguments(), materialized);
@@ -197,16 +190,6 @@ final class I115InlineStoragePlan {
             case CanonicalIntrinsic ignored -> { }
             case CanonicalLiteral ignored -> { }
             case CanonicalLookup ignored -> { }
-        }
-    }
-
-    private void walkContextualOperand(
-            CanonicalExpression expression,
-            boolean materialized) {
-        if (expression instanceof CanonicalClosure closure) {
-            walk(closure.body(), materialized);
-        } else {
-            walk(expression, materialized);
         }
     }
 

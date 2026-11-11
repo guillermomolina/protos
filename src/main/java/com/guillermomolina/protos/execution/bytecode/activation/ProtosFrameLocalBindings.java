@@ -21,45 +21,95 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
-import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Name-keyed lexical binding support of an executing activation: the
- * multiple-creation prefix observation and the write-target resolution and
- * assignment of a NAME binding (module context, object body, or dynamic
- * name).
+ * multiple-creation prefix observation, the exact write destination selected
+ * for a bare assignment, and its assignment.
  *
- * <p>I115: LOCAL and CELL bindings are stored directly in Bytecode DSL locals
- * and cells by the lowering; nothing here selects or recreates them.
+ * <p>I115-S1c-L: the destination itself is selected by {@link
+ * ProtosLexicalSelectionNode}, the single runtime implementation of live
+ * lexical name selection. This class only represents and assigns a selected
+ * destination; it performs no name traversal.
  */
 final class ProtosFrameLocalBindings {
     private ProtosFrameLocalBindings() {}
 
+    /**
+     * The exact writable destination of a bare assignment, selected once,
+     * before its right-hand side evaluates. Assigning through it never
+     * resolves the name again: it fixes the current activation's own scope,
+     * one captured lexical scope node, or the receiver object, together with
+     * the selected name. The private own-physical-binding marker means the
+     * assignment site's own LOCAL binding, which its assignment operation
+     * writes directly.
+     */
     public static final class ResolvedLexicalWriteTarget {
-        final boolean currentContext;
-        final ProtosObjectValue object;
+        private static final ResolvedLexicalWriteTarget OWN_PHYSICAL_BINDING =
+                new ResolvedLexicalWriteTarget(false, null, null, null);
+
+        private final boolean currentContext;
+        private final ProtosLexicalEnvironment environment;
+        private final ProtosObjectValue object;
+        private final String name;
 
         private ResolvedLexicalWriteTarget(
                 boolean currentContext,
-                ProtosObjectValue object) {
+                ProtosLexicalEnvironment environment,
+                ProtosObjectValue object,
+                String name) {
             this.currentContext = currentContext;
+            this.environment = environment;
             this.object = object;
+            this.name = name;
         }
 
-        static ResolvedLexicalWriteTarget currentContext() {
-            return new ResolvedLexicalWriteTarget(true, null);
+        /** The current activation's own lexical scope (Context or frame view). */
+        static ResolvedLexicalWriteTarget currentContext(String name) {
+            return new ResolvedLexicalWriteTarget(
+                    true, null, null, Objects.requireNonNull(name, "name"));
         }
 
-        static ResolvedLexicalWriteTarget object(
-                ProtosObjectValue object) {
+        /** A captured lexical scope, possibly still deferred; never materialized here. */
+        static ResolvedLexicalWriteTarget environment(
+                ProtosLexicalEnvironment environment, String name) {
             return new ResolvedLexicalWriteTarget(
                     false,
-                    java.util.Objects.requireNonNull(object, "object"));
+                    Objects.requireNonNull(environment, "environment"),
+                    null,
+                    Objects.requireNonNull(name, "name"));
+        }
+
+        /** The receiver's own local slot. */
+        static ResolvedLexicalWriteTarget object(ProtosObjectValue object, String name) {
+            return new ResolvedLexicalWriteTarget(
+                    false,
+                    null,
+                    Objects.requireNonNull(object, "object"),
+                    Objects.requireNonNull(name, "name"));
+        }
+
+        /** The assignment site's own LOCAL binding, found PRESENT at selection. */
+        static ResolvedLexicalWriteTarget ownPhysicalBinding() {
+            return OWN_PHYSICAL_BINDING;
+        }
+
+        boolean isOwnPhysicalBinding() {
+            return this == OWN_PHYSICAL_BINDING;
+        }
+
+        /** The selected name; not defined for the own-physical-binding marker. */
+        String nameForRuntime() {
+            if (name == null) {
+                throw new IllegalStateException("the own physical binding carries no name");
+            }
+            return name;
         }
     }
 
@@ -98,50 +148,6 @@ final class ProtosFrameLocalBindings {
         return observed;
     }
 
-    /** The generic String-keyed write target of {@code name}, or the slot-not-found Error. */
-    static ResolvedLexicalWriteTarget resolveWritableLexicalTarget(
-            ProtosActivation activation, String name) {
-        ResolvedLexicalWriteTarget selected = selectByNameOrNull(activation, name);
-        if (selected == null) {
-            throw new ProtosSignalException(
-                    ProtosCoreErrors.newSlotNotFound(activation));
-        }
-        return selected;
-    }
-
-    /**
-     * TEST009-K: the String-keyed destination walk of a NAME assignment is a
-     * host boundary, like {@link ProtosLexicalFallback#readByName}. I115:
-     * LOCAL and CELL bindings are assigned directly and never reach it.
-     */
-    @TruffleBoundary
-    private static ResolvedLexicalWriteTarget selectByNameOrNull(
-            ProtosActivation activation,
-            String name) {
-        if (activation.currentContextHasLocalSlotForRuntime(name)) {
-            return ResolvedLexicalWriteTarget.currentContext();
-        }
-
-        for (ProtosLexicalEnvironment lexical =
-                        activation.capturedLexicalEnvironmentForRuntime();
-                lexical != null;
-                lexical = lexical.outer()) {
-            if (lexical.hasLocalSlotForRuntime(name)) {
-                return ResolvedLexicalWriteTarget.object(
-                        lexical.context());
-            }
-        }
-
-        if (activation.receiver()
-                        instanceof ProtosObjectValue ordinaryReceiver
-                && ordinaryReceiver.hasLocalSlot(name)) {
-            return ResolvedLexicalWriteTarget.object(
-                    ordinaryReceiver);
-        }
-
-        return null;
-    }
-
     /** Assigns {@code value} through a resolved generic write target. */
     static Object assignResolvedLexicalTarget(
             ProtosActivation activation,
@@ -149,19 +155,34 @@ final class ProtosFrameLocalBindings {
             String name,
             Object value) {
         try {
-            if (destination.currentContext) {
-                activation.assignCurrentLocalSlotForRuntime(
-                        name,
-                        value);
-            } else {
-                destination.object.assignLocalSlot(
-                        name,
-                        value);
-            }
+            assignSelected(activation, destination, name, value);
         } catch (IllegalStateException invalidMutation) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(activation));
         }
         return value;
+    }
+
+    /*
+     * Cold: assignment through a selected destination applies the ordinary
+     * object rules of that destination (presence, FROZEN) without
+     * materializing a deferred Context.
+     */
+    @TruffleBoundary
+    private static void assignSelected(
+            ProtosActivation activation,
+            ResolvedLexicalWriteTarget destination,
+            String name,
+            Object value) {
+        if (destination.isOwnPhysicalBinding()) {
+            throw new IllegalStateException("the own physical binding is assigned by its site");
+        }
+        if (destination.currentContext) {
+            activation.assignCurrentLocalSlotForRuntime(name, value);
+        } else if (destination.environment != null) {
+            destination.environment.assignLocalSlotForRuntime(name, value);
+        } else {
+            destination.object.assignLocalSlot(name, value);
+        }
     }
 }
