@@ -34,20 +34,17 @@ SQLITE_OPEN_MEMORY: 128
 database: FFI.opaque(sqlite, "sqlite3")
 statement: FFI.opaque(sqlite, "sqlite3_stmt")
 ownedDatabase: FFI.owned(database, "sqlite3_close_v2", FFI.i32)
-ownedStatement: FFI.owned(statement, "sqlite3_finalize", FFI.i32)
-// These private types have no producers: only null can be supplied. pzTail
-// is passed as NULL, never retained or read after utf8z call storage expires.
+// This private type has no producers: only null can be supplied as the VFS name.
 vfs: FFI.nullable(FFI.opaque(sqlite, "sqlite3_vfs_name"))
-tail: FFI.nullable(FFI.opaque(sqlite, "sqlite3_sql_tail"))
 bind: (symbol, returns, parameters) => FFI.bind(sqlite, symbol, returns, parameters)
 libversion: bind("sqlite3_libversion_number", FFI.i32, Array())
 open: bind("sqlite3_open_v2", FFI.i32, Array(FFI.utf8z, FFI.out(ownedDatabase), FFI.i32, vfs))
-prepare: bind("sqlite3_prepare_v2", FFI.i32,
-    Array(database, FFI.utf8z, FFI.i32, FFI.out(ownedStatement), tail))
 bindInteger: bind("sqlite3_bind_int64", FFI.i32, Array(statement, FFI.i32, FFI.i64))
 bindFloat: bind("sqlite3_bind_double", FFI.i32, Array(statement, FFI.i32, FFI.f64))
 bindNull: bind("sqlite3_bind_null", FFI.i32, Array(statement, FFI.i32))
 step: bind("sqlite3_step", FFI.i32, Array(statement))
+reset: bind("sqlite3_reset", FFI.i32, Array(statement))
+clearBindings: bind("sqlite3_clear_bindings", FFI.i32, Array(statement))
 columnCount: bind("sqlite3_column_count", FFI.i32, Array(statement))
 columnType: bind("sqlite3_column_type", FFI.i32, Array(statement, FFI.i32))
 columnInteger: bind("sqlite3_column_int64", FFI.i64, Array(statement, FFI.i32))
@@ -58,3 +55,46 @@ release: (handle) => FFI.release(handle)
 copyColumn: Borrowed.columnReader(sqlite)
 // sqlite3_errmsg is intentionally omitted: R1 has no bounded C-string length
 // operation. Numeric SQLite statuses supply safe diagnostics without scanning.
+
+// LIB030 private inputs. Public std:ffi R1 has no length-carrying input,
+// SQLITE_TRANSIENT or tail descriptor, so these declarations use the provider's
+// private members exactly like the LIB029 column adaptation. No pointer,
+// address, region or destructor value is ever supplied by or published to Protos.
+//   int sqlite3_prepare_v2(sqlite3*, const char*, int, sqlite3_stmt**, const char**)
+//   int sqlite3_bind_text(sqlite3_stmt*, int, const char*, int, void(*)(void*))
+//   int sqlite3_bind_blob(sqlite3_stmt*, int, const void*, int, void(*)(void*))
+declare: (symbol, returns, parameters) => {
+    signature: sqlite.signature(returns)
+    for(parameter in parameters) {
+        signature = sqlite.param(signature, parameter)
+    }
+    sqlite.bind(symbol, signature)
+}
+rawStatement: sqlite.opaque("sqlite3_stmt")
+ownedStatement: sqlite.owned(rawStatement, "sqlite3_finalize", sqlite.i32)
+// out(remainder) converts pzTail into the count of unconsumed SQL octets while
+// the per-call utf8z copy is alive; the tail pointer itself is never retained.
+rawPrepare: declare("sqlite3_prepare_v2", sqlite.i32, Array(sqlite.opaque("sqlite3"),
+    sqlite.utf8z, sqlite.i32, sqlite.out(ownedStatement), sqlite.out(sqlite.remainder)))
+// inputLength is the exact octet count of the preceding input, never a Protos
+// argument; copyDestructor passes SQLITE_TRANSIENT, so SQLite copies the value
+// before the call returns and the per-call input region is then released.
+rawText: declare("sqlite3_bind_text", sqlite.i32, Array(rawStatement, sqlite.i32,
+    sqlite.text, sqlite.inputLength, sqlite.copyDestructor))
+rawBlob: declare("sqlite3_bind_blob", sqlite.i32, Array(rawStatement, sqlite.i32,
+    sqlite.octets, sqlite.inputLength, sqlite.copyDestructor))
+
+// Answers Array(status, ownedStatementOrNull, remainingOctetsOrNull).
+prepare: (db, sql) => {
+    result: rawPrepare(db, sql, -1)
+    Array(result[0], result[1], result[2])
+}
+bindText: (handle, index, text) => rawText(handle, index, text)
+// Latin1 is the bijection between the 256 octets and U+0000..U+00FF. The decode
+// is only a lossless private transport of an independent snapshot of the Bytes
+// (D188 passes no Bytes across the foreign boundary); the provider converts each
+// character back to exactly one octet and SQLite receives binary data.
+bindBlob: (handle, index, bytes) => rawBlob(handle, index, Encoding.Latin1.decode(bytes))
+// Statements are owned through the private declaration above, so they are
+// released through the same library's private release operation.
+finalize: (handle) => sqlite.release(handle)

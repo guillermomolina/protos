@@ -15,7 +15,7 @@
 
 // DOC024 cookbook: query and filter numeric records with prepared parameters.
 // Host: --foreign-provider-path <protos-ffm-provider.jar>; Linux x86-64 JVM/JDK25.
-// Input binds are Integer, Float or null only; Strings and Bytes are not bound.
+// Numeric binds and one INSERT reused through reset()/clearBindings() (LIB030).
 Assertions: import("std:test/assertions")
 SQLite: import("std:sqlite")
 db: SQLite.openMemory()
@@ -23,19 +23,22 @@ db: SQLite.openMemory()
     create: db.prepare("CREATE TABLE readings (id INTEGER, value REAL, flag INTEGER)")
     (() => { Assertions.require(create.step() === false) }).ensure(() => create.close().value())
 
-    // Statements have no reset: every insert prepares, executes and closes one.
-    insert: (id, value, flag) => {
-        statement: db.prepare("INSERT INTO readings VALUES (?1, ?2, ?3)")
-        (() => {
-            statement.bind(1, id).bind(2, value).bind(3, flag)
-            Assertions.require(statement.step() === false)
-        }).ensure(() => statement.close().value())
-    }
-    insert(4, 0.5, 20)
-    insert(2, 2.5, 10)
-    insert(5, 4.0, 30)
-    insert(1, 1.5, null)
-    insert(3, 3.25, null)
+    // One prepared INSERT is reused. The first execution binds and steps;
+    // every later one resets, rebinds and steps.
+    insert: db.prepare("INSERT INTO readings VALUES (?1, ?2, ?3);")
+    (() => {
+        insert.bind(1, 4).bind(2, 0.5).bind(3, 20)
+        Assertions.require(insert.step() === false)
+        for(reading in Array(Array(2, 2.5, 10), Array(5, 4.0, 30))) {
+            insert.reset().bind(1, reading[0]).bind(2, reading[1]).bind(3, reading[2])
+            Assertions.require(insert.step() === false)
+        }
+        // clearBindings() here deliberately turns the unbound flag into SQL NULL.
+        for(reading in Array(Array(1, 1.5), Array(3, 3.25))) {
+            insert.reset().clearBindings().bind(1, reading[0]).bind(2, reading[1])
+            Assertions.require(insert.step() === false)
+        }
+    }).ensure(() => insert.close().value())
 
     // A numeric predicate; ORDER BY makes the traversal deterministic.
     query: db.prepare("SELECT id, value, flag FROM readings WHERE value >= ?1 AND id <= ?2 ORDER BY id")

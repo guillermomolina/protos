@@ -18,8 +18,9 @@
 // SQL validation, connections, statements, rows, error handling and cleanup.
 // :memory: acquires no Protos Filesystem grant. The trusted in-process C
 // library still has process authority: this is not a native-code sandbox.
-// Numeric/NULL input binds are supported; TEXT/BLOB inputs await a separately
-// approved native lifetime policy. SQL must contain no semicolon or NUL.
+// Integer, Float, String (TEXT), Bytes (BLOB) and null input binds are
+// supported (LIB030); SQLite copies TEXT/BLOB during the bind call. prepare
+// admits exactly one statement; a conventional ";" terminator is fine.
 Assertions: import("std:test/assertions")
 SQLite: import("std:sqlite")
 db: SQLite.openMemory()
@@ -39,6 +40,20 @@ db: SQLite.openMemory()
         Assertions.require(held[3] == "copied text")
         Assertions.require(held[4][1] == 255)
     }).ensure(() => statement.close().value())
+
+    // TEXT and BLOB are parameters, never interpolated SQL. "" is empty TEXT,
+    // empty Bytes is an empty BLOB, and null is SQL NULL: three distinct values.
+    payload: Encoding.UTF8.encode("")
+    for(octet in Array(0, 1, 0)) { payload.add(octet) }
+    kinds: db.prepare("SELECT typeof(?1), typeof(?2), typeof(?3), ?2;")
+    (() => {
+        kinds.bind(1, "").bind(2, payload).bind(3, null)
+        payload[1] = 99    // the binding is a snapshot taken by bind
+        Assertions.require(kinds.step())
+        row: kinds.row()
+        Assertions.require((row[0] == "text") && (row[1] == "blob") && (row[2] == "null"))
+        Assertions.require((row[3].size() == 3) && (row[3][1] == 1) && (row[3][2] == 0))
+    }).ensure(() => kinds.close().value())
     // Statements close before their parent. Closing the connection also
     // retires any remaining statements; neither native release is retried.
 }).ensure(() => db.close().value())

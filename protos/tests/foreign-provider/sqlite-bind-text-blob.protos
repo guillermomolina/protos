@@ -1,0 +1,158 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// LIB030: TEXT and BLOB input through the public std:sqlite API; run only with
+// the explicitly authorized real provider.
+Assertions: import("std:test/assertions")
+SQLite: import("std:sqlite")
+
+ordinary: (body) => {
+    error: Assertions.signals(Error, body)
+    Assertions.require(error.parent() === Error)
+}
+octets: (...values) => {
+    bytes: Encoding.UTF8.encode("")
+    for(value in values) { bytes.add(value) }
+    bytes
+}
+sameOctets: (left, right) => {
+    Assertions.require(left.size() == right.size())
+    index: 0
+    while(index < left.size()) {
+        Assertions.require(left[index] == right[index])
+        index = index + 1
+    }
+}
+// Doubles text until it holds 2^count copies of the seed.
+repeated: (seed, count) => {
+    text: seed
+    round: 0
+    while(round < count) {
+        text = text + text
+        round = round + 1
+    }
+    text
+}
+// Binds values at 1.., steps once and answers the copied row.
+single: (db, sql, values) => {
+    statement: db.prepare(sql)
+    (() => {
+        index: 1
+        for(value in values) {
+            statement.bind(index, value)
+            index = index + 1
+        }
+        Assertions.require(statement.step())
+        statement.row()
+    }).ensure(() => statement.close().value())
+}
+describe: "SELECT ?1, typeof(?1), length(CAST(?1 AS BLOB)), hex(?1)"
+
+db: SQLite.openMemory()
+(() => {
+    // TEXT: ASCII, multibyte UTF-8, supplementary scalar, interior NUL, empty.
+    for(sample in Array(
+        Array("abc", 3, "616263"),
+        Array("caf\u{E9}", 5, "636166C3A9"),
+        Array("\u{1F642}", 4, "F09F9982"),
+        Array("a\u{0}b", 3, "610062"),
+        Array("", 0, ""))) {
+        row: single(db, describe, Array(sample[0]))
+        Assertions.require(row[0] == sample[0])
+        Assertions.require(row[1] == "text")
+        Assertions.require(row[2] == sample[1])
+        Assertions.require(row[3] == sample[2])
+    }
+
+    // BLOB: every octet preserved, interior and edge NUL, empty is not NULL.
+    blob: octets(0, 97, 0, 255, 128)
+    row: single(db, describe, Array(blob))
+    Assertions.require(row[1] == "blob")
+    Assertions.require(row[2] == 5)
+    Assertions.require(row[3] == "006100FF80")
+    sameOctets(row[0], blob)
+    Assertions.require(row[0] !== blob)
+    empty: single(db, describe, Array(octets()))
+    Assertions.require(empty[0] !== null)
+    Assertions.require(empty[0].size() == 0)
+    Assertions.require(empty[1] == "blob")
+    Assertions.require(empty[2] == 0)
+
+    // null is SQL NULL; "" is empty TEXT; empty Bytes is empty BLOB.
+    kinds: single(db, "SELECT typeof(?1), typeof(?2), typeof(?3), ?1 IS NULL, ?2 IS NULL, ?3 IS NULL",
+        Array(null, "", octets()))
+    Assertions.require((kinds[0] == "null") && (kinds[1] == "text") && (kinds[2] == "blob"))
+    Assertions.require((kinds[3] == 1) && (kinds[4] == 0) && (kinds[5] == 0))
+
+    // The binding is an independent snapshot: later caller mutation is invisible.
+    snapshot: db.prepare("SELECT hex(?1)")
+    (() => {
+        source: octets(1, 2, 3)
+        snapshot.bind(1, source)
+        source[0] = 9
+        source.add(4)
+        Assertions.require(snapshot.step())
+        Assertions.require(snapshot.column(0) == "010203")
+    }).ensure(() => snapshot.close().value())
+
+    // Rebinding the same parameter replaces value and storage class.
+    rebound: db.prepare("SELECT typeof(?1), hex(?1)")
+    (() => {
+        rebound.bind(1, "first").bind(1, octets(5)).bind(1, 7).bind(1, "\u{E9}")
+        Assertions.require(rebound.step())
+        Assertions.require(rebound.row()[0] == "text")
+        Assertions.require(rebound.column(1) == "C3A9")
+    }).ensure(() => rebound.close().value())
+
+    // Bound values persist in SQLite after the native call and its temporary
+    // memory are gone: store them, then read them through another statement.
+    create: db.prepare("CREATE TABLE items (label TEXT, payload BLOB)")
+    create.step()
+    create.close().value()
+    inject: "'); DROP TABLE items; --"
+    insert: db.prepare("INSERT INTO items VALUES (?1, ?2)")
+    (() => {
+        insert.bind(1, inject).bind(2, octets(0, 0, 7))
+        Assertions.require(insert.step() === false)
+    }).ensure(() => insert.close().value())
+    stored: single(db, "SELECT label, payload, typeof(payload) FROM items", Array())
+    Assertions.require(stored[0] == inject)
+    sameOctets(stored[1], octets(0, 0, 7))
+    Assertions.require(stored[2] == "blob")
+
+    // Large values within the bound are preserved exactly.
+    large: repeated("x", 20)
+    big: single(db, "SELECT length(?1), length(?2), substr(?1, 1048576), hex(substr(?2, 1, 2))",
+        Array(large, Encoding.Latin1.encode(large)))
+    Assertions.require((big[0] == 1048576) && (big[1] == 1048576))
+    Assertions.require((big[2] == "x") && (big[3] == "7878"))
+
+    // The exact 16 MiB input bounds are exercised once in sqlite-input-limits.
+
+    // Invalid indices: domain failures are ordinary, SQLite range is SQLiteError.
+    range: db.prepare("SELECT ?1, ?2")
+    (() => {
+        for(index in Array(0, -1, 2147483648, "1", null)) {
+            ordinary(() => range.bind(index, "text"))
+            ordinary(() => range.bind(index, octets(1)))
+        }
+        for(value in Array("text", octets(1))) {
+            failure: Assertions.signals(SQLite.SQLiteError, () => range.bind(3, value))
+            Assertions.require((failure.operation == "bind") && (failure.code == 25))
+        }
+        ordinary(() => range.bind(1, Array(1, 2)))
+    }).ensure(() => range.close().value())
+}).ensure(() => db.close().value())
+print("LIB030-BIND-TEXT-BLOB-PASS")

@@ -194,6 +194,25 @@ class ProtosI144FfmFixtureAbiTest {
     }
 
     @Test
+    void privateLengthCarryingInputsCopyExactOctetsOnlyWithinTheCall() throws Exception {
+        // LIB030 provider-private inputs: exact lengths, interior NUL, non-NULL empty regions,
+        // the copy-destructor sentinel, remainder conversion and pre-entry refusals. Every
+        // assertion is in Protos; this host only authorizes the fixture library.
+        try (ProtosExternalForeignProviderTest.Fixture fixture = fixture(authorized())) {
+            ProtosActivation observer = fixture.newActorActivation();
+            int liveBaseline = nativeCount(fixture, observer, "ffi_test_live_count");
+            ProtosExecutionOutcome outcome =
+                    fixture.run(Files.readString(CASES.resolve("ffm-inputs.protos")));
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(),
+                    () -> "ffm-inputs.protos failed with " + describe(fixture, outcome.error()));
+            // Inputs never create provider custody: nothing is owned or retained.
+            assertEquals(liveBaseline, nativeCount(fixture, observer, "ffi_test_live_count"));
+            // Another Actor's session observes the same C copy but holds no input region.
+            assertEquals(120, nativeCount(fixture, observer, "ffi_test_input_byte_zero"));
+        }
+    }
+
+    @Test
     void publicDeclarationsDoNotOpenAConfiguredProviderSession() throws Exception {
         try (ProtosExternalForeignProviderTest.Fixture fixture = fixture(authorized())) {
             assertEquals(ProtosExecutionOutcome.State.COMPLETED,

@@ -35,8 +35,9 @@ import java.util.Objects;
  *
  * <p>The native {@link MethodHandle} is linked once, when the binding is created, and reused by
  * every invocation. Each invocation is synchronous, runs inside the current Actor segment, and
- * uses one confined per-call arena for {@code utf8z} text and {@code out} slots, closed on every
- * exit. A non-zero C status is never interpreted as a failure: it is returned as data.
+ * uses one confined per-call arena for {@code utf8z} text, private length-carrying input regions
+ * and {@code out} slots, closed on every exit. A non-zero C status is never interpreted as a
+ * failure: it is returned as data.
  */
 final class FfmBinding {
     /**
@@ -54,11 +55,37 @@ final class FfmBinding {
                 throw new IllegalArgumentException("unsupported return descriptor");
             }
             parameters = List.copyOf(parameters);
-            for (FfmTypes.Type parameter : parameters) {
-                if (!FfmTypes.isParameterType(parameter)) {
+            for (int index = 0; index < parameters.size(); index++) {
+                if (!admitsAt(parameters.subList(0, index), parameters.get(index))) {
                     throw new IllegalArgumentException("unsupported parameter descriptor");
                 }
             }
+        }
+
+        /** Whether {@code parameter} may follow this signature's parameters. */
+        boolean canAppend(FfmTypes.Type parameter) {
+            return admitsAt(parameters, parameter);
+        }
+
+        /**
+         * Positional rules of the private provider-supplied parameters: an input length or copy
+         * destructor needs a preceding input region, and a remainder output needs a preceding
+         * text input.
+         */
+        private static boolean admitsAt(List<FfmTypes.Type> before, FfmTypes.Type parameter) {
+            if (!FfmTypes.isParameterType(parameter)) {
+                return false;
+            }
+            if (parameter == FfmTypes.InputLength.INSTANCE
+                    || parameter == FfmTypes.CopyDestructor.INSTANCE) {
+                // A length or copy instruction is meaningful only for an input region.
+                return before.stream().anyMatch(type -> type instanceof FfmTypes.InputType);
+            }
+            if (parameter instanceof FfmTypes.OutType out
+                    && out.target() == FfmTypes.Remainder.INSTANCE) {
+                return before.stream().anyMatch(FfmTypes::isTextInput);
+            }
+            return true;
         }
 
         Signature withParameter(FfmTypes.Type parameter) {
@@ -75,7 +102,7 @@ final class FfmBinding {
         int arity() {
             int count = 0;
             for (FfmTypes.Type parameter : parameters) {
-                if (!(parameter instanceof FfmTypes.OutType)) {
+                if (FfmTypes.consumesArgument(parameter)) {
                     count++;
                 }
             }
@@ -83,7 +110,12 @@ final class FfmBinding {
         }
 
         boolean hasOutputs() {
-            return arity() != parameters.size();
+            for (FfmTypes.Type parameter : parameters) {
+                if (parameter instanceof FfmTypes.OutType) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         FunctionDescriptor descriptor() {
@@ -167,7 +199,7 @@ final class FfmBinding {
         }
         int next = 0;
         for (FfmTypes.Type parameter : signature.parameters()) {
-            if (parameter instanceof FfmTypes.OutType) {
+            if (!FfmTypes.consumesArgument(parameter)) {
                 continue;
             }
             if (!admitsArgument(parameter, arguments.get(next++))) {
@@ -193,6 +225,9 @@ final class FfmBinding {
                         && resource.type().name().equals(opaque.name())
                         && resource.type().library().equals(opaque.library());
             }
+            case FfmTypes.InputType input ->
+                    argument.kind() == ProtosForeignValueClass.Kind.STRING
+                            && FfmTypes.inputLength(input, value) >= 0;
             default -> false;
         };
     }
@@ -210,18 +245,37 @@ final class FfmBinding {
             List<FfmTypes.Type> parameters = signature.parameters();
             Object[] carriers = new Object[parameters.size()];
             MemorySegment[] outSlots = new MemorySegment[parameters.size()];
+            // Octet length of each marshalled text/input region (utf8z excludes its NUL); -1
+            // elsewhere. Only private input lengths and remainder outputs consult it.
+            long[] regionLengths = new long[parameters.size()];
             Object[] values;
             try (Arena call = Arena.ofConfined()) {
                 int next = 0;
+                long lastInput = -1;
                 for (int index = 0; index < carriers.length; index++) {
                     FfmTypes.Type parameter = parameters.get(index);
+                    regionLengths[index] = -1;
                     if (parameter instanceof FfmTypes.OutType out) {
                         MemorySegment slot = call.allocate(FfmTypes.layout(out.target()));
                         slot.fill((byte) 0);
                         outSlots[index] = slot;
                         carriers[index] = slot;
+                    } else if (parameter == FfmTypes.InputLength.INSTANCE) {
+                        // Admitted lengths never exceed MAX_INPUT_BYTES, so this is exact.
+                        carriers[index] = Integer.valueOf(Math.toIntExact(lastInput));
+                    } else if (parameter == FfmTypes.CopyDestructor.INSTANCE) {
+                        carriers[index] =
+                                MemorySegment.ofAddress(FfmTypes.CopyDestructor.SENTINEL);
                     } else {
-                        carriers[index] = carrier(parameter, arguments.get(next++).value(), call);
+                        Object value = arguments.get(next++).value();
+                        carriers[index] = carrier(parameter, value, call);
+                        if (FfmTypes.isTextInput(parameter)
+                                || parameter instanceof FfmTypes.InputType) {
+                            regionLengths[index] = ((MemorySegment) carriers[index]).byteSize() - 1;
+                        }
+                        if (parameter instanceof FfmTypes.InputType) {
+                            lastInput = regionLengths[index];
+                        }
                     }
                 }
                 // Every argument is validated and marshalled: entry into C starts here. A
@@ -242,7 +296,22 @@ final class FfmBinding {
                 for (int index = 0; index < carriers.length; index++) {
                     if (parameters.get(index) instanceof FfmTypes.OutType out) {
                         types.add(out.target());
-                        natives.add(readCarrier(out.target(), outSlots[index]));
+                        Object nativeValue = readCarrier(out.target(), outSlots[index]);
+                        if (out.target() == FfmTypes.Remainder.INSTANCE) {
+                            // Capture only integers while the input region is alive: the
+                            // tail address and the bounds of the nearest preceding text input.
+                            int source = index - 1;
+                            while (!FfmTypes.isTextInput(parameters.get(source))) {
+                                source--;
+                            }
+                            MemorySegment base = (MemorySegment) carriers[source];
+                            nativeValue =
+                                    new Tail(
+                                            ((MemorySegment) nativeValue).address(),
+                                            base.address(),
+                                            regionLengths[source]);
+                        }
+                        natives.add(nativeValue);
                     }
                 }
 
@@ -288,8 +357,31 @@ final class FfmBinding {
                 : fromNative(signature.returns(), raw);
     }
 
+    /** Integer-only capture of one remainder output; never an address-bearing segment. */
+    private record Tail(long tail, long base, long length) {
+        Object remaining() {
+            if (tail == 0) {
+                return FfmHandles.Absent.INSTANCE;
+            }
+            long offset = tail - base;
+            if (offset < 0 || offset > length) {
+                throw new FfmFailure("invalid-result", "the tail is outside the input");
+            }
+            return Long.valueOf(length - offset);
+        }
+    }
+
     private Object carrier(FfmTypes.Type parameter, Object value, Arena call) {
         return switch (parameter) {
+            case FfmTypes.InputType input -> {
+                byte[] octets = FfmTypes.inputOctets(input, (String) value);
+                // Never NULL, even for an empty input: callees such as sqlite3_bind_blob treat a
+                // NULL pointer as SQL NULL. The trailing NUL is allocated but never counted.
+                MemorySegment region = call.allocate(Math.addExact(octets.length, 1L));
+                MemorySegment.copy(octets, 0, region, ValueLayout.JAVA_BYTE, 0, octets.length);
+                region.set(ValueLayout.JAVA_BYTE, octets.length, (byte) 0);
+                yield region;
+            }
             case FfmTypes.Scalar scalar when scalar == FfmTypes.Scalar.UTF8Z -> {
                 byte[] octets = FfmTypes.strictUtf8((String) value);
                 MemorySegment text = call.allocate(octets.length + 1L);
@@ -361,6 +453,11 @@ final class FfmBinding {
                         : new FfmHandles.Borrowed(session, session.borrowEpoch(), address);
             }
             case FfmTypes.OutType ignored -> throw new IllegalStateException("nested out");
+            case FfmTypes.Remainder ignored -> ((Tail) raw).remaining();
+            case FfmTypes.InputType ignored -> throw new IllegalStateException("input only");
+            case FfmTypes.InputLength ignored -> throw new IllegalStateException("input only");
+            case FfmTypes.CopyDestructor ignored ->
+                    throw new IllegalStateException("input only");
         };
     }
 

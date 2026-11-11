@@ -1,0 +1,59 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// LIB030: the std:sqlite 16 MiB input policy at its exact boundaries. Kept apart
+// from the fast domain cases because it builds 16 MiB values; each is built
+// once by doubling. Run only with the explicitly authorized real provider.
+Assertions: import("std:test/assertions")
+SQLite: import("std:sqlite")
+
+ordinary: (body) => {
+    error: Assertions.signals(Error, body)
+    Assertions.require(error.parent() === Error)
+}
+repeated: (seed, count) => {
+    text: seed
+    round: 0
+    while(round < count) {
+        text = text + text
+        round = round + 1
+    }
+    text
+}
+
+maximum: repeated("x", 24)              // 16777216 ASCII octets
+wide: repeated("\u{E9}", 23)            // 8388608 characters, 16777216 UTF-8 octets
+maximumBytes: Encoding.Latin1.encode(maximum)
+db: SQLite.openMemory()
+(() => {
+    limit: db.prepare("SELECT length(CAST(?1 AS BLOB)), length(?2), length(CAST(?3 AS BLOB))")
+    (() => {
+        limit.bind(1, wide).bind(2, maximumBytes).bind(3, maximum)
+        Assertions.require(limit.step())
+        Assertions.require(limit.column(0) == 16777216)
+        Assertions.require(limit.column(1) == 16777216)
+        Assertions.require(limit.column(2) == 16777216)
+        limit.reset()
+        // One octet over is refused before SQLite, measured after UTF-8 encoding.
+        ordinary(() => limit.bind(1, maximum + "y"))
+        ordinary(() => limit.bind(1, wide + "a"))
+        maximumBytes.add(0)
+        ordinary(() => limit.bind(2, maximumBytes))
+        // Refusals left the earlier bindings in place.
+        Assertions.require(limit.step())
+        Assertions.require(limit.column(1) == 16777216)
+    }).ensure(() => limit.close().value())
+}).ensure(() => db.close().value())
+print("LIB030-INPUT-LIMITS-PASS")

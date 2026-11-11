@@ -28,3 +28,18 @@ Assertions.require(complete("SELECT 1") == 0)
 Assertions.require(complete("SELECT 'caf\u{E9}';") == 1)
 Assertions.signals(Error, () => complete("SELECT\u{0}1;"))
 Assertions.signals(Error, () => complete(42))
+
+// sqlite3_complete only reports whether text ends a statement. std:sqlite
+// prepare uses SQLite's parser to admit exactly one statement, terminators
+// and trailing comments included, and rejects a second statement.
+SQLite: import("std:sqlite")
+db: SQLite.openMemory()
+(() => {
+    Assertions.require(complete("SELECT 1; SELECT 2;") == 1)
+    Assertions.signals(Error, () => db.prepare("SELECT 1; SELECT 2;"))
+    statement: db.prepare("SELECT 'a;b'; -- trailing comment")
+    (() => {
+        Assertions.require(statement.step())
+        Assertions.require(statement.column(0) == "a;b")
+    }).ensure(() => statement.close().value())
+}).ensure(() => db.close().value())

@@ -81,6 +81,15 @@ LIB029_CASES = (
     ("LIB029_LIFECYCLE", "sqlite-lifecycle.protos", "LIB029-LIFECYCLE-PASS"),
     ("LIB029_DENIED", "sqlite-denied.protos", "LIB029-DENIED-PASS"),
 )
+# LIB030 real-SQLite extension: TEXT/BLOB input, statement reuse and complete
+# single-statement SQL admission, through the same authorized provider JAR.
+LIB030_CASES = (
+    ("LIB030_BIND_TEXT_BLOB", "sqlite-bind-text-blob.protos", "LIB030-BIND-TEXT-BLOB-PASS"),
+    ("LIB030_STATEMENT_REUSE", "sqlite-statement-reuse.protos", "LIB030-STATEMENT-REUSE-PASS"),
+    ("LIB030_SQL_ADMISSION", "sqlite-sql-admission.protos", "LIB030-SQL-ADMISSION-PASS"),
+    # Exact 16 MiB / 16 MiB + 1 input policy; separate because it builds large values.
+    ("LIB030_INPUT_LIMITS", "sqlite-input-limits.protos", "LIB030-INPUT-LIMITS-PASS"),
+)
 LIB029_LEARNING = (
     ("LIB029_EXAMPLE", ROOT / "protos/examples/ffi/sqlite-library.protos"),
     ("LIB029_TUTORIAL", ROOT / "protos/tutorials/12-system-resources/05-sqlite-protos-first.protos"),
@@ -131,6 +140,7 @@ RESULT_KEYS = (
     "I144_EXAMPLE_QUERY",
     "LIB029_MISSING",
     *(key for key, _, _ in LIB029_CASES),
+    *(key for key, _, _ in LIB030_CASES),
     *(key for key, _ in LIB029_LEARNING),
     *(key for key, _ in DOC024_LEARNING),
 )
@@ -363,7 +373,8 @@ def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
     sqlite = shared_sqlite()
     if sqlite is None:
         for key in ("I144_FFM_SQLITE", "I144_FFM_DENIED", *(key for key, _ in I144_LEARNING),
-                    *(key for key, _, _ in LIB029_CASES), *(key for key, _ in LIB029_LEARNING),
+                    *(key for key, _, _ in LIB029_CASES), *(key for key, _, _ in LIB030_CASES),
+                    *(key for key, _ in LIB029_LEARNING),
                     *(key for key, _ in DOC024_LEARNING)):
             runner.record(key, UNSUPPORTED, f"no shared libsqlite3.so.0 in {SQLITE_CANDIDATES}")
     else:
@@ -375,6 +386,9 @@ def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
             plan.append(lambda key=key, source=source: check_ffm_silent(runner, key, install, source, provider))
 
         for key, program, marker in LIB029_CASES:
+            plan.append(lambda key=key, program=program, marker=marker: check_ffm_program(
+                runner, key, install, program, provider, marker))
+        for key, program, marker in LIB030_CASES:
             plan.append(lambda key=key, program=program, marker=marker: check_ffm_program(
                 runner, key, install, program, provider, marker))
         for key, source in LIB029_LEARNING:

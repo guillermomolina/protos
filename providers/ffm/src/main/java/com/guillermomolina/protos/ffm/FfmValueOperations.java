@@ -37,7 +37,9 @@ import java.util.Set;
  *
  * <p>The members of a library module are the minimal provider-private operations a future
  * Protos-source {@code std:ffi} needs: descriptors ({@code void}, {@code i32}, {@code i64}, {@code
- * f64}, {@code sizeT}, {@code utf8z}, {@code borrowed}), {@code opaque(name)}, {@code
+ * f64}, {@code sizeT}, {@code utf8z}, {@code borrowed}, and the LIB030 private input descriptors
+ * {@code text}, {@code octets}, {@code inputLength}, {@code copyDestructor} and {@code
+ * remainder}), {@code opaque(name)}, {@code
  * nullable(opaque)}, {@code owned(opaque, destructorSymbol, void|i32)}, {@code out(type)}, {@code
  * signature(returnType)}, {@code param(signature, type)}, {@code preserving(signature)}, {@code
  * bind(symbol, signature)}, {@code release(owned)}, {@code isLive(reference)}, and {@code
@@ -92,6 +94,12 @@ final class FfmValueOperations implements ProtosForeignValueOperations {
             members.put(scalar.spelling(), scalar);
         }
         members.put("borrowed", FfmTypes.BorrowedType.INSTANCE);
+        for (FfmTypes.InputType input : FfmTypes.InputType.values()) {
+            members.put(input.spelling(), input);
+        }
+        members.put("inputLength", FfmTypes.InputLength.INSTANCE);
+        members.put("copyDestructor", FfmTypes.CopyDestructor.INSTANCE);
+        members.put("remainder", FfmTypes.Remainder.INSTANCE);
         for (Op op : Op.values()) {
             members.put(op.member, op);
         }
@@ -185,9 +193,9 @@ final class FfmValueOperations implements ProtosForeignValueOperations {
                             && FfmTypes.isReturnType(type)
                             && inLibrary(type, library);
             case PARAM ->
-                    v[0] instanceof FfmBinding.Signature
+                    v[0] instanceof FfmBinding.Signature signature
                             && v[1] instanceof FfmTypes.Type type
-                            && FfmTypes.isParameterType(type)
+                            && signature.canAppend(type)
                             && inLibrary(type, library);
             case PRESERVING -> v[0] instanceof FfmBinding.Signature;
             case BIND ->

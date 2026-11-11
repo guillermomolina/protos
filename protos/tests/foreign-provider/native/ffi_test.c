@@ -165,3 +165,49 @@ void ffi_test_bytes_clobber(void) {
 }
 
 const unsigned char *ffi_test_null_bytes(void) { return NULL; }
+
+/* ---- LIB030 private length-carrying inputs */
+
+/*
+ * Copies a length-carrying input only when the destructor is the copy sentinel
+ * ((void (*)(void *)) -1), as a copying C API does, and records whether the
+ * region was non-NULL and NUL-guarded. Answers the length, or -1 on misuse.
+ */
+#define FFI_TEST_INPUT_MAX 64
+static unsigned char ffi_test_input[FFI_TEST_INPUT_MAX];
+static int32_t ffi_test_input_length = -1;
+static int32_t ffi_test_input_calls;
+static int32_t ffi_test_input_guarded;
+
+int32_t ffi_test_input_copy(const unsigned char *data, int32_t length, void (*destructor)(void *)) {
+    ffi_test_input_calls++;
+    if (data == NULL || length < 0 || destructor != (void (*)(void *))-1) {
+        return -1;
+    }
+    int32_t kept = length < FFI_TEST_INPUT_MAX ? length : FFI_TEST_INPUT_MAX;
+    memcpy(ffi_test_input, data, (size_t)kept);
+    ffi_test_input_length = length;
+    ffi_test_input_guarded = data[length] == 0;
+    return length;
+}
+
+/* Reads the private copy after the call that supplied it has returned. */
+int32_t ffi_test_input_byte(int32_t index) {
+    if (index < 0 || index >= ffi_test_input_length || index >= FFI_TEST_INPUT_MAX) {
+        return -1;
+    }
+    return ffi_test_input[index];
+}
+
+int32_t ffi_test_input_calls_count(void) { return ffi_test_input_calls; }
+
+int32_t ffi_test_input_was_guarded(void) { return ffi_test_input_guarded; }
+
+/* Writes text + skip as the tail; a negative skip writes NULL. */
+int32_t ffi_test_tail(const char *text, int32_t skip, const char **tail) {
+    *tail = skip < 0 ? NULL : text + skip;
+    return 0;
+}
+
+/* First octet of the private copy, readable from any session as int32_t f(void). */
+int32_t ffi_test_input_byte_zero(void) { return ffi_test_input_byte(0); }

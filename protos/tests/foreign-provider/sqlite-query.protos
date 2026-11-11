@@ -22,7 +22,9 @@ db: SQLite.openMemory()
     Assertions.require(db.prepare("") === null)
     Assertions.require(db.prepare("  \n\t ") === null)
     Assertions.require(db.prepare(" \n-- only a comment\n/* still empty */") === null)
-    for(sql in Array("SELECT 1; SELECT 2", "SELECT 1;", "SELECT ';'", "SELECT 1 -- ;", "SELECT 1\u{0}SELECT 2")) {
+    // LIB030: conventional terminators are admitted (sqlite-sql-admission);
+    // a second statement and NUL remain ordinary Errors.
+    for(sql in Array("SELECT 1; SELECT 2", "SELECT 1\u{0}SELECT 2")) {
         ordinary(() => db.prepare(sql))
     }
     ordinary(() => db.prepare(42))
@@ -36,7 +38,8 @@ db: SQLite.openMemory()
         for(index in Array(0, -1, 1.0, 2147483648, "1")) {
             ordinary(() => insert.bind(index, 1))
         }
-        for(value in Array("text", true, 1 / 2, 9223372036854775808, -9223372036854775809)) {
+        // LIB030 admits String and Bytes (sqlite-bind-text-blob).
+        for(value in Array(true, 1 / 2, 9223372036854775808, -9223372036854775809, Array(1), {})) {
             ordinary(() => insert.bind(1, value))
         }
         Assertions.signals(SQLite.SQLiteError, () => insert.bind(4, 1))

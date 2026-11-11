@@ -109,3 +109,17 @@ configure(Array(239, 187, 191, 97), false, 4, 0)
 Assertions.require(read(null, null, 0, true, fail) == "\u{FEFF}a")
 configure(Array(239, 187, 191, 239, 187, 191), false, 6, 0)
 Assertions.require(read(null, null, 0, true, fail) == "\u{FEFF}\u{FEFF}")
+
+// LIB030 reuse: every read copies again inside its own accessor window; a
+// result never aliases provider memory or an earlier result, so a later
+// step/reset/close cannot change values already returned.
+configure(Array(0, 7, 0), false, 3, 0)
+copiesBefore: copies
+again: read(null, null, 0, false, fail)
+later: read(null, null, 0, false, fail)
+Assertions.require(copies == (copiesBefore + 2))
+Assertions.require(again !== later)
+again[1] = 9
+Assertions.require(later[1] == 7)
+data[1] = 8
+Assertions.require((later[1] == 7) && (again[1] == 9))

@@ -108,9 +108,13 @@ The two original examples use the provider-private I144 operations directly: `si
   descriptors, Closure bindings and ordinary result Arrays. Import alone
   grants no authority. R1 has no public borrowed-memory copy method;
 - `sqlite-library.protos` uses LIB029 `std:sqlite`, which owns connections,
-  statements, numeric/NULL parameters, copied rows and `Closable` lifecycle.
-  SQL must contain no semicolon or NUL. TEXT/BLOB input binding and transaction
-  abstractions remain outside this bounded surface.
+  statements, parameters, copied rows and `Closable` lifecycle. With LIB030,
+  `bind` also accepts String (TEXT) and Bytes (BLOB), `prepare` admits exactly
+  one statement with conventional `;` terminators and trailing comments, and
+  `reset()`/`clearBindings()` reuse a Statement explicitly. Transaction
+  abstractions and file databases remain outside this bounded surface;
+- `sqlite-complete-public.protos` contrasts public `sqlite3_complete` with the
+  single-statement admission of `std:sqlite` `prepare`.
 
 Applications can use the [SQLite library](../../../docs/guide/library/sqlite.md)
 without copying low-level declarations. The maintainer reports **34/34 PASS**
@@ -120,7 +124,9 @@ also passed as maintainer-reported for the published LIB029 implementation
 `90fd4ece800f6d0e007aa9a2c735ee2f7659919a`. The DOC024 programs
 `sqlite-prepared-numeric.protos` and `sqlite-copied-values.protos` are
 registered in the same harness; their validation is pending until the
-maintainer runs it.
+maintainer runs it. The LIB030 additions to `sqlite-prepared-numeric.protos`,
+`sqlite-complete-public.protos` and the SQLite tutorials are likewise pending
+maintainer validation.
 
 ## Limitations and security
 

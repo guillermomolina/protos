@@ -25,10 +25,16 @@ import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Hosted execution of Protos-owned deterministic lifecycle failure assertions. */
+/**
+ * Hosted execution of Protos-owned deterministic lifecycle failure assertions.
+ *
+ * <p>The models also cover the LIB030 extension: TEXT/BLOB binding failures, complete SQL
+ * admission with trailing-statement finalization, reset/clearBindings statuses and uncertain
+ * provider failures, and copy independence across statement reuse.
+ */
 class ProtosLib029SqliteLifecycleTest {
     @Test
-    void acquisitionAndReleaseFailuresPreserveCustodyAndFirstError() throws Exception {
+    void acquisitionReuseAndReleaseFailuresPreserveCustodyAndFirstError() throws Exception {
         runModel("Resources.protos", "sqlite-failure-model.protos");
     }
 

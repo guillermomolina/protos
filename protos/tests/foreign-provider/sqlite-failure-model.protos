@@ -26,8 +26,40 @@ model: () => {
     openNull: false
     prepareCode: 0
     prepareNull: false
+    prepareRest: 0
+    // Optional per-call prepare plans Array(code, producesStatement, remaining).
+    script: Array()
+    scriptIndex: 0
+    sqls: Array()
+    calls: Array()
+    textCode: 0
+    textError: null
+    blobCode: 0
+    blobError: null
+    stepCode: 101
+    stepError: null
+    resetCode: 0
+    resetError: null
+    clearCode: 0
+    clearError: null
     releaseCodes: IdentityMap()
     releaseErrors: IdentityMap()
+    // Records the observable operation order; a provider failure is signaled
+    // only after the operation was entered.
+    answer: (name, code, error) => {
+        calls = Array(...calls, name)
+        if(error !== null) { error.signal() }
+        code
+    }
+    destroy: (token) => {
+        // Fail immediately if the wrapper retries any destructor.
+        for(previous in releases) { Assertions.require(previous !== token) }
+        releases = Array(...releases, token)
+        if(releaseErrors.containsKey(token)) { releaseErrors.at(token).signal() }
+        result: 0
+        if(releaseCodes.containsKey(token)) { result = releaseCodes.at(token) }
+        result
+    }
     abi: {
         SQLITE_OK: 0
         SQLITE_ROW: 100
@@ -43,25 +75,39 @@ model: () => {
             if(openNull) { token = null }
             Array(openCode, token)
         }
-        prepare: (db, sql, length, tail) => {
+        prepare: (db, sql) => {
             Assertions.require(db === dbToken)
-            Assertions.require(length == -1)
-            Assertions.require(tail === null)
+            sqls = Array(...sqls, sql)
+            plan: Array(prepareCode, !prepareNull, prepareRest)
+            if(scriptIndex < script.size()) {
+                plan = script[scriptIndex]
+                scriptIndex = scriptIndex + 1
+            }
             token: null
-            if(!prepareNull) {
+            if(plan[1]) {
                 token = {}
                 statementTokens = Array(...statementTokens, token)
             }
-            Array(prepareCode, token)
+            Array(plan[0], token, plan[2])
         }
+        bindNull: (handle, index) => answer("bindNull", 0, null)
+        bindInteger: (handle, index, value) => answer("bindInteger", 0, null)
+        bindFloat: (handle, index, value) => answer("bindFloat", 0, null)
+        bindText: (handle, index, value) => {
+            Assertions.require(String.recognizes(value))
+            answer("bindText", textCode, textError)
+        }
+        bindBlob: (handle, index, value) => answer("bindBlob", blobCode, blobError)
+        step: (handle) => answer("step", stepCode, stepError)
+        reset: (handle) => answer("reset", resetCode, resetError)
+        clearBindings: (handle) => answer("clearBindings", clearCode, clearError)
         release: (token) => {
-            // Fail immediately if the wrapper retries any destructor.
-            for(previous in releases) { Assertions.require(previous !== token) }
-            releases = Array(...releases, token)
-            if(releaseErrors.containsKey(token)) { releaseErrors.at(token).signal() }
-            result: 0
-            if(releaseCodes.containsKey(token)) { result = releaseCodes.at(token) }
-            result
+            Assertions.require(token === dbToken)
+            destroy(token)
+        }
+        finalize: (token) => {
+            Assertions.require(token !== dbToken)
+            destroy(token)
         }
     }
     {
@@ -76,6 +122,33 @@ model: () => {
         prepareResult: (code, isNull) => {
             prepareCode = code
             prepareNull = isNull
+        }
+        sqls: () => sqls
+        calls: () => calls
+        prepareRest: (rest) => { prepareRest = rest }
+        script: (plans) => {
+            script = plans
+            scriptIndex = 0
+        }
+        textResult: (code, error) => {
+            textCode = code
+            textError = error
+        }
+        blobResult: (code, error) => {
+            blobCode = code
+            blobError = error
+        }
+        stepResult: (code, error) => {
+            stepCode = code
+            stepError = error
+        }
+        resetResult: (code, error) => {
+            resetCode = code
+            resetError = error
+        }
+        clearResult: (code, error) => {
+            clearCode = code
+            clearError = error
         }
         failRelease: (token, code) => { releaseCodes[token] = code }
         signalRelease: (token, error) => { releaseErrors[token] = error }
@@ -232,3 +305,182 @@ Assertions.require(admissionChild.close().value() === admissionChild)
 Assertions.require(admissionParent.close().value() === admissionParent)
 Assertions.require(gateChecks == 3)
 Assertions.require(admission.releases().size() == 2)
+
+// ---- LIB030: TEXT/BLOB binding, reuse and complete SQL admission ----
+octets: (...values) => {
+    bytes: Encoding.UTF8.encode("")
+    for(value in values) { bytes.add(value) }
+    bytes
+}
+ordinary: (body) => {
+    error: Assertions.signals(Error, body)
+    Assertions.require(error.parent() === Error)
+}
+
+// Trailing SQL: each remainder is parsed again from the exact octet offset.
+trailing: model()
+trailingDb: openMemory(trailing.abi, terminal, SQLiteError)
+trailing.script(Array(Array(0, true, 7), Array(0, false, 0)))
+kept: trailingDb.prepare("SELECT '\u{E9}'; -- \u{F1}x")
+Assertions.require(kept !== null)
+Assertions.require(trailing.sqls()[1] == " -- \u{F1}x")
+Assertions.require(trailing.releases().size() == 0)
+
+// A second statement is finalized once, then the first once; ordinary Error.
+trailing.script(Array(Array(0, true, 4), Array(0, true, 0)))
+ordinary(() => trailingDb.prepare("one; two"))
+Assertions.require(trailing.sqls()[3] == " two")
+Assertions.require(trailing.releases().size() == 2)
+Assertions.require(trailing.releases()[0] === trailing.statements()[2])
+Assertions.require(trailing.releases()[1] === trailing.statements()[1])
+
+// Invalid trailing SQL keeps SQLite's status; the kept statement is finalized.
+trailing.script(Array(Array(0, true, 4), Array(1, false, 4)))
+invalidTail: Assertions.signals(SQLiteError, () => trailingDb.prepare("one; bad"))
+Assertions.require((invalidTail.operation == "prepare") && (invalidTail.code == 1))
+Assertions.require(trailing.releases()[2] === trailing.statements()[3])
+
+// An unknown or non-advancing tail cannot prove admission: no loop, no prefix.
+for(plans in Array(Array(Array(0, true, null)), Array(Array(0, true, 3), Array(0, false, 3)),
+    Array(Array(0, true, 99)))) {
+    trailing.script(plans)
+    before: trailing.releases().size()
+    uncertain: Assertions.signals(SQLiteError, () => trailingDb.prepare("one; x"))
+    Assertions.require((uncertain.operation == "prepare") && (uncertain.code == 0))
+    Assertions.require(trailing.releases().size() == (before + 1))
+}
+
+// A primary prepare failure survives a failing cleanup of the partial handle.
+trailing.script(Array(Array(21, true, 0)))
+partialCleanup: ForeignError()
+partialIndex: trailing.statements().size()
+primaryPrepare: null
+savedFinalize: trailing.abi.finalize
+trailing.abi.finalize = (token) => {
+    savedFinalize(token)
+    partialCleanup.signal()
+}
+(() => {
+    primaryPrepare = Assertions.signals(SQLiteError, () => trailingDb.prepare("partial"))
+}).ensure(() => { trailing.abi.finalize = savedFinalize })
+Assertions.require((primaryPrepare.operation == "prepare") && (primaryPrepare.code == 21))
+lastRelease: trailing.releases()[trailing.releases().size() - 1]
+Assertions.require(lastRelease === trailing.statements()[partialIndex])
+trailing.script(Array())
+trailingDb.close().value()
+
+// Binding: argument and state failures never enter the ABI.
+binding: model()
+bindingDb: openMemory(binding.abi, terminal, SQLiteError)
+statement: bindingDb.prepare("SELECT ?1")
+for(index in Array(0, -1, 2147483648, "1", null)) {
+    ordinary(() => statement.bind(index, "text"))
+    ordinary(() => statement.bind(index, octets(1)))
+}
+ordinary(() => statement.bind(1, Array(1)))
+ordinary(() => statement.bind(1, true))
+Assertions.require(binding.calls().size() == 0)
+Assertions.require(statement.bind(1, "a\u{0}b") === statement)
+Assertions.require(statement.bind(1, octets()) === statement)
+Assertions.require(binding.calls()[0] == "bindText")
+Assertions.require(binding.calls()[1] == "bindBlob")
+
+// Non-OK statuses are SQLiteErrors naming the operation; bind stays usable.
+binding.textResult(18, null)
+textFailure: Assertions.signals(SQLiteError, () => statement.bind(1, "big"))
+Assertions.require((textFailure.operation == "bind") && (textFailure.code == 18))
+binding.blobResult(7, null)
+blobFailure: Assertions.signals(SQLiteError, () => statement.bind(1, octets(0)))
+Assertions.require((blobFailure.operation == "bind") && (blobFailure.code == 7))
+// Provider failures after entry (allocation, marshaling) propagate unchanged.
+allocation: ForeignError()
+binding.textResult(0, allocation)
+Assertions.require(Assertions.signals(Error, () => statement.bind(1, "x")) === allocation)
+binding.blobResult(0, allocation)
+Assertions.require(Assertions.signals(Error, () => statement.bind(1, octets(1))) === allocation)
+binding.textResult(0, null)
+binding.blobResult(0, null)
+Assertions.require(statement.bind(1, "again") === statement)
+
+// Oversized Bytes are refused before the ABI, never truncated.
+oversizedText: "x"
+round: 0
+while(round < 24) {
+    oversizedText = oversizedText + oversizedText
+    round = round + 1
+}
+oversized: Encoding.Latin1.encode(oversizedText + "y")
+callsBefore: binding.calls().size()
+ordinary(() => statement.bind(1, oversized))
+Assertions.require(binding.calls().size() == callsBefore)
+
+// DONE, then reset: a failed reset keeps the statement failed and unexecuted.
+Assertions.require(statement.step() === false)
+ordinary(() => statement.bind(1, "late"))
+binding.resetResult(7, null)
+resetFailure: Assertions.signals(SQLiteError, () => statement.reset())
+Assertions.require((resetFailure.operation == "reset") && (resetFailure.code == 7))
+callsBefore = binding.calls().size()
+ordinary(() => statement.step())
+ordinary(() => statement.bind(1, 1))
+Assertions.require(binding.calls().size() == callsBefore)
+// An uncertain provider failure during reset is equally not reusable.
+uncertainReset: ForeignError()
+binding.resetResult(0, uncertainReset)
+Assertions.require(Assertions.signals(Error, () => statement.reset()) === uncertainReset)
+ordinary(() => statement.step())
+binding.resetResult(0, null)
+Assertions.require(statement.reset() === statement)
+binding.stepResult(100, null)
+Assertions.require(statement.step())
+
+// clearBindings: its own operation name, no reset, no row invalidation.
+binding.clearResult(21, null)
+clearFailure: Assertions.signals(SQLiteError, () => statement.clearBindings())
+Assertions.require((clearFailure.operation == "clearBindings") && (clearFailure.code == 21))
+binding.clearResult(0, uncertainReset)
+Assertions.require(Assertions.signals(Error, () => statement.clearBindings()) === uncertainReset)
+binding.clearResult(0, null)
+callsBefore = binding.calls().size()
+Assertions.require(statement.clearBindings() === statement)
+Assertions.require(binding.calls().size() == (callsBefore + 1))
+Assertions.require(binding.calls()[callsBefore] == "clearBindings")
+// The row is still current: step continues and does not restart.
+Assertions.require(statement.step())
+
+// An uncertain step is never replayed; only an explicit reset may follow.
+uncertainStep: ForeignError()
+binding.stepResult(100, uncertainStep)
+Assertions.require(Assertions.signals(Error, () => statement.step()) === uncertainStep)
+callsBefore = binding.calls().size()
+ordinary(() => statement.step())
+ordinary(() => statement.column(0))
+Assertions.require(binding.calls().size() == callsBefore)
+binding.stepResult(101, null)
+statement.reset()
+Assertions.require(statement.step() === false)
+
+// Retired handles are never reused: no ABI call after close.
+statementToken: binding.statements()[0]
+binding.failRelease(statementToken, 5)
+Assertions.signals(SQLiteError, () => statement.close().value())
+callsBefore = binding.calls().size()
+Assertions.signals(IOLifecycleError, () => statement.reset())
+Assertions.signals(IOLifecycleError, () => statement.clearBindings())
+Assertions.signals(IOLifecycleError, () => statement.bind(1, "x"))
+Assertions.require(binding.calls().size() == callsBefore)
+Assertions.require(binding.releases().size() == 1)
+// Connection release failure after a finalize failure keeps the first error.
+binding.failRelease(binding.database, 5)
+reused: bindingDb.prepare("SELECT ?1")
+reused.bind(1, "x")
+reused.reset()
+reusedToken: binding.statements()[1]
+binding.failRelease(reusedToken, 19)
+closeFailure: Assertions.signals(SQLiteError, () => bindingDb.close().value())
+Assertions.require((closeFailure.operation == "finalize") && (closeFailure.code == 19))
+Assertions.require(binding.releases().size() == 3)
+Assertions.require(binding.releases()[1] === reusedToken)
+Assertions.require(binding.releases()[2] === binding.database)
+Assertions.signals(IOLifecycleError, () => reused.reset())
+Assertions.require(binding.releases().size() == 3)

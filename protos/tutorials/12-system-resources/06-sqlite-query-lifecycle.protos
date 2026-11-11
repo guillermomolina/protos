@@ -14,8 +14,9 @@
 // the specific language governing rights and limitations under the License.
 
 // DOC024: a practical std:sqlite query and lifecycle lesson. It builds on
-// 05-sqlite-protos-first.protos and introduces no new API: it combines the
-// same public operations into a complete table/insert/query/cleanup sequence.
+// 05-sqlite-protos-first.protos and combines the same public operations, plus
+// the LIB030 reuse operations reset() and clearBindings(), into a complete
+// table/insert/query/cleanup sequence.
 //
 // The host must explicitly authorize the optional FFM provider, for example:
 //   bin/protos --foreign-provider-path <protos-ffm-provider.jar> <this file>
@@ -32,28 +33,29 @@ SQLite: import("std:sqlite")
 db: SQLite.openMemory()
 (() => {
     // Step B: a command Statement completes on its first step: false, no row.
-    create: db.prepare("CREATE TABLE measurements (id INTEGER, reading REAL, optional INTEGER)")
+    create: db.prepare("CREATE TABLE measurements (id INTEGER, reading REAL, optional INTEGER, label TEXT);")
     (() => {
         Assertions.require(create.step() === false)
     }).ensure(() => create.close().value())
 
-    // Step C: bind one-based numeric parameters, then execute exactly once.
-    // A Statement cannot be reset or rebound after it has started executing,
-    // so each further insert prepares a fresh Statement.
-    insert: (id, reading, optional) => {
-        statement: db.prepare("INSERT INTO measurements VALUES (?1, ?2, ?3)")
-        (() => {
-            statement.bind(1, id).bind(2, reading).bind(3, optional)
-            Assertions.require(statement.step() === false)
-        }).ensure(() => statement.close().value())
-    }
-    insert(1, 1.25, null)
-    insert(2, 2.5, 7)
-    insert(3, 0.75, null)
+    // Step C: bind one-based parameters and execute. A completed Statement
+    // stays completed; reset() is the explicit way to run it again. reset()
+    // keeps the bindings, clearBindings() sets every parameter to SQL NULL.
+    insert: db.prepare("INSERT INTO measurements VALUES (?1, ?2, ?3, ?4)")
+    (() => {
+        insert.bind(1, 1).bind(2, 1.25).bind(3, null).bind(4, "first")
+        Assertions.require(insert.step() === false)
+        Assertions.require(insert.step() === false)    // not executed again
+        Assertions.signals(Error, () => insert.bind(1, 2))  // reset first
+        insert.reset().bind(1, 2).bind(2, 2.5).bind(3, 7).bind(4, "second")
+        Assertions.require(insert.step() === false)
+        insert.reset().clearBindings().bind(1, 3).bind(2, 0.75)
+        Assertions.require(insert.step() === false)
+    }).ensure(() => insert.close().value())
 
     // Step D: each copies every row into an ordinary Array before calling the
     // ordinary Protos Closure, which updates ordinary local variables.
-    query: db.prepare("SELECT id, reading, optional FROM measurements ORDER BY id")
+    query: db.prepare("SELECT id, reading, optional, label FROM measurements ORDER BY id")
     seen: 0
     total: 0.0
     (() => {
@@ -63,9 +65,11 @@ db: SQLite.openMemory()
             Assertions.require(Float.recognizes(row[1]))
             if(row[0] == 2) {
                 Assertions.require(row[2] == 7)
+                Assertions.require(row[3] == "second")
             } else {
                 Assertions.require(row[2] === null)
             }
+            if(row[0] == 3) { Assertions.require(row[3] === null) }
             total = total + row[1]
         })
     }).ensure(() => query.close().value())
@@ -75,8 +79,13 @@ db: SQLite.openMemory()
     // Step E: each error case owns a bounded Statement and its own cleanup.
     // Ordinary argument errors are plain Errors; SQLite status failures are
     // SQLite.SQLiteError with operation and code slots.
-    Assertions.signals(Error, () => db.prepare("SELECT 1;"))
-    Assertions.signals(Error, () => db.prepare("SELECT ';'"))
+    // One statement per prepare: a terminator is fine, a second statement is not.
+    terminated: db.prepare("SELECT ';'; -- a comment after the terminator")
+    (() => {
+        Assertions.require(terminated.step())
+        Assertions.require(terminated.column(0) == ";")
+    }).ensure(() => terminated.close().value())
+    Assertions.signals(Error, () => db.prepare("SELECT 1; SELECT 2"))
     Assertions.signals(Error, () => db.prepare("SELECT 1\u{0}"))
     syntax: Assertions.signals(SQLite.SQLiteError, () => db.prepare("SELECT FROM"))
     Assertions.require(syntax.operation == "prepare")
@@ -88,9 +97,9 @@ db: SQLite.openMemory()
         range: Assertions.signals(SQLite.SQLiteError, () => parameters.bind(2, 1))
         Assertions.require(range.operation == "bind")
         Assertions.require(Integer.recognizes(range.code))
-        // No implicit coercion: Strings and Fractions are not bindable.
-        Assertions.signals(Error, () => parameters.bind(1, "1"))
+        // No implicit coercion: Fractions and Booleans are not bindable.
         Assertions.signals(Error, () => parameters.bind(1, 1 / 2))
+        Assertions.signals(Error, () => parameters.bind(1, true))
     }).ensure(() => parameters.close().value())
 
     rows: db.prepare("SELECT 1")
@@ -114,6 +123,8 @@ db: SQLite.openMemory()
         Assertions.require(again.value() === retired)
         Assertions.signals(IOLifecycleError, () => retired.step())
         Assertions.signals(IOLifecycleError, () => retired.bind(1, 1))
+        Assertions.signals(IOLifecycleError, () => retired.reset())
+        Assertions.signals(IOLifecycleError, () => retired.clearBindings())
     }).ensure(() => retired.close().value())
 }).ensure(() => db.close().value())
 

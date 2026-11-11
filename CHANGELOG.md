@@ -7,6 +7,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.463-SNAPSHOT
+
+- `LIB030-S1`: extend the Protos-first `std:sqlite` R1 library compatibly.
+  - `bind` accepts String as strict UTF-8 TEXT and Bytes as BLOB, preserving
+    interior NUL and every octet, keeping `""`, empty Bytes and `null` distinct,
+    snapshotting the value at bind time and bounding each input to 16 MiB
+    before native entry. SQLite copies each value during the call
+    (`SQLITE_TRANSIENT`); no input memory outlives the call.
+  - `prepare` admits exactly one statement judged by SQLite's parser:
+    conventional `;` terminators, trailing comments and grammar-internal
+    separators are accepted; the unconsumed SQL is measured while the call
+    input is alive and re-parsed, a second statement is finalized once and
+    rejected, and no prefix ever executes.
+  - Add `Statement.reset()` and `Statement.clearBindings()` with explicit
+    state transitions, the `reset`/`clearBindings` SQLiteError operations and
+    no implicit retry after failed or uncertain execution.
+  - Add provider-private FFM descriptors (`text`, `octets`, `inputLength`,
+    `copyDestructor`, `remainder`) for length-carrying inputs and tail
+    measurement, outside the public `std:ffi` R1 contract and without new
+    native authority.
+  - Add real-SQLite cases, deterministic ABI-double scenarios, a provider
+    fixture program, and updated guide, examples and tutorials.
+  - The maintainer reports focused Java tests PASS, the complete external
+    foreign-provider integration PASS, `make check` PASS and `make test` PASS.
+
 ## 0.3.462-SNAPSHOT
 
 - `LIB029-S1` (D238-B1-SQL-R1): add the Protos-first `std:sqlite` in-memory

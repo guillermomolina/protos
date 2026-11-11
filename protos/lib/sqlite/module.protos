@@ -14,8 +14,12 @@
 // the specific language governing rights and limitations under the License.
 
 //! Protos-first in-memory SQLite. Native authority is required only by openMemory.
-//! SQL must contain no semicolons or NUL. Input binds are Integer/Float/null;
-//! copied output columns are Integer/Float/String/Bytes/null. Calls are synchronous.
+//! prepare admits exactly one SQL statement; conventional ";" terminators and
+//! trailing comments are accepted, a second statement or NUL is rejected.
+//! bind accepts an exact i64 Integer, Float, String (TEXT), Bytes (BLOB) or null;
+//! Statement.reset() reruns a statement keeping its bindings and
+//! Statement.clearBindings() sets every binding to SQL NULL. Copied output
+//! columns are Integer/Float/String/Bytes/null. Calls are synchronous.
 Resources: import("./internal/Resources.protos")
 terminal: _terminalFutureFacility
 context.removeSlot("_terminalFutureFacility")

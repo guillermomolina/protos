@@ -45,7 +45,9 @@ final class FfmTypes {
     private FfmTypes() {}
 
     /** One ABI descriptor. Implementations are immutable and never expose an address. */
-    sealed interface Type permits Scalar, OpaqueType, OwnedType, BorrowedType, OutType {
+    sealed interface Type
+            permits Scalar, OpaqueType, OwnedType, BorrowedType, OutType, InputType, InputLength,
+                    CopyDestructor, Remainder {
         /** The descriptor's spelling, safe for diagnostics; never contains an address. */
         String spelling();
     }
@@ -138,6 +140,101 @@ final class FfmTypes {
         }
     }
 
+    /**
+     * Private length-carrying input region (LIB030). The argument is a Protos String; the callee
+     * receives a pointer to a fresh, non-NULL per-call copy of exactly its octets, followed by
+     * one NUL that is never counted. {@link #TEXT} uses strict UTF-8 and admits interior NUL;
+     * {@link #OCTETS} is a lossless octet transport in which every character is U+0000..U+00FF
+     * and denotes exactly one octet (the Latin-1 bijection), so no character interpretation is
+     * applied to binary data. Admission bounds the octet length by {@link #MAX_INPUT_BYTES}
+     * (the C {@code int} length domain, leaving room for the guard NUL) before native entry;
+     * smaller application policies belong to the consuming library. These are provider-private
+     * members, not public std:ffi descriptors.
+     */
+    enum InputType implements Type {
+        TEXT("text"),
+        OCTETS("octets");
+
+        private final String spelling;
+
+        InputType(String spelling) {
+            this.spelling = spelling;
+        }
+
+        @Override
+        public String spelling() {
+            return spelling;
+        }
+    }
+
+    /**
+     * C {@code int} parameter that consumes no Protos argument: the exact octet length of the
+     * nearest preceding {@link InputType} parameter of the same call. The length is therefore
+     * never supplied by Protos and can never exceed the marshalled region.
+     */
+    enum InputLength implements Type {
+        INSTANCE;
+
+        @Override
+        public String spelling() {
+            return "inputLength";
+        }
+    }
+
+    /**
+     * Destructor-pointer parameter that consumes no Protos argument and always passes the C
+     * destructor sentinel {@code (void (*)(void *)) -1}, by which the callee is instructed to
+     * make its own private copy of the preceding input before returning (for SQLite, {@code
+     * SQLITE_TRANSIENT}). The constant is ABI-correct as a function-pointer argument, is never
+     * dereferenced by the provider, is never derived from a Protos value and is never published.
+     * Together with the per-call arena this is the only custody it implies: no input memory
+     * outlives the call.
+     */
+    enum CopyDestructor implements Type {
+        INSTANCE;
+
+        static final long SENTINEL = -1L;
+
+        @Override
+        public String spelling() {
+            return "copyDestructor";
+        }
+    }
+
+    /**
+     * Out-only target describing a {@code const char **} tail written by the callee into the
+     * nearest preceding text input ({@code utf8z} or {@link InputType#TEXT}). The pointer is
+     * converted, while the per-call input is still alive, into the exact number of unconsumed
+     * octets (excluding the terminating NUL); native NULL becomes absent and a pointer outside
+     * the input is a provider failure. No address is retained or published.
+     */
+    enum Remainder implements Type {
+        INSTANCE;
+
+        @Override
+        public String spelling() {
+            return "remainder";
+        }
+    }
+
+    /**
+     * Generic bound of one private input region: its length must fit the C {@code int} passed by
+     * {@link InputLength}, and the region plus its guard NUL must fit one Java array.
+     */
+    static final long MAX_INPUT_BYTES = Integer.MAX_VALUE - 8L;
+
+    /** Whether a parameter is supplied by the provider rather than by a Protos argument. */
+    static boolean consumesArgument(Type type) {
+        return !(type instanceof OutType
+                || type == InputLength.INSTANCE
+                || type == CopyDestructor.INSTANCE);
+    }
+
+    /** Whether {@code type} is a text input to which an {@code out(remainder)} may refer. */
+    static boolean isTextInput(Type type) {
+        return type == Scalar.UTF8Z || type == InputType.TEXT;
+    }
+
     /** Output position: consumes no Protos argument; its zeroed slot is read after the call. */
     record OutType(Type target) implements Type {
         OutType {
@@ -159,11 +256,13 @@ final class FfmTypes {
                 || type == Scalar.SIZE_T
                 || type instanceof OpaqueType
                 || type instanceof OwnedType
-                || type == BorrowedType.INSTANCE;
+                || type == BorrowedType.INSTANCE
+                || type == Remainder.INSTANCE;
     }
 
     static boolean isReturnType(Type type) {
-        return type == Scalar.VOID || (type != Scalar.UTF8Z && isOutTarget(type));
+        return type == Scalar.VOID
+                || (type != Scalar.UTF8Z && type != Remainder.INSTANCE && isOutTarget(type));
     }
 
     static boolean isParameterType(Type type) {
@@ -173,7 +272,10 @@ final class FfmTypes {
                 || type == Scalar.SIZE_T
                 || type == Scalar.UTF8Z
                 || type instanceof OpaqueType
-                || type instanceof OutType;
+                || type instanceof OutType
+                || type instanceof InputType
+                || type == InputLength.INSTANCE
+                || type == CopyDestructor.INSTANCE;
     }
 
     /** The library whose handles this descriptor admits, or null for a library-neutral one. */
@@ -201,6 +303,10 @@ final class FfmTypes {
             case OwnedType ignored -> ValueLayout.ADDRESS;
             case BorrowedType ignored -> ValueLayout.ADDRESS;
             case OutType ignored -> ValueLayout.ADDRESS;
+            case InputType ignored -> ValueLayout.ADDRESS;
+            case InputLength ignored -> ValueLayout.JAVA_INT;
+            case CopyDestructor ignored -> ValueLayout.ADDRESS;
+            case Remainder ignored -> ValueLayout.ADDRESS;
         };
     }
 
@@ -296,6 +402,63 @@ final class FfmTypes {
             return bits;
         }
         return new BigInteger(Long.toUnsignedString(bits));
+    }
+
+    /**
+     * Exact octet length of one admitted private input, or -1 when {@code value} is not
+     * admitted: not a String, an unpaired surrogate for {@link InputType#TEXT}, a character above
+     * U+00FF for {@link InputType#OCTETS}, or longer than {@link #MAX_INPUT_BYTES}. Pure and
+     * allocation-free, so repeated admission does not copy the input.
+     */
+    static long inputLength(InputType type, Object value) {
+        if (!(value instanceof String text)) {
+            return -1;
+        }
+        long count = 0;
+        int length = text.length();
+        for (int index = 0; index < length; index++) {
+            char unit = text.charAt(index);
+            if (type == InputType.OCTETS) {
+                if (unit > 0xFF) {
+                    return -1;
+                }
+                count++;
+            } else if (unit < 0x80) {
+                count++;
+            } else if (unit < 0x800) {
+                count += 2;
+            } else if (Character.isHighSurrogate(unit)) {
+                if (index + 1 >= length || !Character.isLowSurrogate(text.charAt(index + 1))) {
+                    return -1;
+                }
+                index++;
+                count += 4;
+            } else if (Character.isLowSurrogate(unit)) {
+                return -1;
+            } else {
+                count += 3;
+            }
+            if (count > MAX_INPUT_BYTES) {
+                return -1;
+            }
+        }
+        return count;
+    }
+
+    /** Exact octets of an input already admitted by {@link #inputLength}. */
+    static byte[] inputOctets(InputType type, String text) {
+        if (type == InputType.TEXT) {
+            byte[] octets = strictUtf8(text);
+            if (octets == null) {
+                throw new FfmFailure("invalid-argument", "text is not valid Unicode");
+            }
+            return octets;
+        }
+        byte[] octets = new byte[text.length()];
+        for (int index = 0; index < octets.length; index++) {
+            octets[index] = (byte) text.charAt(index);
+        }
+        return octets;
     }
 
     /** Whether {@code text} is valid Unicode without an interior NUL, so strict UTF-8 applies. */

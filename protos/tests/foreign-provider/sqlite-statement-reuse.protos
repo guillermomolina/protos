@@ -1,0 +1,160 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// LIB030: explicit Statement reuse through reset() and clearBindings(); run
+// only with the explicitly authorized real provider.
+Assertions: import("std:test/assertions")
+SQLite: import("std:sqlite")
+
+ordinary: (body) => {
+    error: Assertions.signals(Error, body)
+    Assertions.require(error.parent() === Error)
+}
+octets: (...values) => {
+    bytes: Encoding.UTF8.encode("")
+    for(value in values) { bytes.add(value) }
+    bytes
+}
+count: (db) => {
+    query: db.prepare("SELECT count(*) FROM items")
+    (() => {
+        Assertions.require(query.step())
+        query.column(0)
+    }).ensure(() => query.close().value())
+}
+
+db: SQLite.openMemory()
+(() => {
+    create: db.prepare("CREATE TABLE items (id INTEGER, label TEXT, payload BLOB);")
+    Assertions.require(create.step() === false)
+    create.close().value()
+
+    insert: db.prepare("INSERT INTO items VALUES (?1, ?2, ?3)")
+    (() => {
+        // DONE is terminal until an explicit reset: step does not run again.
+        insert.bind(1, 1).bind(2, "one").bind(3, octets(1))
+        Assertions.require(insert.step() === false)
+        Assertions.require(insert.step() === false)
+        Assertions.require(count(db) == 1)
+        ordinary(() => insert.bind(1, 2))
+
+        // reset answers the Statement, does not execute and keeps bindings.
+        Assertions.require(insert.reset() === insert)
+        Assertions.require(count(db) == 1)
+        Assertions.require(insert.step() === false)
+        Assertions.require(count(db) == 2)
+
+        // reset followed by new bindings.
+        insert.reset().bind(1, 2).bind(2, "two").bind(3, octets(2, 0))
+        Assertions.require(insert.step() === false)
+        Assertions.require(count(db) == 3)
+
+        // clearBindings is not reset: a DONE statement stays DONE.
+        Assertions.require(insert.clearBindings() === insert)
+        Assertions.require(insert.step() === false)
+        Assertions.require(count(db) == 3)
+        ordinary(() => insert.bind(1, 3))
+
+        // After reset the cleared parameters are SQL NULL.
+        insert.reset()
+        Assertions.require(insert.step() === false)
+        Assertions.require(count(db) == 4)
+
+        // Many iterations of one prepared statement.
+        for(entry in Array(Array(10, "ten"), Array(11, "eleven"), Array(12, "twelve"))) {
+            insert.reset().clearBindings().bind(1, entry[0]).bind(2, entry[1])
+            Assertions.require(insert.step() === false)
+        }
+        Assertions.require(count(db) == 7)
+    }).ensure(() => insert.close().value())
+
+    nulls: db.prepare("SELECT typeof(id), typeof(label), typeof(payload) FROM items WHERE rowid = 4")
+    (() => {
+        Assertions.require(nulls.step())
+        row: nulls.row()
+        Assertions.require((row[0] == "null") && (row[1] == "null") && (row[2] == "null"))
+    }).ensure(() => nulls.close().value())
+
+    query: db.prepare("SELECT id, label, payload FROM items WHERE id >= ?1 ORDER BY id")
+    (() => {
+        query.bind(1, 10)
+        Assertions.require(query.step())
+        first: query.row()
+        Assertions.require((first[0] == 10) && (first[1] == "ten") && (first[2] === null))
+
+        // clearBindings does not invalidate the current row or restart execution.
+        query.clearBindings()
+        Assertions.require(query.column(1) == "ten")
+
+        // reset after a partial read invalidates the row and restarts execution.
+        query.reset()
+        ordinary(() => query.row())
+        ordinary(() => query.column(0))
+        Assertions.require(first[1] == "ten")
+        // The cleared parameter is NULL: id >= NULL selects nothing.
+        Assertions.require(query.step() === false)
+        query.reset().bind(1, 11)
+        Assertions.require(query.step())
+        Assertions.require(query.column(1) == "eleven")
+        Assertions.require(query.step())
+        Assertions.require(query.column(1) == "twelve")
+        Assertions.require(query.step() === false)
+        Assertions.require(query.step() === false)
+        query.reset()
+        Assertions.require(query.step())
+        Assertions.require(query.column(0) == 11)
+    }).ensure(() => query.close().value())
+
+    // A failed execution is never retried implicitly. The first reset reports
+    // the earlier step failure and leaves the statement failed; a reset that
+    // SQLite confirms with SQLITE_OK makes it reusable again.
+    broken: db.prepare("SELECT abs(?1)")
+    (() => {
+        broken.bind(1, -9223372036854775808)
+        first: Assertions.signals(SQLite.SQLiteError, () => broken.step())
+        Assertions.require(first.operation == "step")
+        ordinary(() => broken.step())
+        reported: Assertions.signals(SQLite.SQLiteError, () => broken.reset())
+        // SQLite reports an error status for the earlier failure; its exact
+        // value is SQLite's choice, so only a non-OK status is required.
+        Assertions.require((reported.operation == "reset") && (reported.code != 0))
+        ordinary(() => broken.step())
+        ordinary(() => broken.bind(1, 5))
+        Assertions.require(broken.reset() === broken)
+        broken.bind(1, -5)
+        Assertions.require(broken.step())
+        Assertions.require(broken.column(0) == 5)
+    }).ensure(() => broken.close().value())
+
+    // reset and clearBindings are ordinary operations of an open Statement only.
+    closed: db.prepare("SELECT 1")
+    closed.close().value()
+    Assertions.signals(IOLifecycleError, () => closed.reset())
+    Assertions.signals(IOLifecycleError, () => closed.clearBindings())
+}).ensure(() => db.close().value())
+
+// Closing the Connection closes Statements that are still open after reuse.
+parent: SQLite.openMemory()
+reused: parent.prepare("SELECT ?1")
+reused.bind(1, "a")
+Assertions.require(reused.step())
+reused.reset().bind(1, octets(1))
+Assertions.require(reused.step())
+Assertions.require(parent.close().value() === parent)
+Assertions.signals(IOLifecycleError, () => reused.reset())
+Assertions.signals(IOLifecycleError, () => reused.clearBindings())
+Assertions.signals(IOLifecycleError, () => reused.step())
+Assertions.require(reused.close().value() === reused)
+print("LIB030-STATEMENT-REUSE-PASS")

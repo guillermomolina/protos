@@ -185,9 +185,20 @@ returned as data.
 | `owned(opaque, destructorSymbol, destructorReturnType)` | pointer whose lifetime the session takes over; `destructorReturnType` is `void` or `i32` | owned reference |
 | `borrowed` | pointer to memory the C library still owns (return only) | borrowed region, read only with `copy` |
 | `out(type)` | `type *` output slot | no argument; value returned after the C result |
+| `text` | `const char *` length-carrying input (LIB030, private) | String, strict UTF-8, interior NUL allowed, length within the C `int` domain |
+| `octets` | `const void *` length-carrying input (LIB030, private) | String of U+0000..U+00FF, one octet per character (a private binary transport), length within the C `int` domain |
+| `inputLength` | `int` length of the nearest preceding `text`/`octets` | no argument; exact octet count computed by the provider |
+| `copyDestructor` | `void (*)(void *)` destructor argument | no argument; always the copy sentinel `-1` (for SQLite, `SQLITE_TRANSIENT`) |
+| `out(remainder)` | `const char **` tail into the nearest preceding `utf8z`/`text` | no argument; unconsumed octet count, `null` for a NULL tail |
 
 Integers are never truncated or wrapped, and no Integer converts to a
-pointer.
+pointer. The LIB030 input regions are fresh, non-NULL, NUL-guarded copies in
+the per-call arena: they exist only during the call, so the callee must copy
+them before returning (`copyDestructor`). A remainder is measured while that
+input is still alive; a tail outside the input is a `ForeignError`. These
+descriptors are private provider machinery for `std:sqlite`, not public
+`std:ffi` R1 descriptors. Size policies such as the 16 MiB `std:sqlite` input
+bound belong to the consuming library, not to the provider.
 
 ### Operations
 These `signature`, `param`, `preserving`, `bind` and `copy` operations are

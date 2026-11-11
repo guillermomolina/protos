@@ -1,0 +1,109 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// LIB030: complete single-statement SQL admission judged by SQLite's parser;
+// run only with the explicitly authorized real provider.
+Assertions: import("std:test/assertions")
+SQLite: import("std:sqlite")
+
+ordinary: (body) => {
+    error: Assertions.signals(Error, body)
+    Assertions.require(error.parent() === Error)
+}
+first: (db, sql) => {
+    statement: db.prepare(sql)
+    Assertions.require(statement !== null)
+    (() => {
+        Assertions.require(statement.step())
+        statement.column(0)
+    }).ensure(() => statement.close().value())
+}
+tables: (db, name) => {
+    statement: db.prepare("SELECT count(*) FROM sqlite_master WHERE name = ?1")
+    (() => {
+        statement.bind(1, name)
+        Assertions.require(statement.step())
+        statement.column(0)
+    }).ensure(() => statement.close().value())
+}
+
+db: SQLite.openMemory()
+(() => {
+    // One statement with conventional terminators, comments and quoted separators.
+    for(sample in Array(
+        Array("SELECT 1", 1),
+        Array("SELECT 1;", 1),
+        Array("SELECT 1 ;  \n\t", 1),
+        Array("SELECT 1;;", 1),
+        Array("SELECT ';'", ";"),
+        Array("SELECT 'a;b';", "a;b"),
+        Array("SELECT 'it''s; fine';", "it's; fine"),
+        Array("SELECT 1 /* ; */;", 1),
+        Array("SELECT 1; -- trailing; comment", 1),
+        Array("SELECT 1; /* trailing; comment */", 1),
+        Array("SELECT 1; -- one\n /* two */ -- three", 1),
+        Array("SELECT '\u{E9}'; -- \u{F1}\u{1F642}", "\u{E9}"),
+        Array("SELECT \"x;y\" FROM (SELECT 7 AS \"x;y\");", 7),
+        Array("SELECT [a;b] FROM (SELECT 8 AS [a;b]);", 8))) {
+        Assertions.require(first(db, sample[0]) == sample[1])
+    }
+
+    // Blank and comment-only SQL is not a statement.
+    for(sql in Array("", "  \n", ";", " ; ; ", "-- only", "/* c */ ;", "\n-- a\n/* b */")) {
+        Assertions.require(db.prepare(sql) === null)
+    }
+
+    // A second statement is rejected after prepare and never executes a prefix.
+    for(sql in Array(
+        "SELECT 1; SELECT 2",
+        "SELECT 1;SELECT 2;",
+        "SELECT 1;\n -- comment\n SELECT 2",
+        "SELECT 1; /* comment */ SELECT 2;",
+        "CREATE TABLE side (n); SELECT 1",
+        "; CREATE TABLE side (n); SELECT 1")) {
+        ordinary(() => db.prepare(sql))
+    }
+    Assertions.require(tables(db, "side") == 0)
+
+    // NUL and non-String SQL are rejected before SQLite.
+    for(sql in Array("SELECT 1\u{0}", "SELECT 1;\u{0}", 42, null)) {
+        ordinary(() => db.prepare(sql))
+    }
+
+    // Invalid or incomplete SQL, first or after a complete statement, is SQLite's.
+    for(sql in Array("SELECT FROM", "SELECT (1", "SELECT 'open", "SELECT 1; garbage",
+        "SELECT 1; SELECT * FROM missing_table", "CREATE TABLE late (n); SELECT FROM")) {
+        failure: Assertions.signals(SQLite.SQLiteError, () => db.prepare(sql))
+        Assertions.require(failure.operation == "prepare")
+        Assertions.require(failure.code != 0)
+    }
+    Assertions.require(tables(db, "late") == 0)
+
+    // Internal separators that SQLite's grammar owns form one statement.
+    for(sql in Array("CREATE TABLE source (n INTEGER);", "CREATE TABLE log (n INTEGER);")) {
+        statement: db.prepare(sql)
+        statement.step()
+        statement.close().value()
+    }
+    trigger: db.prepare("CREATE TRIGGER copy AFTER INSERT ON source BEGIN INSERT INTO log VALUES (new.n); INSERT INTO log VALUES (new.n + 1); END;")
+    Assertions.require(trigger.step() === false)
+    trigger.close().value()
+    insert: db.prepare("INSERT INTO source VALUES (?1);")
+    insert.bind(1, 40)
+    Assertions.require(insert.step() === false)
+    insert.close().value()
+    Assertions.require(first(db, "SELECT sum(n) FROM log; -- 40 + 41") == 81)
+}).ensure(() => db.close().value())
+print("LIB030-SQL-ADMISSION-PASS")

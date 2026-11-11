@@ -16,15 +16,62 @@
 //! SQLite resources and state transitions. All native policy lives here.
 Arrays: import("std:collections/array")
 
-// SQL admission deliberately rejects every semicolon, including quoted and
-// commented ones. NUL is rejected before utf8z admission as well. Without
-// separators SQLite cannot leave a second supported statement behind pzTail.
+// std:sqlite input policy: one TEXT (strict UTF-8 octets) or BLOB value is at
+// most 16 MiB, the same bound as the R1 column copy, so every accepted input can
+// also be read back by column(). It is checked here, before native entry; the
+// generic provider bound is only the C int length domain.
+inputLimit: 16777216
+
+// Strict UTF-8 octet length of a String, or an ordinary Error when the String
+// is not valid Unicode. The provider re-validates the same encoding.
+textLength: (text) => {
+    size: null
+    Error.handle(() => { size = Encoding.UTF8.encode(text).size() }, (error) => null)
+    if(size === null) { Error().signal() }
+    size
+}
+
+// Argument-domain admission before SQLite. NUL cannot reach utf8z; every other
+// character, including semicolons in strings, comments or separating statements,
+// is judged by SQLite's own parser in prepare below. Answers the exact octets.
 admitSql: (sql) => {
     String.recognizes(sql).ifFalse(() => Error().signal())
-    for(octet in Encoding.UTF8.encode(sql)) {
-        if((octet == 59) || (octet == 0)) { Error().signal() }
+    octets: Encoding.UTF8.encode(sql)
+    for(octet in octets) {
+        if(octet == 0) { Error().signal() }
     }
-    sql
+    octets
+}
+
+// The SQL text after the first (size - remaining) octets. SQLite's tail always
+// lies on a token boundary, so the suffix is complete UTF-8.
+suffix: (octets, remaining) => {
+    rest: Encoding.UTF8.encode("")
+    position: octets.size() - remaining
+    while(position < octets.size()) {
+        rest.add(octets[position])
+        position = position + 1
+    }
+    decoded: Encoding.UTF8.decode(rest)
+    // The standard decoder consumes an initial BOM; here U+FEFF is SQL source
+    // that SQLite must still judge, so restore it after strict validation.
+    if(remaining >= 3) {
+        if(((rest[0] == 239) && (rest[1] == 187)) && (rest[2] == 191)) {
+            decoded = "\u{FEFF}" + decoded
+        }
+    }
+    decoded
+}
+
+// Recognizes a standard Bytes value. Latin1 accepts every octet sequence and
+// rejects every non-Bytes value, so it is exact Bytes-domain validation.
+isBytes: (value) => {
+    recognized: false
+    Error.handle(() => {
+        Encoding.Latin1.decode(value)
+        recognized = true
+    }, (error) => null)
+    recognized
 }
 
 // The ABI and terminal-Future facility are injected privately. This also lets
@@ -38,9 +85,9 @@ openMemory: (abi, terminal, SQLiteError) => {
         if(code != abi.SQLITE_OK) { failure(operation, code).signal() }
     }
     // Attempts cleanup without replacing an already established primary error.
-    discard: (handle) => {
+    discard: (handle, release) => {
         if(handle !== null) {
-            Error.handle(() => abi.release(handle), (error) => null)
+            Error.handle(() => release(handle), (error) => null)
         }
     }
     opened: abi.open(":memory:", abi.SQLITE_OPEN_READWRITE + abi.SQLITE_OPEN_CREATE + abi.SQLITE_OPEN_MEMORY, null)
@@ -63,10 +110,10 @@ openMemory: (abi, terminal, SQLiteError) => {
         observe: (receiver, error) => {
             if(error === null) { terminal.resolved(receiver) } else { terminal.failed(error) }
         }
-        retire: (handle, operation) => {
+        retire: (handle, operation, release) => {
             error: null
             Error.handle(
-                () => check(operation, abi.release(handle)),
+                () => check(operation, release(handle)),
                 (caught) => { error = caught }
             )
             error
@@ -74,17 +121,54 @@ openMemory: (abi, terminal, SQLiteError) => {
 
         prepare: (sql) => {
             requireOpen()
-            admitSql(sql)
-            prepared: abi.prepare(native, sql, -1, null)
-            handle: prepared[1]
+            octets: admitSql(sql)
+            // The single native statement found in sql, or null for blank SQL.
+            handle: null
             admitted: false
             (() => {
-                if(prepared[0] != abi.SQLITE_OK) {
-                    primary: failure("prepare", prepared[0])
-                    primary.signal()
+                // SQLite parses one statement per call and reports the unconsumed
+                // octets, measured while its input copy is alive. Each remainder is
+                // parsed again by SQLite: trailing separators, whitespace and
+                // comments yield no statement; a second statement or invalid
+                // trailing SQL is rejected, so a prefix never runs silently.
+                source: sql
+                remaining: octets.size()
+                parsing: true
+                while(parsing) {
+                    prepared: abi.prepare(native, source)
+                    if(prepared[1] !== null) {
+                        if(handle === null) {
+                            handle = prepared[1]
+                        } else {
+                            // Finalize the extra statement once, then reject the input.
+                            // The first statement is finalized by the ensure below.
+                            discard(prepared[1], abi.finalize)
+                            Error().signal()
+                        }
+                    }
+                    if(prepared[0] != abi.SQLITE_OK) {
+                        primary: failure("prepare", prepared[0])
+                        primary.signal()
+                    }
+                    rest: prepared[2]
+                    // An unknown or non-advancing tail cannot prove complete admission.
+                    if(rest === null) { failure("prepare", abi.SQLITE_OK).signal() }
+                    // Strict progress: the remainder must shrink, or already be zero.
+                    if((rest < 0) || (rest > remaining) || ((rest == remaining) && (rest > 0))) {
+                        failure("prepare", abi.SQLITE_OK).signal()
+                    }
+                    if(rest == 0) {
+                        parsing = false
+                    } else {
+                        remaining = rest
+                        source = suffix(octets, remaining)
+                    }
                 }
                 statement: null
                 if(handle !== null) {
+                    // State: prepared/reset (all flags false), row available, done
+                    // (finished), failed, or permanently closed. Only reset() leaves
+                    // done or failed, and only when SQLite confirms SQLITE_OK.
                     closed: false
                     terminalError: null
                     rowAvailable: false
@@ -105,7 +189,7 @@ openMemory: (abi, terminal, SQLiteError) => {
                                 rowAvailable = false
                                 retired: handle
                                 handle = null
-                                terminalError = retire(retired, "finalize")
+                                terminalError = retire(retired, "finalize", abi.finalize)
                                 // Unregistration may fail independently; it must never prevent
                                 // native finalization or replace an earlier release failure.
                                 Error.handle(
@@ -120,6 +204,7 @@ openMemory: (abi, terminal, SQLiteError) => {
                     }
                     bind: (index, value) => {
                         usable()
+                        // SQLite accepts bindings only before the first step or after reset.
                         if(finished || failed || rowAvailable) { Error().signal() }
                         Integer.recognizes(index).ifFalse(() => Error().signal())
                         if((index < 1) || (index > 2147483647)) { Error().signal() }
@@ -132,7 +217,16 @@ openMemory: (abi, terminal, SQLiteError) => {
                             code = abi.bindInteger(handle, index, value)
                         }
                         if(Float.recognizes(value)) { code = abi.bindFloat(handle, index, value) }
-                        if(code === null) { Error().signal() }
+                        if(String.recognizes(value)) {
+                            // Interior NUL is data; only the octet bound is policy here.
+                            if(textLength(value) > inputLimit) { Error().signal() }
+                            code = abi.bindText(handle, index, value)
+                        }
+                        if(code === null) {
+                            if(!isBytes(value)) { Error().signal() }
+                            if(value.size() > inputLimit) { Error().signal() }
+                            code = abi.bindBlob(handle, index, value)
+                        }
                         check("bind", code)
                         statement
                     }
@@ -158,6 +252,24 @@ openMemory: (abi, terminal, SQLiteError) => {
                             if(failed) { failure("step", code).signal() }
                         }
                         rowAvailable
+                    }
+                    reset: () => {
+                        usable()
+                        // The current row is invalid from here on, whatever the outcome.
+                        rowAvailable = false
+                        // Until SQLite confirms SQLITE_OK the statement is not reusable;
+                        // an entered provider failure therefore also leaves it failed.
+                        failed = true
+                        code: abi.reset(handle)
+                        if(code != abi.SQLITE_OK) { failure("reset", code).signal() }
+                        failed = false
+                        finished = false
+                        statement
+                    }
+                    clearBindings: () => {
+                        usable()
+                        check("clearBindings", abi.clearBindings(handle))
+                        statement
                     }
                     column: (index) => {
                         usable()
@@ -198,10 +310,15 @@ openMemory: (abi, terminal, SQLiteError) => {
                         result
                     }
                     statement = {
-                        /// Binds an Integer, Float or null at SQLite's one-based index.
+                        /// Binds an Integer, Float, String (TEXT), Bytes (BLOB) or null at
+                        /// SQLite's one-based index; only before the first step or after reset.
                         bind: bind
                         /// Synchronously advances; true means row, false means done.
                         step: step
+                        /// Resets execution, keeping bindings; required to run again.
+                        reset: reset
+                        /// Replaces every binding with SQL NULL; does not reset or execute.
+                        clearBindings: clearBindings
                         /// Copies a zero-based current column into ordinary Protos data.
                         column: column
                         /// Copies all current columns into a fresh ordinary Array.
@@ -219,11 +336,12 @@ openMemory: (abi, terminal, SQLiteError) => {
                 }
                 statement
             }).ensure(() => {
-                if(!admitted) { discard(handle) }
+                if(!admitted) { discard(handle, abi.finalize) }
             })
         }
         connection = {
-            /// Prepares one semicolon-free SQL statement; blank/comment SQL yields null.
+            /// Prepares exactly one SQL statement, optionally terminated by semicolons
+            /// and followed by comments; blank/comment SQL yields null.
             prepare: prepare
             /// Closes every child and then the database, preserving the first failure.
             close: () => {
@@ -240,7 +358,7 @@ openMemory: (abi, terminal, SQLiteError) => {
                         }
                         retired: native
                         native = null
-                        parentError: retire(retired, "close")
+                        parentError: retire(retired, "close", abi.release)
                         if(closeError === null) { closeError = parentError }
                     }
                     observe(connection, closeError)
@@ -250,6 +368,6 @@ openMemory: (abi, terminal, SQLiteError) => {
         published = true
         connection
     }).ensure(() => {
-        if(!published) { discard(native) }
+        if(!published) { discard(native, abi.release) }
     })
 }
