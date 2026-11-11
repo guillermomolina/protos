@@ -221,7 +221,26 @@ final class ProtosPerf032ExecutionModeTest {
                 ProtosStandaloneHostedSession.PreparedTopLevel prepared =
                         session.prepareTopLevel("run");
                 Value executable = prepared.executable();
+                System.out.println(
+                        "I115_CONSTANT_MATERIALIZED_FIRST=" + materializedFirst);
+
                 assertEquals(1, executable.execute().asInt(), "first call precedes the debugger");
+
+                var lexical =
+                        prepared.closureForTesting()
+                                .capturedLexicalEnvironmentForRuntime();
+
+                System.out.println(
+                        "I115_CONSTANT_CAPTURE_PRESENT=" + (lexical != null));
+
+                for (int depth = 0; depth < 8 && lexical != null; depth++) {
+                    System.out.println(
+                            "I115_CONSTANT_CAPTURE_DEPTH=" + depth
+                                    + " DEFERRED=" + lexical.isDeferredForRuntime()
+                                    + " HAS_MARKER="
+                                    + lexical.hasLocalSlotForRuntime("marker"));
+                    lexical = lexical.outer();
+                }
                 if (materializedFirst) {
                     ProtosHostExecutableClosure adapter = prepared.hostExecutableForTesting();
                     session.processContextForTesting()
@@ -612,9 +631,9 @@ final class ProtosPerf032ExecutionModeTest {
     }
 
     /**
-     * I102: the zero-argument host entry of {@code adapter}'s unobservable-home Closure, identical
-     * with and without a debugger: the Closure, no explicit Task, the adapter's exact caller and
-     * the unobservable marker, with no supplied value.
+     * I102: the zero-argument host entry retains the exact Closure and caller,
+     * no explicit Task, no supplied arguments, and the ReturnHome selected by
+     * the effective callee's existing return-home classification.
      */
     private static void assertB5ZeroArgumentHeader(
             ProtosHostExecutableClosure adapter, Object[] arguments) {
@@ -622,7 +641,38 @@ final class ProtosPerf032ExecutionModeTest {
         assertSame(adapter.closure, arguments[0]);
         assertNull(arguments[2], "no explicit Task");
         assertSame(adapter.caller, arguments[3]);
-        assertSame(ProtosReturnHome.unobservable(), arguments[4]);
+        ProtosReturnHome home =
+                org.junit.jupiter.api.Assertions.assertInstanceOf(
+                        ProtosReturnHome.class, arguments[4]);
+
+        ProtosBytecodeRootNode callee =
+                org.junit.jupiter.api.Assertions.assertInstanceOf(
+                        ProtosBytecodeRootNode.class,
+                        adapter.target.getRootNode());
+
+        switch (ProtosFunctionCallDispatchers.classifyReturnHome(
+                adapter.closure, callee)) {
+            case UNOBSERVABLE ->
+                    assertSame(
+                            ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
+                            home,
+                            "prepared direct entry retains its exact primitive-result marker");
+
+            case CAPTURED ->
+                    assertSame(
+                            adapter.closure.capturedReturnHomeOrNullForRuntime(),
+                            home,
+                            "captured home retains its exact identity");
+
+            case OWNED_PHYSICAL -> {
+                assertTrue(
+                        home.isMaterialized(),
+                        "physical invocation must own a materialized home");
+                assertTrue(
+                        home.isActive(),
+                        "prepared physical invocation must have an active home");
+            }
+        }
         assertEquals(0, ProtosFrameArguments.compactSuppliedArgumentCount(arguments));
     }
 
@@ -654,6 +704,21 @@ final class ProtosPerf032ExecutionModeTest {
                 assertEquals(BODY_LINE, event.getSourceSection().getStartLine());
                 DebugScope scope = event.getTopStackFrame().getScope();
                 assertNotNull(scope);
+                DebugScope observed = scope;
+                for (int depth = 0; depth < 8 && observed != null; depth++) {
+                    System.out.println(
+                            "I115_DEBUG_SCOPE_DEPTH=" + depth
+                                    + " NAME=" + observed.getName());
+
+                    for (DebugValue binding : observed.getDeclaredValues()) {
+                        System.out.println(
+                                "I115_DEBUG_SCOPE_BINDING="
+                                        + binding.getName());
+                    }
+
+                    observed = observed.getParent();
+                }
+
                 DebugValue value = scope.getDeclaredValue("marker");
                 assertNotNull(value, "captured lexical binding must be visible");
                 marker.set(value.toDisplayString());
