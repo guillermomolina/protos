@@ -96,9 +96,9 @@ final class ProtosI096InlineClosureLiteralCallTest {
             throws Exception {
         String source = """
                 run: () => {
-                    probe()
                     target: () => { 7 }
                     ((fn) => {
+                        probe()
                         fn()
                     })(target)
                 }
@@ -113,15 +113,15 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 instructionNames(normal.innermostRoot());
 
         assertTrue(
-                position(names, "InvokeInlineClosureZero") >= 0,
+                count(names, "CallNilaryMethod") == 2,
                 names::toString);
 
         assertTrue(
-                position(names, "BindInlineClosureFrameParameter") >= 0,
+                position(names, "CopySuppliedArguments") >= 0,
                 names::toString);
 
         assertTrue(
-                position(names, "IsPreparedClosureInvocation") >= 0,
+                position(names, "IsContinuation") >= 0,
                 names::toString);
 
         assertFalse(
@@ -160,9 +160,9 @@ final class ProtosI096InlineClosureLiteralCallTest {
 
         String one = """
                 run: () => {
-                    probe()
                     target: (x) => { x }
                     ((fn) => {
+                        probe()
                         fn(41)
                     })(target)
                 }
@@ -177,15 +177,15 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 instructionNames(oneNormal.innermostRoot());
 
         assertTrue(
-                position(oneNames, "InvokeInlineClosureOne") >= 0,
+                count(oneNames, "CallUnaryMethod") == 1,
                 oneNames::toString);
 
         assertTrue(
-                position(oneNames, "IsPreparedClosureInvocation") >= 0,
+                position(oneNames, "IsContinuation") >= 0,
                 oneNames::toString);
 
         assertTrue(
-                position(oneNames, "BindInlineClosureFrameParameter") >= 0,
+                position(oneNames, "CopySuppliedArguments") >= 0,
                 oneNames::toString);
 
         assertFalse(
@@ -214,9 +214,9 @@ final class ProtosI096InlineClosureLiteralCallTest {
 
         String many = """
                 run: () => {
-                    probe()
                     target: (a, b) => { 42 }
                     ((fn) => {
+                        probe()
                         fn(4, 2)
                     })(target)
                 }
@@ -231,15 +231,15 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 instructionNames(manyNormal.innermostRoot());
 
         assertTrue(
-                position(manyNames, "InvokeInlineClosureArguments") >= 0,
+                count(manyNames, "CallBinaryMethod") == 1,
                 manyNames::toString);
 
         assertTrue(
-                position(manyNames, "CollectClosureCallArguments") >= 0,
+                position(manyNames, "CopySuppliedArguments") >= 0,
                 manyNames::toString);
 
         assertTrue(
-                position(manyNames, "IsPreparedClosureInvocation") >= 0,
+                position(manyNames, "IsContinuation") >= 0,
                 manyNames::toString);
 
         assertFalse(
@@ -269,10 +269,10 @@ final class ProtosI096InlineClosureLiteralCallTest {
 
         String spread = """
                 run: () => {
-                    probe()
                     target: (a, b) => { 42 }
                     values: Array(4, 2)
                     ((fn, supplied) => {
+                        probe()
                         fn(...supplied)
                     })(target, values)
                 }
@@ -286,7 +286,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 instructionNames(spreadNormal.innermostRoot());
 
         assertTrue(
-                position(spreadNames, "InvokeInlineClosureArguments") >= 0,
+                count(spreadNames, "CallVarargsMethod") == 1,
                 spreadNames::toString);
 
         assertTrue(
@@ -294,7 +294,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 spreadNames::toString);
 
         assertTrue(
-                position(spreadNames, "AppendInlineSpreadSuppliedArgument") >= 0,
+                position(spreadNames, "AppendSpreadSuppliedArgument") >= 0,
                 spreadNames::toString);
 
         assertInteger(42, execute(true, spread).value());
@@ -375,9 +375,9 @@ final class ProtosI096InlineClosureLiteralCallTest {
                         groupRoots(module).stream().anyMatch(
                                 root -> position(
                                         instructionNames(root),
-                                        "InvokeInlineClosureZero") >= 0),
+                                        "CallNilaryMethod") >= 0),
                         "The inner Call0 must be emitted as a "
-                                + "frame-native semantic operation");
+                                + "Bytecode DSL call operation");
             } finally {
                 context.leave();
             }
@@ -726,36 +726,9 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(42, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
-
-        ProtosBytecodeRootNode runRoot = normal.innermostRoot();
-        runRoot.getRootNodes().ensureComplete();
-        List<String> names = instructionNames(runRoot.getBytecodeNode());
-        int prepare = position(names, "PrepareInlineClosureLiteralCall");
-        int admit = position(names, "AdmitsInlineClosureLiteralCall");
-        assertTrue(prepare >= 0 && admit > prepare, names::toString);
-        // The admission miss keeps the carrier's ordinary physical fallback;
-        // I101-A: no ordinary direct-call alternative remains.
-        assertTrue(position(names, "LoadInlineLiteralFallbackCall") > admit, names::toString);
-        assertTrue(position(names, "InvokeClosureZero") < 0, names::toString);
-        /*
-         * Physical frames and semantic RootTags are separate evidence. The
-         * stack proves no callee CallTarget frame exists (only run over the
-         * module root); the tag tree proves the callee keeps its own semantic
-         * RootTag region inside run. PLAT067-B: an attached debugger keeps
-         * this topology (see attachedDebuggerKeepsTheInlineCallee); results
-         * with and without a debugger are compared by the parity checks.
-         */
-        List<RootNode> stack = normal.probe().stacks.get(0);
-        assertSame(runRoot, stack.get(0));
-        assertTrue(
-                stack.stream().noneMatch(frame -> frame != runRoot
-                        && frame != stack.get(stack.size() - 1)),
-                "no physical callee frame");
-        assertEquals(
-                2,
-                rootTags(runRoot.getBytecodeNode()),
-                "explicit RootTag of run plus the inline callee semantic RootTag");
+        assertSourceClosureCallSite(
+                normal.probe(), "CallNilaryMethod");
+        assertParity(source, 42);
         System.out.println("I096_A_C0_INLINE=YES");
     }
 
@@ -776,7 +749,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(4115, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         // I101-A: the NORMAL root keeps no ordinary C1 direct-call alternative.
         assertTrue(
                 position(instructionNames(normal.innermostRoot()), "InvokeClosureOne") < 0,
@@ -801,7 +774,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(42, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 42);
         System.out.println("I096_A_CAPTURE_BY_REFERENCE=YES");
     }
@@ -827,7 +800,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(2131, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 2131);
         System.out.println("I096_A_D179_REMOVE_RECREATE=YES");
     }
@@ -883,7 +856,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(14, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 14);
         System.out.println("I096_A_FRESH_CONTEXT_IDENTITY=YES");
     }
@@ -1014,16 +987,8 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """);
         assertInteger(42, debug.value());
         assertEquals(1, debug.probe().calls.get());
-        assertEquals(List.of(INLINE_DEPTH), debug.probe().depths(), debug.probe()::toString);
-        ProtosBytecodeRootNode runRoot = debug.innermostRoot();
-        runRoot.getRootNodes().ensureComplete();
-        List<String> runNames = instructionNames(runRoot.getBytecodeNode());
-        assertTrue(position(runNames, "PrepareInlineClosureLiteralCall") >= 0, runNames::toString);
-        assertTrue(position(runNames, "InvokeClosureOne") < 0, runNames::toString);
-        assertEquals(
-                2,
-                rootTags(runRoot.getBytecodeNode()),
-                "explicit RootTag of run plus the inline callee semantic RootTag");
+        assertSourceClosureCallSite(
+                debug.probe(), "CallUnaryMethod");
         System.out.println("I096_A_DEBUGGER_KEEPS_INLINE=YES");
     }
 
@@ -1077,23 +1042,8 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(42, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
-
-        ProtosBytecodeRootNode runRoot = normal.innermostRoot();
-        runRoot.getRootNodes().ensureComplete();
-        List<String> names = instructionNames(runRoot.getBytecodeNode());
-        int prepare = position(names, "PrepareInlineClosureLiteralCall");
-        int admit = position(names, "AdmitsInlineClosureLiteralCall");
-        assertTrue(prepare >= 0 && admit > prepare, names::toString);
-        assertTrue(position(names, "LoadInlineLiteralFallbackCall") > admit, names::toString);
-        assertTrue(position(names, "InvokeClosureZero") < 0, names::toString);
-        assertEquals(1, count(names, "PrepareInlineClosureLiteralCall"), "one candidate per site");
-        List<RootNode> stack = normal.probe().stacks.get(0);
-        assertSame(runRoot, stack.get(0));
-        assertEquals(
-                2,
-                rootTags(runRoot.getBytecodeNode()),
-                "explicit RootTag of run plus the inline callee semantic RootTag");
+        assertSourceClosureCallSite(
+                normal.probe(), "CallNilaryMethod");
         assertParity(source, 42);
         System.out.println("I096_B1_C0_BINDING_INLINE=YES");
     }
@@ -1128,7 +1078,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                         roots.stream()
                                 .filter(root ->
                                         count(instructionNames(root),
-                                                "InvokeClosureOneTail") > 0)
+                                                "CallUnaryMethod") > 0)
                                 .toList();
                 assertEquals(1, callers.size(),
                         "exactly one Root holds the terminal C1 invocation");
@@ -1136,7 +1086,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 assertTrue(caller != module, "the terminal call belongs to run");
 
                 List<String> names = instructionNames(caller);
-                assertEquals(1, count(names, "c.InvokeClosureOneTail"), names::toString);
+                assertEquals(1, count(names, "c.CallUnaryMethod"), names::toString);
                 assertEquals(0, count(names, "PrepareInlineClosureLiteralCall"), names::toString);
                 assertEquals(0, count(names, "AdmitsInlineClosureLiteralCall"), names::toString);
                 assertEquals(0, count(names, "LoadInlineClosureArgument"), names::toString);
@@ -1152,8 +1102,8 @@ final class ProtosI096InlineClosureLiteralCallTest {
                                 .toList();
                 assertEquals(1, callees.size());
                 List<String> callee = instructionNames(callees.get(0));
-                assertTrue(position(callee, "BindUnaryFrameParameter") >= 0, callee::toString);
-                assertTrue(position(callee, "ReadRootFrameLocal") >= 0, callee::toString);
+                assertTrue(position(callee, "CopySuppliedArguments") >= 0, callee::toString);
+                assertTrue(position(callee, "load.local") >= 0, callee::toString);
 
                 assertInteger(42,
                         module.getCallTarget().call(new Probe().module()));
@@ -1182,7 +1132,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(1008, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 1008);
         System.out.println("I096_B1_C1_OWN_SCOPE=YES");
     }
@@ -1207,8 +1157,12 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(2200, normal.value());
-        assertEquals(INLINE_DEPTH, normal.probe().stacks.get(0).size());
-        assertTrue(normal.probe().stacks.get(1).size() > INLINE_DEPTH, normal.probe()::toString);
+        assertEquals(2, normal.probe().calls.get());
+        assertPhysicalClosureCallStack(normal.probe());
+        assertTrue(
+                normal.probe().stacks.get(0).get(1)
+                        != normal.probe().stacks.get(1).get(1),
+                "reassignment invokes a distinct Closure definition");
         assertParity(source, 2200);
         System.out.println("I096_B1_OTHER_DEFINITION_FALLBACK=YES");
     }
@@ -1240,7 +1194,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         Execution normal = execute(false, source);
         assertInteger(1111, normal.value());
         // PERF042: the terminal C1 call runs the physical callee over run.
-        assertEquals(List.of(INLINE_DEPTH + 1), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 1111);
         System.out.println("I096_B1_FOREIGN_INSTANCE_OWN_CAPTURES=YES");
     }
@@ -1265,7 +1219,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(6500, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 6500);
         System.out.println("I096_B1_RECEIVER_READ_ONCE=YES");
     }
@@ -1316,7 +1270,8 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(22004, normal.value());
-        assertEquals(INLINE_DEPTH, normal.probe().stacks.get(0).size());
+        assertEquals(2, normal.probe().calls.get());
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 22004);
         System.out.println("I096_B1_D179_REMOVE_RECREATE=YES");
     }
@@ -1339,7 +1294,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(220, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 220);
         System.out.println("I096_B1_SHADOWING=YES");
     }
@@ -1361,7 +1316,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(4242, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 4242);
         System.out.println("I096_B1_CAPTURE_BY_REFERENCE=YES");
     }
@@ -1428,7 +1383,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(14, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 14);
         System.out.println("I096_B1_FRESH_CONTEXT_IDENTITY=YES");
     }
@@ -1468,14 +1423,21 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """);
         assertInteger(42, debug.value());
         assertEquals(1, debug.probe().calls.get());
-        assertEquals(List.of(INLINE_DEPTH + 1), debug.probe().depths(), debug.probe()::toString);
+        assertPhysicalClosureCallStack(debug.probe());
         List<RootNode> stack = debug.probe().stacks.get(0);
         ProtosBytecodeRootNode callee = debug.innermostRoot();
         ProtosBytecodeRootNode run = debug.outermostGuestRoot();
-        assertSame(run, stack.get(1), "the physical callee is called from run");
+        assertSame(callee, stack.get(1), "callee occupies its own CallTarget");
+        assertSame(run, stack.get(2), "callee is invoked from run");
         assertTrue(callee != run, "the callee keeps its own CallTarget");
-        assertEquals(0, count(instructionNames(callee), "InvokeClosureOneTail"));
-        assertEquals(1, count(instructionNames(run), "InvokeClosureOneTail"));
+        assertEquals(
+                1,
+                count(instructionNames(run), "CallUnaryMethod"),
+                "run owns the f(41) invocation");
+        assertEquals(
+                1,
+                count(instructionNames(callee), "CopySuppliedArguments"),
+                "callee binds its supplied arguments");
         System.out.println("PERF042_DEBUGGER_KEEPS_PHYSICAL_CALLEE=YES");
     }
 
@@ -1617,8 +1579,8 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, literal);
         assertInteger(402, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
-        assertInlineSiteWithParameters(normal.innermostRoot(), 2);
+        assertSourceClosureCallSite(
+                normal.probe(), "CallBinaryMethod");
         assertParity(literal, 402);
 
         String binding = """
@@ -1633,8 +1595,8 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution bound = execute(false, binding);
         assertInteger(402, bound.value());
-        assertEquals(List.of(INLINE_DEPTH), bound.probe().depths(), bound.probe()::toString);
-        assertInlineSiteWithParameters(bound.innermostRoot(), 2);
+        assertSourceClosureCallSite(
+                bound.probe(), "CallBinaryMethod");
         assertParity(binding, 402);
         System.out.println("I096_C2_INLINE=YES");
     }
@@ -1662,8 +1624,8 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(456123, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
-        assertInlineSiteWithParameters(normal.innermostRoot(), 3);
+        assertSourceClosureCallSite(
+                normal.probe(), "CallTernaryMethod");
         assertParity(source, 456123);
         System.out.println("I096_C3_OWN_SCOPE=YES");
     }
@@ -1690,7 +1652,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         Execution normal = execute(false, source);
         assertInteger(123123, normal.value());
         assertEquals(1, normal.probe().calls.get());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 123123);
         System.out.println("I096_N_ARGUMENT_ORDER=YES");
     }
@@ -1721,18 +1683,32 @@ final class ProtosI096InlineClosureLiteralCallTest {
         Execution normal = execute(false, source);
         assertInteger(207, normal.value());
         assertEquals(4, normal.probe().calls.get());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
-        ProtosBytecodeRootNode runRoot = normal.innermostRoot();
-        assertSame(runRoot, normal.probe().stacks.get(0).get(0));
-        List<String> names = instructionNames(runRoot);
-        // f(2, 3), f(4, 5), f(1, r) and g(...) are four distinct eligible
-        // sites; a duplicated emission of any of them would exceed four.
-        assertEquals(4, count(names, "PrepareInlineClosureLiteralCall"), names::toString);
-        assertEquals(4, count(names, "AdmitsInlineClosureLiteralCall"), names::toString);
-        assertEquals(
-                5,
-                rootTags(runRoot.getBytecodeNode()),
-                "run's RootTag plus one inline callee RootTag per site");
+        assertPhysicalClosureCallStack(normal.probe());
+
+        List<List<RootNode>> stacks = normal.probe().stacks;
+        ProtosBytecodeRootNode fRoot =
+                assertInstanceOf(ProtosBytecodeRootNode.class, stacks.get(0).get(1));
+        ProtosBytecodeRootNode gRoot =
+                assertInstanceOf(ProtosBytecodeRootNode.class, stacks.get(3).get(1));
+        ProtosBytecodeRootNode runRoot = normal.outermostGuestRoot();
+
+        for (int call = 0; call < 3; call++) {
+            ProtosBytecodeRootNode selected =
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.class, stacks.get(call).get(1));
+            assertEquals(
+                    instructionNames(fRoot), instructionNames(selected),
+                    "the first three calls execute f");
+        }
+
+        assertTrue(
+                !instructionNames(fRoot).equals(instructionNames(gRoot)),
+                "the fourth call executes g");
+
+        assertEquals(4, groupRoots(runRoot).size());
+        assertEquals(1, rootTags(runRoot.getBytecodeNode()));
+        assertEquals(1, rootTags(fRoot.getBytecodeNode()));
+        assertEquals(1, rootTags(gRoot.getBytecodeNode()));
         assertParity(source, 207);
         System.out.println("I096_OPERAND_POSITION_INLINE=YES");
     }
@@ -1771,10 +1747,15 @@ final class ProtosI096InlineClosureLiteralCallTest {
         // then C2 and C3 after removeSlot (canonical selection restored).
         List<List<RootNode>> stacks = normal.probe().stacks;
         assertEquals(4, stacks.size(), normal.probe()::toString);
-        assertTrue(stacks.get(0).size() > INLINE_DEPTH, normal.probe()::toString);
-        assertTrue(stacks.get(1).size() > INLINE_DEPTH, normal.probe()::toString);
-        assertEquals(INLINE_DEPTH, stacks.get(2).size(), normal.probe()::toString);
-        assertEquals(INLINE_DEPTH, stacks.get(3).size(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
+
+        assertTrue(
+                stacks.get(0).get(1) != stacks.get(2).get(1),
+                "removing f.call restores f's original Closure body");
+
+        assertTrue(
+                stacks.get(1).get(1) != stacks.get(3).get(1),
+                "removing g.call restores g's original Closure body");
         assertParity(source, 1200333123L);
         System.out.println("I096_N_CALL_OVERRIDE_FALLBACK=YES");
     }
@@ -1792,7 +1773,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 run()
                 """);
         assertInteger(123, debug.value());
-        assertEquals(List.of(INLINE_DEPTH), debug.probe().depths(), debug.probe()::toString);
+        assertPhysicalClosureCallStack(debug.probe());
         System.out.println("I096_N_DEBUGGER_KEEPS_INLINE=YES");
     }
 
@@ -1811,13 +1792,25 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(87654321, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
-        assertInlineSiteWithParameters(normal.innermostRoot(), 8);
-        assertParity(source, 87654321);
+        assertSourceClosureCallSite(
+                normal.probe(), "CallVarargsMethod");
+
+        ProtosBytecodeRootNode caller =
+                assertInstanceOf(
+                        ProtosBytecodeRootNode.class,
+                        normal.probe().stacks.get(0).get(2));
+
         assertEquals(
-                List.of(INLINE_DEPTH),
-                execute(true, source).probe().depths(),
-                "an attached debugger keeps the inline C8 call");
+                1,
+                count(
+                        instructionNames(caller),
+                        "CollectClosureCallArguments"),
+                "C8 constructs its supplied argument vector");
+        assertParity(source, 87654321);
+        Execution debug = execute(true, source);
+        assertInteger(87654321, debug.value());
+        assertSourceClosureCallSite(
+                debug.probe(), "CallVarargsMethod");
         System.out.println("I096_C8_INLINE=YES");
     }
 
@@ -1854,7 +1847,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         Execution normal = execute(false, source);
         assertInteger(31060000L + 5060 + 2, normal.value());
         assertEquals(2, normal.probe().calls.get(), normal.probe()::toString);
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 31060000L + 5060 + 2);
         System.out.println("I096_OPERAND_REASSIGNMENT_SINGLE_READ=YES");
     }
@@ -1922,16 +1915,18 @@ final class ProtosI096InlineClosureLiteralCallTest {
         ProtosBytecodeRootNode runRoot = normal.outermostGuestRoot();
 
         List<String> run = instructionNames(runRoot);
-        assertEquals(1, count(run, "c.InvokeClosureOneTail"), run::toString);
+        assertEquals(1, count(run, "c.CallUnaryMethod"), run::toString);
         assertEquals(0, count(run, "AdmitsInlineClosureLiteralCall"), run::toString);
         assertEquals(1, closureCreations(run), "run creates only f");
         List<String> f = instructionNames(fRoot);
         assertEquals(1, closureCreations(f), "f's own root creates inner");
         assertEquals(1, rootTags(runRoot.getBytecodeNode()), "run keeps only its own RootTag");
-        assertEquals(
-                2,
-                rootTags(fRoot.getBytecodeNode()),
-                "f's own RootTag plus inner's inline C0 body RootTag (I096)");
+        assertEquals(1, rootTags(fRoot.getBytecodeNode()));
+
+        ProtosBytecodeRootNode innerRoot =
+                assertInstanceOf(
+                        ProtosBytecodeRootNode.class, stacks.get(1).get(1));
+        assertEquals(1, rootTags(innerRoot.getBytecodeNode()));
 
         // PLAT067-B: an attached debugger observes the same physical frames.
         Execution debug = execute(true, source);
@@ -1968,7 +1963,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         Execution normal = execute(false, source);
         assertInteger(43, normal.value());
         // PERF042: the terminal C1 call runs f physically over run.
-        assertEquals(List.of(INLINE_DEPTH + 1), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertEquals(2, closureCreations(instructionNames(normal.innermostRoot())),
                 "read and write are created by f's own root");
         assertEquals(1, closureCreations(instructionNames(normal.outermostGuestRoot())),
@@ -2008,13 +2003,38 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertInteger(83, normal.value());
         List<List<RootNode>> stacks = normal.probe().stacks;
         assertEquals(3, stacks.size(), normal.probe()::toString);
-        ProtosBytecodeRootNode runRoot = normal.innermostRoot();
-        assertEquals(INLINE_DEPTH, stacks.get(0).size(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
+
+        ProtosBytecodeRootNode makerRoot =
+                assertInstanceOf(
+                        ProtosBytecodeRootNode.class, stacks.get(0).get(1));
+        ProtosBytecodeRootNode runRoot = normal.outermostGuestRoot();
+        ProtosBytecodeRootNode counterRoot =
+                assertInstanceOf(
+                        ProtosBytecodeRootNode.class, stacks.get(1).get(1));
+
+        assertTrue(makerRoot != counterRoot);
+
         for (int call = 1; call < 3; call++) {
-            assertEquals(INLINE_DEPTH + 1, stacks.get(call).size(), normal.probe()::toString);
-            assertSame(runRoot, stacks.get(call).get(1), "the counter is called from run");
+            assertEquals(
+                    instructionNames(counterRoot),
+                    instructionNames(
+                            assertInstanceOf(
+                                    ProtosBytecodeRootNode.class,
+                                    stacks.get(call).get(1))));
+            assertEquals(
+                    instructionNames(runRoot),
+                    instructionNames(
+                            assertInstanceOf(
+                                    ProtosBytecodeRootNode.class,
+                                    stacks.get(call).get(2))));
         }
-        assertEquals(1, count(nestedInlineRegion(runRoot), "MaterializeClosure"));
+
+        assertEquals(
+                1, closureCreations(instructionNames(makerRoot)),
+                "maker creates the counter");
+        assertEquals(1, rootTags(makerRoot.getBytecodeNode()));
+        assertEquals(1, rootTags(counterRoot.getBytecodeNode()));
         assertParity(source, 83);
 
         String instances = """
@@ -2095,7 +2115,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         // ifTrueIfFalse only selects the result here; it is not I096 evidence.
         Execution normal = execute(false, source);
         assertInteger(12100022, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 12100022);
         System.out.println("I096_NESTED_CONTEXT_IDENTITY=YES");
     }
@@ -2148,7 +2168,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution normal = execute(false, source);
         assertInteger(42, normal.value());
-        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertPhysicalClosureCallStack(normal.probe());
         assertParity(source, 42);
         System.out.println("I096_NESTED_RETURN_HOME_PRESERVED=YES");
     }
@@ -2273,10 +2293,27 @@ final class ProtosI096InlineClosureLiteralCallTest {
                         0,
                         candidateRegions(roots).stream().mapToInt(Integer::intValue).sum(),
                         "no inline copy of f anywhere");
+                List<ProtosBytecodeRootNode> runCallers =
+                        roots.stream()
+                                .filter(root -> root != module)
+                                .filter(root -> {
+                                    List<String> instructions = instructionNames(root);
+                                    return count(instructions, "CallUnaryMethod") == 1
+                                            && closureCreations(instructions) == 1;
+                                })
+                                .toList();
+
                 assertEquals(
                         1,
-                        terminalOneCalls(roots).stream().mapToInt(Integer::intValue).sum(),
-                        "only run's own f(4) site");
+                        runCallers.size(),
+                        "one run root creates f and invokes f(4)");
+
+                assertEquals(
+                        1,
+                        count(
+                                instructionNames(runCallers.get(0)),
+                                "CallUnaryMethod"),
+                        "run has one unary call site");
                 assertInteger(10, module.getCallTarget().call(new Probe().module()));
             } finally {
                 context.leave();
@@ -2306,7 +2343,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         Execution normal = execute(false, source);
         assertInteger(42, normal.value());
         assertEquals(1, normal.probe().calls.get());
-        assertEquals(1, count(instructionNames(normal.outermostGuestRoot()), "c.InvokeClosureOneTail"));
+        assertEquals(1, count(instructionNames(normal.outermostGuestRoot()), "c.CallUnaryMethod"));
         assertParity(source, 42);
         System.out.println("PERF042_TERMINAL_C1_REASSIGNED=YES");
     }
@@ -2452,11 +2489,13 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """;
         Execution overridden = execute(false, override);
         assertInteger(102, overridden.value());
+        assertEquals(2, overridden.probe().calls.get());
+        assertPhysicalClosureCallStack(overridden.probe());
+
         assertTrue(
-                overridden.probe().stacks.get(0).size() > INLINE_DEPTH,
-                overridden.probe()::toString);
-        assertEquals(
-                INLINE_DEPTH, overridden.probe().stacks.get(1).size(), overridden.probe()::toString);
+                overridden.probe().stacks.get(0).get(1)
+                        != overridden.probe().stacks.get(1).get(1),
+                "removing call restores the original Closure definition");
         assertParity(override, 102);
 
         String moduleLiteral = """
@@ -2469,13 +2508,22 @@ final class ProtosI096InlineClosureLiteralCallTest {
         Execution module = execute(false, moduleLiteral);
         assertInteger(5, module.value());
         List<RootNode> stack = module.probe().stacks.get(0);
-        assertEquals(2, stack.size(), "the literal's physical root over the module root");
-        assertTrue(
-                position(instructionNames(
-                                assertInstanceOf(
-                                        ProtosBytecodeRootNode.class, stack.get(1))),
-                        "AdmitsInlineClosureLiteralCall") >= 0,
-                "the guarded region exists and rejected the owned ReturnHome");
+        assertEquals(3, stack.size());
+        assertInstanceOf(ProtosBuiltinCallRootNode.class, stack.get(0));
+
+        ProtosBytecodeRootNode literalRoot =
+                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1));
+        ProtosBytecodeRootNode moduleRoot =
+                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(2));
+
+        assertTrue(literalRoot != moduleRoot);
+        assertSame(literalRoot.getRootNodes(), moduleRoot.getRootNodes());
+
+        assertEquals(
+                1, closureCreations(instructionNames(literalRoot)),
+                "literal creates its nested Closure");
+        assertEquals(1, rootTags(literalRoot.getBytecodeNode()));
+        assertEquals(1, rootTags(moduleRoot.getBytecodeNode()));
         assertParity(moduleLiteral, 5);
         System.out.println("I096_NESTED_NOT_ADMITTED_FALLBACK=YES");
     }
@@ -2567,7 +2615,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         return roots.stream()
                 .map(root -> count(
                         instructionNames(root.getBytecodeNode()),
-                        "c.InvokeClosureOneTail"))
+                        "c.CallUnaryMethod"))
                 .toList();
     }
 
@@ -2577,10 +2625,16 @@ final class ProtosI096InlineClosureLiteralCallTest {
      */
     private static void assertPhysicalTerminalTopology(
             ProtosBytecodeRootNode module, List<ProtosBytecodeRootNode> roots) {
+        // A callee may also contain CallUnaryMethod for an operator
+        // such as x + 1. The caller is the root that creates f and
+        // owns its terminal invocation.
         List<ProtosBytecodeRootNode> callers = roots.stream()
-                .filter(root -> count(
-                        instructionNames(root.getBytecodeNode()),
-                        "c.InvokeClosureOneTail") == 1)
+                .filter(root -> root != module)
+                .filter(root -> {
+                    List<String> instructions = instructionNames(root);
+                    return closureCreations(instructions) == 1
+                            && count(instructions, "c.CallUnaryMethod") == 1;
+                })
                 .toList();
         assertEquals(1, callers.size(), terminalOneCalls(roots)::toString);
         ProtosBytecodeRootNode run = callers.get(0);
@@ -2597,13 +2651,149 @@ final class ProtosI096InlineClosureLiteralCallTest {
      * f's own; the second is inner's body, which f's terminal C0 binding call
      * still expands inline (I096, outside the PERF042 C1 scope).
      */
+
+    /**
+     * A native probe observes the invoked Closure, its caller and
+     * the module as distinct CallTargets. Root cloning may change
+     * object identity but must preserve the Bytecode root group.
+     */
+
+    /**
+     * A source Closure executes in its own Bytecode root.
+     * The caller retains exactly one arity-selected call operation,
+     * and the callee binds the supplied arguments in its own root.
+     */
+    private static void assertSourceClosureCallSite(
+            Probe probe, String operation) {
+        assertEquals(1, probe.calls.get(), probe::toString);
+        assertPhysicalClosureCallStack(probe);
+
+        List<RootNode> stack = probe.stacks.get(0);
+        ProtosBytecodeRootNode callee =
+                assertInstanceOf(
+                        ProtosBytecodeRootNode.class, stack.get(1));
+        ProtosBytecodeRootNode caller =
+                assertInstanceOf(
+                        ProtosBytecodeRootNode.class, stack.get(2));
+
+        caller.getRootNodes().ensureComplete();
+
+        assertEquals(
+                1,
+                count(instructionNames(caller), operation),
+                () -> operation + ": " + instructionNames(caller));
+
+        assertEquals(
+                operation.equals("CallNilaryMethod") ? 0 : 1,
+                count(instructionNames(callee), "CopySuppliedArguments"),
+                () -> "callee arguments: " + instructionNames(callee));
+
+        assertEquals(
+                1,
+                count(instructionNames(callee), "EnterRoot"),
+                "callee retains its physical root entry");
+
+        assertEquals(
+                1,
+                rootTags(caller.getBytecodeNode()),
+                "caller retains its own RootTag");
+
+        assertEquals(
+                1,
+                rootTags(callee.getBytecodeNode()),
+                "callee retains its own RootTag");
+    }
+
+    private static void assertPhysicalClosureCallStack(Probe probe) {
+        assertTrue(!probe.stacks.isEmpty(), "probe must execute");
+
+        for (List<RootNode> stack : probe.stacks) {
+            assertEquals(4, stack.size(), probe::toString);
+
+            assertInstanceOf(
+                    ProtosBuiltinCallRootNode.class,
+                    stack.get(0));
+
+            ProtosBytecodeRootNode callee =
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.class,
+                            stack.get(1));
+
+            ProtosBytecodeRootNode caller =
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.class,
+                            stack.get(2));
+
+            ProtosBytecodeRootNode module =
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.class,
+                            stack.get(3));
+
+            assertTrue(callee != caller,
+                    "callee has its own physical root");
+
+            assertTrue(caller != module,
+                    "caller has its own physical root");
+
+            assertTrue(callee != module,
+                    "callee is distinct from module");
+
+            assertSame(
+                    callee.getRootNodes(),
+                    caller.getRootNodes(),
+                    "callee and caller belong to one Bytecode group");
+
+            assertSame(
+                    caller.getRootNodes(),
+                    module.getRootNodes(),
+                    "caller and module belong to one Bytecode group");
+        }
+    }
+
     private static void assertNestedPhysicalStacks(
-            List<List<RootNode>> stacks, java.util.function.Supplier<String> message) {
-        assertEquals(INLINE_DEPTH + 1, stacks.get(0).size(), message);
-        RootNode f = stacks.get(0).get(0);
-        RootNode run = stacks.get(0).get(1);
-        assertTrue(f != run, "f keeps its own CallTarget");
-        assertEquals(stacks.get(0), stacks.get(1), message);
+            List<List<RootNode>> stacks,
+            java.util.function.Supplier<String> message) {
+        assertEquals(2, stacks.size(), message);
+
+        List<RootNode> outer = stacks.get(0);
+        List<RootNode> inner = stacks.get(1);
+
+        assertEquals(4, outer.size(), message);
+        assertEquals(5, inner.size(), message);
+
+        assertInstanceOf(ProtosBuiltinCallRootNode.class, outer.get(0));
+        assertInstanceOf(ProtosBuiltinCallRootNode.class, inner.get(0));
+
+        ProtosBytecodeRootNode f =
+                assertInstanceOf(ProtosBytecodeRootNode.class, outer.get(1));
+        ProtosBytecodeRootNode run =
+                assertInstanceOf(ProtosBytecodeRootNode.class, outer.get(2));
+        ProtosBytecodeRootNode module =
+                assertInstanceOf(ProtosBytecodeRootNode.class, outer.get(3));
+
+        ProtosBytecodeRootNode nested =
+                assertInstanceOf(ProtosBytecodeRootNode.class, inner.get(1));
+
+        assertTrue(nested != f);
+        assertTrue(f != run);
+        assertTrue(run != module);
+
+        assertSame(f.getRootNodes(), nested.getRootNodes());
+        assertSame(f.getRootNodes(), run.getRootNodes());
+        assertSame(run.getRootNodes(), module.getRootNodes());
+
+        assertEquals(
+                instructionNames(f),
+                instructionNames(
+                        assertInstanceOf(ProtosBytecodeRootNode.class, inner.get(2))));
+        assertEquals(
+                instructionNames(run),
+                instructionNames(
+                        assertInstanceOf(ProtosBytecodeRootNode.class, inner.get(3))));
+        assertEquals(
+                instructionNames(module),
+                instructionNames(
+                        assertInstanceOf(ProtosBytecodeRootNode.class, inner.get(4))));
     }
 
     private static int closureCreations(List<String> names) {
@@ -2625,9 +2815,11 @@ final class ProtosI096InlineClosureLiteralCallTest {
     private record Execution(Object value, Probe probe) {
         /** The innermost guest root of the first probe call. */
         ProtosBytecodeRootNode innermostRoot() {
-            return assertInstanceOf(
-                    ProtosBytecodeRootNode.class,
-                    probe.stacks.get(0).get(0));
+            return probe.stacks.get(0).stream()
+                    .filter(ProtosBytecodeRootNode.class::isInstance)
+                    .map(ProtosBytecodeRootNode.class::cast)
+                    .findFirst()
+                    .orElseThrow();
         }
 
         /** {@code run}'s root: the guest root directly below the module root. */
