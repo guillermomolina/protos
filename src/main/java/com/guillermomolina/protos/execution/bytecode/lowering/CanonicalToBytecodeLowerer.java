@@ -3482,6 +3482,47 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
+    /**
+     * A specialized Call1/Send1 is not proof of synchronous completion.
+     * Keep the specialized direct call operation and compose its
+     * transport through the existing Bytecode DSL Yield protocol before
+     * exposing the result to an enclosing expression.
+     *
+     * The Runnable emits Bytecode DSL at compilation time. It is not a
+     * guest callback or an alternative runtime invocation mechanism.
+     */
+    private void emitComposedDirectUnaryValue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            Runnable invocation,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        if (childResult == null || resumeValue == null) {
+            throw new AssertionError(
+                    "Direct unary invocation requires continuation locals");
+        }
+
+        builder.beginBlock();
+
+        builder.beginStoreLocal(childResult);
+        invocation.run();
+        builder.endStoreLocal();
+
+        emitDispatchedContinuationComposition(
+                builder, childResult, resumeValue);
+
+        if (primitiveCarrierResult) {
+            builder.emitLoadLocal(childResult);
+        } else {
+            builder.beginMaterializePrimitiveNumericCarrier();
+            builder.emitLoadLocal(childResult);
+            builder.emitLoadConstant(true);
+            builder.endMaterializePrimitiveNumericCarrier();
+        }
+
+        builder.endBlock();
+    }
+
     private void emitI115DirectUnaryValue(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression,
@@ -3556,10 +3597,9 @@ final class CanonicalToBytecodeLowerer {
                     yield callback.body().expressions().stream()
                             .anyMatch(this::requiresContinuationScratch);
                 }
-                yield !i115DirectUnaryCall(send)
-                        && (!primitiveNumericSendCandidate(send)
-                                || requiresContinuationScratch(send.receiver())
-                                || requiresContinuationScratch(send.arguments().get(0)));
+                yield !primitiveNumericSendCandidate(send)
+                        || requiresContinuationScratch(send.receiver())
+                        || requiresContinuationScratch(send.arguments().get(0));
             }
             case CanonicalCreate create ->
                     create.target().map(this::requiresContinuationScratch)
@@ -3578,8 +3618,7 @@ final class CanonicalToBytecodeLowerer {
                     requiresContinuationScratch(identity.left())
                             || requiresContinuationScratch(identity.right());
             case CanonicalCall call ->
-                    i115ConstantLongArray(call) == null
-                            && !i115DirectUnaryCall(call);
+                    i115ConstantLongArray(call) == null;
             case CanonicalSuperSend ignored -> true;
             case CanonicalDerivedInequality ignored -> true;
             // I115: a non-standard receiver dispatches atPut, which may suspend.
@@ -3788,7 +3827,10 @@ final class CanonicalToBytecodeLowerer {
         }
         if (i115DirectUnaryCall(expression)) {
             builder.beginStoreLocal(target);
-            emitI115DirectUnaryValue(builder, expression, false);
+            emitComposedDirectUnaryValue(
+                    builder,
+                    () -> emitI115DirectUnaryValue(builder, expression, true),
+                    childResult, resumeValue, false);
             builder.endStoreLocal();
             return;
         }
@@ -5880,9 +5922,14 @@ final class CanonicalToBytecodeLowerer {
             } else {
                 builder.beginStoreLocal(result);
             }
-            emitI115DirectUnaryOperation(
-                    builder, shape, receiver, selector,
-                    arguments.get(0), primitiveCarrierResult, false);
+
+            emitComposedDirectUnaryValue(
+                    builder,
+                    () -> emitI115DirectUnaryOperation(
+                            builder, shape, receiver, selector,
+                            arguments.get(0), true, false),
+                    childResult, resumeValue, primitiveCarrierResult);
+
             if (result == null) {
                 builder.endDiscardValue();
             } else {
@@ -6253,7 +6300,10 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (i115DirectUnaryCall(expression)) {
-            emitI115DirectUnaryValue(builder, expression, primitiveCarrierResult);
+            emitComposedDirectUnaryValue(
+                    builder,
+                    () -> emitI115DirectUnaryValue(builder, expression, true),
+                    childResult, resumeValue, primitiveCarrierResult);
             return;
         }
         if (expression instanceof CanonicalSend send
@@ -6314,7 +6364,10 @@ final class CanonicalToBytecodeLowerer {
         }
         if (i115DirectUnaryCall(expression)) {
             builder.beginDiscardValue();
-            emitI115DirectUnaryValue(builder, expression, false);
+            emitComposedDirectUnaryValue(
+                    builder,
+                    () -> emitI115DirectUnaryValue(builder, expression, true),
+                    childResult, resumeValue, true);
             builder.endDiscardValue();
             return;
         }
@@ -7992,7 +8045,10 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         if (i115DirectUnaryCall(expression)) {
-            emitI115DirectUnaryValue(builder, expression, true);
+            emitComposedDirectUnaryValue(
+                    builder,
+                    () -> emitI115DirectUnaryValue(builder, expression, true),
+                    childResult, resumeValue, true);
             return;
         }
         if (expression instanceof CanonicalMember member
@@ -8047,7 +8103,10 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue) {
         if (i115DirectUnaryCall(expression)) {
             builder.beginStoreLocal(target);
-            emitI115DirectUnaryValue(builder, expression, true);
+            emitComposedDirectUnaryValue(
+                    builder,
+                    () -> emitI115DirectUnaryValue(builder, expression, true),
+                    childResult, resumeValue, true);
             builder.endStoreLocal();
             return;
         }

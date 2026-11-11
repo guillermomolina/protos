@@ -31,7 +31,7 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * I115 (GraalPy {@code Call*Method}): the {@code CallQuaternaryMethod} operation, a call
+ * Protos Bytecode DSL: the {@code CallQuaternaryMethod} operation, a call
  * of an evaluated callable with 4 positional arguments. The callable is a source Closure, a
  * native Closure, a {@link ProtosBoundMethod} produced by {@code GetMethod}
  * (its receiver is not counted among the arguments) or any other object.
@@ -50,7 +50,10 @@ abstract class ProtosCallQuaternaryMethodNode extends Node {
 
     abstract Object execute(VirtualFrame frame, boolean terminal, Object callable, Object a0, Object a1, Object a2, Object a3);
 
-    @Specialization(guards = "isSourceFunction(callable)")
+    @Specialization(guards = {
+                    "isSourceFunction(callable)",
+                    "canonicalCallSelected(callable, rootSelection)"
+            })
     static Object callFunction(
             VirtualFrame frame,
             boolean terminal,
@@ -61,6 +64,10 @@ abstract class ProtosCallQuaternaryMethodNode extends Node {
             Object a3,
             @Bind("$node") Node inliningTarget,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached(
+                    value = "rootCallSelection()",
+                    allowUncached = true)
+                    ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
             @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         return call.execute(
                 frame, inliningTarget, terminal, callable,
@@ -91,8 +98,8 @@ abstract class ProtosCallQuaternaryMethodNode extends Node {
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
     }
 
-    /* Builtins, bound builtins and generic callables: GraalPy CallNode. */
-    @Specialization(guards = "!isSourceCallable(callable)")
+    /* Builtins, bound builtins and generic callables: the shared CallNode. */
+    @Specialization(guards = "requiresCallableSelection(callable)")
     @InliningCutoff
     static Object call(
             VirtualFrame frame,
@@ -109,6 +116,27 @@ abstract class ProtosCallQuaternaryMethodNode extends Node {
                 ProtosFrameArguments.dispatchedCall4(
                 null, ProtosFrameArguments.functionCallMarker(), null, null, null, a0, a1, a2, a3),
                 null, root);
+    }
+
+
+    static ProtosStandardObjectProtocol.CanonicalRootCallSelection
+            rootCallSelection() {
+        return ProtosStandardObjectProtocol
+                .canonicalRootCallSelectionOrNullForRuntime();
+    }
+
+    static boolean canonicalCallSelected(
+            ProtosClosureValue callable,
+            ProtosStandardObjectProtocol.CanonicalRootCallSelection selection) {
+        return ProtosFunctionCallDispatchers.hasCanonicalCallSelection(
+                callable, selection);
+    }
+
+    static boolean requiresCallableSelection(Object callable) {
+        return !isSourceCallable(callable)
+                || (callable instanceof ProtosClosureValue closure
+                        && !canonicalCallSelected(
+                                closure, rootCallSelection()));
     }
 
     static boolean isSourceFunction(ProtosClosureValue callable) {

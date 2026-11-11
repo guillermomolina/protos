@@ -37,7 +37,7 @@ import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * I115 GraalPy-shaped fixed-arity call operation.
+ * Fixed-arity Protos Bytecode DSL call operation.
  *
  * Ordinary CALL2 receives two positional arguments. Immediate SEND1
  * receives an independently transported receiver and one positional
@@ -117,7 +117,11 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
         return ProtosFunctionCallDispatchers.classifyReturnHome(closure, callee);
     }
 
-    @Specialization(guards = {"!methodSend", "isSourceFunction(callable)"})
+    @Specialization(guards = {
+                    "!methodSend",
+                    "isSourceFunction(callable)",
+                    "canonicalCallSelected(callable, rootSelection)"
+            })
     static Object callFunction(
             VirtualFrame frame,
             boolean terminal,
@@ -127,6 +131,10 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             Object a1,
             @Bind("$node") Node inliningTarget,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached(
+                    value = "rootCallSelection()",
+                    allowUncached = true)
+                    ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
             @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         return call.execute(
                 frame, inliningTarget, terminal, callable,
@@ -164,7 +172,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
     }
 
     @Specialization(
-            guards = {"!methodSend", "!isSourceCallable(callable)"})
+            guards = {"!methodSend", "requiresCallableSelection(callable)"})
     @InliningCutoff
     static Object call(
             VirtualFrame frame,
@@ -244,6 +252,27 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
 
     static ProtosObjectValue receiverHomeOrNull(Object receiver) {
         return receiver instanceof ProtosObjectValue object ? object : null;
+    }
+
+
+    static ProtosStandardObjectProtocol.CanonicalRootCallSelection
+            rootCallSelection() {
+        return ProtosStandardObjectProtocol
+                .canonicalRootCallSelectionOrNullForRuntime();
+    }
+
+    static boolean canonicalCallSelected(
+            ProtosClosureValue callable,
+            ProtosStandardObjectProtocol.CanonicalRootCallSelection selection) {
+        return ProtosFunctionCallDispatchers.hasCanonicalCallSelection(
+                callable, selection);
+    }
+
+    static boolean requiresCallableSelection(Object callable) {
+        return !isSourceCallable(callable)
+                || (callable instanceof ProtosClosureValue closure
+                        && !canonicalCallSelected(
+                                closure, rootCallSelection()));
     }
 
     static boolean isSourceFunction(ProtosClosureValue callable) {

@@ -37,7 +37,6 @@ import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
-import com.oracle.truffle.api.dsl.Fallback;
 import com.oracle.truffle.api.dsl.GenerateCached;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
@@ -52,7 +51,7 @@ import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 
 /**
- * I115: the single call dispatch of Protos, copied from GraalPy 25.4.4
+ * The single callable dispatcher of Protos
  * ({@code CallNode} and {@code CallDispatchers}).
  *
  * <p>Every call enters {@link CallNode} with an already evaluated callable and
@@ -66,7 +65,7 @@ import com.oracle.truffle.api.nodes.RootNode;
  * <ul>
  *   <li>{@code functionCall}: a source Closure, selected by representation
  *       only, through {@link FunctionCachedCallNode}. Its local {@code call}
- *       slot is not consulted (owner-approved I115 divergence from D013).
+ *       selection is checked before direct execution.
  *   <li>{@code builtinFunctionCall} / {@code builtinMethodCall}: a native
  *       Closure through its Context-local {@link ProtosBuiltinCallRootNode}.
  *   <li>{@code boundMethodCall}: a {@link ProtosBoundMethod} selected by
@@ -83,10 +82,38 @@ import com.oracle.truffle.api.nodes.RootNode;
 final class ProtosFunctionCallDispatchers {
     private ProtosFunctionCallDispatchers() {}
 
-    /** GraalPy {@code CallNode}. */
+    /*
+     * A source function may bypass method selection only while its
+     * inherited call behavior remains canonical. An already-selected
+     * method has a separate invocation contract.
+     */
+    static boolean hasCanonicalCallSelection(
+            ProtosClosureValue closure,
+            ProtosStandardObjectProtocol.CanonicalRootCallSelection selection) {
+        return selection != null
+                && selection.isValid()
+                && !closure.hasLocalCallSlotForRuntime();
+    }
+
+
+    /** {@code CallNode}. */
     @GenerateUncached
     @GenerateInline(false)
     abstract static class CallNode extends Node {
+
+    static ProtosStandardObjectProtocol.CanonicalRootCallSelection
+            rootCallSelection() {
+        return ProtosStandardObjectProtocol
+                .canonicalRootCallSelectionOrNullForRuntime();
+    }
+
+        static boolean hasCanonicalCallSelection(
+                ProtosClosureValue closure,
+                ProtosStandardObjectProtocol.CanonicalRootCallSelection
+                        selection) {
+            return ProtosFunctionCallDispatchers
+                    .hasCanonicalCallSelection(closure, selection);
+        }
 
         /**
          * @param frame the caller frame, or {@code null} for a host-side call
@@ -105,7 +132,10 @@ final class ProtosFunctionCallDispatchers {
                 Object callerReference,
                 ProtosBytecodeRootNode root);
 
-        @Specialization(guards = "isSourceFunction(callable)")
+        @Specialization(guards = {
+                "isSourceFunction(callable)",
+                "!isFunctionCall(arguments) || hasCanonicalCallSelection(callable, rootSelection)"
+        })
         static Object functionCall(
                 VirtualFrame frame,
                 boolean terminal,
@@ -114,13 +144,19 @@ final class ProtosFunctionCallDispatchers {
                 Object callerReference,
                 ProtosBytecodeRootNode root,
                 @Bind("$node") Node inliningTarget,
+                @Cached(value = "rootCallSelection()", allowUncached = true)
+                    ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
                 @Cached FunctionCachedCallNode cachedCall) {
             return cachedCall.execute(
                     frame, inliningTarget, terminal, callable, arguments,
                     callerReference, root, currentContext(inliningTarget));
         }
 
-        @Specialization(guards = {"isBuiltin(callable)", "isFunctionCall(arguments)"})
+        @Specialization(guards = {
+                "isBuiltin(callable)",
+                "isFunctionCall(arguments)",
+                "hasCanonicalCallSelection(callable, rootSelection)"
+        })
         static Object builtinFunctionCall(
                 VirtualFrame frame,
                 boolean terminal,
@@ -129,6 +165,8 @@ final class ProtosFunctionCallDispatchers {
                 Object callerReference,
                 ProtosBytecodeRootNode root,
                 @Bind("$node") Node inliningTarget,
+                @Cached(value = "rootCallSelection()", allowUncached = true)
+                    ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
                 @Cached BuiltinFunctionCachedCallNode cachedCall) {
             return cachedCall.execute(
                     frame, inliningTarget, terminal, callable, arguments,
@@ -171,10 +209,33 @@ final class ProtosFunctionCallDispatchers {
         }
 
         /*
-         * GraalPy CallNode.doGeneric: the callable behavior of any other
+         * Generic callable selection: the callable behavior of any other
          * object is its ordinary `call` slot, invoked as a method on it.
          */
-        @Fallback
+        /*
+         * A selected method already has its receiver and methodHome.
+         * Other values require ordinary callable selection. Function
+         * calls on Closures require it only when Object.call is not
+         * the behavior currently selected.
+         */
+        static boolean requiresCallableSelection(
+                Object callable, Object[] arguments) {
+            if (callable instanceof ProtosBoundMethod) {
+                return false;
+            }
+            if (callable instanceof ProtosClosureValue closure) {
+                if (!isSourceFunction(closure) && !isBuiltin(closure)) {
+                    return true;
+                }
+                return isFunctionCall(arguments)
+                        && !hasCanonicalCallSelection(
+                                closure, rootCallSelection());
+            }
+            return true;
+        }
+
+        @Specialization(
+                guards = "requiresCallableSelection(callable, arguments)")
         @InliningCutoff
         static Object doGeneric(
                 VirtualFrame frame,
@@ -389,7 +450,7 @@ final class ProtosFunctionCallDispatchers {
         return callPublishedUncached(selected, activation);
     }
 
-    /** GraalPy {@code CallDispatchers.FunctionCachedCallNode}. */
+    /** {@code CallDispatchers.FunctionCachedCallNode}. */
     @GenerateInline
     @GenerateCached(false)
     @GenerateUncached
@@ -572,7 +633,7 @@ final class ProtosFunctionCallDispatchers {
     }
 
     /**
-     * GraalPy {@code CallDispatchers.BuiltinFunctionCachedCallNode}: a native
+     * {@code CallDispatchers.BuiltinFunctionCachedCallNode}: a native
      * Closure called as a function, keyed by the identity of its body.
      */
     @GenerateInline
@@ -642,7 +703,7 @@ final class ProtosFunctionCallDispatchers {
     }
 
     /**
-     * GraalPy {@code CallDispatchers.BuiltinMethodCachedCallNode}: a native
+     * {@code CallDispatchers.BuiltinMethodCachedCallNode}: a native
      * Closure selected as a method; the receiver and methodHome are already
      * in the arguments.
      */
@@ -906,7 +967,7 @@ final class ProtosFunctionCallDispatchers {
         return outcome;
     }
 
-    /** GraalPy {@code CallDispatchers.FunctionDirectInvokeNode}. */
+    /** {@code CallDispatchers.FunctionDirectInvokeNode}. */
     @GenerateInline
     @GenerateCached(false)
     @GenerateUncached
@@ -956,7 +1017,7 @@ final class ProtosFunctionCallDispatchers {
         }
     }
 
-    /** GraalPy {@code CallDispatchers.FunctionIndirectInvokeNode}. */
+    /** {@code CallDispatchers.FunctionIndirectInvokeNode}. */
     @GenerateInline
     @GenerateCached(false)
     @GenerateUncached
@@ -1018,7 +1079,7 @@ final class ProtosFunctionCallDispatchers {
     }
 
     /*
-     * GraalPy GetMethod for the generic path: the ordinary `call` slot of
+     * Callable method lookup for the generic path: the ordinary `call` slot of
      * the receiver; a missing or non-Closure behavior is an Error.
      */
     @TruffleBoundary

@@ -31,7 +31,7 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * I115 (GraalPy {@code Call*Method}): the {@code CallNilaryMethod} operation, a call
+ * Protos Bytecode DSL: the {@code CallNilaryMethod} operation, a call
  * of an evaluated callable with 0 positional arguments. The callable is a source Closure, a
  * native Closure, a {@link ProtosBoundMethod} produced by {@code GetMethod}
  * (its receiver is not counted among the arguments) or any other object.
@@ -48,15 +48,26 @@ import com.oracle.truffle.api.nodes.Node;
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = true)
 abstract class ProtosCallNilaryMethodNode extends Node {
 
+    static ProtosStandardObjectProtocol.CanonicalRootCallSelection
+            rootCallSelection() {
+        return ProtosStandardObjectProtocol
+                .canonicalRootCallSelectionOrNullForRuntime();
+    }
+
     abstract Object execute(VirtualFrame frame, boolean terminal, Object callable);
 
-    @Specialization(guards = "isSourceFunction(callable)")
+    @Specialization(guards = {
+            "isSourceFunction(callable)",
+            "canonicalCallSelected(callable, rootSelection)"
+        })
     static Object callFunction(
             VirtualFrame frame,
             boolean terminal,
             ProtosClosureValue callable,
             @Bind("$node") Node inliningTarget,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached(value = "rootCallSelection()", allowUncached = true)
+                    ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
             @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         return call.execute(
                 frame, inliningTarget, terminal, callable,
@@ -83,8 +94,20 @@ abstract class ProtosCallNilaryMethodNode extends Node {
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
     }
 
-    /* Builtins, bound builtins and generic callables: GraalPy CallNode. */
-    @Specialization(guards = "!isSourceCallable(callable)")
+    /* Builtins, bound builtins and generic callables: the shared CallNode. */
+    /*
+     * Source functions retain the specialized call path while their
+     * selected call behavior is canonical. Bound methods are already
+     * selected and must not perform another callable lookup.
+     */
+    static boolean requiresCallableSelection(Object callable) {
+        return !isSourceCallable(callable)
+                || (callable instanceof ProtosClosureValue closure
+                        && !canonicalCallSelected(
+                                closure, rootCallSelection()));
+    }
+
+    @Specialization(guards = "requiresCallableSelection(callable)")
     @InliningCutoff
     static Object call(
             VirtualFrame frame,
@@ -97,6 +120,13 @@ abstract class ProtosCallNilaryMethodNode extends Node {
                 ProtosFrameArguments.dispatchedCall0(
                 null, ProtosFrameArguments.functionCallMarker(), null, null, null),
                 null, root);
+    }
+
+    static boolean canonicalCallSelected(
+            ProtosClosureValue callable,
+            ProtosStandardObjectProtocol.CanonicalRootCallSelection selection) {
+        return ProtosFunctionCallDispatchers.hasCanonicalCallSelection(
+                callable, selection);
     }
 
     static boolean isSourceFunction(ProtosClosureValue callable) {

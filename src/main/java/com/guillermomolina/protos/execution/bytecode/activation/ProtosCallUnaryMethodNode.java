@@ -38,13 +38,13 @@ import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * I115 (GraalPy {@code Call*Method}): the {@code CallUnaryMethod} operation, a call
+ * Protos Bytecode DSL: the {@code CallUnaryMethod} operation, a call
  * of an evaluated callable with 1 positional argument. The callable is a source Closure, a
  * native Closure, a {@link ProtosBoundMethod} produced by {@code GetMethod}
  * (its receiver is not counted among the arguments) or any other object.
  *
  * <p>The B5 frame-argument array is built once here and becomes the callee
- * frame's arguments. Source functions use a GraalPy-style identity-keyed
+ * frame's arguments. Source functions use a identity-keyed
  * unary direct-call cache before entering the existing call dispatcher.
  * A bound source method preserves its receiver and methodHome and uses
  * the shared PIC; other callables use {@link
@@ -56,10 +56,16 @@ import com.oracle.truffle.api.nodes.Node;
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = true)
 abstract class ProtosCallUnaryMethodNode extends Node {
 
+    static ProtosStandardObjectProtocol.CanonicalRootCallSelection
+            rootCallSelection() {
+        return ProtosStandardObjectProtocol
+                .canonicalRootCallSelectionOrNullForRuntime();
+    }
+
     abstract Object execute(VirtualFrame frame, boolean terminal, Object callable, Object a0);
 
     /*
-     * GraalPy CallUnaryMethodNode.callPFunction: cache the callable
+     * CallUnaryMethodNode.callPFunction: cache the callable
      * instance rather than its shared source execution plan. Cache hits
      * use the already-prepared, same-language target without resolving
      * an entered Context. Other source calls use the existing dispatcher.
@@ -72,7 +78,8 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                     "isSourceFunction(callable)",
                     "isSingleContext()",
                     "callable == cachedCallable",
-                    "cachedTarget != null"
+                    "cachedTarget != null",
+                    "canonicalCallSelected(callable, rootSelection)"
             },
             assumptions = {"cachedCodeStable", "cachedCallerNeedsStable"},
             excludeForUncached = true,
@@ -86,6 +93,8 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached(value = "callable", weak = true)
                     ProtosClosureValue cachedCallable,
+            @Cached(value = "rootCallSelection()", allowUncached = true)
+                    ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
             @Cached("cachedCallable.codeStableAssumptionForRuntime()")
                     Assumption cachedCodeStable,
             @Cached("singleContextTargetOrNull(cachedCallable, root)")
@@ -121,11 +130,14 @@ abstract class ProtosCallUnaryMethodNode extends Node {
     }
 
     /*
-     * GraalPy-style megamorphic transition for source functions.
+     * megamorphic transition for source functions.
      * Reuse the existing CallNode and its current dispatch implementation.
      */
     @Specialization(
-            guards = "isSourceFunction(callable)",
+            guards = {
+                    "isSourceFunction(callable)",
+                    "canonicalCallSelected(callable, rootSelection)"
+            },
             replaces = "callPFunction")
     @Megamorphic
     @InliningCutoff
@@ -135,6 +147,8 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             ProtosClosureValue callable,
             Object a0,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached(value = "rootCallSelection()", allowUncached = true)
+                    ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
             @Cached ProtosFunctionCallDispatchers.CallNode call) {
         return call.execute(
                 frame, terminal, callable,
@@ -162,8 +176,20 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
     }
 
-    /* Builtins, bound builtins and generic callables: GraalPy CallNode. */
-    @Specialization(guards = "!isSourceCallable(callable)")
+    /* Builtins, bound builtins and generic callables: CallNode. */
+    /*
+     * Source functions retain the specialized call path while their
+     * selected call behavior is canonical. Bound methods are already
+     * selected and must not perform another callable lookup.
+     */
+    static boolean requiresCallableSelection(Object callable) {
+        return !isSourceCallable(callable)
+                || (callable instanceof ProtosClosureValue closure
+                        && !canonicalCallSelected(
+                                closure, rootCallSelection()));
+    }
+
+    @Specialization(guards = "requiresCallableSelection(callable)")
     @InliningCutoff
     static Object call(
             VirtualFrame frame,
@@ -179,6 +205,13 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                 null, root);
     }
 
+    static boolean canonicalCallSelected(
+            ProtosClosureValue callable,
+            ProtosStandardObjectProtocol.CanonicalRootCallSelection selection) {
+        return ProtosFunctionCallDispatchers.hasCanonicalCallSelection(
+                callable, selection);
+    }
+
     static boolean isSourceFunction(ProtosClosureValue callable) {
         return ProtosFunctionCallDispatchers.CallNode.isSourceFunction(callable);
     }
@@ -191,7 +224,7 @@ abstract class ProtosCallUnaryMethodNode extends Node {
     }
 
     /*
-     * GraalPy AbstractCallMethodNode.isSingleContext:
+     * AbstractCallMethodNode.isSingleContext:
      * admission-time guard, independent of the generated cache node.
      */
     @Idempotent

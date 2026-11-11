@@ -29,6 +29,7 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
@@ -398,20 +399,28 @@ final class ProtosI096InlineClosureLiteralCallTest {
         String[][] variants = {
             {
                 "Call0", "()",
-                "chosen()", "InvokeInlineClosureZero"
+                "chosen()", "CallNilaryMethod"
             },
             {
                 "Call1", "(a)",
-                "chosen(4)", "InvokeInlineClosureOne"
+                "chosen(4)", "CallUnaryMethod"
             },
             {
                 "CallN", "(a, b)",
-                "chosen(4, 2)", "InvokeInlineClosureArguments"
+                "chosen(4, 2)", "CallBinaryMethod"
+            },
+            {
+                "Call3", "(a, b, c)",
+                "chosen(4, 2, 1)", "CallTernaryMethod"
+            },
+            {
+                "Call4", "(a, b, c, d)",
+                "chosen(4, 2, 1, 0)", "CallQuaternaryMethod"
             },
             {
                 "Spread", "(a, b)",
                 "chosen(...values)",
-                "InvokeInlineClosureArguments"
+                "CallVarargsMethod"
             }
         };
 
@@ -429,9 +438,9 @@ final class ProtosI096InlineClosureLiteralCallTest {
                     f4: @@PARAMETERS@@ => { 14 }
 
                     apply: (fn) => {
-                        probe()
                         values: Array(4, 2)
                         ((chosen) => {
+                            probe()
                             @@CALL@@
                         })(fn)
                     }
@@ -465,73 +474,108 @@ final class ProtosI096InlineClosureLiteralCallTest {
              */
             Execution normal = execute(false, source);
 
+            System.out.println(
+                    "CALL_PIC_RESULT_" + label
+                            + " value="
+                            + ProtosNumericValueSupport.integerDecimalText(
+                                    normal.value())
+                            + " probes=" + normal.probe().calls.get()
+                            + " stacks=" + normal.probe().stacks.size());
+
             assertInteger(251, normal.value());
             assertEquals(
                     8, normal.probe().calls.get(), label);
 
             ProtosBytecodeRootNode caller =
-                    normal.innermostRoot();
+                    normal.probe().stacks.get(0).stream()
+                            .filter(ProtosBytecodeRootNode.class::isInstance)
+                            .map(ProtosBytecodeRootNode.class::cast)
+                            .findFirst()
+                            .orElseThrow();
 
             List<String> instructions =
                     instructionNames(caller);
 
+            int originalRootIndex =
+                    caller.getRootNodes().getNodes().indexOf(caller);
+
+            assertTrue(
+                    originalRootIndex >= 0,
+                    label + ": initial root must belong to its parse group");
+
+            assertSame(
+                    caller,
+                    caller.getRootNodes().getNode(originalRootIndex),
+                    label + ": registered source root");
+
+            /*
+             * The callback root contains exactly one probe() call
+             * and one selected chosen(...) call site. For Call0
+             * both are nilary; other arities have distinct operations.
+             */
             assertEquals(
-                    1,
+                    label.equals("Call0") ? 2 : 1,
                     count(instructions, operation),
-                    label + ": exactly one inner semantic call site");
-
-            assertTrue(
-                    position(
-                            instructions,
-                            "IsPreparedClosureInvocation") >= 0,
                     () -> label + ": " + instructions);
 
-            assertTrue(
-                    position(
-                            instructions,
-                            "BindInlineClosureFrameParameter") >= 0,
-                    () -> label + ": " + instructions);
-
-            /*
-             * The probe is outside the inline callback.
-             * All eight captures must identify the same physical
-             * root. This avoids mistaking distinct call sites
-             * for a single PIC's changing receiver definitions.
-             */
-            for (List<RootNode> stack :
-                    normal.probe().stacks) {
-                assertSame(
-                        caller,
-                        stack.get(0),
-                        label + ": physical call site identity");
-            }
-
-            int admitted = position(
-                    instructions,
-                    "AdmitsInlineClosureLiteralCall");
-
-            assertTrue(
-                    admitted >= 0,
-                    () -> label + ": missing inline admission");
-
-            List<String> inlineRegion =
-                    instructions.subList(
-                            admitted, instructions.size());
-
-            /*
-             * This assertion is about emitted bytecode, not a
-             * measurement of runtime activation allocation.
-             * The semantic operation owns the occasional
-             * durable transition when exact caller authority
-             * actually requires it.
-             */
             assertEquals(
-                    0,
-                    count(
-                            inlineRegion,
-                            "MaterializeInlineCallbackActivation"),
-                    () -> label + ": unexpected explicit "
-                            + "caller materialization");
+                    label.equals("Call0") ? 2 : 1,
+                    count(instructions, "CallNilaryMethod"),
+                    label + ": one probe and the selected target");
+
+            assertEquals(
+                    label.equals("Spread") ? 2 : 1,
+                    count(instructions, "ResumeDispatchedContinuation"),
+                    () -> label + ": " + instructions);
+
+            assertEquals(
+                    label.equals("Spread") ? 2 : 1,
+                    count(instructions, "IsContinuation"),
+                    () -> label + ": " + instructions);
+
+            assertFalse(
+                    instructions.stream().anyMatch(name ->
+                            name.contains("InvokeInlineClosure")
+                                    || name.contains("IsPreparedClosureInvocation")
+                                    || name.contains("BindInlineClosureFrameParameter")
+                                    || name.contains("AdmitsInlineClosureLiteralCall")
+                                    || name.contains("MaterializeInlineCallbackActivation")),
+                    instructions::toString);
+
+            /*
+             * Every invocation originates from the same bytecode
+             * definition and call site. Truffle may clone the root
+             * for call-site-specific profiling after specialization.
+             * Such clones are not additional parsed definitions.
+             */
+            for (List<RootNode> stack : normal.probe().stacks) {
+                ProtosBytecodeRootNode observedCaller =
+                        stack.stream()
+                                .filter(ProtosBytecodeRootNode.class::isInstance)
+                                .map(ProtosBytecodeRootNode.class::cast)
+                                .findFirst()
+                                .orElseThrow();
+
+                assertSame(
+                        caller.getRootNodes(),
+                        observedCaller.getRootNodes(),
+                        label + ": source bytecode group identity");
+
+                if (observedCaller != caller) {
+                    assertEquals(
+                            -1,
+                            caller.getRootNodes()
+                                    .getNodes()
+                                    .indexOf(observedCaller),
+                            label + ": cloned root is not a new definition");
+                }
+
+                assertEquals(
+                        instructions,
+                        instructionNames(observedCaller),
+                        () -> label
+                                + ": cloned root must preserve the call site");
+            }
 
             if (label.equals("Spread")) {
                 assertTrue(
@@ -543,7 +587,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 assertTrue(
                         position(
                                 instructions,
-                                "AppendInlineSpreadSuppliedArgument") >= 0,
+                                "AppendSpreadSuppliedArgument") >= 0,
                         instructions::toString);
             }
 
@@ -2110,6 +2154,62 @@ final class ProtosI096InlineClosureLiteralCallTest {
     }
 
     @Test
+    void suspendingUnaryCallUsedAsNumericOperandMustResume()
+            throws Exception {
+        String terminal = """
+                run: () => {
+                    step: (() => { 1 }).future()
+                    f: (value) => {
+                        value + step.value()
+                    }
+                    f(41)
+                }
+                run()
+                """;
+
+        String numeric = terminal.replace("f(41)", "f(41) * 10");
+
+        assertTrue(!terminal.equals(numeric));
+
+        ProtosExecutionOutcome terminalOutcome =
+                ProtosTestExecutionSupport.execute(
+                        "i115-async-unary-terminal.protos",
+                        terminal,
+                        new ProtosCoreBootstrap()
+                                .bootstrap(CORE)
+                                .newModuleActivation());
+
+        ProtosExecutionOutcome numericOutcome =
+                ProtosTestExecutionSupport.execute(
+                        "i115-async-unary-numeric.protos",
+                        numeric,
+                        new ProtosCoreBootstrap()
+                                .bootstrap(CORE)
+                                .newModuleActivation());
+
+        System.out.println(
+                "I115_ASYNC_UNARY_TERMINAL=" + terminalOutcome.state());
+        System.out.println(
+                "I115_ASYNC_UNARY_NUMERIC=" + numericOutcome.state());
+
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                terminalOutcome.state(),
+                () -> "terminal error=" + terminalOutcome.error()
+                        + ", trace="
+                        + terminalOutcome.failureDiagnosticTrace());
+        assertInteger(42, terminalOutcome.value());
+
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                numericOutcome.state(),
+                () -> "numeric error=" + numericOutcome.error()
+                        + ", trace="
+                        + numericOutcome.failureDiagnosticTrace());
+        assertInteger(420, numericOutcome.value());
+    }
+
+    @Test
     void suspensionAfterNestedCaptureResumesWithoutReplay() throws Exception {
         String source = """
                 run: () => {
@@ -2133,7 +2233,15 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
-                () -> "outcome=" + outcome.state() + ", error=" + outcome.error());
+                () -> "outcome=" + outcome.state()
+                        + ", errorSlots="
+                        + (outcome.error() == null
+                                ? null
+                                : outcome.error().localSlotsSnapshot())
+                        + ", diagnosticFrames="
+                        + outcome.failureDiagnosticTrace()
+                                .map(trace -> trace.frames())
+                                .orElse(null));
         assertInteger(831, outcome.value());
         System.out.println("I096_NESTED_SUSPENSION_PRESERVED=YES");
     }
@@ -2239,7 +2347,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         Execution direct = execute(false, plain);
         assertInteger(5, direct.value());
         assertEquals(1, direct.probe().calls.get());
-        assertEquals(1, count(instructionNames(direct.outermostGuestRoot()), "c.InvokeClosureOneTail"));
+        assertEquals(1, count(instructionNames(direct.outermostGuestRoot()), "CallUnaryMethod"));
         assertParity(plain, 5);
 
         String removed = """
@@ -2257,7 +2365,12 @@ final class ProtosI096InlineClosureLiteralCallTest {
         Execution restored = execute(false, removed);
         assertInteger(5, restored.value());
         assertEquals(1, restored.probe().calls.get());
-        assertEquals(1, count(instructionNames(restored.outermostGuestRoot()), "c.InvokeClosureOneTail"));
+        assertEquals(
+                2,
+                count(
+                        instructionNames(restored.outermostGuestRoot()),
+                        "CallUnaryMethod"),
+                "removeSlot and f(4) are distinct unary call sites");
         assertParity(removed, 5);
         System.out.println("PERF042_TERMINAL_C1_CALL_OVERRIDE=YES");
     }

@@ -237,6 +237,35 @@ final class ProtosI115LexicalStorageConvergenceTest {
     }
 
     @Test
+    void immediateLiteralCallKeepsDirectInlineStorage()
+            throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosClosureValue outer =
+                            closure(fixture, """
+                                    (() => {
+                                        value: 41
+                                        (() => value + 1)()
+                                    })
+                                    """);
+
+                    List<String> names =
+                            operations(activationNode(outer));
+
+                    assertFalse(names.contains("CreateCell"), names::toString);
+                    assertFalse(names.contains("StoreCell"), names::toString);
+                    assertFalse(names.contains("LoadCell"), names::toString);
+                    assertFalse(names.contains("CaptureClosureCells"), names::toString);
+                    assertTrue(
+                            names.stream().anyMatch(
+                                    name -> name.startsWith("load.local")),
+                            names::toString);
+                    assertNoRetiredSelection(names);
+                    assertEquals(42L, execute(fixture, outer));
+                });
+    }
+
+    @Test
     void capturedBindingIsOneCellSharedByReference() throws Exception {
         withFixture(
                 fixture -> {

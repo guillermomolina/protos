@@ -876,7 +876,7 @@ final class ProtosI115ARuntimeAdmissionTest {
     }
 
     @Test
-    void sourceFunctionSelectionIgnoresLocalCallOverrides() throws Exception {
+    void sourceClosureClassificationIsIndependentOfCallSelection() throws Exception {
         withCore(module -> {
             evaluate("make: () => { (value) => { value } }\n", "i115a-select-define.protos", module);
             ProtosClosureValue source = closure("make()\n", module);
@@ -901,7 +901,7 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertTrue(source.hasLocalCallSlotForRuntime());
             assertSame(source, functionSelection(source));
             assertNotNull(dispatchFacts(source, context));
-            // Even a local canonical alias does not redirect source-function calls.
+            // A local canonical alias does not change the Closure's source representation.
             source.assignLocalSlot("call", standardCall);
             assertTrue(source.hasLocalCallSlotForRuntime());
             assertSame(source, functionSelection(source));
@@ -915,7 +915,7 @@ final class ProtosI115ARuntimeAdmissionTest {
     }
 
     @Test
-    void warmCallSiteKeepsDirectSourceDispatchAcrossCallOverrides() throws Exception {
+    void warmCallSiteSelectsOverridesAndRestoresDirectDispatch() throws Exception {
         withCore(module -> {
             evaluate("""
                     make: () => { (value) => { value } }
@@ -927,12 +927,12 @@ final class ProtosI115ARuntimeAdmissionTest {
             }
             for (int round = 0; round < 2; round++) {
                 evaluate("late.call: (value) => { 100 + value }\n", "i115a-warm-override.protos", module);
-                assertInteger(7, evaluate("callOne(late, 7)\n", "i115a-warm-overridden.protos", module));
+                assertInteger(107, evaluate("callOne(late, 7)\n", "i115a-warm-overridden.protos", module));
                 assertInteger(107, evaluate("late.call(7)\n", "i115a-explicit-overridden.protos", module));
                 evaluate("late.removeSlot(\"call\")\n", "i115a-warm-remove.protos", module);
                 assertInteger(7, evaluate("callOne(late, 7)\n", "i115a-warm-restored.protos", module));
                 evaluate("late.call: (value) => { 200 + value }\n", "i115a-warm-recreate.protos", module);
-                assertInteger(7, evaluate("callOne(late, 7)\n", "i115a-warm-recreated.protos", module));
+                assertInteger(207, evaluate("callOne(late, 7)\n", "i115a-warm-recreated.protos", module));
                 assertInteger(207, evaluate("late.call(7)\n", "i115a-explicit-recreated.protos", module));
                 evaluate("late.removeSlot(\"call\")\n", "i115a-warm-remove-again.protos", module);
                 assertInteger(7, evaluate("callOne(make(), 7)\n", "i115a-warm-fresh.protos", module));
@@ -941,7 +941,7 @@ final class ProtosI115ARuntimeAdmissionTest {
     }
 
     @Test
-    void callCreatedWhileEvaluatingArgumentKeepsDirectFunctionSelection() throws Exception {
+    void callOverrideCreatedDuringArgumentEvaluationIsSelected() throws Exception {
         withCore(module -> {
             evaluate("""
                     make: () => { (value) => { value } }
@@ -957,7 +957,7 @@ final class ProtosI115ARuntimeAdmissionTest {
                 assertInteger(7, evaluate("callWith(make(), plain)\n", "i115a-argument-warm.protos", module));
             }
             for (int round = 0; round < 2; round++) {
-                assertInteger(7, evaluate("callWith(late, arm)\n", "i115a-argument-arm.protos", module));
+                assertInteger(107, evaluate("callWith(late, arm)\n", "i115a-argument-arm.protos", module));
                 assertInteger(107, evaluate("late.call(7)\n", "i115a-argument-explicit.protos", module));
                 evaluate("late.removeSlot(\"call\")\n", "i115a-argument-remove.protos", module);
                 assertInteger(7, evaluate("callWith(late, plain)\n", "i115a-argument-plain.protos", module));
