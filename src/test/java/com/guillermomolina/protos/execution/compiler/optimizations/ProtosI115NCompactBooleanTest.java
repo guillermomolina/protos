@@ -97,7 +97,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void perf041PrimaryCase() throws Exception {
-        runCase("perf041", 3, """
+        runCase("perf041", 2, """
                 run: () => {
                     value: true
                     result: null
@@ -111,7 +111,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void trueIfTrueRunsCallback() throws Exception {
-        runCase("true-if-true", 3, """
+        runCase("true-if-true", 2, """
                 run: () => {
                     flag: true
                     out: 0
@@ -125,7 +125,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void falseIfTrueSkipsCallback() throws Exception {
-        runCase("false-if-true", 3, """
+        runCase("false-if-true", 2, """
                 run: () => {
                     seen: 7
                     off: false
@@ -138,7 +138,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void trueIfFalseSkipsCallback() throws Exception {
-        runCase("true-if-false", 3, """
+        runCase("true-if-false", 2, """
                 run: () => {
                     mark: 3
                     yes: true
@@ -151,7 +151,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void falseIfFalseRunsCallback() throws Exception {
-        runCase("false-if-false", 3, """
+        runCase("false-if-false", 2, """
                 run: () => {
                     no: false
                     count: 0
@@ -165,7 +165,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void ifTrueIfFalseSelectsFirst() throws Exception {
-        runCase("if-true-if-false-true", 4, """
+        runCase("if-true-if-false-true", 2, """
                 run: () => {
                     pick: true
                     pick.ifTrueIfFalse(() => 10, () => 20)
@@ -175,7 +175,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void ifTrueIfFalseSelectsSecond() throws Exception {
-        runCase("if-true-if-false-false", 4, """
+        runCase("if-true-if-false-false", 2, """
                 run: () => {
                     side: 1
                     choice: false
@@ -221,8 +221,8 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void computedCondition() throws Exception {
-        // I115-H1-FIX: guarded control; its callback root serves the MISS.
-        runCase("computed-condition", 3, """
+        // A computed receiver selects natively; its inline callback registers no root.
+        runCase("computed-condition", 2, """
                 run: () => {
                     acc: 0
                     value: 2 < 3
@@ -236,7 +236,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void consecutiveIfTrueGrowDsl() throws Exception {
-        Census single = runCase("single-if-true", 3, """
+        Census single = runCase("single-if-true", 2, """
                 run: () => {
                     t: true
                     sum: 1
@@ -246,7 +246,7 @@ final class ProtosI115NCompactBooleanTest {
                     sum
                 }
                 """, result -> assertEquals(3, result.asInt()));
-        Census consecutive = runCase("consecutive-if-true", 4, """
+        Census consecutive = runCase("consecutive-if-true", 2, """
                 run: () => {
                     t: true
                     sum: 1
@@ -283,7 +283,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void consumedIfTrueReturnsCallbackResult() throws Exception {
-        runCase("consumed-if-true", 3, """
+        runCase("consumed-if-true", 2, """
                 run: () => {
                     base: 6
                     on: true
@@ -296,7 +296,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void discardedIfTrueUsesNoResultLocal() throws Exception {
-        Census census = runCase("discarded-if-true", 3, """
+        Census census = runCase("discarded-if-true", 2, """
                 run: () => {
                     z: 1
                     ready: true
@@ -306,7 +306,7 @@ final class ProtosI115NCompactBooleanTest {
                     z
                 }
                 """, result -> assertEquals(2, result.asInt()));
-        assertEquals(3, census.rootCount());
+        assertEquals(2, census.rootCount());
         assertFalse(census.resultLocal(),
                 "A discarded ifTrue must not allocate a result local");
     }
@@ -415,10 +415,9 @@ final class ProtosI115NCompactBooleanTest {
     }
 
     /*
-     * {@code rootCount}: the module and run roots, plus one registered
-     * callback root per callback of a guarded (dispatching) control. A
-     * receiver that is not a Boolean literal is guarded: a custom receiver
-     * selects its own method, which receives the materialized callback.
+     * {@code rootCount}: the module and run roots, plus one registered root
+     * per callback that is materialized as a genuine Closure. An inline
+     * callback registers no root and imposes no cell on its captures.
      */
     private static Census runCase(
             String name, int rootCount, String source, Consumer<Value> expected)

@@ -214,6 +214,36 @@ final class ProtosI115StructuredControlSmokeTest {
         });
     }
 
+    /*
+     * VALUES_AND_COLLECTIONS: ifTrue, ifFalse and ifTrueIfFalse are ordinary
+     * messages. A site that is not lowered internally (here, a spread argument
+     * list) reaches the standard behavior by ordinary dispatch; a receiver
+     * that only delegates to true selects that standard behavior and fails
+     * its receiver-domain check, on both the generic and the lowered site.
+     */
+    @Test
+    void genericSendsReachTheStandardConditionalBehavior() throws Exception {
+        withCore(module -> {
+            assertInteger(5, run(module, "true.ifTrue(...[() => { 5 }])"));
+            assertSame(ProtosBooleanValue.TRUE,
+                    run(module, "false.ifTrue(...[() => { 5 }]) === null"));
+            assertInteger(4, run(module, "false.ifFalse(...[() => { 4 }])"));
+            assertInteger(1, run(module, "true.ifTrueIfFalse(...[() => { 1 }, () => { 2 }])"));
+            assertInteger(2, run(module, "false.ifTrueIfFalse(...[() => { 1 }, () => { 2 }])"));
+            // The unselected callback is neither validated nor invoked.
+            assertInteger(1, run(module, "true.ifTrueIfFalse(...[() => { 1 }, 17])"));
+            assertInteger(42, run(module, """
+                    delegate: (true) { }
+                    Error.handle(() => { delegate.ifTrue(...[() => { 1 }]) }, (caught) => { 42 })
+                    """));
+            assertInteger(42, run(module, """
+                    delegate: (true) { }
+                    select: (condition) => { condition.ifTrue(() => { 1 }) }
+                    Error.handle(() => { select(delegate) }, (caught) => { 42 })
+                    """));
+        });
+    }
+
     @Test
     void dynamicCallbackIsAnOrdinaryNilaryCall() throws Exception {
         withCore(module -> {

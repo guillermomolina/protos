@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -56,14 +57,26 @@ public final class ProtosStandardBooleanProtocol {
     private static final ProtosClosureValue STANDARD_OR =
             standardNative(STANDARD_OR_BODY);
 
+    /*
+     * The standard conditional behavior reached by ordinary dispatch: a
+     * spread or named argument list, an extracted method, a reflective send,
+     * or a receiver that only delegates to a Boolean. A lowered conditional
+     * site whose receiver is canonical true or false selects internally and
+     * never sends these selectors.
+     */
+    private static final ProtosClosureValue STANDARD_IF_TRUE =
+            standardNative(ProtosStandardBooleanProtocol::ifTrue);
+    private static final ProtosClosureValue STANDARD_IF_FALSE =
+            standardNative(ProtosStandardBooleanProtocol::ifFalse);
+    private static final ProtosClosureValue STANDARD_IF_TRUE_IF_FALSE =
+            standardNative(ProtosStandardBooleanProtocol::ifTrueIfFalse);
+
     private ProtosStandardBooleanProtocol() {}
 
     /*
-     * Keep the audited Core native-provider boundary at one lexical provider. The
-     * remaining native standard Boolean selectors (not, and, or) keep stable Closure/body
-     * identities so C-prime recognizes the structured callback operations without
-     * expanding that boundary. ifTrue, ifFalse and ifTrueIfFalse are I115 Bytecode DSL
-     * control flow, not native methods.
+     * Keep the audited Core native-provider boundary at one lexical provider. Every
+     * standard Boolean selector keeps a stable Closure/body identity, so the bootstrap
+     * can verify that the frozen root publishes exactly this behavior.
      */
     private static ProtosClosureValue standardNative(ProtosNativeClosureBody body) {
         return ProtosClosureValue.nativeClosure(body);
@@ -91,11 +104,26 @@ public final class ProtosStandardBooleanProtocol {
         return home.isRootObject() && behavior == STANDARD_NOT;
     }
 
+    /** Whether {@code behavior} is the standard conditional behavior of {@code selector}. */
+    static boolean isStandardConditionalSelection(
+            String selector, Object behavior, ProtosObjectValue home) {
+        if (!home.isRootObject()) return false;
+        return switch (selector) {
+            case "ifTrue" -> behavior == STANDARD_IF_TRUE;
+            case "ifFalse" -> behavior == STANDARD_IF_FALSE;
+            case "ifTrueIfFalse" -> behavior == STANDARD_IF_TRUE_IF_FALSE;
+            default -> false;
+        };
+    }
+
     public static void install() {
         ProtosObjectValue object = ProtosObjectValue.rootObject();
         install(object, "not", STANDARD_NOT);
         install(object, "and", STANDARD_AND);
         install(object, "or", STANDARD_OR);
+        install(object, "ifTrue", STANDARD_IF_TRUE);
+        install(object, "ifFalse", STANDARD_IF_FALSE);
+        install(object, "ifTrueIfFalse", STANDARD_IF_TRUE_IF_FALSE);
     }
 
     private static void install(
@@ -112,6 +140,30 @@ public final class ProtosStandardBooleanProtocol {
         return receiver == ProtosBooleanValue.TRUE
                 ? ProtosBooleanValue.FALSE
                 : ProtosBooleanValue.TRUE;
+    }
+
+    /*
+     * VALUES_AND_COLLECTIONS: the selected callback is invoked exactly once
+     * with no arguments and its normal result is returned unchanged; the
+     * unselected callback is neither validated nor invoked.
+     */
+    private static Object ifTrue(ProtosActivation activation, List<?> supplied) {
+        Object receiver = requireReceiverAndArity(activation, supplied, 1);
+        if (receiver == ProtosBooleanValue.FALSE) return ProtosNullValue.INSTANCE;
+        return ProtosInvocation.invoke(supplied.get(0), List.of(), activation);
+    }
+
+    private static Object ifFalse(ProtosActivation activation, List<?> supplied) {
+        Object receiver = requireReceiverAndArity(activation, supplied, 1);
+        if (receiver == ProtosBooleanValue.TRUE) return ProtosNullValue.INSTANCE;
+        return ProtosInvocation.invoke(supplied.get(0), List.of(), activation);
+    }
+
+    private static Object ifTrueIfFalse(ProtosActivation activation, List<?> supplied) {
+        Object receiver = requireReceiverAndArity(activation, supplied, 2);
+        Object selected =
+                receiver == ProtosBooleanValue.TRUE ? supplied.get(0) : supplied.get(1);
+        return ProtosInvocation.invoke(selected, List.of(), activation);
     }
 
     private static Object and(ProtosActivation activation, List<?> supplied) {

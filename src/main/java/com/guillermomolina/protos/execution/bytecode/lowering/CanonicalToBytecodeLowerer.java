@@ -261,17 +261,7 @@ final class CanonicalToBytecodeLowerer {
                 @Override
                 public boolean inlineCallbackPosition(CanonicalSend send, int position) {
                     I115Control control = I115Control.of(send.message(), send.arguments());
-                    if (control == null || !control.callbackPosition(position)) {
-                        return false;
-                    }
-                    /*
-                     * A dynamic conditional receiver can select a custom method.
-                     * That branch materializes its callback, even when the
-                     * standard Boolean branch executes the callback inline.
-                     * Captured bindings must retain their physical cells.
-                     */
-                    return control.loop()
-                            || canonicalBooleanLiteral(send.receiver()) != null;
+                    return control != null && control.callbackPosition(position);
                 }
             };
 
@@ -6748,26 +6738,8 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
 
-        boolean guardedConditional =
-                !control.loop() && canonicalBooleanLiteral(receiver) == null;
-
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
-
-        BytecodeLocal conditionalReceiver = null;
-        if (guardedConditional) {
-            conditionalReceiver = builder.createLocal(
-                    "conditionalReceiver", null);
-            stageOperand(
-                    builder, receiver, conditionalReceiver,
-                    scratch, childResult, resumeValue, stager);
-
-            builder.beginIfThenElse();
-            builder.beginIsCanonicalBooleanOperand();
-            builder.emitLoadLocal(conditionalReceiver);
-            builder.endIsCanonicalBooleanOperand();
-            builder.beginBlock();
-        }
 
         java.util.List<CanonicalExpression> operands = new java.util.ArrayList<>(arguments.size() + 1);
         operands.add(receiver);
@@ -6784,12 +6756,6 @@ final class CanonicalToBytecodeLowerer {
             allCallbacksInline &= i115AdmitsInlineClosure(operands.get(position));
         }
         for (int position = 0; position < operands.size(); position++) {
-            if (guardedConditional && position == 0) {
-                inline.add(false);
-                staged.add(conditionalReceiver);
-                continue;
-            }
-
             CanonicalExpression operand = operands.get(position);
             boolean callback = control.callbackPosition(position);
             boolean admitted = callback && i115AdmitsInlineClosure(operand);
@@ -6818,36 +6784,6 @@ final class CanonicalToBytecodeLowerer {
                     valueUsed, result, primitiveCarrierResult);
         }
 
-        if (guardedConditional) {
-            builder.endBlock();
-            builder.beginBlock();
-
-            BytecodeLocal selectedMethod =
-                    builder.createLocal("conditionalMethod", null);
-            emitGetMethod(
-                    builder, control.selector, conditionalReceiver,
-                    selectedMethod);
-
-            java.util.List<BytecodeLocal> selectedArguments =
-                    new java.util.ArrayList<>(arguments.size());
-
-            for (CanonicalExpression argument : arguments) {
-                BytecodeLocal argumentValue =
-                        builder.createLocal("conditionalArgument", null);
-                stageOperand(
-                        builder, argument, argumentValue,
-                        scratch, childResult, resumeValue, stager);
-                selectedArguments.add(argumentValue);
-            }
-
-            emitDispatchedCall(
-                    builder, selectedMethod, selectedArguments, null,
-                    childResult, valueUsed ? result : null,
-                    resumeValue, primitiveCarrierResult);
-
-            builder.endBlock();
-            builder.endIfThenElse();
-        }
 
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);

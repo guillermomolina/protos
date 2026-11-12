@@ -904,6 +904,9 @@ public final class ProtosCoreBootstrap {
                         "slotValue",
                         "and",
                         "or",
+                        "ifTrue",
+                        "ifFalse",
+                        "ifTrueIfFalse",
                         "hash",
                         "future",
                         "parallel",
@@ -965,11 +968,10 @@ public final class ProtosCoreBootstrap {
         validateContextLocalRootExecutionProjection(object, "==");
         validateContextLocalRootExecutionProjection(object, "match");
         /*
-         * I095 inlines the standard Boolean selectors and, or and not; it
-         * relies on these frozen selections; never publish another behavior.
-         * I115 lowers ifTrue, ifFalse, ifTrueIfFalse, whileTrue, whileFalse,
-         * untilTrue and untilFalse directly as Bytecode DSL control flow, so
-         * the root publishes no native slots for them.
+         * A lowered Boolean control site whose receiver is canonical true or
+         * false runs the standard behavior internally; it relies on these
+         * frozen selections, which ordinary dispatch reaches for any other
+         * site. Never publish another behavior.
          */
         requireStandardBooleanSelection(object, "and",
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.AND);
@@ -979,6 +981,15 @@ public final class ProtosCoreBootstrap {
                 object.readLocalSlot("not").orElse(null), object)) {
             throw new IllegalStateException(
                     "standard Object root must publish the standard not behavior");
+        }
+        for (String selector : java.util.List.of("ifTrue", "ifFalse", "ifTrueIfFalse")) {
+            if (!ProtosStandardBooleanProtocol.isStandardConditionalSelection(
+                    selector, object.readLocalSlot(selector).orElse(null), object)) {
+                throw new IllegalStateException(
+                        "standard Object root must publish the standard "
+                                + selector
+                                + " behavior");
+            }
         }
         if (!ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
                 object.readLocalSlot("call").orElse(null), object)) {
