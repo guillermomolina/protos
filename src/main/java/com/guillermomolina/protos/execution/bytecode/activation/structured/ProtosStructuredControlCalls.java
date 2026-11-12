@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
@@ -303,6 +304,78 @@ final class ProtosStructuredControlCalls {
             return ProtosStandardBooleanProtocol.requireBooleanResult(
                     result,
                     activation);
+        }
+    }
+
+    /**
+     * A standard Closure loop reached by ordinary dispatch, driven as a
+     * sequence of child activations so each one may suspend and resume. The
+     * receiver, the argument count and the argument are validated, in that
+     * order, before either Closure is activated. Each child is a
+     * zero-argument activation of the condition or the body; a condition
+     * result that is exactly the exit Boolean ends the loop, the other
+     * canonical Boolean continues it and any other value signals a fresh
+     * Error. The result is the last normal body result, or canonical null.
+     */
+    static final class PreparedLoopCall {
+        private final ProtosClosureValue condition;
+        private final ProtosClosureValue body;
+        private final ProtosBooleanValue exitValue;
+        private final ProtosActivation activation;
+        private boolean conditionNext;
+        private boolean done;
+        private Object lastBodyResult = ProtosNullValue.INSTANCE;
+
+        PreparedLoopCall(
+                boolean postTest,
+                ProtosBooleanValue exitValue,
+                Object receiver,
+                List<?> supplied,
+                ProtosActivation activation) {
+            this.activation = java.util.Objects.requireNonNull(activation, "activation");
+            this.exitValue = java.util.Objects.requireNonNull(exitValue, "exitValue");
+            if (!(receiver instanceof ProtosClosureValue receiverClosure)
+                    || supplied.size() != 1
+                    || !(supplied.get(0) instanceof ProtosClosureValue argument)) {
+                throw ProtosCoreErrors.signal(activation, ProtosCoreErrors.newError(activation));
+            }
+            this.condition = postTest ? argument : receiverClosure;
+            this.body = postTest ? receiverClosure : argument;
+            this.conditionNext = !postTest;
+        }
+
+        boolean hasNext() {
+            return !done;
+        }
+
+        ProtosCallRequest prepareCurrent() {
+            if (done) {
+                throw new IllegalStateException("loop child requested after termination");
+            }
+            return ProtosCallRequest.call(conditionNext ? condition : body, List.of(), activation);
+        }
+
+        void acceptCurrent(Object outcome) {
+            if (done) {
+                throw new IllegalStateException("loop child outcome accepted after termination");
+            }
+            if (!conditionNext) {
+                lastBodyResult = outcome;
+                conditionNext = true;
+                return;
+            }
+            if (outcome == exitValue) {
+                done = true;
+                return;
+            }
+            if (outcome != ProtosBooleanValue.TRUE && outcome != ProtosBooleanValue.FALSE) {
+                throw ProtosCoreErrors.signal(activation, ProtosCoreErrors.newError(activation));
+            }
+            conditionNext = false;
+        }
+
+        Object finish() {
+            return lastBodyResult;
         }
     }
 }

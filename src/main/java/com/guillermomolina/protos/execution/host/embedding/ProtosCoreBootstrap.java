@@ -907,6 +907,10 @@ public final class ProtosCoreBootstrap {
                         "ifTrue",
                         "ifFalse",
                         "ifTrueIfFalse",
+                        "whileTrue",
+                        "whileFalse",
+                        "untilTrue",
+                        "untilFalse",
                         "hash",
                         "future",
                         "parallel",
@@ -981,6 +985,15 @@ public final class ProtosCoreBootstrap {
                 object.readLocalSlot("not").orElse(null), object)) {
             throw new IllegalStateException(
                     "standard Object root must publish the standard not behavior");
+        }
+        for (String selector : java.util.List.of("whileTrue", "whileFalse", "untilTrue", "untilFalse")) {
+            if (!ProtosStandardObjectProtocol.isStandardLoopSelection(
+                    selector, object.readLocalSlot(selector).orElse(null), object)) {
+                throw new IllegalStateException(
+                        "standard Object root must publish the standard "
+                                + selector
+                                + " behavior");
+            }
         }
         for (String selector : java.util.List.of("ifTrue", "ifFalse", "ifTrueIfFalse")) {
             if (!ProtosStandardBooleanProtocol.isStandardConditionalSelection(

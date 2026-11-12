@@ -265,8 +265,8 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void ifTrueInsideWhileTrue() throws Exception {
-        // I115-H1-FIX: guarded control; its callback root serves the MISS.
-        runCase("if-true-in-while", 3, """
+        // The inline loop body and its nested inline ifTrue register no root.
+        runCase("if-true-in-while", 2, """
                 run: () => {
                     k: 0
                     hits: 0

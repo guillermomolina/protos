@@ -26,6 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
 import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -54,6 +55,58 @@ public final class ProtosStandardObjectProtocol {
             ProtosStandardObjectProtocol::ensure;
     private static final ProtosClosureValue STANDARD_ENSURE =
             ProtosClosureValue.nativeClosure(STANDARD_ENSURE_BODY);
+
+    /*
+     * EXECUTION_AND_CONTROL: the four standard Closure loops reached by
+     * ordinary dispatch (an extracted method, a reflective send, a receiver
+     * that is not a Closure literal). A lowered loop whose operands are
+     * Closures runs the same algorithm internally and never sends these
+     * selectors.
+     */
+    /**
+     * The four standard Closure loops: a pre-test loop's receiver is its
+     * condition, a post-test loop's receiver is its body; the loop ends when
+     * a completed condition is exactly {@code exitValue}.
+     */
+    enum StandardLoop {
+        WHILE_TRUE(false, false),
+        WHILE_FALSE(false, true),
+        UNTIL_TRUE(true, true),
+        UNTIL_FALSE(true, false);
+
+        private final boolean postTest;
+        private final ProtosBooleanValue exitValue;
+
+        StandardLoop(boolean postTest, boolean exitValue) {
+            this.postTest = postTest;
+            this.exitValue = exitValue ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+
+        boolean postTest() {
+            return postTest;
+        }
+
+        ProtosBooleanValue exitValue() {
+            return exitValue;
+        }
+    }
+
+    private static final ProtosNativeClosureBody STANDARD_WHILE_TRUE_BODY =
+            (activation, supplied) -> loop(StandardLoop.WHILE_TRUE, activation, supplied);
+    private static final ProtosNativeClosureBody STANDARD_WHILE_FALSE_BODY =
+            (activation, supplied) -> loop(StandardLoop.WHILE_FALSE, activation, supplied);
+    private static final ProtosNativeClosureBody STANDARD_UNTIL_TRUE_BODY =
+            (activation, supplied) -> loop(StandardLoop.UNTIL_TRUE, activation, supplied);
+    private static final ProtosNativeClosureBody STANDARD_UNTIL_FALSE_BODY =
+            (activation, supplied) -> loop(StandardLoop.UNTIL_FALSE, activation, supplied);
+    private static final ProtosClosureValue STANDARD_WHILE_TRUE =
+            ProtosClosureValue.nativeClosure(STANDARD_WHILE_TRUE_BODY);
+    private static final ProtosClosureValue STANDARD_WHILE_FALSE =
+            ProtosClosureValue.nativeClosure(STANDARD_WHILE_FALSE_BODY);
+    private static final ProtosClosureValue STANDARD_UNTIL_TRUE =
+            ProtosClosureValue.nativeClosure(STANDARD_UNTIL_TRUE_BODY);
+    private static final ProtosClosureValue STANDARD_UNTIL_FALSE =
+            ProtosClosureValue.nativeClosure(STANDARD_UNTIL_FALSE_BODY);
     private static final class StandardCaseOfBody implements ProtosNativeClosureBody {
         @Override
         public Object execute(ProtosActivation activation, List<?> arguments) {
@@ -161,6 +214,35 @@ public final class ProtosStandardObjectProtocol {
      */
     static boolean isOrdinaryConstructionReceiver(Object receiver) {
         return receiver instanceof ProtosObjectValue && ordinaryReceiver(receiver);
+    }
+
+    /**
+     * The standard loop a native body implements, or {@code null}; inside a
+     * Task the loop runs through structured dispatch, whose callback
+     * activations may suspend.
+     */
+    static StandardLoop standardLoopForImplementation(ProtosClosureValue closure) {
+        ProtosNativeClosureBody body = closure.nativeBody().orElse(null);
+        if (body == STANDARD_WHILE_TRUE_BODY) return StandardLoop.WHILE_TRUE;
+        if (body == STANDARD_WHILE_FALSE_BODY) return StandardLoop.WHILE_FALSE;
+        if (body == STANDARD_UNTIL_TRUE_BODY) return StandardLoop.UNTIL_TRUE;
+        if (body == STANDARD_UNTIL_FALSE_BODY) return StandardLoop.UNTIL_FALSE;
+        return null;
+    }
+
+    /** Whether {@code behavior} is the standard loop behavior of {@code selector}. */
+    static boolean isStandardLoopSelection(
+            String selector, Object behavior, ProtosObjectValue home) {
+        if (!home.isRootObject()) {
+            return false;
+        }
+        return switch (selector) {
+            case "whileTrue" -> behavior == STANDARD_WHILE_TRUE;
+            case "whileFalse" -> behavior == STANDARD_WHILE_FALSE;
+            case "untilTrue" -> behavior == STANDARD_UNTIL_TRUE;
+            case "untilFalse" -> behavior == STANDARD_UNTIL_FALSE;
+            default -> false;
+        };
     }
 
     static boolean isCanonicalStandardEnsureSelection(
@@ -276,6 +358,10 @@ public final class ProtosStandardObjectProtocol {
                     "ensure",
                     STANDARD_ENSURE);
         }
+        installLoop(object, "whileTrue", STANDARD_WHILE_TRUE);
+        installLoop(object, "whileFalse", STANDARD_WHILE_FALSE);
+        installLoop(object, "untilTrue", STANDARD_UNTIL_TRUE);
+        installLoop(object, "untilFalse", STANDARD_UNTIL_FALSE);
         if (!object.hasLocalSlot("caseOf")) {
             object.createLocalSlot(
                     "caseOf",
@@ -635,6 +721,55 @@ public final class ProtosStandardObjectProtocol {
             }
             state.leaveFrame(frame);
             throw laterTransfer;
+        }
+    }
+
+    private static void installLoop(
+            ProtosObjectValue object, String selector, ProtosClosureValue behavior) {
+        if (!object.hasLocalSlot(selector)) {
+            object.createLocalSlot(selector, behavior);
+        }
+    }
+
+    /*
+     * The receiver is the condition of a pre-test loop and the body of a
+     * post-test loop. After validating, in order, a semantic Closure
+     * receiver, exactly one argument and a semantic Closure argument, and
+     * before activating either, the loop activates each Closure with no
+     * arguments, ends normally when a condition result is exactly
+     * {@code exitValue}, continues on the other canonical Boolean, signals a
+     * fresh Error for any other result, and answers the last normal body
+     * result or canonical null.
+     */
+    private static Object loop(
+            StandardLoop kind,
+            ProtosActivation activation,
+            List<?> supplied) {
+        boolean postTest = kind.postTest();
+        ProtosBooleanValue exitValue = kind.exitValue();
+        if (!(activation.receiver() instanceof ProtosClosureValue receiver)) {
+            throw invalid(activation);
+        }
+        if (supplied.size() != 1
+                || !(supplied.get(0) instanceof ProtosClosureValue argument)) {
+            throw invalid(activation);
+        }
+        ProtosClosureValue condition = postTest ? argument : receiver;
+        ProtosClosureValue body = postTest ? receiver : argument;
+        Object lastBodyResult = ProtosNullValue.INSTANCE;
+        if (postTest) {
+            lastBodyResult = ProtosClosureInvoker.invoke(body, List.of(), activation);
+        }
+        while (true) {
+            Object conditionResult = ProtosClosureInvoker.invoke(condition, List.of(), activation);
+            if (conditionResult == exitValue) {
+                return lastBodyResult;
+            }
+            if (conditionResult != ProtosBooleanValue.TRUE
+                    && conditionResult != ProtosBooleanValue.FALSE) {
+                throw invalid(activation);
+            }
+            lastBodyResult = ProtosClosureInvoker.invoke(body, List.of(), activation);
         }
     }
 

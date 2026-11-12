@@ -119,15 +119,23 @@ public enum ProtosStructuredCallKind {
         }
     },
 
-    ARRAY_MATCH {
+    /*
+     * A protocol driven as a sequence of guest child calls whose every
+     * outcome it consumes before choosing the next: Array.match and the
+     * standard Closure loops. One driver serves both; its operations
+     * specialize on the prepared protocol.
+     */
+    CHILD_OUTCOME_SEQUENCE {
         @Override
         boolean admits(StructuredNativeInvocation prepared) {
-            return prepared.isStructuredArrayMatch();
+            return prepared.isStructuredArrayMatch() || prepared.isStructuredLoop();
         }
 
         @Override
         Object prepare(StructuredNativeInvocation prepared) {
-            return prepared.prepareStructuredArrayMatch();
+            return prepared.isStructuredLoop()
+                    ? prepared.prepareStructuredLoop()
+                    : prepared.prepareStructuredArrayMatch();
         }
     },
 

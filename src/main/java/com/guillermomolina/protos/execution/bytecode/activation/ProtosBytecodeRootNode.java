@@ -38,6 +38,7 @@ import java.util.List;
 import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedArgumentVector;
 import com.guillermomolina.protos.execution.ProtosPreparedCalls.StructuredNativeInvocation;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedBooleanCall;
+import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedLoopCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedIndexedEachCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedLocalEachCall;
 import com.guillermomolina.protos.execution.ProtosStructuredMapUpdateCalls.PreparedMapInitialDefinition;
@@ -3230,6 +3231,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @ConstantOperand(type = ProtosStructuredPhase.class, name = "phase")
     public static final class StructuredHasNext {
         @Specialization
+        public static boolean loop(
+                ProtosStructuredPhase phase,
+                PreparedLoopCall prepared) {
+            return prepared.hasNext();
+        }
+
+        @Specialization
         public static boolean localEach(
                 ProtosStructuredPhase phase,
                 PreparedLocalEachCall prepared) {
@@ -3328,6 +3336,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     @ConstantOperand(type = ProtosStructuredPhase.class, name = "phase")
     public static final class StructuredPrepareChildCall {
+        @Specialization
+        public static ProtosCallRequest loop(
+                ProtosStructuredPhase phase,
+                PreparedLoopCall prepared) {
+            return prepared.prepareCurrent();
+        }
+
         @Specialization
         public static ProtosCallRequest booleanCall(
                 ProtosStructuredPhase phase,
@@ -3468,6 +3483,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @ConstantOperand(type = ProtosStructuredPhase.class, name = "phase")
     public static final class StructuredAcceptChildOutcome {
         @Specialization
+        public static void loop(
+                ProtosStructuredPhase phase,
+                PreparedLoopCall prepared,
+                Object outcome) {
+            prepared.acceptCurrent(outcome);
+        }
+
+        @Specialization
         public static void caseOf(
                 ProtosStructuredPhase phase,
                 PreparedCaseOfCall prepared,
@@ -3594,6 +3617,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     /** Produces the protocol's result without a further guest child result. */
     @Operation
     public static final class StructuredFinish {
+        @Specialization
+        public static Object loop(PreparedLoopCall prepared) {
+            return prepared.finish();
+        }
+
         @Specialization
         public static Object localEach(PreparedLocalEachCall prepared) {
             return prepared.finish();
@@ -3815,6 +3843,52 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Fallback
         public static boolean doOther(Object value) {
             return false;
+        }
+    }
+
+    /**
+     * Whether ordinary lookup of a standard loop selector on a loop receiver
+     * selects the standard Closure loop: the receiver is a semantic Closure
+     * and has no nearer slot of that selector (every Closure delegates to the
+     * standard Object, whose loop slots are frozen). Any other receiver keeps
+     * ordinary selection. Sends nothing.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "selector")
+    public static final class IsStandardLoopReceiver {
+        @Specialization
+        public static boolean doClosure(String selector, ProtosClosureValue value) {
+            return !value.hasLocalSlot(selector);
+        }
+
+        @Fallback
+        public static boolean doOther(String selector, Object value) {
+            return false;
+        }
+    }
+
+    /**
+     * The Closure-domain validation of a standard loop operand, performed
+     * after every operand is evaluated and before either Closure is
+     * activated. A value that is not a semantic Closure signals the fresh
+     * standard Error; an invokable non-Closure is not accepted.
+     */
+    @Operation
+    public static final class RequireLoopClosure {
+        @Specialization
+        public static ProtosClosureValue doClosure(ProtosClosureValue value) {
+            return value;
+        }
+
+        @Fallback
+        public static Object doOther(
+                Object value,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root) {
+            root.requestCallerNeed(NEEDS_EXACT_ACTIVATION);
+            ProtosActivation activation = ProtosFrameArguments.activation(frame);
+            throw ProtosCoreErrors.signal(
+                    activation, ProtosCoreErrors.newError(activation));
         }
     }
 

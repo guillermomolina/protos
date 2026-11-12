@@ -100,7 +100,7 @@ final class ProtosI115PCompactBooleanWhileTest {
 
     @Test
     void primitiveWhileZeroExactSource() throws Exception {
-        Census census = runCompact(
+        Census census = runEliminatedLoop(
                 "primitive-while-zero",
                 """
                 run: () => {
@@ -112,9 +112,8 @@ final class ProtosI115PCompactBooleanWhileTest {
 
         assertEquals(2, census.rootCount());
         assertStructuredWhile(census);
-        // I115: the unified control lowering validates every control
-        // condition, a literal one included, with the canonical Boolean condition.
-        assertBooleanConversion(census);
+        // A literal false condition is decided at lowering: neither the
+        // condition nor the body is emitted, and the result is the same.
         assertFalse(census.names().stream()
                         .anyMatch(name -> name.contains("TryPrimitiveNumeric")),
                 "A literal Boolean condition must not become a numeric comparison");
@@ -124,7 +123,7 @@ final class ProtosI115PCompactBooleanWhileTest {
 
     @Test
     void falseConditionNeverExecutesObservableBody() throws Exception {
-        runCompact(
+        runEliminatedLoop(
                 "false-body",
                 """
                 run: () => {
@@ -227,7 +226,7 @@ final class ProtosI115PCompactBooleanWhileTest {
 
     @Test
     void consumedZeroIterationLoopReturnsCanonicalNull() throws Exception {
-        runCompact(
+        runEliminatedLoop(
                 "consumed-zero",
                 """
                 run: () => {
@@ -347,13 +346,13 @@ final class ProtosI115PCompactBooleanWhileTest {
                     BytecodeTier.UNCACHED,
                     run.getBytecodeNode().getTier());
 
-            Census before = census("reparse-before", run, true);
+            Census before = census("reparse-before", run, true, true);
 
             assertEquals(1, prepared.executable().execute().asInt());
 
             run.getRootNodes().ensureSourceInformation();
 
-            Census after = census("reparse-after", run, true);
+            Census after = census("reparse-after", run, true, true);
 
             assertEquals(before.runFull(), after.runFull());
             assertEquals(before.moduleFull(), after.moduleFull());
@@ -375,7 +374,7 @@ final class ProtosI115PCompactBooleanWhileTest {
 
             assertEquals(1, prepared.executable().execute().asInt());
 
-            Census cached = census("reparse-cached", run, true);
+            Census cached = census("reparse-cached", run, true, true);
 
             assertStructuredWhile(cached);
             assertBooleanConversion(cached);
@@ -572,13 +571,40 @@ final class ProtosI115PCompactBooleanWhileTest {
 
             ProtosBytecodeRootNode run = selectedRoot(prepared);
 
-            Census result = census(name, run, true);
+            Census result = census(name, run, true, true);
 
             assertion.accept(prepared.executable().execute());
 
             System.out.println(
                     "I115_P_CASE[" + name + "]_CORRECTNESS=PASS");
 
+            return result;
+        }
+    }
+
+    /*
+     * A loop whose literal condition is false is decided at lowering: the run
+     * root contains neither the condition validation nor a loop test, and
+     * executes to the same result as the loop.
+     */
+    private static Census runEliminatedLoop(
+            String name,
+            String source,
+            Consumer<Value> assertion) throws Exception {
+        try (ProtosStandaloneHostedSession session =
+                     openSession(name, source)) {
+            ProtosStandaloneHostedSession.PreparedTopLevel prepared =
+                    session.prepareTopLevel("run");
+            ProtosBytecodeRootNode run = selectedRoot(prepared);
+            Census result = census(name, run, true, false);
+            assertFalse(result.names().stream()
+                            .anyMatch(n -> n.contains("CanonicalControlCondition")),
+                    name + " tests an eliminated condition: " + result.names());
+            assertFalse(result.names().stream().anyMatch(n -> n.startsWith("branch.false")),
+                    name + " keeps a loop test: " + result.names());
+            assertion.accept(prepared.executable().execute());
+            System.out.println(
+                    "I115_P_CASE[" + name + "]_CORRECTNESS=PASS");
             return result;
         }
     }
@@ -619,7 +645,8 @@ final class ProtosI115PCompactBooleanWhileTest {
     private static Census census(
             String name,
             ProtosBytecodeRootNode run,
-            boolean admitted) {
+            boolean admitted,
+            boolean loopEmitted) {
 
         run.getRootNodes().ensureSourceInformation();
 
@@ -676,7 +703,9 @@ final class ProtosI115PCompactBooleanWhileTest {
                 }
             }
 
-            assertStructuredWhileInstructions(instructions);
+            if (loopEmitted) {
+                assertStructuredWhileInstructions(instructions);
+            }
         }
 
         return new Census(
@@ -728,13 +757,13 @@ final class ProtosI115PCompactBooleanWhileTest {
         assertTrue(
                 census.names().stream().anyMatch(
                         name -> name.contains(
-                                "ExperimentalCanonicalBooleanCondition")),
+                                "CanonicalControlCondition")),
                 "A non-literal condition must use the validating conversion");
     }
 
     /*
      * I115 unified control: one RichCompareLt site, then (possibly after
-     * continuation composition) MaterializePrimitiveNumericCarrier, then one
+     * continuation composition) one
      * canonical Boolean validation, then the While's branch.false. The
      * comparison and the branch need not be adjacent. The retired numeric
      * MISS operations stay absent.
@@ -743,15 +772,15 @@ final class ProtosI115PCompactBooleanWhileTest {
         assertEquals(1, names.stream().filter(name -> name.startsWith("c.RichCompareLt")).count(),
                 "The condition comparison is exactly one RichCompareLt: " + names);
         assertEquals(1, names.stream().filter(
-                        name -> name.startsWith("c.ExperimentalCanonicalBooleanCondition")).count(),
+                        name -> name.startsWith("c.CanonicalControlCondition")).count(),
                 "One canonical Boolean validation of the condition: " + names);
+        // The primitive Boolean carrier of the comparison feeds the
+        // validation directly; it is never materialized as a guest value.
         int compare = firstIndex(names, "c.RichCompareLt", 0);
-        int materialize = firstIndex(names, "c.MaterializePrimitiveNumericCarrier", compare + 1);
-        int condition = firstIndex(names, "c.ExperimentalCanonicalBooleanCondition", materialize + 1);
+        int condition = firstIndex(names, "c.CanonicalControlCondition", compare + 1);
         int branch = firstIndex(names, "branch.false", condition + 1);
-        assertTrue(compare >= 0 && materialize > compare && condition > materialize
-                        && branch > condition,
-                "comparison, materialization, validation, branch: " + names);
+        assertTrue(compare >= 0 && condition > compare && branch > condition,
+                "comparison, validation, branch: " + names);
         assertFalse(names.stream().anyMatch(name -> name.startsWith("c.Lt")),
                 "The retired Lt operation remains: " + names);
         for (String retired : List.of("TryPrimitiveNumeric", "IsCanonicalBooleanValue",

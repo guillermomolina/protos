@@ -21,6 +21,7 @@ import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.Prepare
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedCaseOfCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedEnsureCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedErrorHandlerCall;
+import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedLoopCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardImportCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardObjectCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedArrayEachCall;
@@ -72,6 +73,7 @@ final class ProtosPreparedCalls {
         final boolean ensure;
         final boolean errorHandler;
         final ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind;
+        final ProtosStandardObjectProtocol.StandardLoop loop;
         final boolean arrayEach;
         final boolean bytesEach;
         final boolean environmentEach;
@@ -88,6 +90,7 @@ final class ProtosPreparedCalls {
                 boolean ensure,
                 boolean errorHandler,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind,
+                ProtosStandardObjectProtocol.StandardLoop loop,
                 boolean arrayEach,
                 boolean bytesEach,
                 boolean environmentEach,
@@ -102,6 +105,7 @@ final class ProtosPreparedCalls {
             this.ensure = ensure;
             this.errorHandler = errorHandler;
             this.booleanKind = booleanKind;
+            this.loop = loop;
             this.arrayEach = arrayEach;
             this.bytesEach = bytesEach;
             this.environmentEach = environmentEach;
@@ -117,6 +121,7 @@ final class ProtosPreparedCalls {
                     (ensure ? 1 : 0)
                             + (errorHandler ? 1 : 0)
                             + (booleanKind != null ? 1 : 0)
+                            + (loop != null ? 1 : 0)
                             + (arrayEach ? 1 : 0)
                             + (bytesEach ? 1 : 0)
                             + (environmentEach ? 1 : 0)
@@ -139,6 +144,7 @@ final class ProtosPreparedCalls {
                 boolean ensure,
                 boolean errorHandler,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind,
+                ProtosStandardObjectProtocol.StandardLoop loop,
                 boolean arrayEach,
                 boolean bytesEach,
                 boolean environmentEach,
@@ -154,6 +160,7 @@ final class ProtosPreparedCalls {
                     ensure
                             || errorHandler
                             || booleanKind != null
+                            || loop != null
                             || arrayEach
                             || bytesEach
                             || environmentEach
@@ -172,6 +179,7 @@ final class ProtosPreparedCalls {
                     ensure,
                     errorHandler,
                     booleanKind,
+                    loop,
                     arrayEach,
                     bytesEach,
                     environmentEach,
@@ -227,6 +235,7 @@ final class ProtosPreparedCalls {
                                     ProtosStandardObjectProtocol.isStandardEnsureImplementation(closure),
                                     ProtosStandardErrorProtocol.isStandardHandleImplementation(closure),
                                     ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(closure),
+                                    ProtosStandardObjectProtocol.standardLoopForImplementation(closure),
                                     ProtosStandardArrayProtocol.isStandardEachImplementation(closure),
                                     ProtosStandardBytesProtocol.isStandardEachImplementation(closure),
                                     ProtosStandardEnvironmentProtocol.isStandardEachImplementation(closure),
@@ -265,6 +274,21 @@ final class ProtosPreparedCalls {
 
         boolean isStructuredBoolean() {
             return structured != null && structured.booleanKind != null;
+        }
+
+        boolean isStructuredLoop() { return structured != null && structured.loop != null; }
+
+        PreparedLoopCall prepareStructuredLoop() {
+            if (!isStructuredLoop()) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured loop capability");
+            }
+            return new PreparedLoopCall(
+                    structured.loop.postTest(),
+                    structured.loop.exitValue(),
+                    activation.receiver(),
+                    supplied,
+                    activation);
         }
 
         boolean isStructuredArrayEach() { return structured != null && structured.arrayEach; }
@@ -313,6 +337,7 @@ final class ProtosPreparedCalls {
                             || structured.ensure
                             || structured.errorHandler
                             || structured.booleanKind != null
+                            || structured.loop != null
                             || structured.arrayEach
                             || structured.bytesEach
                             || structured.environmentEach

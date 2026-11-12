@@ -6821,7 +6821,8 @@ final class CanonicalToBytecodeLowerer {
         I115ControlOperands staging = new I115ControlOperands(
                 operands, staged, inline, scratch, childResult, resumeValue);
         if (control.loop()) {
-            emitI115Loop(builder, control, staging, valueUsed, result, primitiveCarrierResult);
+            emitValidatedLoop(builder, control, staging, arguments, valueUsed, result,
+                    scratch, childResult, resumeValue, stager, primitiveCarrierResult);
         } else {
             emitI115Conditional(
                     builder, control, staging, null,
@@ -6839,6 +6840,67 @@ final class CanonicalToBytecodeLowerer {
 
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /*
+     * EXECUTION_AND_CONTROL: a standard loop validates, after every operand
+     * is evaluated and before activating either Closure, that the receiver
+     * and the argument are semantic Closures. A Closure literal is one by
+     * construction and is not tested. A receiver that is not a literal may
+     * also be any other object, or a Closure with a nearer slot of the
+     * selector: ordinary dispatch then selects that method, which receives
+     * the evaluated argument, a callback literal being created over the live
+     * frame. When such a callback cannot be created that way, the receiver
+     * is validated like the argument instead.
+     */
+    private void emitValidatedLoop(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            I115Control control,
+            I115ControlOperands staging,
+            java.util.List<CanonicalExpression> arguments,
+            boolean valueUsed,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            OperandStager stager,
+            boolean primitiveCarrierResult) {
+        BytecodeLocal receiver = staging.staged().get(0);
+        BytecodeLocal argument = staging.staged().get(1);
+        boolean receiverDynamic = !(staging.operands().get(0) instanceof CanonicalClosure);
+        boolean argumentDynamic = !(staging.operands().get(1) instanceof CanonicalClosure);
+        boolean selectsCustomBehavior = receiverDynamic && admitsSelectedCallbacks(arguments);
+
+        if (selectsCustomBehavior) {
+            builder.beginIfThenElse();
+            builder.beginIsStandardLoopReceiver(control.selector);
+            builder.emitLoadLocal(receiver);
+            builder.endIsStandardLoopReceiver();
+        }
+        builder.beginBlock();
+        if (receiverDynamic && !selectsCustomBehavior) {
+            emitRequireLoopClosure(builder, receiver);
+        }
+        if (argumentDynamic) {
+            emitRequireLoopClosure(builder, argument);
+        }
+        emitI115Loop(builder, control, staging, valueUsed, result, primitiveCarrierResult);
+        builder.endBlock();
+        if (selectsCustomBehavior) {
+            emitSelectedConditionalSend(
+                    builder, control.selector, receiver, arguments,
+                    java.util.Arrays.asList(argument),
+                    valueUsed ? result : null,
+                    scratch, childResult, resumeValue, stager, primitiveCarrierResult);
+            builder.endIfThenElse();
+        }
+    }
+
+    private void emitRequireLoopClosure(
+            ProtosBytecodeRootNodeGen.Builder builder, BytecodeLocal operand) {
+        builder.beginRequireLoopClosure();
+        builder.emitLoadLocal(operand);
+        builder.endRequireLoopClosure();
     }
 
     /*
@@ -6879,11 +6941,37 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue,
             OperandStager stager,
             boolean primitiveCarrierResult) {
+        emitSelectedConditionalSend(builder, selector, receiver, arguments, null, result,
+                scratch, childResult, resumeValue, stager, primitiveCarrierResult);
+    }
+
+    /*
+     * As above; an argument whose value is already in {@code evaluated} (same
+     * index, non-null) is passed as is instead of being evaluated again.
+     */
+    private void emitSelectedConditionalSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            String selector,
+            BytecodeLocal receiver,
+            java.util.List<CanonicalExpression> arguments,
+            java.util.List<BytecodeLocal> evaluated,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            OperandStager stager,
+            boolean primitiveCarrierResult) {
         builder.beginBlock();
         BytecodeLocal method = builder.createLocal("conditionalMethod", null);
         emitGetMethod(builder, selector, receiver, method);
         java.util.List<BytecodeLocal> argumentValues = new java.util.ArrayList<>(arguments.size());
-        for (CanonicalExpression argument : arguments) {
+        for (int index = 0; index < arguments.size(); index++) {
+            CanonicalExpression argument = arguments.get(index);
+            BytecodeLocal known = evaluated == null ? null : evaluated.get(index);
+            if (known != null) {
+                argumentValues.add(known);
+                continue;
+            }
             BytecodeLocal value = builder.createLocal("conditionalArgument", null);
             if (argument instanceof CanonicalClosure closure) {
                 builder.beginStoreLocal(value);

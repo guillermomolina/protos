@@ -18,6 +18,8 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -430,10 +432,14 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
 
                 assertInteger(1, root.getCallTarget().call(probe.module()));
                 assertEquals(1, probe.calls.get());
-                assertEquals(List.of(4), probe.depths(), () -> "stacks=" + probe.stacks);
+                // callback, structured helper, the native ensure, run, module.
+                assertEquals(List.of(5), probe.depths(), () -> "stacks=" + probe.stacks);
                 assertFalse(
                         assertInstanceOf(ProtosBytecodeRootNode.class, probe.stacks.get(0).get(1))
                                 .isSemanticActivationRoot());
+                assertEquals(
+                        "ProtosBuiltinCallRootNode",
+                        probe.stacks.get(0).get(2).getClass().getSimpleName());
             } finally {
                 context.leave();
             }
@@ -667,7 +673,7 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
 
     /**
      * A non-admitted pair inside {@code run}: the probing callback runs in its
-     * own physical root entered from the structured-dispatch helper root.
+     * own physical root, invoked by the loop in run's own root.
      */
     private static void assertStructuredWhilePreserved(String characters) throws Exception {
         assertStructuredWhilePreserved(characters, 1);
@@ -686,14 +692,17 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                 // Every preserved shape runs exactly one body ending in n = 1 (D201).
                 assertInteger(1, root.getCallTarget().call(probe.module()));
 
-                assertEquals(List.of(4), probe.depths(), () -> characters + " stacks=" + probe.stacks);
+                // The loop runs in run's own bytecode, which invokes the
+                // non-admitted callback directly: callback, run, module.
+                assertEquals(List.of(3), probe.depths(), () -> characters + " stacks=" + probe.stacks);
                 List<RootNode> stack = probe.stacks.get(0);
                 ProtosBytecodeRootNode callback =
                         assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0));
-                assertFalse(
-                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1))
-                                .isSemanticActivationRoot());
-                assertSame(root, stack.get(3));
+                ProtosBytecodeRootNode loopRoot =
+                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1));
+                assertTrue(loopRoot.isSemanticActivationRoot(), characters);
+                assertNotSame(callback, loopRoot, characters);
+                assertSame(root, stack.get(2));
 
                 callback.getRootNodes().ensureComplete();
                 assertEquals(callbackRootTags, rootTags(callback.getBytecodeNode()), characters);
@@ -703,7 +712,7 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
         }
     }
 
-    /** A native {@code probe} binding recording the guest CallTarget stack of every call. */
+    /** A native {@code probe} binding recording, below its own native root, the guest CallTarget stack of every call. */
     private static final class Probe {
         final List<List<RootNode>> stacks = new ArrayList<>();
         final AtomicInteger calls = new AtomicInteger();
@@ -730,7 +739,13 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                                                                     .getRootNode());
                                                     return null;
                                                 });
-                                stacks.add(stack);
+                                // The probe's own native root is the first physical
+                                // frame; the guest stack below it is recorded.
+                                assertEquals(
+                                        "ProtosBuiltinCallRootNode",
+                                        stack.get(0).getClass().getSimpleName(),
+                                        () -> "stack=" + stack);
+                                stacks.add(List.copyOf(stack.subList(1, stack.size())));
                                 return ProtosNullValue.INSTANCE;
                             }));
             return module;

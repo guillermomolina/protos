@@ -352,7 +352,7 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.ARRAY_MATCH);
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.CHILD_OUTCOME_SEQUENCE);
         builder.emitLoadLocal(structuredInvocation);
         builder.endIsStructuredCall();
 
@@ -360,7 +360,7 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredArrayMatch);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.ARRAY_MATCH);
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.CHILD_OUTCOME_SEQUENCE);
         builder.emitLoadLocal(structuredInvocation);
         builder.endPrepareStructuredCall();
         builder.endStoreLocal();
