@@ -2445,9 +2445,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class ObserveMultipleCreatePrefix {
         @Specialization
-        public static Object[] perform(ProtosActivation activation, int required, Object source) {
-            return ProtosFrameLocalBindings.observeMultipleCreatePrefix(activation, required, source)
-                    .toArray();
+        public static Object[] perform(
+                int required,
+                Object source,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root) {
+            java.util.List<Object> observed =
+                    ProtosFrameLocalBindings.multipleCreatePrefixOrNull(required, source);
+            if (observed == null) {
+                throw lexicalMutationError(lexicalActivation(frame, root));
+            }
+            return observed.toArray();
         }
     }
 
@@ -2875,6 +2883,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return validated == ProtosBooleanValue.TRUE
                     ? ProtosBooleanValue.FALSE
                     : ProtosBooleanValue.TRUE;
+        }
+    }
+
+    /** Reads the invocation receiver directly from its ordinary call header. */
+    @Operation(storeBytecodeIndex = false)
+    public static final class LoadCurrentReceiver {
+        @Specialization
+        public static Object perform(@Bind VirtualFrame frame) {
+            return ProtosFrameArguments.currentReceiver(frame.getArguments());
         }
     }
 

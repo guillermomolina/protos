@@ -53,8 +53,6 @@ final class ProtosI115LazyCapturedFrameTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
 
-    private static final String INSTALL = "InstallFrameLexicalAuthority";
-    private static final String ENSURE = "EnsureLiveFrameLexicalAuthority";
 
     // ---- Bytecode structure ------------------------------------------------------
 
@@ -64,8 +62,11 @@ final class ProtosI115LazyCapturedFrameTest {
             ClosureUnderTest plan =
                     closurePlan(fixture, "(a) => { unused: () => 1\n a }");
             List<String> names = instructionNames(activationNode(plan));
-            assertNone(names, INSTALL);
-            assertNone(names, ENSURE);
+            // PLAT066-C: the nested Closure uses nothing of this activation.
+            assertNone(names, "CreateCell");
+            assertNone(names, "CaptureClosureCells");
+            assertNone(names, "PublishCurrentClosureContext");
+            assertNone(names, "EnsureCurrentClosureLexicalView");
         });
     }
 
@@ -74,11 +75,15 @@ final class ProtosI115LazyCapturedFrameTest {
         withFixture(fixture -> {
             ClosureUnderTest plan = closurePlan(fixture, "(x) => { g: () => x\n g }");
             List<String> names = instructionNames(activationNode(plan));
-            assertNone(names, INSTALL);
-            assertEquals(1, count(names, ENSURE), names::toString);
+            // The captured x is a cell created once, before the Closure that
+            // captures it; nothing binds or publishes the frame.
+            assertEquals(1, count(names, "CreateCell"), names::toString);
             assertTrue(
-                    indexOf(names, ENSURE) < indexOf(names, "MaterializeCurrentClosure"),
-                    () -> "promotion must precede the capture: " + names);
+                    indexOf(names, "CreateCell") < indexOf(names, "MaterializeCurrentClosure"),
+                    () -> "the cell must exist before the capture: " + names);
+            assertContains(names, "CaptureClosureCells");
+            assertNone(names, "PublishCurrentClosureContext");
+            assertNone(names, "EnsureCurrentClosureLexicalView");
         });
     }
 
@@ -87,11 +92,13 @@ final class ProtosI115LazyCapturedFrameTest {
         withFixture(fixture -> {
             ClosureUnderTest plan = closurePlan(fixture, "(a) => { b: a\n context }");
             List<String> names = instructionNames(activationNode(plan));
-            assertNone(names, INSTALL);
-            assertEquals(1, count(names, ENSURE), names::toString);
+            // The frame is bound to its live view once, at the observation
+            // itself, after the earlier statements; there is no entry prologue.
+            assertEquals(1, count(names, "PublishCurrentClosureContext"), names::toString);
             assertTrue(
-                    indexOf(names, ENSURE) < indexOf(names, "LoadIntrinsic"),
-                    () -> "promotion must precede the observation: " + names);
+                    indexOf(names, "CreateLexicalLocal") < indexOf(names, "PublishCurrentClosureContext"),
+                    () -> "the observation binds the frame where it occurs: " + names);
+            assertNone(names, "EnsureCurrentClosureLexicalView");
         });
     }
 
@@ -100,9 +107,11 @@ final class ProtosI115LazyCapturedFrameTest {
         withFixture(fixture -> {
             ClosureUnderTest plan = closurePlan(fixture, "(a) => { b: a\n b = a\n b }");
             List<String> names = instructionNames(activationNode(plan));
-            assertNone(names, INSTALL);
-            assertNone(names, ENSURE);
-            assertContains(names, "AssignRootFrameLocal");
+            // Own bindings are plain frame locals: no cell, no view, no publication.
+            assertNone(names, "CreateCell");
+            assertNone(names, "PublishCurrentClosureContext");
+            assertNone(names, "EnsureCurrentClosureLexicalView");
+            assertContains(names, "store.local");
         });
     }
 
@@ -113,8 +122,10 @@ final class ProtosI115LazyCapturedFrameTest {
                     closurePlan(fixture,
                             "x: 7\n" + "(a) => { y: x\n" + "x: 2\n" + "g: () => y\n" + "g }");
             List<String> names = instructionNames(activationNode(plan));
-            assertContains(names, INSTALL);
-            assertNone(names, ENSURE);
+            // A read of an own name before its creation is presence-aware:
+            // while the own x is absent it selects the outer one.
+            assertContains(names, "LoadLexicalLocal");
+            assertNone(names, "EnsureCurrentClosureLexicalView");
             ProtosClosureValue g = assertInstanceOf(
                     ProtosClosureValue.class,
                     plan.plan.executeBytecodeActivationForTesting(
@@ -249,10 +260,11 @@ final class ProtosI115LazyCapturedFrameTest {
         withFixture(fixture -> {
             ClosureUnderTest plan =
                     closurePlan(fixture, "(x) => { g: () => ^x\n" + "g()\n" + "99 }");
-            assertContains(instructionNames(activationNode(plan)), ENSURE);
+            // The returning Closure captures x as a cell of this activation.
+            assertContains(instructionNames(activationNode(plan)), "CaptureClosureCells");
             ProtosObjectValue argument = newObject();
-            assertSame(argument, plan.plan.executeBytecodeActivationForTesting(
-                    deferredInvocation(fixture, plan.closure, List.of(argument))));
+            assertSame(argument, ProtosClosureInvoker.invoke(
+                    plan.closure, List.of(argument), fixture.module));
         });
     }
 

@@ -503,17 +503,21 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
 
                 ProtosActivation invocation = invocationOf(module, closure);
                 /*
-                 * A nearer PRESENT binding, already established before
-                 * resolution even runs, must win over the statically proven
-                 * owner: the static accessor owner must not be used at all.
+                 * D179 C0: this Closure never exposes its Context, so guest
+                 * code cannot create a binding nearer than the module's and
+                 * the module binding is the write's destination. A binding
+                 * injected from Java into the unobserved Context is not part
+                 * of that selection and stays untouched. Guest-visible
+                 * shadowing through an observed Context is covered by
+                 * ProtosPerf037CCapturedLexicalReadTest.
                  */
                 invocation.context().createLocalSlot("x", nearer);
 
                 Object result = plan.executeBytecodeActivationForTesting(invocation);
 
                 assertSame(replacement, result);
-                assertSame(replacement, invocation.context().readLocalSlot("x").orElseThrow());
-                assertSame(original, module.context().readLocalSlot("x").orElseThrow());
+                assertSame(nearer, invocation.context().readLocalSlot("x").orElseThrow());
+                assertSame(replacement, module.context().readLocalSlot("x").orElseThrow());
             } finally {
                 context.leave();
             }
@@ -643,17 +647,18 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                 /*
                  * The rebuild lowers the Closure in isolation, in a brand new
                  * BytecodeRootNodes group that does not include the module
-                 * root: the owner BytecodeLocal is unavailable, so the exact
-                 * old runtime-authority fallback path must still be used.
+                 * root. A module binding lives in the module Context reached
+                 * through the captured environment, so the write needs no
+                 * owner frame local and keeps its safe module write path.
                  */
                 assertTrue(
                         instructionNames.stream()
-                                .anyMatch(name -> name.contains("ResolveCapturedWritableLexicalTarget")),
-                        () -> "isolated rebuild lost its safe write fallback path: " + instructionNames);
+                                .anyMatch(name -> name.contains("SelectWriteGlobal")),
+                        () -> "isolated rebuild lost its safe write path: " + instructionNames);
                 assertTrue(
                         instructionNames.stream()
-                                .anyMatch(name -> name.contains("AssignCapturedFrameLocal")),
-                        () -> "isolated rebuild lost its safe write fallback path: " + instructionNames);
+                                .anyMatch(name -> name.contains("WriteGlobal")),
+                        () -> "isolated rebuild lost its safe write path: " + instructionNames);
                 assertTrue(
                         instructionNames.stream()
                                 .noneMatch(
@@ -684,6 +689,19 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
         System.out.println("ISOLATED_GROUP_SAFE_WRITE_FALLBACK=PASS");
     }
 
+    private static int indexOfContaining(List<String> names, String operation) {
+        return indexOfContaining(names, operation, 0);
+    }
+
+    private static int indexOfContaining(List<String> names, String operation, int from) {
+        for (int index = Math.max(from, 0); index < names.size(); index++) {
+            if (names.get(index).contains(operation)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
     private static void assertMaterializedWritePath(
             ProtosClosureExecutionPlan plan, CanonicalAssign capturedWrite) {
         assertInstanceOf(
@@ -698,17 +716,15 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                         .map(ProtosInstructionNames::of)
                         .toList();
 
+        // The destination is selected once, before the right-hand side, and
+        // written directly in the module Context: no generic lookup by name.
+        int select = indexOfContaining(instructionNames, "SelectWriteGlobal");
+        int write = indexOfContaining(instructionNames, "WriteGlobal", select + 1);
+        assertTrue(select >= 0 && write > select,
+                () -> "captured write did not select its destination before writing: " + instructionNames);
         assertTrue(
-                instructionNames.stream()
-                        .anyMatch(
-                                name ->
-                                        name.contains(
-                                                "ResolveCapturedMaterializedWritableLexicalTarget")),
-                () -> "captured write did not select the materialized resolve fast path: " + instructionNames);
-        assertTrue(
-                instructionNames.stream()
-                        .anyMatch(name -> name.contains("AssignCapturedMaterializedLocal")),
-                () -> "captured write did not select the materialized assign fast path: " + instructionNames);
+                instructionNames.stream().noneMatch(name -> name.contains("AccessNamedLexical")),
+                () -> "captured write fell back to the generic lookup: " + instructionNames);
         assertTrue(
                 instructionNames.stream()
                         .noneMatch(name -> name.equals("ResolveCapturedWritableLexicalTarget")),

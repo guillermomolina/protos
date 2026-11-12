@@ -443,6 +443,16 @@ final class ProtosFrameArguments {
         return dispatchedCallN(null, DIRECT_CLOSURE_CALL, task, null, null, supplied);
     }
 
+    /** The current receiver, without publishing the invocation's activation. */
+    static Object currentReceiver(Object[] arguments) {
+        if (hasPublishedActivation(arguments)) {
+            return publishedActivation(arguments).receiver();
+        }
+        return isDirectClosureCall(arguments)
+                ? compactClosure(arguments).capturedReceiver()
+                : arguments[RECEIVER_INDEX];
+    }
+
     /** Whether a B5 array built for the dispatcher is an unbound function call. */
     static boolean isFunctionCall(Object[] arguments) {
         return arguments[RECEIVER_INDEX] == DIRECT_CLOSURE_CALL;

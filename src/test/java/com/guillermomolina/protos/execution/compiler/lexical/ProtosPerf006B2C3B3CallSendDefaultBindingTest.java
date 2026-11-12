@@ -9,6 +9,10 @@
  * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
  * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
  * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.execution;
 
@@ -55,7 +59,7 @@ final class ProtosPerf006B2C3B3CallSendDefaultBindingTest {
                 ProtosClosureValue child = semanticClosure(childDef, ProtosClosureExecutionPlan.bytecode(childDef, language, childSource, childRoot), module);
                 module.context().createLocalSlot("child", child);
 
-                String chars = "(first: child(), second: first) => { second }";
+                String chars = "(first: child(), second: first) => { context\n second }";
                 Source source = Source.newBuilder(ProtosLanguage.ID, chars, "perf006-b2c3b3-default-call.protos").build();
                 CanonicalClosure def = closureDefinition(chars);
                 ProtosClosureValue semantic = semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, source), module);
@@ -95,7 +99,7 @@ final class ProtosPerf006B2C3B3CallSendDefaultBindingTest {
                 CanonicalClosure methodDef = closureDefinition(methodChars);
                 receiver.createLocalSlot("pick", semanticClosure(methodDef, ProtosClosureExecutionPlan.bytecode(methodDef, language, methodSource), module));
 
-                String chars = "(head, fallback: head.pick()) => { fallback }";
+                String chars = "(head, fallback: head.pick()) => { context\n fallback }";
                 Source source = Source.newBuilder(ProtosLanguage.ID, chars, "perf006-b2c3b3-default-send.protos").build();
                 CanonicalClosure def = closureDefinition(chars);
                 ProtosClosureValue semantic = semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, source), module);

@@ -139,6 +139,14 @@ final class ProtosDebuggerScope implements TruffleObject {
                 activation.context(),
                 names);
 
+        List<String> capturedNames = capturedCellNames();
+        var cells = activation.capturedCellsForRuntime();
+        for (int index = 0; index < capturedNames.size(); index++) {
+            if (cells[index].isPresentForRuntime()) {
+                names.add(capturedNames.get(index));
+            }
+        }
+
         for (ProtosObjectValue lexical :
                 activation.capturedLexicalContexts()) {
             appendLocalNames(lexical, names);
@@ -152,11 +160,7 @@ final class ProtosDebuggerScope implements TruffleObject {
             }
         }
         appendReceiverDelegationNames(names);
-        if (!inlineCallbackBindings.isEmpty()) {
-            // The callback shadows a parent binding without duplicating its name.
-            return List.copyOf(new java.util.LinkedHashSet<>(names));
-        }
-        return List.copyOf(names);
+        return List.copyOf(new java.util.LinkedHashSet<>(names));
     }
 
     private static void appendLocalNames(
@@ -188,6 +192,15 @@ final class ProtosDebuggerScope implements TruffleObject {
         }
     }
 
+    /** Tooling reads the shared cells live; no captured value is copied. */
+    private List<String> capturedCellNames() {
+        var closure = activation.invokedClosureOrNullForRuntime();
+        if (closure == null || activation.capturedCellsForRuntime().length == 0) {
+            return List.of();
+        }
+        return closure.executionPlanForRuntimeInvocation().capturedCellNamesForTooling();
+    }
+
     private Optional<Object> rawVisibleValue(String member) {
         if (inlineCallbackBindings.containsKey(member)) {
             return Optional.of(inlineCallbackBindings.get(member));
@@ -197,6 +210,17 @@ final class ProtosDebuggerScope implements TruffleObject {
                         .readLocalSlot(member);
         if (local.isPresent()) {
             return local;
+        }
+
+        List<String> capturedNames = capturedCellNames();
+        var cells = activation.capturedCellsForRuntime();
+        for (int index = 0; index < capturedNames.size(); index++) {
+            if (capturedNames.get(index).equals(member)) {
+                Object value = cells[index].valueOrNullForRuntime();
+                if (value != null) {
+                    return Optional.of(value);
+                }
+            }
         }
 
         for (ProtosObjectValue lexical :

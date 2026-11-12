@@ -79,7 +79,8 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                     1,
                     reads.size(),
                     () -> "expected one module-global read in " + names(run));
-            assertEquals("holder", constantArgument(reads.get(0), "name"));
+            // The name operand is the interned TruffleString of the attribute.
+            assertEquals("holder", constantArgument(reads.get(0), "name").toString());
             assertTrue(
                     (Integer) constantArgument(reads.get(0), "lexicalDepth") >= 1,
                     "the proven lexical depth is an immediate constant operand");

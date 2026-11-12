@@ -211,6 +211,14 @@ final class ProtosBytecodeClosureExecutionPlan {
         return definition;
     }
 
+    /** Names in the same order as the Closure's shared captured-cell array. */
+    java.util.List<String> capturedCellNamesForTooling() {
+        return bindingAnalysis.scopeOf(definition)
+                .map(scope -> scope.freeCells().stream()
+                        .map(CanonicalBindingIdentity::name).toList())
+                .orElse(java.util.List.of());
+    }
+
     ProtosLanguage language() {
         return language;
     }

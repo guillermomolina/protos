@@ -499,6 +499,28 @@ final class ProtosPerf025LazyLexicalCaptureTest {
             assertEquals("1", integerValue(interop.readMember(scope, "x")));
             invokeDirect(writer, module, integer(9));
             assertEquals("9", integerValue(interop.readMember(scope, "x")));
+
+            Object members = interop.getMembers(scope);
+            long occurrences = 0;
+            for (long index = 0; index < interop.getArraySize(members); index++) {
+                if ("x".equals(interop.asString(interop.readArrayElement(members, index)))) {
+                    occurrences++;
+                }
+            }
+            assertEquals(1L, occurrences);
+
+            // Own locals shadow free cells; removing the local reveals the live capture.
+            invocation.context().createLocalSlot("x", integer(12));
+            assertEquals("12", integerValue(interop.readMember(scope, "x")));
+            invocation.context().removeLocalSlot("x");
+            assertEquals("9", integerValue(interop.readMember(scope, "x")));
+
+            invokeDirect(writer, module, ProtosNullValue.INSTANCE);
+            assertSame(ProtosNullValue.INSTANCE, interop.readMember(scope, "x"));
+            reader.capturedCellsForRuntime()[0].clearForRuntime();
+            assertFalse(interop.isMemberReadable(scope, "x"));
+            reader.capturedCellsForRuntime()[0].setForRuntime(integer(7));
+            assertEquals("7", integerValue(interop.readMember(scope, "x")));
         });
         System.out.println("DEBUGGER_SCOPE_PROJECTION=PASS");
     }

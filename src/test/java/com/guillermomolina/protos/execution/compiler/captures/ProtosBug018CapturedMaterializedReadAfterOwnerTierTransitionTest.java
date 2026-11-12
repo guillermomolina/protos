@@ -148,7 +148,9 @@ final class ProtosBug018CapturedMaterializedReadAfterOwnerTierTransitionTest {
 
         Object observed = module.context().readLocalSlot("observed").orElseThrow();
 
-        // The read exercised the proven materialized fast path, not the generic lookup.
+        // The read exercised the proven direct path, not the generic lookup: the
+        // escaped Closure reads x through the cell it captured, which never
+        // consults the owner frame's local metadata.
         List<String> readerInstructions =
                 r1.executionPlan()
                         .orElseThrow()
@@ -159,12 +161,12 @@ final class ProtosBug018CapturedMaterializedReadAfterOwnerTierTransitionTest {
                         .map(ProtosInstructionNames::of)
                         .toList();
         assertTrue(
-                readerInstructions.stream()
-                        .anyMatch(name -> name.contains("SelectCapturedMaterializedOwnerFrame")),
-                () -> "captured read did not take the materialized fast path: " + readerInstructions);
+                readerInstructions.stream().anyMatch(name -> name.contains("LoadCapturedCell"))
+                        && readerInstructions.stream().anyMatch(name -> name.contains("LoadCell")),
+                () -> "captured read did not take the captured cell path: " + readerInstructions);
         assertTrue(
-                readerInstructions.stream().anyMatch(name -> name.startsWith("load.local.mat")),
-                () -> "captured read did not load through LoadLocalMaterialized: " + readerInstructions);
+                readerInstructions.stream().noneMatch(name -> name.contains("AccessNamedLexical")),
+                () -> "captured read fell back to the generic lookup: " + readerInstructions);
 
         return observed;
     }

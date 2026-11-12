@@ -12,7 +12,7 @@
  *
  * Software distributed under the License is distributed on an "AS IS" basis,
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the LICENSE.
+ * the specific language governing rights and limitations under the License.
  */
 
 package com.guillermomolina.protos.execution;
@@ -28,6 +28,7 @@ import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.bytecode.GenerateBytecode;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.InteropLibrary;
@@ -129,7 +130,7 @@ final class ProtosPerf006B5ABytecodeDebuggerScopeTest {
             assertEquals(1, generators, "exactly one @GenerateBytecode interpreter");
         }
 
-        // I111-A / PLAT065-A: the single interpreter tags semantic roots explicitly.
+        // The unified interpreter uses automatic root and root-body tags.
         Path semanticPath =
                 Path.of(
                         "src", "main", "java", "com", "guillermomolina", "protos",
@@ -137,15 +138,19 @@ final class ProtosPerf006B5ABytecodeDebuggerScopeTest {
                         "ProtosBytecodeRootNode.java");
         String semantic = Files.readString(semanticPath);
 
+        assertEquals(Boolean.TRUE,
+                GenerateBytecode.class.getMethod("enableRootTagging").getDefaultValue());
+        assertEquals(Boolean.TRUE,
+                GenerateBytecode.class.getMethod("enableRootBodyTagging").getDefaultValue());
         assertTrue(semantic.contains("enableTagInstrumentation = true"));
-        assertTrue(semantic.contains("enableRootTagging = false"));
-        assertTrue(semantic.contains("enableRootBodyTagging = false"));
+        assertFalse(semantic.contains("enableRootTagging = false"));
+        assertFalse(semantic.contains("enableRootBodyTagging = false"));
         assertTrue(
                 semantic.contains(
                         "tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class"));
 
         System.out.println("PERF006_B5A_BYTECODE_TAG_TREE_SCOPE_LIBRARY=YES");
-        System.out.println("PERF006_B5A_ROOT_TAG_EXPANSION=NO");
+        System.out.println("PERF006_B5A_ROOT_TAGGING=AUTOMATIC");
     }
 
     private static VirtualFrame frame(ProtosActivation activation) {

@@ -30,12 +30,12 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
-import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
+import com.oracle.truffle.api.interop.InteropLibrary;
 import java.util.List;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
@@ -57,7 +57,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
 
                 String characters =
-                        "(head, literalDefault: \"fallback\", inherited: head) => { inherited }";
+                        "(head, literalDefault: \"fallback\", inherited: head) => { context\n inherited }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -91,11 +91,9 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                                 .executeActivation(invocation);
 
                 assertSame(head, result);
-                ProtosStringValue literal =
-                        assertInstanceOf(
-                                ProtosStringValue.class,
-                                ProtosLexicalFallback.readByName(invocation, "literalDefault").orElseThrow());
-                assertEquals("fallback", literal.value());
+                Object literal =
+                        ProtosLexicalFallback.readByName(invocation, "literalDefault").orElseThrow();
+                assertEquals("fallback", InteropLibrary.getUncached().asString(literal));
                 assertSame(
                         head,
                         ProtosLexicalFallback.readByName(invocation, "inherited").orElseThrow());
@@ -195,7 +193,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
 
                 String characters =
-                        "(head, fallback: head, ...tail) => { tail }";
+                        "(head, fallback: head, ...tail) => { context\n tail }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,

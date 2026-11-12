@@ -54,6 +54,7 @@ public final class ProtosActivation {
     private ProtosDynamicControlState directDynamicControlState;
     private static final ProtosLexicalCell[] NO_CAPTURED_CELLS = new ProtosLexicalCell[0];
     private ProtosLexicalCell[] capturedCells = NO_CAPTURED_CELLS;
+    private ProtosClosureValue invokedClosure;
 
     /*
      * I143: allocated only for a name-bearing invocation. It describes
@@ -545,12 +546,18 @@ public final class ProtosActivation {
     private static ProtosActivation withCapturedCells(
             ProtosActivation activation, ProtosClosureValue closure) {
         activation.capturedCells = closure.capturedCellsForRuntime();
+        activation.invokedClosure = closure;
         return activation;
     }
 
     /** I115: the invoked Closure's captured cells; empty for other activations. */
     public ProtosLexicalCell[] capturedCellsForRuntime() {
         return capturedCells;
+    }
+
+    /** Source of the captured-cell layout; null for non-invocation activations. */
+    public ProtosClosureValue invokedClosureOrNullForRuntime() {
+        return invokedClosure;
     }
 
     public static ProtosActivation forObjectConstruction(

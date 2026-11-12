@@ -276,7 +276,7 @@ final class CanonicalBindingAnalysis {
                 || ownScope == null
                 || parentScope == null
                 || !parentHasFrameLayout
-                || !multipleCreateIdentities.isEmpty()
+                || !ownsInlineMultipleCreations(ownScope)
                 || !parameterIdentities.isEmpty()) {
             return false;
         }
@@ -326,6 +326,22 @@ final class CanonicalBindingAnalysis {
         return true;
     }
 
+    /** Multiple targets use owned locals without observable structural mutation. */
+    private boolean ownsInlineMultipleCreations(CanonicalLexicalScope scope) {
+        if (scope.observesContext() && !multipleCreateIdentities.isEmpty()) {
+            return false;
+        }
+        for (List<CanonicalBindingIdentity> identities : multipleCreateIdentities.values()) {
+            for (CanonicalBindingIdentity identity : identities) {
+                if (identity.owner() != scope
+                        || storageOf(identity) != CanonicalLexicalScope.Storage.LOCAL) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     /**
      * The parameterized counterpart of {@link
      * #admitsOwnBindingsAndDirectParentCaptures} for a callback whose
@@ -343,7 +359,7 @@ final class CanonicalBindingAnalysis {
             boolean parentHasFrameLayout) {
         if (ownScope == null
                 || parameterIdentities.isEmpty()
-                || !multipleCreateIdentities.isEmpty()) {
+                || !ownsInlineMultipleCreations(ownScope)) {
             return false;
         }
         for (CanonicalBindingIdentity identity : parameterIdentities.values()) {

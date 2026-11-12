@@ -2300,9 +2300,11 @@ final class CanonicalToBytecodeLowerer {
      * are ignored without rest, so no upper-bound check is emitted. A rest
      * parameter binds the frozen Array of the remaining supplied values.
      *
-     * <p>I115-S1c-L: parameters are established at entry, before any
-     * operation of the body can publish the frame or observe the Context, so
-     * no duplicate or structural check applies to them.
+     * <p>A default may observe and mutate this invocation's Context before
+     * its own parameter or a later parameter is established. From the first
+     * default onward, binding therefore uses ordinary checked creation in
+     * the same LOCAL or CELL storage. Parameter lists without defaults keep
+     * their direct stores and grouped argument copy.
      */
     private void emitClosureParameterBindings(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -2361,11 +2363,13 @@ final class CanonicalToBytecodeLowerer {
         }
 
         int positionalIndex = 0;
+        boolean checkCreation = false;
         for (CanonicalParameter parameter : definition.parameters()) {
+            checkCreation |= parameter.defaultValue().isPresent();
             if (parameter.rest()) {
-                beginStoreParameter(builder, parameter);
+                beginStoreParameter(builder, parameter, checkCreation);
                 builder.emitLoadRestArguments(positionalIndex);
-                endStoreParameter(builder, parameter);
+                endStoreParameter(builder, parameter, checkCreation);
                 continue;
             }
 
@@ -2380,19 +2384,21 @@ final class CanonicalToBytecodeLowerer {
                 emitBindSuppliedClosureParameter(
                         builder,
                         parameter,
-                        positionalIndex);
+                        positionalIndex,
+                        checkCreation);
                 builder.endBlock();
 
                 builder.beginBlock();
-                if (i115DirectUnaryCall(defaultExpression)
+                if (!requiresContinuationScratch(defaultExpression)
+                        || i115DirectUnaryCall(defaultExpression)
                         || (defaultExpression instanceof CanonicalSend numericDefault
                                 && isDirectNumericOperand(numericDefault))) {
-                    beginStoreParameter(builder, parameter);
+                    beginStoreParameter(builder, parameter, checkCreation);
                     emitExpressionValue(
                             builder, defaultExpression,
                             defaultPreparedCall, defaultChildResult,
                             defaultResumeValue, false);
-                    endStoreParameter(builder, parameter);
+                    endStoreParameter(builder, parameter, checkCreation);
                 } else if (defaultExpression instanceof CanonicalCall defaultCall) {
                     emitComposedDefaultCall(
                             builder,
@@ -2401,7 +2407,7 @@ final class CanonicalToBytecodeLowerer {
                             defaultPreparedCall,
                             defaultChildResult,
                             defaultResumeValue);
-                    emitBindDefaultLocal(builder, parameter, defaultValue);
+                    emitBindDefaultLocal(builder, parameter, defaultValue, checkCreation);
                 } else if (defaultExpression instanceof CanonicalSend defaultSend) {
                     emitComposedDefaultSend(
                             builder,
@@ -2410,7 +2416,7 @@ final class CanonicalToBytecodeLowerer {
                             defaultPreparedCall,
                             defaultChildResult,
                             defaultResumeValue);
-                    emitBindDefaultLocal(builder, parameter, defaultValue);
+                    emitBindDefaultLocal(builder, parameter, defaultValue, checkCreation);
                 } else if (defaultExpression instanceof CanonicalReturn
                         || requiresComposedInvocation(defaultExpression)) {
                     emitDefaultExpressionToLocal(
@@ -2420,15 +2426,15 @@ final class CanonicalToBytecodeLowerer {
                             defaultPreparedCall,
                             defaultChildResult,
                             defaultResumeValue);
-                    emitBindDefaultLocal(builder, parameter, defaultValue);
+                    emitBindDefaultLocal(builder, parameter, defaultValue, checkCreation);
                 } else {
-                    beginStoreParameter(builder, parameter);
+                    beginStoreParameter(builder, parameter, checkCreation);
                     builder.beginSourceSection(
                             defaultExpression.span().startOffset(),
                             defaultExpression.span().length());
                     emitExpression(builder, defaultExpression);
                     builder.endSourceSection();
-                    endStoreParameter(builder, parameter);
+                    endStoreParameter(builder, parameter, checkCreation);
                 }
                 builder.endBlock();
 
@@ -2437,7 +2443,8 @@ final class CanonicalToBytecodeLowerer {
                 emitBindSuppliedClosureParameter(
                         builder,
                         parameter,
-                        positionalIndex);
+                        positionalIndex,
+                        checkCreation);
             }
 
             positionalIndex++;
@@ -2447,34 +2454,43 @@ final class CanonicalToBytecodeLowerer {
     private void emitBindDefaultLocal(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalParameter parameter,
-            BytecodeLocal defaultValue) {
+            BytecodeLocal defaultValue,
+            boolean checkCreation) {
         if (defaultValue == null) {
             throw new AssertionError("composed default value local was not allocated");
         }
-        beginStoreParameter(builder, parameter);
+        beginStoreParameter(builder, parameter, checkCreation);
         builder.emitLoadLocal(defaultValue);
-        endStoreParameter(builder, parameter);
+        endStoreParameter(builder, parameter, checkCreation);
     }
 
-    /** I115: a supplied (or D203 canonical null) parameter value, stored directly. */
+    /** Establishes a supplied parameter, or canonical null for an absent position. */
     private void emitBindSuppliedClosureParameter(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalParameter parameter,
-            int positionalIndex) {
-        beginStoreParameter(builder, parameter);
+            int positionalIndex,
+            boolean checkCreation) {
+        beginStoreParameter(builder, parameter, checkCreation);
         builder.emitLoadSuppliedArgument(positionalIndex);
-        endStoreParameter(builder, parameter);
+        endStoreParameter(builder, parameter, checkCreation);
     }
 
-    /**
-     * I115: opens the store of {@code parameter} into its classified storage
-     * ({@code StoreCell} into its cell, otherwise {@code StoreLocal}),
-     * leaving only the value operand to emit.
-     */
+    /** Opens parameter establishment in its classified LOCAL or CELL storage. */
     private void beginStoreParameter(
             ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalParameter parameter) {
+            CanonicalParameter parameter,
+            boolean checkCreation) {
         BytecodeLocal cell = parameterCellLocalOrNull(parameter);
+        if (checkCreation) {
+            builder.beginDiscardValue();
+            if (cell != null) {
+                builder.beginCreateLexicalCell(parameter.name());
+                builder.emitLoadLocal(cell);
+            } else {
+                builder.beginCreateLexicalLocal(parameter.name(), parameterLocal(parameter));
+            }
+            return;
+        }
         if (cell != null) {
             builder.beginStoreCell();
             builder.emitLoadLocal(cell);
@@ -2485,7 +2501,17 @@ final class CanonicalToBytecodeLowerer {
 
     private void endStoreParameter(
             ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalParameter parameter) {
+            CanonicalParameter parameter,
+            boolean checkCreation) {
+        if (checkCreation) {
+            if (parameterCellLocalOrNull(parameter) != null) {
+                builder.endCreateLexicalCell();
+            } else {
+                builder.endCreateLexicalLocal();
+            }
+            builder.endDiscardValue();
+            return;
+        }
         if (parameterCellLocalOrNull(parameter) != null) {
             builder.endStoreCell();
         } else {
@@ -2673,7 +2699,6 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal observed = builder.createLocal("multipleCreateObserved", null);
         builder.beginStoreLocal(observed);
         builder.beginObserveMultipleCreatePrefix();
-        emitCurrentActivation(builder);
         builder.emitLoadConstant(identities.size());
         builder.emitLoadLocal(source);
         builder.endObserveMultipleCreatePrefix();
@@ -5041,14 +5066,13 @@ final class CanonicalToBytecodeLowerer {
                 childResult,
                 resumeValue);
 
+        CanonicalBindingAnalysis analysis = currentNormalCallbackScalarAnalysis != null
+                ? currentNormalCallbackScalarAnalysis : currentRootAnalysis;
         emitMultipleCreateCurrentBindings(
                 builder,
                 create.names(),
-                currentRootAnalysis == null
-                        ? null
-                        : currentRootAnalysis.identitiesOf(create).orElse(null),
-                currentRootAnalysis != null
-                        && currentRootAnalysis.requiresPresenceCheckedCreation(create),
+                analysis == null ? null : analysis.identitiesOf(create).orElse(null),
+                analysis != null && analysis.requiresPresenceCheckedCreation(create),
                 source,
                 result);
     }
@@ -5347,6 +5371,13 @@ final class CanonicalToBytecodeLowerer {
      * storage.
      */
     private BindingStorage bindingStorageOrNull(CanonicalBindingIdentity identity) {
+        if (identity != null && identity.owner() == currentNormalCallbackScalarScope) {
+            BytecodeLocal local = currentNormalCallbackScalarLocals.get(identity.name());
+            if (local == null) {
+                throw new AssertionError("missing inline binding local: " + identity.name());
+            }
+            return BindingStorage.ofLocal(local);
+        }
         BytecodeLocal cell = cellLocalOrNull(identity);
         if (cell != null) {
             return new BindingStorage(cell, null);
@@ -8071,6 +8102,11 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalIntrinsic intrinsic) {
+            if (intrinsic.kind() == CanonicalIntrinsic.Kind.THIS
+                    && currentActivationLocal == null) {
+                builder.emitLoadCurrentReceiver();
+                return;
+            }
             if (intrinsic.kind() == CanonicalIntrinsic.Kind.CONTEXT
                     && currentInlineContextCache != null) {
                 builder.emitPublishInlineCallbackContext(
@@ -8862,10 +8898,7 @@ final class CanonicalToBytecodeLowerer {
         for (CanonicalExpression expression : body.expressions()) {
             if (expression instanceof CanonicalCreate create) {
                 if (create.target().isPresent()
-                        || !(create.value() instanceof CanonicalLiteral
-                                || (create.value() instanceof CanonicalLookup read
-                                        && readsEstablishedScalar(
-                                                read, analysis, scope, established)))
+                        || !admittedInlineCreationValue(create.value())
                         || analysis.identityOf(create)
                                 .map(identity -> identity.owner() != scope
                                         || !identity.name().equals(create.name()))
@@ -8874,6 +8907,25 @@ final class CanonicalToBytecodeLowerer {
                     return false;
                 }
                 createSites++;
+                continue;
+            }
+            if (expression instanceof CanonicalMultipleCreate create) {
+                java.util.List<CanonicalBindingIdentity> identities =
+                        analysis.identitiesOf(create).orElse(null);
+                if (scope.observesContext()
+                        || identities == null
+                        || identities.size() != create.names().size()
+                        || !admittedInlineCreationValue(create.value())) {
+                    return false;
+                }
+                for (int index = 0; index < identities.size(); index++) {
+                    CanonicalBindingIdentity identity = identities.get(index);
+                    if (identity.owner() != scope
+                            || !identity.name().equals(create.names().get(index))
+                            || !established.add(identity.name())) {
+                        return false;
+                    }
+                }
                 continue;
             }
             if (expression instanceof CanonicalAssign assign) {
@@ -8897,6 +8949,26 @@ final class CanonicalToBytecodeLowerer {
         return !established.isEmpty()
                 && established.equals(scope.declaredNames())
                 && analysis.lexicalCreateSiteCount() == createSites;
+    }
+
+    /** Values using existing local, identity and numeric operations without nested bindings. */
+    private static boolean admittedInlineCreationValue(CanonicalExpression expression) {
+        return switch (expression) {
+            case CanonicalLiteral ignored -> true;
+            case CanonicalLookup ignored -> true;
+            case CanonicalIntrinsic intrinsic -> intrinsic.kind() == CanonicalIntrinsic.Kind.THIS;
+            case CanonicalIdentity identity -> admittedInlineCreationValue(identity.left())
+                    && admittedInlineCreationValue(identity.right());
+            case CanonicalNotIdentity identity -> admittedInlineCreationValue(identity.left())
+                    && admittedInlineCreationValue(identity.right());
+            case CanonicalSend send -> !send.contextual()
+                    && send.arguments().size() == 1
+                    && java.util.Set.of("+", "-", "*", "/", "<", "<=", ">", ">=")
+                            .contains(send.message())
+                    && admittedInlineCreationValue(send.receiver())
+                    && admittedInlineCreationValue(send.arguments().get(0));
+            default -> false;
+        };
     }
 
     /** Reject nested binding mutations; ordinary side-effectful sends stay allowed. */

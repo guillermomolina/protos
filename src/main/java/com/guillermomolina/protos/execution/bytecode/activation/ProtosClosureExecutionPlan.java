@@ -116,6 +116,10 @@ public final class ProtosClosureExecutionPlan {
         return bytecodePlan.bindingAnalysisForTesting();
     }
 
+    java.util.List<String> capturedCellNamesForTooling() {
+        return bytecodePlan.capturedCellNamesForTooling();
+    }
+
     Object executeBytecodeActivationForTesting(
             com.guillermomolina.protos.runtime.ProtosActivation activation) {
         return bytecodePlan.executeActivation(activation);

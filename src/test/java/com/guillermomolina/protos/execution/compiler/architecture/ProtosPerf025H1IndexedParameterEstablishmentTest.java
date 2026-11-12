@@ -44,18 +44,15 @@ import org.junit.jupiter.api.Test;
 /**
  * PERF025-H1 focal evidence, reconciled with I115: every Closure root binds
  * its parameters through the one unified parameter lowering. Each supplied
- * positional argument is read at its constant position ({@code
- * LoadSuppliedArgument}, guarded by {@code HasSuppliedArgument} for a
- * default; a rest parameter by {@code LoadRestArguments}) and stored directly
- * into the parameter's native LOCAL or CELL storage. No frame lexical
- * authority is installed and no parameter is established by name.
+ * positional argument is copied as a contiguous group when all parameters
+ * use LOCAL storage without defaults or rest. Other parameters use constant
+ * positional reads, presence tests for defaults and exact suffix reads for
+ * rest, storing into the same LOCAL or CELL storage.
  *
- * <p>The guest-level assertions about context reflection, duplicate
- * creation through a planted context binding, non-OPEN contexts and
- * removal/recreation are the specified semantics this test always proved.
- * I115 records a KNOWN SEMANTIC DIVERGENCE for them (a Closure context holds
- * only NAME bindings; D179 cells are never removed or recreated); they are
- * kept unchanged, not rewritten to the divergent behavior.
+ * <p>Defaults execute in the real activation and can observe or change its
+ * Context. Parameter establishment after a default therefore applies ordinary
+ * creation checks. The guest assertions cover reflection, duplicate creation,
+ * structural state, capture by reference and removal/recreation.
  */
 final class ProtosPerf025H1IndexedParameterEstablishmentTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -82,7 +79,8 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
             ProtosClosureValue required =
                     closure("(value) => { here: context\nvalue }", module);
             List<String> requiredNames = instructionNames(required);
-            assertContains(requiredNames, SUPPLIED);
+            assertContains(requiredNames, "CopySuppliedArguments");
+            assertNone(requiredNames, SUPPLIED);
             assertNone(requiredNames, HAS_SUPPLIED);
             assertNoRetired(requiredNames);
 
@@ -203,6 +201,28 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
         System.out.println("PRESENT_NULL_DISTINCT_FROM_ABSENT=PASS");
         System.out.println("D179_C0_REMOVE_RECREATE=PASS");
         System.out.println("ESTABLISHMENT_ORDER_SEMANTICS=PASS");
+    }
+
+    @Test
+    void defaultsCannotPrecreateRequiredCapturedOrRestParameters() throws Exception {
+        withCore(module -> {
+            List<Object> results = array(evaluate(
+                    "plant: (c) => { c.b: 1\n0 }\n"
+                            + "plantTail: (c) => { c.tail: []\n0 }\n"
+                            + "required: (a: plant(context), b) => b\n"
+                            + "captured: (a: plant(context), b: 2) => { get: () => b\nget() }\n"
+                            + "rest: (a: plantTail(context), ...tail) => tail\n"
+                            + "own: (b: plant(context)) => b\n"
+                            + "[Error.handle(() => required(), (e) => true),\n"
+                            + " Error.handle(() => captured(), (e) => true),\n"
+                            + " Error.handle(() => rest(), (e) => true),\n"
+                            + " Error.handle(() => own(), (e) => true)]",
+                    module));
+            assertEquals(4, results.size());
+            for (Object result : results) {
+                assertTrue(bool(result), "parameter establishment rejects a pre-existing binding");
+            }
+        });
     }
 
     @Test
@@ -329,7 +349,9 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
         withCore(module -> {
             ProtosClosureValue identity = closure("(value) => value", module);
             List<String> names = instructionNames(identity);
-            assertContains(names, SUPPLIED);
+            assertEquals(1L, names.stream()
+                    .filter(name -> name.contains("CopySuppliedArguments")).count());
+            assertNone(names, SUPPLIED);
             assertNone(names, CREATE_CELL);
             assertNoRetired(names);
             assertEquals(4L, integer(evaluate("f: (value) => value\nf(4)", module)));

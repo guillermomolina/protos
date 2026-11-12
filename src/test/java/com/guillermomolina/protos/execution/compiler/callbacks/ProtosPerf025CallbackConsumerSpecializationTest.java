@@ -12,7 +12,7 @@
  *
  * Software distributed under the License is distributed on an "AS IS" basis,
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the LICENSE.
+ * the specific language governing rights and limitations under the License.
  */
 
 package com.guillermomolina.protos.execution;
@@ -88,7 +88,7 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         assertInteger(4, stop.binding("result"));
         // I115: the captured limit is read through its cell, never by name,
         // and the sum is the per-selector NumberAdd operation.
-        stop.assertInstruction("LoadCell");
+        stop.assertInstruction(stop.inlined() ? "load.local" : "LoadCell");
         stop.assertNoInstruction("AccessNamedLexical");
         stop.assertInstruction("NumberAdd");
         stop.assertNoRetired();
@@ -118,8 +118,8 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         for (Stop stop : run.stops) {
             stop.assertLazy();
             // I115: the captured accumulator is read and written through its cell.
-            stop.assertInstruction("LoadCell");
-            stop.assertInstruction("StoreCell");
+            stop.assertInstruction(stop.inlined() ? "load.local" : "LoadCell");
+            stop.assertInstruction(stop.inlined() ? "store.local" : "StoreCell");
             stop.assertNoInstruction("AccessNamedLexical");
             stop.assertNoRetired();
         }
@@ -131,9 +131,9 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
     }
 
     /**
-     * The RHS materializes the callback activation (a dynamic lookup is a
-     * real observer); the captured destination selected before it is still
-     * the one written (PERF028-A).
+     * The RHS calls a module binding; the destination selected before that
+     * call remains the one written. An inlined callback still needs no own
+     * activation merely to invoke the module binding.
      */
     @Test
     void rhsMaterializationKeepsPreselectedCapturedDestination() throws Exception {
@@ -156,11 +156,13 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         assertEquals(2, run.stops.size());
         for (int index = 0; index < run.stops.size(); index++) {
             Stop stop = run.stops.get(index);
-            assertTrue(stop.materialized(), "the dynamic lookup observes the activation");
+            if (stop.inlined()) {
+                stop.assertLazy();
+            }
             // Materialization keeps the frame bindings exact.
             assertInteger(index + 1, stop.binding("element"));
             // The destination is the captured cell, selected and written directly.
-            stop.assertInstruction("StoreCell");
+            stop.assertInstruction(stop.inlined() ? "store.local" : "StoreCell");
             stop.assertNoRetired();
         }
         System.out.println("PERF028_A_DESTINATION_SELECTED_BEFORE_RHS=YES");
@@ -217,7 +219,7 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         stop.assertLazy();
         assertInteger(2, stop.binding("result"));
         // I115: the callee is the captured next, loaded from its cell.
-        stop.assertInstruction("LoadCell");
+        stop.assertInstruction(stop.inlined() ? "load.local" : "LoadCell");
         stop.assertNoInstruction("AccessNamedLexical");
         stop.assertNoRetired();
         System.out.println("PERF025_S3_DIRECT_SOURCE_CLOSURE_CALL_WITHOUT_ACTIVATION=YES");
@@ -241,7 +243,7 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
                         5);
         run.assertCompleted();
         Stop stop = run.single();
-        assertTrue(stop.materialized(), "the generic invocation path takes the activation");
+        stop.assertAnyInstruction("CallUnaryMethod", "CallBinaryMethod", "CallRequest");
         assertInteger(40, stop.binding("result"));
         assertInteger(4, stop.binding("element"));
         stop.assertNoRetired();
@@ -268,13 +270,37 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         stop.assertLazy();
         assertSame(ProtosBooleanValue.TRUE, stop.binding("same"));
         // I115: the captured me is read through its cell; this needs no activation.
-        stop.assertInstruction("LoadCell");
-        stop.assertNoInstruction("CurrentActivation");
+        stop.assertInstruction(stop.inlined() ? "load.local" : "LoadCell");
+        assertEquals(stop.inlined() ? 2L : 1L, stop.instructions().stream()
+                .filter(name -> name.contains("LoadCurrentReceiver")).count());
+        if (!stop.inlined()) {
+            stop.assertNoInstruction("CurrentActivation");
+        }
         stop.assertNoRetired();
         System.out.println("PERF025_S3_THIS_WITHOUT_ACTIVATION=YES");
     }
 
-    /** {@code context} remains a real observer: the callback is not frame-native. */
+    @Test
+    void receiverHeaderPreservesMethodExtractionAndNestedCapture() throws Exception {
+        assertGuestTrue("""
+                moduleReceiver: this
+                direct: () => this === moduleReceiver
+                parent: {
+                    self: () => this
+                    published: () => { here: context
+                        this }
+                    make: () => { saved: this
+                        () => this === saved }
+                }
+                child: parent {}
+                extracted: child.self
+                nested: child.make()
+                (child.self() === child) && (child.published() === child) &&
+                    (extracted() === child) && nested() && direct()
+                """);
+    }
+
+    /** The context intrinsic observes the callback even when its body is inlined. */
     @Test
     void contextRemainsAnObserver() throws Exception {
         Run run =
@@ -295,7 +321,8 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         Stop stop = run.single();
         assertTrue(stop.materialized(), "context observes the callback activation");
         // The context intrinsic is what obtains the exact activation.
-        stop.assertInstruction("CurrentActivation");
+        stop.assertInstruction(stop.inlined()
+                ? "PublishInlineCallbackContext" : "PublishCurrentClosureContext");
         assertSame(ProtosBooleanValue.TRUE, stop.binding("same"));
         stop.assertNoRetired();
         System.out.println("PERF025_S3_CONTEXT_MATERIALIZES=YES");
@@ -322,8 +349,8 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         assertInteger(7, stop.binding("read"));
         // I115: the root-level member read (ReadMemberAtRoot or its
         // GetAttribute form) of the captured box.
-        stop.assertAnyInstruction("ReadMemberAtRoot", "ExperimentalGetAttribute");
-        stop.assertInstruction("LoadCell");
+        stop.assertAnyInstruction("ReadMemberAtRoot", "GetAttribute");
+        stop.assertInstruction(stop.inlined() ? "load.local" : "LoadCell");
         stop.assertNoRetired();
         System.out.println("PERF025_S3_MEMBER_READ_WITHOUT_ACTIVATION=YES");
     }
@@ -419,9 +446,15 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
 
     private static void assertDistinctCarriers(List<Stop> stops) {
         for (int index = 1; index < stops.size(); index++) {
-            assertTrue(
-                    stops.get(index - 1).call() != stops.get(index).call(),
-                    "each invocation has its own carrier");
+            Stop current = stops.get(index);
+            if (current.inlined()) {
+                // Fresh binding state replaces an unobservable invocation identity.
+                current.assertAnyInstruction(
+                        "ResetInlineCallbackLocal", "ArrayEachNext", "AssociationEachNext");
+            } else {
+                assertTrue(stops.get(index - 1).call() != current.call(),
+                        "each physical invocation has its own arguments");
+            }
         }
     }
 
@@ -435,9 +468,9 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
     }
 
     /**
-     * The callback invocation observed at one breakpoint hit. I115: the
-     * callback is an ordinary invocation through the shared dispatcher; its
-     * identity is its B5 frame arguments.
+     * One breakpoint snapshot. A physical callback has its own arguments;
+     * an inlined callback shares its host frame and publishes only its own
+     * context cache. Publishing the host is not publishing the callback.
      */
     /* Retired PLAT044 B-prime inline-callback and frame-authority operations. */
     private static final List<String> RETIRED =
@@ -456,6 +489,7 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
 
     private record Stop(
             Object call,
+            boolean inlined,
             boolean materialized,
             Map<String, Object> bindings,
             List<String> instructions) {
@@ -615,6 +649,10 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
          */
         Map<String, Object> bindings = new HashMap<>();
         Map<String, Object> freeCells = new HashMap<>();
+        Map<String, Object> inlineBindings = new HashMap<>();
+        String inlinePrefix = CanonicalToBytecodeLowerer.NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX;
+        boolean inlined = false;
+        boolean inlineMaterialized = false;
         String freeCellPrefix = CanonicalToBytecodeLowerer.FREE_CELL_LOCAL_PREFIX;
         for (int offset = 0; offset < names.length; offset++) {
             if (names[offset] == null) {
@@ -622,6 +660,16 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
             }
             String name = String.valueOf(names[offset]);
             Object value = bytecode.getLocalValue(bytecodeIndex, frame, offset);
+            if (name.equals("inlineCallbackActivation") && value instanceof ProtosActivation) {
+                inlineMaterialized = true;
+            }
+            if (name.startsWith(inlinePrefix)) {
+                inlined = true;
+                if (value != null) {
+                    inlineBindings.put(name.substring(inlinePrefix.length()), value);
+                }
+                continue;
+            }
             if (value instanceof ProtosLexicalCell cell) {
                 value = cell.valueOrNullForRuntime();
                 if (value == null) {
@@ -635,11 +683,13 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
             }
         }
         freeCells.forEach(bindings::putIfAbsent);
+        bindings.putAll(inlineBindings);
         assertTrue(ProtosFrameArguments.hasActivation(call),
                 () -> "the breakpoint is not inside a callback invocation");
-        boolean materialized = ProtosFrameArguments.hasPublishedActivation(call);
+        boolean materialized = inlined
+                ? inlineMaterialized : ProtosFrameArguments.hasPublishedActivation(call);
         List<String> instructions =
                 bytecode.getInstructionsAsList().stream().map(ProtosInstructionNames::of).toList();
-        return new Stop(call, materialized, bindings, instructions);
+        return new Stop(call, inlined, materialized, bindings, instructions);
     }
 }

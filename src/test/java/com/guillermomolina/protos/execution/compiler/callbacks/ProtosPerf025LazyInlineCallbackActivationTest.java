@@ -12,7 +12,7 @@
  *
  * Software distributed under the License is distributed on an "AS IS" basis,
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the LICENSE.
+ * the specific language governing rights and limitations under the License.
  */
 
 package com.guillermomolina.protos.execution;
@@ -39,6 +39,7 @@ import com.oracle.truffle.api.bytecode.BytecodeFrame;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.ContinuationRootNode;
 import com.oracle.truffle.api.bytecode.Instruction;
+import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.TagTreeNode;
 import com.oracle.truffle.api.debug.Breakpoint;
 import com.oracle.truffle.api.debug.DebugScope;
@@ -62,24 +63,11 @@ import org.graalvm.polyglot.Instrument;
 import org.junit.jupiter.api.Test;
 
 /**
- * PERF025 lazy inline callback activation (PLAT044 B′ Candidate, Slice 2)
- * focal evidence.
- *
- * <p>An admitted frame-native inline callback enters its region holding only
- * the invocation's retired {@code PreparedInlineLiteralCall} carrier. Its parameters
- * and current locals are bound, read and written through carrier-operand
- * operations; the fresh semantic activation is materialized, once, by the
- * first operation or tooling query that needs it, and that materialization
- * moves the frame-native bindings to a durable activation-owned authority
- * before the activation reaches its consumer, so no Context can observe, or
- * keep aliasing, the reused block locals.
- *
- * <p>Laziness at entry is proven structurally: {@code
- * MaterializeInlineCallbackActivation} and {@code LoadInlineCallbackActivation}
- * are the only guest operations that hand out the callback activation, and a
- * carrier operation materializes it only on an Error or fallback path, so a
- * region without them never materializes one on its ordinary path.
- * Runtime identity is observed through the live region's carrier local.
+ * Inline callbacks keep their bindings in the host root's native locals.
+ * The context intrinsic publishes one live view per semantic invocation;
+ * leaving the region detaches that view before the locals can be reused.
+ * Native observers receive the guest-observed Context explicitly, so their
+ * physical caller frame cannot be mistaken for the callback's activation.
  */
 final class ProtosPerf025LazyInlineCallbackActivationTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -88,15 +76,13 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
             LanguageReference.create(ProtosLanguage.class);
 
     private static final String PLAIN_LOAD = "LoadInlineCallbackActivation";
-    private static final String MATERIALIZE = "MaterializeInlineCallbackActivation";
+    private static final String MATERIALIZE = "PublishInlineCallbackContext";
 
     @Test
     void frameNativeZeroParameterCallbackEntersWithoutActivation() throws Exception {
         /*
-         * PLAT067-B: a literal receiver is always the open-coded I095 site, so
-         * the B-prime frame-native callback region is reached through a
-         * dynamic receiver, whose MISS path keeps the ordinary send with its
-         * literal callback.
+         * A dynamic standard receiver selects the inline branch; its custom
+         * selection branch retains an ordinary callback invocation.
          */
         List<String> names =
                 assertRegionWithoutActivation(
@@ -111,10 +97,10 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                         }
                         run(true)
                         """);
-        assertContains(names, "CreateInlineCurrentFrameLocal");
-        assertContains(names, "ReadInlineFrameLocal");
-        assertContains(names, "ResolveInlineFrameLocalWriteTarget");
-        assertContains(names, "AssignInlineFrameLocal");
+        assertContains(names, "ResetInlineCallbackLocal");
+        assertContains(names, "load.local");
+        assertContains(names, "store.local");
+        assertContains(names, "IsCanonicalBooleanOperand");
         System.out.println("PERF025_INLINE_CALLBACK_ENTRY_MATERIALIZES_ACTIVATION=NO");
         System.out.println(
                 "PERF025_FRAME_NATIVE_CALLBACK_ENTRY_HAS_LOAD_INLINE_CALLBACK_ACTIVATION=NO");
@@ -140,16 +126,16 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                         }
                         run()
                         """);
-        assertContains(names, "LoadInlineClosureArgument");
-        assertContains(names, "BindInlineClosureFrameParameter");
+        assertContains(names, "ArrayEachNext");
+        assertContains(names, "store.local");
         System.out.println("PERF025_FRAME_NATIVE_ONE_PARAMETER_EACH_STAYS_LAZY=YES");
         System.out.println("PERF025_FRAME_NATIVE_PARAMETER_PATH_WITHOUT_ACTIVATION=YES");
     }
 
     @Test
     void frameNativeTwoParameterEachEntersWithoutActivation() throws Exception {
-        List<String> names =
-                assertRegionWithoutActivation(
+        List<Instruction> instructions =
+                assertRegionInstructionsWithoutActivation(
                         """
                         run: () => {
                             probe()
@@ -164,10 +150,14 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                         }
                         run()
                         """);
+        List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
+        List<Object> formals = constantLocals(instructions, "AssociationEachNext");
+        assertEquals(2, formals.size(), "both formals have constant local accessors");
+        assertEquals(2L, formals.stream().distinct().count(), "key and value use distinct locals");
         assertEquals(
-                2,
-                names.stream().filter(name -> name.contains("BindInlineClosureFrameParameter")).count(),
-                () -> "both formals must bind from the carrier: " + names);
+                1L,
+                names.stream().filter(name -> name.contains("AssociationEachNext")).count(),
+                () -> "one association step binds both callback formals: " + names);
         System.out.println("PERF025_FRAME_NATIVE_TWO_PARAMETER_EACH_STAYS_LAZY=YES");
     }
 
@@ -188,30 +178,29 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                         run()
                         """);
         List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
-        List<Integer> parameter = constantOrdinals(instructions, "BindInlineClosureFrameParameter");
-        List<Integer> creations = constantOrdinals(instructions, "CreateInlineCurrentFrameLocal");
+        List<Object> parameter = constantLocals(instructions, "ArrayEachNext");
+        List<Object> creations = constantLocals(instructions, "ResetInlineCallbackLocal");
         assertEquals(1, parameter.size(), () -> "one formal: " + names);
-        assertEquals(3, creations.size(), () -> "copy, then one creation per multiple target: " + names);
-        assertEquals(
-                4,
+        assertEquals(3, creations.size(), () -> "copy, first and second: " + names);
+        assertEquals(4L,
                 java.util.stream.Stream.concat(parameter.stream(), creations.stream()).distinct().count(),
-                "each establishment owns its own block-local ordinal");
-        int copy = firstIndexOf(names, "CreateInlineCurrentFrameLocal");
-        int observation = firstIndexOf(names, "ObserveInlineMultipleCreatePrefix");
-        int firstTarget =
-                copy + 1 + firstIndexOf(names.subList(copy + 1, names.size()), "CreateInlineCurrentFrameLocal");
-        assertTrue(
-                copy < observation && observation < firstTarget,
-                () -> "the complete prefix is observed before the first multiple target: " + names);
+                "each callback binding owns a distinct constant local accessor");
+        int reset = firstIndexOf(names, "ResetInlineCallbackLocal");
+        int observation = firstIndexOf(names, "ObserveMultipleCreatePrefix");
+        int firstTarget = firstIndexOf(names, "ObservedMultipleCreateValue");
+        assertTrue(reset < observation && observation < firstTarget,
+                () -> "the prefix is observed before any target value is selected: " + names);
+        assertEquals(2L, names.stream()
+                .filter(name -> name.contains("ObservedMultipleCreateValue")).count());
         System.out.println("PERF030_I_INLINE_PARAMETER_CONSTANT_ORDINAL=YES");
         System.out.println("PERF030_I_INLINE_CREATION_CONSTANT_ORDINAL=YES");
         System.out.println("PERF030_I_INLINE_MULTIPLE_CREATE_RUNTIME_ORDINAL_ARRAY=NO");
     }
 
     /**
-     * The first send materializes the activation; a second observer of the
-     * same invocation receives the identical instance, and each invocation
-     * has its own.
+     * The first context expression materializes the semantic activation;
+     * later observers in the same invocation receive the identical Context,
+     * and each invocation has its own.
      */
     @Test
     void firstObserverMaterializesOncePerFreshInvocation() throws Exception {
@@ -225,8 +214,8 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                                 run: () => {
                                     Array(1, 2).each((element) => {
                                         copy: element
-                                        probe(copy)
-                                        probe(copy)
+                                        probe(context, copy)
+                                        probe(context, copy)
                                     })
                                 }
                                 run()
@@ -248,15 +237,15 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                 for (Observation observation : probe.calls) {
                     assertTrue(
                             observation.materializedAtProbe(),
-                            "the probe send is the first semantic observer");
+                            "context is observed before the native probe executes");
                 }
                 assertSame(probe.calls.get(0).call(), probe.calls.get(1).call());
-                assertSame(probe.calls.get(0).activation(), probe.calls.get(1).activation());
+                assertSame(probe.calls.get(0).context(), probe.calls.get(1).context());
                 assertSame(probe.calls.get(2).call(), probe.calls.get(3).call());
-                assertSame(probe.calls.get(2).activation(), probe.calls.get(3).activation());
+                assertSame(probe.calls.get(2).context(), probe.calls.get(3).context());
                 assertNotSame(probe.calls.get(0).call(), probe.calls.get(2).call());
                 assertNotSame(
-                        probe.calls.get(0).activation(), probe.calls.get(2).activation());
+                        probe.calls.get(0).context(), probe.calls.get(2).context());
             } finally {
                 context.leave();
             }
@@ -266,7 +255,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
         System.out.println("PERF025_FIRST_SEMANTIC_OBSERVER_MATERIALIZES=YES");
         System.out.println("PERF025_MATERIALIZATION_AT_MOST_ONCE=YES");
         System.out.println("PERF025_FRESH_IDENTITY_PER_INVOCATION=YES");
-        System.out.println("PERF025_PREPARED_INLINE_LITERAL_CALL_IS_IDENTITY_CARRIER=YES");
+        System.out.println("PERF025_OBSERVED_CONTEXT_HAS_INVOCATION_IDENTITY=YES");
     }
 
     /**
@@ -287,7 +276,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                                 run: () => {
                                     Array(10, 20).each((element) => {
                                         copy: element
-                                        observe()
+                                        observe(context)
                                     })
                                 }
                                 run()
@@ -320,7 +309,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
     }
 
     private static void assertBindings(java.util.Map<String, Object> bindings, long value) {
-        assertEquals(List.of("element", "copy"), List.copyOf(bindings.keySet()));
+        assertEquals(java.util.Set.of("element", "copy"), bindings.keySet());
         assertInteger(value, bindings.get("element"));
         assertInteger(value, bindings.get("copy"));
     }
@@ -348,7 +337,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                                             seen: 0
                                             Array(10, 20).each((element) => {
                                                 copy: element
-                                                observe()
+                                                observe(context)
                                                 copy = copy + 1
                                                 later: copy
                                                 forget()
@@ -401,9 +390,9 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                             Array(1, 2, 3).each((element) => {
                                 local: element
                                 visits = visits + 1
-                                probe(local)
+                                probe(context, local)
                                 local = local * step.value()
-                                probe(local)
+                                probe(context, local)
                                 acc = acc * 10 + local
                             })
                             acc * 10 + visits
@@ -421,7 +410,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
             Observation beforeSuspension = probe.calls.get(visit * 2);
             Observation afterResumption = probe.calls.get(visit * 2 + 1);
             assertSame(beforeSuspension.call(), afterResumption.call());
-            assertSame(beforeSuspension.activation(), afterResumption.activation());
+            assertSame(beforeSuspension.context(), afterResumption.context());
         }
         System.out.println("PERF025_SUSPEND_RESUME_DOES_NOT_REMATERIALIZE=YES");
     }
@@ -564,23 +553,17 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
         }
     }
 
-    /** The immediate constant {@code ordinal} of every {@code operation} instruction, in order. */
-    private static List<Integer> constantOrdinals(List<Instruction> instructions, String operation) {
+    /** Constant local accessors consumed by one current binding operation. */
+    private static List<Object> constantLocals(List<Instruction> instructions, String operation) {
         return instructions.stream()
                 .filter(instruction -> ProtosInstructionNames.of(instruction).contains(operation))
-                .map(instruction -> {
-                    Instruction.Argument ordinal =
-                            instruction.getArguments().stream()
-                                    .filter(argument -> argument.getName().equals("ordinal"))
-                                    .findFirst()
-                                    .orElseThrow(() -> new AssertionError(
-                                            "no constant ordinal operand of " + operation));
-                    return switch (ordinal.getKind()) {
-                        case CONSTANT -> (Integer) ordinal.asConstant();
-                        case INTEGER -> ordinal.asInteger();
-                        default -> throw new AssertionError("ordinal is not a constant: " + ordinal);
-                    };
+                .flatMap(instruction -> instruction.getArguments().stream())
+                .filter(argument -> switch (argument.getKind()) {
+                    case CONSTANT -> true;
+                    default -> false;
                 })
+                .map(Instruction.Argument::asConstant)
+                .filter(LocalAccessor.class::isInstance)
                 .toList();
     }
 
@@ -617,29 +600,17 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
         assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
     }
 
-    /**
-     * One probe call made from inside a callback. I115: the callback is an
-     * ordinary invocation through the shared dispatcher, so {@code call} is
-     * the identity of its B5 frame arguments (one per invocation).
-     */
+    /** One observation of a guest Context, or a host-root discovery probe. */
     private record Observation(
             Object call,
             boolean materializedAtProbe,
             boolean durableAtProbe,
-            ProtosActivation activation) {}
+            ProtosObjectValue context) {}
 
     /**
-     * Native bindings that inspect the innermost live inline callback region
-     * through its carrier local, exactly as tooling locates it.
-     *
-     * <ul>
-     *   <li>{@code probe(...)} records the semantic host root and, inside a
-     *       region, the carrier and its activation;</li>
-     *   <li>{@code observe()} additionally makes the callback's Context
-     *       observable, out of band, and records its bindings at that
-     *       instant;</li>
-     *   <li>{@code forget()} removes {@code copy} from that observed Context.</li>
-     * </ul>
+     * Native probes discover the physical host root and inspect only a Context
+     * explicitly passed by guest code. Retained Contexts must stay tied to
+     * their semantic invocation when the physical locals are reused.
      */
     private static final class CarrierProbe {
         final AtomicReference<ProtosBytecodeRootNode> host = new AtomicReference<>();
@@ -659,16 +630,16 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                     "probe",
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
-                                record();
+                                record(supplied);
                                 return ProtosNullValue.INSTANCE;
                             }));
             module.context().createLocalSlot(
                     "observe",
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
-                                Observation observation = record();
+                                Observation observation = record(supplied);
                                 ProtosObjectValue observedContext =
-                                        observation.activation().context();
+                                        observation.context();
                                 observed.add(observedContext);
                                 observedAtProbe.add(observedContext.localSlotsSnapshot());
                                 return ProtosNullValue.INSTANCE;
@@ -682,7 +653,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                             }));
         }
 
-        private Observation record() {
+        private Observation record(List<?> supplied) {
             AtomicReference<Object[]> found = new AtomicReference<>();
             Truffle.getRuntime()
                     .iterateFrames(
@@ -708,15 +679,17 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
             if (arguments == null || !ProtosFrameArguments.hasActivation(arguments)) {
                 return null;
             }
-            boolean materialized = ProtosFrameArguments.hasPublishedActivation(arguments);
-            // I115: no carrier transfers bindings; the callee frame keeps them.
-            boolean durable = false;
+            ProtosObjectValue context = supplied.isEmpty()
+                    ? null : assertInstanceOf(ProtosObjectValue.class, supplied.get(0));
+            boolean materialized = context != null;
+            boolean durable = context != null
+                    && context.hasLocalSlot("element") && context.hasLocalSlot("copy");
             Observation observation =
                     new Observation(
-                            arguments,
+                            context != null ? context : arguments,
                             materialized,
                             durable,
-                            ProtosFrameArguments.activation(arguments));
+                            context);
             calls.add(observation);
             return observation;
         }

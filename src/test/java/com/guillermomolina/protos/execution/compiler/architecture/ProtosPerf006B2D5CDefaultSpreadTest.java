@@ -98,7 +98,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                         executeDefault(
                                 language,
                                 module,
-                                "(value: target(a, ...left, d, ...right)) => { value }",
+                                "(value: target(a, ...left, d, ...right)) => { context\n value }",
                                 List.of(),
                                 "perf006-b2d5c-default-call-order.protos");
 
@@ -349,7 +349,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                         executeDefault(
                                 language,
                                 module,
-                                "(value: entry().capture(...itemsProducer(), later())) => { value }",
+                                "(value: entry().capture(...itemsProducer(), later())) => { context\n value }",
                                 List.of(),
                                 "perf006-b2d5c-default-spread-suspension.protos");
 
@@ -504,7 +504,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                         executeDefault(
                                 language,
                                 module,
-                                "(value: target(...itemsProducer())) => { value }",
+                                "(value: target(...itemsProducer())) => { context\n value }",
                                 List.of(supplied),
                                 "perf006-b2d5c-default-skipped.protos");
 
