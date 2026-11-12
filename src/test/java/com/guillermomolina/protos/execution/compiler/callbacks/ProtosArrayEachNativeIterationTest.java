@@ -232,11 +232,14 @@ final class ProtosArrayEachNativeIterationTest {
             assertEquals(1L, first.readLocalSlot("element").orElseThrow());
             assertEquals(2L, second.readLocalSlot("element").orElseThrow());
 
+            // A callback observing its context still runs inline: each
+            // invocation materializes its own activation lazily, and that
+            // activation keeps its bindings once the invocation ends.
             List<String> names = instructionNames(module.physicalRun());
-            assertFalse(names.stream().anyMatch(name -> name.contains("c.ArrayEachNext")),
-                    () -> "an observable callback must not run in the caller: " + names);
-            assertTrue(names.stream().anyMatch(name -> name.contains("c.CallUnaryMethod")),
-                    () -> "an observable callback keeps the ordinary send: " + names);
+            assertTrue(names.stream().anyMatch(name -> name.contains("c.ArrayEachNext")),
+                    () -> "the observing callback runs in the caller: " + names);
+            assertTrue(names.stream().anyMatch(name -> name.contains("c.PublishInlineCallbackContext")),
+                    () -> "its context is published lazily: " + names);
         });
     }
 

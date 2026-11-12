@@ -414,7 +414,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    private static final LexicalFrameLayout EMPTY_LEXICAL_FRAME_LAYOUT =
+    static final LexicalFrameLayout EMPTY_LEXICAL_FRAME_LAYOUT =
             new LexicalFrameLayout(new String[0], new int[0], new boolean[0], new LocalAccessor[0]);
 
     /* The layout of a genuine Closure root, or null for any other root. */
@@ -1194,6 +1194,95 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosActivation activation = lexicalActivation(frame, root);
             root.ensureLexicalFrameView(frame, bytecode, bytecodeIndex, activation);
             return activation.context();
+        }
+    }
+
+    /**
+     * The {@code context} intrinsic inside a callback that runs inline in
+     * this root. The first observation in one inline invocation creates that
+     * invocation's genuine activation, as the callback's own invocation would:
+     * its Closure is created over this root's activation, whose frame is bound
+     * to its live view first, and its own bindings are the live view of the
+     * inline region's locals in this same frame. Later observations in the
+     * same invocation answer that activation's single Context; the next
+     * invocation starts with an empty cache and gets a fresh one.
+     */
+    @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = LocalAccessor.class, name = "activationCache")
+    @ConstantOperand(type = LexicalFrameLayout.class, name = "layout")
+    @ConstantOperand(type = ProtosSelectedCallbackPlan.class, name = "callback")
+    public static final class PublishInlineCallbackContext {
+        @Specialization
+        public static ProtosObjectValue perform(
+                LocalAccessor activationCache,
+                LexicalFrameLayout layout,
+                ProtosSelectedCallbackPlan callback,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecode,
+                @Bind("$bytecodeIndex") int bytecodeIndex) {
+            if (!activationCache.isCleared(bytecode, frame)
+                    && activationCache.getObject(bytecode, frame) instanceof ProtosActivation inline) {
+                return inline.context();
+            }
+            ProtosActivation creator = lexicalActivation(frame, root);
+            root.ensureLexicalFrameView(frame, bytecode, bytecodeIndex, creator);
+            ProtosActivation inline = materialize(
+                    frame.materialize(), bytecode.getBytecodeLocation(bytecodeIndex),
+                    layout, callback, creator);
+            activationCache.setObject(bytecode, frame, inline);
+            return inline.context();
+        }
+
+        @TruffleBoundary
+        static ProtosActivation materialize(
+                MaterializedFrame frame,
+                BytecodeLocation location,
+                LexicalFrameLayout layout,
+                ProtosSelectedCallbackPlan callback,
+                ProtosActivation creator) {
+            ProtosClosureValue closure = callback.materialize(creator);
+            ProtosActivation inline = ProtosActivation.forClosureInvocation(
+                    closure,
+                    java.util.List.of(),
+                    creator.prelude().orElse(null),
+                    creator.actorModuleState(),
+                    creator.currentModuleKey().orElse(null),
+                    creator.executionDomain());
+            ProtosBytecodeLexicalFrameView view =
+                    new ProtosBytecodeLexicalFrameView(frame, location, layout);
+            inline.installPublishedClosureLexicalAuthorityForRuntime(view);
+            view.attachCellOwners(inline);
+            return inline;
+        }
+    }
+
+    /**
+     * Ends the previous inline invocation of a context-observing callback
+     * before its region locals are reused: an activation materialized by that
+     * invocation keeps its bindings as values of its own, so its Context no
+     * longer observes the locals of a later invocation.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = LocalAccessor.class, name = "activationCache")
+    public static final class DetachInlineCallbackActivation {
+        @Specialization
+        public static void perform(
+                LocalAccessor activationCache,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            if (!activationCache.isCleared(bytecode, frame)
+                    && activationCache.getObject(bytecode, frame) instanceof ProtosActivation previous) {
+                detach(previous);
+            }
+        }
+
+        @TruffleBoundary
+        static void detach(ProtosActivation previous) {
+            if (previous.publishedClosureLexicalAuthorityForRuntime()
+                    instanceof ProtosBytecodeLexicalFrameView view) {
+                view.detach();
+            }
         }
     }
 

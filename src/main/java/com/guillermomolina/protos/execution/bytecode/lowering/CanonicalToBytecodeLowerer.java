@@ -247,6 +247,17 @@ final class CanonicalToBytecodeLowerer {
      * represents physically as LOCAL, because only inline Closures of this
      * root capture them. Saved and restored with the other per-root state.
      */
+    /*
+     * The context publication state of the inline callback being emitted
+     * when it observes its context: the per-invocation activation cache, the
+     * layout of its region locals and its Closure for the activation.
+     */
+    private BytecodeLocal currentInlineContextCache;
+    /* The cache allocated by the inline body wrapper for the body it opens next. */
+    private BytecodeLocal pendingInlineContextCache;
+    private ProtosBytecodeRootNode.LexicalFrameLayout currentInlineContextLayout;
+    private ProtosSelectedCallbackPlan currentInlineContextCallback;
+
     private java.util.Set<CanonicalBindingIdentity> currentRootPromotedCells =
             java.util.Set.of();
 
@@ -1444,6 +1455,24 @@ final class CanonicalToBytecodeLowerer {
      * never a second stored value). A module root records none: its bindings
      * are NAME bindings of its module Context.
      */
+    /* The physical layout of an inline callback region's own LOCAL bindings. */
+    private static ProtosBytecodeRootNode.LexicalFrameLayout inlineRegionLayout(
+            java.util.Map<String, BytecodeLocal> locals) {
+        int count = locals.size();
+        String[] names = new String[count];
+        int[] offsets = new int[count];
+        boolean[] cells = new boolean[count];
+        LocalAccessor[] accessors = new LocalAccessor[count];
+        int index = 0;
+        for (java.util.Map.Entry<String, BytecodeLocal> entry : locals.entrySet()) {
+            names[index] = entry.getKey();
+            offsets[index] = entry.getValue().getLocalOffset();
+            accessors[index] = LocalAccessor.constantOf(entry.getValue());
+            index++;
+        }
+        return new ProtosBytecodeRootNode.LexicalFrameLayout(names, offsets, cells, accessors);
+    }
+
     private void recordLexicalFrameLayout(
             ProtosBytecodeRootNode root,
             CanonicalLexicalScope scope) {
@@ -6516,9 +6545,36 @@ final class CanonicalToBytecodeLowerer {
         builder.beginSourceSection(closure.span().startOffset(), closure.span().length());
         builder.beginTag(StandardTags.RootTag.class);
         builder.beginBlock();
-        emitInlineClosureBodyContent(builder, closure, mode, result,
-                scratch, childResult, resumeValue, primitiveCarrierResult,
-                boundParameters);
+        CanonicalLexicalScope ownScope =
+                compilationFacts.isolatedClosureAnalysis(closure).scopeOf(closure).orElse(null);
+        if (ownScope != null && ownScope.observesContext()) {
+            /*
+             * The activation an invocation materializes for its context must
+             * stop viewing the region locals when the invocation ends, by
+             * any exit, before a later invocation reuses them.
+             */
+            BytecodeLocal cache = builder.createLocal("inlineCallbackActivation", null);
+            BytecodeLocal value = mode == InlineBodyResult.STACK
+                    ? builder.createLocal("inlineCallbackValue", null)
+                    : null;
+            builder.beginTryFinally(() -> builder.emitDetachInlineCallbackActivation(cache));
+            builder.beginBlock();
+            pendingInlineContextCache = cache;
+            emitInlineClosureBodyContent(builder, closure,
+                    value != null ? InlineBodyResult.STORE : mode,
+                    value != null ? value : result,
+                    scratch, childResult, resumeValue, primitiveCarrierResult,
+                    boundParameters);
+            builder.endBlock();
+            builder.endTryFinally();
+            if (value != null) {
+                builder.emitLoadLocal(value);
+            }
+        } else {
+            emitInlineClosureBodyContent(builder, closure, mode, result,
+                    scratch, childResult, resumeValue, primitiveCarrierResult,
+                    boundParameters);
+        }
         builder.endBlock();
         builder.endTag(StandardTags.RootTag.class);
         builder.endSourceSection();
@@ -6549,6 +6605,9 @@ final class CanonicalToBytecodeLowerer {
                 currentNormalCallbackScalarScope;
         boolean savedDirectParent = currentNormalDirectParentCaptureReads;
         boolean savedInlineBody = currentInlineClosureCallBody;
+        BytecodeLocal savedContextCache = currentInlineContextCache;
+        ProtosBytecodeRootNode.LexicalFrameLayout savedContextLayout = currentInlineContextLayout;
+        ProtosSelectedCallbackPlan savedContextCallback = currentInlineContextCallback;
 
         // Stable ordering matters for Bytecode DSL reparses. The I095
         // emitBodyCreate/emitBodyAssign/emitLookup handlers recognize these
@@ -6577,6 +6636,23 @@ final class CanonicalToBytecodeLowerer {
             if (!boundParameters.containsKey(name)) {
                 builder.emitResetInlineCallbackLocal(locals.get(name));
             }
+        }
+        /*
+         * A callback that observes its context gets, per inline invocation,
+         * a cache for the activation its first observation creates; the
+         * activation's bindings are the live view of these region locals.
+         */
+        if (scope.observesContext()) {
+            BytecodeLocal cache = pendingInlineContextCache;
+            pendingInlineContextCache = null;
+            builder.emitResetInlineCallbackLocal(cache);
+            currentInlineContextCache = cache;
+            currentInlineContextLayout = inlineRegionLayout(locals);
+            currentInlineContextCallback = new ProtosSelectedCallbackPlan(closure, language, source);
+        } else {
+            currentInlineContextCache = null;
+            currentInlineContextLayout = null;
+            currentInlineContextCallback = null;
         }
         currentNormalCallbackScalarLocals = java.util.Map.copyOf(locals);
         currentNormalCallbackScalarAnalysis = analysis;
@@ -6634,6 +6710,9 @@ final class CanonicalToBytecodeLowerer {
             currentNormalCallbackScalarAnalysis = savedAnalysis;
             currentNormalCallbackScalarScope = savedScope;
             currentInlineClosureCallBody = savedInlineBody;
+            currentInlineContextCache = savedContextCache;
+            currentInlineContextLayout = savedContextLayout;
+            currentInlineContextCallback = savedContextCallback;
             currentNormalDirectParentCaptureReads = savedDirectParent;
         }
     }
@@ -7993,6 +8072,14 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalIntrinsic intrinsic) {
             if (intrinsic.kind() == CanonicalIntrinsic.Kind.CONTEXT
+                    && currentInlineContextCache != null) {
+                builder.emitPublishInlineCallbackContext(
+                        currentInlineContextCache,
+                        currentInlineContextLayout,
+                        currentInlineContextCallback);
+                return;
+            }
+            if (intrinsic.kind() == CanonicalIntrinsic.Kind.CONTEXT
                     && publishesOwnClosureContext()) {
                 /*
                  * I115-S1c-L: the observed Context of a Closure activation is
@@ -9163,7 +9250,7 @@ final class CanonicalToBytecodeLowerer {
         CanonicalBindingAnalysis analysis =
                 compilationFacts.isolatedClosureAnalysis(closure);
         CanonicalLexicalScope scope = analysis.scopeOf(closure).orElse(null);
-        if (scope == null || scope.observesContext()) {
+        if (scope == null) {
             return false;
         }
         java.util.Set<String> parameterNames = new java.util.LinkedHashSet<>();

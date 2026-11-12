@@ -886,7 +886,11 @@ final class CanonicalCompilationFacts {
         }
         if (expression instanceof CanonicalIntrinsic intrinsic) {
             // I115 lazy context: observing the context is a promotion point.
-            return !promotable && intrinsic.kind() == CanonicalIntrinsic.Kind.CONTEXT;
+            // An inline callback region publishes its own activation's
+            // context lazily, so observing it demands nothing of the frame.
+            return !promotable
+                    && inline == null
+                    && intrinsic.kind() == CanonicalIntrinsic.Kind.CONTEXT;
         }
         if (expression instanceof CanonicalLookup lookup) {
             return (ownBindingsOnly || scope.declaresName(lookup.name()))

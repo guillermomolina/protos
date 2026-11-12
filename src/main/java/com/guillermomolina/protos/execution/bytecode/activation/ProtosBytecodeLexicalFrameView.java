@@ -70,7 +70,7 @@ import java.util.Optional;
  */
 final class ProtosBytecodeLexicalFrameView implements ProtosLexicalBindingAuthority {
     private final MaterializedFrame frame;
-    private final ProtosBytecodeRootNode.LexicalFrameLayout layout;
+    private ProtosBytecodeRootNode.LexicalFrameLayout layout;
     private BytecodeLocation location;
     private LinkedHashMap<String, Object> overflow;
 
@@ -96,6 +96,32 @@ final class ProtosBytecodeLexicalFrameView implements ProtosLexicalBindingAuthor
                 cell.attachOwnerForRuntime(owner);
             }
         }
+    }
+
+    /**
+     * Stops viewing the frame: every PRESENT declared binding moves, with its
+     * current value, into this view's own store, and the frame layout is no
+     * longer consulted. Used when the frame locals are about to be reused by
+     * another invocation, so the bindings stay those of this activation.
+     */
+    @TruffleBoundary
+    void detach() {
+        if (layout.size() == 0) {
+            return;
+        }
+        BytecodeNode bytecode = currentBytecode();
+        LinkedHashMap<String, Object> values = new LinkedHashMap<>();
+        for (int index = 0; index < layout.size(); index++) {
+            Object value = valueOrNull(index, bytecode);
+            if (value != null) {
+                values.put(layout.name(index), value);
+            }
+        }
+        if (overflow != null) {
+            values.putAll(overflow);
+        }
+        overflow = values;
+        layout = ProtosBytecodeRootNode.EMPTY_LEXICAL_FRAME_LAYOUT;
     }
 
     /** The current Bytecode node of the retained location; never a stale tier. */

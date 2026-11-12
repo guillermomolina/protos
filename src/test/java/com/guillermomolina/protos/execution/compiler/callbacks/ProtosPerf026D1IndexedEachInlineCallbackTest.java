@@ -200,7 +200,9 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                 }
                 run(probe)
                 """,
-                2, false);
+                // A context-observing callback also runs inline, with a
+                // fresh lazily materialized activation per element.
+                2, true);
         System.out.println("PERF026_D1_ARRAY_SNAPSHOT_PRESERVED=YES");
         System.out.println("PERF026_D1_ARRAY_ASCENDING_ORDER_PRESERVED=YES");
         System.out.println("PERF026_D1_ARRAY_CALLBACK_RESULT_IGNORED=YES");
@@ -229,7 +231,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                 run(probe)
                 """,
                 3);
-        assertBytesOrdinaryTrue(
+        assertBytesInlineTrue(
                 """
                 run: (probe) => {
                     outer: context
@@ -828,25 +830,6 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                         root.getCallTarget().call(probe.module()),
                         characters);
                 assertNativeArrayProbeFrames(root, probe, expectedCalls);
-            } finally {
-                context.leave();
-            }
-        }
-    }
-
-    private static void assertBytesOrdinaryTrue(
-            String characters, int expectedCalls) throws Exception {
-        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
-            context.initialize(ProtosLanguage.ID);
-            context.enter();
-            try {
-                Probe probe = new Probe();
-                ProtosBytecodeRootNode root = lowerRoot(characters);
-                assertSame(
-                        ProtosBooleanValue.TRUE,
-                        root.getCallTarget().call(probe.module()),
-                        characters);
-                assertOrdinaryEachProbeFrames(root, probe, expectedCalls);
             } finally {
                 context.leave();
             }
