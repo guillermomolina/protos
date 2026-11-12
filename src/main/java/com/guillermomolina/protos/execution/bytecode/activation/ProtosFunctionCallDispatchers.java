@@ -248,9 +248,7 @@ final class ProtosFunctionCallDispatchers {
             Object receiver = ProtosNumericValueSupport.guestValue(callable);
             ProtosSlotLookupResult selected = selectCall(
                     receiver,
-                    frame == null
-                            ? callerReference
-                            : ProtosFrameArguments.activation(frame),
+                    frame == null ? callerReference : frame.getArguments(),
                     root);
             ProtosFrameArguments.bindMethod(
                     arguments, receiver, (ProtosObjectValue) selected.home());
@@ -1080,31 +1078,39 @@ final class ProtosFunctionCallDispatchers {
 
     /*
      * Callable method lookup for the generic path: the ordinary `call` slot of
-     * the receiver; a missing or non-Closure behavior is an Error.
+     * the receiver; a missing or non-Closure behavior is an Error. Selection
+     * reads only the caller's admitted Prelude; the exact caller activation is
+     * demanded only to construct a signaled Error.
      */
     @TruffleBoundary
     static ProtosSlotLookupResult selectCall(
             Object receiver, Object callerReference, ProtosBytecodeRootNode root) {
-        ProtosActivation caller = exactCaller(root, callerReference);
-        ProtosPrelude prelude =
-                caller.prelude()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "polymorphic invocation requires an owning Core prelude"));
-        ProtosSlotLookupResult selected;
-        try {
-            selected =
-                    ProtosValueLookup.lookup(receiver, "call", prelude)
+        ProtosPrelude prelude = admittedCallerPrelude(root, callerReference);
+        if (prelude == null) {
+            prelude =
+                    exactCaller(root, callerReference)
+                            .prelude()
                             .orElseThrow(
-                                    () -> new ProtosSignalException(ProtosCoreErrors.newError(caller)));
+                                    () ->
+                                            new IllegalStateException(
+                                                    "polymorphic invocation requires an owning Core prelude"));
+        }
+        java.util.Optional<ProtosSlotLookupResult> found;
+        try {
+            found = ProtosValueLookup.lookup(receiver, "call", prelude);
         } catch (UnsupportedOperationException unsupportedRepresentation) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+            throw callSelectionError(root, callerReference);
         }
-        if (!(selected.value() instanceof ProtosClosureValue)) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+        if (found.isEmpty() || !(found.get().value() instanceof ProtosClosureValue)) {
+            throw callSelectionError(root, callerReference);
         }
-        return selected;
+        return found.get();
+    }
+
+    private static ProtosSignalException callSelectionError(
+            ProtosBytecodeRootNode root, Object callerReference) {
+        return new ProtosSignalException(
+                ProtosCoreErrors.newError(exactCaller(root, callerReference)));
     }
 
     /**

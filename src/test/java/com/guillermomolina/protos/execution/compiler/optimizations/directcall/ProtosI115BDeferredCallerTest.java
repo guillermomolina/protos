@@ -573,7 +573,9 @@ final class ProtosI115BDeferredCallerTest {
                 assertInteger(7, evaluate("callWith(late, plain)\n", "i115b-g-late.protos", module));
             }
             for (int round = 0; round < 3; round++) {
-                assertInteger(7, evaluate("callWith(late, arm)\n", "i115b-g-arm.protos", module));
+                // CALLABLES.md: ordinary `call` lookup selects the override that
+                // argument evaluation installed before dispatch.
+                assertInteger(107, evaluate("callWith(late, arm)\n", "i115b-g-arm.protos", module));
                 assertTrue(late(module).hasLocalCallSlotForRuntime());
                 evaluate("late.removeSlot(\"call\")\n", "i115b-g-remove.protos", module);
                 assertFalse(late(module).hasLocalCallSlotForRuntime());
@@ -581,9 +583,9 @@ final class ProtosI115BDeferredCallerTest {
                 assertInteger(7, evaluate("callWith(make(), plain)\n", "i115b-g-fresh.protos", module));
             }
             /*
-             * Argument evaluation installs a local call slot, but the
-             * source-function dispatcher continues to invoke the source body.
-             * The slot remains present and is removed explicitly above.
+             * Argument evaluation installs a local call slot before dispatch,
+             * so ordinary `call` lookup selects it (CALLABLES.md). Once it is
+             * removed, the direct source-function entry applies again.
              */
         });
     }
@@ -871,8 +873,8 @@ final class ProtosI115BDeferredCallerTest {
     }
 
     /**
-     * An instance-local call override does not redirect a source-function
-     * invocation. Direct dispatch must not request an exact caller merely
+     * An instance-local call override is selected by ordinary `call` lookup
+     * (CALLABLES.md). Direct dispatch must not request an exact caller merely
      * because that override exists. Repeated calls keep the needs stable.
      */
     @Test
@@ -893,15 +895,21 @@ final class ProtosI115BDeferredCallerTest {
             com.oracle.truffle.api.Assumption beforeOverride =
                     root.callerNeedsStability();
             boolean beforeExactNeed = root.hasCallerNeed(need);
-            assertInteger(4, evaluate("callOne(late, 4)\n", "i115-needs-late.protos", module));
+            assertInteger(104, evaluate("callOne(late, 4)\n", "i115-needs-late.protos", module));
             assertTrue(late(module).hasLocalCallSlotForRuntime());
-            assertSame(beforeOverride, root.callerNeedsStability(),
-                    "local call override must not trigger a fallback");
-            assertEquals(beforeExactNeed, root.hasCallerNeed(need));
+            // The selected override body is a different callee whose Prelude
+            // use may notify this caller once (the callee-demand profile used by
+            // TruffleRuby's notifyCallerToSendFrame); it must never demand the
+            // exact caller activation merely because the override exists.
+            assertTrue(beforeOverride.isValid()
+                            || root.callerNeedsStability() != beforeOverride,
+                    "an invalidated caller-needs assumption must be replaced");
+            assertEquals(beforeExactNeed, root.hasCallerNeed(need),
+                    "local call override must not demand the exact caller activation");
             com.oracle.truffle.api.Assumption settled = root.callerNeedsStability();
             boolean registered = root.hasCallerNeed(need);
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
-                assertInteger(5, evaluate("callOne(late, 5)\n", "i115-needs-late2.protos", module));
+                assertInteger(105, evaluate("callOne(late, 5)\n", "i115-needs-late2.protos", module));
                 assertInteger(6, evaluate("callOne(make(), 6)\n", "i115-needs-admitted.protos", module));
             }
             assertSame(settled, root.callerNeedsStability(), "no repeated invalidation");

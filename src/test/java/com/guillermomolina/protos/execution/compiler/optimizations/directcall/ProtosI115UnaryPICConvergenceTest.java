@@ -199,11 +199,10 @@ final class ProtosI115UnaryPICConvergenceTest {
     }
 
     /*
-     * I115 intentionally dispatches source Closures by their function
-     * representation and execution plan rather than a mutable local call
-     * slot. This is an approved temporary divergence from D013. The
-     * historical override behavior must eventually be revisited on top of
-     * the new infrastructure, without restoring the old dispatcher.
+     * Source Closures take the direct function entry only while ordinary
+     * `call` lookup would select the canonical Object.call; a nearer local
+     * `call` slot is selected instead (CALLABLES.md, D013). The former
+     * I115 divergence is closed by owner decision.
      */
     @Test
     void megamorphicUnaryCallDispatchesSourceFunctions() throws Exception {
@@ -219,11 +218,10 @@ final class ProtosI115UnaryPICConvergenceTest {
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 assertInteger(i, evaluate("callOne(make(), " + i + ")\n", "i115-pic-mega-saturate.protos", module));
             }
-            // I115 (D013 divergence): the local call slot does not divert the
-            // source Closure from the shared function dispatcher.
+            // D013: the nearer local call slot is selected by ordinary lookup.
             ProtosClosureValue overridden = closure("overridden\n", module);
             assertTrue(overridden.hasLocalCallSlotForRuntime(), "the override is installed");
-            assertInteger(5, evaluate("callOne(overridden, 5)\n", "i115-pic-mega-after-override.protos", module));
+            assertInteger(105, evaluate("callOne(overridden, 5)\n", "i115-pic-mega-after-override.protos", module));
             assertSame(
                     closure("make()\n", module).preparedExecutionPlanOrNullForRuntime(),
                     overridden.preparedExecutionPlanOrNullForRuntime(),
@@ -233,15 +231,14 @@ final class ProtosI115UnaryPICConvergenceTest {
     }
 
     /*
-     * I115 intentionally dispatches source Closures by their function
-     * representation and execution plan rather than a mutable local call
-     * slot. This is an approved temporary divergence from D013. The
-     * historical override behavior must eventually be revisited on top of
-     * the new infrastructure, without restoring the old dispatcher.
+     * Source Closures take the direct function entry only while ordinary
+     * `call` lookup would select the canonical Object.call; a nearer local
+     * `call` slot is selected instead (CALLABLES.md, D013). The former
+     * I115 divergence is closed by owner decision.
      *
-     * The argument is still evaluated before dispatch (arm runs exactly once
-     * per call and installs the override), but the installed override does
-     * not redirect the source-function call.
+     * The argument is evaluated before dispatch (arm runs exactly once per
+     * call and installs the override), so the installed override is the
+     * selected `call` behavior of that very invocation.
      */
     @Test
     void unaryCallEvaluatesArgumentBeforeSourceFunctionDispatch() throws Exception {
@@ -269,7 +266,7 @@ final class ProtosI115UnaryPICConvergenceTest {
             }
             for (int round = 0; round < 2; round++) {
                 int before = armed[0];
-                assertInteger(7, evaluate("callWith(late, arm)\n", "i115-pic-argument-arm.protos", module));
+                assertInteger(107, evaluate("callWith(late, arm)\n", "i115-pic-argument-arm.protos", module));
                 assertEquals(before + 1, armed[0], "the argument expression ran exactly once");
                 assertTrue(closure("late\n", module).hasLocalCallSlotForRuntime(),
                         "argument evaluation installed the override");
@@ -313,11 +310,10 @@ final class ProtosI115UnaryPICConvergenceTest {
     }
 
     /*
-     * I115 intentionally dispatches source Closures by their function
-     * representation and execution plan rather than a mutable local call
-     * slot. This is an approved temporary divergence from D013. The
-     * historical override behavior must eventually be revisited on top of
-     * the new infrastructure, without restoring the old dispatcher.
+     * Source Closures take the direct function entry only while ordinary
+     * `call` lookup would select the canonical Object.call; a nearer local
+     * `call` slot is selected instead (CALLABLES.md, D013). The former
+     * I115 divergence is closed by owner decision.
      */
     @Test
     void projectionAndReturnHomeRemainValidWithSourceFunctionDispatch() throws Exception {
@@ -361,15 +357,26 @@ final class ProtosI115UnaryPICConvergenceTest {
                 assertInteger(7, evaluate("callOne(projected, 7)\n", "i115-pic-projected.protos", module));
             }
 
-            // I115 (D013 divergence): a local call override does not divert a
-            // source Closure; the shared function dispatcher runs its body.
-            assertInteger(7, evaluate("callOne(overridden, 7)\n", "i115-pic-generic.protos", module));
+            // D013: a local call override is selected by ordinary lookup.
+            assertInteger(107, evaluate("callOne(overridden, 7)\n", "i115-pic-generic.protos", module));
 
             // I115: every root shares the one lowering: one CallUnaryMethod per
             // unary call site and no separate callee-context path.
             assertSharedUnaryCallRoot(rootOf("earlyTerminal\n", module), 1);
             assertSharedUnaryCallRoot(rootOf("earlyInner\n", module), 1);
-            assertSharedUnaryCallRoot(rootOf("nonTerminal\n", module), 1);
+            // `identity(1) + 1`: one unary call site plus the `+` message
+            // fallback, entered only when IsStandardAddSelection rejects the
+            // standard addition (the standard path is the internal NumberAdd).
+            ProtosBytecodeRootNode nonTerminalRoot = rootOf("nonTerminal\n", module);
+            assertSharedUnaryCallRoot(nonTerminalRoot, 2);
+            List<String> nonTerminalNames = nonTerminalRoot.getBytecodeNode()
+                    .getInstructionsAsList().stream().map(Instruction::getName).toList();
+            assertTrue(nonTerminalNames.stream()
+                            .anyMatch(name -> isInstruction(name, "c.IsStandardAddSelection")),
+                    nonTerminalNames::toString);
+            assertTrue(nonTerminalNames.stream()
+                            .anyMatch(name -> isInstruction(name, "c.NumberAdd")),
+                    nonTerminalNames::toString);
             assertSharedUnaryCallRoot(rootOf("callOne\n", module), 1);
             assertTrue(localNames(rootOf("earlyTerminal\n", module)).contains("f"));
             assertTrue(localNames(rootOf("nonTerminal\n", module)).contains("identity"));

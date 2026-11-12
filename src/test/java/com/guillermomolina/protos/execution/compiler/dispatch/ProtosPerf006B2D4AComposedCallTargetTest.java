@@ -384,9 +384,9 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                                 .executeActivation(invocation);
 
                 assertSame(marker, result);
-                assertSame(
-                        marker,
-                        ProtosLexicalFallback.readByName(invocation, "value").orElseThrow());
+                // The body `{ value }` returns the default-bound value, which is
+                // the guest evidence; the unobserved invocation Context keeps
+                // its bindings frame-native and is not read from Java.
             } finally {
                 context.leave();
             }
@@ -632,12 +632,15 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
 
     private static ProtosActivation activationOf(
             ContinuationResult continuation) {
-        Object[] arguments =
-                continuation.getFrame().getArguments();
-        assertTrue(arguments.length > 0);
-        return assertInstanceOf(
-                ProtosActivation.class,
-                arguments[0]);
+        /*
+         * Frame argument 0 holds the invocation's Closure header until its
+         * activation is demanded; the runtime accessor publishes it once into
+         * that same frame, so repeated reads after each suspension observe the
+         * exact invocation identity without a fresh activation.
+         */
+        Object[] arguments = continuation.getFrame().getArguments();
+        assertTrue(arguments.length > 0, "ContinuationResult frame has no invocation header");
+        return ProtosFrameArguments.activation(arguments);
     }
 
     private static ProtosClosureValue semanticClosure(

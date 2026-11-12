@@ -411,9 +411,9 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                                 .executeActivation(invocation);
 
                 assertSame(overrideMarker, result);
-                assertSame(
-                        overrideMarker,
-                        ProtosLexicalFallback.readByName(invocation, "value").orElseThrow());
+                // The body `{ value }` returns the default-bound value, which is
+                // the guest evidence; the unobserved invocation Context keeps
+                // its bindings frame-native and is not read from Java.
             } finally {
                 context.leave();
             }
@@ -585,7 +585,11 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                             builder.endSourceSection();
                             builder.endSource();
                         });
-        return roots.getNode(0);
+        ProtosBytecodeRootNode root = roots.getNode(0);
+        // The no-home proof lives on the physical root and is recorded by the
+        // lowering; this hand-built `() => { null }` root has no `^`.
+        root.recordReturnHomeProvenUnobservable(true);
+        return root;
     }
 
     private static ProtosClosureValue semanticClosure(
@@ -644,11 +648,15 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
     }
 
     private static ProtosActivation activationOf(ContinuationResult continuation) {
+        /*
+         * Frame argument 0 holds the invocation's Closure header until its
+         * activation is demanded; the runtime accessor publishes it once into
+         * that same frame, so repeated reads after each suspension observe the
+         * exact invocation identity without a fresh activation.
+         */
         Object[] arguments = continuation.getFrame().getArguments();
-        if (arguments.length == 0) {
-            throw new AssertionError("ContinuationResult frame has no invocation activation");
-        }
-        return assertInstanceOf(ProtosActivation.class, arguments[0]);
+        assertTrue(arguments.length > 0, "ContinuationResult frame has no invocation header");
+        return ProtosFrameArguments.activation(arguments);
     }
 
 }

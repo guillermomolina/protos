@@ -136,14 +136,24 @@ class ProtosI143NamedArgumentStagingTest {
         return (CanonicalExpression) method.invoke(null, argument);
     }
 
+    /*
+     * The lowering classifies each supplied value (unwrapped from its named
+     * or spread form) with requiresComposedInvocation; an argument list is
+     * composed when any of its supplied values is.
+     */
     private static boolean hasComposedArgument(
             List<CanonicalExpression> arguments) throws Exception {
         Method method = CanonicalToBytecodeLowerer.class
                 .getDeclaredMethod(
-                        "hasComposedArgument",
-                        List.class);
+                        "requiresComposedInvocation",
+                        CanonicalExpression.class);
         method.setAccessible(true);
 
-        return (Boolean) method.invoke(null, arguments);
+        for (CanonicalExpression argument : arguments) {
+            if ((Boolean) method.invoke(null, unwrap(argument))) {
+                return true;
+            }
+        }
+        return false;
     }
 }
