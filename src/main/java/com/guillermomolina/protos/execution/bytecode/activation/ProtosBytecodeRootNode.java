@@ -2997,8 +2997,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * also false and the complete lexical subtree is proven independent,
      * the {@code nonCapturing} specializations build the
      * lightweight {@link ProtosClosureValue#experimentalNonCapturing}
-     * representation without binding the frame, so neither the creator's
-     * activation nor its frame arguments are consulted. A
+     * representation without binding the frame: the creator's activation is
+     * not consulted, and its frame header is read only for the admitted
+     * Prelude the new Closure retains. A
      * definition that may observe its ReturnHome ({@code ^}) keeps the I115-G
      * construction with the creator's ReturnHome. Inherited-only captures
      * retain the existing chain without creating a new creator context.
@@ -3037,6 +3038,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosClosureValue.experimentalNonCapturing(
                     definition, cachedPlan,
                     ProtosFrameArguments.definingModuleKeyForClosureCreation(
+                            frame.getArguments()),
+                    ProtosFrameArguments.creatorPreludeForClosureCreation(
                             frame.getArguments()));
         }
 
@@ -3058,6 +3061,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosClosureValue.experimentalNonCapturing(
                     definition, executionPlanCell.plan(),
                     ProtosFrameArguments.definingModuleKeyForClosureCreation(
+                            frame.getArguments()),
+                    ProtosFrameArguments.creatorPreludeForClosureCreation(
                             frame.getArguments()));
         }
 

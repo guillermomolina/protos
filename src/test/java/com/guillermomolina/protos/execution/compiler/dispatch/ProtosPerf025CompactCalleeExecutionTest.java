@@ -144,7 +144,11 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertSame(maker, arguments[0]);
             assertNull(independent.capturedLexicalEnvironmentForRuntime());
             assertTrue(independent.returnHome().isEmpty());
-            assertTrue(independent.prelude().isEmpty());
+            // Owner decision: the creator's Prelude is retained as a plain
+            // reference, read from the header without publishing (arguments[0]
+            // is still the maker).
+            assertSame(maker.prelude().orElseGet(() -> module.prelude().orElseThrow()),
+                    independent.prelude().orElseThrow());
             assertEquals("42", integerValue(enter(fastDirect(independent, module, integer(42)))));
         });
     }

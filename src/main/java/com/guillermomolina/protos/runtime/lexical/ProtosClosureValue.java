@@ -253,24 +253,31 @@ public final class ProtosClosureValue extends ProtosObjectValue {
      * I115-H (EXPERIMENTAL, PLAT066-C): minimal materialization of a source
      * Closure the lowering classified as not capturing its creator's context
      * ({@code capturesCreatorContext == false}): its definition and prepared
-     * plan, the stable root receiver, and no captured lexical environment,
-     * methodHome, ReturnHome, Prelude or plan rematerializer. Never used for
-     * a capturing Closure, and other constructions keep their contract.
+     * plan, the stable root receiver, its creator's Prelude, and no captured
+     * lexical environment, methodHome, ReturnHome or plan rematerializer.
+     * Never used for a capturing Closure, and other constructions keep their
+     * contract.
+     *
+     * <p>The creator's Prelude is retained as a plain reference, like the
+     * module globals every function value keeps, so an invocation without a
+     * transporting caller (host entry, Task, embedding) still owns its Core.
+     * It is {@code null} only when the creator itself had none admitted.
      *
      * <p>NORMATIVE DIVERGENCE (not an established equivalence): the creator's
-     * receiver, methodHome, ReturnHome and Prelude are not retained.
+     * receiver, methodHome and ReturnHome are not retained.
      */
     public static ProtosClosureValue experimentalNonCapturing(
             CanonicalClosure definition,
             ProtosClosureExecutionPlan executionPlan,
-            ProtosModuleKey definingModuleKey) {
+            ProtosModuleKey definingModuleKey,
+            ProtosPrelude prelude) {
         return new ProtosClosureValue(
                 Objects.requireNonNull(definition, "definition"),
                 (ProtosLexicalEnvironment) null,
                 ProtosObjectValue.rootObject(),
                 null,
                 null,
-                null,
+                prelude,
                 Objects.requireNonNull(executionPlan, "executionPlan"),
                 null,
                 null,

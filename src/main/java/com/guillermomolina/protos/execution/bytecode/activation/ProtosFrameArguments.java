@@ -937,8 +937,9 @@ final class ProtosFrameArguments {
      * <p>I115-H (EXPERIMENTAL): when the definition also cannot observe its
      * ReturnHome and needs no inherited environment, such a Closure is the
      * lightweight {@link ProtosClosureValue#experimentalNonCapturing}
-     * representation; the creator's Closure, environment, receiver,
-     * methodHome, ReturnHome and Prelude are not consulted. A definition that
+     * representation; it retains only the creator's admitted Prelude, and
+     * the creator's environment, receiver, methodHome and ReturnHome are not
+     * consulted. A definition that
      * may observe its ReturnHome (for example {@code (value) => { ^value }})
      * keeps the I115-G construction with the creator's ReturnHome.
      */
@@ -953,7 +954,8 @@ final class ProtosFrameArguments {
             return ProtosClosureValue.experimentalNonCapturing(
                     definition,
                     executionPlanCell.plan(),
-                    definingModuleKeyForClosureCreation(arguments));
+                    definingModuleKeyForClosureCreation(arguments),
+                    creatorPreludeForClosureCreation(arguments));
         }
         if (hasPublishedActivation(arguments)) {
             ProtosActivation owner = publishedActivation(arguments);
@@ -1057,6 +1059,37 @@ final class ProtosFrameArguments {
                 .capturedLexicalEnvironmentForRuntime();
     }
 
+
+    /**
+     * The Prelude a new Closure retains from its creator: the admitted one
+     * read from the creator's header, without publishing an activation. When
+     * the creator inherits a Prelude its caller did not transport, the
+     * non-publishing recovery runs behind a boundary.
+     */
+    static ProtosPrelude creatorPreludeForClosureCreation(Object[] arguments) {
+        if (arguments.length >= HEADER_LENGTH) {
+            Object first = arguments[CLOSURE_INDEX];
+            if (first instanceof ProtosActivation activation) {
+                return activation.preludeOrNullForRuntime();
+            }
+            if (first instanceof ProtosClosureValue closure) {
+                ProtosPrelude own = closure.preludeOrNullForRuntime();
+                if (own != null) {
+                    return own;
+                }
+                ProtosPrelude transported = callerPreludeOrNull(arguments);
+                if (transported != null) {
+                    return transported;
+                }
+            }
+        }
+        return recoveredCreatorPrelude(arguments);
+    }
+
+    @TruffleBoundary
+    private static ProtosPrelude recoveredCreatorPrelude(Object[] arguments) {
+        return preludeOrNull(arguments);
+    }
 
     static ProtosPrelude preludeOrNull(Object[] arguments) {
         if (hasPublishedActivation(arguments)) {

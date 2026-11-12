@@ -1370,8 +1370,11 @@ final class ProtosI115BDeferredCallerTest {
                         callOne: (f, value) => { f(value) }
                         """, "i115-ref-suspend-define.protos", module);
                 ProtosClosureValue inner = closure("make()\n", module);
-                assertSame(null, inner.preludeOrNullForRuntime(),
-                        "non-capturing fixture inherits its prelude");
+                // Owner decision: a non-capturing Closure retains its creator's
+                // Prelude; the registered caller need below still makes the
+                // call site transport the caller across the suspension.
+                assertSame(prelude, inner.preludeOrNullForRuntime(),
+                        "non-capturing fixture retains its creator's prelude");
                 ProtosBytecodeRootNode innerRoot = assertInstanceOf(
                         ProtosBytecodeRootNode.class, directTarget(inner).getRootNode());
                 innerRoot.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE);
