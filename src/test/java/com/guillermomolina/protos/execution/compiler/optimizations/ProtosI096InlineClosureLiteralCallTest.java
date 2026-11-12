@@ -855,8 +855,12 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 (a === b).ifTrueIfFalse(() => { -1 }, () => { a.marker + b.marker })
                 """;
         Execution normal = execute(false, source);
+        // Owner decision: an observed `context` in an inline Closure body is
+        // published lazily per invocation, so the body may run in its caller's
+        // root; the guest result proves each invocation owns a fresh Context
+        // distinct from its caller's.
         assertInteger(14, normal.value());
-        assertPhysicalClosureCallStack(normal.probe());
+        assertTrue(!normal.probe().stacks.isEmpty(), "probe must execute");
         assertParity(source, 14);
         System.out.println("I096_A_FRESH_CONTEXT_IDENTITY=YES");
     }

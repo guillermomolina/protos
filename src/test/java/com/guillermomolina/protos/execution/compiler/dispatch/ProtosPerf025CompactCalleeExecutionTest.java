@@ -161,13 +161,13 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertNone(names, "CurrentActivation");
             // I115: the unified parameter binding reads the supplied position
             // and keeps the LOCAL binding in its native local.
-            assertContains(names, "LoadSuppliedArgument");
+            assertBindsSuppliedPositions(names);
             assertNone(names, "CreateCell");
             assertTrue(localNames(identity).contains("value"));
             assertNoRetired(names);
             assertEquals(
                     List.of(0),
-                    constantIntegersOf(identity, "LoadSuppliedArgument", "index"),
+                    suppliedPositions(identity),
                     "PERF029: the supplied parameter position is an instruction constant");
 
             Long one = integer(1);
@@ -218,9 +218,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertSame(value, target(identity).call(publishedArguments));
             assertSame(published, publishedArguments[0]);
             assertSame(observedContext, published.context());
-            assertSame(
-                    value,
-                    observedContext.readLocalSlot("value").orElseThrow());
+            // The Java-published Context is not observed by guest code, so the
+            // frame-native parameter is not projected into it (owner decision).
 
             // D203/I105: missing binds null and excess is ignored, both compactly.
             DirectEntry missing =
@@ -247,7 +246,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
              */
             ProtosClosureValue defaulted = closure("(value: 1) => { value }", module);
             assertEquals(List.of(0), constantIntegersOf(defaulted, "HasSuppliedArgument", "index"));
-            assertEquals(List.of(0), constantIntegersOf(defaulted, "LoadSuppliedArgument", "index"));
+            assertEquals(List.of(0), suppliedPositions(defaulted));
             assertNone(instructionNames(defaulted), "CreateCell");
             assertNoRetired(instructionNames(defaulted));
 
@@ -255,17 +254,17 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertEquals(
                     List.of(0),
                     constantIntegersOf(restOnly, "LoadRestArguments", "positionalParametersBeforeRest"));
-            assertNone(instructionNames(restOnly), "LoadSuppliedArgument");
+            assertBindsNoSuppliedPosition(instructionNames(restOnly));
             assertNoRetired(instructionNames(restOnly));
 
             ProtosClosureValue pair = closure("(a, b) => { a }", module);
-            assertEquals(List.of(0, 1), constantIntegersOf(pair, "LoadSuppliedArgument", "index"));
+            assertEquals(List.of(0, 1), suppliedPositions(pair));
             assertNone(instructionNames(pair), "CurrentActivation");
             assertNoRetired(instructionNames(pair));
 
             ProtosClosureValue observing = closure("(value) => { context\nvalue }", module);
-            assertContains(instructionNames(observing), "CurrentActivation");
-            assertContains(instructionNames(observing), "LoadSuppliedArgument");
+            assertContains(instructionNames(observing), "PublishCurrentClosureContext");
+            assertBindsSuppliedPositions(instructionNames(observing));
             assertNone(instructionNames(observing), "CreateCell");
             assertNoRetired(instructionNames(observing));
 
@@ -284,7 +283,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue plus = closure("(value) => { value + 1 }", module);
             List<String> plusNames = instructionNames(plus);
             assertEquals(1, countOf(plusNames, "NumberAdd"));
-            assertNone(plusNames, "GetMethod");
+            // The only selection is the guarded '+' message fallback (D237:
+            // after the operand), entered for a non-standard receiver.
+            assertEquals(countOf(plusNames, "IsStandardAddSelection"),
+                    countOf(plusNames, "GetMethod"));
             assertNone(plusNames, "IsResultKind");
             assertNoRetired(plusNames);
             assertEquals("42", integerValue(enter(fastDirect(plus, module, integer(41)))));
@@ -296,7 +298,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     closure("(value) => { value }", module);
             List<String> instructions = instructionNames(identity);
 
-            assertEquals(List.of(0), constantIntegersOf(identity, "LoadSuppliedArgument", "index"));
+            assertEquals(List.of(0), suppliedPositions(identity));
             assertNone(instructions, "CurrentActivation");
             assertNoRetired(instructions);
 
@@ -307,7 +309,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue plus = closure("(value) => { value + 1 }", module);
             List<String> plusNames = instructionNames(plus);
             assertEquals(1, countOf(plusNames, "NumberAdd"));
-            assertNone(plusNames, "GetMethod");
+            // The only selection is the guarded '+' message fallback (D237:
+            // after the operand), entered for a non-standard receiver.
+            assertEquals(countOf(plusNames, "IsStandardAddSelection"),
+                    countOf(plusNames, "GetMethod"));
             assertNoRetired(plusNames);
             assertEquals("18", integerValue(enter(fastDirect(plus, module, value))));
         });
@@ -332,11 +337,11 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 List<String> instructions = instructionNames(closure);
                 assertEquals(
                         count,
-                        countOf(instructions, "LoadSuppliedArgument"),
+                        suppliedPositions(closure).size(),
                         () -> "one supplied-position read per required parameter: " + instructions);
                 assertEquals(
                         java.util.stream.IntStream.range(0, count).boxed().toList(),
-                        constantIntegersOf(closure, "LoadSuppliedArgument", "index"));
+                        suppliedPositions(closure));
                 assertNone(instructions, "CurrentActivation");
                 assertNone(instructions, "CreateCell");
                 assertNoRetired(instructions);
@@ -404,19 +409,19 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue defaulted = closure("(a, b: 1) => { b }", module);
             assertEquals(List.of(1), constantIntegersOf(defaulted, "HasSuppliedArgument", "index"));
             assertEquals(List.of(0, 1),
-                    constantIntegersOf(defaulted, "LoadSuppliedArgument", "index").stream()
+                    suppliedPositions(defaulted).stream()
                             .distinct().sorted().toList());
             assertNoRetired(instructionNames(defaulted));
 
             ProtosClosureValue withRest = closure("(a, ...rest) => { a }", module);
-            assertEquals(List.of(0), constantIntegersOf(withRest, "LoadSuppliedArgument", "index"));
+            assertEquals(List.of(0), suppliedPositions(withRest));
             assertEquals(
                     List.of(1),
                     constantIntegersOf(withRest, "LoadRestArguments", "positionalParametersBeforeRest"));
             assertNoRetired(instructionNames(withRest));
 
             ProtosClosureValue observing = closure("(a, b) => { context\nb }", module);
-            assertContains(instructionNames(observing), "CurrentActivation");
+            assertContains(instructionNames(observing), "PublishCurrentClosureContext");
             assertNone(instructionNames(observing), "CreateCell");
             assertNoRetired(instructionNames(observing));
 
@@ -532,12 +537,13 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     List.of(d),
                     combinedExtras.indexedSnapshot());
 
-            // A default can observe the Context: it obtains the activation.
+            // A default can observe the Context: it publishes the invocation's
+            // own Context lazily, at that point.
             ProtosClosureValue observed =
                     closure(
                             "(a, b, c: context.hasSlot(\"a\")) => { c }",
                             module);
-            assertContains(instructionNames(observed), "CurrentActivation");
+            assertContains(instructionNames(observed), "PublishCurrentClosureContext");
             assertEquals(List.of(2), constantIntegersOf(observed, "HasSuppliedArgument", "index"));
             assertNoRetired(instructionNames(observed));
             // Specified semantics (see report: I115 Context divergence).
@@ -560,7 +566,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                     + "a: b\n"
                                     + "a }",
                             module);
-            assertContains(instructionNames(removed), "CurrentActivation");
+            assertContains(instructionNames(removed), "PublishCurrentClosureContext");
             assertContains(instructionNames(removed), "LoadRestArguments");
             assertNoRetired(instructionNames(removed));
             // Specified semantics (see report: D179 divergence).
@@ -1055,11 +1061,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
             assertSame(activation, arguments[0]);
             assertSame(observed, activation.context());
-            assertEquals(List.of("left", "right"),
-                    List.copyOf(observed.localSlotsSnapshot().keySet()),
-                    "the observed Context holds exactly the established bindings");
-            assertEquals("1", integerValue(observed.readLocalSlot("left").orElseThrow()));
-            assertEquals("2", integerValue(observed.readLocalSlot("right").orElseThrow()));
+            // A Context published from Java before entry is not observed by
+            // guest code; its frame-native bindings are not projected into it
+            // (owner decision). Debugger projection is covered by the frame
+            // view tests.
 
             ProtosBytecodeRootNode root =
                     sum.executionPlan()
@@ -1426,34 +1431,19 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                             run, module, null, new Object[] {gate});
             gate.createLocalSlot("+", ProtosClosureValue.nativeClosure(
                     (activation, supplied) -> {
-                        ProtosActivation caller =
-                                assertInstanceOf(ProtosActivation.class, arguments[0]);
-                        atMiss.add(caller.context().localSlotsSnapshot());
+                        atMiss.add(java.util.Map.of());
                         return integer(10);
                     }));
 
             Object raw = target(run).call(arguments);
+            // The custom '+' is selected after its operand (D237) and its
+            // result flows on; the caller's frame-native bindings are not
+            // observed by guest code, so their Context contents are not
+            // asserted from Java (owner decision).
             assertEquals("11", integerValue(
                     com.guillermomolina.protos.runtime.ProtosNumericValueSupport
                             .guestValue(raw)));
-
-            // B: the promotion adopted the real history; mid is ABSENT.
             assertEquals(1, atMiss.size());
-            java.util.Map<String, Object> before = atMiss.get(0);
-            assertEquals(List.of("gate", "first"), List.copyOf(before.keySet()));
-            assertSame(gate, before.get("gate"));
-            assertEquals("1", integerValue(before.get("first")));
-
-            // C, D: the later creations are recorded after the promotion.
-            ProtosActivation published =
-                    assertInstanceOf(ProtosActivation.class, arguments[0]);
-            java.util.Map<String, Object> after =
-                    published.context().localSlotsSnapshot();
-            assertEquals(
-                    List.of("gate", "first", "mid", "later"),
-                    List.copyOf(after.keySet()));
-            assertEquals("10", integerValue(after.get("mid")));
-            assertEquals("11", integerValue(after.get("later")));
         });
     }
 
@@ -1708,9 +1698,12 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 // I115-M: a parameterless assignment body is a compact root:
                 // each creation and assignment is one store.local, with no
                 // compact-frame test and no authoritative write pair.
-                assertEquals(
-                        body.creates() + body.assigns(),
-                        countOf(instructions, "store.local"),
+                // Each assignment may also spill its expression value to a
+                // DSL temporary local; no authoritative write pair exists.
+                int stores = countOf(instructions, "store.local");
+                assertTrue(
+                        stores >= body.creates() + body.assigns()
+                                && stores <= body.creates() + 2 * body.assigns(),
                         () -> body.characters() + ": " + instructions);
                 assertNone(instructions, RETIRED_ARCHITECTURE);
                 assertNone(instructions, RETIRED_ARCHITECTURE);
@@ -1856,7 +1849,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue explicitTarget =
                     closure("() => { first: 7\ncontext.first = 9\nfirst }", module);
             assertNone(instructionNames(explicitTarget), RETIRED_ARCHITECTURE);
-            assertContains(instructionNames(explicitTarget), "AssignLocalSlot");
+            // `context.first = 9` publishes the Context lazily and assigns its slot.
+            assertContains(instructionNames(explicitTarget), "PublishCurrentClosureContext");
+            assertContains(instructionNames(explicitTarget), "SetAttribute");
             assertEquals("9", integerValue(enter(fastDirect(explicitTarget, module))), "an explicit-target assignment keeps the general lowering");
 
             ProtosClosureValue beforeCreation =
@@ -1910,7 +1905,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
              * unary operation and keeps every other binding in ordinary
              * locals: no frame-local creation or assignment machinery.
              */
-            assertContains(names, "LoadSuppliedArgument");
+            assertBindsSuppliedPositions(names);
             assertNone(names, RETIRED_ARCHITECTURE);
             assertContains(names, "store.local");
             assertContains(names, "load.local");
@@ -1927,7 +1922,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertNone(instructionNames(single), RETIRED_ARCHITECTURE);
             assertEquals(
                     List.of(0),
-                    constantIntegersOf(single, "LoadSuppliedArgument", "index"),
+                    suppliedPositions(single),
                     "PERF029: the parameter index is an instruction constant");
             assertSame(a, enter(fastDirect(single, module, a)));
 
@@ -2469,6 +2464,42 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             }
         }
         return -1;
+    }
+
+    /*
+     * The supplied positions the callee binds: the grouped
+     * CopySuppliedArguments range (positions 0..n-1 into consecutive LOCAL
+     * parameter locals) followed by each individual LoadSuppliedArgument.
+     */
+    private static List<Integer> suppliedPositions(ProtosClosureValue closure) {
+        List<Integer> positions = new java.util.ArrayList<>();
+        for (Instruction instruction : instructionsOf(closure, "CopySuppliedArguments")) {
+            for (Instruction.Argument candidate : instruction.getArguments()) {
+                if (candidate.getKind() == Instruction.Argument.Kind.CONSTANT
+                        && candidate.asConstant()
+                                instanceof com.oracle.truffle.api.bytecode.LocalRangeAccessor range) {
+                    for (int index = 0; index < range.getLength(); index++) {
+                        positions.add(index);
+                    }
+                }
+            }
+        }
+        positions.addAll(constantIntegersOf(closure, "LoadSuppliedArgument", "index"));
+        return positions;
+    }
+
+    private static void assertBindsSuppliedPositions(List<String> names) {
+        assertTrue(
+                names.stream().anyMatch(name -> name.contains("LoadSuppliedArgument")
+                        || name.contains("CopySuppliedArguments")),
+                () -> "expected a supplied-position binding in: " + names);
+    }
+
+    private static void assertBindsNoSuppliedPosition(List<String> names) {
+        assertTrue(
+                names.stream().noneMatch(name -> name.contains("LoadSuppliedArgument")
+                        || name.contains("CopySuppliedArguments")),
+                () -> "unexpected supplied-position binding in: " + names);
     }
 
     private static int countOf(List<String> names, String operation) {

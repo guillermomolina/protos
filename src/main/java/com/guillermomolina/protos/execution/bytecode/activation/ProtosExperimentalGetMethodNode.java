@@ -37,6 +37,7 @@ import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
+import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
@@ -48,7 +49,8 @@ import com.oracle.truffle.api.strings.TruffleString;
  * evaluated once by the caller bytecode; the selector is a constant operand.
  * Ordinary selection returns a {@link ProtosBoundMethod} carrying the
  * selected Closure, receiver and methodHome. Direct cached selection returns
- * the raw Closure; D188 foreign member selection returns its read callable.
+ * the raw Closure only when the receiver itself owns the selected slot (an
+ * inherited selection keeps its owning methodHome); D188 foreign member selection returns its read callable.
  * Nothing is prepared or executed here.
  *
  * <p>{@link #doCached} is the selection cache (at most three entries),
@@ -79,8 +81,8 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             guards = {
                 "receiver == cachedReceiver",
                 "cachedSelection != null",
-                "cachedSelection.isValid()",
-                "isClosure(cachedSelection.read())"
+                "selectionStillValid(cachedSelection)",
+                "selectsClosure(cachedSelection)"
             },
             limit = "3")
     @ForceQuickening
@@ -91,16 +93,22 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             Object receiver,
             @Cached("receiver") Object cachedReceiver,
             @Cached("selectOrNull(receiver, selector)")
-                    StructuralSelection cachedSelection) {
+                    StructuralSelection cachedSelection,
+            @Cached("ownsSelection(cachedReceiver, cachedSelection)") boolean ownSelection) {
         ProtosClosureValue selected =
                 (ProtosClosureValue) cachedSelection.read();
-        if (direct) {
-            // I115 divergence: the receiver travels separately; the
-            // inherited method's exact original methodHome is not retained.
+        if (direct && ownSelection) {
+            // The receiver travels separately and is its own methodHome.
             return selected;
         }
+        // An inherited method keeps the exact object owning the selected
+        // slot as its methodHome, which `super` starts from.
         return new ProtosBoundMethod(
                 selected, receiver, cachedSelection.home());
+    }
+
+    static boolean ownsSelection(Object receiver, StructuralSelection selection) {
+        return selection != null && selection.home() == receiver;
     }
 
     @Specialization(replaces = "doCached")
@@ -121,6 +129,18 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
 
     static boolean isClosure(Object value) {
         return value instanceof ProtosClosureValue;
+    }
+
+    /* The observed Shapes may change between executions. */
+    @NonIdempotent
+    static boolean selectionStillValid(StructuralSelection selection) {
+        return selection.isValid();
+    }
+
+    /* The selected slot may be reassigned between executions. */
+    @NonIdempotent
+    static boolean selectsClosure(StructuralSelection selection) {
+        return selection.read() instanceof ProtosClosureValue;
     }
 
     /* Installation only: the structural selection from an exact ordinary receiver, or null. */

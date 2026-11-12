@@ -31,6 +31,7 @@ import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Idempotent;
+import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.ReportPolymorphism.Megamorphic;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
@@ -77,9 +78,11 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             guards = {
                     "isSourceFunction(callable)",
                     "isSingleContext()",
+                    // D013 selection first: an overridden `call` never
+                    // prepares the Closure's own target.
+                    "canonicalCallSelected(callable, rootSelection)",
                     "callable == cachedCallable",
-                    "cachedTarget != null",
-                    "canonicalCallSelected(callable, rootSelection)"
+                    "cachedTarget != null"
             },
             assumptions = {"cachedCodeStable", "cachedCallerNeedsStable"},
             excludeForUncached = true,
@@ -205,6 +208,8 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                 null, root);
     }
 
+    // A local `call` slot may be added or removed between executions.
+    @NonIdempotent
     static boolean canonicalCallSelected(
             ProtosClosureValue callable,
             ProtosStandardObjectProtocol.CanonicalRootCallSelection selection) {

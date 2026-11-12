@@ -83,7 +83,11 @@ class ProtosI106ComposableCompilationFactsTest {
     @Test
     void missingOrNegativeProofKeepsPersistentFrameAuthority() {
         assertPersistent("() => { context }");
-        assertPersistent("() => { () => { 1 } }");
+        // PLAT066-C: a nested Closure that does not use its creator is built
+        // on the creator's captured environment and demands no frame authority.
+        assertFalse(persistent("() => { () => { 1 } }"));
+        // One that does use its creator still demands it.
+        assertPersistent("() => { () => { undeclared } }");
         assertPersistent("() => { x\n x: 1 }");
 
         CanonicalSequence program = canonicalize("(value) => { value }");
@@ -424,6 +428,10 @@ class ProtosI106ComposableCompilationFactsTest {
     }
 
     private void assertPersistent(String source) {
+        assertTrue(persistent(source), source);
+    }
+
+    private boolean persistent(String source) {
         CanonicalClosure closure =
                 assertInstanceOf(CanonicalClosure.class, canonicalize(source).expressions().get(0));
         CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeClosure(closure);
@@ -434,7 +442,7 @@ class ProtosI106ComposableCompilationFactsTest {
                                 closure,
                                 analysis,
                                 analysis.scopeOf(closure).orElseThrow());
-        assertTrue(rootFacts.requiresPersistentFrameAuthority(), source);
+        return rootFacts.requiresPersistentFrameAuthority();
     }
 
     private CanonicalSequence canonicalize(String source) {

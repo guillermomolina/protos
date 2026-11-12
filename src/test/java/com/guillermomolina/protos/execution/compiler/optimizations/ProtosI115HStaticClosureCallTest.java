@@ -739,17 +739,22 @@ final class ProtosI115HStaticClosureCallTest {
      */
     private static void assertRecursiveUnaryLowering(List<String> names, String comparison) {
         List<String> plain = unquickened(names);
-        assertEquals(2, plain.stream().filter(TERMINAL_CALL::equals).count(),
+        // Two recursive calls plus one guarded message fallback per GetMethod.
+        assertEquals(2 + plain.stream().filter("c.GetMethod"::equals).count(),
+                plain.stream().filter(TERMINAL_CALL::equals).count(),
                 plain::toString);
         assertEquals(2, plain.stream().filter("c.ReadGlobal"::equals).count(),
                 plain::toString);
+        // n is bound into its native storage: the grouped LOCAL copy (the
+        // inline ifTrue body shares the frame), or a CELL store when captured.
         int load = plain.indexOf("c.LoadSuppliedArgument");
-        assertTrue(load >= 0 && plain.get(load + 1).equals("c.StoreCell"), plain::toString);
+        assertTrue(plain.indexOf("c.CopySuppliedArguments") == 1
+                        || (load >= 0 && plain.get(load + 1).equals("c.StoreCell")),
+                plain::toString);
         int compare = plain.indexOf(comparison);
-        int materialize = plain.indexOf("c.MaterializePrimitiveNumericCarrier");
-        int condition = plain.indexOf("c.ExperimentalCanonicalBooleanCondition");
-        assertTrue(compare >= 0 && materialize > compare && condition > materialize,
-                () -> "comparison, materialization, Boolean validation: " + plain);
+        int condition = plain.indexOf("c.IsCanonicalBooleanOperand");
+        assertTrue(compare >= 0 && condition > compare,
+                () -> "comparison, then the canonical Boolean control: " + plain);
         assertTrue(plain.contains("c.NumberSubtract") && plain.contains("c.NumberAdd"),
                 plain::toString);
         for (String retired : List.of("InvokeStaticClosureOneTail", "ExperimentalLongArgument0",

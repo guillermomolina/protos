@@ -968,7 +968,8 @@ final class ProtosI112TailContinuationTest {
                 List<String> names = signature(root).stream()
                         .map(entry -> entry.split(" ", 2)[0]).toList();
                 assertFalse(names.contains("c.InstallFrameLexicalAuthority"), names::toString);
-                assertTrue(names.contains("c.CreateCurrentFrameLocal"), names::toString);
+                // Module bindings are created in the module's own Context.
+                assertTrue(names.contains("c.CreateCurrentLocalSlot"), names::toString);
 
                 ProtosActivation module = harness.moduleActivation();
                 Object[] observed = new Object[2];
@@ -1041,9 +1042,12 @@ final class ProtosI112TailContinuationTest {
                         "identity: (value) => { value }\nresult: identity(1)\nresult",
                         "identity: (value) => { value }\nidentity(identity(1))")) {
                     ProtosBytecodeRootNode root = compile(program, "not-admitted");
+                    // The module keeps its persistent authority: its bindings
+                    // are created in its own Context (the retired
+                    // InstallFrameLexicalAuthority body operation is gone).
                     assertTrue(
                             signature(root).stream().anyMatch(
-                                    entry -> entry.startsWith("c.InstallFrameLexicalAuthority")),
+                                    entry -> entry.startsWith("c.CreateCurrentLocalSlot")),
                             program);
                     assertInteger(1, root.getCallTarget().call(harness.moduleActivation()));
                 }

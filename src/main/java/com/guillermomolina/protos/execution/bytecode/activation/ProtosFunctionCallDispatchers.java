@@ -119,6 +119,8 @@ final class ProtosFunctionCallDispatchers {
                 .canonicalRootCallSelectionOrNullForRuntime();
     }
 
+        // A local `call` slot may be added or removed between executions.
+        @NonIdempotent
         static boolean hasCanonicalCallSelection(
                 ProtosClosureValue closure,
                 ProtosStandardObjectProtocol.CanonicalRootCallSelection

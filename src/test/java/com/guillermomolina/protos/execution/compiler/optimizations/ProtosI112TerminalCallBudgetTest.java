@@ -144,7 +144,7 @@ final class ProtosI112TerminalCallBudgetTest {
                         "c.MaterializeCurrentClosure",
                         "c.CreateCurrentFrameLocal",
                         "c.ReadRootFrameLocal",
-                        "c.InvokeClosureOneTail",
+                        "c.CallUnaryMethod",
                         "c.EpilogForReturn")) {
                     assertTrue(
                             names(module).contains(required),
@@ -258,7 +258,7 @@ final class ProtosI112TerminalCallBudgetTest {
 
                 List<Integer> runs = new ArrayList<>();
                 for (int index = 1; index < census.roots().size(); index++) {
-                    if (count(names(census.signatures().get(index)), "c.InvokeClosureOneTail") == 1) {
+                    if (count(names(census.signatures().get(index)), "c.CallUnaryMethod") == 1) {
                         runs.add(index);
                     }
                 }
@@ -270,7 +270,7 @@ final class ProtosI112TerminalCallBudgetTest {
                 List<String> run = names(census.signatures().get(runIndex));
                 List<String> identity = names(census.signatures().get(identityIndex));
                 for (String required : List.of(
-                        "c.BindUnaryFrameParameter",
+                        "c.CopySuppliedArguments",
                         "load.local")) {
                     assertTrue(
                             identity.contains(required),
@@ -305,7 +305,7 @@ final class ProtosI112TerminalCallBudgetTest {
 
                 System.out.println("PERF042_RUN_PHYSICAL_CALL=PASS");
                 System.out.println("PERF042_RUN_INLINE_BODY_IN_LOWERER=ABSENT");
-                System.out.println("PERF042_RUN_TERMINAL_OPERATION=InvokeClosureOneTail");
+                System.out.println("PERF042_RUN_TERMINAL_OPERATION=CallUnaryMethod");
             });
         }
     }
@@ -330,7 +330,7 @@ final class ProtosI112TerminalCallBudgetTest {
 
                 List<Integer> runs = new ArrayList<>();
                 for (int index = 1; index < census.roots().size(); index++) {
-                    if (count(names(census.signatures().get(index)), "c.InvokeClosureOneTail") == 1) {
+                    if (count(names(census.signatures().get(index)), "c.CallUnaryMethod") == 1) {
                         runs.add(index);
                     }
                 }
@@ -342,7 +342,7 @@ final class ProtosI112TerminalCallBudgetTest {
 
                 assertEquals(
                         1,
-                        count(run, "c.InvokeClosureOneTail"),
+                        count(run, "c.CallUnaryMethod"),
                         () -> "one terminal call in run\n" + census.fullReport());
                 for (String forbidden : List.of(
                         "c.InstallFrameLexicalAuthority",
@@ -373,10 +373,10 @@ final class ProtosI112TerminalCallBudgetTest {
                         count(run, "c.MaterializeCurrentClosure"),
                         () -> "one Closure creation in run\n" + census.fullReport());
                 assertTrue(
-                        !run.contains("c.BindUnaryFrameParameter"),
+                        !run.contains("c.CopySuppliedArguments"),
                         () -> "identity body copied into run\n" + census.fullReport());
                 assertTrue(
-                        identity.contains("c.BindUnaryFrameParameter"),
+                        identity.contains("c.CopySuppliedArguments"),
                         () -> "identity keeps its own root\n" + census.fullReport());
 
                 assertInteger(
@@ -431,7 +431,7 @@ final class ProtosI112TerminalCallBudgetTest {
                                 "c.EnterRoot",
                                 "c.ReadGlobal",
                                 "load.constant",
-                                "c.InvokeExperimentalClosureOneTail",
+                                "c.CallUnaryMethod",
                                 "c.EpilogForReturn",
                                 "return"),
                         run,

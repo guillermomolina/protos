@@ -86,8 +86,10 @@ final class ProtosPerf006B6A3BClosureLiteralCanonicalCoverageTest {
             assertSame(methodHome, closure.methodHome().orElseThrow());
             assertSame(methodActivation.returnHome().orElseThrow(), closure.returnHome().orElseThrow());
             assertSame(prelude, closure.prelude().orElseThrow());
+            // PLAT066-C: `() => this` does not use its creator's Context, so
+            // it is built on the creator's captured environment.
             assertEquals(
-                    methodActivation.lexicalContextsForClosureCapture(),
+                    methodActivation.capturedLexicalContexts(),
                     closure.capturedLexicalContexts());
             assertTrue(closure.executionPlan().isPresent());
         }

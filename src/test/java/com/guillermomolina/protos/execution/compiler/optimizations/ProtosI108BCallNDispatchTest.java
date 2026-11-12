@@ -556,9 +556,17 @@ final class ProtosI108BCallNDispatchTest {
     private static boolean containsOperation(
             java.util.List<String> instructions,
             String operation) {
-        return instructions.stream().anyMatch(
+        return instructions.stream().map(I108BBase::unquickened).anyMatch(
                 name -> name.equals(operation)
                         || name.equals("c." + operation));
+    }
+
+    /* Instruction names without their DSL quickening suffix ($...). */
+    private static final class I108BBase {
+        static String unquickened(String name) {
+            int quickened = name.indexOf('$');
+            return quickened < 0 ? name : name.substring(0, quickened);
+        }
     }
 
     private static void assertInvocationTopology(
@@ -777,6 +785,7 @@ final class ProtosI108BCallNDispatchTest {
                 instructionNames(functionRoot(function, module));
 
         long calls = instructions.stream()
+                .map(I108BBase::unquickened)
                 .filter(name -> name.equals(expectedOperation)
                         || name.equals("c." + expectedOperation))
                 .count();

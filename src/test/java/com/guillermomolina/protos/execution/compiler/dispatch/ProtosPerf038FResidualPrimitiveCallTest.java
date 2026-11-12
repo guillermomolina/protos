@@ -304,15 +304,20 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
             ProtosClosureValue reader = parsedClosure(
                     "makeSlot: (initial) => {\n"
                             + "    slot: initial\n"
-                            + "    () => { slot }\n"
+                            + "    reader: () => { slot }\n"
+                            + "    context\n"
                             + "}\n"
-                            + "reader: makeSlot(1)\n"
+                            + "owner: makeSlot(1)\n"
+                            + "reader: owner.reader\n"
                             + "reader\n",
                     "perf038f-cleared.protos", module);
             for (int call = 0; call < WARM_UP_CALLS; call++) {
                 assertEquals("1", integerValue(callReader(module, call)));
             }
-            ProtosObjectValue owner = reader.capturedLexicalEnvironmentForRuntime().context();
+            // The owner's Context is observed in guest terms (PLAT066-C: a
+            // cell-only reader does not capture it).
+            ProtosObjectValue owner = (ProtosObjectValue)
+                    module.context().readLocalSlot("owner").orElseThrow();
             owner.removeLocalSlot("slot");
             ProtosSignalException absent =
                     assertThrows(ProtosSignalException.class, () -> callReader(module, -1));
@@ -373,7 +378,9 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
                 source.capturedReceiver(),
                 null,
                 null,
-                prelude);
+                prelude,
+                // Every source Closure carries its prepared plan.
+                source.executionPlan().orElseThrow());
     }
 
     private static ProtosPrelude otherPrelude() {

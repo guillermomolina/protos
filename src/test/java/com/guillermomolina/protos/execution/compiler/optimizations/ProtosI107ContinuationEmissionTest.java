@@ -51,7 +51,7 @@ import org.junit.jupiter.api.Test;
  * pre-builder emission plan, so a nested constant Boolean-control site whose
  * selection is complete under the published standard root folds to its proven
  * literal and loses the ordinary send, its continuation composition ({@code
- * IsContinuationForCall}, {@code Yield}, {@code ResumeContinuation}) and its
+ * IsContinuation}, {@code Yield}, {@code ResumeDispatchedContinuation}) and its
  * callback roots; the published root capability is the consumed EFFECTIVE_ROOT
  * proof. Every dynamic selection keeps its generic fallback.
  *
@@ -72,7 +72,7 @@ final class ProtosI107ContinuationEmissionTest {
             "() => { true.ifTrue() { false.ifFalse() { 7 + 0 } } }";
     /** Exact Bytecode instruction names of the continuation composition. */
     private static final List<String> CONTINUATION =
-            List.of("c.IsContinuationForCall", "yield", "c.ResumeContinuation");
+            List.of("c.IsContinuation", "yield", "c.ResumeDispatchedContinuation");
 
     @Test
     void nestedConstantControlFoldsToTheIndependentOracle() throws Exception {
@@ -373,7 +373,8 @@ final class ProtosI107ContinuationEmissionTest {
                         "() => { 5 }", 5),
                 new Case("(f) => { f(1) }", "c.CallUnaryMethod",
                         "(value) => { value + 4 }", 5),
-                new Case("(f) => { f(2, 3) }", "c.CallVarargsMethod",
+                // Two arguments: the callable plus two operands (CallBinaryMethod).
+                new Case("(f) => { f(2, 3) }", "c.CallBinaryMethod",
                         "(a, b) => { a + b }", 5));
         try (Harness normal = new Harness(false)) {
             normal.run(() -> {
@@ -383,7 +384,7 @@ final class ProtosI107ContinuationEmissionTest {
                     List<String> instructions = completeSignature(activation);
                     assertTrue(
                             instructions.stream().anyMatch(
-                                    entry -> entry.split(" ", 2)[0].equals(test.operation())),
+                                    entry -> entry.split(" ", 2)[0].split("\\$", 2)[0].equals(test.operation())),
                             () -> test.operation() + " missing in " + instructions);
                     assertNoContinuation(instructions);
                     for (String absent : List.of(
@@ -555,7 +556,7 @@ final class ProtosI107ContinuationEmissionTest {
 
     private static void assertNoContinuation(List<String> signature) {
         for (String entry : signature) {
-            String name = entry.split(" ", 2)[0];
+            String name = entry.split(" ", 2)[0].split("\\$", 2)[0];
             for (String operation : CONTINUATION) {
                 assertFalse(name.equals(operation), () -> operation + " in " + signature);
             }
@@ -566,7 +567,8 @@ final class ProtosI107ContinuationEmissionTest {
     private static void assertHasContinuation(List<String> signature) {
         for (String operation : CONTINUATION) {
             assertTrue(
-                    signature.stream().anyMatch(entry -> entry.split(" ", 2)[0].equals(operation)),
+                    signature.stream().anyMatch(
+                            entry -> entry.split(" ", 2)[0].split("\\$", 2)[0].equals(operation)),
                     () -> operation + " missing in " + signature);
         }
     }

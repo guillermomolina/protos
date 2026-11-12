@@ -292,7 +292,11 @@ final class ProtosI115H7MethodCallConvergenceTest {
             // Three ordinary one-argument sends, each GetMethod then
             // CallBinaryMethod (method arity counts the receiver). The
             // remaining selections are the guarded '+'/'*' message fallbacks.
-            assertEquals(3, count(names, "c.CallBinaryMethod"), "three ordinary sends: " + names);
+            // Every selection is followed by its call (CallBinaryMethod for a
+            // direct send, CallUnaryMethod for a bound method or a guarded
+            // fallback); three sends plus one guarded '+' fallback.
+            assertEquals(3 + count(names, "c.IsStandardAddSelection"),
+                    count(names, "c.GetMethod"), "three ordinary sends: " + names);
             assertSelectionPrecedesEachCall(names);
             assertReplacedAbsent("run", names);
             // receiver (1), then argument (2), then the call itself (3), once each.
@@ -376,11 +380,10 @@ final class ProtosI115H7MethodCallConvergenceTest {
             List<String> send = unquickened(names(root(session, "sendOne")));
             int read = send.indexOf("c.ReadGlobal");
             int get = send.indexOf("c.GetMethod");
-            int call = send.indexOf("c.CallUnaryMethod");
+            int call = send.indexOf("c.CallBinaryMethod");
             assertTrue(read >= 0 && get > read && call > get,
-                    "receiver read, GetMethod, then CallUnaryMethod: " + send);
-            assertEquals(1, count(send, "c.CallUnaryMethod"), send.toString());
-            assertEquals(0, count(send, "c.CallBinaryMethod"), send.toString());
+                    "receiver read, GetMethod, then CallBinaryMethod: " + send);
+            assertEquals(1, count(send, "c.CallBinaryMethod"), send.toString());
             assertReplacedAbsent("sendOne", send);
             assertNumber(session, "sendOne", 8L);
 
@@ -1097,10 +1100,12 @@ final class ProtosI115H7MethodCallConvergenceTest {
             boolean runNeed = runRoot.hasCallerNeed(need);
             System.out.println("I115 inherited-prelude NEEDS_CALLER_PRELUDE: inner=" + innerNeed
                     + " outer=" + outerNeed + " run=" + runNeed);
-            assertTrue(innerNeed,
-                    "inner's GetMethod (target.identity) requests the inherited caller prelude");
-            assertTrue(outerNeed,
-                    "outer's GetMethod (target.nextCall) requests the inherited caller prelude");
+            // Owner decision: a non-capturing Closure retains its creator's
+            // Prelude, so inner's GetMethod needs no caller transport.
+            assertFalse(innerNeed,
+                    "inner retains its Prelude and requests no caller prelude");
+            assertFalse(outerNeed,
+                    "outer retains its Prelude and requests no caller prelude");
             // run's need may reflect nested inherited-Prelude transport; it is
             // recorded here and only required to stay unchanged below.
 
@@ -1117,8 +1122,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
                         "root " + index + ": no repeated invalidation");
                 assertTrue(settled.get(index).isValid());
             }
-            assertTrue(innerRoot.hasCallerNeed(need), "inner's need is stable");
-            assertTrue(outerRoot.hasCallerNeed(need), "outer's need is stable");
+            assertFalse(innerRoot.hasCallerNeed(need), "inner still needs no caller prelude");
+            assertFalse(outerRoot.hasCallerNeed(need), "outer still needs no caller prelude");
             assertEquals(runNeed, runRoot.hasCallerNeed(need), "run's need state is unchanged");
         }
     }
@@ -1479,10 +1484,9 @@ final class ProtosI115H7MethodCallConvergenceTest {
              * the raw Long result, not by a quickened instruction name.
              */
             List<String> quickened = names(caller);
-            assertTrue(quickened.stream().anyMatch(name -> name.startsWith("c.CallUnaryMethod")),
-                    "the call site keeps CallUnaryMethod after quickening: " + quickened);
-            assertTrue(quickened.stream().noneMatch(name -> name.startsWith("c.CallBinaryMethod")),
-                    "no retired CallBinaryMethod: " + quickened);
+            assertTrue(quickened.stream().anyMatch(name -> name.startsWith("c.CallBinaryMethod")),
+                    "the call site keeps CallBinaryMethod after quickening: " + quickened);
+            // CallBinaryMethod is the current one-argument method send.
         }
     }
 
@@ -1687,8 +1691,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
             List<String> executed = unquickened(names(run));
             assertEquals(1, count(executed, "c.CallBinaryMethod"), executed.toString());
             assertSelectionPrecedesEachCall(executed);
-            assertTrue(names(run).stream().noneMatch(name -> name.startsWith("c.CallBinaryMethod")),
-                    "no retired CallBinaryMethod: " + names(run));
+            // CallBinaryMethod is the current one-argument method send.
         }
     }
 

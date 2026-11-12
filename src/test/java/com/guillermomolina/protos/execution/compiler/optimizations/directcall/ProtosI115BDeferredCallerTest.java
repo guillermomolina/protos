@@ -1548,14 +1548,13 @@ final class ProtosI115BDeferredCallerTest {
      * binding of the same owner afterwards (D179 C0).
      */
     /**
-     * KNOWN I115 EXPERIMENTAL DIVERGENCE:
-     * a captured CELL is not projected into the published Context.
-     * The Context's NAME bindings and the Closure's captured CELL remain
-     * independent. D179 context-visible removal/recreation is not
-     * implemented by this experimental representation.
+     * D179: a captured binding of an observed Context is that Context's slot.
+     * Removing it through the Context removes the binding the reader shares,
+     * and recreating it is observed by the reader (the former experimental
+     * divergence, where the cell stayed independent, is closed).
      */
     @Test
-    void capturedCellRemainsIndependentOfPublishedContextUnderI115()
+    void capturedCellFollowsTheObservedContextBinding()
             throws Exception {
         withCore(module -> {
             evaluate("""
@@ -1589,8 +1588,11 @@ final class ProtosI115BDeferredCallerTest {
                     .bytecodeActivationRootForTesting()
                     .getBytecodeNode().setUncachedThreshold(0);
 
-            assertFalse(publishedOwner.hasLocalSlot("seed"),
-                    "I115 CELL bindings are not published as Context slots");
+            // `make` observes its Context (`owner: context`), so its binding
+            // `seed` is a slot of that observed Context in guest terms; the
+            // reader keeps sharing the same binding through its cell.
+            assertTrue(publishedOwner.hasLocalSlot("seed"),
+                    "an observed Context exposes its bindings");
 
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 assertInteger(10 + i,
@@ -1598,32 +1600,25 @@ final class ProtosI115BDeferredCallerTest {
                                 "i115-captured-read.protos", module));
             }
 
-            // Removal of a nonexistent Context NAME signals normally.
+            // Guest terms: the observed owner Context exposes `seed`, so
+            // removing it removes the binding the reader shares; the reader
+            // then finds no `seed` and signals the lookup failure.
+            evaluate("drop()\n", "i115-captured-drop.protos", module);
+            assertFalse(publishedOwner.hasLocalSlot("seed"));
             assertThrows(
                     com.guillermomolina.protos.runtime.ProtosSignalException.class,
-                    () -> evaluate("drop()\n", "i115-captured-drop.protos", module));
+                    () -> evaluate("read(1)\n", "i115-captured-after-drop.protos", module));
 
-            assertFalse(publishedOwner.hasLocalSlot("seed"));
-            assertInteger(11,
-                    evaluate("read(1)\n", "i115-captured-after-drop.protos", module));
-
-            // Recreating the NAME slot must not overwrite the captured CELL.
+            // Recreating the slot recreates that same binding for the reader.
             evaluate("recreate()\n", "i115-captured-recreate.protos", module);
             assertTrue(publishedOwner.hasLocalSlot("seed"));
             assertInteger(30,
                     publishedOwner.readLocalSlot("seed").orElseThrow());
-
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
-                assertInteger(10 + i,
+                assertInteger(30 + i,
                         evaluate("read(" + i + ")\n",
                                 "i115-captured-again.protos", module));
             }
-
-            // Removing the new Context NAME leaves the original CELL intact.
-            evaluate("drop()\n", "i115-captured-drop-name.protos", module);
-            assertFalse(publishedOwner.hasLocalSlot("seed"));
-            assertInteger(11,
-                    evaluate("read(1)\n", "i115-captured-final.protos", module));
         });
     }
 

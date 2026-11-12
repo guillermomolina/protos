@@ -93,10 +93,15 @@ final class ProtosPerf038ITerminalMethodSendTest {
             assertInteger(1, census.module().getCallTarget().call(module));
 
             List<String> run = names(census.signatures().get(census.runIndex()));
+            // The terminal one-argument send is GetMethod then CallBinaryMethod.
             assertEquals(
                     1,
-                    run.stream().filter("c.InvokeMethodOneTail"::equals).count(),
-                    () -> "run must contain one InvokeMethodOneTail\n" + census.report());
+                    run.stream().filter("c.CallBinaryMethod"::equals).count(),
+                    () -> "run must contain one terminal CallBinaryMethod\n" + census.report());
+            assertEquals(
+                    1,
+                    run.stream().filter("c.GetMethod"::equals).count(),
+                    () -> "run must contain one GetMethod\n" + census.report());
             for (String forbidden : FORBIDDEN_IN_RUN) {
                 assertTrue(
                         !run.contains(forbidden),
@@ -108,7 +113,7 @@ final class ProtosPerf038ITerminalMethodSendTest {
                     census.roots().get(census.methodIndex()));
             assertTrue(
                     !names(census.signatures().get(census.methodIndex()))
-                            .contains("c.InvokeMethodOneTail"),
+                            .contains("c.CallBinaryMethod"),
                     () -> "identity must not contain the caller's send\n" + census.report());
         });
         System.out.println("PERF038_I_PHYSICAL_INVOCATION=PASS");
@@ -220,7 +225,10 @@ final class ProtosPerf038ITerminalMethodSendTest {
                 assertInteger(3, evaluate("forward(3)\n", "perf038i-unknown.protos", module));
             }
             assertTerminalSite("forward", module);
-            assertEquals(0, tierEntries("forward", module).size(), "UNKNOWN is never admitted");
+            // The direct source-send tier composes a callee suspension (see
+            // terminalMethodSendSuspendsAndResumesWithoutReplay), so a target
+            // without a non-suspension proof is admitted like any source method.
+            assertEquals(1, tierEntries("forward", module).size(), "UNKNOWN is admitted");
 
             // A non-local return to the method home.
             assertEquals("7", integerValue(evaluate(
@@ -349,7 +357,7 @@ final class ProtosPerf038ITerminalMethodSendTest {
 
             assertFalse(
                     names(fullSignature(functionRoot("mutating", module)))
-                            .contains("c.InvokeMethodOneTail"),
+                            .contains("c.CallBinaryMethod"),
                     "a composed argument is not a terminal operand");
             assertInteger(101, evaluate("mutating()\n", "perf038i-selection-mutate.protos", module));
             assertInteger(103, evaluate("run(3)\n", "perf038i-selection-after.protos", module));
@@ -471,12 +479,21 @@ final class ProtosPerf038ITerminalMethodSendTest {
 
     private static Object assertSingleEntryFor(Object receiver, ProtosActivation module)
             throws Exception {
-        List<Object> entries = tierEntries("run", module);
+        // The selection cache of the send keys every observed receiver; the
+        // eligible one has exactly one valid entry.
+        List<Object> entries = new ArrayList<>();
+        for (Object candidate : selectionEntries("run", module)) {
+            if (field(candidate, "cachedReceiver_") == receiver) {
+                entries.add(candidate);
+            }
+        }
         assertEquals(1, entries.size(), "only the eligible receiver is admitted");
         Object entry = entries.get(0);
         assertSame(receiver, field(entry, "cachedReceiver_"));
-        Object send = field(entry, "cachedSend_");
-        assertTrue(((com.oracle.truffle.api.Assumption) field(send, "stability")).isValid());
+        Object selection = field(entry, "cachedSelection_");
+        java.lang.reflect.Method isValid = selection.getClass().getDeclaredMethod("isValid");
+        isValid.setAccessible(true);
+        assertTrue((Boolean) isValid.invoke(selection));
         return entry;
     }
 
@@ -542,8 +559,9 @@ final class ProtosPerf038ITerminalMethodSendTest {
 
     private static void assertTerminalSite(String function, ProtosActivation module) {
         List<String> signature = names(fullSignature(functionRoot(function, module)));
-        assertTrue(signature.contains("c.InvokeMethodOneTail"),
-                () -> function + " must contain InvokeMethodOneTail: " + signature);
+        assertTrue(signature.stream().anyMatch(name -> name.startsWith("c.GetMethod"))
+                        && signature.stream().anyMatch(name -> name.startsWith("c.CallBinaryMethod")),
+                () -> function + " must contain the GetMethod/CallBinaryMethod send: " + signature);
         assertFalse(signature.contains("c.TryDirectSendOne"),
                 () -> function + " must not contain TryDirectSendOne: " + signature);
     }
@@ -553,11 +571,23 @@ final class ProtosPerf038ITerminalMethodSendTest {
      * single InvokeMethodOneTail site of {@code function} (the cached-node
      * reflection of ProtosI115BDeferredCallerTest.tierEntries).
      */
+    /** The direct source-send tier of the send's CallBinaryMethod: admitted callees only. */
     private static List<Object> tierEntries(String function, ProtosActivation module)
+            throws Exception {
+        return cachedEntries(function, module, "CallBinaryMethod_Node", "callDirectSourceSend_cache");
+    }
+
+    /** The receiver-keyed selection cache of the send's GetMethod. */
+    private static List<Object> selectionEntries(String function, ProtosActivation module)
+            throws Exception {
+        return cachedEntries(function, module, "GetMethod_Node", "cached_cache");
+    }
+
+    private static List<Object> cachedEntries(
+            String function, ProtosActivation module, String nodeName, String cacheField)
             throws Exception {
         Object bytecode = functionRoot(function, module).getBytecodeNode();
         Node[] cachedNodes = (Node[]) field(bytecode, "cachedNodes_");
-        String nodeName = "InvokeMethodOneTail_Node";
         List<Object> entries = new ArrayList<>();
         int sites = 0;
         for (Node node : cachedNodes) {
@@ -565,7 +595,7 @@ final class ProtosPerf038ITerminalMethodSendTest {
                 continue;
             }
             sites++;
-            for (Object entry = field(node, "guardedSource_cache");
+            for (Object entry = field(node, cacheField);
                     entry != null;
                     entry = field(entry, "next_")) {
                 entries.add(entry);

@@ -320,7 +320,9 @@ final class ProtosPerf038EResidualCallGraphTest {
                 source.capturedReceiver(),
                 null,
                 null,
-                prelude);
+                prelude,
+                // Every source Closure carries its prepared plan.
+                source.executionPlan().orElseThrow());
     }
 
     private static ProtosPrelude otherPrelude() {

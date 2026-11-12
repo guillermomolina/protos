@@ -217,9 +217,9 @@ class ProtosI143NamedActivationPresenceTest {
         assertTrue(has(activation, 1));
         assertFalse(has(activation, 2));
 
-        assertSame(
-                ProtosNullValue.INSTANCE,
-                activation.suppliedArgumentsForRuntime().get(2));
+        // The supplied packet holds exactly what the call supplied; the
+        // unsupplied position is absent (D203 reads it as canonical null).
+        assertEquals(2, activation.suppliedArgumentsForRuntime().size());
     }
 
     @Test

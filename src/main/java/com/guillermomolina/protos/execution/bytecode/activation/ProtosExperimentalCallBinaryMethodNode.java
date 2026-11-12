@@ -31,6 +31,7 @@ import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Idempotent;
+import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.DirectCallNode;
@@ -261,6 +262,8 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                 .canonicalRootCallSelectionOrNullForRuntime();
     }
 
+    // A local `call` slot may be added or removed between executions.
+    @NonIdempotent
     static boolean canonicalCallSelected(
             ProtosClosureValue callable,
             ProtosStandardObjectProtocol.CanonicalRootCallSelection selection) {

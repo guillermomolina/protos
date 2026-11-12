@@ -653,14 +653,15 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             assertNull(dispatchedAsFunction(first));
             evaluate("local.removeSlot(\"call\")\n", "i114-local-remove-again.protos", module);
 
-            // A local non-Closure call, and a local alias of STANDARD_CALL:
-            // neither is the canonical root selection.
+            // A local non-Closure call is not the canonical selection; a local
+            // alias of STANDARD_CALL selects the same behavior, so it is
+            // dispatched like the inherited one (selection identity).
             Object standardCall =
                     ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow();
             second.createLocalSlot("call", ProtosNullValue.INSTANCE);
             assertNull(dispatchedAsFunction(second));
             second.assignLocalSlot("call", standardCall);
-            assertNull(dispatchedAsFunction(second));
+            assertSame(second, dispatchedAsFunction(second));
             second.removeLocalSlot("call");
             assertSame(second, dispatchedAsFunction(second));
 
@@ -804,8 +805,11 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                         functionRoot(function, module).getBytecodeNode().getInstructionsAsList().stream()
                                 .map(ProtosInstructionNames::of)
                                 .toList();
+                // A fresh Closure per run misses the instance-keyed fast path, so
+                // the site uses its source specialization, whose dispatcher
+                // installs the definition-keyed direct tier checked below.
                 assertTrue(
-                        names.contains("c.CallUnaryMethod$CallPFunction"),
+                        names.stream().anyMatch(name -> name.startsWith("c.CallUnaryMethod")),
                         names::toString);
                 assertNewCallSite(function, 1, module);
             }
@@ -934,10 +938,20 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                 : null;
     }
 
+    /*
+     * The function target the dispatcher would enter: none for a Closure
+     * whose ordinary `call` selection is not the standard Object.call, so an
+     * overridden Closure never prepares its own plan.
+     */
     private static RootCallTarget effectiveTarget(Object value, ProtosLanguageContext context) {
-        return context == null || !(value instanceof ProtosClosureValue closure)
-                ? null
-                : ProtosClosureCallPreparation.functionCallTarget(closure, context);
+        if (context == null
+                || !(value instanceof ProtosClosureValue closure)
+                || !ProtosFunctionCallDispatchers.hasCanonicalCallSelection(
+                        closure,
+                        ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime())) {
+            return null;
+        }
+        return ProtosClosureCallPreparation.functionCallTarget(closure, context);
     }
 
     private static boolean nonSuspendingRoot(RootCallTarget target) {
@@ -946,9 +960,18 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                 && root.provablyNonSuspendingBody();
     }
 
+    /*
+     * The dispatcher's own function-path admission: a source function whose
+     * ordinary `call` selection is still the standard Object.call (D013; a
+     * nearer non-standard `call` slot is selected by ordinary lookup).
+     */
     private static ProtosClosureValue dispatchedAsFunction(ProtosClosureValue closure) {
         return ProtosFunctionCallDispatchers.CallNode.isSourceFunction(closure)
                         && closure.hasUnobservableInvocationReturnHomeForRuntime()
+                        && ProtosFunctionCallDispatchers.hasCanonicalCallSelection(
+                                closure,
+                                com.guillermomolina.protos.execution.ProtosStandardObjectProtocol
+                                        .canonicalRootCallSelectionOrNullForRuntime())
                 ? closure
                 : null;
     }

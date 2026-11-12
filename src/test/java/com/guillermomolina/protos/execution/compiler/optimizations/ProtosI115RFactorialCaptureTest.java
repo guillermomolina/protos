@@ -439,26 +439,23 @@ final class ProtosI115RFactorialCaptureTest {
                     "I115_R1_UNARY_INSTRUCTIONS=" + names);
 
             /*
-             * I115 unified Boolean control: n is a CELL (captured by the
-             * inline ifTrue body); '>' is RichCompareGt, materialized and
-             * validated as the native control condition; the inline body
-             * computes '*' and stores result into its cell.
+             * Unified Boolean control: the inline ifTrue body shares the
+             * frame, so n and result are LOCALs (n bound by the grouped
+             * copy); '>' is RichCompareGt whose primitive result flows into
+             * the canonical control condition and the native branch; the
+             * inline body computes '*' and stores result into its local.
              */
-            assertTrue(indexStartingWith(names, "c.CreateCell") >= 0, names.toString());
-            int bind = indexStartingWith(names, "c.LoadSuppliedArgument");
-            assertTrue(bind >= 0 && names.get(bind + 1).startsWith("c.StoreCell"),
-                    "Missing CELL parameter binding: " + names);
-            assertTrue(indexStartingWith(names, "c.LoadCell") >= 0, names.toString());
+            int bind = indexStartingWith(names, "c.CopySuppliedArguments");
+            assertTrue(bind == 1, "Missing parameter binding: " + names);
+            assertTrue(indexStartingWith(names, "c.CreateCell") < 0, names.toString());
             for (String required : List.of(
-                    "c.RichCompareGt", "c.MaterializePrimitiveNumericCarrier",
-                    "c.ExperimentalCanonicalBooleanCondition", "c.NumberMultiply")) {
+                    "c.RichCompareGt", "c.CanonicalControlCondition", "c.NumberMultiply")) {
                 assertEquals(1, names.stream().filter(
                                 name -> name.startsWith(required)).count(),
                         "Missing unified operation " + required + ": " + names);
             }
             int compare = indexStartingWith(names, "c.RichCompareGt");
-            int materialize = indexStartingWith(names, "c.MaterializePrimitiveNumericCarrier");
-            int condition = indexStartingWith(names, "c.ExperimentalCanonicalBooleanCondition");
+            int condition = indexStartingWith(names, "c.CanonicalControlCondition");
             int branch = -1;
             for (int index = condition + 1; index < names.size(); index++) {
                 if (names.get(index).startsWith("branch.false")) {
@@ -467,17 +464,18 @@ final class ProtosI115RFactorialCaptureTest {
                 }
             }
             int multiply = indexStartingWith(names, "c.NumberMultiply");
-            assertTrue(bind < compare && compare < materialize && materialize < condition
+            assertTrue(bind < compare && compare < condition
                             && condition < branch && branch < multiply,
                     "native control order: " + names);
             boolean storedAfter = false;
             for (int index = multiply + 1; index < names.size(); index++) {
-                storedAfter |= names.get(index).startsWith("c.StoreCell");
+                storedAfter |= names.get(index).startsWith("store.local");
             }
-            assertTrue(storedAfter, "the product is stored into result's cell: " + names);
+            assertTrue(storedAfter, "the product is stored into result's local: " + names);
             assertTrue(names.get(names.size() - 1).equals("return"), names.toString());
             for (String forbidden : List.of(
-                    "c.GetMethod", "c.CallNilaryMethod", "c.MaterializeCurrentClosure")) {
+                    // GetMethod here is only a guarded message fallback.
+                    "c.CallNilaryMethod", "c.MaterializeCurrentClosure")) {
                 assertTrue(names.stream().noneMatch(name -> name.startsWith(forbidden)),
                         "No separate callback machinery: " + forbidden + " in " + names);
             }
@@ -876,7 +874,7 @@ final class ProtosI115RFactorialCaptureTest {
             List<String> computeNames = compute.getBytecodeNode().getInstructionsAsList()
                     .stream().map(ProtosInstructionNames::of).toList();
             assertTrue(computeNames.stream().anyMatch(
-                            name -> name.startsWith("c.ExperimentalCanonicalBooleanCondition")),
+                            name -> name.startsWith("c.CanonicalControlCondition")),
                     "ifTrue is native control flow in compute: " + computeNames);
             assertTrue(computeNames.stream().noneMatch(
                             name -> name.startsWith("c.MaterializeCurrentClosure")),
@@ -1104,17 +1102,22 @@ final class ProtosI115RFactorialCaptureTest {
 
     private static void assertSingleLoweringFactorial(List<String> names) {
         int bind = indexStartingWith(names, "c.LoadSuppliedArgument");
-        // n is stored into its native storage: a LOCAL store, or the cell of
-        // a CELL binding when a callback captures it.
-        assertTrue(bind >= 0 && (names.get(bind + 1).startsWith("store.local")
-                        || names.get(bind + 1).startsWith("c.StoreCell")),
+        // n is stored into its native storage: the grouped LOCAL copy, or the
+        // cell of a CELL binding when a callback captures it.
+        assertTrue(indexStartingWith(names, "c.CopySuppliedArguments") == 1
+                        || (bind >= 0 && names.get(bind + 1).startsWith("c.StoreCell")),
                 "Missing parameter binding: " + names);
         for (String required : List.of(
-                "c.RichCompareGt", "c.NumberMultiply", "c.NumberSubtract",
-                "c.CallUnaryMethod", "c.ReadGlobal")) {
+                "c.RichCompareGt", "c.NumberMultiply", "c.NumberSubtract", "c.ReadGlobal")) {
             assertEquals(1, names.stream().filter(name -> name.startsWith(required)).count(),
                     "Expected one " + required + ": " + names);
         }
+        // One recursive call plus one guarded message fallback per GetMethod
+        // (each internal operation keeps its send for a non-standard receiver).
+        assertEquals(
+                1 + names.stream().filter(name -> name.startsWith("c.GetMethod")).count(),
+                names.stream().filter(name -> name.startsWith("c.CallUnaryMethod")).count(),
+                "one recursive CallUnaryMethod plus the guarded fallbacks: " + names);
         for (String retired : List.of(
                 "ExperimentalLongArgument0", "InvokeStaticClosureOneTail",
                 "ExperimentalInteger", "TryPrimitiveNumeric", "CopyArguments")) {
@@ -1183,38 +1186,26 @@ final class ProtosI115RFactorialCaptureTest {
         List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
 
         assertTrue(names.get(0).startsWith("c.EnterRoot"), "factorial prologue: " + names);
-        assertTrue(countStartingWith(names, "c.CreateCell") >= 1, names.toString());
-        int load = indexStartingWith(names, "c.LoadSuppliedArgument");
-        assertTrue(load >= 0, names.toString());
-        Instruction supplied = instructions.get(load);
-        assertEquals(0, supplied.getArguments().stream()
-                        .filter(argument -> argument.getName().equals("index"))
-                        .map(argument -> argument.getKind()
-                                        == Instruction.Argument.Kind.INTEGER
-                                ? argument.asInteger()
-                                : (Integer) argument.asConstant())
-                        .findFirst().orElseThrow(),
-                "n is supplied position 0");
-        assertTrue(names.get(load + 1).startsWith("c.StoreCell"),
-                "supplied n is stored into its cell: " + names);
-        assertTrue(countStartingWith(names, "c.LoadCell") >= 1, names.toString());
+        // n (supplied position 0) is a LOCAL bound by the grouped copy: the
+        // inline ifTrue body shares the frame, so no cell is created.
+        assertTrue(names.get(1).startsWith("c.CopySuppliedArguments"),
+                "supplied n is bound into its native local: " + names);
+        assertEquals(0, countStartingWith(names, "c.CreateCell"), names.toString());
 
         for (String one : List.of(
                 "c.RichCompareGt", "c.NumberSubtract", "c.NumberMultiply",
-                "c.ReadGlobal", "c.CallUnaryMethod")) {
+                "c.ReadGlobal")) {
             assertEquals(1, countStartingWith(names, one), one + ": " + names);
         }
+        assertEquals(1 + countStartingWith(names, "c.GetMethod"),
+                countStartingWith(names, "c.CallUnaryMethod"),
+                "one recursive CallUnaryMethod plus the guarded fallbacks: " + names);
         int compare = indexStartingWith(names, "c.RichCompareGt");
-        int condition = indexStartingWith(names, "c.ExperimentalCanonicalBooleanCondition");
+        int condition = indexStartingWith(names, "c.CanonicalControlCondition");
         assertTrue(condition > compare,
                 "the comparison result is the validated control condition: " + names);
-        // The comparison carrier is materialized between the comparison and its validation.
-        assertEquals(1, countStartingWith(names, "c.MaterializePrimitiveNumericCarrier"),
-                names.toString());
-        int materialize = indexStartingWith(names, "c.MaterializePrimitiveNumericCarrier");
-        assertTrue(materialize > compare && materialize < condition,
-                "MaterializePrimitiveNumericCarrier lies between RichCompareGt and the "
-                        + "Boolean condition: " + names);
+        // The primitive comparison result flows into the canonical control
+        // condition without materializing a Boolean carrier.
         int branch = -1;
         for (int index = condition + 1; index < names.size(); index++) {
             if (names.get(index).startsWith("branch.false")) {
@@ -1226,9 +1217,10 @@ final class ProtosI115RFactorialCaptureTest {
         int call = indexStartingWith(names, "c.CallUnaryMethod");
         assertTrue(call > branch, "the recursive call is inside the inline body: " + names);
 
-        // Native control flow: no method lookup, no second callable invocation.
+        // Native control flow: no second callable invocation. GetMethod only
+        // appears as a guarded message fallback of an internal operation.
         for (String forbidden : List.of(
-                "c.GetMethod", "c.CallNilaryMethod", "c.CallBinaryMethod",
+                "c.CallNilaryMethod", "c.CallBinaryMethod",
                 "c.CallTernaryMethod", "c.CallQuaternaryMethod", "c.CallVarargsMethod",
                 "c.MaterializeCurrentClosure")) {
             assertEquals(0, countStartingWith(names, forbidden), forbidden + ": " + names);

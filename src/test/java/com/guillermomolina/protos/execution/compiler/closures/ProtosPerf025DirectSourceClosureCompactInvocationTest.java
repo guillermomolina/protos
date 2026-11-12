@@ -101,8 +101,11 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 Object result = enter(prepared);
                 assertEquals("5", integerValue(result));
 
-                ProtosActivation callee =
-                        assertInstanceOf(ProtosActivation.class, targetArguments[0]);
+                // The compact entry never published an activation while it
+                // ran; projecting it afterwards yields the invocation state.
+                assertSame(add, targetArguments[0],
+                        "the source target ran without publishing its activation");
+                ProtosActivation callee = ProtosFrameArguments.activation(targetArguments);
                 assertDeferred(callee);
                 assertSame(add.capturedReceiver(), callee.receiver());
                 assertEquals(add.methodHome(), callee.methodHome());
