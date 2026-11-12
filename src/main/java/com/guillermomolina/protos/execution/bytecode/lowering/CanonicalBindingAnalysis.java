@@ -457,6 +457,47 @@ final class CanonicalBindingAnalysis {
         return false;
     }
 
+    /**
+     * Whether every name this isolated Closure analysis does not resolve
+     * itself is, under {@code enclosing}, unresolved, owned by {@code
+     * rootScope} or owned by a module scope. Such a Closure, lowered
+     * standalone, selects each of those names by name: the root's bindings
+     * through its frame-backed view, module bindings through the module
+     * Context. A binding of any other scope (for instance of an inline
+     * region that has no place in the root's frame layout) is not reachable
+     * that way.
+     */
+    boolean freeNamesSelectableFrom(
+            CanonicalBindingAnalysis enclosing, CanonicalLexicalScope rootScope) {
+        if (enclosing == null || rootScope == null) {
+            return false;
+        }
+        for (var entry : lookupResolutions.entrySet()) {
+            if (entry.getValue() instanceof CanonicalBindingResolution.Dynamic
+                    && !selectableFrom(
+                            enclosing.resolutionOf(entry.getKey()).orElse(null), rootScope)) {
+                return false;
+            }
+        }
+        for (var entry : assignResolutions.entrySet()) {
+            if (entry.getValue() instanceof CanonicalBindingResolution.Dynamic
+                    && !selectableFrom(
+                            enclosing.resolutionOf(entry.getKey()).orElse(null), rootScope)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean selectableFrom(
+            CanonicalBindingResolution resolution, CanonicalLexicalScope rootScope) {
+        CanonicalBindingIdentity identity =
+                resolution == null ? null : resolution.staticIdentityOrNull();
+        return identity == null
+                || identity.owner() == rootScope
+                || identity.owner().kind() == CanonicalLexicalScope.Kind.ROOT;
+    }
+
     /*
      * A capture owned by the physical parent root at any lexical depth. The
      * admission is evaluated against that root only while every Closure

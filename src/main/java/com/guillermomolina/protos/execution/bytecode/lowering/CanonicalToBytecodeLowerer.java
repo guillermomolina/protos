@@ -6738,8 +6738,30 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
 
+        /*
+         * A conditional whose receiver may be any object selects natively only
+         * for canonical true or false; any other receiver performs the
+         * ordinary send, whose method receives genuine callbacks. Those are
+         * created by MaterializeSelectedCallback over the live frame, so the
+         * inline callbacks keep their captures in plain locals.
+         */
+        boolean selectsCustomBehavior =
+                !control.loop() && admitsSelectedCallbacks(arguments);
+
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
+
+        BytecodeLocal conditionalReceiver = null;
+        if (selectsCustomBehavior) {
+            conditionalReceiver = builder.createLocal("conditionalReceiver", null);
+            stageOperand(builder, receiver, conditionalReceiver,
+                    scratch, childResult, resumeValue, stager);
+            builder.beginIfThenElse();
+            builder.beginIsCanonicalBooleanOperand();
+            builder.emitLoadLocal(conditionalReceiver);
+            builder.endIsCanonicalBooleanOperand();
+            builder.beginBlock();
+        }
 
         java.util.List<CanonicalExpression> operands = new java.util.ArrayList<>(arguments.size() + 1);
         operands.add(receiver);
@@ -6756,6 +6778,11 @@ final class CanonicalToBytecodeLowerer {
             allCallbacksInline &= i115AdmitsInlineClosure(operands.get(position));
         }
         for (int position = 0; position < operands.size(); position++) {
+            if (selectsCustomBehavior && position == 0) {
+                inline.add(false);
+                staged.add(conditionalReceiver);
+                continue;
+            }
             CanonicalExpression operand = operands.get(position);
             boolean callback = control.callbackPosition(position);
             boolean admitted = callback && i115AdmitsInlineClosure(operand);
@@ -6784,9 +6811,78 @@ final class CanonicalToBytecodeLowerer {
                     valueUsed, result, primitiveCarrierResult);
         }
 
+        if (selectsCustomBehavior) {
+            builder.endBlock();
+            emitSelectedConditionalSend(
+                    builder, control.selector, conditionalReceiver, arguments,
+                    valueUsed ? result : null,
+                    scratch, childResult, resumeValue, stager, primitiveCarrierResult);
+            builder.endIfThenElse();
+        }
 
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /*
+     * Whether a conditional site can pass genuine callbacks to a method that
+     * ordinary dispatch selects: every literal callback must reach its free
+     * names by name from this root (its own bindings through the frame-backed
+     * view, or module and unresolved names). Otherwise the site keeps only the
+     * standard Boolean selection.
+     */
+    private boolean admitsSelectedCallbacks(java.util.List<CanonicalExpression> arguments) {
+        if (currentRootTopScope == null || currentRootAnalysis == null) {
+            return false;
+        }
+        for (CanonicalExpression argument : arguments) {
+            if (argument instanceof CanonicalClosure closure
+                    && !compilationFacts.isolatedClosureAnalysis(closure)
+                            .freeNamesSelectableFrom(currentRootAnalysis, currentRootTopScope)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /*
+     * The ordinary send of a conditional selector to a receiver that is not a
+     * canonical Boolean. Arguments are evaluated again in source order, as
+     * this branch is the only one that runs; a callback literal becomes a
+     * genuine Closure created over the live frame.
+     */
+    private void emitSelectedConditionalSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            String selector,
+            BytecodeLocal receiver,
+            java.util.List<CanonicalExpression> arguments,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            OperandStager stager,
+            boolean primitiveCarrierResult) {
+        builder.beginBlock();
+        BytecodeLocal method = builder.createLocal("conditionalMethod", null);
+        emitGetMethod(builder, selector, receiver, method);
+        java.util.List<BytecodeLocal> argumentValues = new java.util.ArrayList<>(arguments.size());
+        for (CanonicalExpression argument : arguments) {
+            BytecodeLocal value = builder.createLocal("conditionalArgument", null);
+            if (argument instanceof CanonicalClosure closure) {
+                builder.beginStoreLocal(value);
+                builder.beginMaterializeSelectedCallback();
+                emitCurrentActivation(builder);
+                builder.emitLoadConstant(new ProtosSelectedCallbackPlan(closure, language, source));
+                builder.endMaterializeSelectedCallback();
+                builder.endStoreLocal();
+            } else {
+                stageOperand(builder, argument, value, scratch, childResult, resumeValue, stager);
+            }
+            argumentValues.add(value);
+        }
+        emitDispatchedCall(builder, method, argumentValues, null,
+                childResult, result, resumeValue, primitiveCarrierResult);
+        builder.endBlock();
     }
 
     /** I115: the evaluated operands of one control site and the shared invocation scratch. */

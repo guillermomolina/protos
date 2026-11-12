@@ -2668,6 +2668,30 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     // ---- Closure literals and inline Object construction ---------------------------
 
+    /**
+     * The genuine Closure of a callback literal that this root normally runs
+     * inline, created only when a conditional receiver is not a canonical
+     * Boolean and ordinary dispatch must receive the callback. The frame is
+     * first bound to its live frame-backed view, so the Closure, which selects
+     * the creating root's bindings by name, reads and writes the very frame
+     * locals the inline execution uses. Never executed while the receiver is
+     * true or false.
+     */
+    @Operation(storeBytecodeIndex = true)
+    public static final class MaterializeSelectedCallback {
+        @Specialization
+        public static ProtosClosureValue perform(
+                ProtosActivation activation,
+                ProtosSelectedCallbackPlan callback,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecode,
+                @Bind("$bytecodeIndex") int bytecodeIndex) {
+            root.ensureLexicalFrameView(frame, bytecode, bytecodeIndex, activation);
+            return callback.materialize(activation);
+        }
+    }
+
     @Operation
     public static final class MaterializeClosure {
         @Specialization

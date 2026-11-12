@@ -329,9 +329,8 @@ final class ProtosI115NCompactBooleanTest {
             List<String> names = instructionNames(run);
             assertTrue(names.stream().anyMatch(n -> n.contains("RichCompareLt")));
             assertTrue(names.stream().anyMatch(n -> n.contains("IsCanonicalBooleanOperand")));
-            assertTrue(names.stream().anyMatch(n -> n.contains("MaterializeCurrentClosure")
-                    || n.contains("MaterializeClosure")),
-                    "the custom branch materializes the callback");
+            assertTrue(names.stream().anyMatch(n -> n.contains("MaterializeSelectedCallback")),
+                    "the custom branch creates the callback over the live frame");
             assertTrue(names.stream().anyMatch(n -> n.contains("CanonicalControlCondition")),
                     "the root selects the standard Boolean behavior natively");
 

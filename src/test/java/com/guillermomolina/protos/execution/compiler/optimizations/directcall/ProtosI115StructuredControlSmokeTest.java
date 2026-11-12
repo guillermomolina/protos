@@ -244,6 +244,49 @@ final class ProtosI115StructuredControlSmokeTest {
         });
     }
 
+    /*
+     * Squeak/Pharo mustBeBoolean: a non-Boolean receiver of an inline
+     * conditional receives a genuine callback created over the live frame.
+     * Its reads and writes reach the same binding as the inline execution,
+     * including after the creating activation has returned, and the inline
+     * path keeps that binding in a plain local (no cell).
+     */
+    @Test
+    void customReceiverGetsCallbackOverTheLiveFrame() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    keep: null
+                    twice: { ifTrue: (callback) => { callback()\n callback() } }
+                    later: { ifTrue: (callback) => { keep = callback\n 0 } }
+                    count: (condition) => {
+                        n: 1
+                        condition.ifTrue(() => { n = n + 10 })
+                        n
+                    }
+                    """, "i115-control-custom-define.protos", module);
+            assertInteger(11, evaluate("count(true)\n", "i115-control-custom-true.protos", module));
+            assertSame(ProtosBooleanValue.TRUE,
+                    evaluate("count(false) == 1\n", "i115-control-custom-false.protos", module));
+            assertInteger(21, evaluate("count(twice)\n", "i115-control-custom-twice.protos", module));
+            assertInteger(1, evaluate("count(later)\n", "i115-control-custom-later.protos", module));
+            assertInteger(11, evaluate("keep()\n", "i115-control-custom-keep1.protos", module));
+            assertInteger(21, evaluate("keep()\n", "i115-control-custom-keep2.protos", module));
+
+            ProtosClosureValue count = assertInstanceOf(ProtosClosureValue.class,
+                    evaluate("count\n", "i115-control-custom-count.protos", module));
+            ProtosBytecodeRootNode root =
+                    count.executionPlan().orElseThrow().bytecodeActivationRootForTesting();
+            root.getRootNodes().ensureComplete();
+            List<String> names = root.getBytecodeNode().getInstructionsAsList().stream()
+                    .map(Instruction::getName)
+                    .toList();
+            assertTrue(names.stream().noneMatch(name -> isInstruction(name, "c.CreateCell")),
+                    names::toString);
+            assertTrue(names.stream().anyMatch(
+                    name -> isInstruction(name, "c.MaterializeSelectedCallback")), names::toString);
+        });
+    }
+
     @Test
     void dynamicCallbackIsAnOrdinaryNilaryCall() throws Exception {
         withCore(module -> {
