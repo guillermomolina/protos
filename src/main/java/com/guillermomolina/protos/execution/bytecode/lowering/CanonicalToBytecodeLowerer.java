@@ -8507,9 +8507,9 @@ final class CanonicalToBytecodeLowerer {
                                 context.frameNames(),
                                 context.hasFrameLayout());
 
-        boolean requiresPersistentAuthority = compilationFacts.rootFacts(
-                        closure.body(), closure, analysis, scope)
-                .requiresPersistentFrameAuthority();
+        boolean requiresPersistentAuthority =
+                CanonicalCompilationFacts.inlineBodyRequiresPersistentFrameAuthority(
+                        closure, analysis, scope, i115InlinePolicy);
         boolean admitted = (ownScalarBindings
                         || noOwnBindingsAndProvenCaptures
                         || mixedOwnBindingsAndParentCaptures)
@@ -8921,9 +8921,8 @@ final class CanonicalToBytecodeLowerer {
                         context.topScope(),
                         context.frameNames(),
                         context.hasFrameLayout())
-                && !compilationFacts.rootFacts(
-                                closure.body(), closure, analysis, scope)
-                        .requiresPersistentFrameAuthority();
+                && !CanonicalCompilationFacts.inlineBodyRequiresPersistentFrameAuthority(
+                        closure, analysis, scope, i115InlinePolicy);
     }
 
     /**

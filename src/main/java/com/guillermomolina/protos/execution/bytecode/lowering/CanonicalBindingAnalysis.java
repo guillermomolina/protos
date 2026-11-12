@@ -229,7 +229,6 @@ final class CanonicalBindingAnalysis {
                 continue;
             }
             if (captured.identity().owner() != parentScope
-                    || captured.lexicalDepth() != 1
                     || !parentFrameNames.contains(
                             captured.identity().name())) {
                 return false;
@@ -251,7 +250,6 @@ final class CanonicalBindingAnalysis {
             }
 
             if (captured.identity().owner() != parentScope
-                    || captured.lexicalDepth() != 1
                     || !parentFrameNames.contains(
                             captured.identity().name())) {
                 return false;
@@ -459,6 +457,16 @@ final class CanonicalBindingAnalysis {
         return false;
     }
 
+    /*
+     * A capture owned by the physical parent root at any lexical depth. The
+     * admission is evaluated against that root only while every Closure
+     * between the reference and the owner is itself emitted inline in the
+     * root (a Closure that is not inline is lowered as its own root, whose
+     * scope is then the parent scope), so each eliminated activation removes
+     * one lexical hop and the access becomes a local or cell access of the
+     * root. A nested Closure that is materialized instead captures the
+     * binding as a cell, which the root reaches through the same cell local.
+     */
     private static boolean directParentCapture(
             CanonicalBindingResolution resolution,
             CanonicalLexicalScope parentScope,
@@ -466,7 +474,6 @@ final class CanonicalBindingAnalysis {
         return resolution
                         instanceof CanonicalBindingResolution.CapturedResolved captured
                 && captured.identity().owner() == parentScope
-                && captured.lexicalDepth() == 1
                 && parentFrameNames.contains(captured.identity().name());
     }
 

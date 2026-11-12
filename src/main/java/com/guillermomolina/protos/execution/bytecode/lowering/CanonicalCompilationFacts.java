@@ -662,11 +662,40 @@ final class CanonicalCompilationFacts {
                     || (parameter.defaultValue().isPresent()
                             && demandsPersistentFrame(
                                     parameter.defaultValue().orElseThrow(),
-                                    analysis, scope, ownBindingsOnly, false))) {
+                                    analysis, scope, ownBindingsOnly, false, null))) {
                 return true;
             }
         }
-        return demandsPersistentFrame(body, analysis, scope, ownBindingsOnly, false);
+        return demandsPersistentFrame(body, analysis, scope, ownBindingsOnly, false, null);
+    }
+
+    /**
+     * Whether the body of {@code definition}, executed inline in a physical
+     * root, still requires a persistent frame authority. Its nested callbacks
+     * that {@code inline} also runs in that root create no context and are
+     * analyzed as part of the same region; every other demand is as in
+     * {@link #requiresPersistentFrameAuthority}.
+     */
+    static boolean inlineBodyRequiresPersistentFrameAuthority(
+            CanonicalClosure definition,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope,
+            I115InlineStoragePlan.InlinePolicy inline) {
+        if (definition == null || analysis == null || scope == null) {
+            return true;
+        }
+        for (CanonicalParameter parameter : definition.parameters()) {
+            if (analysis.identityOf(parameter)
+                            .map(identity -> identity.owner() != scope)
+                            .orElse(true)
+                    || (parameter.defaultValue().isPresent()
+                            && demandsPersistentFrame(
+                                    parameter.defaultValue().orElseThrow(),
+                                    analysis, scope, false, false, null))) {
+                return true;
+            }
+        }
+        return demandsPersistentFrame(definition.body(), analysis, scope, false, false, inline);
     }
 
     /**
@@ -709,7 +738,7 @@ final class CanonicalCompilationFacts {
                 return false;
             }
         }
-        return !demandsPersistentFrame(body, analysis, scope, false, true);
+        return !demandsPersistentFrame(body, analysis, scope, false, true, null);
     }
 
     /**
@@ -842,7 +871,8 @@ final class CanonicalCompilationFacts {
             CanonicalBindingAnalysis analysis,
             CanonicalLexicalScope scope,
             boolean ownBindingsOnly,
-            boolean promotable) {
+            boolean promotable,
+            I115InlineStoragePlan.InlinePolicy inline) {
         if (expression instanceof CanonicalLiteral) {
             return false;
         }
@@ -864,22 +894,22 @@ final class CanonicalCompilationFacts {
         }
         if (expression instanceof CanonicalAssign assign) {
             if (assign.target().isPresent()) {
-                return demandsPersistentFrame(assign.target().orElseThrow(), analysis, scope, ownBindingsOnly, promotable)
-                        || demandsPersistentFrame(assign.value(), analysis, scope, ownBindingsOnly, promotable);
+                return demandsPersistentFrame(assign.target().orElseThrow(), analysis, scope, ownBindingsOnly, promotable, inline)
+                        || demandsPersistentFrame(assign.value(), analysis, scope, ownBindingsOnly, promotable, inline);
             }
             return ((ownBindingsOnly || scope.declaresName(assign.name()))
                             && !resolvedInScope(analysis.resolutionOf(assign), scope))
-                    || demandsPersistentFrame(assign.value(), analysis, scope, ownBindingsOnly, promotable);
+                    || demandsPersistentFrame(assign.value(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalCreate create) {
             if (create.target().isPresent()) {
-                return demandsPersistentFrame(create.target().orElseThrow(), analysis, scope, ownBindingsOnly, promotable)
-                        || demandsPersistentFrame(create.value(), analysis, scope, ownBindingsOnly, promotable);
+                return demandsPersistentFrame(create.target().orElseThrow(), analysis, scope, ownBindingsOnly, promotable, inline)
+                        || demandsPersistentFrame(create.value(), analysis, scope, ownBindingsOnly, promotable, inline);
             }
             return analysis.identityOf(create)
                             .map(identity -> identity.owner() != scope)
                             .orElse(true)
-                    || demandsPersistentFrame(create.value(), analysis, scope, ownBindingsOnly, promotable);
+                    || demandsPersistentFrame(create.value(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalMultipleCreate create) {
             return analysis.identitiesOf(create)
@@ -887,61 +917,71 @@ final class CanonicalCompilationFacts {
                                     || identities.stream()
                                             .anyMatch(identity -> identity.owner() != scope))
                             .orElse(true)
-                    || demandsPersistentFrame(create.value(), analysis, scope, ownBindingsOnly, promotable);
+                    || demandsPersistentFrame(create.value(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalSequence sequence) {
-            return anyDemandsPersistentFrame(sequence.expressions(), analysis, scope, ownBindingsOnly, promotable);
+            return anyDemandsPersistentFrame(sequence.expressions(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalCall call) {
-            return demandsPersistentFrame(call.receiver(), analysis, scope, ownBindingsOnly, promotable)
-                    || anyDemandsPersistentFrame(call.arguments(), analysis, scope, ownBindingsOnly, promotable);
+            return demandsPersistentFrame(call.receiver(), analysis, scope, ownBindingsOnly, promotable, inline)
+                    || anyDemandsPersistentFrame(call.arguments(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalSend send) {
             // Contextual operands are ordinary Closure boundaries for
-            // lexical capture and persistent-frame analysis.
-            return demandsPersistentFrame(send.receiver(), analysis, scope, ownBindingsOnly, promotable)
-                    || anyDemandsPersistentFrame(send.arguments(), analysis, scope, ownBindingsOnly, promotable);
+            // lexical capture and persistent-frame analysis, except a
+            // callback that the same inline policy runs in this region.
+            if (operandDemandsPersistentFrame(send, 0, send.receiver(),
+                    analysis, scope, ownBindingsOnly, promotable, inline)) {
+                return true;
+            }
+            for (int index = 0; index < send.arguments().size(); index++) {
+                if (operandDemandsPersistentFrame(send, index + 1, send.arguments().get(index),
+                        analysis, scope, ownBindingsOnly, promotable, inline)) {
+                    return true;
+                }
+            }
+            return false;
         }
         if (expression instanceof CanonicalSuperSend superSend) {
-            return anyDemandsPersistentFrame(superSend.arguments(), analysis, scope, ownBindingsOnly, promotable);
+            return anyDemandsPersistentFrame(superSend.arguments(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalMember member) {
-            return demandsPersistentFrame(member.receiver(), analysis, scope, ownBindingsOnly, promotable);
+            return demandsPersistentFrame(member.receiver(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalIdentity identity) {
-            return demandsPersistentFrame(identity.left(), analysis, scope, ownBindingsOnly, promotable)
-                    || demandsPersistentFrame(identity.right(), analysis, scope, ownBindingsOnly, promotable);
+            return demandsPersistentFrame(identity.left(), analysis, scope, ownBindingsOnly, promotable, inline)
+                    || demandsPersistentFrame(identity.right(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalNotIdentity identity) {
-            return demandsPersistentFrame(identity.left(), analysis, scope, ownBindingsOnly, promotable)
-                    || demandsPersistentFrame(identity.right(), analysis, scope, ownBindingsOnly, promotable);
+            return demandsPersistentFrame(identity.left(), analysis, scope, ownBindingsOnly, promotable, inline)
+                    || demandsPersistentFrame(identity.right(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalDerivedInequality inequality) {
-            return demandsPersistentFrame(inequality.left(), analysis, scope, ownBindingsOnly, promotable)
-                    || demandsPersistentFrame(inequality.right(), analysis, scope, ownBindingsOnly, promotable);
+            return demandsPersistentFrame(inequality.left(), analysis, scope, ownBindingsOnly, promotable, inline)
+                    || demandsPersistentFrame(inequality.right(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalIndexedAssign indexed) {
-            return demandsPersistentFrame(indexed.receiver(), analysis, scope, ownBindingsOnly, promotable)
-                    || demandsPersistentFrame(indexed.index(), analysis, scope, ownBindingsOnly, promotable)
-                    || demandsPersistentFrame(indexed.value(), analysis, scope, ownBindingsOnly, promotable);
+            return demandsPersistentFrame(indexed.receiver(), analysis, scope, ownBindingsOnly, promotable, inline)
+                    || demandsPersistentFrame(indexed.index(), analysis, scope, ownBindingsOnly, promotable, inline)
+                    || demandsPersistentFrame(indexed.value(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalMapConstruction map) {
-            if (demandsPersistentFrame(map.factory(), analysis, scope, ownBindingsOnly, promotable)) {
+            if (demandsPersistentFrame(map.factory(), analysis, scope, ownBindingsOnly, promotable, inline)) {
                 return true;
             }
             for (CanonicalMapConstruction.Entry entry : map.entries()) {
-                if (demandsPersistentFrame(entry.key(), analysis, scope, ownBindingsOnly, promotable)
-                        || demandsPersistentFrame(entry.value(), analysis, scope, ownBindingsOnly, promotable)) {
+                if (demandsPersistentFrame(entry.key(), analysis, scope, ownBindingsOnly, promotable, inline)
+                        || demandsPersistentFrame(entry.value(), analysis, scope, ownBindingsOnly, promotable, inline)) {
                     return true;
                 }
             }
             return false;
         }
         if (expression instanceof CanonicalReturn returnExpression) {
-            return demandsPersistentFrame(returnExpression.value(), analysis, scope, ownBindingsOnly, promotable);
+            return demandsPersistentFrame(returnExpression.value(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalSpread spread) {
-            return demandsPersistentFrame(spread.expression(), analysis, scope, ownBindingsOnly, promotable);
+            return demandsPersistentFrame(spread.expression(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         return true;
     }
@@ -951,13 +991,39 @@ final class CanonicalCompilationFacts {
             CanonicalBindingAnalysis analysis,
             CanonicalLexicalScope scope,
             boolean ownBindingsOnly,
-            boolean promotable) {
+            boolean promotable,
+            I115InlineStoragePlan.InlinePolicy inline) {
         for (CanonicalExpression expression : expressions) {
-            if (demandsPersistentFrame(expression, analysis, scope, ownBindingsOnly, promotable)) {
+            if (demandsPersistentFrame(expression, analysis, scope, ownBindingsOnly, promotable, inline)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /*
+     * An inline callback creates no execution context: its body runs in the
+     * region being analyzed, exactly as the storage plan walks it. Any other
+     * operand keeps its ordinary demand.
+     */
+    private static boolean operandDemandsPersistentFrame(
+            CanonicalSend send,
+            int position,
+            CanonicalExpression operand,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope,
+            boolean ownBindingsOnly,
+            boolean promotable,
+            I115InlineStoragePlan.InlinePolicy inline) {
+        if (inline != null
+                && operand instanceof CanonicalClosure closure
+                && inline.inlineCallbackPosition(send, position)
+                && inline.admitsInline(closure)) {
+            return demandsPersistentFrame(
+                    closure.body(), analysis, scope, ownBindingsOnly, promotable, inline);
+        }
+        return demandsPersistentFrame(
+                operand, analysis, scope, ownBindingsOnly, promotable, inline);
     }
 
     private static boolean resolvedInScope(
