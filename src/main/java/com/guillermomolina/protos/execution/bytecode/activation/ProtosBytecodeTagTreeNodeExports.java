@@ -82,8 +82,24 @@ final class ProtosBytecodeTagTreeNodeExports {
         java.util.Map<String, Object> ownInlineBindings =
                 normalInlineCallbackBindings(node, frame.materialize());
         if (ownInlineBindings != null) {
-            // I095-B6: virtual lexical scope; no carrier or guest activation.
-            return new ProtosDebuggerScope(activation, ownInlineBindings);
+            /*
+             * The physical frame belongs to the enclosing source root.
+             * Its LOCAL/CELL bindings are not necessarily in the activation's
+             * Context. Overlay those live bindings before the callback's own
+             * bindings, preserving lexical shadowing without constructing a
+             * callback activation or retaining the frame.
+             *
+             * This projection is used only when tooling requests a scope.
+             */
+            java.util.Map<String, Object> parentBindings =
+                    toolingBindings(node, frame);
+            if (parentBindings == null || parentBindings.isEmpty()) {
+                return new ProtosDebuggerScope(activation, ownInlineBindings);
+            }
+            java.util.LinkedHashMap<String, Object> visible =
+                    new java.util.LinkedHashMap<>(parentBindings);
+            visible.putAll(ownInlineBindings);
+            return new ProtosDebuggerScope(activation, visible);
         }
         java.util.Map<String, Object> rootBindings = toolingBindings(node, frame);
         if (rootBindings != null) {

@@ -495,7 +495,7 @@ final class ProtosPerf026B2BooleanInlineCallbackTest {
                 Probe probe = new Probe();
                 ProtosBytecodeRootNode root = lowerRoot(characters);
 
-                root.getCallTarget().call(probe.module());
+                callWithSignalDetail(root, probe.module(), "B2 dynamic");
 
                 assertEquals(1, probe.calls.get(), characters);
                 assertEquals(3, probe.stack.size(), () -> characters + " stack=" + probe.stack);
@@ -576,6 +576,93 @@ final class ProtosPerf026B2BooleanInlineCallbackTest {
     }
 
     /** A native {@code probe} binding recording the guest CallTarget stack. */
+
+    /**
+     * Diagnostic-only view of a guest Error transfer.
+     * Preserves the original exception and execution path.
+     */
+    private static Object callWithSignalDetail(
+            ProtosBytecodeRootNode root,
+            ProtosActivation module,
+            String scenario) {
+        try {
+            return root.getCallTarget().call(module);
+        } catch (com.guillermomolina.protos.runtime.ProtosSignalException signal) {
+            Object parent = signal.error().parent().orElse(null);
+            var prelude = module.prelude().orElseThrow();
+
+            String category = "UNCLASSIFIED";
+            for (var standard :
+                    com.guillermomolina.protos.runtime.ProtosCoreErrors
+                            .StandardError.values()) {
+                Object prototype = prelude.bindings()
+                        .readLocalSlot(standard.prototypeName())
+                        .orElse(null);
+                if (parent == prototype) {
+                    category = standard.prototypeName();
+                    break;
+                }
+            }
+
+            StringBuilder ancestry = new StringBuilder();
+            Object current = parent;
+            for (int depth = 0; depth < 4 && current != null; depth++) {
+                if (!(current instanceof
+                        com.guillermomolina.protos.runtime.ProtosObjectValue object)) {
+                    ancestry.append(current.getClass().getSimpleName());
+                    break;
+                }
+                ancestry.append(depth == 0 ? "" : " -> ")
+                        .append(object.getClass().getSimpleName())
+                        .append(object.localSlotsSnapshot().keySet());
+                current = object.parent().orElse(null);
+            }
+
+            int bci = signal.originBytecodeIndexForRuntime();
+            var bytecode = signal.originBytecodeForRuntime();
+            StringBuilder operations = new StringBuilder();
+
+            if (bytecode != null && bci >= 0) {
+                var instructions = bytecode.getInstructionsAsList();
+                int selected = -1;
+
+                for (int i = 0; i < instructions.size(); i++) {
+                    if (instructions.get(i).getBytecodeIndex() <= bci) {
+                        selected = i;
+                    } else {
+                        break;
+                    }
+                }
+
+                if (selected >= 0) {
+                    int first = Math.max(0, selected - 3);
+                    int last = Math.min(
+                            instructions.size() - 1, selected + 3);
+
+                    for (int i = first; i <= last; i++) {
+                        var instruction = instructions.get(i);
+                        operations.append(i == selected ? " [ORIGIN] " : " ")
+                                .append(instruction.getBytecodeIndex())
+                                .append(":")
+                                .append(instruction.getName());
+                    }
+                }
+            }
+
+            System.err.println(
+                    "B57_SIGNAL=" + scenario
+                    + " CATEGORY=" + category
+                    + " BCI=" + bci
+                    + " PARENT_CHAIN=" + ancestry);
+
+            System.err.println(
+                    "B57_BYTECODE=" + scenario
+                    + " OPERATIONS=" + operations);
+
+            throw signal;
+        }
+    }
+
     private static final class Probe {
         final List<RootNode> stack = new ArrayList<>();
         final AtomicInteger calls = new AtomicInteger();

@@ -7173,9 +7173,11 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         builder.beginRequireCanonicalBooleanResult();
+        builder.beginBlock();
         emitI115InlineClosureBody(
                 builder, rhs, InlineBodyResult.STACK, null,
                 scratch, childResult, resumeValue, false);
+        builder.endBlock();
         builder.endRequireCanonicalBooleanResult();
     }
 
