@@ -751,10 +751,12 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                             assertInstanceOf(
                                     ProtosBytecodeRootNode.class,
                                     root.getRootNodes().getNode(1));
+                    // run, the native each callback, and the inline right
+                    // operand of each of the two && in the result expression.
                     assertEquals(
-                            2,
+                            4,
                             rootTags(runRoot.getBytecodeNode()),
-                            "run RootTag plus native callback RootTag");
+                            "run RootTag plus each inline callback RootTag");
                 } else {
                     assertEquals(expectedCalls, probe.calls.get(), characters);
 

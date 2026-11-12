@@ -71,7 +71,11 @@ final class ProtosI095BooleanProtocolInlineTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
 
-    private static final int INLINE_DEPTH = 2;
+    /*
+     * The native probe's own physical root, the run root executing an
+     * admitted callback inline, and the module root.
+     */
+    private static final int INLINE_DEPTH = 3;
 
     private static final String CODE = """
             code: (value) => {
@@ -767,11 +771,14 @@ final class ProtosI095BooleanProtocolInlineTest {
     }
 
     private record Execution(Object value, Probe probe) {
-        /** The guest root that called probe first. */
+        /** The guest root that called probe first, below the probe's native root. */
         ProtosBytecodeRootNode rootOfFirstProbe() {
-            return assertInstanceOf(
-                    ProtosBytecodeRootNode.class,
-                    probe.stacks.get(0).get(0));
+            List<RootNode> stack = probe.stacks.get(0);
+            assertEquals(
+                    "ProtosBuiltinCallRootNode",
+                    stack.get(0).getClass().getSimpleName(),
+                    probe::toString);
+            return assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1));
         }
     }
 
@@ -817,7 +824,7 @@ final class ProtosI095BooleanProtocolInlineTest {
         assertInteger(expected, outcome.value());
     }
 
-    /** A native {@code probe} recording the guest CallTarget stack of every call. */
+    /** A native {@code probe} recording the physical CallTarget stack of every call, its own first. */
     private static final class Probe {
         final List<List<RootNode>> stacks = new ArrayList<>();
         final AtomicInteger calls = new AtomicInteger();

@@ -27,7 +27,10 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.bytecode.BytecodeLocation;
+import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
@@ -234,7 +237,19 @@ final class ProtosI115StructuredControlSmokeTest {
                     names::toString);
             assertTrue(names.stream().anyMatch(name -> isInstruction(name, "c.CanonicalControlCondition")),
                     names::toString);
-            assertTrue(names.stream().noneMatch(name -> isInstruction(name, "c.GetMethod")),
+            // VALUES_AND_COLLECTIONS: ifTrue is an ordinary message, so a
+            // non-Boolean receiver selects its own method; that selection
+            // appears only behind the standard Boolean guard.
+            int guard = java.util.stream.IntStream.range(0, names.size())
+                    .filter(index -> isInstruction(names.get(index), "c.IsCanonicalBooleanOperand"))
+                    .findFirst()
+                    .orElse(-1);
+            assertTrue(guard >= 0, names::toString);
+            assertTrue(names.subList(0, guard).stream()
+                            .noneMatch(name -> isInstruction(name, "c.GetMethod")),
+                    names::toString);
+            assertTrue(names.subList(guard, names.size()).stream()
+                            .anyMatch(name -> isInstruction(name, "c.GetMethod")),
                     names::toString);
         });
     }
@@ -260,10 +275,15 @@ final class ProtosI115StructuredControlSmokeTest {
         }
     }
 
-    /** Evaluates {@code body} as the body of a fresh {@code run} Closure and calls it. */
+    /**
+     * Evaluates {@code body} as the body of a fresh {@code run} Closure and
+     * calls it, in a fresh module of the same Prelude: creating {@code run}
+     * again in one module is a slot-creation error (EXECUTION_AND_CONTROL).
+     */
     private static Object run(ProtosActivation module, String body) {
         return evaluate("run: () => {\n" + body + "\n}\nrun()\n",
-                "i115-control-smoke.protos", module);
+                "i115-control-smoke.protos",
+                module.prelude().orElseThrow().newModuleActivation());
     }
 
     private static Object evaluate(String characters, String name, ProtosActivation activation) {
@@ -272,7 +292,26 @@ final class ProtosI115StructuredControlSmokeTest {
                         .mimeType(ProtosLanguage.MIME_TYPE)
                         .build();
         CallTarget target = ProtosLanguageContext.current().parsePublic(source);
-        return target.call(activation);
+        try {
+            return target.call(activation);
+        } catch (ProtosSignalException signal) {
+            throw new AssertionError(describe(signal) + "\n" + characters, signal);
+        }
+    }
+
+    /** The guest error's message and the instruction and source position that signalled it. */
+    private static String describe(ProtosSignalException signal) {
+        StringBuilder text = new StringBuilder("guest error");
+        signal.error().readLocalSlot("message")
+                .ifPresent(message -> text.append(" message=").append(message));
+        BytecodeNode origin = signal.originBytecodeForRuntime();
+        if (origin != null) {
+            BytecodeLocation location =
+                    origin.getBytecodeLocation(signal.originBytecodeIndexForRuntime());
+            text.append(" instruction=").append(location.getInstruction())
+                    .append(" source=").append(location.getSourceLocation());
+        }
+        return text.toString();
     }
 
     private static void assertInteger(long expected, Object actual) {

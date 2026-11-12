@@ -93,10 +93,8 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                 assertInteger(1, root.getCallTarget().call(probe.module()));
 
                 assertEquals(1, probe.calls.get());
-                assertEquals(2, probe.stack.size(), () -> "stack=" + probe.stack);
                 ProtosBytecodeRootNode runRoot =
-                        assertInstanceOf(ProtosBytecodeRootNode.class, probe.stack.get(0));
-                assertSame(root, probe.stack.get(1));
+                        assertProbeCalledFrom(probe.stack, root, "probe");
 
                 runRoot.getRootNodes().ensureComplete();
                 assertEquals(
@@ -144,9 +142,7 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                                 """);
 
                 assertInteger(1, root.getCallTarget().call(probe.module()));
-                assertEquals(2, probe.stack.size(), () -> "stack=" + probe.stack);
-                assertNotSame(root, probe.stack.get(0));
-                assertSame(root, probe.stack.get(1));
+                assertProbeCalledFrom(probe.stack, root, "probe");
             } finally {
                 context.leave();
             }
@@ -176,7 +172,7 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                                 run()
                                 """);
                 assertInteger(5, callWithSignalDetail(customRoot, custom.module(), "B1 custom"));
-                assertEquals(3, custom.stack.size(), () -> "stack=" + custom.stack);
+                assertPhysicalInvocationStack(custom.stack, customRoot, "custom selector");
 
                 Probe callable = new Probe();
                 ProtosBytecodeRootNode callableRoot =
@@ -194,7 +190,7 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                                 run()
                                 """);
                 assertInteger(7, callWithSignalDetail(callableRoot, callable.module(), "B1 callable"));
-                assertEquals(3, callable.stack.size(), () -> "stack=" + callable.stack);
+                assertPhysicalInvocationStack(callable.stack, callableRoot, "custom callable");
             } finally {
                 context.leave();
             }
@@ -253,7 +249,7 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                                         """)
                                 .getCallTarget()
                                 .call(nonLocalReturn.module()));
-                assertEquals(2, nonLocalReturn.stack.size(), () -> "stack=" + nonLocalReturn.stack);
+                assertProbeCalledInline(nonLocalReturn.stack, "nonLocalReturn");
 
                 Probe capture = new Probe();
                 assertInteger(
@@ -272,7 +268,7 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                                         """)
                                 .getCallTarget()
                                 .call(capture.module()));
-                assertEquals(2, capture.stack.size(), () -> "stack=" + capture.stack);
+                assertProbeCalledInline(capture.stack, "capture");
 
                 Probe activation = new Probe();
                 assertSame(
@@ -293,7 +289,7 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                                         """)
                                 .getCallTarget()
                                 .call(activation.module()));
-                assertEquals(2, activation.stack.size(), () -> "stack=" + activation.stack);
+                assertProbeCalledInline(activation.stack, "activation");
             } finally {
                 context.leave();
             }
@@ -405,6 +401,67 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
         System.out.println("PERF026_B1_IFTRUE_INLINE_SCOPE_PROJECTION=YES");
     }
 
+    /**
+     * The native probe frame, the guest root that executed the probe and the
+     * module must occupy distinct physical frames in that order: an inline
+     * callback adds no root of its own.
+     */
+    private static ProtosBytecodeRootNode assertProbeCalledFrom(
+            List<RootNode> stack,
+            ProtosBytecodeRootNode moduleRoot,
+            String scenario) {
+        assertEquals(3, stack.size(), () -> scenario + " stack=" + stack);
+        assertEquals(
+                "ProtosBuiltinCallRootNode",
+                stack.get(0).getClass().getSimpleName(),
+                scenario);
+        ProtosBytecodeRootNode caller =
+                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1));
+        assertNotSame(moduleRoot, caller, scenario);
+        assertSame(moduleRoot, stack.get(2), scenario);
+        return caller;
+    }
+
+    /** As {@link #assertProbeCalledFrom}, for a test without its module root. */
+    private static void assertProbeCalledInline(List<RootNode> stack, String scenario) {
+        assertEquals(3, stack.size(), () -> scenario + " stack=" + stack);
+        assertEquals(
+                "ProtosBuiltinCallRootNode",
+                stack.get(0).getClass().getSimpleName(),
+                scenario);
+        assertNotSame(
+                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1)),
+                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(2)),
+                scenario);
+    }
+
+    /**
+     * The native probe, selected guest callee, enclosing Closure and module
+     * must occupy distinct physical frames in that order.
+     */
+    private static ProtosBytecodeRootNode assertPhysicalInvocationStack(
+            List<RootNode> stack,
+            ProtosBytecodeRootNode moduleRoot,
+            String scenario) {
+        assertEquals(4, stack.size(), () -> scenario + " stack=" + stack);
+        assertEquals(
+                "ProtosBuiltinCallRootNode",
+                stack.get(0).getClass().getSimpleName(),
+                scenario);
+
+        ProtosBytecodeRootNode calleeRoot =
+                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1));
+        ProtosBytecodeRootNode enclosingRoot =
+                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(2));
+
+        assertNotSame(calleeRoot, enclosingRoot, scenario);
+        assertNotSame(calleeRoot, moduleRoot, scenario);
+        assertNotSame(enclosingRoot, moduleRoot, scenario);
+        assertSame(moduleRoot, stack.get(3), scenario);
+
+        return calleeRoot;
+    }
+
     private static void assertCallbackRootPreserved(String characters) throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -416,10 +473,9 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                 callWithSignalDetail(root, probe.module(), "B1 dynamic");
 
                 assertEquals(1, probe.calls.get(), characters);
-                assertEquals(3, probe.stack.size(), () -> characters + " stack=" + probe.stack);
                 ProtosBytecodeRootNode callback =
-                        assertInstanceOf(ProtosBytecodeRootNode.class, probe.stack.get(0));
-                assertSame(root, probe.stack.get(2));
+                        assertPhysicalInvocationStack(
+                                probe.stack, root, characters);
 
                 callback.getRootNodes().ensureComplete();
                 assertEquals(1, rootTags(callback.getBytecodeNode()), characters);

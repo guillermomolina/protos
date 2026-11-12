@@ -159,8 +159,8 @@ final class CanonicalBindingAnalysis {
      * lookup sites. The enclosing whole-tree analysis supplies
      * their real lexical owners.
      *
-     * All writes, creations, parameters, dynamic lookups and
-     * unknown/candidate resolutions remain on B-prime.
+     * Dynamic reads are admitted (live selection by name). All writes,
+     * creations, parameters and unproven resolutions keep the Closure.
      */
     boolean admitsDirectParentCaptures(
             CanonicalBindingAnalysis enclosing,
@@ -178,9 +178,28 @@ final class CanonicalBindingAnalysis {
             return true;
         }
 
-        if (enclosing == null
-                || parentScope == null
-                || !parentHasFrameLayout) {
+        if (enclosing == null || parentScope == null) {
+            return false;
+        }
+
+        /*
+         * A Dynamic read is a live lexical selection by name from the
+         * executing activation. The eliminated callback activation declares
+         * no binding of that name and cannot be observed, so the selection
+         * from the physical parent selects the same binding. Such a read
+         * uses no parent storage, so a body made only of Dynamic reads needs
+         * no parent frame layout when that parent is a Closure activation.
+         * A module-level callback keeps its own root.
+         */
+        if (parentScope.kind() == CanonicalLexicalScope.Kind.CLOSURE
+                && assignResolutions.isEmpty()
+                && lookupResolutions.keySet().stream().allMatch(
+                        lookup -> enclosing.resolutionOf(lookup).orElse(null)
+                                instanceof CanonicalBindingResolution.Dynamic)) {
+            return true;
+        }
+
+        if (!parentHasFrameLayout) {
             return false;
         }
 
@@ -188,22 +207,14 @@ final class CanonicalBindingAnalysis {
             CanonicalBindingResolution resolution =
                     enclosing.resolutionOf(lookup).orElse(null);
 
+            if (resolution instanceof CanonicalBindingResolution.Dynamic) {
+                continue;
+            }
             if (resolution instanceof CanonicalBindingResolution.Candidate candidate
                     && admittedInlineCandidateRead(candidate, parentScope)) {
                 // The physical parent performs the regular presence-aware
                 // named lexical lookup. Never claim that Candidate is PRESENT.
                 continue;
-            }
-            if (Boolean.getBoolean("protos.i115.traceInlineAdmission")
-                    && parentFrameNames.contains("result")
-                    && parentFrameNames.contains("n")) {
-                System.err.println("I115_CAPTURE_LOOKUP name=" + lookup.name()
-                        + " resolution=" + resolution
-                        + " parentKind=" + parentScope.kind()
-                        + " parentNames=" + parentFrameNames
-                        + " inlineGlobal=" + (resolution instanceof
-                                CanonicalBindingResolution.CapturedResolved c
-                                && admittedInlineGlobalRead(c, parentScope)));
             }
 
             if (!(resolution
@@ -232,12 +243,6 @@ final class CanonicalBindingAnalysis {
 
             CanonicalBindingResolution resolution =
                     enclosing.resolutionOf(assign).orElse(null);
-            if (Boolean.getBoolean("protos.i115.traceInlineAdmission")
-                    && parentFrameNames.contains("result")
-                    && parentFrameNames.contains("n")) {
-                System.err.println("I115_CAPTURE_ASSIGN name=" + assign.name()
-                        + " resolution=" + resolution);
-            }
 
             if (!(resolution
                     instanceof CanonicalBindingResolution.CapturedResolved
@@ -292,6 +297,10 @@ final class CanonicalBindingAnalysis {
             }
             CanonicalBindingResolution parent =
                     enclosing.resolutionOf(entry.getKey()).orElse(null);
+            if (parent instanceof CanonicalBindingResolution.Dynamic) {
+                // Live selection by name, as in admitsDirectParentCaptures.
+                continue;
+            }
             if (parent instanceof CanonicalBindingResolution.Candidate candidate
                     && admittedInlineCandidateRead(candidate, parentScope)) {
                 continue;
@@ -364,6 +373,10 @@ final class CanonicalBindingAnalysis {
             }
             CanonicalBindingResolution parent =
                     enclosing.resolutionOf(entry.getKey()).orElse(null);
+            if (parent instanceof CanonicalBindingResolution.Dynamic) {
+                // Live selection by name, as in admitsDirectParentCaptures.
+                continue;
+            }
             if (parent instanceof CanonicalBindingResolution.Candidate candidate
                     && admittedInlineCandidateRead(candidate, parentScope)) {
                 continue;
@@ -409,12 +422,6 @@ final class CanonicalBindingAnalysis {
             return false;
         }
         int depth = 1;
-        if (Boolean.getBoolean("protos.i115.traceInlineAdmission")) {
-            System.err.println("I115_CAPTURE_GLOBAL owner=" + captured.identity().owner()
-                    + " name=" + captured.identity().name()
-                    + " sourceDepth=" + captured.lexicalDepth()
-                    + " parent=" + parentScope);
-        }
         for (CanonicalLexicalScope current = parentScope;
                 current != null;
                 current = current.outwardScope(), depth++) {

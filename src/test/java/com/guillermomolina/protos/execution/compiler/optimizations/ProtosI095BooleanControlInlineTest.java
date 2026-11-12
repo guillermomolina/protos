@@ -67,7 +67,11 @@ final class ProtosI095BooleanControlInlineTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
 
-    private static final int INLINE_DEPTH = 2;
+    /*
+     * The native probe's own physical root, the run root executing an
+     * admitted callback inline, and the module root.
+     */
+    private static final int INLINE_DEPTH = 3;
 
     /**
      * The standard ifTrue/ifFalse rows and the D211 contextual if sends,
@@ -175,15 +179,15 @@ final class ProtosI095BooleanControlInlineTest {
         Execution normal = execute(false, source);
         assertInteger(6260 + 36, normal.value());
         List<String> names = instructionNames(normal.rootOfFirstProbe());
-        int classify = position(names, "TryCompactCanonicalBooleanOne");
-        int falseClass = position(names, "IsCanonicalBooleanFalseClass");
-        // I101-A: the classifier is the admitted site's semantic guard; no mode test precedes it.
+        int classify = position(names, "IsCanonicalBooleanOperand");
+        int falseClass = position(names, "CanonicalControlCondition");
+        // I101-A: the standard/custom guard is the site's semantic guard; no mode test precedes it.
         assertTrue(classify >= 0, () -> "no canonical classification: " + names);
         assertTrue(falseClass > classify,
                 () -> "falseClass " + falseClass + " classify " + classify);
-        // MISS keeps an ordinary prepared send in the NORMAL lowering.
+        // MISS keeps an ordinary method selection after the native selection.
         int prepare = falseClass + 1
-                + position(names.subList(falseClass + 1, names.size()), "PrepareSendOne");
+                + position(names.subList(falseClass + 1, names.size()), "GetMethod");
         assertTrue(prepare > falseClass,
                 () -> "prepare " + prepare + " falseClass " + falseClass);
         // The custom method is a physical callee above run.
@@ -573,7 +577,7 @@ final class ProtosI095BooleanControlInlineTest {
                     probe()
                     b.ifFalse(() => {
                         inner: 1
-                        missing + inner
+                        missing = missing + inner
                     })
                 }
                 missing: 41
@@ -581,18 +585,25 @@ final class ProtosI095BooleanControlInlineTest {
                 """;
         Execution normal = execute(false, source);
         List<String> names = instructionNames(normal.rootOfFirstProbe());
-        // The site is not admitted: no canonical classification, only the ordinary send.
-        assertTrue(position(names, "TryCompactCanonicalBooleanOne") < 0, names::toString);
-        assertTrue(position(names, "PrepareSend") >= 0, names::toString);
+        // The callback writes a binding that is not its direct parent's: it is
+        // not admitted and stays a genuine Closure. The control itself still
+        // selects natively, without sending ifFalse.
+        assertTrue(position(names, "ResetInlineCallbackLocal") < 0, names::toString);
+        assertTrue(position(names, "MaterializeCurrentClosure") >= 0
+                || position(names, "MaterializeClosure") >= 0, names::toString);
+        assertTrue(position(names, "CanonicalControlCondition") >= 0, names::toString);
         System.out.println("I095_C_UNPROVEN_FALLBACK=PASS");
     }
 
     private record Execution(Object value, Probe probe) {
-        /** The guest root that called probe first. */
+        /** The guest root that called probe first, below the probe's native root. */
         ProtosBytecodeRootNode rootOfFirstProbe() {
-            return assertInstanceOf(
-                    ProtosBytecodeRootNode.class,
-                    probe.stacks.get(0).get(0));
+            List<RootNode> stack = probe.stacks.get(0);
+            assertEquals(
+                    "ProtosBuiltinCallRootNode",
+                    stack.get(0).getClass().getSimpleName(),
+                    probe::toString);
+            return assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1));
         }
     }
 
@@ -642,7 +653,7 @@ final class ProtosI095BooleanControlInlineTest {
         assertInteger(expected, outcome.value());
     }
 
-    /** A native {@code probe} recording the guest CallTarget stack of every call. */
+    /** A native {@code probe} recording the physical CallTarget stack of every call, its own first. */
     private static final class Probe {
         final List<List<RootNode>> stacks = new ArrayList<>();
         final AtomicInteger calls = new AtomicInteger();

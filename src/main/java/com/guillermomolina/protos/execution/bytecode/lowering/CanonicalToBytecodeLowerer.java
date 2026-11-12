@@ -261,7 +261,17 @@ final class CanonicalToBytecodeLowerer {
                 @Override
                 public boolean inlineCallbackPosition(CanonicalSend send, int position) {
                     I115Control control = I115Control.of(send.message(), send.arguments());
-                    return control != null && control.callbackPosition(position);
+                    if (control == null || !control.callbackPosition(position)) {
+                        return false;
+                    }
+                    /*
+                     * A dynamic conditional receiver can select a custom method.
+                     * That branch materializes its callback, even when the
+                     * standard Boolean branch executes the callback inline.
+                     * Captured bindings must retain their physical cells.
+                     */
+                    return control.loop()
+                            || canonicalBooleanLiteral(send.receiver()) != null;
                 }
             };
 
@@ -491,12 +501,27 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
+    /*
+     * The bindings an inline callback may reach in its physical parent: the
+     * parent's plain locals and the cells it owns. A cell is reached through
+     * the same cell local by the parent and by the inline body, so captures
+     * by reference are preserved. This is the same name set rootEntry gives
+     * the analysis that selects inline controls, so selection and emission
+     * agree on every callback.
+     */
     private ControlSiteContext currentControlSiteContext() {
+        java.util.Set<String> names =
+                new java.util.LinkedHashSet<>(currentRootFrameLocals.keySet());
+        for (CanonicalBindingIdentity identity : currentRootCellLocals.keySet()) {
+            if (identity.owner() == currentRootTopScope) {
+                names.add(identity.name());
+            }
+        }
         return new ControlSiteContext(
                 currentRootAnalysis,
                 currentRootTopScope,
-                currentRootFrameLocals.keySet(),
-                !currentRootFrameLocals.isEmpty(),
+                java.util.Collections.unmodifiableSet(names),
+                !names.isEmpty(),
                 false,
                 currentActivationLocal != null);
     }
@@ -2973,7 +2998,11 @@ final class CanonicalToBytecodeLowerer {
                 || send.arguments().size() != 1
                 || hasVectorArgument(send.arguments())
                 || primitiveNumericSendCandidate(send)
-                || i115AddSend(send)) {
+                || i115AddSend(send)
+                || i115IndexedRead(send)
+                || I115Control.of(send.message(), send.arguments()) != null
+                || i115NativeBooleanControl(
+                        send.message(), send.arguments()) != null) {
             return false;
         }
         return isTerminalCallOperand(send.receiver())
@@ -6476,6 +6505,30 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult,
             java.util.Map<String, BytecodeLocal> boundParameters) {
+        /*
+         * The inline body keeps the RootTag of the Closure activation it
+         * replaces, so instruments and the debugger still see that guest
+         * root, and project its scope, inside the physical parent.
+         */
+        builder.beginTag(StandardTags.RootTag.class);
+        builder.beginBlock();
+        emitInlineClosureBodyContent(builder, closure, mode, result,
+                scratch, childResult, resumeValue, primitiveCarrierResult,
+                boundParameters);
+        builder.endBlock();
+        builder.endTag(StandardTags.RootTag.class);
+    }
+
+    private void emitInlineClosureBodyContent(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalClosure closure,
+            InlineBodyResult mode,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult,
+            java.util.Map<String, BytecodeLocal> boundParameters) {
         // Reuse I095's lexical proof and existing callback-local handlers.
         // An inline callback's bindings are *not* bindings of its parent root.
         CanonicalBindingAnalysis analysis =
@@ -6509,7 +6562,12 @@ final class CanonicalToBytecodeLowerer {
          * locals are reused, but every inline callback invocation starts
          * with its own bindings ABSENT. The operation runs inside the selected
          * callback path, including once per iteration of an admitted loop.
+         * A value-producing body opens its Block first, so these resets are
+         * statements of that Block and its last expression is its value.
          */
+        if (mode == InlineBodyResult.STACK) {
+            builder.beginBlock();
+        }
         for (String name : names) {
             if (!boundParameters.containsKey(name)) {
                 builder.emitResetInlineCallbackLocal(locals.get(name));
@@ -6525,7 +6583,10 @@ final class CanonicalToBytecodeLowerer {
                     closure.body().expressions();
             if (expressions.isEmpty()) {
                 switch (mode) {
-                    case STACK -> builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                    case STACK -> {
+                        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                        builder.endBlock();
+                    }
                     case STORE -> {
                         builder.beginStoreLocal(result);
                         builder.emitLoadConstant(ProtosNullValue.INSTANCE);
@@ -6536,9 +6597,6 @@ final class CanonicalToBytecodeLowerer {
                 return;
             }
             DiscardSink sink = null;
-            if (mode == InlineBodyResult.STACK) {
-                builder.beginBlock();
-            }
             for (int index = 0; index < expressions.size(); index++) {
                 CanonicalExpression expression = expressions.get(index);
                 boolean last = index == expressions.size() - 1;
@@ -6690,8 +6748,27 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
 
+        boolean guardedConditional =
+                !control.loop() && canonicalBooleanLiteral(receiver) == null;
+
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
+
+        BytecodeLocal conditionalReceiver = null;
+        if (guardedConditional) {
+            conditionalReceiver = builder.createLocal(
+                    "conditionalReceiver", null);
+            stageOperand(
+                    builder, receiver, conditionalReceiver,
+                    scratch, childResult, resumeValue, stager);
+
+            builder.beginIfThenElse();
+            builder.beginIsCanonicalBooleanOperand();
+            builder.emitLoadLocal(conditionalReceiver);
+            builder.endIsCanonicalBooleanOperand();
+            builder.beginBlock();
+        }
+
         java.util.List<CanonicalExpression> operands = new java.util.ArrayList<>(arguments.size() + 1);
         operands.add(receiver);
         operands.addAll(arguments);
@@ -6707,6 +6784,12 @@ final class CanonicalToBytecodeLowerer {
             allCallbacksInline &= i115AdmitsInlineClosure(operands.get(position));
         }
         for (int position = 0; position < operands.size(); position++) {
+            if (guardedConditional && position == 0) {
+                inline.add(false);
+                staged.add(conditionalReceiver);
+                continue;
+            }
+
             CanonicalExpression operand = operands.get(position);
             boolean callback = control.callbackPosition(position);
             boolean admitted = callback && i115AdmitsInlineClosure(operand);
@@ -6734,6 +6817,38 @@ final class CanonicalToBytecodeLowerer {
                     builder, control, staging, null,
                     valueUsed, result, primitiveCarrierResult);
         }
+
+        if (guardedConditional) {
+            builder.endBlock();
+            builder.beginBlock();
+
+            BytecodeLocal selectedMethod =
+                    builder.createLocal("conditionalMethod", null);
+            emitGetMethod(
+                    builder, control.selector, conditionalReceiver,
+                    selectedMethod);
+
+            java.util.List<BytecodeLocal> selectedArguments =
+                    new java.util.ArrayList<>(arguments.size());
+
+            for (CanonicalExpression argument : arguments) {
+                BytecodeLocal argumentValue =
+                        builder.createLocal("conditionalArgument", null);
+                stageOperand(
+                        builder, argument, argumentValue,
+                        scratch, childResult, resumeValue, stager);
+                selectedArguments.add(argumentValue);
+            }
+
+            emitDispatchedCall(
+                    builder, selectedMethod, selectedArguments, null,
+                    childResult, valueUsed ? result : null,
+                    resumeValue, primitiveCarrierResult);
+
+            builder.endBlock();
+            builder.endIfThenElse();
+        }
+
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
@@ -8407,11 +8522,6 @@ final class CanonicalToBytecodeLowerer {
             CanonicalClosure closure, ControlSiteContext context) {
         if (!closure.parameters().isEmpty()
                 || compilationFacts.mayObserveReturnHome(closure)) {
-            if (Boolean.getBoolean("protos.i115.traceInlineAdmission")) {
-                System.err.println("I115_INLINE_PROOF=REJECT_EARLY span=" + closure.span()
-                        + " params=" + closure.parameters().size()
-                        + " returnHome=" + compilationFacts.mayObserveReturnHome(closure));
-            }
             return false;
         }
 
@@ -8468,20 +8578,6 @@ final class CanonicalToBytecodeLowerer {
                         || noOwnBindingsAndProvenCaptures
                         || mixedOwnBindingsAndParentCaptures)
                 && !requiresPersistentAuthority;
-        if (Boolean.getBoolean("protos.i115.traceInlineAdmission")) {
-            System.err.println("I115_INLINE_PROOF=" + (admitted ? "ADMIT" : "REJECT")
-                    + " span=" + closure.span()
-                    + " params=" + closure.parameters().size()
-                    + " ownNames=" + scope.declaredNames()
-                    + " scalarNames=" + scalarNames
-                    + " ownScalar=" + ownScalarBindings
-                    + " directCaptures=" + noOwnBindingsAndProvenCaptures
-                    + " mixed=" + mixedOwnBindingsAndParentCaptures
-                    + " persistentAuthority=" + requiresPersistentAuthority
-                    + " parentScope=" + context.topScope()
-                    + " parentFrameNames=" + context.frameNames()
-                    + " parentHasFrameLayout=" + context.hasFrameLayout());
-        }
         return admitted;
     }
 
@@ -8972,14 +9068,10 @@ final class CanonicalToBytecodeLowerer {
         builder.beginArrayEachNext(element);
         builder.emitLoadLocal(snapshot);
         builder.endArrayEachNext();
-        builder.beginTag(StandardTags.RootTag.class);
-        builder.beginBlock();
         emitI115InlineClosureBody(
                 builder, callback, InlineBodyResult.DISCARD, null,
                 scratch, childResult, resumeValue, false,
                 java.util.Map.of(parameter, element));
-        builder.endBlock();
-        builder.endTag(StandardTags.RootTag.class);
         builder.endWhile();
 
         builder.beginStoreLocal(result);

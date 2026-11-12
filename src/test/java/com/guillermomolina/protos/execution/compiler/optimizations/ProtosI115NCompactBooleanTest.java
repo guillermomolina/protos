@@ -97,7 +97,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void perf041PrimaryCase() throws Exception {
-        runCase("perf041", """
+        runCase("perf041", 3, """
                 run: () => {
                     value: true
                     result: null
@@ -111,7 +111,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void trueIfTrueRunsCallback() throws Exception {
-        runCase("true-if-true", """
+        runCase("true-if-true", 3, """
                 run: () => {
                     flag: true
                     out: 0
@@ -125,7 +125,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void falseIfTrueSkipsCallback() throws Exception {
-        runCase("false-if-true", """
+        runCase("false-if-true", 3, """
                 run: () => {
                     seen: 7
                     off: false
@@ -138,7 +138,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void trueIfFalseSkipsCallback() throws Exception {
-        runCase("true-if-false", """
+        runCase("true-if-false", 3, """
                 run: () => {
                     mark: 3
                     yes: true
@@ -151,7 +151,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void falseIfFalseRunsCallback() throws Exception {
-        runCase("false-if-false", """
+        runCase("false-if-false", 3, """
                 run: () => {
                     no: false
                     count: 0
@@ -165,7 +165,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void ifTrueIfFalseSelectsFirst() throws Exception {
-        runCase("if-true-if-false-true", """
+        runCase("if-true-if-false-true", 4, """
                 run: () => {
                     pick: true
                     pick.ifTrueIfFalse(() => 10, () => 20)
@@ -175,7 +175,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void ifTrueIfFalseSelectsSecond() throws Exception {
-        runCase("if-true-if-false-false", """
+        runCase("if-true-if-false-false", 4, """
                 run: () => {
                     side: 1
                     choice: false
@@ -236,7 +236,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void consecutiveIfTrueGrowDsl() throws Exception {
-        Census single = runCase("single-if-true", """
+        Census single = runCase("single-if-true", 3, """
                 run: () => {
                     t: true
                     sum: 1
@@ -246,7 +246,7 @@ final class ProtosI115NCompactBooleanTest {
                     sum
                 }
                 """, result -> assertEquals(3, result.asInt()));
-        Census consecutive = runCase("consecutive-if-true", """
+        Census consecutive = runCase("consecutive-if-true", 4, """
                 run: () => {
                     t: true
                     sum: 1
@@ -283,7 +283,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void consumedIfTrueReturnsCallbackResult() throws Exception {
-        runCase("consumed-if-true", """
+        runCase("consumed-if-true", 3, """
                 run: () => {
                     base: 6
                     on: true
@@ -296,7 +296,7 @@ final class ProtosI115NCompactBooleanTest {
 
     @Test
     void discardedIfTrueUsesNoResultLocal() throws Exception {
-        Census census = runCase("discarded-if-true", """
+        Census census = runCase("discarded-if-true", 3, """
                 run: () => {
                     z: 1
                     ready: true
@@ -306,7 +306,7 @@ final class ProtosI115NCompactBooleanTest {
                     z
                 }
                 """, result -> assertEquals(2, result.asInt()));
-        assertEquals(2, census.rootCount());
+        assertEquals(3, census.rootCount());
         assertFalse(census.resultLocal(),
                 "A discarded ifTrue must not allocate a result local");
     }
@@ -327,11 +327,13 @@ final class ProtosI115NCompactBooleanTest {
                     "(gate) => { hits: 0\n(gate < 2).ifTrue() {\nhits = hits + 1\n}\nhits }",
                     module);
             List<String> names = instructionNames(run);
-            assertTrue(names.stream().anyMatch(n -> n.contains("TryPrimitiveNumericLess")));
-            assertTrue(names.stream().anyMatch(n -> n.contains("IsCanonicalBooleanValue")));
-            assertTrue(names.stream().anyMatch(n -> n.contains("MaterializeCurrentClosure")));
-            assertTrue(names.stream().anyMatch(n -> n.contains("Experimental")),
-                    "the root keeps the compact lowering");
+            assertTrue(names.stream().anyMatch(n -> n.contains("RichCompareLt")));
+            assertTrue(names.stream().anyMatch(n -> n.contains("IsCanonicalBooleanOperand")));
+            assertTrue(names.stream().anyMatch(n -> n.contains("MaterializeCurrentClosure")
+                    || n.contains("MaterializeClosure")),
+                    "the custom branch materializes the callback");
+            assertTrue(names.stream().anyMatch(n -> n.contains("CanonicalControlCondition")),
+                    "the root selects the standard Boolean behavior natively");
 
             // HIT: canonical true, then canonical false, both inline.
             DirectEntry taken =
@@ -412,15 +414,11 @@ final class ProtosI115NCompactBooleanTest {
         }
     }
 
-    private static Census runCase(
-            String name, String source, Consumer<Value> expected)
-            throws Exception {
-        return runCase(name, 2, source, expected);
-    }
-
     /*
      * {@code rootCount}: the module and run roots, plus one registered
-     * callback root per callback of a guarded (dispatching) control.
+     * callback root per callback of a guarded (dispatching) control. A
+     * receiver that is not a Boolean literal is guarded: a custom receiver
+     * selects its own method, which receives the materialized callback.
      */
     private static Census runCase(
             String name, int rootCount, String source, Consumer<Value> expected)
@@ -473,7 +471,21 @@ final class ProtosI115NCompactBooleanTest {
     }
 
     private static Object enter(DirectEntry prepared) {
-        return ProtosDispatchTestSupport.enter(prepared);
+        try {
+            return ProtosDispatchTestSupport.enter(prepared);
+        } catch (com.guillermomolina.protos.runtime.ProtosSignalException signal) {
+            StringBuilder text = new StringBuilder("guest error");
+            signal.error().readLocalSlot("message")
+                    .ifPresent(message -> text.append(" message=").append(message));
+            var origin = signal.originBytecodeForRuntime();
+            if (origin != null) {
+                var location = origin.getBytecodeLocation(
+                        signal.originBytecodeIndexForRuntime());
+                text.append(" instruction=").append(location.getInstruction())
+                        .append(" source=").append(location.getSourceLocation());
+            }
+            throw new AssertionError(text.toString(), signal);
+        }
     }
 
     private static List<String> instructionNames(ProtosClosureValue closure) {
@@ -572,7 +584,7 @@ final class ProtosI115NCompactBooleanTest {
         for (Instruction instruction
                 : run.getBytecodeNode().getInstructionsAsList()) {
             String instructionName = ProtosInstructionNames.of(instruction);
-            compact |= instructionName.contains("Experimental");
+            compact |= instructionName.contains("CanonicalControlCondition");
             for (String forbidden : FORBIDDEN) {
                 assertFalse(instructionName.contains(forbidden),
                         name + " run root contains " + instructionName);
@@ -587,7 +599,7 @@ final class ProtosI115NCompactBooleanTest {
             System.out.println(
                     "I115_N_" + MISS_PATH.get(index) + "_COUNT=" + missPath[index]);
         }
-        assertTrue(compact, name + " run root must take the compact lowerer");
+        assertTrue(compact, name + " run root must select the standard Boolean behavior natively");
         // A discarded Boolean control stores its result in no local.
         boolean consumedLocal = false;
         for (LocalVariable local : run.getBytecodeNode().getLocals()) {
