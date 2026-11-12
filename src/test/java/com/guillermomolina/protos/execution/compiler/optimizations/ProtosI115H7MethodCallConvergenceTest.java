@@ -51,9 +51,9 @@ import org.junit.jupiter.api.Test;
 /**
  * I115-H7 EXPERIMENTAL: GraalPy-shaped physical convergence of the
  * {@code method-call} workload (Bytecode While, ReadGlobal, GetMethod,
- * CallUnaryMethod, NumberAdd, RichCompareLt and the one parameter lowering
- * LoadSuppliedArgument followed by a LOCAL or CELL store; I115 retired
- * CopyArguments, Lt, NumberInPlaceAdd, the CallBinaryMethod direct tier,
+ * CallUnaryMethod, NumberAdd, RichCompareLt and the grouped parameter
+ * binding CopySuppliedArguments into LOCAL locals, or LoadSuppliedArgument
+ * into a CELL; I115 retired the former CopyArguments, Lt, NumberInPlaceAdd, the CallBinaryMethod direct tier,
  * compact roots and the reduced H11 entries), and
  * I115-H7-R1 regression protection for the contracts those operations must
  * keep (caller protocol, rebinding, numeric exactness, strict conditions,
@@ -91,33 +91,36 @@ final class ProtosI115H7MethodCallConvergenceTest {
             """;
 
     /**
-     * I115: the run root of METHOD_CALL in the shared Bytecode DSL lowering.
-     * i and sink are CELLs (captured by the inline loop bodies); the
-     * condition is RichCompareLt, materialized and validated by the
-     * canonical Boolean condition before the native branch; the send is
-     * ReadGlobal, GetMethod, then one CallUnaryMethod; both {@code x = x + e}
-     * are NumberAdd; a backward branch closes the loop. No fixed instruction
-     * budget is asserted.
+     * The run root of METHOD_CALL in the shared Bytecode DSL lowering. The
+     * loop condition and body are inline callbacks of the native while, so i
+     * and sink are frame-native locals of run (no cells); the condition is
+     * RichCompareLt whose primitive result flows into the canonical control
+     * condition and the native branch; the send is ReadGlobal, GetMethod, then
+     * one CallBinaryMethod (receiver plus one argument); both
+     * {@code x = x + e} are NumberAdd behind IsStandardAddSelection, whose
+     * message fallback is a guarded GetMethod; a backward branch closes the
+     * loop. No fixed instruction budget is asserted.
      */
     private static void assertRunArchitecture(List<String> names) {
         assertTrue(names.get(0).equals("c.EnterRoot"), names.toString());
-        assertEquals(2, count(names, "c.CreateCell"), "i and sink are cells: " + names);
-        assertTrue(names.contains("c.LoadCell") && names.contains("c.StoreCell"),
+        assertEquals(0, count(names, "c.CreateCell"), "i and sink are frame locals: " + names);
+        assertFalse(names.contains("c.LoadCell") || names.contains("c.StoreCell"),
                 names.toString());
         assertEquals(1, count(names, "c.RichCompareLt"), names.toString());
         assertEquals(1, count(names, "c.ReadGlobal"), names.toString());
-        assertEquals(1, count(names, "c.GetMethod"), names.toString());
-        assertEquals(1, count(names, "c.CallUnaryMethod"), names.toString());
+        assertEquals(1, count(names, "c.CallBinaryMethod"), names.toString());
         assertEquals(2, count(names, "c.NumberAdd"), names.toString());
+        assertEquals(2, count(names, "c.IsStandardAddSelection"), names.toString());
+        assertEquals(1 + count(names, "c.IsStandardAddSelection"),
+                count(names, "c.GetMethod"),
+                "one send selection plus one guarded fallback per '+': " + names);
         int compare = names.indexOf("c.RichCompareLt");
-        int materialize = indexAfter(names, "c.MaterializePrimitiveNumericCarrier", compare);
-        int condition = indexAfter(names, "c.ExperimentalCanonicalBooleanCondition", materialize);
+        int condition = indexAfter(names, "c.CanonicalControlCondition", compare);
         int branch = indexAfter(names, "branch.false", condition);
-        assertTrue(compare >= 0 && materialize > compare && condition > materialize
-                        && branch > condition,
-                "comparison, materialization, validation, branch: " + names);
+        assertTrue(compare >= 0 && condition > compare && branch > condition,
+                "comparison, canonical condition, branch: " + names);
         int select = names.indexOf("c.GetMethod");
-        int call = names.indexOf("c.CallUnaryMethod");
+        int call = names.indexOf("c.CallBinaryMethod");
         assertTrue(names.indexOf("c.ReadGlobal") < select && select < call,
                 "receiver read, method selection, then its call: " + names);
         assertTrue(names.contains("branch.backward"), names.toString());
@@ -143,8 +146,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
      */
     private static final List<String> IDENTITY_DSL = List.of(
             "c.EnterRoot",
-            "c.LoadSuppliedArgument",
-            "store.local",
+            "c.CopySuppliedArguments",
             "load.local",
             "c.EpilogForReturn",
             "return");
@@ -287,10 +289,10 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 }
                 """)) {
             List<String> names = unquickened(names(root(session, "run")));
-            // I115: three ordinary unary sends, each GetMethod then CallUnaryMethod.
-            assertEquals(3, count(names, "c.GetMethod"), "three ordinary sends: " + names);
-            assertEquals(3, count(names, "c.CallUnaryMethod"), names.toString());
-            assertEquals(0, count(names, "c.CallBinaryMethod"), names.toString());
+            // Three ordinary one-argument sends, each GetMethod then
+            // CallBinaryMethod (method arity counts the receiver). The
+            // remaining selections are the guarded '+'/'*' message fallbacks.
+            assertEquals(3, count(names, "c.CallBinaryMethod"), "three ordinary sends: " + names);
             assertSelectionPrecedesEachCall(names);
             assertReplacedAbsent("run", names);
             // receiver (1), then argument (2), then the call itself (3), once each.
@@ -362,7 +364,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
             List<String> loop = unquickened(names(loopRoot));
             assertEquals(1, count(loop, "c.RichCompareLt"), "k < 3 is RichCompareLt: " + loop);
             int compare = loop.indexOf("c.RichCompareLt");
-            int condition = indexAfter(loop, "c.ExperimentalCanonicalBooleanCondition", compare);
+            int condition = indexAfter(loop, "c.CanonicalControlCondition", compare);
             assertTrue(condition > compare
                             && indexAfter(loop, "branch.false", condition) > condition,
                     "comparison, Boolean validation, then the native branch: " + loop);
@@ -877,9 +879,9 @@ final class ProtosI115H7MethodCallConvergenceTest {
              */
             List<String> names = unquickened(names(root(session, "probeNotBoolean")));
             assertEquals(2, count(names, "c.CallNilaryMethod"), names.toString());
-            assertTrue(count(names, "c.ExperimentalCanonicalBooleanCondition") >= 1,
+            assertTrue(count(names, "c.CanonicalControlCondition") >= 1,
                     names.toString());
-            int condition = names.indexOf("c.ExperimentalCanonicalBooleanCondition");
+            int condition = names.indexOf("c.CanonicalControlCondition");
             assertTrue(names.indexOf("c.CallNilaryMethod") < condition,
                     "the condition callback runs before its validation: " + names);
             assertReplacedAbsent("probeNotBoolean", names);
@@ -1080,7 +1082,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
             ProtosBytecodeRootNode runRoot = root(session, "run");
             List<String> innerNames = unquickened(names(innerRoot));
             assertTrue(innerNames.contains("c.GetMethod")
-                            && innerNames.contains("c.CallUnaryMethod"),
+                            && innerNames.contains("c.CallBinaryMethod"),
                     "inner uses the ordinary unary send: " + innerNames);
             assertSelectionPrecedesEachCall(innerNames);
             assertReplacedAbsent("inner", innerNames);
@@ -1348,7 +1350,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 assertEquals(List.of(0), suppliedPositions(template), calleeNames.toString());
                 assertEquals(1, count(calleeNames, "c.NumberAdd"), calleeNames.toString());
                 assertEquals(1, count(runNames, "c.GetMethod"), runNames.toString());
-                assertEquals(1, count(runNames, "c.CallUnaryMethod"), runNames.toString());
+                assertEquals(1, count(runNames, "c.CallBinaryMethod"), runNames.toString());
                 assertSelectionPrecedesEachCall(runNames);
                 for (List<String> names : List.of(calleeNames, runNames)) {
                     assertTrue(names.stream().noneMatch(
@@ -1446,7 +1448,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
             assertEquals(0, count(calleeNames, "c.ReadGlobal"), calleeNames.toString());
             assertEquals(1, count(calleeNames, "c.NumberAdd"), calleeNames.toString());
             assertEquals(1, count(runNames, "c.GetMethod"), runNames.toString());
-            assertEquals(1, count(runNames, "c.CallUnaryMethod"), runNames.toString());
+            assertEquals(1, count(runNames, "c.CallBinaryMethod"), runNames.toString());
             assertSelectionPrecedesEachCall(runNames);
             for (List<String> names : List.of(calleeNames, runNames)) {
                 assertTrue(names.stream().noneMatch(
@@ -1601,18 +1603,18 @@ final class ProtosI115H7MethodCallConvergenceTest {
     }
 
     /**
-     * I115 (replaces CopyArguments): LoadSuppliedArgument(0) is one
-     * specialization reading the supplied position from the frame
-     * arguments, with no fallback, and the lowering stores it directly into
-     * the parameter's native storage: a LOCAL local, or the cell of a
-     * captured (CELL) parameter. Argument identity is exact for generic
-     * and primitive values.
+     * CopySuppliedArguments (grouped binding, GraalPy CopyArguments) is one
+     * specialization copying the supplied positions from the frame arguments
+     * straight into the consecutive LOCAL parameter locals, with no
+     * fallback; a captured (CELL) parameter keeps LoadSuppliedArgument stored
+     * into its cell. Argument identity is exact for generic and primitive
+     * values.
      */
     @Test
     void copyArgumentsStoresTheSingleArgumentWithoutFallback() throws Exception {
         List<String> specializations = new ArrayList<>();
         for (java.lang.reflect.Method method :
-                ProtosBytecodeRootNode.LoadSuppliedArgument.class.getDeclaredMethods()) {
+                ProtosBytecodeRootNode.CopySuppliedArguments.class.getDeclaredMethods()) {
             assertNull(method.getAnnotation(com.oracle.truffle.api.dsl.Fallback.class),
                     "no fallback: " + method.getName());
             if (method.getAnnotation(com.oracle.truffle.api.dsl.Specialization.class) != null) {
@@ -1683,7 +1685,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
             assertFalse(run.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION),
                     "run never published its activation for the send");
             List<String> executed = unquickened(names(run));
-            assertEquals(1, count(executed, "c.CallUnaryMethod"), executed.toString());
+            assertEquals(1, count(executed, "c.CallBinaryMethod"), executed.toString());
             assertSelectionPrecedesEachCall(executed);
             assertTrue(names(run).stream().noneMatch(name -> name.startsWith("c.CallBinaryMethod")),
                     "no retired CallBinaryMethod: " + names(run));
@@ -2207,16 +2209,36 @@ final class ProtosI115H7MethodCallConvergenceTest {
         for (String name : names) {
             if (name.equals("c.GetMethod")) {
                 selections++;
-            } else if (name.equals("c.CallUnaryMethod")) {
+            } else if (name.equals("c.CallUnaryMethod") || name.equals("c.CallBinaryMethod")) {
                 assertTrue(selections > 0, "a call without a preceding selection: " + names);
                 selections--;
             }
         }
     }
 
-    /* The constant positions of the root's LoadSuppliedArgument instructions, in order. */
+    /*
+     * The supplied positions the root binds, in order: the grouped
+     * CopySuppliedArguments range (positions 0..n-1 copied into consecutive
+     * parameter locals) followed by any individual LoadSuppliedArgument.
+     */
     private static List<Integer> suppliedPositions(ProtosBytecodeRootNode root) {
-        return constantIntegers(root, "LoadSuppliedArgument", "index");
+        List<Integer> positions = new ArrayList<>();
+        for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {
+            if (!ProtosInstructionNames.of(instruction).contains("CopySuppliedArguments")) {
+                continue;
+            }
+            for (Instruction.Argument candidate : instruction.getArguments()) {
+                if (candidate.getKind() == Instruction.Argument.Kind.CONSTANT
+                        && candidate.asConstant()
+                                instanceof com.oracle.truffle.api.bytecode.LocalRangeAccessor range) {
+                    for (int index = 0; index < range.getLength(); index++) {
+                        positions.add(index);
+                    }
+                }
+            }
+        }
+        positions.addAll(constantIntegers(root, "LoadSuppliedArgument", "index"));
+        return positions;
     }
 
     /* The immediate integer constant {@code argument} of every {@code operation} instruction. */

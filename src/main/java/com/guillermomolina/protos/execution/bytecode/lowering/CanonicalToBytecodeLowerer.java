@@ -3112,6 +3112,8 @@ final class CanonicalToBytecodeLowerer {
 
         BytecodeLocal callable = builder.createLocal("terminalCallable", null);
         java.util.List<CanonicalExpression> arguments;
+        BytecodeLocal terminalSendReceiver = null;
+        String terminalSendSelector = null;
         if (expression instanceof CanonicalCall call) {
             arguments = call.arguments();
             builder.beginStoreLocal(callable);
@@ -3123,7 +3125,8 @@ final class CanonicalToBytecodeLowerer {
             builder.beginStoreLocal(receiver);
             emitTerminalCallOperand(builder, send.receiver());
             builder.endStoreLocal();
-            emitGetMethod(builder, send.message(), receiver, callable);
+            terminalSendReceiver = receiver;
+            terminalSendSelector = send.message();
         } else {
             throw new AssertionError(
                     "Unsupported fixed-arity call: " + expression.getClass());
@@ -3135,6 +3138,10 @@ final class CanonicalToBytecodeLowerer {
             emitTerminalCallOneArgument(builder, argument);
             builder.endStoreLocal();
             argumentValues.add(argumentValue);
+        }
+        // D237: a send selects its behavior once the argument packet is formed.
+        if (terminalSendReceiver != null) {
+            emitGetMethod(builder, terminalSendSelector, terminalSendReceiver, callable);
         }
         // The block's value: the terminal call result or transport.
         emitCallOperation(builder, true, callable, argumentValues, null);
@@ -3534,6 +3541,15 @@ final class CanonicalToBytecodeLowerer {
             }
             StackValue receiverValue = builder.endBindStackValue();
 
+            builder.beginBindStackValue();
+            if (terminal) {
+                emitTerminalCallOneArgument(builder, argument);
+            } else {
+                emitI115DirectUnaryOperand(builder, argument, true);
+            }
+            StackValue argumentValue = builder.endBindStackValue();
+
+            // D237: receiver, then argument, then selection and the call.
             builder.beginCallBinaryMethod(terminal, true);
 
             builder.beginGetMethod(
@@ -3544,11 +3560,7 @@ final class CanonicalToBytecodeLowerer {
             builder.endGetMethod();
 
             builder.emitLoadStackValue(receiverValue);
-            if (terminal) {
-                emitTerminalCallOneArgument(builder, argument);
-            } else {
-                emitI115DirectUnaryOperand(builder, argument, true);
-            }
+            builder.emitLoadStackValue(argumentValue);
 
             builder.endCallBinaryMethod();
             builder.endBlock();
@@ -6107,17 +6119,10 @@ final class CanonicalToBytecodeLowerer {
                         builder, receiver, receiverValue,
                         scratch, childResult, resumeValue, stager);
 
-                if (!namedInvocation) {
-                    emitGetMethod(builder, selector, receiverValue, callable);
-                }
             }
 
             case SUPER_SEND -> {
-                if (!namedInvocation) {
-                    builder.beginStoreLocal(callable);
-                    builder.emitGetSuperMethod(selector);
-                    builder.endStoreLocal();
-                }
+                // Selected after the argument packet (D237), below.
             }
         }
 
@@ -6154,6 +6159,14 @@ final class CanonicalToBytecodeLowerer {
                     resumeValue,
                     primitiveCarrierResult);
         } else {
+            // D237: the behavior is selected once the argument packet is formed.
+            if (shape == InvocationShape.SEND) {
+                emitGetMethod(builder, selector, receiverValue, callable);
+            } else if (shape == InvocationShape.SUPER_SEND) {
+                builder.beginStoreLocal(callable);
+                builder.emitGetSuperMethod(selector);
+                builder.endStoreLocal();
+            }
             emitDispatchedCall(
                     builder, callable, argumentValues, suppliedVector,
                     childResult, result, resumeValue,
@@ -7071,7 +7084,6 @@ final class CanonicalToBytecodeLowerer {
             boolean primitiveCarrierResult) {
         builder.beginBlock();
         BytecodeLocal method = builder.createLocal("conditionalMethod", null);
-        emitGetMethod(builder, selector, receiver, method);
         java.util.List<BytecodeLocal> argumentValues = new java.util.ArrayList<>(arguments.size());
         for (int index = 0; index < arguments.size(); index++) {
             CanonicalExpression argument = arguments.get(index);
@@ -7093,6 +7105,8 @@ final class CanonicalToBytecodeLowerer {
             }
             argumentValues.add(value);
         }
+        // D237: selection after the argument packet.
+        emitGetMethod(builder, selector, receiver, method);
         emitDispatchedCall(builder, method, argumentValues, null,
                 childResult, result, resumeValue, primitiveCarrierResult);
         builder.endBlock();
@@ -7427,7 +7441,6 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.beginBlock();
         BytecodeLocal callable = builder.createLocal("invocationCallable", null);
-        emitGetMethod(builder, selector, receiverValue, callable);
         java.util.List<BytecodeLocal> argumentValues =
                 new java.util.ArrayList<>(arguments.size());
         for (CanonicalExpression argument : arguments) {
@@ -7436,6 +7449,8 @@ final class CanonicalToBytecodeLowerer {
                     scratch, childResult, resumeValue, stager);
             argumentValues.add(argumentValue);
         }
+        // D237: selection after the argument packet.
+        emitGetMethod(builder, selector, receiverValue, callable);
         emitDispatchedCall(builder, callable, argumentValues, null,
                 childResult, result, resumeValue, false);
         builder.endBlock();
@@ -9075,17 +9090,16 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115 (GraalPy {@code PyNumberAddNode}): a binary {@code +} send.
+     * A binary {@code +} send.
      *
      * <ol>
      *   <li>The receiver is evaluated exactly once into a local.
-     *   <li>{@code IsStandardAddSelection} observes, without invoking
-     *       anything, whether the behavior selected for {@code +} on that
-     *       receiver is the standard numeric one or exactly the standard
-     *       String concatenation. Otherwise {@code GetMethod} selects the
-     *       behavior now: the ordinary send selection point, after the
-     *       receiver and before the argument.
      *   <li>The right operand is evaluated exactly once into a local.
+     *   <li>Once the argument packet is formed (D237), {@code
+     *       IsStandardAddSelection} observes, without invoking anything,
+     *       whether the behavior selected for {@code +} on the receiver is
+     *       the standard numeric one or exactly the standard String
+     *       concatenation. Otherwise {@code GetMethod} selects it now.
      *   <li>Standard: the native {@code NumberAdd} (primitive {@code long}/
      *       {@code double} specializations, overflow promotion, String
      *       concatenation), with no message send. Otherwise: {@code
@@ -9127,6 +9141,12 @@ final class CanonicalToBytecodeLowerer {
                 builder, send.receiver(), receiver,
                 scratch, childResult, resumeValue, stager);
 
+        BytecodeLocal operand = builder.createLocal("addOperand", null);
+        stageOperand(
+                builder, send.arguments().get(0), operand,
+                scratch, childResult, resumeValue, stager);
+
+        // D237: the behavior is selected once both operands are evaluated.
         BytecodeLocal standard = builder.createLocal("addStandard", null);
         builder.beginStoreLocal(standard);
         builder.beginIsStandardAddSelection();
@@ -9141,11 +9161,6 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
         emitGetMethod(builder, "+", receiver, callable);
         builder.endIfThenElse();
-
-        BytecodeLocal operand = builder.createLocal("addOperand", null);
-        stageOperand(
-                builder, send.arguments().get(0), operand,
-                scratch, childResult, resumeValue, stager);
 
         builder.beginIfThenElse();
         builder.emitLoadLocal(standard);
