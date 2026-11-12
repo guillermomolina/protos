@@ -150,7 +150,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
     }
 
     @Test
-    void contextObservingInlineCallbackKeepsNamedAuthorityFallback()
+    void contextObservingInlineCallbackPublishesLazyContext()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -173,29 +173,34 @@ final class ProtosPerf025InlineCallbackPreparationTest {
 
                 entry.getCallTarget().call(module);
 
-                ProtosBytecodeRootNode callbackRoot =
+                // Translated guarantee: observing `context` no longer forces a
+                // separate Closure root. The callback stays inline in its host
+                // and its Context is published lazily on first observation.
+                ProtosBytecodeRootNode hostRoot =
                         probe.callbackHost.get();
 
                 assertNotNull(
-                        callbackRoot,
-                        "context observer must execute in a Closure root");
+                        hostRoot,
+                        "context observer must execute in an inline callback host");
 
-                List<String> names = instructionNames(callbackRoot);
-
-                assertTrue(
-                        names.stream().anyMatch(
-                                name -> name.contains("c.CopySuppliedArguments")),
-                        () -> "callback must bind its supplied parameter: " + names);
+                List<String> names = instructionNames(hostRoot);
 
                 assertTrue(
                         names.stream().anyMatch(
-                                name -> name.contains("c.PublishCurrentClosureContext")),
-                        () -> "callback must publish its own Context: " + names);
+                                name -> name.contains("c.PublishInlineCallbackContext")),
+                        () -> "observable inline callback must publish its Context lazily: "
+                                + names);
+
+                assertTrue(
+                        names.stream().anyMatch(
+                                name -> name.contains("c.DetachInlineCallbackActivation")),
+                        () -> "observable inline callback must detach its activation on exit: "
+                                + names);
 
                 assertFalse(
                         names.stream().anyMatch(
-                                name -> name.contains("c.ResetInlineCallbackLocal")),
-                        () -> "observable callback must not use ephemeral inline storage: "
+                                name -> name.contains("c.PublishCurrentClosureContext")),
+                        () -> "inline callback must not fall back to a Closure activation: "
                                 + names);
 
                 ProtosObjectValue callbackContext =

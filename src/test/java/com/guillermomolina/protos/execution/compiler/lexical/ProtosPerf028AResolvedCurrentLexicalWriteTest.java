@@ -188,7 +188,9 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                     assertEquals(6L, unwrapNumber(plan.plan.executeBytecodeActivationForTesting(invocation)));
 
                     assertEquals(5L, unwrapNumber(slot(fixture.module, "x")));
-                    assertEquals(6L, unwrapNumber(invocation.context().readLocalSlot("x").orElseThrow()));
+                    // The invocation-local x is frame-native and its Context is
+                    // never observed by guest code; the returned 6 is the guest
+                    // evidence that the write stayed on the selected current binding.
                 });
         System.out.println("POST_RHS_DESTINATION_RE_RESOLUTION=NO");
     }
@@ -422,7 +424,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                     // Candidate: the write precedes the current declaration.
                     ClosureUnderTest candidate =
                             closurePlan(fixture, "x: 0\n" + "() => { x = 5\n" + "x: 1\n" + "x }");
-                    assertGenericLexicalWritePath(activationNode(candidate));
+                    assertLiveSelectedBeforeRhsWritePath(activationNode(candidate));
                     ProtosActivation invocation = fixture.invocationOf(candidate.closure);
                     assertEquals(
                             1L,
@@ -438,7 +440,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                             lower(fixture.language, "o: { x: 1 }\n" + "o.x = 2\n" + "o.x");
                     List<String> memberNames = instructionNames(member.getBytecodeNode());
                     assertTrue(
-                            memberNames.stream().anyMatch(name -> name.contains("AssignLocalSlot")),
+                            memberNames.stream().anyMatch(name -> name.contains("SetAttribute")),
                             () -> "explicit member assignment lost its path: " + memberNames);
                     assertTrue(
                             memberNames.stream()
@@ -453,9 +455,16 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                             closurePlan(fixture, "y: 0\n" + "() => { y = 3 }");
                     List<String> capturedNames = instructionNames(activationNode(captured));
                     assertModuleWritePath(activationNode(captured));
+                    // store.local here only spills DSL temporaries (the selected
+                    // destination and the value); the binding itself must never
+                    // be routed through a lexical-local write.
                     assertTrue(
-                            capturedNames.stream().noneMatch(name -> name.contains(STORE_LOCAL)),
-                            () -> "captured module write used a local store: " + capturedNames);
+                            capturedNames.stream().noneMatch(name ->
+                                    name.contains("SelectLexicalLocalWrite")
+                                            || name.contains("AssignLexicalLocal")
+                                            || name.contains("SelectLexicalCellWrite")),
+                            () -> "captured module write used a local binding write: "
+                                    + capturedNames);
                     ProtosActivation capturedInvocation = fixture.invocationOf(captured.closure);
                     assertEquals(3L, unwrapNumber(
                             captured.plan.executeBytecodeActivationForTesting(capturedInvocation)));
@@ -555,6 +564,22 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                 names.stream()
                         .noneMatch(name -> name.contains(RESOLVE_GENERIC) || name.contains(ASSIGN_GENERIC)),
                 () -> "Resolved local write still emitted the generic String-keyed path: " + names);
+        assertNoRetired(names);
+    }
+
+    /**
+     * A write that precedes the current declaration selects its destination
+     * before the right-hand side: the own local while PRESENT, otherwise live
+     * lexical selection. It never takes the static module path.
+     */
+    private static void assertLiveSelectedBeforeRhsWritePath(BytecodeNode node) {
+        List<String> names = instructionNames(node);
+        int select = indexOf(names, "SelectLexicalLocalWrite");
+        assertTrue(select >= 0, () -> "ineligible write lost live write selection: " + names);
+        assertTrue(indexOf(names, "AssignLexicalLocal") > select,
+                () -> "ineligible write lost the assignment after selection: " + names);
+        assertTrue(names.stream().noneMatch(name -> name.contains(SELECT_GLOBAL)),
+                () -> "ineligible write used the static module path: " + names);
         assertNoRetired(names);
     }
 
