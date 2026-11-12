@@ -2565,9 +2565,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Cached("executionPlanCell") ProtosClosureExecutionPlanCell cachedCell,
-                @Cached("cachedCell.plan()") ProtosClosureExecutionPlan cachedPlan) {
+                @Cached("cachedCell.plan()") ProtosClosureExecutionPlan cachedPlan,
+                @Bind VirtualFrame frame) {
             return ProtosClosureValue.experimentalNonCapturing(
-                    definition, cachedPlan);
+                    definition, cachedPlan,
+                    ProtosFrameArguments.definingModuleKeyForClosureCreation(
+                            frame.getArguments()));
         }
 
         @Specialization(
@@ -2583,9 +2586,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 boolean requiresInheritedLexicalEnvironment,
                 boolean mayObserveReturnHome,
                 CanonicalClosure definition,
-                ProtosClosureExecutionPlanCell executionPlanCell) {
+                ProtosClosureExecutionPlanCell executionPlanCell,
+                @Bind VirtualFrame frame) {
             return ProtosClosureValue.experimentalNonCapturing(
-                    definition, executionPlanCell.plan());
+                    definition, executionPlanCell.plan(),
+                    ProtosFrameArguments.definingModuleKeyForClosureCreation(
+                            frame.getArguments()));
         }
 
         @Specialization(guards = {

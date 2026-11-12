@@ -262,7 +262,8 @@ public final class ProtosClosureValue extends ProtosObjectValue {
      */
     public static ProtosClosureValue experimentalNonCapturing(
             CanonicalClosure definition,
-            ProtosClosureExecutionPlan executionPlan) {
+            ProtosClosureExecutionPlan executionPlan,
+            ProtosModuleKey definingModuleKey) {
         return new ProtosClosureValue(
                 Objects.requireNonNull(definition, "definition"),
                 (ProtosLexicalEnvironment) null,
@@ -272,7 +273,8 @@ public final class ProtosClosureValue extends ProtosObjectValue {
                 null,
                 Objects.requireNonNull(executionPlan, "executionPlan"),
                 null,
-                null);
+                null,
+                definingModuleKey);
     }
 
     public static ProtosClosureValue nativeClosure(ProtosNativeClosureBody body) {

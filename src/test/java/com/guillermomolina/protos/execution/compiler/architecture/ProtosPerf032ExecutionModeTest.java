@@ -221,26 +221,7 @@ final class ProtosPerf032ExecutionModeTest {
                 ProtosStandaloneHostedSession.PreparedTopLevel prepared =
                         session.prepareTopLevel("run");
                 Value executable = prepared.executable();
-                System.out.println(
-                        "I115_CONSTANT_MATERIALIZED_FIRST=" + materializedFirst);
-
                 assertEquals(1, executable.execute().asInt(), "first call precedes the debugger");
-
-                var lexical =
-                        prepared.closureForTesting()
-                                .capturedLexicalEnvironmentForRuntime();
-
-                System.out.println(
-                        "I115_CONSTANT_CAPTURE_PRESENT=" + (lexical != null));
-
-                for (int depth = 0; depth < 8 && lexical != null; depth++) {
-                    System.out.println(
-                            "I115_CONSTANT_CAPTURE_DEPTH=" + depth
-                                    + " DEFERRED=" + lexical.isDeferredForRuntime()
-                                    + " HAS_MARKER="
-                                    + lexical.hasLocalSlotForRuntime("marker"));
-                    lexical = lexical.outer();
-                }
                 if (materializedFirst) {
                     ProtosHostExecutableClosure adapter = prepared.hostExecutableForTesting();
                     session.processContextForTesting()
@@ -265,6 +246,50 @@ final class ProtosPerf032ExecutionModeTest {
     }
 
     /** PLAT067-B: a call prepared before the debugger attached keeps its exact scope. */
+    @Test
+    void importedConstantClosureExposesItsDefiningSourceModule() throws Exception {
+        Path importedFile = sourceFile("imported-origin");
+
+        Files.writeString(
+                importedFile,
+                CONSTANT_SOURCE.replace(
+                        "perf032-marker", "imported-origin-marker"),
+                StandardCharsets.UTF_8);
+
+        String importer = """
+                marker: "caller-marker"
+                imported: import("./perf032-imported-origin.protos")
+                run: imported.run
+                0
+                """;
+
+        try (ProtosStandaloneHostedSession session =
+                open("source-origin", importer)) {
+            ProtosStandaloneHostedSession.PreparedTopLevel prepared =
+                    session.prepareTopLevel("run");
+
+            assertNotNull(
+                    prepared.closureForTesting()
+                            .definingModuleKeyOrNullForRuntime(),
+                    "imported Closure must retain its defining module");
+
+            ScopeObservation observation = new ScopeObservation();
+
+            try (DebuggerSession debugSession =
+                    debugger(session).startSession(observation::onSuspend)) {
+                debugSession.install(
+                        Breakpoint.newBuilder(importedFile.toUri())
+                                .lineIs(BODY_LINE)
+                                .build());
+
+                assertEquals(1, prepared.executable().execute().asInt());
+            }
+
+            observation.assertObserved("imported-origin-marker");
+            assertNoTask(session);
+        }
+    }
+
     @Test
     void callPreparedBeforeTheDebuggerKeepsItsScope() throws Exception {
         try (ProtosStandaloneHostedSession session = open("prepared")) {
@@ -704,21 +729,6 @@ final class ProtosPerf032ExecutionModeTest {
                 assertEquals(BODY_LINE, event.getSourceSection().getStartLine());
                 DebugScope scope = event.getTopStackFrame().getScope();
                 assertNotNull(scope);
-                DebugScope observed = scope;
-                for (int depth = 0; depth < 8 && observed != null; depth++) {
-                    System.out.println(
-                            "I115_DEBUG_SCOPE_DEPTH=" + depth
-                                    + " NAME=" + observed.getName());
-
-                    for (DebugValue binding : observed.getDeclaredValues()) {
-                        System.out.println(
-                                "I115_DEBUG_SCOPE_BINDING="
-                                        + binding.getName());
-                    }
-
-                    observed = observed.getParent();
-                }
-
                 DebugValue value = scope.getDeclaredValue("marker");
                 assertNotNull(value, "captured lexical binding must be visible");
                 marker.set(value.toDisplayString());

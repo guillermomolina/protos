@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,6 +26,8 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.RootCallTarget;
@@ -179,7 +182,9 @@ final class ProtosPerf025InlineCallbackPreparationTest {
             context.enter();
             try {
                 Probe probe = new Probe();
-                ProtosBytecodeRootNode root =
+                ProtosActivation module = probe.module();
+
+                ProtosBytecodeRootNode entry =
                         lowerRoot(
                                 """
                                 run: () => {
@@ -191,95 +196,194 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                                 run()
                                 """);
 
-                root.getCallTarget().call(probe.module());
+                entry.getCallTarget().call(module);
 
-                ProtosBytecodeRootNode callbackHost =
+                ProtosBytecodeRootNode callbackRoot =
                         probe.callbackHost.get();
-                assertNotNull(
-                        callbackHost,
-                        "callback must execute in a semantic source root");
 
-                List<String> names = instructionNames(callbackHost);
+                assertNotNull(
+                        callbackRoot,
+                        "context observer must execute in a Closure root");
+
+                List<String> names = instructionNames(callbackRoot);
 
                 assertTrue(
-                        names.stream()
-                                .anyMatch(
-                                        name ->
-                                                name.contains(
-                                                        "LoadInlineCallbackActivation")),
-                        () -> "context-observing callback must load its Activation: " + names);
+                        names.stream().anyMatch(
+                                name -> name.contains("c.CopySuppliedArguments")),
+                        () -> "callback must bind its supplied parameter: " + names);
+
+                assertTrue(
+                        names.stream().anyMatch(
+                                name -> name.contains("c.PublishCurrentClosureContext")),
+                        () -> "callback must publish its own Context: " + names);
 
                 assertFalse(
-                        names.stream()
-                                .anyMatch(
-                                        name ->
-                                                name.contains(
-                                                        "BindInlineClosureFrameParameter")),
-                        () ->
-                                "context-observing callback must not retain ephemeral "
-                                        + "frame-native parameter authority: "
-                                        + names);
+                        names.stream().anyMatch(
+                                name -> name.contains("c.ResetInlineCallbackLocal")),
+                        () -> "observable callback must not use ephemeral inline storage: "
+                                + names);
 
-                assertFalse(
-                        names.stream()
-                                .anyMatch(
-                                        name ->
-                                                name.contains(
-                                                        "CreateInlineCurrentFrameLocal")),
-                        () ->
-                                "context-observing callback must not use ephemeral "
-                                        + "frame-native local creation: "
-                                        + names);
+                ProtosObjectValue callbackContext =
+                        probe.observedContext.get();
+
+                assertNotNull(
+                        callbackContext,
+                        "probe must receive the observable callback Context");
+
+                assertTrue(
+                        callbackContext != module.context(),
+                        "callback Context must be distinct from module Context");
+
+                assertEquals(
+                        "1",
+                        ProtosNumericValueSupport.integerDecimalText(
+                                callbackContext.readLocalSlot("element")
+                                        .orElseThrow()),
+                        "the callback parameter must remain visible in its Context");
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF025_INLINE_CALLBACK_CONTEXT_OBSERVER_FALLBACK=PASS");
+        System.out.println("PERF025_CALLBACK_CONTEXT_PUBLISHED=PASS");
     }
 
     @Test
     void booleanLiteralAdmissionPrecedesActivationAndPhysicalFallback() throws Exception {
-        assertPreparationOrder(
+        assertNativeInlineControl(
                 """
                 run: () => {
                     true.ifTrue(() => {
-                        probe()
-                        1
+                        local: 1
+                        local
                     })
                 }
                 run()
                 """,
-                "StructuredPrepareInlineChildCall",
-                "AdmitsInlineLiteralCallback",
-                "StructuredPrepareChildCall");
+                "1",
+                "ResetInlineCallbackLocal");
 
-        System.out.println(
-                "PERF025_PLAT044_BOOLEAN_RICH_PREPARATION_BEFORE_ADMISSION=NO");
+        System.out.println("PERF025_INLINE_BOOLEAN_BYTECODE=PASS");
     }
 
     @Test
     void whileLiteralAdmissionPrecedesActivationAndPhysicalFallback() throws Exception {
-        assertPreparationOrder(
+        assertNativeInlineControl(
                 """
                 run: () => {
                     n: 0
-                    (() => {
-                        probe()
-                        n < 1
-                    }).whileTrue() {
-                        probe()
+                    (() => { n < 2 }).whileTrue() {
                         n = n + 1
                     }
+                    n
                 }
                 run()
                 """,
-                "StructuredPrepareInlineChildCall",
-                "AdmitsInlineLiteralWhileCondition",
-                "StructuredPrepareChildCall");
+                "2",
+                "RichCompareLt",
+                "CanonicalControlCondition",
+                "IsStandardAddSelection",
+                "NumberAdd",
+                "branch.backward");
 
-        System.out.println(
-                "PERF025_PLAT044_WHILE_RICH_PREPARATION_BEFORE_ADMISSION=NO");
+        System.out.println("PERF025_INLINE_WHILE_BYTECODE=PASS");
+    }
+
+    /**
+     * Inspect the physical Closure root, not the source entry root or
+     * a callback root reached only through a dynamically resolved probe.
+     */
+    private static void assertNativeInlineControl(
+            String characters,
+            String expectedResult,
+            String... requiredOperations) throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosActivation module = new Probe().module();
+                ProtosBytecodeRootNode entry = lowerRoot(characters);
+                Object outcome = entry.getCallTarget().call(module);
+
+                assertEquals(
+                        expectedResult,
+                        ProtosNumericValueSupport.integerDecimalText(outcome),
+                        "native callback must preserve its numerical result");
+
+                ProtosClosureValue run =
+                        (ProtosClosureValue)
+                                module.context().readLocalSlot("run").orElseThrow();
+
+                ProtosBytecodeRootNode physicalRoot =
+                        run.executionPlan()
+                                .orElseThrow()
+                                .bytecodeActivationRootForTesting();
+
+                List<String> names = instructionNames(physicalRoot);
+
+                for (String operation : requiredOperations) {
+                    assertTrue(
+                            names.stream().anyMatch(
+                                    name -> name.contains(operation)),
+                            () -> "missing native operation " + operation
+                                    + ": " + names);
+                }
+
+                assertFalse(
+                        names.stream().anyMatch(
+                                name -> name.contains("MaterializeCurrentClosure")),
+                        () -> "inline callback must not materialize a Closure: "
+                                + names);
+
+                assertFalse(
+                        names.stream().anyMatch(
+                                name -> name.contains("c.CallNilaryMethod")),
+                        () -> "native control must not dispatch nilary messages: "
+                                + names);
+
+                boolean guardedAddition = names.stream().anyMatch(
+                        name -> name.contains("c.IsStandardAddSelection"));
+
+                if (guardedAddition) {
+                    assertOrdered(
+                            names,
+                            "c.IsStandardAddSelection",
+                            "c.GetMethod",
+                            "c.NumberAdd",
+                            "c.CallUnaryMethod");
+
+                    assertTrue(
+                            names.stream()
+                                    .filter(name -> name.contains("c.GetMethod"))
+                                    .count() == 1L,
+                            () -> "only guarded addition may select a method: "
+                                    + names);
+
+                    assertTrue(
+                            names.stream()
+                                    .filter(name -> name.contains("c.CallUnaryMethod"))
+                                    .count() == 1L,
+                            () -> "only guarded addition may dispatch a message: "
+                                    + names);
+                } else {
+                    assertFalse(
+                            names.stream().anyMatch(
+                                    name -> name.contains("c.GetMethod")
+                                            || name.contains("c.CallUnaryMethod")),
+                            () -> "unguarded native control dispatched a message: "
+                                    + names);
+                }
+
+                assertFalse(
+                        names.stream().anyMatch(
+                                name -> name.contains("StructuredPrepareInlineChildCall")
+                                        || name.contains("MaterializeInlineCallbackActivation")),
+                        () -> "retired inline machinery must not return: "
+                                + names);
+            } finally {
+                context.leave();
+            }
+        }
     }
 
     @Test
@@ -440,6 +544,8 @@ final class ProtosPerf025InlineCallbackPreparationTest {
     private static final class Probe {
         private final AtomicReference<ProtosBytecodeRootNode>
                 callbackHost = new AtomicReference<>();
+        private final AtomicReference<ProtosObjectValue>
+                observedContext = new AtomicReference<>();
 
         ProtosActivation module() throws Exception {
             ProtosActivation module =
@@ -452,6 +558,10 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                             "probe",
                             ProtosClosureValue.nativeClosure(
                                     (activation, supplied) -> {
+                                        if (supplied.size() == 1
+                                                && supplied.get(0) instanceof ProtosObjectValue observed) {
+                                            observedContext.compareAndSet(null, observed);
+                                        }
                                         Truffle.getRuntime()
                                                 .iterateFrames(
                                                         frame -> {

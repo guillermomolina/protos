@@ -26,6 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.CompilerDirectives;
@@ -941,7 +942,8 @@ final class ProtosFrameArguments {
         if (!capturesCreatorContext && !requiresInheritedLexicalEnvironment && !mayObserveReturnHome) {
             return ProtosClosureValue.experimentalNonCapturing(
                     definition,
-                    executionPlanCell.plan());
+                    executionPlanCell.plan(),
+                    definingModuleKeyForClosureCreation(arguments));
         }
         if (hasPublishedActivation(arguments)) {
             ProtosActivation owner = publishedActivation(arguments);
@@ -979,6 +981,17 @@ final class ProtosFrameArguments {
                 preludeOrNull(arguments),
                 executionPlanCell.plan(),
                 currentClosure.definingModuleKeyOrNullForRuntime());
+    }
+
+    /** The lexical module origin of a Closure created in this invocation. */
+    static ProtosModuleKey definingModuleKeyForClosureCreation(
+            Object[] arguments) {
+        if (hasPublishedActivation(arguments)) {
+            return publishedActivation(arguments)
+                    .currentModuleKey().orElse(null);
+        }
+        return compactClosure(arguments)
+                .definingModuleKeyOrNullForRuntime();
     }
 
     /**

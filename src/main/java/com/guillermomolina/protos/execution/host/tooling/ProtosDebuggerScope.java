@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
@@ -119,6 +120,17 @@ final class ProtosDebuggerScope implements TruffleObject {
         return "scope";
     }
 
+    private ProtosObjectValue sourceModuleContextOrNull() {
+        ProtosModuleKey origin =
+                activation.currentModuleKey().orElse(null);
+        if (origin == null || !origin.isSource()) {
+            return null;
+        }
+        var record =
+                activation.actorModuleState().lookup(origin).orElse(null);
+        return record == null ? null : record.instance();
+    }
+
     private List<String> visibleNamesSnapshot() {
         ArrayList<String> names = new ArrayList<>();
         names.addAll(inlineCallbackBindings.keySet());
@@ -130,6 +142,14 @@ final class ProtosDebuggerScope implements TruffleObject {
         for (ProtosObjectValue lexical :
                 activation.capturedLexicalContexts()) {
             appendLocalNames(lexical, names);
+        }
+        ProtosObjectValue sourceContext = sourceModuleContextOrNull();
+        if (sourceContext != null) {
+            for (String name : sourceContext.localSlotsSnapshot().keySet()) {
+                if (!names.contains(name)) {
+                    names.add(name);
+                }
+            }
         }
         appendReceiverDelegationNames(names);
         if (!inlineCallbackBindings.isEmpty()) {
@@ -185,6 +205,15 @@ final class ProtosDebuggerScope implements TruffleObject {
                     lexical.readLocalSlot(member);
             if (captured.isPresent()) {
                 return captured;
+            }
+        }
+
+        ProtosObjectValue sourceContext = sourceModuleContextOrNull();
+        if (sourceContext != null) {
+            Optional<Object> sourceValue =
+                    sourceContext.readLocalSlot(member);
+            if (sourceValue.isPresent()) {
+                return sourceValue;
             }
         }
 
