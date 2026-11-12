@@ -529,7 +529,8 @@ final class ProtosPerf025LazyLexicalCaptureTest {
     void bindMethodAndParallelProjectionKeepTheirCaptureBoundaries() throws Exception {
         withCore(module -> {
             ProtosClosureValue make =
-                    parsedClosure("() => { x: 4\n () => x }", "perf025-lazy-rebind.protos", module);
+                    parsedClosure("() => { f: () => later\n later: 4\n f }",
+                            "perf025-lazy-rebind.protos", module);
             Invocation outer = invokeDirect(make, module);
             ProtosClosureValue closure =
                     assertInstanceOf(ProtosClosureValue.class, outer.result());
@@ -687,14 +688,13 @@ final class ProtosPerf025LazyLexicalCaptureTest {
                             + " [before, written, get()]\n}\nrun()",
                     "i115-capturing.protos", freshModule(module)))));
 
-            List<Object> pair = elements(evaluate(
-                    "run: () => {\n x: 1\n get: () => x\n [get, context]\n}\nrun()",
-                    "i115-capturing-context.protos", freshModule(module)));
-            ProtosClosureValue get = assertInstanceOf(ProtosClosureValue.class, pair.get(0));
-            assertSame(
-                    pair.get(1),
-                    get.capturedLexicalContexts().get(0),
-                    "a capturing Closure still captures the observable Context");
+            // Guest terms (PLAT066-C): the capturing Closure and the observable
+            // Context share the one binding `x`.
+            assertEquals(List.of("5", "6"), integerValues(elements(evaluate(
+                    "run: () => {\n x: 1\n get: () => x\n set: (v) => { x = v }\n"
+                            + " context.x = 5\n first: get()\n set(6)\n"
+                            + " [first, context.x]\n}\nrun()",
+                    "i115-capturing-context.protos", freshModule(module)))));
         });
         System.out.println("I115_CAPTURING_CLOSURE_PRESERVED=PASS");
     }

@@ -194,7 +194,9 @@ final class ProtosI115LazyCapturedFrameTest {
                             + "k: f(1)");
             ProtosClosureValue k = assertInstanceOf(ProtosClosureValue.class, run(fixture, "k"));
             ProtosObjectValue before = assertInstanceOf(ProtosObjectValue.class, run(fixture, "k()"));
-            assertSame(before, k.capturedLexicalEnvironmentForRuntime().context());
+            // g only reads the cell `before`; it receives that cell, not its
+            // creator's Context (PLAT066-C), so identity is checked in guest
+            // terms: the Context observed before and after creation is one.
             assertSame(before, before.readLocalSlot("after").orElseThrow());
         });
     }
@@ -209,8 +211,14 @@ final class ProtosI115LazyCapturedFrameTest {
                     ProtosClosureValue.class, observed.readLocalSlot("g").orElseThrow());
             ProtosClosureValue h = assertInstanceOf(
                     ProtosClosureValue.class, observed.readLocalSlot("h").orElseThrow());
-            assertSame(observed, g.capturedLexicalEnvironmentForRuntime().context());
-            assertSame(observed, h.capturedLexicalEnvironmentForRuntime().context());
+            // Guest terms (PLAT066-C): both Closures share the one binding the
+            // observed Context exposes, before and after an assignment to it.
+            run(fixture, "c2: f(1)");
+            assertEquals(1L, unwrapNumber(run(fixture, "c2.g()")));
+            assertEquals(1L, unwrapNumber(run(fixture, "c2.h()")));
+            run(fixture, "c2.a = 9");
+            assertEquals(9L, unwrapNumber(run(fixture, "c2.g()")));
+            assertEquals(9L, unwrapNumber(run(fixture, "c2.h()")));
         });
     }
 

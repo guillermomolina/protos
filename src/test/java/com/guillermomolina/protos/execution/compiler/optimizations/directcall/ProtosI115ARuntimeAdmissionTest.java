@@ -564,9 +564,15 @@ final class ProtosI115ARuntimeAdmissionTest {
     void completedCreatorCapturesShareOneDeferredOwnerContext() throws Exception {
         withCore(module -> {
             evaluate("""
-                    makeDurable: (seed) => { (value) => { seed + value } }
+                    makeDurable: (seed) => {
+                        f: (value) => { later + value }
+                        later: seed
+                        f
+                    }
                     durable: makeDurable(7)
                     """, "i115a-durable-owner.protos", module);
+            // `later` is declared after the Closure, so the Closure uses its
+            // creator's Context (a cell-only Closure would not: PLAT066-C).
             ProtosClosureValue escaped = closure("durable", module);
             var environment = escaped.capturedLexicalEnvironmentForRuntime();
             assertNotNull(environment);
@@ -586,7 +592,11 @@ final class ProtosI115ARuntimeAdmissionTest {
     void freshClosuresOfOneDefinitionShareExecutableFactsButNotCaptures() throws Exception {
         withCore(module -> {
             evaluate("""
-                    make: (seed) => { (value) => { seed + value } }
+                    make: (seed) => {
+                        f: (value) => { later + value }
+                        later: seed
+                        f
+                    }
                     first: make(1)
                     second: make(2)
                     """, "i115a-fresh-define.protos", module);

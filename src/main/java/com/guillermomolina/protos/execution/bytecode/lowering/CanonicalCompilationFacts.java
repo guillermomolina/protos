@@ -893,7 +893,9 @@ final class CanonicalCompilationFacts {
         }
         if (expression instanceof CanonicalLookup lookup) {
             return (ownBindingsOnly || scope.declaresName(lookup.name()))
-                    && !resolvedInScope(analysis.resolutionOf(lookup), scope);
+                    && !resolvedInScope(analysis.resolutionOf(lookup), scope)
+                    && !(ownBindingsOnly
+                            && transportedFreeCell(analysis.resolutionOf(lookup), scope));
         }
         if (expression instanceof CanonicalAssign assign) {
             if (assign.target().isPresent()) {
@@ -901,7 +903,9 @@ final class CanonicalCompilationFacts {
                         || demandsPersistentFrame(assign.value(), analysis, scope, ownBindingsOnly, promotable, inline);
             }
             return ((ownBindingsOnly || scope.declaresName(assign.name()))
-                            && !resolvedInScope(analysis.resolutionOf(assign), scope))
+                            && !resolvedInScope(analysis.resolutionOf(assign), scope)
+                            && !(ownBindingsOnly
+                                    && transportedFreeCell(analysis.resolutionOf(assign), scope)))
                     || demandsPersistentFrame(assign.value(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalCreate create) {
@@ -1027,6 +1031,31 @@ final class CanonicalCompilationFacts {
         }
         return demandsPersistentFrame(
                 operand, analysis, scope, ownBindingsOnly, promotable, inline);
+    }
+
+    /*
+     * A reference to an enclosing CELL binding that this Closure's scope
+     * carries among its free cells: the Closure receives that cell by
+     * reference when it is created (CaptureClosureCells), so reading or
+     * assigning it never needs the creator's execution context.
+     */
+    private static boolean transportedFreeCell(
+            Optional<CanonicalBindingResolution> resolution,
+            CanonicalLexicalScope scope) {
+        if (resolution.isEmpty()) {
+            return false;
+        }
+        CanonicalBindingIdentity identity;
+        if (resolution.orElseThrow() instanceof CanonicalBindingResolution.Resolved resolved) {
+            identity = resolved.identity();
+        } else if (resolution.orElseThrow()
+                instanceof CanonicalBindingResolution.CapturedResolved captured) {
+            identity = captured.identity();
+        } else {
+            return false;
+        }
+        return CanonicalBindingAnalysis.storageOf(identity) == CanonicalLexicalScope.Storage.CELL
+                && CanonicalBindingAnalysis.freeCellsOf(scope).contains(identity);
     }
 
     private static boolean resolvedInScope(

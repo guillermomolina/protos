@@ -312,8 +312,8 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                 assertEquals("2", integerValue(call(readerB, module)));
             }
 
-            // Materializing the owner Context after warm-up changes nothing.
-            readerA.capturedLexicalEnvironmentForRuntime().context();
+            // A cell-only reader receives the owner's cell, not its Context
+            // (PLAT066-C); reads stay exact per activation after warm-up.
             assertEquals("1", integerValue(call(readerA, module)));
             assertEquals("2", integerValue(call(readerB, module)));
 
@@ -346,7 +346,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
     void deferredAndMaterializedOwnersReadIdentically() throws Exception {
         withCore(module -> {
             ProtosClosureValue makeSlot =
-                    closure("() => {\n  slot: 1\n  () => { slot }\n}", module);
+                    closure("() => {\n  r: () => { later }\n  later: 1\n  r\n}", module);
             ProtosClosureValue deferredReader =
                     assertInstanceOf(ProtosClosureValue.class, call(makeSlot, module));
             ProtosClosureValue materializedReader =
