@@ -6455,6 +6455,27 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
+        emitI115InlineClosureBody(builder, closure, mode, result,
+                scratch, childResult, resumeValue, primitiveCarrierResult,
+                java.util.Map.of());
+    }
+
+    /**
+     * The inline body whose parameters are already bound: {@code
+     * boundParameters} maps each parameter name to the local its caller
+     * stored the supplied value into before this body. Those locals are
+     * PRESENT on entry and are not reset; every other own binding is.
+     */
+    private void emitI115InlineClosureBody(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalClosure closure,
+            InlineBodyResult mode,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult,
+            java.util.Map<String, BytecodeLocal> boundParameters) {
         // Reuse I095's lexical proof and existing callback-local handlers.
         // An inline callback's bindings are *not* bindings of its parent root.
         CanonicalBindingAnalysis analysis =
@@ -6479,7 +6500,8 @@ final class CanonicalToBytecodeLowerer {
                 new java.util.ArrayList<>(scope.declaredNames());
         java.util.Collections.sort(names);
         for (String name : names) {
-            locals.put(name, builder.createLocal(
+            BytecodeLocal bound = boundParameters.get(name);
+            locals.put(name, bound != null ? bound : builder.createLocal(
                     NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + name, null));
         }
         /*
@@ -6489,7 +6511,9 @@ final class CanonicalToBytecodeLowerer {
          * callback path, including once per iteration of an admitted loop.
          */
         for (String name : names) {
-            builder.emitResetInlineCallbackLocal(locals.get(name));
+            if (!boundParameters.containsKey(name)) {
+                builder.emitResetInlineCallbackLocal(locals.get(name));
+            }
         }
         currentNormalCallbackScalarLocals = java.util.Map.copyOf(locals);
         currentNormalCallbackScalarAnalysis = analysis;
@@ -8471,8 +8495,22 @@ final class CanonicalToBytecodeLowerer {
             CanonicalSequence body,
             CanonicalBindingAnalysis analysis,
             CanonicalLexicalScope scope) {
+        return admitsNormalMixedCallbackOwnCreations(
+                body, analysis, scope, java.util.Set.of());
+    }
+
+    /**
+     * The same proof for a callback whose {@code boundParameters} are
+     * already PRESENT on entry: they count as established before the first
+     * statement and are never created by the body.
+     */
+    private static boolean admitsNormalMixedCallbackOwnCreations(
+            CanonicalSequence body,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope,
+            java.util.Set<String> boundParameters) {
         java.util.LinkedHashSet<String> established =
-                new java.util.LinkedHashSet<>();
+                new java.util.LinkedHashSet<>(boundParameters);
         int createSites = 0;
         for (CanonicalExpression expression : body.expressions()) {
             if (expression instanceof CanonicalCreate create) {
@@ -8766,11 +8804,200 @@ final class CanonicalToBytecodeLowerer {
             }
             return;
         }
+        CanonicalClosure eachCallback = inlineArrayEachCallback(send);
+        if (eachCallback != null) {
+            emitArrayEachSend(
+                    builder, send, eachCallback, result, scratch, childResult, resumeValue);
+            return;
+        }
         emitDispatchedInvocation(
                 builder, InvocationShape.SEND, send.receiver(), send.message(), send.arguments(),
                 result, scratch, childResult, resumeValue,
                 this::emitBodyExpressionToLocal, this::emitBodySpreadArgumentVector,
                 primitiveCarrierResult);
+    }
+
+    /**
+     * The literal Closure argument of an {@code each} send whose callback
+     * activation may be eliminated on the standard Array path, or {@code
+     * null}. Only the shape of the site is decided here; whether the
+     * standard behaviors are actually selected is observed at run time.
+     */
+    private CanonicalClosure inlineArrayEachCallback(CanonicalSend send) {
+        if (!"each".equals(send.message())
+                || send.contextual()
+                || send.arguments().size() != 1
+                || hasVectorArgument(send.arguments())
+                || hasNamedArgument(send.arguments())
+                || !(send.arguments().get(0) instanceof CanonicalClosure closure)) {
+            return null;
+        }
+        return admitsArrayEachInlineCallback(closure, currentControlSiteContext())
+                ? closure : null;
+    }
+
+    /**
+     * Whether the activation of a literal {@code each} callback is
+     * unobservable, so its body may run in this physical root once per
+     * element. The single ordinary parameter and every own creation must be
+     * LOCAL bindings of the callback scope proven by the binding analysis;
+     * every other reference must be a proven capture of this root (or a
+     * module read). A CELL binding, a nested Closure or other escape, an
+     * observable Context, an observable ReturnHome, or any persistent frame
+     * authority keeps the genuine Closure invocation.
+     */
+    private boolean admitsArrayEachInlineCallback(
+            CanonicalClosure closure, ControlSiteContext context) {
+        if (closure.parameters().size() != 1
+                || compilationFacts.mayObserveReturnHome(closure)) {
+            return false;
+        }
+        CanonicalParameter parameter = closure.parameters().get(0);
+        if (parameter.rest() || parameter.defaultValue().isPresent()) {
+            return false;
+        }
+        CanonicalLexicalScope wholeTreeScope =
+                context.analysis() == null
+                        ? null
+                        : context.analysis().scopeOf(closure).orElse(null);
+        if (wholeTreeScope != null
+                && !wholeTreeScope.cellNamesInDeclarationOrder().isEmpty()) {
+            return false;
+        }
+
+        CanonicalBindingAnalysis analysis =
+                compilationFacts.isolatedClosureAnalysis(closure);
+        CanonicalLexicalScope scope = analysis.scopeOf(closure).orElse(null);
+        CanonicalBindingIdentity identity =
+                analysis.identityOf(parameter).orElse(null);
+        if (scope == null
+                || scope.observesContext()
+                || identity == null
+                || identity.owner() != scope
+                || CanonicalBindingAnalysis.storageOf(identity)
+                        != CanonicalLexicalScope.Storage.LOCAL) {
+            return false;
+        }
+        return admitsNormalMixedCallbackOwnCreations(
+                        closure.body(), analysis, scope,
+                        java.util.Set.of(identity.name()))
+                && analysis.admitsParameterBindingsAndDirectParentCaptures(
+                        context.analysis(),
+                        scope,
+                        context.topScope(),
+                        context.frameNames(),
+                        context.hasFrameLayout())
+                && !compilationFacts.rootFacts(
+                                closure.body(), closure, analysis, scope)
+                        .requiresPersistentFrameAuthority();
+    }
+
+    /**
+     * An admitted {@code each} send of a literal callback.
+     *
+     * <ol>
+     *   <li>The receiver is evaluated exactly once into a local.
+     *   <li>{@code IsStandardArrayEachSelection} observes, invoking nothing,
+     *       whether {@code each} selects the standard Array behavior and the
+     *       root {@code call} selection is canonical. Otherwise GetMethod
+     *       selects {@code each} now: the ordinary selection point, after
+     *       the receiver and before the argument.
+     *   <li>Standard: evaluating the literal argument has no observable
+     *       effect and its activation is proven unobservable, so no Closure
+     *       is created. {@code GetArrayEachSnapshot} establishes the single
+     *       snapshot; a While loop advances it with {@code ArrayEachNext},
+     *       which stores each element into the parameter local, and runs the
+     *       callback body inline with its other bindings reset to ABSENT.
+     *       The result is the original receiver.
+     *   <li>Otherwise: the literal argument is evaluated exactly once
+     *       (materializing the genuine Closure) and the selected behavior is
+     *       invoked by {@code CallUnaryMethod}, composed with
+     *       Yield/ResumeDispatchedContinuation.
+     * </ol>
+     */
+    private void emitArrayEachSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            CanonicalClosure callback,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        if (result == null || scratch == null || childResult == null || resumeValue == null) {
+            throw new AssertionError("each send result/scratch locals were not allocated");
+        }
+        OperandStager stager = this::emitBodyExpressionToLocal;
+        // The generic selection observes the Prelude, like GetMethod.
+        currentRootMayRequirePrelude = true;
+
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+
+        BytecodeLocal receiver = builder.createLocal("eachReceiver", null);
+        stageOperand(builder, send.receiver(), receiver,
+                scratch, childResult, resumeValue, stager);
+
+        BytecodeLocal standard = builder.createLocal("eachStandard", null);
+        builder.beginStoreLocal(standard);
+        builder.beginIsStandardArrayEachSelection();
+        builder.emitLoadLocal(receiver);
+        builder.endIsStandardArrayEachSelection();
+        builder.endStoreLocal();
+
+        BytecodeLocal callable = builder.createLocal("eachMethod", null);
+        builder.beginIfThenElse();
+        builder.emitLoadLocal(standard);
+        builder.beginBlock();
+        builder.endBlock();
+        emitGetMethod(builder, "each", receiver, callable);
+        builder.endIfThenElse();
+
+        builder.beginIfThenElse();
+        builder.emitLoadLocal(standard);
+
+        builder.beginBlock();
+        BytecodeLocal snapshot = builder.createLocal("eachSnapshot", null);
+        builder.beginStoreLocal(snapshot);
+        builder.beginGetArrayEachSnapshot();
+        builder.emitLoadLocal(receiver);
+        builder.endGetArrayEachSnapshot();
+        builder.endStoreLocal();
+
+        String parameter = callback.parameters().get(0).name();
+        BytecodeLocal element = builder.createLocal(
+                NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + parameter, null);
+        builder.beginWhile();
+        builder.beginArrayEachNext(element);
+        builder.emitLoadLocal(snapshot);
+        builder.endArrayEachNext();
+        builder.beginTag(StandardTags.RootTag.class);
+        builder.beginBlock();
+        emitI115InlineClosureBody(
+                builder, callback, InlineBodyResult.DISCARD, null,
+                scratch, childResult, resumeValue, false,
+                java.util.Map.of(parameter, element));
+        builder.endBlock();
+        builder.endTag(StandardTags.RootTag.class);
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.emitLoadLocal(receiver);
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.beginBlock();
+        BytecodeLocal argument = builder.createLocal("invocationArgument", null);
+        stageOperand(builder, callback, argument,
+                scratch, childResult, resumeValue, stager);
+        emitDispatchedCall(
+                builder, callable, java.util.List.of(argument), null,
+                childResult, result, resumeValue, false);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
     }
 
 

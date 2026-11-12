@@ -114,6 +114,14 @@ public final class ProtosStandardArrayProtocol {
         return ProtosNumericValueSupport.integer(array.indexedSize());
     }
 
+    /**
+     * Whether {@code behavior} is exactly the installed standard Array
+     * {@code each} behavior. Observes identity only; never invokes it.
+     */
+    public static boolean isStandardEachBehavior(Object behavior) {
+        return behavior == STANDARD_EACH;
+    }
+
     static boolean isStandardEachImplementation(ProtosClosureValue closure) {
         return closure.nativeBody().orElse(null) == STANDARD_EACH_BODY;
     }

@@ -1727,6 +1727,188 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * Admission of the native iteration of a literal {@code each} callback.
+     *
+     * <p>True only when the behavior actually selected for {@code each} on
+     * the receiver is exactly the standard Array behavior and the root
+     * Object's inherited {@code call} selection is the canonical
+     * {@code Object.call}, so a fresh Closure literal argument passes the
+     * standard callability validation and its ordinary invocation reaches
+     * its own body. Any other receiver or selection answers false and the
+     * lowering selects {@code each} with GetMethod and dispatches it.
+     * Nothing is invoked here.
+     *
+     * <p>The cached path uses the same inherited structural selection as
+     * {@link IsStandardIndexedSelection}: a later override, removal or
+     * reassignment of {@code each} along the delegation chain, or of the
+     * root {@code call}, misses the cache.
+     */
+    @Operation(storeBytecodeIndex = false)
+    public static final class IsStandardArrayEachSelection {
+        @Specialization(
+                guards = {
+                    "receiver.usesObjectStorageForRuntime()",
+                    "receiverShape.check(receiver)",
+                    "selection != null",
+                    "hasSelectionParent(receiver, selection)",
+                    "selection.isValid()",
+                    "callSelection != null",
+                    "callSelection.isValid()"
+                },
+                limit = "3")
+        public static boolean doCached(
+                ProtosArrayValue receiver,
+                @Cached("receiver.getShape()") Shape receiverShape,
+                @Cached("selectInherited(receiver, receiverShape)")
+                        ProtosValueLookup.StructuralSelection selection,
+                @Cached("rootCallSelection()")
+                        ProtosStandardObjectProtocol.CanonicalRootCallSelection callSelection) {
+            return ProtosStandardArrayProtocol.isStandardEachBehavior(selection.read());
+        }
+
+        @Specialization(replaces = "doCached")
+        public static boolean doGeneric(
+                ProtosArrayValue receiver,
+                @Bind VirtualFrame frame) {
+            return selectsStandard(
+                    receiver,
+                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()));
+        }
+
+        @Fallback
+        public static boolean doOther(Object receiver) {
+            return false;
+        }
+
+        static boolean hasSelectionParent(
+                ProtosObjectValue receiver,
+                ProtosValueLookup.StructuralSelection selection) {
+            return ProtosValueLookup.hasSelectionParent(receiver, selection);
+        }
+
+        static ProtosStandardObjectProtocol.CanonicalRootCallSelection rootCallSelection() {
+            return ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime();
+        }
+
+        /* Specialization-time only: null when the receiver owns the slot. */
+        @TruffleBoundary
+        static ProtosValueLookup.StructuralSelection selectInherited(
+                ProtosObjectValue receiver, Shape receiverShape) {
+            if (!receiver.usesObjectStorageForRuntime()
+                    || ProtosValueLookup.hasProperty(receiverShape, "each")) {
+                return null;
+            }
+            Object parent = receiver.parent().orElse(null);
+            if (parent == null) {
+                return null;
+            }
+            return ProtosValueLookup.selectStructural(parent, "each");
+        }
+
+        /*
+         * The complete selections, observed without invoking anything. A
+         * missing or unsupported selection is not standard: the dispatched
+         * GetMethod then raises its own Error.
+         */
+        @TruffleBoundary
+        static boolean selectsStandard(ProtosArrayValue receiver, ProtosPrelude prelude) {
+            if (ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime() == null) {
+                return false;
+            }
+            try {
+                return ProtosValueLookup.lookup(receiver, "each", prelude)
+                        .map(found -> ProtosStandardArrayProtocol
+                                .isStandardEachBehavior(found.value()))
+                        .orElse(false);
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                return false;
+            }
+        }
+    }
+
+    /**
+     * The iteration state of one native standard {@code each}: the single
+     * shallow snapshot established at its start and the position of the
+     * next element to visit. Held only in a Bytecode DSL local of the
+     * iterating root, so it survives that root's suspensions and is never a
+     * guest value.
+     */
+    public static final class ArrayEachSnapshot {
+        private final List<Object> elements;
+        private int next;
+
+        ArrayEachSnapshot(List<Object> elements) {
+            this.elements = elements;
+        }
+
+        @NonIdempotent
+        boolean nextIsLong() {
+            return next < elements.size() && elements.get(next) instanceof Long;
+        }
+
+        boolean hasNext() {
+            return next < elements.size();
+        }
+
+        Object advance() {
+            return elements.get(next++);
+        }
+    }
+
+    /**
+     * Establishes the single shallow snapshot of a standard {@code each}
+     * receiver. Emitted only behind {@link IsStandardArrayEachSelection},
+     * after the receiver and the literal callback have been evaluated and
+     * the callability of that callback is proven by the same selection.
+     */
+    @Operation(storeBytecodeIndex = false)
+    public static final class GetArrayEachSnapshot {
+        @Specialization
+        public static ArrayEachSnapshot perform(ProtosArrayValue receiver) {
+            return snapshot(receiver);
+        }
+
+        @TruffleBoundary
+        static ArrayEachSnapshot snapshot(ProtosArrayValue receiver) {
+            return new ArrayEachSnapshot(receiver.indexedSnapshot());
+        }
+    }
+
+    /**
+     * One step of a native standard {@code each}: stores the next snapshot
+     * element, in ascending order, directly into the local of the inline
+     * callback parameter and answers whether an element was stored. A
+     * signed-64 Integer element uses primitive {@code long} local storage;
+     * every other element is stored as the exact object.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = LocalAccessor.class, name = "element")
+    public static final class ArrayEachNext {
+        @Specialization(guards = "snapshot.nextIsLong()")
+        public static boolean doLong(
+                LocalAccessor element,
+                ArrayEachSnapshot snapshot,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            element.setLong(bytecode, frame, (Long) snapshot.advance());
+            return true;
+        }
+
+        @Specialization(guards = "!snapshot.nextIsLong()")
+        public static boolean doObject(
+                LocalAccessor element,
+                ArrayEachSnapshot snapshot,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            if (!snapshot.hasNext()) {
+                return false;
+            }
+            element.setObject(bytecode, frame, snapshot.advance());
+            return true;
+        }
+    }
+
     /*
      * I115: GraalPy BinarySubscript / SetItem model.
      *

@@ -63,6 +63,13 @@ final class ProtosPerf025InlineCallbackPreparationTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
 
+    /**
+     * A literal one-parameter callback whose own bindings are proven LOCAL
+     * runs in the physical root of {@code run}: the element is stored by
+     * the iteration operation straight into the parameter local, the other
+     * own binding is reset to ABSENT on every iteration, and the loop body
+     * neither creates a Closure or activation nor dispatches any message.
+     */
     @Test
     void admittedInlineCallbackUsesStaticFrameBindingsWithoutEntryActivation()
             throws Exception {
@@ -70,108 +77,76 @@ final class ProtosPerf025InlineCallbackPreparationTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                Probe probe = new Probe();
-                ProtosBytecodeRootNode root =
+                ProtosActivation module = new Probe().module();
+                Object outcome =
                         lowerRoot(
                                 """
                                 run: () => {
-                                    Array(1).each((element) => {
+                                    last: 0
+                                    values: Array(1, 2, 3)
+                                    returned: values.each((element) => {
                                         local: element
                                         local = element
-                                        probe(local)
-                                        local
+                                        last = local
                                     })
+                                    (returned === values).ifTrueIfFalse(() => { last }, () => { 0 })
                                 }
                                 run()
-                                """);
+                                """)
+                                .getCallTarget()
+                                .call(module);
 
-                root.getCallTarget().call(probe.module());
+                assertEquals(
+                        "3",
+                        ProtosNumericValueSupport.integerDecimalText(outcome),
+                        "each must visit every element and answer its original receiver");
 
-                ProtosBytecodeRootNode callbackHost =
-                        probe.callbackHost.get();
-                assertNotNull(
-                        callbackHost,
-                        "callback must execute in a semantic source root");
+                List<String> names = instructionNames(physicalRun(module));
 
-                List<String> names = instructionNames(callbackHost);
+                int selection =
+                        indexOfContainingAfter(names, "c.IsStandardArrayEachSelection", -1);
+                int snapshot =
+                        indexOfContainingAfter(names, "c.GetArrayEachSnapshot", selection);
+                int next =
+                        indexOfContainingAfter(names, "c.ArrayEachNext", snapshot);
+                int backward =
+                        indexOfContainingAfter(names, "branch.backward", next);
 
-                int argument =
-                        indexOfContainingAfter(
-                                names,
-                                "LoadInlineClosureArgument",
-                                -1);
-                int parameter =
-                        indexOfContainingAfter(
-                                names,
-                                "BindInlineClosureFrameParameter",
-                                argument);
-                int creation =
-                        indexOfContainingAfter(
-                                names,
-                                "CreateInlineCurrentFrameLocal",
-                                parameter);
-                int read =
-                        indexOfContainingAfter(
-                                names,
-                                "ReadInlineFrameLocal",
-                                parameter);
-                int resolveWrite =
-                        indexOfContainingAfter(
-                                names,
-                                "ResolveInlineFrameLocalWriteTarget",
-                                parameter);
-                int assign =
-                        indexOfContainingAfter(
-                                names,
-                                "AssignInlineFrameLocal",
-                                resolveWrite);
-                int firstActivation =
-                        indexOfContainingAfter(
-                                names,
-                                "MaterializeInlineCallbackActivation",
-                                -1);
+                assertTrue(selection >= 0,
+                        () -> "missing standard each selection guard: " + names);
+                assertTrue(snapshot > selection,
+                        () -> "snapshot must follow the selection guard: " + names);
+                assertTrue(next > snapshot,
+                        () -> "missing native iteration step: " + names);
+                assertTrue(backward > next,
+                        () -> "iteration must be a Bytecode DSL loop: " + names);
 
-                assertTrue(
-                        argument >= 0,
-                        () -> "callback argument was not read from the carrier: " + names);
-                assertTrue(
-                        firstActivation > parameter,
-                        () -> "the frame-native callback Activation must be "
-                                + "materialized only by the probe send, after "
-                                + "parameter binding: " + names);
+                List<String> perElement = names.subList(next, backward + 1);
+                assertEquals(
+                        1L,
+                        perElement.stream()
+                                .filter(name -> name.contains("c.ResetInlineCallbackLocal"))
+                                .count(),
+                        () -> "each iteration must reset exactly the callback's own "
+                                + "creation, never its parameter: " + perElement);
                 assertFalse(
-                        names.stream().anyMatch(name -> name.contains("LoadInlineCallbackActivation")),
-                        () -> "frame-native callback must not use the plain entry load: " + names);
-                assertTrue(
-                        parameter >= 0,
-                        () -> "callback parameter did not use static frame layout: " + names);
-                assertTrue(
-                        creation >= 0,
-                        () -> "callback local creation did not use frame storage: " + names);
-                assertTrue(
-                        read >= 0,
-                        () -> "resolved callback read did not use frame-local access: " + names);
-                assertTrue(
-                        resolveWrite >= 0,
-                        () -> "resolved callback write target was not specialized: " + names);
-                assertTrue(
-                        assign >= 0,
-                        () -> "resolved callback write did not use the frame-local target: " + names);
+                        perElement.stream().anyMatch(
+                                name -> name.startsWith("c.Call")
+                                        || name.contains("GetMethod")
+                                        || name.contains("MaterializeClosure")
+                                        || name.contains("MaterializeCurrentClosure")
+                                        || name.contains("CaptureClosureCells")
+                                        || name.contains("Activation")),
+                        () -> "an admitted callback must not create a Closure or "
+                                + "activation nor dispatch per element: " + perElement);
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF025_INLINE_CALLBACK_STATIC_BINDING_ANALYSIS=YES");
-        System.out.println("PERF025_INLINE_CALLBACK_STATIC_LAYOUT=YES");
-        System.out.println("PERF025_INLINE_CALLBACK_PARAMETER_FRAME_PATH=YES");
-        System.out.println("PERF025_INLINE_CALLBACK_LOCAL_READ_DIRECT=YES");
-        System.out.println("PERF025_INLINE_CALLBACK_LOCAL_WRITE_DIRECT=YES");
-        System.out.println("PERF025_INLINE_CALLBACK_EAGER_ACTIVATION=REMOVED");
-        System.out.println(
-                "PERF025_FRAME_NATIVE_CALLBACK_ENTRY_HAS_LOAD_INLINE_CALLBACK_ACTIVATION=NO");
-        System.out.println(
-                "PERF025_FRAME_NATIVE_CALLBACK_HAS_MATERIALIZE_INLINE_CALLBACK_ACTIVATION=YES");
+        System.out.println("PERF025_INLINE_EACH_PARAMETER_LOCAL_STORE=YES");
+        System.out.println("PERF025_INLINE_EACH_PER_ITERATION_RESET=YES");
+        System.out.println("PERF025_INLINE_EACH_PER_ELEMENT_DISPATCH=NO");
     }
 
     @Test
@@ -386,76 +361,149 @@ final class ProtosPerf025InlineCallbackPreparationTest {
         }
     }
 
+    /**
+     * The admitted site observes the ordinary {@code each} selection before
+     * the native loop, keeps the ordinary GetMethod/CallUnaryMethod send for
+     * any other selection, keeps the callback a genuine Closure whose
+     * redefined {@code call} is honoured, and never repeats an element or effect when
+     * a selection changes in the middle of a native iteration.
+     */
     @Test
     void eachLiteralAdmissionPrecedesActivationAndPhysicalFallback() throws Exception {
-        assertPreparationOrder(
-                """
-                run: () => {
-                    Array(1).each((element) => {
-                        probe(element)
-                        element
-                    })
-                }
-                run()
-                """,
-                "StructuredPrepareInlineChildCall",
-                "AdmitsInlineLiteralLocalEachChild",
-                "StructuredPrepareChildCall");
-
-        System.out.println(
-                "PERF025_PLAT044_EACH_RICH_PREPARATION_BEFORE_ADMISSION=NO");
-    }
-
-    private static void assertPreparationOrder(
-            String characters,
-            String prepareInline,
-            String admission,
-            String forbiddenRichPreparation)
-            throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                Probe probe = new Probe();
-                ProtosBytecodeRootNode root = lowerRoot(characters);
-                root.getCallTarget().call(probe.module());
+                // Ordinary selection on the receiver: its own each is invoked
+                // with the materialized callback, and the native loop is not.
+                ProtosActivation module = new Probe().module();
+                List<Object> visits = recordingHook(module, null);
+                lowerRoot(
+                                """
+                                hook: recorder
+                                run: () => {
+                                    values: Array(1, 2)
+                                    values.each: (callback) => { callback(7) }
+                                    values.each((element) => {
+                                        seen: element
+                                        hook(seen)
+                                    })
+                                }
+                                run()
+                                """)
+                        .getCallTarget()
+                        .call(module);
+                assertEquals(List.of(7L), visits,
+                        "a receiver-defined each must be selected and must receive "
+                                + "the genuine callback");
 
-                ProtosBytecodeRootNode callbackHost =
-                        probe.callbackHost.get();
-
-                assertNotNull(
-                        callbackHost,
-                        "callback must execute in a semantic source root");
-
-                List<String> names = instructionNames(callbackHost);
-
+                List<String> names = instructionNames(physicalRun(module));
                 assertOrdered(
                         names,
-                        prepareInline,
-                        admission,
-                        "MaterializeInlineCallbackActivation",
-                        "LoadInlineLiteralFallbackCall");
+                        "c.IsStandardArrayEachSelection",
+                        "c.GetMethod",
+                        "c.GetArrayEachSnapshot",
+                        "c.ArrayEachNext",
+                        "c.CallUnaryMethod");
 
-                assertFalse(
-                        names.stream().anyMatch(name -> name.contains("LoadInlineCallbackActivation")),
-                        () -> "frame-native callback must not use the plain entry load: " + names);
+                // A selection change during the native loop neither repeats
+                // nor skips an element: the selection was made once.
+                ProtosActivation deoptModule = new Probe().module();
+                List<Object> deoptVisits =
+                        recordingHook(deoptModule, (values, element) -> {
+                            if (Long.valueOf(1L).equals(element)) {
+                                values.createLocalSlot(
+                                        "each",
+                                        ProtosClosureValue.nativeClosure(
+                                                (activation, supplied) ->
+                                                        ProtosNullValue.INSTANCE));
+                            }
+                        });
+                lowerRoot(
+                        """
+                        hook: recorder
+                        run: () => {
+                            values: Array(1, 2, 3)
+                            values.each((element) => {
+                                hook(values, element)
+                            })
+                        }
+                        run()
+                        run()
+                        """)
+                        .getCallTarget()
+                        .call(deoptModule);
+                assertEquals(List.of(1L, 2L, 3L, 1L, 2L, 3L), deoptVisits,
+                        "every snapshot element must be visited exactly once per each");
 
-                assertFalse(
-                        names.stream()
-                                .anyMatch(
-                                        name ->
-                                                name.contains(
-                                                        forbiddenRichPreparation)),
-                        () ->
-                                "inline source root must not contain "
-                                        + "pre-admission rich preparation "
-                                        + forbiddenRichPreparation
-                                        + ": "
-                                        + names);
+                // The root Object is frozen, so the reachable call
+                // redefinition is a local call slot on the callback itself.
+                // The literal must remain a genuine Closure whose ordinary
+                // invocation selects that slot instead of its own body.
+                ProtosActivation callModule = new Probe().module();
+                List<Object> callVisits = recordingHook(callModule, null);
+                lowerRoot(
+                        """
+                        hook: recorder
+                        run: () => {
+                            values: Array(1, 2)
+                            values.each: (callback) => {
+                                callback.call: (argument) => { hook(argument + 100) }
+                                callback(1)
+                                callback(2)
+                            }
+                            values.each((element) => {
+                                hook(element)
+                            })
+                        }
+                        run()
+                        """)
+                        .getCallTarget()
+                        .call(callModule);
+                assertEquals(List.of(101L, 102L), callVisits,
+                        "a redefined call must be selected by the ordinary invocation");
             } finally {
                 context.leave();
             }
         }
+
+        System.out.println("PERF025_INLINE_EACH_ORDINARY_SELECTION=PASS");
+        System.out.println("PERF025_INLINE_EACH_CALL_REDEFINITION=PASS");
+        System.out.println("PERF025_INLINE_EACH_SELECTION_CHANGE_NO_REPEAT=PASS");
+    }
+
+    /** What a recording hook does besides recording its element. */
+    @FunctionalInterface
+    private interface HookEffect {
+        void apply(ProtosObjectValue values, Object element);
+    }
+
+    /**
+     * Installs the module binding {@code recorder}: a native callable that
+     * records its last argument and applies {@code effect} to its first
+     * argument when it receives two.
+     */
+    private static List<Object> recordingHook(ProtosActivation module, HookEffect effect) {
+        List<Object> visits = new java.util.ArrayList<>();
+        module.context().createLocalSlot(
+                "recorder",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            Object element = supplied.get(supplied.size() - 1);
+                            visits.add(element);
+                            if (effect != null && supplied.size() == 2) {
+                                effect.apply((ProtosObjectValue) supplied.get(0), element);
+                            }
+                            return ProtosNullValue.INSTANCE;
+                        }));
+        return visits;
+    }
+
+    /** The physical Bytecode root of the module binding {@code run}. */
+    private static ProtosBytecodeRootNode physicalRun(ProtosActivation module) {
+        ProtosClosureValue run =
+                (ProtosClosureValue) module.context().readLocalSlot("run").orElseThrow();
+        return run.executionPlan().orElseThrow().bytecodeActivationRootForTesting();
     }
 
     /**

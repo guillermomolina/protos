@@ -320,6 +320,81 @@ final class CanonicalBindingAnalysis {
     }
 
     /**
+     * The parameterized counterpart of {@link
+     * #admitsOwnBindingsAndDirectParentCaptures} for a callback whose
+     * activation is eliminated while its caller iterates: every parameter
+     * and every creation of this isolated analysis is a LOCAL binding owned
+     * by {@code ownScope}; every other read or assignment is proven to reach
+     * the immediate physical parent (or a module declaration, for a read)
+     * by the enclosing analysis. Name spelling is never evidence.
+     */
+    boolean admitsParameterBindingsAndDirectParentCaptures(
+            CanonicalBindingAnalysis enclosing,
+            CanonicalLexicalScope ownScope,
+            CanonicalLexicalScope parentScope,
+            java.util.Set<String> parentFrameNames,
+            boolean parentHasFrameLayout) {
+        if (ownScope == null
+                || parameterIdentities.isEmpty()
+                || !multipleCreateIdentities.isEmpty()) {
+            return false;
+        }
+        for (CanonicalBindingIdentity identity : parameterIdentities.values()) {
+            if (identity.owner() != ownScope
+                    || storageOf(identity) != CanonicalLexicalScope.Storage.LOCAL) {
+                return false;
+            }
+        }
+        for (CanonicalBindingIdentity identity : createIdentities.values()) {
+            if (identity.owner() != ownScope
+                    || storageOf(identity) != CanonicalLexicalScope.Storage.LOCAL) {
+                return false;
+            }
+        }
+        boolean parentProvable =
+                enclosing != null && parentScope != null && parentHasFrameLayout;
+
+        for (var entry : lookupResolutions.entrySet()) {
+            if (entry.getValue() instanceof CanonicalBindingResolution.Resolved resolved
+                    && resolved.identity().owner() == ownScope) {
+                continue;
+            }
+            if (!parentProvable) {
+                return false;
+            }
+            CanonicalBindingResolution parent =
+                    enclosing.resolutionOf(entry.getKey()).orElse(null);
+            if (parent instanceof CanonicalBindingResolution.Candidate candidate
+                    && admittedInlineCandidateRead(candidate, parentScope)) {
+                continue;
+            }
+            if (!(parent instanceof CanonicalBindingResolution.CapturedResolved captured)
+                    || (!admittedInlineGlobalRead(captured, parentScope)
+                            && !directParentCapture(
+                                    parent, parentScope, parentFrameNames))) {
+                return false;
+            }
+        }
+
+        for (var entry : assignResolutions.entrySet()) {
+            if (entry.getKey().target().isPresent()) {
+                return false;
+            }
+            if (entry.getValue() instanceof CanonicalBindingResolution.Resolved resolved
+                    && resolved.identity().owner() == ownScope) {
+                continue;
+            }
+            if (!parentProvable
+                    || !directParentCapture(
+                            enclosing.resolutionOf(entry.getKey()).orElse(null),
+                            parentScope, parentFrameNames)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * I115: a read in an inlined callback may refer to an enclosing module
      * declaration. The lexical owner and complete depth are proven against
      * the current parent's scope chain; no name-only global assumption is

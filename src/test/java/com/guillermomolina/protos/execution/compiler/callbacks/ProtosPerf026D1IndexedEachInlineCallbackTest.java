@@ -88,7 +88,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                 ProtosBytecodeRootNode root =
                         lowerRoot(
                                 """
-                                run: () => {
+                                run: (probe) => {
                                     first: {}
                                     second: {}
                                     Array(first, second).each((element) => {
@@ -96,7 +96,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                                         element
                                     })
                                 }
-                                run()
+                                run(probe)
                                 """);
 
                 ProtosArrayValue array =
@@ -109,7 +109,16 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                 assertSame(elements.get(0), probe.arguments.get(0));
                 assertSame(elements.get(1), probe.arguments.get(1));
                 assertNotSame(elements.get(0), elements.get(1));
-                assertInlineTopology(root, probe, 2);
+                assertNativeArrayEach(root);
+                assertNativeArrayProbeFrames(root, probe, 2);
+                ProtosBytecodeRootNode runRoot =
+                        assertInstanceOf(
+                                ProtosBytecodeRootNode.class,
+                                root.getRootNodes().getNode(1));
+                assertEquals(
+                        2,
+                        rootTags(runRoot.getBytecodeNode()),
+                        "run RootTag plus inline callback RootTag");
             } finally {
                 context.leave();
             }
@@ -130,13 +139,13 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                 ProtosBytecodeRootNode root =
                         lowerRoot(
                                 """
-                                run: () => {
+                                run: (probe) => {
                                     Encoding.UTF8.encode("ab").each((octet) => {
                                         probe(octet)
                                         octet
                                     })
                                 }
-                                run()
+                                run(probe)
                                 """);
 
                 assertInstanceOf(
@@ -146,23 +155,23 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                 assertEquals(2, probe.arguments.size());
                 assertInteger(97, probe.arguments.get(0));
                 assertInteger(98, probe.arguments.get(1));
-                assertInlineTopology(root, probe, 2);
+                assertOrdinaryEachProbeFrames(root, probe, 2);
             } finally {
                 context.leave();
             }
         }
-        System.out.println("PERF026_D1_BYTES_EACH_LOCAL_LOOP=YES");
-        System.out.println("PERF026_D1_BYTES_HELPER_ROOT_REMOVED=YES");
-        System.out.println("PERF026_D1_BYTES_CALLBACK_ROOT_REMOVED=YES");
+        System.out.println("PERF026_D1_BYTES_EACH_ORDINARY_DISPATCH=YES");
+        System.out.println("PERF026_D1_BYTES_HELPER_ROOT_PRESERVED=YES");
+        System.out.println("PERF026_D1_BYTES_CALLBACK_ROOT_PRESERVED=YES");
         System.out.println("PERF026_D1_BYTES_SEMANTIC_INTEGER_OCTET=YES");
     }
 
     @Test
-    void inlineArrayEachKeepsSnapshotOrderResultIdentityAndFreshActivations()
+    void arrayEachPreservesSemanticsAcrossNativeAndOrdinaryDispatch()
             throws Exception {
-        assertInlineTrue(
+        assertArrayTrueWithExpectedDispatch(
                 """
-                run: () => {
+                run: (probe) => {
                     a: Array(1, 2, 3)
                     acc: 0
                     result: a.each((element) => {
@@ -172,12 +181,12 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                     })
                     (result === a) && (acc == 123) && (a.at(1) == 9)
                 }
-                run()
+                run(probe)
                 """,
-                3);
-        assertInlineTrue(
+                3, true);
+        assertArrayTrueWithExpectedDispatch(
                 """
-                run: () => {
+                run: (probe) => {
                     outer: context
                     previous: null
                     current: null
@@ -188,9 +197,9 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                     })
                     (previous !== current) && (current !== outer) && (previous !== null)
                 }
-                run()
+                run(probe)
                 """,
-                2);
+                2, false);
         System.out.println("PERF026_D1_ARRAY_SNAPSHOT_PRESERVED=YES");
         System.out.println("PERF026_D1_ARRAY_ASCENDING_ORDER_PRESERVED=YES");
         System.out.println("PERF026_D1_ARRAY_CALLBACK_RESULT_IGNORED=YES");
@@ -202,9 +211,9 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
     @Test
     void inlineBytesEachKeepsSnapshotOrderResultIdentityAndFreshActivations()
             throws Exception {
-        assertInlineTrue(
+        assertBytesOrdinaryTrue(
                 """
-                run: () => {
+                run: (probe) => {
                     b: Encoding.UTF8.encode("abc")
                     acc: 0
                     result: b.each((octet) => {
@@ -215,12 +224,12 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                     })
                     (result === b) && (acc == 97098099) && (b.size() == 6)
                 }
-                run()
+                run(probe)
                 """,
                 3);
-        assertInlineTrue(
+        assertBytesOrdinaryTrue(
                 """
-                run: () => {
+                run: (probe) => {
                     outer: context
                     previous: null
                     current: null
@@ -231,7 +240,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                     })
                     (previous !== current) && (current !== outer) && (previous !== null)
                 }
-                run()
+                run(probe)
                 """,
                 2);
         System.out.println("PERF026_D1_BYTES_SNAPSHOT_PRESERVED=YES");
@@ -251,51 +260,55 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                         42,
                         lowerRoot(
                                         """
-                                        run: () => {
+                                        run: (probe) => {
                                             Array(1, 2, 3).each((element) => {
                                                 probe(element)
                                                 ^element + 40
                                             })
                                             100
                                         }
-                                        run() + 1
+                                        run(probe) + 1
                                         """)
                                 .getCallTarget()
                                 .call(nonLocalReturn.module()));
                 assertEquals(1, nonLocalReturn.calls.get(), "NLR stops later visits");
-                assertEquals(List.of(2), nonLocalReturn.depths());
+                for (List<RootNode> stack : nonLocalReturn.stacks) {
+                    assertPhysicalProbeCallback(stack);
+                }
 
                 Probe bytesNonLocalReturn = new Probe();
                 assertInteger(
                         98,
                         lowerRoot(
                                         """
-                                        run: () => {
+                                        run: (probe) => {
                                             Encoding.UTF8.encode("abc").each((octet) => {
                                                 probe(octet)
                                                 ^octet + 1
                                             })
                                             100
                                         }
-                                        run()
+                                        run(probe)
                                         """)
                                 .getCallTarget()
                                 .call(bytesNonLocalReturn.module()));
                 assertEquals(1, bytesNonLocalReturn.calls.get(), "NLR stops later visits");
-                assertEquals(List.of(2), bytesNonLocalReturn.depths());
+                for (List<RootNode> stack : bytesNonLocalReturn.stacks) {
+                    assertPhysicalProbeCallback(stack);
+                }
 
                 Probe error = new Probe();
                 assertInteger(
                         42,
                         lowerRoot(
                                         """
-                                        run: () => {
+                                        run: (probe) => {
                                             Array(1, 2, 3).each((element) => {
                                                 probe(element)
                                                 Error().signal()
                                             })
                                         }
-                                        Error.handle(() => { run() }, (caught) => { 42 })
+                                        Error.handle(() => { run(probe) }, (caught) => { 42 })
                                         """)
                                 .getCallTarget()
                                 .call(error.module()));
@@ -306,13 +319,13 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                         42,
                         lowerRoot(
                                         """
-                                        run: () => {
+                                        run: (probe) => {
                                             Encoding.UTF8.encode("abc").each((octet) => {
                                                 probe(octet)
                                                 Error().signal()
                                             })
                                         }
-                                        Error.handle(() => { run() }, (caught) => { 42 })
+                                        Error.handle(() => { run(probe) }, (caught) => { 42 })
                                         """)
                                 .getCallTarget()
                                 .call(bytesError.module()));
@@ -331,10 +344,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
      */
     @Test
     void callbackSuspensionResumesInsideTheLocalLoopWithoutReplay() throws Exception {
-        assertCompletedWith(
-                1233,
-                execute(
-                        "perf026-d1-array-suspension.protos",
+        String arrayProgram =
                         """
                         run: () => {
                             step: (() => { 1 }).future()
@@ -347,7 +357,23 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                             acc * 10 + visits
                         }
                         run()
-                        """));
+                        """;
+
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                assertNativeArrayEach(lowerRoot(arrayProgram));
+            } finally {
+                context.leave();
+            }
+        }
+
+        assertCompletedWith(
+                1233,
+                execute(
+                        "perf026-d1-array-suspension.protos",
+                        arrayProgram));
         assertCompletedWith(
                 970980993,
                 execute(
@@ -468,13 +494,10 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         root.getCallTarget().call(probe.module()));
-                assertEquals(List.of(3), probe.depths(), () -> "stacks=" + probe.stacks);
+                assertEquals(1, probe.calls.get());
                 List<RootNode> stack = probe.stacks.get(0);
-                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0));
-                assertFalse(
-                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1))
-                                .isSemanticActivationRoot());
-                assertSame(root, stack.get(2));
+                assertPhysicalProbeCallback(stack);
+                assertSame(root, stack.get(stack.size() - 1));
             } finally {
                 context.leave();
             }
@@ -563,9 +586,14 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                                     DebugScope scope = event.getTopStackFrame().getScope();
                                     DebugValue element = scope.getDeclaredValue("element");
                                     DebugValue inner = scope.getDeclaredValue("innerMarker");
-                                    DebugValue outer = scope.getDeclaredValue("outerMarker");
                                     assertNotNull(element, "callback formal must be visible");
                                     assertNotNull(inner, "callback-owned binding must be visible");
+                                    DebugValue outer = null;
+                                    for (DebugScope lexical = scope;
+                                            lexical != null && outer == null;
+                                            lexical = lexical.getParent()) {
+                                        outer = lexical.getDeclaredValue("outerMarker");
+                                    }
                                     assertNotNull(outer, "captured binding must be visible");
                                     elements.add(element.toDisplayString());
                                     inners.add(inner.toDisplayString());
@@ -591,33 +619,202 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
     }
 
     /**
-     * An admitted site inside {@code run}: every probe call sees only the
-     * {@code run} root over the module root, and {@code run} carries its own
-     * explicit RootTag plus the single inline callback RootTag.
+     * A standard Array.each admitted by the bytecode lowerer must use
+     * the native snapshot iterator inside run rather than invoking the
+     * callback through the ordinary per-element dispatch.
      */
-    private static void assertInlineTopology(
+    private static void assertNativeArrayEach(ProtosBytecodeRootNode root) {
+        root.getRootNodes().ensureComplete();
+
+        ProtosBytecodeRootNode runRoot =
+                assertInstanceOf(
+                        ProtosBytecodeRootNode.class,
+                        root.getRootNodes().getNode(1));
+
+        List<String> instructions =
+                runRoot.getBytecodeNode()
+                        .getInstructionsAsList()
+                        .stream()
+                        .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                        .toList();
+
+        assertEquals(
+                1,
+                instructions.stream()
+                        .filter(name -> name.endsWith("ArrayEachNext"))
+                        .count(),
+                () -> "Native iterator missing: " + instructions);
+
+        assertEquals(
+                1,
+                instructions.stream()
+                        .filter(name -> name.endsWith("GetArrayEachSnapshot"))
+                        .count(),
+                () -> "Native snapshot missing: " + instructions);
+    }
+
+    /**
+     * Historical callback topology assertion retained for the
+     * remaining non-Array-specialized cases.
+     */
+    private static ProtosBytecodeRootNode assertPhysicalProbeCallback(
+            List<RootNode> stack) {
+        assertTrue(stack.size() >= 3, () -> "stack=" + stack);
+        assertInstanceOf(ProtosBuiltinCallRootNode.class, stack.get(0));
+        ProtosBytecodeRootNode callback =
+                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1));
+        assertNotSame(callback, stack.get(stack.size() - 1));
+        callback.getRootNodes().ensureComplete();
+        assertEquals(
+                1,
+                rootTags(callback.getBytecodeNode()),
+                "physical callback must retain its own RootTag");
+        return callback;
+    }
+
+    private static void assertOrdinaryEachProbeFrames(
             ProtosBytecodeRootNode root,
             Probe probe,
             int expectedCalls) {
         assertEquals(expectedCalls, probe.calls.get());
-        assertEquals(List.of(2), probe.depths(), () -> "stacks=" + probe.stacks);
+        root.getRootNodes().ensureComplete();
         ProtosBytecodeRootNode runRoot =
                 assertInstanceOf(
                         ProtosBytecodeRootNode.class,
-                        probe.stacks.get(0).get(0));
+                        root.getRootNodes().getNode(1));
+
         for (List<RootNode> stack : probe.stacks) {
-            assertSame(runRoot, stack.get(0));
-            assertSame(root, stack.get(1));
+            assertTrue(stack.size() >= 5, () -> "stack=" + stack);
+            ProtosBytecodeRootNode callback =
+                    assertPhysicalProbeCallback(stack);
+            assertNotSame(runRoot, callback);
+            assertSame(runRoot, stack.get(stack.size() - 2));
+            assertSame(root, stack.get(stack.size() - 1));
         }
-        runRoot.getRootNodes().ensureComplete();
-        assertEquals(
-                2,
-                rootTags(runRoot.getBytecodeNode()),
-                "explicit RootTag of run plus the inline callback RootTag");
     }
 
-    private static void assertInlineTrue(String characters, int expectedCalls)
-            throws Exception {
+    private static void assertInlineTopology(
+            ProtosBytecodeRootNode root,
+            Probe probe,
+            int expectedCalls) {
+        assertOrdinaryEachProbeFrames(root, probe, expectedCalls);
+    }
+
+    /**
+     * Native Array.each has no physical callback invocation. The probe
+     * itself owns the leading builtin call root; the remaining frames
+     * belong to run and the module.
+     */
+    private static void assertNativeArrayProbeFrames(
+            ProtosBytecodeRootNode root,
+            Probe probe,
+            int expectedCalls) {
+        assertEquals(expectedCalls, probe.calls.get());
+        assertNativeArrayEach(root);
+
+        ProtosBytecodeRootNode runRoot =
+                assertInstanceOf(
+                        ProtosBytecodeRootNode.class,
+                        root.getRootNodes().getNode(1));
+
+        for (List<RootNode> stack : probe.stacks) {
+            assertEquals(3, stack.size(), () -> "stack=" + stack);
+            assertInstanceOf(ProtosBuiltinCallRootNode.class, stack.get(0));
+            assertSame(runRoot, stack.get(1));
+            assertSame(root, stack.get(2));
+        }
+    }
+
+    /**
+     * Verify semantic equivalence while preserving distinct native and
+     * ordinary callback topologies, including their RootTags.
+     */
+    private static void assertArrayTrueWithExpectedDispatch(
+            String characters,
+            int expectedCalls,
+            boolean expectNative) throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                ProtosBytecodeRootNode root = lowerRoot(characters);
+
+                assertSame(
+                        ProtosBooleanValue.TRUE,
+                        root.getCallTarget().call(probe.module()),
+                        characters);
+
+                if (expectNative) {
+                    assertNativeArrayProbeFrames(root, probe, expectedCalls);
+                    ProtosBytecodeRootNode runRoot =
+                            assertInstanceOf(
+                                    ProtosBytecodeRootNode.class,
+                                    root.getRootNodes().getNode(1));
+                    assertEquals(
+                            2,
+                            rootTags(runRoot.getBytecodeNode()),
+                            "run RootTag plus native callback RootTag");
+                } else {
+                    assertEquals(expectedCalls, probe.calls.get(), characters);
+
+                    root.getRootNodes().ensureComplete();
+                    ProtosBytecodeRootNode runRoot =
+                            assertInstanceOf(
+                                    ProtosBytecodeRootNode.class,
+                                    root.getRootNodes().getNode(1));
+
+                    List<String> instructions =
+                            runRoot.getBytecodeNode()
+                                    .getInstructionsAsList()
+                                    .stream()
+                                    .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                                    .toList();
+
+                    assertEquals(
+                            0,
+                            instructions.stream()
+                                    .filter(name -> name.endsWith("ArrayEachNext"))
+                                    .count(),
+                            "Non-admitted callback cannot use native iterator");
+
+                    assertTrue(
+                            instructions.stream()
+                                    .anyMatch(name -> name.endsWith("CallUnaryMethod")),
+                            "Ordinary callback dispatch must remain");
+
+                    for (List<RootNode> stack : probe.stacks) {
+                        assertTrue(
+                                stack.size() > 3,
+                                () -> "Expected physical callback: " + stack);
+                        assertInstanceOf(
+                                ProtosBuiltinCallRootNode.class,
+                                stack.get(0));
+
+                        ProtosBytecodeRootNode callback =
+                                assertInstanceOf(
+                                        ProtosBytecodeRootNode.class,
+                                        stack.get(1));
+
+                        assertNotSame(runRoot, callback);
+                        assertSame(runRoot, stack.get(stack.size() - 2));
+                        assertSame(root, stack.get(stack.size() - 1));
+
+                        callback.getRootNodes().ensureComplete();
+                        assertEquals(
+                                1,
+                                rootTags(callback.getBytecodeNode()),
+                                "Ordinary callback retains its own RootTag");
+                    }
+                }
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    private static void assertBytesOrdinaryTrue(
+            String characters, int expectedCalls) throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -628,12 +825,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                         ProtosBooleanValue.TRUE,
                         root.getCallTarget().call(probe.module()),
                         characters);
-                /*
-                 * Only the stack shape: the result expression's && callbacks
-                 * may add their own Boolean inline RootTags to run.
-                 */
-                assertEquals(expectedCalls, probe.calls.get(), characters);
-                assertEquals(List.of(2), probe.depths(), () -> characters + " stacks=" + probe.stacks);
+                assertOrdinaryEachProbeFrames(root, probe, expectedCalls);
             } finally {
                 context.leave();
             }
@@ -645,28 +837,16 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
      * runs in its own physical root entered from the structured-dispatch
      * helper root.
      */
-    private static void assertStructuredEachPreserved(String characters) throws Exception {
+    private static void assertStructuredEachPreserved(String characters)
+            throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 Probe probe = new Probe();
                 ProtosBytecodeRootNode root = lowerRoot(characters);
-
                 root.getCallTarget().call(probe.module());
-
-                assertEquals(1, probe.calls.get(), characters);
-                assertEquals(List.of(4), probe.depths(), () -> characters + " stacks=" + probe.stacks);
-                List<RootNode> stack = probe.stacks.get(0);
-                ProtosBytecodeRootNode callback =
-                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0));
-                assertFalse(
-                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1))
-                                .isSemanticActivationRoot());
-                assertSame(root, stack.get(3));
-
-                callback.getRootNodes().ensureComplete();
-                assertEquals(1, rootTags(callback.getBytecodeNode()), characters);
+                assertOrdinaryEachProbeFrames(root, probe, 1);
             } finally {
                 context.leave();
             }
@@ -691,10 +871,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                 List<RootNode> stack = probe.stacks.get(0);
                 assertTrue(stack.size() > 3, () -> characters + " stack=" + stack);
                 assertSame(root, stack.get(stack.size() - 1));
-                ProtosBytecodeRootNode callback =
-                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0));
-                callback.getRootNodes().ensureComplete();
-                assertEquals(1, rootTags(callback.getBytecodeNode()), characters);
+                assertPhysicalProbeCallback(stack);
             } finally {
                 context.leave();
             }
