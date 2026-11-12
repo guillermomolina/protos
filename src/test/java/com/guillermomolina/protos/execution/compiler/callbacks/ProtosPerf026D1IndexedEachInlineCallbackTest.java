@@ -155,7 +155,8 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                 assertEquals(2, probe.arguments.size());
                 assertInteger(97, probe.arguments.get(0));
                 assertInteger(98, probe.arguments.get(1));
-                assertOrdinaryEachProbeFrames(root, probe, 2);
+                // Bytes run their octets as an inline local loop, like an Array.
+                assertNativeArrayProbeFrames(root, probe, 2);
             } finally {
                 context.leave();
             }
@@ -211,7 +212,8 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
     @Test
     void inlineBytesEachKeepsSnapshotOrderResultIdentityAndFreshActivations()
             throws Exception {
-        assertBytesOrdinaryTrue(
+        // Bytes iterate their octets inline exactly as an Array does.
+        assertBytesInlineTrue(
                 """
                 run: (probe) => {
                     b: Encoding.UTF8.encode("abc")
@@ -277,25 +279,23 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                 assertNativeArrayProbeFrames(nonLocalReturnRoot, nonLocalReturn, 1);
 
                 Probe bytesNonLocalReturn = new Probe();
+                ProtosBytecodeRootNode bytesNonLocalReturnRoot =
+                        lowerRoot(
+                                """
+                                run: (probe) => {
+                                    Encoding.UTF8.encode("abc").each((octet) => {
+                                        probe(octet)
+                                        ^octet + 1
+                                    })
+                                    100
+                                }
+                                run(probe)
+                                """);
                 assertInteger(
                         98,
-                        lowerRoot(
-                                        """
-                                        run: (probe) => {
-                                            Encoding.UTF8.encode("abc").each((octet) => {
-                                                probe(octet)
-                                                ^octet + 1
-                                            })
-                                            100
-                                        }
-                                        run(probe)
-                                        """)
-                                .getCallTarget()
-                                .call(bytesNonLocalReturn.module()));
-                assertEquals(1, bytesNonLocalReturn.calls.get(), "NLR stops later visits");
-                for (List<RootNode> stack : bytesNonLocalReturn.stacks) {
-                    assertPhysicalProbeCallback(stack);
-                }
+                        bytesNonLocalReturnRoot.getCallTarget().call(bytesNonLocalReturn.module()));
+                // As for Array: the return reaches run's home inline and ends the iteration.
+                assertNativeArrayProbeFrames(bytesNonLocalReturnRoot, bytesNonLocalReturn, 1);
 
                 Probe error = new Probe();
                 assertInteger(
@@ -809,6 +809,25 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                                 "Ordinary callback retains its own RootTag");
                     }
                 }
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    private static void assertBytesInlineTrue(
+            String characters, int expectedCalls) throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                ProtosBytecodeRootNode root = lowerRoot(characters);
+                assertSame(
+                        ProtosBooleanValue.TRUE,
+                        root.getCallTarget().call(probe.module()),
+                        characters);
+                assertNativeArrayProbeFrames(root, probe, expectedCalls);
             } finally {
                 context.leave();
             }

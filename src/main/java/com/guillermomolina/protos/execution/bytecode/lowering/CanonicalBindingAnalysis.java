@@ -366,15 +366,20 @@ final class CanonicalBindingAnalysis {
                     && resolved.identity().owner() == ownScope) {
                 continue;
             }
+            if (enclosing != null
+                    && parentScope != null
+                    && parentScope.kind() == CanonicalLexicalScope.Kind.CLOSURE
+                    && enclosing.resolutionOf(entry.getKey()).orElse(null)
+                            instanceof CanonicalBindingResolution.Dynamic) {
+                // Live selection by name, as in admitsDirectParentCaptures:
+                // it uses no storage of the parent, so no frame layout either.
+                continue;
+            }
             if (!parentProvable) {
                 return false;
             }
             CanonicalBindingResolution parent =
                     enclosing.resolutionOf(entry.getKey()).orElse(null);
-            if (parent instanceof CanonicalBindingResolution.Dynamic) {
-                // Live selection by name, as in admitsDirectParentCaptures.
-                continue;
-            }
             if (parent instanceof CanonicalBindingResolution.Candidate candidate
                     && admittedInlineCandidateRead(candidate, parentScope)) {
                 continue;

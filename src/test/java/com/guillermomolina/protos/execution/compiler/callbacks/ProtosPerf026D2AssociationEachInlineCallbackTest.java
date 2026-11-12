@@ -471,13 +471,15 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
                                             + "m.each((key, value) => { probe() })\n");
 
                     root.getCallTarget().call(probe.module());
-                    assertEquals(List.of(3), probe.depths(), () -> receiver + " stacks=" + probe.stacks);
+                    // callback, structured helper, the native each, module.
+                    assertEquals(List.of(4), probe.depths(), () -> receiver + " stacks=" + probe.stacks);
                     List<RootNode> stack = probe.stacks.get(0);
                     assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0));
                     assertFalse(
                         assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1))
                                 .isSemanticActivationRoot());
-                    assertSame(root, stack.get(2));
+                    assertEquals("ProtosBuiltinCallRootNode", stack.get(2).getClass().getSimpleName());
+                    assertSame(root, stack.get(3));
                 }
             } finally {
                 context.leave();
@@ -738,14 +740,16 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
                 root.getCallTarget().call(probe.module());
 
                 assertEquals(1, probe.calls.get(), characters);
-                assertEquals(List.of(4), probe.depths(), () -> characters + " stacks=" + probe.stacks);
+                // callback, structured helper, the native each, run, module.
+                assertEquals(List.of(5), probe.depths(), () -> characters + " stacks=" + probe.stacks);
                 List<RootNode> stack = probe.stacks.get(0);
                 ProtosBytecodeRootNode callback =
                         assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0));
                 assertFalse(
                         assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1))
                                 .isSemanticActivationRoot());
-                assertSame(root, stack.get(3));
+                assertEquals("ProtosBuiltinCallRootNode", stack.get(2).getClass().getSimpleName());
+                assertSame(root, stack.get(4));
 
                 callback.getRootNodes().ensureComplete();
                 assertEquals(1, rootTags(callback.getBytecodeNode()), characters);
@@ -815,7 +819,13 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
                                                                     .getRootNode());
                                                     return null;
                                                 });
-                                stacks.add(stack);
+                                // The probe's own native root is the first physical
+                                // frame; the guest stack below it is recorded.
+                                assertEquals(
+                                        "ProtosBuiltinCallRootNode",
+                                        stack.get(0).getClass().getSimpleName(),
+                                        () -> "stack=" + stack);
+                                stacks.add(List.copyOf(stack.subList(1, stack.size())));
                                 return ProtosNullValue.INSTANCE;
                             }));
             return module;

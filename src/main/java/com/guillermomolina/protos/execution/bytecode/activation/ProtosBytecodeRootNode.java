@@ -1777,6 +1777,35 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()));
         }
 
+        /* Bytes iterate their octets exactly as an Array iterates its elements. */
+        @Specialization
+        public static boolean doBytes(
+                com.guillermomolina.protos.runtime.ProtosBytesValue receiver,
+                @Bind VirtualFrame frame) {
+            return selectsStandardBytes(
+                    receiver,
+                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()));
+        }
+
+        @TruffleBoundary
+        static boolean selectsStandardBytes(
+                com.guillermomolina.protos.runtime.ProtosBytesValue receiver, ProtosPrelude prelude) {
+            if (prelude == null
+                    || ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime() == null) {
+                return false;
+            }
+            try {
+                ProtosObjectValue canonicalHome = prelude.bytesPrototypeForRuntime();
+                return ProtosValueLookup.lookup(receiver, "each", prelude)
+                        .map(found -> found.value() instanceof ProtosClosureValue closure
+                                && ProtosStandardBytesProtocol.isStandardEachImplementation(closure)
+                                && found.home() == canonicalHome)
+                        .orElse(false);
+            } catch (IllegalStateException | UnsupportedOperationException unavailable) {
+                return false;
+            }
+        }
+
         @Fallback
         public static boolean doOther(Object receiver) {
             return false;
@@ -1829,6 +1858,153 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
+     * Whether {@code each} on a Map, IdentityMap or Environment receiver
+     * selects that receiver's standard behavior and the root {@code call}
+     * selection is canonical, observed without invoking anything. Any other
+     * receiver or selection keeps ordinary selection.
+     */
+    @Operation(storeBytecodeIndex = false)
+    public static final class IsStandardAssociationEachSelection {
+        @Specialization
+        public static boolean doGeneric(Object receiver, @Bind VirtualFrame frame) {
+            return selectsStandard(
+                    receiver, ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()));
+        }
+
+        @TruffleBoundary
+        static boolean selectsStandard(Object receiver, ProtosPrelude prelude) {
+            if (!(receiver instanceof com.guillermomolina.protos.runtime.ProtosMapValue
+                            || receiver instanceof com.guillermomolina.protos.runtime.ProtosIdentityMapValue
+                            || receiver instanceof com.guillermomolina.protos.runtime.ProtosEnvironmentValue)
+                    || ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime() == null) {
+                return false;
+            }
+            try {
+                return ProtosValueLookup.lookup(receiver, "each", prelude)
+                        .map(found -> found.value() instanceof ProtosClosureValue closure
+                                && isStandardEachOf(receiver, closure, found.home(), prelude))
+                        .orElse(false);
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                return false;
+            }
+        }
+
+        /* The standard behavior at its canonical home; a copy homed elsewhere is not. */
+        private static boolean isStandardEachOf(
+                Object receiver, ProtosClosureValue closure, ProtosObjectValue home, ProtosPrelude prelude) {
+            if (receiver instanceof com.guillermomolina.protos.runtime.ProtosMapValue) {
+                return ProtosStandardMapProtocol.isStandardEachImplementation(closure)
+                        && prelude != null
+                        && prelude.bindings().readLocalSlot("Map").orElse(null) == home;
+            }
+            if (receiver instanceof com.guillermomolina.protos.runtime.ProtosIdentityMapValue) {
+                return ProtosStandardIdentityMapProtocol.isStandardEachImplementation(closure)
+                        && prelude != null
+                        && prelude.identityMapPrototype() == home;
+            }
+            return ProtosStandardEnvironmentProtocol.isStandardEachImplementation(closure)
+                    && ProtosStandardEnvironmentProtocol.isCanonicalStandardEachHome(receiver, home);
+        }
+    }
+
+    /**
+     * The single association snapshot of a standard Map, IdentityMap or
+     * Environment {@code each}, taken when the iteration starts, exactly as
+     * the standard behavior takes it.
+     */
+    @Operation(storeBytecodeIndex = true)
+    public static final class GetAssociationEachSnapshot {
+        @Specialization
+        public static AssociationEachSnapshot perform(Object receiver, @Bind VirtualFrame frame) {
+            return snapshot(receiver, frame.getArguments());
+        }
+
+        @TruffleBoundary
+        static AssociationEachSnapshot snapshot(Object receiver, Object[] arguments) {
+            java.util.List<Object> keys = new java.util.ArrayList<>();
+            java.util.List<Object> values = new java.util.ArrayList<>();
+            if (receiver instanceof com.guillermomolina.protos.runtime.ProtosEnvironmentValue environment) {
+                for (com.guillermomolina.protos.runtime.ProtosEnvironmentValue.PortableEntry entry
+                        : ProtosStandardEnvironmentProtocol.portableEntriesForStructured(
+                                environment, ProtosFrameArguments.activation(arguments))) {
+                    keys.add(entry.name());
+                    values.add(entry.value());
+                }
+            } else {
+                java.util.List<java.util.Map.Entry<Object, Object>> entries =
+                        receiver instanceof com.guillermomolina.protos.runtime.ProtosMapValue map
+                                ? map.associationSnapshot()
+                                : ((com.guillermomolina.protos.runtime.ProtosIdentityMapValue) receiver)
+                                        .associationSnapshot();
+                for (java.util.Map.Entry<Object, Object> entry : entries) {
+                    keys.add(entry.getKey());
+                    values.add(entry.getValue());
+                }
+            }
+            return new AssociationEachSnapshot(keys.toArray(), values.toArray());
+        }
+    }
+
+    /**
+     * One step of a native standard association {@code each}: stores the
+     * next snapshot key and value, in snapshot order, directly into the
+     * locals of the inline callback's two parameters and answers whether an
+     * association was stored.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = LocalAccessor.class, name = "key")
+    @ConstantOperand(type = LocalAccessor.class, name = "value")
+    public static final class AssociationEachNext {
+        @Specialization
+        public static boolean perform(
+                LocalAccessor key,
+                LocalAccessor value,
+                AssociationEachSnapshot snapshot,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            if (!snapshot.hasNext()) {
+                return false;
+            }
+            key.setObject(bytecode, frame, snapshot.key());
+            value.setObject(bytecode, frame, snapshot.value());
+            snapshot.advance();
+            return true;
+        }
+    }
+
+    /**
+     * The iteration state of one native standard association {@code each}.
+     * Held only in a Bytecode DSL local of the iterating root, so it survives
+     * that root's suspensions and is never a guest value.
+     */
+    public static final class AssociationEachSnapshot {
+        private final Object[] keys;
+        private final Object[] values;
+        private int index;
+
+        AssociationEachSnapshot(Object[] keys, Object[] values) {
+            this.keys = keys;
+            this.values = values;
+        }
+
+        boolean hasNext() {
+            return index < keys.length;
+        }
+
+        Object key() {
+            return keys[index];
+        }
+
+        Object value() {
+            return values[index];
+        }
+
+        void advance() {
+            index++;
+        }
+    }
+
+    /**
      * The iteration state of one native standard {@code each}: the single
      * shallow snapshot established at its start and the position of the
      * next element to visit. Held only in a Bytecode DSL local of the
@@ -1868,6 +2044,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         public static ArrayEachSnapshot perform(ProtosArrayValue receiver) {
             return snapshot(receiver);
+        }
+
+        @Specialization
+        @TruffleBoundary
+        public static ArrayEachSnapshot bytes(com.guillermomolina.protos.runtime.ProtosBytesValue receiver) {
+            return new ArrayEachSnapshot(receiver.indexedSnapshot());
         }
 
         @TruffleBoundary

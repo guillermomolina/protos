@@ -9070,6 +9070,12 @@ final class CanonicalToBytecodeLowerer {
                     builder, send, eachCallback, result, scratch, childResult, resumeValue);
             return;
         }
+        CanonicalClosure associationCallback = inlineAssociationEachCallback(send);
+        if (associationCallback != null) {
+            emitAssociationEachSend(
+                    builder, send, associationCallback, result, scratch, childResult, resumeValue);
+            return;
+        }
         emitDispatchedInvocation(
                 builder, InvocationShape.SEND, send.receiver(), send.message(), send.arguments(),
                 result, scratch, childResult, resumeValue,
@@ -9083,6 +9089,24 @@ final class CanonicalToBytecodeLowerer {
      * null}. Only the shape of the site is decided here; whether the
      * standard behaviors are actually selected is observed at run time.
      */
+    /*
+     * The literal two-parameter callback of an {@code each} send that the
+     * standard Map, IdentityMap or Environment iteration may run inline, or
+     * {@code null}; the selection itself is observed at run time.
+     */
+    private CanonicalClosure inlineAssociationEachCallback(CanonicalSend send) {
+        if (!"each".equals(send.message())
+                || send.contextual()
+                || send.arguments().size() != 1
+                || hasVectorArgument(send.arguments())
+                || hasNamedArgument(send.arguments())
+                || !(send.arguments().get(0) instanceof CanonicalClosure closure)) {
+            return null;
+        }
+        return admitsEachInlineCallback(closure, currentControlSiteContext(), 2)
+                ? closure : null;
+    }
+
     private CanonicalClosure inlineArrayEachCallback(CanonicalSend send) {
         if (!"each".equals(send.message())
                 || send.contextual()
@@ -9108,13 +9132,24 @@ final class CanonicalToBytecodeLowerer {
      */
     private boolean admitsArrayEachInlineCallback(
             CanonicalClosure closure, ControlSiteContext context) {
-        if (closure.parameters().size() != 1
+        return admitsEachInlineCallback(closure, context, 1);
+    }
+
+    /*
+     * The admission of an inline {@code each} callback with {@code arity}
+     * ordinary parameters, each a LOCAL binding of the callback scope that
+     * the iteration stores directly before every visit.
+     */
+    private boolean admitsEachInlineCallback(
+            CanonicalClosure closure, ControlSiteContext context, int arity) {
+        if (closure.parameters().size() != arity
                 || ownsItsReturnHome(closure, context)) {
             return false;
         }
-        CanonicalParameter parameter = closure.parameters().get(0);
-        if (parameter.rest() || parameter.defaultValue().isPresent()) {
-            return false;
+        for (CanonicalParameter parameter : closure.parameters()) {
+            if (parameter.rest() || parameter.defaultValue().isPresent()) {
+                return false;
+            }
         }
         CanonicalLexicalScope wholeTreeScope =
                 context.analysis() == null
@@ -9128,19 +9163,23 @@ final class CanonicalToBytecodeLowerer {
         CanonicalBindingAnalysis analysis =
                 compilationFacts.isolatedClosureAnalysis(closure);
         CanonicalLexicalScope scope = analysis.scopeOf(closure).orElse(null);
-        CanonicalBindingIdentity identity =
-                analysis.identityOf(parameter).orElse(null);
-        if (scope == null
-                || scope.observesContext()
-                || identity == null
-                || identity.owner() != scope
-                || CanonicalBindingAnalysis.storageOf(identity)
-                        != CanonicalLexicalScope.Storage.LOCAL) {
+        if (scope == null || scope.observesContext()) {
             return false;
         }
+        java.util.Set<String> parameterNames = new java.util.LinkedHashSet<>();
+        for (CanonicalParameter parameter : closure.parameters()) {
+            CanonicalBindingIdentity identity =
+                    analysis.identityOf(parameter).orElse(null);
+            if (identity == null
+                    || identity.owner() != scope
+                    || CanonicalBindingAnalysis.storageOf(identity)
+                            != CanonicalLexicalScope.Storage.LOCAL) {
+                return false;
+            }
+            parameterNames.add(identity.name());
+        }
         return admitsNormalMixedCallbackOwnCreations(
-                        closure.body(), analysis, scope,
-                        java.util.Set.of(identity.name()))
+                        closure.body(), analysis, scope, parameterNames)
                 && analysis.admitsParameterBindingsAndDirectParentCaptures(
                         context.analysis(),
                         scope,
@@ -9233,6 +9272,99 @@ final class CanonicalToBytecodeLowerer {
                 builder, callback, InlineBodyResult.DISCARD, null,
                 scratch, childResult, resumeValue, false,
                 java.util.Map.of(parameter, element));
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.emitLoadLocal(receiver);
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.beginBlock();
+        BytecodeLocal argument = builder.createLocal("invocationArgument", null);
+        stageOperand(builder, callback, argument,
+                scratch, childResult, resumeValue, stager);
+        emitDispatchedCall(
+                builder, callable, java.util.List.of(argument), null,
+                childResult, result, resumeValue, false);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /*
+     * An admitted {@code each} send of a literal two-parameter callback on a
+     * Map, IdentityMap or Environment: the receiver once, the standard
+     * selection observed without invoking anything, then one association
+     * snapshot whose keys and values the iteration stores into the callback's
+     * parameter locals before running its body inline; the result is the
+     * receiver. Any other selection invokes the selected method with the
+     * genuine Closure.
+     */
+    private void emitAssociationEachSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            CanonicalClosure callback,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        if (result == null || scratch == null || childResult == null || resumeValue == null) {
+            throw new AssertionError("each send result/scratch locals were not allocated");
+        }
+        OperandStager stager = this::emitBodyExpressionToLocal;
+        // The generic selection observes the Prelude, like GetMethod.
+        currentRootMayRequirePrelude = true;
+
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+
+        BytecodeLocal receiver = builder.createLocal("eachReceiver", null);
+        stageOperand(builder, send.receiver(), receiver,
+                scratch, childResult, resumeValue, stager);
+
+        BytecodeLocal standard = builder.createLocal("eachStandard", null);
+        builder.beginStoreLocal(standard);
+        builder.beginIsStandardAssociationEachSelection();
+        builder.emitLoadLocal(receiver);
+        builder.endIsStandardAssociationEachSelection();
+        builder.endStoreLocal();
+
+        BytecodeLocal callable = builder.createLocal("eachMethod", null);
+        builder.beginIfThenElse();
+        builder.emitLoadLocal(standard);
+        builder.beginBlock();
+        builder.endBlock();
+        emitGetMethod(builder, "each", receiver, callable);
+        builder.endIfThenElse();
+
+        builder.beginIfThenElse();
+        builder.emitLoadLocal(standard);
+
+        builder.beginBlock();
+        BytecodeLocal snapshot = builder.createLocal("eachSnapshot", null);
+        builder.beginStoreLocal(snapshot);
+        builder.beginGetAssociationEachSnapshot();
+        builder.emitLoadLocal(receiver);
+        builder.endGetAssociationEachSnapshot();
+        builder.endStoreLocal();
+
+        String keyName = callback.parameters().get(0).name();
+        String valueName = callback.parameters().get(1).name();
+        BytecodeLocal key = builder.createLocal(
+                NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + keyName, null);
+        BytecodeLocal value = builder.createLocal(
+                NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + valueName, null);
+        builder.beginWhile();
+        builder.beginAssociationEachNext(key, value);
+        builder.emitLoadLocal(snapshot);
+        builder.endAssociationEachNext();
+        emitI115InlineClosureBody(
+                builder, callback, InlineBodyResult.DISCARD, null,
+                scratch, childResult, resumeValue, false,
+                java.util.Map.of(keyName, key, valueName, value));
         builder.endWhile();
 
         builder.beginStoreLocal(result);
