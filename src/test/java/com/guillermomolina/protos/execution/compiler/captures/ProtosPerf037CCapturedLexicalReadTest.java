@@ -233,14 +233,36 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             }
 
             /*
-             * I115-R6 (experimental divergence from D179 C0): slot is
-             * module-owned (ROOT), so a later nearer binding, even
-             * PRESENT(null), does not shadow the module read.
+             * D179 C0: a reader whose creating activation never exposes its
+             * Context cannot have a nearer binding created between it and
+             * the module (guest code creates one only through an observed
+             * Context), so the module binding is its nearest selected binding
+             * and the read stays the static module read.
              */
             assertEquals(1, instructionsOf(reader, "ReadGlobal").size(), () -> names(reader).toString());
-            ProtosObjectValue nearer = reader.capturedLexicalEnvironmentForRuntime().context();
-            nearer.createLocalSlot("slot", ProtosNullValue.INSTANCE);
-            assertEquals("1", integerValue(call(reader, module)), "a nearer binding does not retarget a ROOT read");
+
+            /*
+             * A reader whose creator exposes its Context selects live: a
+             * nearer binding created there shadows the module binding, even
+             * PRESENT(null), and its removal uncovers the module binding.
+             */
+            evaluate(
+                    "makeScoped: () => {\n"
+                            + "  scope: context\n"
+                            + "  [() => { slot }, scope]\n"
+                            + "}\n"
+                            + "scoped: makeScoped()\n"
+                            + "shadowed: scoped[0]\n"
+                            + "nearer: scoped[1]\n",
+                    module);
+            ProtosClosureValue shadowed = closure("shadowed", module);
+            assertTrue(instructionsOf(shadowed, "ReadGlobal").isEmpty(), () -> names(shadowed).toString());
+            assertEquals("1", integerValue(call(shadowed, module)));
+            evaluate("nearer.slot: null\n", module);
+            assertSame(ProtosNullValue.INSTANCE, call(shadowed, module), "a nearer PRESENT(null) shadows");
+            assertEquals("1", integerValue(call(reader, module)), "the unobserved reader is unaffected");
+            evaluate("nearer.removeSlot(\"slot\")\n", module);
+            assertEquals("1", integerValue(call(shadowed, module)), "removal uncovers the module binding");
 
             // PRESENT(null) in the module is not ABSENT.
             module.context().assignLocalSlot("slot", ProtosNullValue.INSTANCE);
@@ -255,10 +277,8 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             assertSame(
                     ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
                     absent.error().parent().orElse(null),
-                    "an ABSENT module binding is SlotNotFound, never the nearer one");
-
-            nearer.removeLocalSlot("slot");
-            assertSlotNotFound(module, () -> call(reader, module));
+                    "an ABSENT module binding is SlotNotFound");
+            assertSlotNotFound(module, () -> call(shadowed, module));
         });
         System.out.println("PERF037C_PRESENT_NULL_VERSUS_ABSENT=PASS");
     }

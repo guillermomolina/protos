@@ -265,7 +265,11 @@ final class ProtosI115LazyCapturedFrameTest {
                     ProtosClosureValue.class,
                     plan.plan.executeBytecodeActivationForTesting(
                             deferredInvocation(fixture, plan.closure, List.of(newObject()), home)));
-            home.complete();
+            // The owning activation closes its own home when it leaves its
+            // scope; complete it here only if it is still open.
+            if (home.isActive()) {
+                home.complete();
+            }
             assertFalse(home.isActive());
             assertThrows(
                     ProtosSignalException.class,
@@ -349,6 +353,8 @@ final class ProtosI115LazyCapturedFrameTest {
                 bindings.createLocalSlot("Context", contextPrototype);
                 bindings.createLocalSlot("Error", errorPrototype);
                 bindings.createLocalSlot("SlotNotFound", new ProtosObjectValue(errorPrototype));
+                // An escaped return whose home completed is the standard InvalidReturn Error.
+                bindings.createLocalSlot("InvalidReturn", new ProtosObjectValue(errorPrototype));
                 bindings.createLocalSlot("Array", newObject());
                 bindings.freeze();
 

@@ -540,26 +540,23 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                         plan.executeBytecodeActivationForTesting(invocation);
 
                 /*
-                 * I115-R6: the write reached the nearer binding, while the
-                 * later ROOT-bound read of x still returns the module's.
+                 * D179 C0: this Closure never exposes its Context, so guest
+                 * code cannot create a binding nearer than the module's; the
+                 * module binding is the selected one for both the write and
+                 * the later read. A binding injected from Java into the
+                 * unobserved Context is not part of that selection and stays
+                 * untouched. Guest-visible shadowing through an observed
+                 * Context is covered by ProtosPerf037CCapturedLexicalReadTest.
                  */
-                assertSame(outer, result);
-
-                /*
-                 * The write must retarget to the now-nearer current context.
-                 */
+                assertSame(replacement, result);
                 assertSame(
                         replacement,
-                        invocation.context()
+                        module.context()
                                 .readLocalSlot("x")
                                 .orElseThrow());
-
-                /*
-                 * The statically proven outer owner must remain untouched.
-                 */
                 assertSame(
-                        outer,
-                        module.context()
+                        nearerBefore,
+                        invocation.context()
                                 .readLocalSlot("x")
                                 .orElseThrow());
             } finally {
@@ -851,12 +848,16 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                         plan.executeBytecodeActivationForTesting(invocation);
 
                 assertSame(outer, result);
-                assertTrue(invocation.context().hasLocalSlot("x"));
+                // The late `x: null` creates x in the Closure's own activation:
+                // a binding of its own scope (a frame local of the invocation,
+                // visible through its context only once that is observed).
+                CanonicalCreate createX =
+                        assertInstanceOf(
+                                CanonicalCreate.class,
+                                definition.body().expressions().get(1));
                 assertSame(
-                        ProtosNullValue.INSTANCE,
-                        invocation.context()
-                                .readLocalSlot("x")
-                                .orElseThrow());
+                        plan.bytecodeBindingAnalysisForTesting().scopeOf(definition).orElseThrow(),
+                        plan.bytecodeBindingAnalysisForTesting().identityOf(createX).orElseThrow().owner());
             } finally {
                 context.leave();
             }
@@ -1294,7 +1295,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
      * SlotNotFound instead of returning the receiver's x.
      */
     @Test
-    void moduleGlobalReadDoesNotFallBackToBoundReceiverAfterRemoval()
+    void moduleGlobalReadFallsBackToBoundReceiverAfterRemoval()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -1366,28 +1367,16 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 module.currentModuleKey().orElse(null),
                                 module.executionDomain());
 
-                // SlotNotFound, never the receiver's x nor a generic Error.
-                ProtosSignalException failure = assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                bound.executionPlan()
-                                        .orElseThrow()
-                                        .executeBytecodeActivationForTesting(
-                                                invocation));
-                ProtosObjectValue slotNotFound =
-                        com.guillermomolina.protos.runtime.ProtosCoreErrors.prototype(
-                                module,
-                                com.guillermomolina.protos.runtime.ProtosCoreErrors
-                                        .StandardError.SLOT_NOT_FOUND);
+                /*
+                 * EXECUTION_AND_CONTROL lookup steps 5-6: with the module
+                 * binding removed the lexical chain is exhausted, so the read
+                 * continues with the ordinary member read on the receiver.
+                 */
                 assertSame(
-                        module.prelude().orElseThrow().bindings()
-                                .readLocalSlot("SlotNotFound").orElseThrow(),
-                        slotNotFound,
-                        "the fixture's standard SlotNotFound prototype");
-                assertSame(
-                        slotNotFound,
-                        failure.error().parent().orElse(null),
-                        "the Error must be a SlotNotFound occurrence");
+                        receiverValue,
+                        bound.executionPlan()
+                                .orElseThrow()
+                                .executeBytecodeActivationForTesting(invocation));
                 assertTrue(receiver.hasLocalSlot("x"));
                 assertFalse(module.context().hasLocalSlot("x"));
             } finally {

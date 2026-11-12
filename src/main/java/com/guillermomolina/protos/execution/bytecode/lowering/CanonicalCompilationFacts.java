@@ -761,15 +761,14 @@ final class CanonicalCompilationFacts {
      * receiver, {@code methodHome}, ReturnHome and Prelude are preserved
      * independently of the lexical environment.
      *
-     * <p>NORMATIVE DIVERGENCE (not an established equivalence):
+     * <p>Accepted by the project owner as an unobservable representation:
      * {@code CALLABLES.md} §1 and {@code EXECUTION_AND_CONTROL.md} §4 state
      * that every Closure captures its genuine lexical execution context by
-     * reference and that its invocation context has that captured context as
-     * its immediate lexical parent. A Closure classified here receives the
-     * creator's own lexical parent instead. The argument that no lexical
-     * traversal of such a Closure can reach the omitted context (only bare
-     * lookups traverse, and all of them resolve locally) is not a ratified
-     * proof; the classification awaits an owner decision.
+     * reference. A Closure classified here performs no lexical traversal
+     * that could reach the omitted creator context (every bare reference
+     * resolves in its own scope, and it does not observe {@code context}),
+     * so receiving the creator's lexical parent instead is not observable by
+     * guest code.
      */
     static boolean capturesCreatorContext(
             CanonicalClosure definition,

@@ -74,22 +74,25 @@ final class ProtosPerf025LazyLexicalCaptureTest {
                         privateField(outer.callee(), "context"),
                         "creating a Closure must not materialize the outer guest Context");
             }
+            // PLAT066-C: a Closure that does not use its creator is created
+            // over the creator's own captured environment, so creating it
+            // neither captures nor materializes the creator's context.
             ProtosLexicalEnvironment captured =
                     trivial.capturedLexicalEnvironmentForRuntime();
-            assertTrue(captured.isDeferredForRuntime());
             assertSame(
                     make.capturedLexicalEnvironmentForRuntime(),
-                    captured.outer(),
-                    "the outer chain is shared by reference, not copied");
+                    captured,
+                    "the creator's captured chain is shared by reference, not copied");
 
             assertEquals("1", integerValue(invokeDirect(trivial, module).result()));
             if (outer.callee() != null) {
                 assertNull(privateField(outer.callee(), "context"));
             }
-            assertNull(
-                    captured.materializedContextOrNullForRuntime(),
-                    "trivial closure invocation must not observe the outer context");
-            assertTrue(captured.isDeferredForRuntime());
+            if (captured != null) {
+                assertNull(
+                        captured.materializedContextOrNullForRuntime(),
+                        "trivial closure invocation must not observe the outer context");
+            }
         });
         System.out.println("TRIVIAL_CLOSURE_DOES_NOT_FORCE_OUTER_CONTEXT=PASS");
     }
@@ -99,7 +102,7 @@ final class ProtosPerf025LazyLexicalCaptureTest {
         withCore(module -> {
             ProtosClosureValue make =
                     parsedClosure(
-                            "() => { [() => 1, () => 2] }",
+                            "() => { [() => { context\n1 }, () => { context\n2 }] }",
                             "perf025-lazy-shared.protos",
                             module);
             Invocation outer = invokeDirect(make, module);
@@ -130,7 +133,7 @@ final class ProtosPerf025LazyLexicalCaptureTest {
         withCore(module -> {
             List<Object> pair =
                     elements(evaluate(
-                            "make: () => { [() => 1, context] }\nmake()",
+                            "make: () => { [() => { context\n1 }, context] }\nmake()",
                             "perf025-lazy-context.protos",
                             module));
             ProtosClosureValue closure = assertInstanceOf(ProtosClosureValue.class, pair.get(0));
@@ -680,12 +683,12 @@ final class ProtosPerf025LazyLexicalCaptureTest {
         withCore(module -> {
             ProtosClosureValue first =
                     parsedClosure(
-                            "() => 1",
+                            "() => { context\n1 }",
                             "i115-e2a-published-first.protos",
                             module);
             ProtosClosureValue second =
                     parsedClosure(
-                            "() => 2",
+                            "() => { context\n2 }",
                             "i115-e2a-published-second.protos",
                             module);
             assertNotSame(first, second);
@@ -767,9 +770,9 @@ final class ProtosPerf025LazyLexicalCaptureTest {
             assertSame(module.context(), expected.context());
 
             ProtosClosureValue first = parsedClosure(
-                    "() => 1", "i115-e2b-materialized-first.protos", module);
+                    "() => { context\n1 }", "i115-e2b-materialized-first.protos", module);
             ProtosClosureValue second = parsedClosure(
-                    "() => 2", "i115-e2b-materialized-second.protos", module);
+                    "() => { context\n2 }", "i115-e2b-materialized-second.protos", module);
 
             assertNotSame(first, second);
             assertSame(expected, first.capturedLexicalEnvironmentForRuntime());
@@ -794,7 +797,7 @@ final class ProtosPerf025LazyLexicalCaptureTest {
             assertSame(enclosing, construction.lexicalEnvironmentForClosureCapture());
 
             ProtosClosureValue closure = parsedClosure(
-                    "() => 3", "i115-e2b-construction-fallback.protos", construction);
+                    "() => { context\n3 }", "i115-e2b-construction-fallback.protos", construction);
 
             assertSame(enclosing, closure.capturedLexicalEnvironmentForRuntime());
             assertEquals("3", integerValue(invokeDirect(closure, module).result()));

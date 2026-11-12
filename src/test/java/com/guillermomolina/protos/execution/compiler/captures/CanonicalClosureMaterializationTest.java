@@ -44,7 +44,8 @@ class CanonicalClosureMaterializationTest {
                 (ProtosClosureValue)
                         ProtosTestExecutionSupport.evaluate(
                                 "closure-materialization-capture.protos",
-                                "() => null",
+                                // PLAT066-C: a capturing Closure captures its creator.
+                                "() => { context\nnull }",
                                 activation);
 
         assertSame(current, closure.capturedLexicalContexts().get(0));
@@ -72,7 +73,8 @@ class CanonicalClosureMaterializationTest {
                 (ProtosClosureValue)
                         ProtosTestExecutionSupport.evaluate(
                                 "closure-materialization-construction.protos",
-                                "() => null",
+                                // PLAT066-C: a capturing Closure captures its creator.
+                                "() => { context\nnull }",
                                 construction);
 
         assertSame(

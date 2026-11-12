@@ -29,6 +29,7 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
+import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.Node;
@@ -192,7 +193,12 @@ abstract class ProtosLexicalSelectionNode extends Node {
 
     // ---- Guards and specialization-time helpers ----------------------------------
 
-    /* The current scope holds nothing while it has neither a Context nor a frame view. */
+    /*
+     * The current scope holds nothing while it has neither a Context nor a
+     * frame view. Both may appear later, so the guard is re-evaluated on
+     * every execution.
+     */
+    @NonIdempotent
     static boolean hasNoCurrentScopeStorage(ProtosActivation activation) {
         return activation.materializedContextOrNullForRuntime() == null
                 && activation.publishedClosureLexicalAuthorityForRuntime() == null;
@@ -202,8 +208,11 @@ abstract class ProtosLexicalSelectionNode extends Node {
      * Live membership of the nearer scopes: none of the first {@code depth}
      * captured scopes holds the name. A scope without any storage is skipped
      * by field reads alone; only a scope that can hold bindings is queried.
-     * The depth is a cached constant, so the loop is exploded.
+     * The depth is a cached constant, so the loop is exploded. A nearer
+     * binding may be created or removed at any time, so the guard is
+     * re-evaluated on every execution.
      */
+    @NonIdempotent
     @ExplodeLoop
     static boolean nearerScopesLackBinding(
             ProtosLexicalEnvironment environment, int depth, String name) {
