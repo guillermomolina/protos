@@ -379,7 +379,12 @@ final class ProtosI095BooleanProtocolInlineTest {
                 """;
         Execution and = execute(false, andSource);
         assertEquals(ProtosBooleanValue.TRUE, and.value());
-        assertEquals(List.of(INLINE_DEPTH), and.probe().depths(), and.probe()::toString);
+        // The and of run(true) runs its body inline (both probes at the inline
+        // depth). run(false) is reached through the right operand of the
+        // module-level &&, which owns its return home and keeps its own root.
+        assertEquals(List.of(INLINE_DEPTH, INLINE_DEPTH, INLINE_DEPTH + 1),
+                and.probe().stacks.stream().map(List::size).toList(),
+                and.probe()::toString);
         Regions andRegions = regions(and.rootOfFirstProbe());
         assertAggressive(andRegions.onTrue());
         assertTrue(andRegions.onTrue().stream()

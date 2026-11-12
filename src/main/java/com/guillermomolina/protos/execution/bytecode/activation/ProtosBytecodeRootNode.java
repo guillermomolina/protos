@@ -2276,12 +2276,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     @ConstantOperand(type = String.class, name = "name")
     public static final class SetAttribute {
+        /*
+         * A frozen object rejects every assignment. Its state is not part of
+         * the shape, so the direct write admits only an unfrozen receiver; a
+         * frozen one takes the generic path, which signals the Error.
+         */
         @ForceQuickening
         @Specialization(
                 guards = {
                     "isOrdinaryObject(receiver)",
                     "cachedShape.check(receiver)",
-                    "propertyPresent"
+                    "propertyPresent",
+                    "!receiver.isFrozen()"
                 },
                 limit = "3")
         public static void direct(

@@ -256,25 +256,25 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
             context.enter();
             try {
                 Probe nonLocalReturn = new Probe();
+                ProtosBytecodeRootNode nonLocalReturnRoot =
+                        lowerRoot(
+                                """
+                                run: (probe) => {
+                                    Array(1, 2, 3).each((element) => {
+                                        probe(element)
+                                        ^element + 40
+                                    })
+                                    100
+                                }
+                                run(probe) + 1
+                                """);
                 assertInteger(
                         42,
-                        lowerRoot(
-                                        """
-                                        run: (probe) => {
-                                            Array(1, 2, 3).each((element) => {
-                                                probe(element)
-                                                ^element + 40
-                                            })
-                                            100
-                                        }
-                                        run(probe) + 1
-                                        """)
-                                .getCallTarget()
-                                .call(nonLocalReturn.module()));
-                assertEquals(1, nonLocalReturn.calls.get(), "NLR stops later visits");
-                for (List<RootNode> stack : nonLocalReturn.stacks) {
-                    assertPhysicalProbeCallback(stack);
-                }
+                        nonLocalReturnRoot.getCallTarget().call(nonLocalReturn.module()));
+                // The callback's return targets run's own return home, so the
+                // callback runs inline in run, as a block inlined into its home
+                // method returns locally; the return still ends the iteration.
+                assertNativeArrayProbeFrames(nonLocalReturnRoot, nonLocalReturn, 1);
 
                 Probe bytesNonLocalReturn = new Probe();
                 assertInteger(

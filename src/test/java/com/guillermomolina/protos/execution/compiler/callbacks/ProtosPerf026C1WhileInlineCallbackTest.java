@@ -397,13 +397,13 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                                 """);
 
                 assertInteger(1, root.getCallTarget().call(probe.module()));
-                assertEquals(List.of(3), probe.depths(), () -> "stacks=" + probe.stacks);
+                // The module-level body owns its return home and keeps its own
+                // root; the loop runs in the module root and invokes it directly.
+                assertEquals(List.of(2), probe.depths(), () -> "stacks=" + probe.stacks);
                 List<RootNode> stack = probe.stacks.get(0);
-                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0));
-                assertFalse(
-                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1))
-                                .isSemanticActivationRoot());
-                assertSame(root, stack.get(2));
+                assertNotSame(root,
+                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0)));
+                assertSame(root, stack.get(1));
             } finally {
                 context.leave();
             }

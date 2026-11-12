@@ -8654,6 +8654,22 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
+     * A callback created by a Closure activation captures that activation's
+     * return home, so a return in the callback targets the very home a
+     * return written in the creating root targets. Inline, the callback's
+     * return is lowered exactly as one written in that root and reaches the
+     * same home through the root's own activation, as a block inlined into
+     * its home method returns locally. A callback created outside any
+     * Closure activation (by a module) owns its own return home; one that
+     * may observe it keeps its genuine activation.
+     */
+    private boolean ownsItsReturnHome(CanonicalClosure closure, ControlSiteContext context) {
+        return compilationFacts.mayObserveReturnHome(closure)
+                && (context.topScope() == null
+                        || context.topScope().kind() != CanonicalLexicalScope.Kind.CLOSURE);
+    }
+
+    /*
      * I095-B1: admission belongs to the entire callback activation,
      * not to individual expression categories. A selected literal
      * Closure is admitted when its own lexical scope, return home and
@@ -8667,7 +8683,7 @@ final class CanonicalToBytecodeLowerer {
     private boolean admitsNormalInlineControlBody(
             CanonicalClosure closure, ControlSiteContext context) {
         if (!closure.parameters().isEmpty()
-                || compilationFacts.mayObserveReturnHome(closure)) {
+                || ownsItsReturnHome(closure, context)) {
             return false;
         }
 
@@ -9093,7 +9109,7 @@ final class CanonicalToBytecodeLowerer {
     private boolean admitsArrayEachInlineCallback(
             CanonicalClosure closure, ControlSiteContext context) {
         if (closure.parameters().size() != 1
-                || compilationFacts.mayObserveReturnHome(closure)) {
+                || ownsItsReturnHome(closure, context)) {
             return false;
         }
         CanonicalParameter parameter = closure.parameters().get(0);

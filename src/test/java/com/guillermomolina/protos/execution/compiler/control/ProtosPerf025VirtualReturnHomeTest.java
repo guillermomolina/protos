@@ -296,8 +296,9 @@ final class ProtosPerf025VirtualReturnHomeTest {
                 assertInteger(7, evaluate("escape()\n", module));
             }
             evaluate("late.call: (value) => { 100 + value }\n", module);
-            // I115 experimental: source Closure dispatch ignores local call.
-            assertInteger(7, evaluate("callOne(late, 7)\n", module));
+            // CALLABLES: a nearer call slot of a Closure is selected by the
+            // ordinary invocation lookup instead of the Closure's own body.
+            assertInteger(107, evaluate("callOne(late, 7)\n", module));
             evaluate("late.removeSlot(\"call\")\n", module);
             assertInteger(7, evaluate("callOne(late, 7)\n", module));
             assertInteger(7, evaluate("escape()\n", module));
