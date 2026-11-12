@@ -268,7 +268,7 @@ final class ProtosPerf006B3CSuspensionCapableNativeLeafTest {
                 ProtosNativeSuspension yielded =
                         assertInstanceOf(
                                 ProtosNativeSuspension.class,
-                                continuation.getResult());
+                                terminalContinuationResult(continuation));
                 assertSame(
                         descriptor.get(),
                         yielded);
@@ -533,15 +533,23 @@ final class ProtosPerf006B3CSuspensionCapableNativeLeafTest {
                 .newModuleActivation();
     }
 
+    /*
+     * The pending chain may include terminal-call transports
+     * (ProtosTailCallContinuation) between Truffle continuations; the leaf is
+     * found through both without consuming either, so the no-replay
+     * guarantees below still observe the original native suspension.
+     */
     private static Object terminalContinuationResult(ContinuationResult continuation) {
         Object result = continuation.getResult();
         int depth = 0;
-        while (result instanceof ContinuationResult nested) {
+        while (ProtosTailCallContinuation.isPending(result)) {
             depth++;
             if (depth > 32) {
                 throw new AssertionError("unexpectedly deep Bytecode continuation composition");
             }
-            result = nested.getResult();
+            result = result instanceof ContinuationResult nested
+                    ? nested.getResult()
+                    : ProtosTailCallContinuation.suspensionLeaf(result);
         }
         return result;
     }

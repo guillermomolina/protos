@@ -660,40 +660,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return java.util.Collections.unmodifiableMap(present);
     }
 
-    @Override
-    public Object interceptControlFlowException(
-            ControlFlowException transfer,
-            VirtualFrame frame,
-            BytecodeNode bytecodeNode,
-            int bytecodeIndex)
-            throws Throwable {
-        /*
-         * PLAT070-configured unwindExceptions bypass this interceptor and
-         * exceptional epilogues. Bytecode TryFinally performs their unwinding;
-         * the external owning invocation boundary (including continuation
-         * resumption) consumes an exact-home return. Retain interception for
-         * other control transfers that legitimately reach this hook.
-         */
-        ProtosReturnHome owned =
-                ProtosFrameArguments.ownedReturnHomeOrNull(frame.getArguments());
-        if (owned != null) {
-            if (transfer instanceof ProtosNonLocalReturnException nonLocalReturn
-                    && nonLocalReturn.target() == owned
-                    && owned.isActive()) {
-                owned.closeOwned();
-                return nonLocalReturn.value();
-            }
-            owned.closeOwned();
-        }
-        /*
-         * I111-B: only a semantic activation root is a CLI008 origin; an
-         * auxiliary root bridges the transfer without a position, exactly as
-         * the former structured/C-prime interpreter did. Exceptional path only;
-         * the classification is a compilation-final property of this root.
-         */
-        throw transfer;
-    }
-
     /*
      * I115: a Java/Truffle internal failure that leaves this activation without
      * crossing EpilogForException still definitively abandons it.

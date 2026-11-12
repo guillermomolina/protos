@@ -374,8 +374,9 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                 }
                 run()
                 """,
-                // The callback's own RootTag plus the I096 inline body of step().
-                2);
+                // The callback's own RootTag only: step() keeps its own
+                // CallTarget (owner decision: no I096 expansion into the caller).
+                1);
         System.out.println("PERF026_C1_NESTED_CLOSURE_LITERAL_FALLBACK=YES");
     }
 

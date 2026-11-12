@@ -75,6 +75,10 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                                 leafSource,
                                 leafDefinition.body().span(),
                                 finalValue);
+                // The callee's no-home proof lives on its physical root and is
+                // recorded by the lowering; this hand-built root records the
+                // same proof, which holds because `() => { null }` has no `^`.
+                syntheticLeafRoot.recordReturnHomeProvenUnobservable(true);
                 ProtosClosureExecutionPlan leafPlan =
                         ProtosClosureExecutionPlan.bytecode(
                                 leafDefinition,
@@ -339,11 +343,15 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
 
     private static ProtosActivation activationOf(
             ContinuationResult continuation) {
+        /*
+         * Frame argument 0 holds the invocation's Closure header until its
+         * activation is demanded; the runtime accessor publishes it once into
+         * that same frame, so repeated reads after each suspension observe the
+         * exact invocation identity (no replay) without a fresh activation.
+         */
         Object[] arguments = continuation.getFrame().getArguments();
         assertTrue(arguments.length > 0);
-        return assertInstanceOf(
-                ProtosActivation.class,
-                arguments[0]);
+        return ProtosFrameArguments.activation(arguments);
     }
 
     private static ProtosClosureValue semanticClosure(

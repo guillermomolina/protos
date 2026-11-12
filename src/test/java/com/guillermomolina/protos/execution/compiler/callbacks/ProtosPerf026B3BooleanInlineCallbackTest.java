@@ -150,9 +150,10 @@ final class ProtosPerf026B3BooleanInlineCallbackTest {
                         }
                         run()
                         """,
-                        // run, the B3 callback, and the I096 inline bodies of
-                        // receiver() and record(2).
-                        4);
+                        // run and the B3 callback. receiver() and record(2) are
+                        // ordinary binding calls that keep their own CallTargets
+                        // (owner decision: no I096 expansion into the caller).
+                        2);
         assertInteger(123, falseSelected);
 
         Object trueSelected =
@@ -175,9 +176,10 @@ final class ProtosPerf026B3BooleanInlineCallbackTest {
                         }
                         run()
                         """,
-                        // run, the B3 callback, and the I096 inline bodies of
-                        // receiver() and record(2).
-                        4);
+                        // run and the B3 callback. receiver() and record(2) are
+                        // ordinary binding calls that keep their own CallTargets
+                        // (owner decision: no I096 expansion into the caller).
+                        2);
         assertInteger(123, trueSelected);
         System.out.println("PERF026_B3_EAGER_ORDERED_ARGUMENT_EVALUATION_PRESERVED=YES");
     }

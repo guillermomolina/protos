@@ -97,7 +97,10 @@ final class ProtosPerf006B2AClosureActivationTest {
                         semanticClosure.capturedLexicalContexts(),
                         invocation.capturedLexicalContexts());
                 assertTrue(invocation.ownsReturnHome());
-                assertTrue(invocation.returnHome().orElseThrow().isActive());
+                // CALLABLES.md: once the owning invocation has completed, its
+                // return home is no longer active (a later `^` targeting it
+                // signals InvalidReturn); the root epilogue closes it.
+                assertFalse(invocation.returnHome().orElseThrow().isActive());
             } finally {
                 context.leave();
             }
