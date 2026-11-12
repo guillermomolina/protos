@@ -57,11 +57,11 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Topology is read from the bytecode of the root that called the native
  * {@code probe} first, lowered by the single proof-optimized lowering
- * (PLAT067-B): after the canonical classification, the
- * {@code IsCanonicalIfTrueTrue} and {@code IsCanonicalBooleanFalseClass}
- * branches hold the TRUE and FALSE paths and the next prepared send is MISS.
- * An aggressive inline path contains no prepared send, no prepared Boolean
- * call and no B-prime admission. Physical callees are seen through the probe's
+ * (PLAT067-B): after the standard/custom guard ({@code
+ * IsCanonicalBooleanOperand}), {@code CanonicalControlCondition} and its branch
+ * targets delimit the TRUE and FALSE paths, and the ordinary selection
+ * ({@code GetMethod}) serves any other receiver. An inline path materializes
+ * no Closure for its callback. Physical callees are seen through the probe's
  * CallTarget stack (depth 2 is a callee of the module root). No test mutates
  * the frozen global root.
  */
@@ -148,7 +148,7 @@ final class ProtosI095BooleanProtocolInlineTest {
         assertInteger(12, normal.value());
         assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
         ProtosBytecodeRootNode runRoot = normal.rootOfFirstProbe();
-        Regions regions = regions(instructionNames(runRoot));
+        Regions regions = regions(runRoot);
         assertAggressive(regions.onTrue());
         assertAggressive(regions.onFalse());
         List<String> sources = rootTagSources(runRoot.getBytecodeNode().getTagTree());
@@ -192,9 +192,9 @@ final class ProtosI095BooleanProtocolInlineTest {
         assertEquals(List.of(INLINE_DEPTH, INLINE_DEPTH, INLINE_DEPTH, INLINE_DEPTH + 1),
                 forward.probe().stacks.stream().map(List::size).toList(),
                 forward.probe()::toString);
-        Regions forwardRegions = regions(instructionNames(forward.rootOfFirstProbe()));
+        Regions forwardRegions = regions(forward.rootOfFirstProbe());
         assertAggressive(forwardRegions.onTrue());
-        assertEquals(null, forwardRegions.onFalse(), "FALSE takes the shared ordinary send");
+        assertOrdinaryCallback(forwardRegions.onFalse());
         assertParity(inlineTrue, 12);
 
         String inlineFalse = """
@@ -218,8 +218,8 @@ final class ProtosI095BooleanProtocolInlineTest {
         assertEquals(List.of(INLINE_DEPTH, INLINE_DEPTH + 1, INLINE_DEPTH, INLINE_DEPTH),
                 reversed.probe().stacks.stream().map(List::size).toList(),
                 reversed.probe()::toString);
-        Regions regions = regions(instructionNames(reversed.rootOfFirstProbe()));
-        assertEquals(null, regions.onTrue(), "TRUE takes the shared ordinary send");
+        Regions regions = regions(reversed.rootOfFirstProbe());
+        assertOrdinaryCallback(regions.onTrue());
         assertAggressive(regions.onFalse());
         assertParity(inlineFalse, 12);
 
@@ -274,7 +274,7 @@ final class ProtosI095BooleanProtocolInlineTest {
                 """;
         Execution normal = execute(false, source);
         assertTrue(position(instructionNames(normal.rootOfFirstProbe()),
-                        "TryCompactCanonicalBooleanOne", 0) >= 0,
+                        "IsCanonicalBooleanOperand", 0) >= 0,
                 "the site is admitted");
         assertParity(source, 1291251295257L);
 
@@ -334,8 +334,8 @@ final class ProtosI095BooleanProtocolInlineTest {
         // I101-A: the literal receiver selects nothing statically, so the
         // admitted site keeps neither a classification nor a send.
         List<String> structureNames = instructionNames(normal.rootOfFirstProbe());
-        assertTrue(position(structureNames, "PrepareSend", 0) < 0
-                        && position(structureNames, "TryCompactCanonicalBooleanOne", 0) < 0,
+        assertTrue(position(structureNames, "GetMethod", 0) < 0
+                        && position(structureNames, "IsCanonicalBooleanOperand", 0) < 0,
                 () -> "an unselected binding argument is admitted: " + structureNames);
 
         String error = """
@@ -380,13 +380,13 @@ final class ProtosI095BooleanProtocolInlineTest {
         Execution and = execute(false, andSource);
         assertEquals(ProtosBooleanValue.TRUE, and.value());
         assertEquals(List.of(INLINE_DEPTH), and.probe().depths(), and.probe()::toString);
-        Regions andRegions = regions(instructionNames(and.rootOfFirstProbe()));
+        Regions andRegions = regions(and.rootOfFirstProbe());
         assertAggressive(andRegions.onTrue());
         assertTrue(andRegions.onTrue().stream()
-                        .anyMatch(name -> name.contains("RequireCanonicalBooleanControlResult")),
+                        .anyMatch(name -> name.contains("RequireCanonicalBooleanResult")),
                 andRegions.onTrue()::toString);
         assertFalse(andRegions.onFalse().stream()
-                        .anyMatch(name -> name.contains("RequireCanonicalBooleanControlResult")),
+                        .anyMatch(name -> name.contains("RequireCanonicalBooleanResult")),
                 andRegions.onFalse()::toString);
 
         String orSource = """
@@ -403,10 +403,10 @@ final class ProtosI095BooleanProtocolInlineTest {
                 """;
         Execution or = execute(false, orSource);
         assertEquals(ProtosBooleanValue.TRUE, or.value());
-        Regions orRegions = regions(instructionNames(or.rootOfFirstProbe()));
+        Regions orRegions = regions(or.rootOfFirstProbe());
         assertAggressive(orRegions.onFalse());
         assertTrue(orRegions.onFalse().stream()
-                        .anyMatch(name -> name.contains("RequireCanonicalBooleanControlResult")),
+                        .anyMatch(name -> name.contains("RequireCanonicalBooleanResult")),
                 orRegions.onFalse()::toString);
 
         // Every non-Boolean normal result fails after the callback ran once.
@@ -514,11 +514,12 @@ final class ProtosI095BooleanProtocolInlineTest {
             Execution normal = execute(false, source);
             assertInteger(7, normal.value());
             List<String> names = instructionNames(normal.rootOfFirstProbe());
-            Regions regions = regions(names);
+            Regions regions = regions(normal.rootOfFirstProbe());
             assertAggressive(regions.onTrue());
             assertAggressive(regions.onFalse());
-            int falseClass = position(names, "IsCanonicalBooleanFalseClass", 0);
-            assertTrue(position(names, "PrepareSendZero", falseClass) > falseClass,
+            // MISS: ordinary selection follows the standard Boolean guard.
+            int guard = position(names, "IsCanonicalBooleanOperand", 0);
+            assertTrue(guard >= 0 && position(names, "GetMethod", guard) > guard,
                     names::toString);
             assertParity(source, 7);
         }
@@ -736,37 +737,73 @@ final class ProtosI095BooleanProtocolInlineTest {
     }
 
     /**
-     * TRUE and FALSE paths completed by the first admitted dynamic Boolean
-     * control; null when that canonical receiver has no own path and takes
-     * the shared ordinary send (MISS and ORDINARY), whose prepared send
-     * follows the last classification test.
+     * The TRUE and FALSE paths of the first dynamic Boolean control of
+     * {@code root}: after the standard/custom guard, CanonicalControlCondition
+     * tests the receiver against its polarity; the instructions between its
+     * conditional branch and the unconditional branch to the end of the
+     * construct run when the receiver equals the polarity, and those from that
+     * branch target to the end run otherwise. Regions are delimited by the
+     * actual branch targets, never by instruction names.
      */
     private record Regions(List<String> onTrue, List<String> onFalse) {}
 
-    private static Regions regions(List<String> names) {
-        int classify = position(names, "TryCompactCanonicalBooleanOne", 0);
-        int trueClass = position(names, "IsCanonicalIfTrueTrue", classify);
-        int falseClass = position(names, "IsCanonicalBooleanFalseClass", classify);
-        int last = Math.max(trueClass, falseClass);
-        int shared = position(names, "PrepareSend", last);
-        assertTrue(classify >= 0 && last > classify
-                        && (trueClass < 0 || falseClass < 0 || falseClass > trueClass)
-                        && shared > last,
-                names::toString);
-        return new Regions(
-                trueClass < 0 ? null
-                        : names.subList(trueClass + 1, falseClass > trueClass ? falseClass : shared),
-                falseClass < 0 ? null : names.subList(falseClass + 1, shared));
+    private static Regions regions(ProtosBytecodeRootNode root) {
+        root.getRootNodes().ensureComplete();
+        List<Instruction> code = root.getBytecodeNode().getInstructionsAsList();
+        List<String> names = code.stream().map(ProtosInstructionNames::of).toList();
+        int guard = position(names, "IsCanonicalBooleanOperand", 0);
+        int condition = position(names, "CanonicalControlCondition", guard);
+        int test = position(names, "branch.false", condition);
+        assertTrue(guard >= 0 && condition > guard && test > condition, names::toString);
+        int otherStart = indexAt(code, branchTarget(code.get(test)));
+        int selectedEnd = otherStart - 1;
+        assertEquals("branch", names.get(selectedEnd), names::toString);
+        int end = indexAt(code, branchTarget(code.get(selectedEnd)));
+        List<String> selected = names.subList(test + 1, selectedEnd);
+        List<String> other = names.subList(otherStart, end);
+        return polarity(code.get(condition))
+                ? new Regions(selected, other)
+                : new Regions(other, selected);
     }
 
-    /**
-     * No prepared send of the control and no B-prime admission. Calls made by
-     * the inline body itself keep the generic prepared-call dispatch, which
-     * includes its structured-call check, so that check is not evidence.
-     */
+    private static int branchTarget(Instruction branch) {
+        return branch.getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.BYTECODE_INDEX)
+                .findFirst()
+                .orElseThrow()
+                .asBytecodeIndex();
+    }
+
+    private static int indexAt(List<Instruction> code, int bytecodeIndex) {
+        for (int index = 0; index < code.size(); index++) {
+            if (code.get(index).getBytecodeIndex() == bytecodeIndex) {
+                return index;
+            }
+        }
+        throw new AssertionError("no instruction at " + bytecodeIndex);
+    }
+
+    private static boolean polarity(Instruction condition) {
+        return (Boolean) condition.getArguments().stream()
+                .filter(argument -> argument.getName().equals("polarity"))
+                .findFirst()
+                .orElseThrow()
+                .asConstant();
+    }
+
+    /** An inline region: its callback is never materialized as a Closure. */
     private static void assertAggressive(List<String> region) {
-        assertFalse(region.stream().anyMatch(name -> name.contains("PrepareSend")
-                        || name.contains("AdmitsInlineLiteralCallback")),
+        assertFalse(region.stream().anyMatch(name -> name.contains("MaterializeClosure")
+                        || name.contains("MaterializeCurrentClosure")
+                        || name.contains("MaterializeSelectedCallback")),
+                region::toString);
+    }
+
+    /** An unproven callback: invoked as an ordinary Closure, with no inline body. */
+    private static void assertOrdinaryCallback(List<String> region) {
+        assertTrue(region.stream().anyMatch(name -> name.contains("CallNilaryMethod")),
+                region::toString);
+        assertFalse(region.stream().anyMatch(name -> name.contains("ResetInlineCallbackLocal")),
                 region::toString);
     }
 

@@ -261,7 +261,19 @@ final class CanonicalToBytecodeLowerer {
                 @Override
                 public boolean inlineCallbackPosition(CanonicalSend send, int position) {
                     I115Control control = I115Control.of(send.message(), send.arguments());
-                    return control != null && control.callbackPosition(position);
+                    if (control != null) {
+                        return control.callbackPosition(position);
+                    }
+                    /*
+                     * The right operand of and/or runs inline for a canonical
+                     * receiver. It is an inline position only when any other
+                     * receiver can receive it over the live frame; otherwise
+                     * that receiver gets a genuine Closure with cells.
+                     */
+                    return position == 1
+                            && !send.contextual()
+                            && i115NativeBooleanControl(send.message(), send.arguments()) != null
+                            && admitsSelectedCallbacks(send.arguments());
                 }
             };
 
@@ -6498,8 +6510,10 @@ final class CanonicalToBytecodeLowerer {
         /*
          * The inline body keeps the RootTag of the Closure activation it
          * replaces, so instruments and the debugger still see that guest
-         * root, and project its scope, inside the physical parent.
+         * root, and project its scope, inside the physical parent. The tag
+         * covers exactly the source of that Closure literal.
          */
+        builder.beginSourceSection(closure.span().startOffset(), closure.span().length());
         builder.beginTag(StandardTags.RootTag.class);
         builder.beginBlock();
         emitInlineClosureBodyContent(builder, closure, mode, result,
@@ -6507,6 +6521,7 @@ final class CanonicalToBytecodeLowerer {
                 boundParameters);
         builder.endBlock();
         builder.endTag(StandardTags.RootTag.class);
+        builder.endSourceSection();
     }
 
     private void emitInlineClosureBodyContent(
@@ -6746,7 +6761,9 @@ final class CanonicalToBytecodeLowerer {
          * inline callbacks keep their captures in plain locals.
          */
         boolean selectsCustomBehavior =
-                !control.loop() && admitsSelectedCallbacks(arguments);
+                !control.loop()
+                        && canonicalBooleanLiteral(receiver) == null
+                        && admitsSelectedCallbacks(arguments);
 
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
@@ -7203,6 +7220,15 @@ final class CanonicalToBytecodeLowerer {
         }
 
         // Any other receiver: ordinary selection on the staged receiver.
+        if (admitsSelectedCallbacks(arguments)) {
+            emitSelectedConditionalSend(
+                    builder, selector, receiverValue, arguments, result,
+                    scratch, childResult, resumeValue, stager, false);
+            builder.endIfThenElse();
+            builder.endBlock();
+            builder.endTag(StandardTags.CallTag.class);
+            return;
+        }
         builder.beginBlock();
         BytecodeLocal callable = builder.createLocal("invocationCallable", null);
         emitGetMethod(builder, selector, receiverValue, callable);
