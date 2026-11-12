@@ -83,16 +83,28 @@ final class ProtosFunctionCallDispatchers {
     private ProtosFunctionCallDispatchers() {}
 
     /*
-     * A source function may bypass method selection only while its
-     * inherited call behavior remains canonical. An already-selected
-     * method has a separate invocation contract.
+     * A source function may bypass method selection only while ordinary
+     * `call` lookup would select the standard Object.call behavior: the
+     * inherited canonical selection, or a nearer local slot holding that same
+     * standard implementation, whose Closure branch executes this Closure's
+     * own body. Dispatch is keyed by the selected behavior's identity, not by
+     * the object that owns it. An already-selected method has a separate
+     * invocation contract.
      */
     static boolean hasCanonicalCallSelection(
             ProtosClosureValue closure,
             ProtosStandardObjectProtocol.CanonicalRootCallSelection selection) {
         return selection != null
                 && selection.isValid()
-                && !closure.hasLocalCallSlotForRuntime();
+                && (!closure.hasLocalCallSlotForRuntime()
+                        || localCallIsStandardCall(closure));
+    }
+
+    @TruffleBoundary
+    private static boolean localCallIsStandardCall(ProtosClosureValue closure) {
+        return closure.readLocalSlot("call").orElse(null)
+                        instanceof ProtosClosureValue local
+                && ProtosStandardObjectProtocol.isStandardCallImplementation(local);
     }
 
 

@@ -929,14 +929,12 @@ final class CanonicalToBytecodeLowerer {
             rootMayRequirePrelude = currentRootMayRequirePrelude;
             if (rootMayRequirePrelude && mayLackOwnPrelude) {
                 /*
-                 * I115: like a rest parameter (emitRootBody), declare the
-                 * caller Prelude dependency on this physical root before it
-                 * is published, so its first invocation already receives
-                 * the Prelude its '+' selection observes. The demand is
-                 * discharged by transport; the creator does not inherit it.
+                 * A non-capturing Closure retains its creator's Prelude, so
+                 * its root needs no caller transport declared in advance; the
+                 * rare creator without an admitted Prelude is covered by the
+                 * runtime caller-need registration. The creator does not
+                 * inherit this root's Prelude requirement.
                  */
-                root.requestCallerNeed(
-                        ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE);
                 rootMayRequirePrelude = false;
             }
             return root;

@@ -1053,8 +1053,10 @@ final class ProtosI115BDeferredCallerTest {
             for (String name : List.of("b", "c", "d")) {
                 ProtosClosureValue closure = assertInstanceOf(ProtosClosureValue.class,
                         module.context().readLocalSlot(name).orElseThrow());
-                assertSame(null, closure.preludeOrNullForRuntime(),
-                        name + ": non-capturing fixture inherits its prelude");
+                // Owner decision: a non-capturing Closure retains its creator's
+                // Prelude, so it never needs its caller to transport one.
+                assertSame(module.prelude().orElseThrow(), closure.preludeOrNullForRuntime(),
+                        name + ": non-capturing fixture retains its creator's prelude");
                 inherited.add(assertInstanceOf(ProtosBytecodeRootNode.class,
                         directTarget(closure).getRootNode()));
             }
@@ -1319,7 +1321,8 @@ final class ProtosI115BDeferredCallerTest {
                     callInner: (target) => { inner(target) }
                     """, "i115-terminal-send.protos", module);
             ProtosClosureValue inner = closure("inner\n", module);
-            assertSame(null, inner.preludeOrNullForRuntime());
+            // Owner decision: the non-capturing Closure retains its creator's Prelude.
+            assertSame(module.prelude().orElseThrow(), inner.preludeOrNullForRuntime());
             ProtosBytecodeRootNode root = functionRoot("inner", module);
             root.getBytecodeNode().setUncachedThreshold(0);
             int need = ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE;

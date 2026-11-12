@@ -81,6 +81,36 @@ public final class ProtosClosureInvoker {
                                 closure, supplied.toArray(), caller)));
     }
 
+    /**
+     * Activates {@code closure} itself as the already-selected executable of
+     * a call: its own captured receiver, methodHome and ReturnHome apply and
+     * no further {@code call} lookup is performed, even when the Closure owns
+     * a nearer {@code call} slot. This is the terminal Closure branch of the
+     * standard {@code Object.call}.
+     */
+    public static Object invokeSelected(
+            ProtosClosureValue closure,
+            List<?> supplied,
+            ProtosActivation caller) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(supplied, "supplied");
+        Objects.requireNonNull(caller, "caller");
+        requireOutsideTask(caller, "synchronous Closure invocation");
+        ProtosActivation activation =
+                ProtosActivation.forClosureInvocation(
+                        closure,
+                        supplied,
+                        caller.prelude().orElse(null),
+                        caller.actorModuleState(),
+                        caller.currentModuleKey().orElse(null),
+                        caller.executionDomain());
+        return synchronous(
+                caller,
+                () -> callWithEnteredContext(
+                        () -> ProtosFunctionCallDispatchers.callPublishedUncached(
+                                closure, activation)));
+    }
+
     public static Object invokeImmediateMethod(
             ProtosClosureValue closure,
             Object receiver,

@@ -178,7 +178,7 @@ public final class ProtosStandardObjectProtocol {
         }
     }
 
-    static boolean isStandardCallImplementation(
+    public static boolean isStandardCallImplementation(
             ProtosClosureValue closure) {
         return closure.nativeBody().orElse(null) == STANDARD_CALL_BODY;
     }
@@ -381,7 +381,9 @@ public final class ProtosStandardObjectProtocol {
             List<?> supplied) {
         Object receiver = activation.receiver();
         if (receiver instanceof ProtosClosureValue closure) {
-            return ProtosClosureInvoker.invoke(
+            // The Closure branch is terminal: it executes the Closure's own
+            // body and never looks up `call` again (CALLABLES.md).
+            return ProtosClosureInvoker.invokeSelected(
                     closure,
                     supplied,
                     activation);

@@ -211,11 +211,11 @@ final class ProtosI115StringAdditionTest {
     }
 
     /**
-     * I115 regression: a non-capturing compact Closure owns no Prelude, so
-     * its root declares the caller Prelude need during lowering, before its
-     * first invocation; the very first {@code a + b} over Strings then
-     * selects the standard String behavior and runs the native NumberAdd.
-     * A number-literal receiver is statically numeric and declares nothing.
+     * A non-capturing compact Closure retains its creator's Prelude (owner
+     * decision), so its root needs no caller Prelude declared in advance;
+     * the very first {@code a + b} over Strings still selects the standard
+     * String behavior and runs the native NumberAdd. A number-literal
+     * receiver is statically numeric and needs nothing either.
      */
     @Test
     void firstCompactClosureInvocationConcatenates() throws Exception {
@@ -237,8 +237,8 @@ final class ProtosI115StringAdditionTest {
         try (ProtosStandaloneHostedSession session = open(source)) {
             ProtosBytecodeRootNode add = root(session, "add");
             ProtosBytecodeRootNode inc = root(session, "inc");
-            assertTrue(add.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE),
-                    "declared before the first invocation");
+            assertFalse(add.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE),
+                    "a Closure that retains its Prelude needs no caller transport");
             assertFalse(inc.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE),
                     "a number-literal receiver needs no caller Prelude");
             List<String> addNames = names(add);
@@ -349,9 +349,11 @@ final class ProtosI115StringAdditionTest {
                     new java.util.HashMap<>();
             for (String name : forwarders) {
                 ProtosBytecodeRootNode forwarder = root(session, name);
-                assertTrue(forwarder.hasCallerNeed(
+                // Owner decision: every non-capturing Closure retains its
+                // creator's Prelude, so no forwarding level needs transport.
+                assertFalse(forwarder.hasCallerNeed(
                                 ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE),
-                        name + " declares the caller Prelude before its first invocation");
+                        name + " retains its Prelude and needs no caller transport");
                 assertFalse(forwarder.hasCallerNeed(
                                 ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION),
                         name + " does not request the exact Activation");
