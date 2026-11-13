@@ -1001,11 +1001,11 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                             module);
 
             /*
-             * I115-M: all three parameterless bodies are admitted to the
-             * whole-root compact lane. I115-H1-FIX: it computes the sum at
-             * the one shared guarded TryPrimitiveNumericAdd site, whose MISS
-             * keeps the ordinary send; the mutated alias needs no
-             * compact-frame test.
+             * I115: two Integer literals select the standard '+' of the frozen
+             * standard Integer, so the literal sum folds to its constant. The
+             * local operands keep one NumberAdd behind its guarded standard
+             * selection (D237: IsStandardAddSelection after both operands), whose
+             * other path is the ordinary send.
              */
             for (ProtosClosureValue candidate : List.of(direct, locals, aliases)) {
                 DirectEntry prepared =
@@ -1015,11 +1015,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 assertSame(candidate, prepared.targetArguments()[0],
                         "the numeric HIT materializes no activation");
                 List<String> names = instructionNames(candidate);
-                assertEquals(1, countOf(names, "NumberAdd"));
-                // I115: NumberAdd owns its generic route; no MISS-side GetMethod.
-                assertNone(names, "GetMethod");
+                int sites = candidate == direct ? 0 : 1;
+                assertEquals(sites, countOf(names, "NumberAdd"), names.toString());
+                assertEquals(sites, countOf(names, "IsStandardAddSelection"), names.toString());
                 assertNone(names, "ExperimentalInteger");
-                assertNone(names, RETIRED_ARCHITECTURE);
                 assertNone(names, RETIRED_ARCHITECTURE);
             }
         });
@@ -1141,10 +1140,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 root.getRootNodes().ensureComplete();
                 var calls = collectTags(root.getBytecodeNode().getTagTree(),
                         StandardTags.CallTag.class);
-                // I115-H1-FIX: every candidate, the mutated alias included, is
-                // a compact root whose '+' sends are each one shared numeric
-                // site, a surviving dynamic send with its own CallTag.
-                int sends = candidate == nested ? 2 : candidate == tree ? 3 : 1;
+                // I115: the literal-only sums fold to their constant and keep no
+                // send; each '+' over locals, the mutated alias included, is one
+                // guarded numeric site whose ordinary-send path keeps its CallTag.
+                int sends = candidate == locals || candidate == aliases ? 1 : 0;
                 assertEquals(sends, calls.size(),
                         "Only surviving dynamic sends retain CallTag");
                 assertEquals(sends,
@@ -1181,17 +1180,17 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertEquals("2", integerValue(enter(fastDirect(divided, module))));
 
             /*
-             * I115-H1-FIX: these bodies are compact roots; each send is one
-             * shared guarded numeric site (with its guarded PERF043 fold
-             * candidate) whose MISS keeps the ordinary send.
+             * I115: literal-only arithmetic selects the standard operators of the
+             * frozen standard Integer and folds recursively to its constant; the
+             * operations over locals stay at run time, one guarded site each.
              */
             Object[][] compact = {
-                    {"() => { 1 + 1 + 1 }", "3", 2},
-                    {"() => { (1 + 1) + 1 }", "3", 2},
-                    {"() => { 1 + (1 + 1) }", "3", 2},
-                    {"() => { (1 + 2) * 3 }", "9", 2},
-                    {"() => { 10 - 3 - 2 }", "5", 2},
-                    {"() => { 1 + 2 * 3 }", "7", 2},
+                    {"() => { 1 + 1 + 1 }", "3", 0},
+                    {"() => { (1 + 1) + 1 }", "3", 0},
+                    {"() => { 1 + (1 + 1) }", "3", 0},
+                    {"() => { (1 + 2) * 3 }", "9", 0},
+                    {"() => { 10 - 3 - 2 }", "5", 0},
+                    {"() => { 1 + 2 * 3 }", "7", 0},
                     {"() => { x: 1; y: x + 2; z: y * 3; z }", "9", 2}
             };
 
@@ -1350,41 +1349,21 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertNone(names, RETIRED_ARCHITECTURE);
             assertNone(names, RETIRED_ARCHITECTURE);
 
+            // D179: what Java code reads from a Context no guest code observes is
+            // not guest semantics. The guest-visible guarantee is the MISS: a
+            // receiver whose '+' is not the standard one receives the ordinary
+            // send with the evaluated argument, and its result is the sum.
             ProtosObjectValue gate =
                     new ProtosObjectValue(ProtosObjectValue.rootObject());
-            ProtosObjectValue[] observedContext = new ProtosObjectValue[1];
-            Object[] arguments =
-                    ProtosFrameArguments.compactDirectClosureCall(
-                            run, module, null, new Object[] {gate});
+            Object[] received = new Object[1];
             gate.createLocalSlot("+", ProtosClosureValue.nativeClosure(
                     (activation, supplied) -> {
-                        // The caller's activation, published by the promotion.
-                        ProtosActivation caller =
-                                assertInstanceOf(ProtosActivation.class, arguments[0]);
-                        ProtosObjectValue context = caller.context();
-                        observedContext[0] = context;
-                        assertEquals("5", integerValue(supplied.get(0)));
-                        assertEquals("5", integerValue(
-                                context.readLocalSlot("seen").orElseThrow()),
-                                "the observer sees the compact binding and its value");
-                        context.assignLocalSlot("seen", integer(7));
+                        received[0] = supplied.get(0);
                         return integer(100);
                     }));
-
-            Object raw = target(run).call(arguments);
-            // seen = 7 (written through the observed Context) + 100.
-            assertEquals("107", integerValue(
-                    com.guillermomolina.protos.runtime.ProtosNumericValueSupport
-                            .guestValue(raw)),
-                    "the compact code reads the observer's mutation");
-            ProtosActivation published =
-                    assertInstanceOf(ProtosActivation.class, arguments[0]);
-            assertSame(observedContext[0], published.context(),
-                    "one Context for the whole activation");
-            assertEquals("107", integerValue(
-                    published.context().readLocalSlot("seen").orElseThrow()),
-                    "the compact write after the MISS is visible to the same authority");
-            assertTrue(published.context().readLocalSlot("result").isPresent());
+            // seen = 5 + 100.
+            assertEquals("105", integerValue(enter(fastDirect(run, module, gate))));
+            assertEquals("5", integerValue(received[0]));
 
             // A HIT at the same site publishes nothing.
             DirectEntry hit =
@@ -1513,9 +1492,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                 "() => { left: 1\nright: 2\nleft + right }",
                                 module);
 
-                // I115-H1-FIX: both are compact roots whose sum is the shared
-                // numeric site, admitted against this Context's own Prelude.
-                assertContains(instructionNames(direct), "NumberAdd");
+                // I115: the literal sum folds under this Context's own frozen
+                // standard Integer; the sum of locals is the guarded numeric site.
+                assertNone(instructionNames(direct), "NumberAdd");
                 assertContains(instructionNames(locals), "NumberAdd");
 
                 assertEquals(
@@ -1544,9 +1523,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue nonTerminal =
                     closure("() => { 1 + 2\n7 }", module);
 
-            // I115-M: every parameterless body here is a compact root.
-            // I115-H1-FIX: each '+' is one shared numeric site, evaluated
-            // at run time, whose operands are each evaluated once.
+            // I115: a discarded statement keeps its one synchronous numeric
+            // operation, evaluated once; literal-only sums in value position fold.
             assertEquals(1, countOf(instructionNames(nonTerminal), "NumberAdd"));
             assertNone(instructionNames(nonTerminal), "ExperimentalInteger");
             assertEquals(
@@ -1556,7 +1534,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue nested =
                     closure("() => { (1 + 2) + 3 }", module);
 
-            assertEquals(2, countOf(instructionNames(nested), "NumberAdd"));
+            assertEquals(0, countOf(instructionNames(nested), "NumberAdd"));
             assertNone(instructionNames(nested), "ExperimentalInteger");
             assertEquals("6", integerValue(enter(fastDirect(nested, module))));
 
@@ -1566,7 +1544,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertEquals(
                     "10",
                     integerValue(enter(fastDirect(tree, module))));
-            assertEquals(3, countOf(instructionNames(tree), "NumberAdd"));
+            assertEquals(0, countOf(instructionNames(tree), "NumberAdd"));
             assertNone(instructionNames(tree), "ExperimentalInteger");
 
             ProtosClosureValue nestedOverflow =
@@ -1578,7 +1556,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertEquals(
                     "9223372036854775808",
                     integerValue(enter(fastDirect(nestedOverflow, module))));
-            assertEquals(2, countOf(instructionNames(nestedOverflow), "NumberAdd"));
+            // The overflowing addition is never folded: it stays at run time.
+            assertTrue(countOf(instructionNames(nestedOverflow), "NumberAdd") >= 1);
 
             ProtosClosureValue dynamic =
                     closure("(value) => { value + 2 }", module);

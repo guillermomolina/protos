@@ -92,6 +92,16 @@ public final class ProtosCoreBootstrap {
             return bootstrapEntered(coreDirectory, moduleResolver);
         }
 
+        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
+        ProtosPrelude prelude = bootstrapInHost(coreDirectory, moduleResolver);
+        if (entered != null) {
+            entered.bindNumericFactoryPreludeForRuntime(prelude);
+        }
+        return prelude;
+    }
+
+    private ProtosPrelude bootstrapInHost(Path coreDirectory, ProtosModuleResolver moduleResolver)
+            throws IOException {
         try (ProtosPolyglotExecutionContext bootstrapHost =
                 ProtosPolyglotExecutionContext.open(
                         java.io.InputStream.nullInputStream(),
@@ -614,7 +624,7 @@ public final class ProtosCoreBootstrap {
                 entropyPrototype,
                 clockPrototype);
 
-        return new ProtosPrelude(
+        ProtosPrelude prelude = new ProtosPrelude(
                 preludeBindings,
                 contextPrototype,
                 bufferedBytesPrototype,
@@ -640,6 +650,16 @@ public final class ProtosCoreBootstrap {
                 filesystemOpenMethod,
                 entropyPrototype,
                 clockPrototype);
+        /*
+         * The numeric constructor belongs to the entered language Context from
+         * the moment its Core exists; the first established Core keeps it.
+         */
+        ProtosLanguageContext languageContext =
+                ProtosLanguageContext.currentIfEnteredForRuntime();
+        if (languageContext != null) {
+            languageContext.bindNumericFactoryPreludeForRuntime(prelude);
+        }
+        return prelude;
     }
 
     /*

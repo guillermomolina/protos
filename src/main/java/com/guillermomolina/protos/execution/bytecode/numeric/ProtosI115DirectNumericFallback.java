@@ -27,20 +27,25 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.frame.VirtualFrame;
 
 /**
- * I115: the synchronous cold paths shared by the direct numeric operations
+ * The synchronous cold paths shared by the direct numeric operations
  * ({@code RichCompare*}, {@code NumberDivide}, {@code NumberAdd},
  * {@code NumberSubtract}, {@code NumberMultiply}).
  *
- * <p>KNOWN I115 TEMPORARY SEMANTIC DIVERGENCE: these intrinsic operations no
- * longer select a program-redefined {@code <}, {@code <=}, {@code >},
- * {@code >=}, {@code +}, {@code -}, {@code *} or {@code /} method. Numeric
- * operands use the trusted standard Number relations and arithmetic; any
- * other operand pair signals a guest Error instead of sending the selector.
+ * <p>An operand pair that no specialization handles performs the ordinary
+ * send of the operator selector (D013): a receiver that selects a redefined
+ * operator receives that method, and a standard receiver receives the
+ * standard method, whose behavior covers every remaining operand pair. The
+ * operation is synchronous, so a suspension of the selected method is
+ * rejected with the standard Error.
  */
 final class ProtosI115DirectNumericFallback {
     private ProtosI115DirectNumericFallback() {}
 
-    /** The canonical Boolean of {@code relation} for any two operands, cold. */
+    /**
+     * The result of {@code relation} for any two operands, cold: the canonical
+     * Boolean of two real Numbers, otherwise the ordinary send of the
+     * relation's selector.
+     */
     static Object compare(ProtosBytecodeRootNode root, VirtualFrame frame,
             Object left, Object right, Relation relation) {
         Object result = compareCold(
@@ -48,9 +53,27 @@ final class ProtosI115DirectNumericFallback {
                 ProtosNumericValueSupport.guestValue(right),
                 relation);
         if (result == null) {
-            throw unsupported(root, frame);
+            return send(root, frame, left, selector(relation), right);
         }
         return result;
+    }
+
+    private static String selector(Relation relation) {
+        return switch (relation) {
+            case LESS -> "<";
+            case LESS_EQUAL -> "<=";
+            case GREATER -> ">";
+            case GREATER_EQUAL -> ">=";
+        };
+    }
+
+    /** The ordinary synchronous send {@code left.selector(right)} made by this frame. */
+    static Object send(ProtosBytecodeRootNode root, VirtualFrame frame,
+            Object left, String selector, Object right) {
+        root.requestCallerNeed(
+                ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
+        return ProtosFunctionCallDispatchers.sendOne(
+                root, ProtosFrameArguments.activation(frame), false, left, selector, right);
     }
 
     @TruffleBoundary

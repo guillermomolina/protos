@@ -83,7 +83,7 @@ final class ProtosLanguageContext {
     /*
      * I115 LONG-6: PFactory-style numeric constructor associated with the
      * entered language Context, not with a call frame. It is established
-     * once by the first root entry. Alternative caller Core prototypes do
+     * once, by the first Core bootstrap or root entry. Alternative caller Core prototypes do
      * not redirect arithmetic promotion at individual call sites.
      */
     private volatile ProtosPrelude numericFactoryPrelude;

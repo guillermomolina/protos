@@ -31,8 +31,9 @@ import com.oracle.truffle.api.nodes.Node;
 
 /**
  * I115: direct synchronous comparison for '>='. It never returns a
- * continuation. KNOWN I115 TEMPORARY SEMANTIC DIVERGENCE: see
- * {@link ProtosI115DirectNumericFallback}.
+ * continuation.
+ * Operand pairs without a specialization take the ordinary operator send
+ * ({@link ProtosI115DirectNumericFallback}).
  */
 @GenerateUncached
 @GenerateInline(false)

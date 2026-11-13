@@ -629,26 +629,30 @@ final class ProtosI115H7MethodCallConvergenceTest {
         assertEquals(16777217.0, ProtosExperimentalNumberAddFastPathsBase.doLD(16777216L, 1.0));
         assertEquals(16777217.0, ProtosExperimentalNumberAddFastPathsBase.doDL(1.0, 16777216L));
         assertEquals(0.1 + 0.2, ProtosExperimentalNumberAddFastPathsBase.doDD(0.1, 0.2));
-        // I115: RichCompareLt's double lane; mixed operands are checked by execution.
-        assertSame(com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE,
-                ProtosRichCompareLtNode.doDD(16777216.0, 16777217.0));
-        assertSame(com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE,
-                ProtosRichCompareLtNode.doDD(16777217.0, 16777216.0));
+        // I115: RichCompareLt's double lane yields the primitive boolean that a
+        // conditional branch consumes directly (as GraalPy's float compare);
+        // mixed operands and guest results are checked by execution.
+        assertTrue(ProtosRichCompareLtNode.doDD(16777216.0, 16777217.0));
+        assertFalse(ProtosRichCompareLtNode.doDD(16777217.0, 16777216.0));
         try (ProtosStandaloneHostedSession session =
                 open("double-results", LONG_DOUBLE)) {
             /*
-             * I115: `&&` is one ordinary unary send whose argument is the
-             * right-hand Closure; the second comparison lives in that
-             * Closure's own root. lessMixed's root therefore has exactly one
-             * method selection followed by one unary call, plus the Closure
-             * argument's materialization and cell capture.
+             * I115: `&&` and `!` are internal Boolean control. A canonical
+             * receiver is decided by CanonicalControlCondition and the
+             * right-hand comparison runs inline in lessMixed's own root, so both
+             * comparisons are RichCompareLt here and no Closure is materialized.
+             * Any other receiver takes the guarded ordinary send: one unary
+             * `&&` send and one nilary `!` send, each selected before its call.
              */
             List<String> mixed = unquickened(names(root(session, "lessMixed")));
-            assertEquals(1, count(mixed, "c.GetMethod"), mixed.toString());
+            assertEquals(2, count(mixed, "c.RichCompareLt"), mixed.toString());
+            assertTrue(count(mixed, "c.CanonicalControlCondition") >= 2, mixed.toString());
+            assertEquals(2, count(mixed, "c.GetMethod"), mixed.toString());
             assertEquals(1, count(mixed, "c.CallUnaryMethod"), mixed.toString());
+            assertEquals(1, count(mixed, "c.CallNilaryMethod"), mixed.toString());
             assertSelectionPrecedesEachCall(mixed);
-            assertEquals(1, count(mixed, "c.MaterializeCurrentClosure"), mixed.toString());
-            assertEquals(1, count(mixed, "c.CaptureClosureCells"), mixed.toString());
+            assertEquals(0, count(mixed, "c.MaterializeCurrentClosure"), mixed.toString());
+            assertEquals(0, count(mixed, "c.CaptureClosureCells"), mixed.toString());
             assertReplacedAbsent("lessMixed", mixed);
             for (int call = 0; call < WARM; call++) {
                 assertDouble(session, "sumDouble", 0.1 + 0.2);

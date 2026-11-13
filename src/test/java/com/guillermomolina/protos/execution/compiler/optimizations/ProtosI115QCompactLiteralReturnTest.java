@@ -51,7 +51,7 @@ final class ProtosI115QCompactLiteralReturnTest {
             Path.of("target", "perf039-while-once", "i115-q");
 
     private static final String BOOLEAN_CONDITION =
-            "ExperimentalCanonicalBooleanCondition";
+            "CanonicalControlCondition";
 
     private static final List<String> FORBIDDEN = List.of(
             "PrepareSendOne",
@@ -93,8 +93,10 @@ final class ProtosI115QCompactLiteralReturnTest {
         assertEquals(2, census.rootCount());
         assertNoGenericDispatch(census);
         assertEquals(List.of(1L), census.guestIntegers());
-        assertTrue(census.carrierIntegers().isEmpty(),
-                "The terminal literal must not be a Long carrier");
+        // I115: Protos Integers are signed-64 longs, so the guest constant is the
+        // long itself; no int carrier is emitted.
+        assertEquals(census.guestIntegers(), census.carrierIntegers());
+        assertTrue(census.intCarriers().isEmpty());
         // PRUIBA DE I115, en algún momento esto volverá a funcionar
         // assertNoReturnProjection(census);
     }
@@ -108,18 +110,18 @@ final class ProtosI115QCompactLiteralReturnTest {
                     "run: () => { %s }\n".formatted(literal),
                     result -> assertEquals(expected, result.asLong()));
             assertEquals(List.of(expected), census.guestIntegers(), literal);
-            assertTrue(census.carrierIntegers().isEmpty(), literal);
+            assertEquals(census.guestIntegers(), census.carrierIntegers(), literal);
+            assertTrue(census.intCarriers().isEmpty(), literal);
             // PRUIBA DE I115, en algún momento esto volverá a funcionar
             // assertNoReturnProjection(census);
         }
     }
 
     /*
-     * I115-H7: a computed terminal is not a literal return. {@code 1 + 2} is
-     * one NumberAdd over two int carriers (no long carrier, no prepared
-     * guest Integer); the return epilogue projects the computed carrier, so
-     * the host receives the guest Integer 3. The literal-return policy above
-     * (prepared guest constant, no projection) does not apply.
+     * I115: {@code 1 + 2} of two Integer literals selects the standard '+' of
+     * the frozen standard Integer (OBJECT_MODEL standard shared-object
+     * publication), so it folds to the guest constant 3 and returns it like a
+     * literal.
      */
     @Test
     void numericArithmeticStillUsesCarrier() throws Exception {
@@ -133,24 +135,16 @@ final class ProtosI115QCompactLiteralReturnTest {
         assertEquals(List.of(
                         "c.EnterRoot",
                         "load.constant",
-                        "load.constant",
-                        "c.NumberAdd",
                         "c.EpilogForReturn",
                         "return"),
                 census.names().stream().map(ProtosI115QCompactLiteralReturnTest::unquickened)
                         .toList(),
-                "the computed terminal is one NumberAdd");
+                "the literal sum is folded");
         assertFalse(census.has("TryPrimitiveNumeric"));
         assertFalse(census.has("ExperimentalInteger"));
         assertNoGenericDispatch(census);
-        assertTrue(census.guestIntegers().isEmpty());
-        assertTrue(census.carrierIntegers().isEmpty(),
-                "signed-32 literals are int carriers, not long carriers");
-        assertEquals(List.of(1, 2), census.intCarriers());
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // assertTrue(census.projectsBefore());
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // assertTrue(census.projectsAfter());
+        assertEquals(List.of(3L), census.guestIntegers());
+        assertTrue(census.intCarriers().isEmpty());
     }
 
     @Test
@@ -234,7 +228,6 @@ final class ProtosI115QCompactLiteralReturnTest {
                     1
                 }
                 """, result -> assertEquals(1L, result.asLong()));
-        assertTrue(census.compact());
         assertTrue(census.has(BOOLEAN_CONDITION),
                 "A Boolean local must keep the existing conversion");
     }
@@ -251,21 +244,22 @@ final class ProtosI115QCompactLiteralReturnTest {
                 }
                 """, result -> assertEquals(1L, result.asLong()));
         /*
-         * I115-H7: one Lt whose Java boolean the conditional branch consumes
-         * directly; a non-primitive comparison result is validated inside
-         * Lt (exactly canonical true/false, otherwise the standard Error),
-         * so no separate Boolean conversion is emitted.
+         * I115: one RichCompareLt whose result CanonicalControlCondition
+         * validates (a redefined '<' may answer any value) before the branch
+         * consumes it; i = i + 1 is one NumberAdd behind its guarded standard
+         * selection.
          */
         List<String> names = census.names();
-        assertEquals(1, names.stream().filter(name -> name.startsWith("c.Lt")).count());
+        assertEquals(1, names.stream().filter(name -> name.startsWith("c.RichCompareLt")).count());
         int lt = names.indexOf(names.stream()
-                .filter(name -> name.startsWith("c.Lt")).findFirst().orElseThrow());
-        assertTrue(names.get(lt + 1).startsWith("branch.false"),
-                "the branch consumes Lt's boolean: " + names);
+                .filter(name -> name.startsWith("c.RichCompareLt")).findFirst().orElseThrow());
+        assertTrue(names.get(lt + 1).startsWith("c." + BOOLEAN_CONDITION), names.toString());
+        assertTrue(names.get(lt + 2).startsWith("branch.false"),
+                "the branch consumes the validated comparison: " + names);
         assertFalse(census.has("TryPrimitiveNumeric"));
-        assertFalse(census.has(BOOLEAN_CONDITION));
         assertFalse(census.has("ExperimentalInteger"));
-        assertTrue(census.has("c.NumberInPlaceAdd"));
+        assertEquals(1, names.stream().filter(name -> name.startsWith("c.NumberAdd")).count());
+        assertTrue(census.has("c.IsStandardAddSelection"));
         assertNoGenericDispatch(census);
         assertFalse(census.has("PromoteFrameLexicalAuthority"));
     }
@@ -286,20 +280,20 @@ final class ProtosI115QCompactLiteralReturnTest {
                 """, result -> assertEquals(1L, result.asLong()));
         // Compact: the literal callbacks add no roots.
         assertEquals(2, census.rootCount(), "No callback roots");
-        assertFalse(census.has(BOOLEAN_CONDITION));
         /*
-         * I115-H7: the prefix n = n + 1 is the single NumberInPlaceAdd and
-         * stays inside the While condition, before the literal test, so it
-         * runs exactly once although the body never runs (result 1).
+         * I115: the prefix n = n + 1 is the single NumberAdd and stays inside
+         * the While condition, before the test of the condition's value, so
+         * it runs exactly once although the body never runs (result 1).
          */
         List<String> names = census.names();
         assertEquals(1, names.stream()
-                .filter(name -> name.startsWith("c.NumberInPlaceAdd")).count());
+                .filter(name -> name.startsWith("c.NumberAdd")).count());
         int prefix = names.indexOf(names.stream()
-                .filter(name -> name.startsWith("c.NumberInPlaceAdd")).findFirst().orElseThrow());
-        int exit = names.indexOf(names.stream()
-                .filter(name -> name.startsWith("branch.false")).findFirst().orElseThrow());
-        assertTrue(prefix < exit, "the prefix is evaluated before the loop test: " + names);
+                .filter(name -> name.startsWith("c.NumberAdd")).findFirst().orElseThrow());
+        int test = names.indexOf(names.stream()
+                .filter(name -> name.startsWith("c." + BOOLEAN_CONDITION)).findFirst().orElseThrow());
+        assertTrue(prefix < test, "the prefix is evaluated before the loop test: " + names);
+        assertTrue(names.get(test + 1).startsWith("branch.false"), names.toString());
         assertFalse(census.has("TryPrimitiveNumeric"));
         assertFalse(census.has("ExperimentalInteger"));
         assertNoGenericDispatch(census);

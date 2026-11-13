@@ -31,7 +31,6 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -112,9 +111,8 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                                             .contains("EpilogForReturn")));
 
             assertFalse(localNames(run).contains("sequenceResult"));
-            assertEquals(
-                    1.5d,
-                    assertInstanceOf(ProtosFloatValue.class, call(run, module)).value());
+            // I115: a Java double is the semantic Float itself.
+            assertEquals(1.5d, assertInstanceOf(Double.class, call(run, module)));
 
             ProtosClosureValue accepting =
                     closure("(ignored) => { 1.5 }", module);
@@ -295,7 +293,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                             .stream()
                             .filter(instruction ->
                                     instruction.getName()
-                                            .contains("ReadMemberAtRoot"))
+                                            .contains("GetAttribute"))
                             .toList();
 
             assertEquals(
@@ -556,7 +554,15 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                                     + "}",
                             module);
 
-            assertTrue(localNames(run).contains("sequenceResult"));
+            // I115: the two prefix calls compose a possible suspension; the
+            // final call shares the same activation state.
+            List<String> names = instructionNames(run);
+            assertEquals(3, names.stream()
+                    .filter(name -> name.startsWith("c.CallNilaryMethod")).count(),
+                    names.toString());
+            assertEquals(2, names.stream()
+                    .filter(name -> name.startsWith("c.ResumeDispatchedContinuation")).count(),
+                    names.toString());
 
             assertEquals("3", integerValue(call(run, module)));
             assertEquals("6", integerValue(call(run, module)));
@@ -661,6 +667,17 @@ final class ProtosPerf037EDirectTerminalReturnTest {
 
     private static String integerValue(Object value) {
         return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
+    }
+
+    private static List<String> instructionNames(ProtosClosureValue closure) {
+        return closure.executionPlan()
+                .orElseThrow()
+                .bytecodeActivationRootForTesting()
+                .getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(ProtosInstructionNames::of)
+                .toList();
     }
 
     private static List<Object> localNames(

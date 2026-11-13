@@ -31,8 +31,9 @@ import com.oracle.truffle.api.nodes.Node;
 
 /**
  * I115: exact synchronous Protos '/'. It never returns a continuation.
- * KNOWN I115 TEMPORARY SEMANTIC DIVERGENCE: see
- * {@link ProtosI115DirectNumericFallback}.
+ *
+ * Operand pairs without a specialization take the ordinary operator send
+ * ({@link ProtosI115DirectNumericFallback}).
  */
 @GenerateUncached
 @GenerateInline(false)
@@ -83,9 +84,7 @@ abstract class ProtosNumberDivideNode extends Node {
                         || ProtosNumericValueSupport.isCurrentFloat(argument))) {
             return floatValue(receiver) / floatValue(argument);
         }
-        // KNOWN I115 TEMPORARY SEMANTIC DIVERGENCE: Fraction operands and
-        // Float/large-Integer mixtures are not divided by this intrinsic.
-        throw ProtosI115DirectNumericFallback.unsupported(root, frame);
+        return ProtosI115DirectNumericFallback.send(root, frame, left, "/", right);
     }
 
     @InliningCutoff
