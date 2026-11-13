@@ -505,6 +505,12 @@ public final class ProtosActorBootstrap {
         }
 
         private Object callRoot(boolean bootstrapMode) {
+            // As every root entry: the entered Context's numeric constructor is its Core.
+            ProtosLanguageContext languageContext =
+                    ProtosLanguageContext.currentIfEnteredForRuntime();
+            if (languageContext != null) {
+                activation.prelude().ifPresent(languageContext::bindNumericFactoryPreludeForRuntime);
+            }
             ProtosActorExecutionDomain domain = actor.executionDomain();
             HostEntryExtent previous =
                     bootstrapMode

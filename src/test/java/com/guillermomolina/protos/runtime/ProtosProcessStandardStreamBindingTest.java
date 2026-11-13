@@ -270,7 +270,7 @@ final class ProtosProcessStandardStreamBindingTest {
             com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(com.guillermomolina.protos.runtime.numeric.ProtosNumberLiteral.parse("18446744073709551616"), prelude),
             com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(com.guillermomolina.protos.runtime.numeric.ProtosNumberLiteral.parse("18446744073709551617"), prelude),
             new ProtosFloatValue(1.0d),
-            Long.valueOf(1L),
+            // I115: a signed-64 Long is the guest Integer itself; 1 is a valid limit.
         };
         for (Object limit : invalid) {
             ProtosFutureValue rejected = stream.readForRuntime(activation, limit);

@@ -1116,11 +1116,56 @@ final class ProtosFrameArguments {
             }
             if (first instanceof ProtosClosureValue closure) {
                 ProtosPrelude own = closure.preludeOrNullForRuntime();
-                return own != null ? own : callerPreludeOrNull(arguments);
+                if (own != null) {
+                    return own;
+                }
+                ProtosPrelude transported = callerPreludeOrNull(arguments);
+                if (transported == null
+                        && arguments[CALLER_INDEX] == null
+                        && CompilerDirectives.inInterpreter()) {
+                    /*
+                     * The caller does not transport the inherited Prelude yet:
+                     * the root registers the demand so later calls transport it,
+                     * and this once it is read from the calling frames.
+                     */
+                    return callingFramePreludeOrNull(arguments);
+                }
+                return transported;
             }
         }
         CompilerDirectives.transferToInterpreter();
         return preludeOrNull(arguments);
+    }
+
+    /**
+     * The Prelude of the nearest calling Protos frame that observes one, read
+     * by walking the stack. Only the first invocation of a root whose caller
+     * did not yet transport its inherited Prelude takes this path.
+     */
+    @TruffleBoundary
+    private static ProtosPrelude callingFramePreludeOrNull(Object[] current) {
+        return com.oracle.truffle.api.Truffle.getRuntime().iterateFrames(frameInstance -> {
+            if (!(frameInstance.getCallTarget() instanceof com.oracle.truffle.api.RootCallTarget target)
+                    || !(target.getRootNode() instanceof ProtosBytecodeRootNode)) {
+                return null;
+            }
+            Object[] frameArguments = frameInstance
+                    .getFrame(com.oracle.truffle.api.frame.FrameInstance.FrameAccess.READ_ONLY)
+                    .getArguments();
+            if (frameArguments == current || frameArguments.length <= CLOSURE_INDEX) {
+                return null;
+            }
+            Object first = frameArguments[CLOSURE_INDEX];
+            if (first instanceof ProtosActivation activation) {
+                return activation.preludeOrNullForRuntime();
+            }
+            if (first instanceof ProtosClosureValue closure
+                    && frameArguments.length >= HEADER_LENGTH) {
+                ProtosPrelude own = closure.preludeOrNullForRuntime();
+                return own != null ? own : callerPreludeOrNull(frameArguments);
+            }
+            return null;
+        });
     }
 
 

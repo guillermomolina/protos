@@ -1286,19 +1286,41 @@ final class ProtosStructuredDispatchLowerer {
         emitContinuationLoop(builder, result, childResult, resumeValue);
     }
 
-    /** The module body of a structured standard import, composed the same way. */
+    /**
+     * The module body of a structured standard import, composed the same way.
+     * Every segment, the resumed ones included, belongs to the initialization:
+     * leaving the composition without completing it, by a guest Error or a
+     * control transfer, fails the module record. A suspension is not an exit.
+     */
     static void emitModuleInitialization(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal module,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        BytecodeLocal completed = builder.createLocal();
+        builder.beginStoreLocal(completed);
+        builder.emitLoadConstant(false);
+        builder.endStoreLocal();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginFailModuleInitializationUnlessCompleted();
+                    builder.emitLoadLocal(module);
+                    builder.emitLoadLocal(completed);
+                    builder.endFailModuleInitializationUnlessCompleted();
+                });
+        builder.beginBlock();
         builder.beginStoreLocal(childResult);
         builder.beginRunModuleInitialization();
         builder.emitLoadLocal(module);
         builder.endRunModuleInitialization();
         builder.endStoreLocal();
         emitContinuationLoop(builder, result, childResult, resumeValue);
+        builder.beginStoreLocal(completed);
+        builder.emitLoadConstant(true);
+        builder.endStoreLocal();
+        builder.endBlock();
+        builder.endTryFinally();
     }
 
     private static void emitContinuationLoop(

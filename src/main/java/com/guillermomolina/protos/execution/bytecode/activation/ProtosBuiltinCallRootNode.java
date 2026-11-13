@@ -140,7 +140,9 @@ final class ProtosBuiltinCallRootNode extends RootNode {
         return activation.task().isPresent()
                 || activation.deferredCPrimeOperationForRuntime().isPresent()
                 || activation.deferredCPrimeReleaseForRuntime().isPresent()
-                || ProtosHostEntrySuspension.suspendible(activation);
+                || ProtosHostEntrySuspension.suspendible(activation)
+                // Task-free Actor initialization: only Future.value() may suspend it.
+                || ProtosActorBootstrapSuspension.admitsNativeContinuation(activation);
     }
 
     private static void closeOwnedHome(ProtosActivation activation) {

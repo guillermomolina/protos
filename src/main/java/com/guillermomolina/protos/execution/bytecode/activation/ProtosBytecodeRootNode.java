@@ -4323,6 +4323,27 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * The {@code TryFinally} handler of a structured import: a module body that
+     * left its composition without completing it fails its initialization record.
+     */
+    @Operation
+    public static final class FailModuleInitializationUnlessCompleted {
+        @Specialization
+        public static void perform(
+                ProtosPreparedCalls.ModuleInitializationCall module,
+                boolean completed) {
+            if (!completed) {
+                fail(module);
+            }
+        }
+
+        @TruffleBoundary
+        private static void fail(ProtosPreparedCalls.ModuleInitializationCall module) {
+            module.failIfModuleInitialization();
+        }
+    }
+
     /** I115: runs the module body of a structured standard import. */
     @Operation(storeBytecodeIndex = true)
     public static final class RunModuleInitialization {

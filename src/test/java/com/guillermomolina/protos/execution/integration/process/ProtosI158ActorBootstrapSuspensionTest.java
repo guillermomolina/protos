@@ -1079,14 +1079,14 @@ final class ProtosI158ActorBootstrapSuspensionTest {
             ProtosActor root = process.processForTesting().rootActorForRuntime();
             org.graalvm.polyglot.Value run = context.getBindings(ProtosLanguage.ID).getMember("run");
 
-            CountDownLatch firstSuspended = suspensionSignal(gate);
+            // The entry waits on the pending Future: it becomes its one observer.
             HostEntry first = new HostEntry(run);
-            first.awaitSuspended(firstSuspended);
+            first.awaitWaiting(gate);
             assertEquals(1L, slot(module, "before"));
             // HOST-FUT-1 owns this wait: the I158 custody and bootstrap extent take no part.
             assertTrue(root.bootstrapCustodyForRuntime().isEmpty());
             assertEquals(null, ProtosActorBootstrapSuspension.awaitedFutureForTesting(root));
-            assertEquals(1, gate.observerCountForTesting());
+            assertEquals(1, waits(gate));
             assertEquals(0L, slot(module, "after"));
 
             assertTrue(gate.resolve(Long.valueOf(41), null));
@@ -1101,13 +1101,12 @@ final class ProtosI158ActorBootstrapSuspensionTest {
             ProtosFutureValue second =
                     new ProtosFutureValue((ProtosObjectValue) sample.parent().orElseThrow(), sample.domain());
             module.assignLocalSlot("gate", second);
-            CountDownLatch secondSuspended = suspensionSignal(second);
             HostEntry waiting = new HostEntry(run);
-            waiting.awaitSuspended(secondSuspended);
+            waiting.awaitWaiting(second);
             assertEquals(2L, slot(module, "before"));
             process.processForTesting().requestTerminationForRuntime();
             assertInstanceOf(org.graalvm.polyglot.PolyglotException.class, waiting.await());
-            assertEquals(0, second.observerCountForTesting());
+            assertEquals(0, waits(second));
             assertEquals(1L, slot(module, "after"), "the abandoned wait never resumed");
         }
     }
@@ -1122,6 +1121,11 @@ final class ProtosI158ActorBootstrapSuspensionTest {
                     }
                 };
         return suspended;
+    }
+
+    /* The registered waits on a Future: Task waiters and observers. */
+    private static int waits(ProtosFutureValue future) {
+        return future.waiterCountForTesting() + future.observerCountForTesting();
     }
 
     /** One host entry on its own thread; the test thread observes and terminalizes. */
@@ -1149,6 +1153,16 @@ final class ProtosI158ActorBootstrapSuspensionTest {
         void awaitSuspended(CountDownLatch suspended) throws InterruptedException {
             assertTrue(suspended.await(5, TimeUnit.SECONDS), "the host entry never suspended");
             assertFalse(outcome.isDone(), "a suspended entry has not returned to the host");
+        }
+
+        /** Bounded wait until this entry observes {@code awaited} and has not returned. */
+        void awaitWaiting(ProtosFutureValue awaited) throws InterruptedException {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (waits(awaited) == 0 && System.nanoTime() < deadline) {
+                Thread.sleep(10);
+            }
+            assertEquals(1, waits(awaited), "the host entry waits on the Future");
+            assertFalse(outcome.isDone(), "a waiting entry has not returned to the host");
         }
 
         Object await() throws Exception {

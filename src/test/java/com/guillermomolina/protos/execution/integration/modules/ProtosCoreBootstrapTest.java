@@ -313,29 +313,24 @@ class ProtosCoreBootstrapTest {
 
         assertFalse(object.hasLocalSlot("!="));
 
-        assertEquals(1, init.capturedLexicalContexts().size());
-        assertEquals(1, equals.capturedLexicalContexts().size());
-        assertEquals(1, match.capturedLexicalContexts().size());
-        assertEquals(1, ifNull.capturedLexicalContexts().size());
-        assertEquals(1, ifNotNull.capturedLexicalContexts().size());
-
-        assertSame(
-                init.capturedLexicalContexts().get(0),
-                equals.capturedLexicalContexts().get(0));
-        assertSame(
-                init.capturedLexicalContexts().get(0),
-                match.capturedLexicalContexts().get(0));
-
-        ProtosObjectValue sourceContext =
-                init.capturedLexicalContexts().get(0);
-
-        assertTrue(sourceContext.isFrozen());
-        assertFalse(sourceContext.hasLocalSlot("_coreObjectInit"));
-        assertFalse(sourceContext.hasLocalSlot("_coreObjectEquals"));
-        assertFalse(sourceContext.hasLocalSlot("_coreObjectMatch"));
-        assertFalse(sourceContext.hasLocalSlot("_coreObjectNotEquals"));
-        assertFalse(sourceContext.hasLocalSlot("ifNull"));
-        assertFalse(sourceContext.hasLocalSlot("ifNotNull"));
+        // PLAT066-C: a Closure that does not use its creator captures no lexical
+        // Context of it; a captured definition Context, if any, is shared, frozen and
+        // exposes none of the Core's private helper bindings.
+        java.util.Set<ProtosObjectValue> definitionContexts =
+                java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+        for (ProtosClosureValue behavior : java.util.List.of(init, equals, match, ifNull, ifNotNull)) {
+            assertTrue(behavior.capturedLexicalContexts().size() <= 1);
+            definitionContexts.addAll(behavior.capturedLexicalContexts());
+        }
+        assertTrue(definitionContexts.size() <= 1);
+        for (ProtosObjectValue sourceContext : definitionContexts) {
+            assertTrue(sourceContext.isFrozen());
+            for (String helper : java.util.List.of(
+                    "_coreObjectInit", "_coreObjectEquals", "_coreObjectMatch",
+                    "_coreObjectNotEquals", "ifNull", "ifNotNull")) {
+                assertFalse(sourceContext.hasLocalSlot(helper), helper);
+            }
+        }
 
         ProtosObjectValue receiver = new ProtosObjectValue(object);
         assertSame(

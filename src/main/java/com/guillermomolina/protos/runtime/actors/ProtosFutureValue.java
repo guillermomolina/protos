@@ -342,6 +342,11 @@ public final class ProtosFutureValue extends ProtosObjectValue {
         return observers.size();
     }
 
+    /** Registered, not yet woken waiters; test evidence that waits release their waiter. */
+    public synchronized int waiterCountForTesting() {
+        return waiters.size();
+    }
+
     public synchronized void removeObserver(Observer observer) {
         for (int index = 0; index < observers.size(); index++) {
             if (observers.get(index) == observer) {

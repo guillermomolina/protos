@@ -268,8 +268,14 @@ final class ProtosDetachedExecutionValueCrossPreludeTest {
         graph.createLocalSlot("large", large);
         graph.createLocalSlot("code", ProtosClosureValue.nativeClosure((a, x) -> large));
 
+        // I115: a signed-64 Long and a double are the guest Integer and Float
+        // themselves, transferred as the same values.
+        assertSame(Long.valueOf(1L), ProtosDetachedExecutionValue.snapshot(
+                Long.valueOf(1L), pair.sourcePrelude, pair.destinationActivation));
+        assertEquals(1.0d, ProtosDetachedExecutionValue.snapshot(
+                Double.valueOf(1.0d), pair.sourcePrelude, pair.destinationActivation));
         for (Object value :
-                new Object[] {BigInteger.ONE.shiftLeft(64), Long.valueOf(1L), Double.valueOf(1.0d), graph}) {
+                new Object[] {BigInteger.ONE.shiftLeft(64), graph}) {
             ProtosSignalException signal =
                     assertThrows(
                             ProtosSignalException.class,
@@ -289,8 +295,10 @@ final class ProtosDetachedExecutionValueCrossPreludeTest {
     }
 
     private static long rawBits(Object value) {
-        return Double.doubleToRawLongBits(
-                assertInstanceOf(ProtosFloatValue.class, value).value());
+        // I115: a Java double is the canonical guest Float; a copied represented
+        // Float keeps its representation.
+        assertTrue(ProtosNumericValueSupport.isCurrentFloat(value), String.valueOf(value));
+        return Double.doubleToRawLongBits(ProtosNumericValueSupport.currentFloatValue(value));
     }
 
     private static Pair pair() throws Exception {
