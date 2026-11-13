@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosTestPrelude;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -69,7 +68,7 @@ class CanonicalMemberReadExecutionTest {
     void memberReadSignalsSlotNotFoundForRepresentedValueWithoutMember() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue context = new ProtosObjectValue(root);
-        context.createLocalSlot("value", ProtosBooleanValue.TRUE);
+        context.createLocalSlot("value", Boolean.TRUE);
         ProtosActivation activation =
                 ProtosTestPrelude.activation(context, List.of(), new ProtosObjectValue(root));
 

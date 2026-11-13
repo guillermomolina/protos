@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemTreeObservationFlow;
@@ -148,11 +147,11 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
                         "open",
                         List.of(
                                 path(x.prelude, "leaf"),
-                                ProtosBooleanValue.FALSE,
-                                ProtosBooleanValue.TRUE,
-                                ProtosBooleanValue.FALSE,
-                                ProtosBooleanValue.FALSE,
-                                ProtosBooleanValue.FALSE));
+                                Boolean.FALSE,
+                                Boolean.TRUE,
+                                Boolean.FALSE,
+                                Boolean.FALSE,
+                                Boolean.FALSE));
         assertIoError(x, writeOpen);
         assertEquals(0, capturedBackend.openCalls.get());
 

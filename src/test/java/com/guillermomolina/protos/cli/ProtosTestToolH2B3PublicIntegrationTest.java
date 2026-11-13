@@ -37,7 +37,6 @@ import com.guillermomolina.protos.execution.ProtosTestLogicalCaseDiscoveryFacili
 import com.guillermomolina.protos.execution.ProtosTestLogicalCaseExecutionFacility;
 import com.guillermomolina.protos.execution.ProtosTestToolFileSelectionFacility;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -225,7 +224,7 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
 
             assertEquals("completed", processSnapshotState.value());
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     processSnapshot.readLocalSlot("value").orElseThrow());
         }
     }

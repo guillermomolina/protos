@@ -215,6 +215,7 @@ public final class ProtosValueLookup {
     public static boolean isProtosValue(Object value) {
         return value instanceof Long
                 || value instanceof Double
+                || value instanceof Boolean
                 || value instanceof ProtosObjectValue
                 || value instanceof ProtosRepresentedValue;
     }
@@ -295,6 +296,10 @@ public final class ProtosValueLookup {
         if (receiver instanceof Double) {
             return Optional.of(Objects.requireNonNull(prelude,
                     "Float lookup requires a Core prelude").floatPrototype());
+        }
+        // A Boolean is a Java boolean and delegates directly to the root Object.
+        if (receiver instanceof Boolean) {
+            return Optional.of(ProtosObjectValue.rootObject());
         }
         if (receiver instanceof ProtosRepresentedValue represented) {
             return Optional.of(

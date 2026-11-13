@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -176,7 +175,7 @@ final class ProtosTestToolResourceCatalogSchemaTest {
         source.append("passed\n");
 
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 completed(source.toString(), fixture));
     }
 

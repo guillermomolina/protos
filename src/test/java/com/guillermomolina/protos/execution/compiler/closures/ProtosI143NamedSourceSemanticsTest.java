@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -192,7 +191,7 @@ class ProtosI143NamedSourceSemanticsTest {
     private static void assertTrueResult(String source) throws Exception {
         Object result = ProtosTestExecutionSupport.evaluate(
                 source, corePrelude().newModuleActivation());
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     private static void assertTraceCount(

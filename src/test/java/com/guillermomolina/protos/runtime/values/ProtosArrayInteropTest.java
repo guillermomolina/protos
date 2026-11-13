@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.runtime.values;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -107,7 +106,7 @@ final class ProtosArrayInteropTest {
         ProtosArrayValue array =
                 new ProtosArrayValue(
                         ProtosObjectValue.rootObject(),
-                        List.of(ProtosBooleanValue.TRUE));
+                        List.of(Boolean.TRUE));
 
         assertFalse(interop.isArrayElementModifiable(array, 0));
         assertFalse(interop.isArrayElementInsertable(array, 1));
@@ -116,12 +115,12 @@ final class ProtosArrayInteropTest {
 
         assertThrows(
                 UnsupportedMessageException.class,
-                () -> interop.writeArrayElement(array, 0, ProtosBooleanValue.FALSE));
+                () -> interop.writeArrayElement(array, 0, Boolean.FALSE));
         assertThrows(
                 UnsupportedMessageException.class,
                 () -> interop.removeArrayElement(array, 0));
 
-        assertSame(ProtosBooleanValue.TRUE, array.indexedAt(0));
+        assertSame(Boolean.TRUE, array.indexedAt(0));
     }
 
     @Test
@@ -129,7 +128,7 @@ final class ProtosArrayInteropTest {
         ProtosArrayValue array =
                 new ProtosArrayValue(
                         ProtosObjectValue.rootObject(),
-                        List.of(ProtosBooleanValue.TRUE));
+                        List.of(Boolean.TRUE));
         array.createLocalSlot("local", new ProtosStringValue("not-a-D5-member"));
 
         assertFalse(interop.hasMembers(array));

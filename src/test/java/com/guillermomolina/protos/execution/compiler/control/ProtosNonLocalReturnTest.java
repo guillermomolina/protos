@@ -448,7 +448,7 @@ class ProtosNonLocalReturnTest {
             ProtosClosureValue escaped = assertInstanceOf(ProtosClosureValue.class, result);
             assertFalse(escaped.returnHome().orElseThrow().isActive());
             assertSame(failure, module.context().readLocalSlot("caught").orElseThrow());
-            assertSame(com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE,
+            assertSame(Boolean.FALSE,
                     module.context().readLocalSlot("bodyReached").orElseThrow());
             Object invalid = ProtosTestExecutionSupport.evaluate(
                     "i115-failed-entry-escaped.protos",

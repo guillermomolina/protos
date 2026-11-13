@@ -25,7 +25,6 @@ import com.guillermomolina.protos.execution.ProtosRootTaskExecution;
 import com.guillermomolina.protos.execution.ProtosSourceCompiler;
 import com.guillermomolina.protos.execution.ProtosStandardFilesystemProtocol;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
@@ -105,7 +104,7 @@ activation);
             case CANCELLED -> throw new AssertionError(
                     "LM006-D Protos case unexpectedly cancelled: " + sourceName);
         };
-        assertSame(ProtosBooleanValue.TRUE, result, sourceName);
+        assertSame(Boolean.TRUE, result, sourceName);
         return new Fixture(resource);
     }
 

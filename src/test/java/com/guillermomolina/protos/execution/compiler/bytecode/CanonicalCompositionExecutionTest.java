@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosTestPrelude;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -34,7 +33,7 @@ class CanonicalCompositionExecutionTest {
     void compositionCopiesLocalBindingsAndMakesThemVisibleToLaterItems() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue source = new ProtosObjectValue(root);
-        source.createLocalSlot("inherited", ProtosBooleanValue.TRUE);
+        source.createLocalSlot("inherited", Boolean.TRUE);
         ProtosObjectValue context = new ProtosObjectValue(root);
         context.createLocalSlot("source", source);
         ProtosActivation activation =
@@ -51,10 +50,10 @@ class CanonicalCompositionExecutionTest {
                                 activation);
 
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 object.readLocalSlot("inherited").orElseThrow());
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 object.readLocalSlot("copied").orElseThrow());
     }
 
@@ -62,8 +61,8 @@ class CanonicalCompositionExecutionTest {
     void directLocalDeclarationReservesNameRegardlessOfTextualPosition() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue source = new ProtosObjectValue(root);
-        source.createLocalSlot("reserved", ProtosBooleanValue.TRUE);
-        source.createLocalSlot("kept", ProtosBooleanValue.TRUE);
+        source.createLocalSlot("reserved", Boolean.TRUE);
+        source.createLocalSlot("kept", Boolean.TRUE);
         ProtosObjectValue context = new ProtosObjectValue(root);
         context.createLocalSlot("source", source);
         ProtosActivation activation =
@@ -80,10 +79,10 @@ class CanonicalCompositionExecutionTest {
                                 activation);
 
         assertSame(
-                ProtosBooleanValue.FALSE,
+                Boolean.FALSE,
                 object.readLocalSlot("reserved").orElseThrow());
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 object.readLocalSlot("kept").orElseThrow());
     }
 
@@ -91,9 +90,9 @@ class CanonicalCompositionExecutionTest {
     void compositionConflictSignalsCoreError() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue first = new ProtosObjectValue(root);
-        first.createLocalSlot("same", ProtosBooleanValue.TRUE);
+        first.createLocalSlot("same", Boolean.TRUE);
         ProtosObjectValue second = new ProtosObjectValue(root);
-        second.createLocalSlot("same", ProtosBooleanValue.FALSE);
+        second.createLocalSlot("same", Boolean.FALSE);
         ProtosObjectValue context = new ProtosObjectValue(root);
         context.createLocalSlot("first", first);
         context.createLocalSlot("second", second);

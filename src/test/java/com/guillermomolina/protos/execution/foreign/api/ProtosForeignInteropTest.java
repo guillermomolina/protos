@@ -28,7 +28,6 @@ import com.guillermomolina.protos.execution.ProtosForeignAdmissionDescriptor.Cap
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Fake;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Integral;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.TestForeignFailure;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosRawForeignValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -68,7 +67,7 @@ class ProtosForeignInteropTest {
                             ProtosObjectValue.class, fixture.eval("import(\"std:interop\")"));
             assertEquals(OPERATIONS, module.localSlotsSnapshot().keySet());
             assertSame(
-                    ProtosBooleanValue.FALSE,
+                    Boolean.FALSE,
                     fixture.eval("import(\"std:interop\").hasSlot(\"_interopFacility\")"));
             assertEquals(sessions, fixture.provider.sessions.size());
             assertTrue(fixture.provider.events.isEmpty());
@@ -154,7 +153,7 @@ class ProtosForeignInteropTest {
             for (String name : List.of("call", "at", "atPut", "each")) {
                 assertMissing(fixture, fixture.failure(h + "h." + name));
             }
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(h + "h == h"));
+            assertSame(Boolean.TRUE, fixture.eval(h + "h == h"));
             assertInstanceOf(Long.class, fixture.eval(h + "h.hash()"));
             for (String name : institutions) {
                 assertEquals(1, provider.count("read:" + name), name);
@@ -181,13 +180,13 @@ class ProtosForeignInteropTest {
 
             // An identity-bearing raw reference comes back as that exact Protos value.
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(t + "s: m.stable\nI.writeMember(t, \"x\", s) === s"));
             ProtosForeignArgument written = (ProtosForeignArgument) target.faithful.get("x");
             assertEquals(ProtosForeignAdmissionDescriptor.Kind.RAW, written.kind());
             assertSame(stable, written.value());
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(t + "v: \"text\"\nI.writeMember(t, \"y\", v) === v"));
             assertEquals("text", ((ProtosForeignArgument) target.faithful.get("y")).value());
             assertEquals(0, provider.count("read:x"));
@@ -227,7 +226,7 @@ class ProtosForeignInteropTest {
             // The facade keeps its Protos-facing identity and gains no slot from the write.
             assertSame(facade, fixture.facade("all"));
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(
                             M + "f: import(\"test:all\")\nI.invoke(f)\nf === import(\"test:all\")"));
             assertTrue(facade.readLocalSlot("z").isEmpty());
@@ -387,7 +386,7 @@ class ProtosForeignInteropTest {
         try (ProtosForeignValueFixture fixture = fixture(new Fake(false).member("all", all))) {
             String a = M + "a: m.all\nn: 10\nc: (x) => {\n    n = n + x\n    n\n}\nm.keep: c\n";
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(a + "(I.invoke(a, c) == 12).and() { I.instantiate(a, c) == 14 }"));
             // The capability denoted the exact Closure; nothing was copied or wrapped.
             assertSame(fixture.facade("root").readLocalSlot("keep").orElseThrow(), seen.get());
@@ -395,7 +394,7 @@ class ProtosForeignInteropTest {
             // A Protos Error leaving the callback round-trips as that exact Error.
             all.body = arguments -> invoke(arguments.get(0));
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(
                             M
                                     + "a: m.all\nboom: Error()\n"
@@ -404,7 +403,7 @@ class ProtosForeignInteropTest {
 
             // A callback the provider retains through writeMember expires with that operation.
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(M + "a: m.all\nc: () => 1\nI.writeMember(a, \"cb\", c) === c"));
             ProtosForeignArgument retained = (ProtosForeignArgument) all.faithful.get("cb");
             assertTrue(retained.isCallback());

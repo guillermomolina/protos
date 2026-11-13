@@ -109,8 +109,8 @@ public final class ProtosDetachedExecutionValue {
             }
 
             if (value == ProtosNullValue.INSTANCE
-                    || value == ProtosBooleanValue.TRUE
-                    || value == ProtosBooleanValue.FALSE) {
+                    || value == Boolean.TRUE
+                    || value == Boolean.FALSE) {
                 return remember(value, value);
             }
             // I091: Core Fraction and Complex are authority-free exact values.

@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -81,8 +80,8 @@ class ProtosStandardNumberOrderingProtocolTest {
         for (Object other :
                 List.of(nan, Long.valueOf(0), integer(BigInteger.ONE.shiftLeft(64), prelude))) {
             for (String selector : List.of("<", "<=", ">", ">=")) {
-                assertSame(ProtosBooleanValue.FALSE, ProtosInvocation.invokeMessage(nan, selector, List.of(other), a));
-                assertSame(ProtosBooleanValue.FALSE, ProtosInvocation.invokeMessage(other, selector, List.of(nan), a));
+                assertSame(Boolean.FALSE, ProtosInvocation.invokeMessage(nan, selector, List.of(other), a));
+                assertSame(Boolean.FALSE, ProtosInvocation.invokeMessage(other, selector, List.of(nan), a));
             }
         }
     }
@@ -139,7 +138,7 @@ class ProtosStandardNumberOrderingProtocolTest {
     private static void assertRelation(
             boolean expected, Object left, String selector, Object right, ProtosActivation a) {
         assertSame(
-                expected ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE,
+                expected ? Boolean.TRUE : Boolean.FALSE,
                 ProtosInvocation.invokeMessage(left, selector, List.of(right), a),
                 left + " " + selector + " " + right);
     }

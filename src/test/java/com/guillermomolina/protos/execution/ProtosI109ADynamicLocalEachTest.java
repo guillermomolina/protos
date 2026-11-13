@@ -10,7 +10,6 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
@@ -182,7 +181,7 @@ final class ProtosI109ADynamicLocalEachTest {
                         each.name());
 
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         task.result().orElseThrow(),
                         each.name() + ": receiver identity");
 
@@ -303,7 +302,7 @@ final class ProtosI109ADynamicLocalEachTest {
                 Object result = root.getCallTarget().call(module);
 
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         result,
                         each.name() + ": empty receiver identity");
 
@@ -372,7 +371,7 @@ final class ProtosI109ADynamicLocalEachTest {
                                         + " / parse " + iteration;
 
                         assertSame(
-                                ProtosBooleanValue.TRUE,
+                                Boolean.TRUE,
                                 result,
                                 diagnostic + ": receiver identity");
 
@@ -682,7 +681,7 @@ final class ProtosI109ADynamicLocalEachTest {
                     Object result = root.getCallTarget().call(module);
 
                     assertSame(
-                            ProtosBooleanValue.TRUE,
+                            Boolean.TRUE,
                             result,
                             diagnostic + ": receiver identity");
 

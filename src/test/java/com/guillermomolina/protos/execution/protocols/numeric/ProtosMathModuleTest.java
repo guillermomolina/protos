@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
@@ -96,7 +95,7 @@ final class ProtosMathModuleTest {
         assertSignals(() -> call());
         assertSignals(() -> call(integer(4), integer(4)));
         assertSignals(() -> call(new ProtosStringValue("4")));
-        assertSignals(() -> call(ProtosBooleanValue.TRUE));
+        assertSignals(() -> call(Boolean.TRUE));
         assertSignals(() -> call(prelude.integerPrototype()));
         assertSignals(() -> call(prelude.complexPrototype()));
         assertSignals(() -> call(evaluate("Integer {}")));
@@ -127,7 +126,7 @@ final class ProtosMathModuleTest {
                     signaled && !touched
                 })()
                 """);
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -142,7 +141,7 @@ final class ProtosMathModuleTest {
                     (Custom.sqrt(4) == "replaced") && (Math.sqrt(4) == 2)
                 })()
                 """);
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test

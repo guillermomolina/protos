@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -109,7 +108,7 @@ final class ProtosHmacSha256FacilityTest {
         assertTrue(secondTag.isOpen());
 
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate(
                         facility,
                         key,
@@ -249,7 +248,7 @@ final class ProtosHmacSha256FacilityTest {
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
                 () -> String.valueOf(outcome.error()));
-        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        assertSame(Boolean.TRUE, outcome.value());
         assertEquals(2, attempts.get());
     }
 
@@ -307,7 +306,7 @@ final class ProtosHmacSha256FacilityTest {
                 outcome.state(),
                 () -> String.valueOf(outcome.error()));
 
-        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        assertSame(Boolean.TRUE, outcome.value());
     }
 
     private static Object evaluate(

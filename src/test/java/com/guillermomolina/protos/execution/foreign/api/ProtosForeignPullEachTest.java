@@ -32,7 +32,6 @@ import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Marker;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.TestForeignFailure;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosRawForeignValue;
@@ -118,7 +117,7 @@ class ProtosForeignPullEachTest {
 
             // The projection wins over the foreign member literally named each.
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(M + "s: m.seq\ns.each((x) => { log(x) }) === s"));
             assertEquals(0, fixture.provider.count("read:each"));
             assertEquals(List.of("iterator", "hasNext", "next:0", "block", "hasNext"), pulls(fixture));
@@ -126,8 +125,8 @@ class ProtosForeignPullEachTest {
             // Iteration confers no Array or Map family membership.
             String s = M + "s: m.seq\n";
             assertSame(ProtosObjectValue.rootObject(), fixture.eval(s + "s.parent()"));
-            assertSame(ProtosBooleanValue.FALSE, fixture.eval(s + "s.parent() === Array"));
-            assertSame(ProtosBooleanValue.FALSE, fixture.eval(s + "s.parent() === Map"));
+            assertSame(Boolean.FALSE, fixture.eval(s + "s.parent() === Array"));
+            assertSame(Boolean.FALSE, fixture.eval(s + "s.parent() === Map"));
             assertMissing(fixture, fixture.failure(s + "s.size()"));
             assertMissing(fixture, fixture.failure(s + "s[0]"));
             assertNoLeak(fixture);
@@ -141,7 +140,7 @@ class ProtosForeignPullEachTest {
             fixture.provider.modules.put("seq", seq);
             String s = M + "s: import(\"test:seq\")\n";
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(s + "s.each((x) => { log(x) }) === s"));
             assertEquals(
                     List.of("iterator", "hasNext", "next:0", "block", "hasNext", "next:1", "block", "hasNext"),
@@ -166,7 +165,7 @@ class ProtosForeignPullEachTest {
                         raw);
         try (ProtosForeignValueFixture fixture = fixture(seq)) {
             String s = M + "s: m.seq\n";
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(s + "s.each((x) => { log(x) }) === s"));
+            assertSame(Boolean.TRUE, fixture.eval(s + "s.each((x) => { log(x) }) === s"));
             List<String> expected = new ArrayList<>(List.of("iterator"));
             for (int i = 0; i < 6; i++) {
                 expected.addAll(List.of("hasNext", "next:" + i, "block"));
@@ -192,7 +191,7 @@ class ProtosForeignPullEachTest {
             Object last = fixture.eval(s + "last: null\ns.each((x) => { last = x })\nlast");
             assertInstanceOf(ProtosRawForeignValue.class, last);
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(s + "n: 0\ns.each((x) => { n = n + 1 })\nn == 6"));
             assertNoLeak(fixture);
         }
@@ -202,7 +201,7 @@ class ProtosForeignPullEachTest {
     void emptyIteratorInvokesNothingAndReturnsTheReceiver() throws Exception {
         try (ProtosForeignValueFixture fixture = fixture(iterable())) {
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(M + "s: m.seq\ns.each((x) => { log(x) }) === s"));
             assertEquals(List.of("iterator", "hasNext"), pulls(fixture));
             assertTrue(fixture.provider.executions.isEmpty());
@@ -228,7 +227,7 @@ class ProtosForeignPullEachTest {
 
             // Any ordinarily invokable value is accepted, not only a literal Closure.
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(s + "callable: { call: (x) => { log(x) } }\ns.each(callable) === s"));
             assertEquals(List.of("iterator", "hasNext", "next:0", "block", "hasNext"), pulls(fixture));
             assertNoLeak(fixture);
@@ -240,7 +239,7 @@ class ProtosForeignPullEachTest {
         try (ProtosForeignValueFixture fixture = fixture(iterable("a", "b", "c"))) {
             String s = M + "s: m.seq\n";
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(
                             s
                                     + "boom: Error()\n"

@@ -17,7 +17,6 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -157,7 +156,7 @@ public final class ProtosHmacSha256Facility {
                 requireBytes(activation, supplied.get(2), Integer.MAX_VALUE);
 
         if (tag.indexedSize() != TAG_LENGTH) {
-            return ProtosBooleanValue.FALSE;
+            return Boolean.FALSE;
         }
 
         byte[] keyCopy = null;
@@ -176,7 +175,7 @@ public final class ProtosHmacSha256Facility {
                 throw invalid(activation);
             }
 
-            return ProtosBooleanValue.of(
+            return Boolean.valueOf(
                     MessageDigest.isEqual(calculated, tagCopy));
         } catch (GeneralSecurityException | IllegalArgumentException | IllegalStateException | ProviderException failure) {
             throw invalid(activation);

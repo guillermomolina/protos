@@ -55,7 +55,6 @@ import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceSuperSend;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -483,7 +482,7 @@ public final class ProtosSourceLayoutToolBridge {
                                 prelude));
                 value.createLocalSlot(
                         "expressionBody",
-                        ProtosBooleanValue.of(
+                        Boolean.valueOf(
                                 closure.expressionBody()));
             }
         }
@@ -600,7 +599,7 @@ public final class ProtosSourceLayoutToolBridge {
                             prelude));
             value.createLocalSlot(
                     "spread",
-                    ProtosBooleanValue.of(argument.spread()));
+                    Boolean.valueOf(argument.spread()));
             value.createLocalSlot(
                     "name",
                     argument.name().isPresent()
@@ -685,7 +684,7 @@ public final class ProtosSourceLayoutToolBridge {
                             prelude));
             value.createLocalSlot(
                     "composition",
-                    ProtosBooleanValue.of(item.composition()));
+                    Boolean.valueOf(item.composition()));
             value.createLocalSlot(
                     "expression",
                     expression(
@@ -724,7 +723,7 @@ public final class ProtosSourceLayoutToolBridge {
                             : ProtosNullValue.INSTANCE);
             value.createLocalSlot(
                     "rest",
-                    ProtosBooleanValue.of(parameter.rest()));
+                    Boolean.valueOf(parameter.rest()));
             value.freeze();
             values.add(value);
         }
@@ -770,11 +769,11 @@ public final class ProtosSourceLayoutToolBridge {
                     string(comment.rawText()));
             value.createLocalSlot(
                     "blankLineBefore",
-                    com.guillermomolina.protos.runtime.ProtosBooleanValue.of(
+                    Boolean.valueOf(
                             comment.blankLineBefore()));
             value.createLocalSlot(
                     "blankLineAfter",
-                    com.guillermomolina.protos.runtime.ProtosBooleanValue.of(
+                    Boolean.valueOf(
                             comment.blankLineAfter()));
             value.createLocalSlot(
                     "placement",
@@ -861,7 +860,7 @@ public final class ProtosSourceLayoutToolBridge {
                     string(separator.kind().name()));
             value.createLocalSlot(
                     "blankLine",
-                    com.guillermomolina.protos.runtime.ProtosBooleanValue.of(
+                    Boolean.valueOf(
                             separator.blankLine()));
             value.createLocalSlot(
                     "following",

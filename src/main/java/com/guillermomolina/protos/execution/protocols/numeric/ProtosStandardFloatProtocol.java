@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosComplexArithmetic;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
@@ -54,7 +53,7 @@ public final class ProtosStandardFloatProtocol {
                                 throw new ProtosSignalException(
                                         ProtosCoreErrors.newError(activation));
                             }
-                            return ProtosBooleanValue.of(
+                            return Boolean.valueOf(
                                     ProtosNumericValueSupport.isCurrentFloat(
                                             supplied.get(0)));
                         }));

@@ -237,8 +237,8 @@ public final class ProtosActorValueTransfer {
             }
 
             if (value == ProtosNullValue.INSTANCE
-                    || value == ProtosBooleanValue.TRUE
-                    || value == ProtosBooleanValue.FALSE) {
+                    || value == Boolean.TRUE
+                    || value == Boolean.FALSE) {
                 memo.put(value, value);
                 return value;
             }

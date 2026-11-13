@@ -115,8 +115,8 @@ class ProtosRepresentedValueLookupTest {
 
         for (Object value :
                 List.of(
-                        ProtosBooleanValue.TRUE,
-                        ProtosBooleanValue.FALSE,
+                        Boolean.TRUE,
+                        Boolean.FALSE,
                         ProtosNullValue.INSTANCE)) {
             ProtosSlotLookupResult selected =
                     ProtosValueLookup.lookup(value, "call", prelude).orElseThrow();

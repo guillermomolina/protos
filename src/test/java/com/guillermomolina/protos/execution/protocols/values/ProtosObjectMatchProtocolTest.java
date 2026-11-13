@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.file.Path;
@@ -74,7 +73,7 @@ class ProtosObjectMatchProtocolTest {
                             state.subjectCalls == 0
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -102,7 +101,7 @@ class ProtosObjectMatchProtocolTest {
                         matched == false && state.calls == 1
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test

@@ -30,7 +30,6 @@ import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Fake;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Integral;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Marker;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -75,7 +74,7 @@ class ProtosForeignValueAdmissionTest {
                         .member("list", List.of(1, 2))
                         .member("map", Map.of("k", 1));
         try (ProtosForeignValueFixture fixture = fixture(root)) {
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(M + "m.bool"));
+            assertSame(Boolean.TRUE, fixture.eval(M + "m.bool"));
             assertSame(ProtosNullValue.INSTANCE, fixture.eval(M + "m.nil"));
             assertEquals(
                     "héllo 😀",
@@ -90,7 +89,7 @@ class ProtosForeignValueAdmissionTest {
             }
             // A converted value is an ordinary member of its family.
             assertSame(fixture.prelude.bigIntegerPrototype(), fixture.eval(M + "m.big.parent()"));
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(M + "m.text == \"héllo 😀\""));
+            assertSame(Boolean.TRUE, fixture.eval(M + "m.text == \"héllo 😀\""));
         }
     }
 
@@ -103,17 +102,17 @@ class ProtosForeignValueAdmissionTest {
                         .member("stable", (Supplier<Object>) () -> new Alias(stable))
                         .member("unstable", (Supplier<Object>) () -> new Alias(unstable));
         try (ProtosForeignValueFixture fixture = fixture(root)) {
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(M + "m.stable === m.stable"));
-            assertSame(ProtosBooleanValue.FALSE, fixture.eval(M + "m.unstable === m.unstable"));
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(M + "u: m.unstable\nv: u\nu === v"));
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(M + "u: m.unstable\nu == u"));
-            assertSame(ProtosBooleanValue.FALSE, fixture.eval(M + "m.unstable == m.unstable"));
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(M + "m.stable == m.stable"));
+            assertSame(Boolean.TRUE, fixture.eval(M + "m.stable === m.stable"));
+            assertSame(Boolean.FALSE, fixture.eval(M + "m.unstable === m.unstable"));
+            assertSame(Boolean.TRUE, fixture.eval(M + "u: m.unstable\nv: u\nu === v"));
+            assertSame(Boolean.TRUE, fixture.eval(M + "u: m.unstable\nu == u"));
+            assertSame(Boolean.FALSE, fixture.eval(M + "m.unstable == m.unstable"));
+            assertSame(Boolean.TRUE, fixture.eval(M + "m.stable == m.stable"));
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(M + "m.stable.hash() == m.stable.hash()"));
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(M + "u: m.unstable\nu.hash() == u.hash()"));
 
             Object first = fixture.eval(M + "m.stable");
@@ -139,14 +138,14 @@ class ProtosForeignValueAdmissionTest {
                                                     + "mp: Map()\nmp[m.unstable] = 1\n"
                                                     + "mp[m.unstable] = 2\nmp.size()")));
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(M + "mp: Map()\nmp[m.stable] = 1\nmp.containsKey(m.stable)"));
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(
                             M + "im: IdentityMap()\nim[m.stable] = 1\nim.containsKey(m.stable)"));
             assertSame(
-                    ProtosBooleanValue.FALSE,
+                    Boolean.FALSE,
                     fixture.eval(
                             M
                                     + "im: IdentityMap()\nim[m.unstable] = 1\n"

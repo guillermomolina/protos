@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -78,14 +77,14 @@ class ProtosCollectionsSetAlgebraModuleTest {
                 assertSame(prelude.mapPrototype(), copiedMap.parent().orElseThrow());
                 assertEquals(3, copiedMap.keyedSize());
                 copiedMap.keyedSnapshot()
-                        .forEach(entry -> assertSame(ProtosBooleanValue.TRUE, entry.value()));
+                        .forEach(entry -> assertSame(Boolean.TRUE, entry.value()));
             } else {
                 ProtosIdentityMapValue copiedMap =
                         assertInstanceOf(ProtosIdentityMapValue.class, copied);
                 assertSame(prelude.identityMapPrototype(), copiedMap.parent().orElseThrow());
                 assertEquals(3, copiedMap.keyedSize());
                 copiedMap.keyedSnapshot()
-                        .forEach(entry -> assertSame(ProtosBooleanValue.TRUE, entry.value()));
+                        .forEach(entry -> assertSame(Boolean.TRUE, entry.value()));
             }
         }
     }

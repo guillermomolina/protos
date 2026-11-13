@@ -29,7 +29,6 @@ import static com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAda
 import static com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAdapter.validateLocation;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -250,10 +249,10 @@ public final class ProtosPackageExecutionPlanV2Adapter {
         ProtosObjectValue identifier = requireObject(value, "prerelease identifier");
         requireExactFields(identifier, PRERELEASE_FIELDS, "prerelease identifier");
 
-        if (!(requireField(identifier, "numeric") instanceof ProtosBooleanValue numericValue)) {
+        if (!(requireField(identifier, "numeric") instanceof Boolean numericValue)) {
             throw new IOException("prerelease numeric is not a Boolean");
         }
-        boolean numeric = numericValue.value();
+        boolean numeric = numericValue.booleanValue();
         String text =
                 requireNonEmptyString(requireField(identifier, "text"), "prerelease text");
         Object number = requireField(identifier, "number");

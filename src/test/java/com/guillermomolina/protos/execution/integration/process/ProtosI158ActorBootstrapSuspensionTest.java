@@ -1053,12 +1053,12 @@ final class ProtosI158ActorBootstrapSuspensionTest {
                     """
                     sample: (() => 1).future()
                     sample.value()
-                    gate: 0
+                    gateBox: { current: 0 }
                     before: 0
                     after: 0
                     run: () => {
                         before = before + 1
-                        v: gate.value()
+                        v: gateBox.current.value()
                         after = after + 1
                         v + 1
                     }
@@ -1075,7 +1075,10 @@ final class ProtosI158ActorBootstrapSuspensionTest {
             ProtosFutureValue sample = (ProtosFutureValue) module.readLocalSlot("sample").orElseThrow();
             ProtosFutureValue gate =
                     new ProtosFutureValue((ProtosObjectValue) sample.parent().orElseThrow(), sample.domain());
-            module.assignLocalSlot("gate", gate);
+            // D179: a Java write into a lexical Context is not guest semantics; the
+            // gate is published through an ordinary object slot the guest reads.
+            ProtosObjectValue gateBox = (ProtosObjectValue) module.readLocalSlot("gateBox").orElseThrow();
+            gateBox.assignLocalSlot("current", gate);
             ProtosActor root = process.processForTesting().rootActorForRuntime();
             org.graalvm.polyglot.Value run = context.getBindings(ProtosLanguage.ID).getMember("run");
 
@@ -1100,7 +1103,7 @@ final class ProtosI158ActorBootstrapSuspensionTest {
             // A second wait is ended by Process termination without resuming guest code.
             ProtosFutureValue second =
                     new ProtosFutureValue((ProtosObjectValue) sample.parent().orElseThrow(), sample.domain());
-            module.assignLocalSlot("gate", second);
+            gateBox.assignLocalSlot("current", second);
             HostEntry waiting = new HostEntry(run);
             waiting.awaitWaiting(second);
             assertEquals(2L, slot(module, "before"));
@@ -1159,6 +1162,13 @@ final class ProtosI158ActorBootstrapSuspensionTest {
         void awaitWaiting(ProtosFutureValue awaited) throws InterruptedException {
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
             while (waits(awaited) == 0 && System.nanoTime() < deadline) {
+                if (outcome.isDone()) {
+                    Object early = outcome.join();
+                    if (early instanceof Throwable failure) {
+                        throw new AssertionError("host entry ended before waiting on the Future", failure);
+                    }
+                    throw new AssertionError("host entry returned before waiting on the Future: " + early);
+                }
                 Thread.sleep(10);
             }
             assertEquals(1, waits(awaited), "the host entry waits on the Future");

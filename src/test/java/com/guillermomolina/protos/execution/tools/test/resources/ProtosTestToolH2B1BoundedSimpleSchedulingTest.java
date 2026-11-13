@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -84,7 +83,7 @@ activation);
                                         + submission.completionOrder()
                                         + ", guestErrorParent="
                                         + guestErrorParentName(outcome, prelude));
-                assertSame(ProtosBooleanValue.TRUE, outcome.value());
+                assertSame(Boolean.TRUE, outcome.value());
                 assertEquals(3, submission.submittedCount());
 
                 assertEquals(

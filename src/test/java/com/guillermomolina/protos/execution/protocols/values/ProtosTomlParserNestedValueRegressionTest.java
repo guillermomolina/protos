@@ -8,7 +8,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.nio.file.Path;
@@ -46,7 +45,7 @@ final class ProtosTomlParserNestedValueRegressionTest {
                         })
                         (node.kind === "integer") && (node.value == 0)
                         """);
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -74,7 +73,7 @@ final class ProtosTomlParserNestedValueRegressionTest {
                             (node.value["leaf"].kind === "integer") &&
                             (node.value["leaf"].value == 1)
                         """);
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     private static Object evaluate(String input, String body) throws Exception {

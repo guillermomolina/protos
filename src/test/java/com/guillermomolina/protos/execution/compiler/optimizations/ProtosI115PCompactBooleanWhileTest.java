@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -434,7 +433,7 @@ final class ProtosI115PCompactBooleanWhileTest {
             ProtosClosureValue mark = ProtosClosureValue.nativeClosure(
                     (activation, supplied) -> {
                         iterations[0]++;
-                        return ProtosBooleanValue.FALSE;
+                        return Boolean.FALSE;
                     });
             ProtosClosureValue gated = closure(
                     "(condition, mark) => { (() => mark(condition)).whileTrue() { 0 }\n0 }",
@@ -444,10 +443,10 @@ final class ProtosI115PCompactBooleanWhileTest {
                             + "body = body + 1\ncondition = false\n}\nbody }",
                     module);
             assertEquals("1", integerValue(
-                    enter(fastDirect(direct, module, ProtosBooleanValue.TRUE))),
+                    enter(fastDirect(direct, module, Boolean.TRUE))),
                     "canonical true runs the body");
             assertEquals("0", integerValue(
-                    enter(fastDirect(direct, module, ProtosBooleanValue.FALSE))),
+                    enter(fastDirect(direct, module, Boolean.FALSE))),
                     "canonical false runs no body");
             assertEquals("0", integerValue(enter(fastDirect(gated, module, 0L, mark))));
             assertEquals(1, iterations[0], "the condition prefix ran once");

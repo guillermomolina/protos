@@ -31,7 +31,6 @@ import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Fake;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Integral;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Marker;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.TestForeignFailure;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -146,7 +145,7 @@ class ProtosForeignCallbackTest {
                                     + "}\n"
                                     + "m.keep: c\n"
                                     + "(m.fn(c) == 12).and() { ok }.and() { n == 12 }");
-            assertSame(ProtosBooleanValue.TRUE, result);
+            assertSame(Boolean.TRUE, result);
             // The capability denoted the exact Closure; nothing was copied or wrapped.
             assertSame(
                     setup.fixture.facade("root").readLocalSlot("keep").orElseThrow(), seen.get());
@@ -184,7 +183,7 @@ class ProtosForeignCallbackTest {
                             throw rejected;
                         }
                     };
-            assertSame(ProtosBooleanValue.TRUE, setup.eval("m.fn(() => m.stable) === m.stable"));
+            assertSame(Boolean.TRUE, setup.eval("m.fn(() => m.stable) === m.stable"));
             ProtosForeignArgument raw = (ProtosForeignArgument) results.get(0);
             assertEquals(ProtosForeignAdmissionDescriptor.Kind.RAW, raw.kind());
             assertSame(setup.stable, raw.value());
@@ -378,14 +377,14 @@ class ProtosForeignCallbackTest {
                         }
                     };
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     setup.eval(
                             "boom: Error()\n"
                                     + "Error.handle(() => m.fn(() => boom.signal(), \"same\"),"
                                     + " (caught) => caught === boom)"));
             // Errors raised while the callback is nested in another operation round-trip too.
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     setup.eval(
                             "boom: Error()\n"
                                     + "Error.handle(() => m.fn(() => m.fn(() => boom.signal(),"

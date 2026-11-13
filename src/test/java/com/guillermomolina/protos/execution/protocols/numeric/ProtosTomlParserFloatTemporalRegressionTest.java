@@ -8,7 +8,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.nio.file.Path;
@@ -39,7 +38,7 @@ final class ProtosTomlParserFloatTemporalRegressionTest {
                         root.value["value"].kind === "float"
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -55,7 +54,7 @@ final class ProtosTomlParserFloatTemporalRegressionTest {
                             (root.value["value"].value == (1.0 / 0.0))
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -71,7 +70,7 @@ final class ProtosTomlParserFloatTemporalRegressionTest {
                             (root.value["value"].value.fraction.digits == 448)
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     private static Object evaluate(String input, String body) throws Exception {

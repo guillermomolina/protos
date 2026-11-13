@@ -10,7 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
@@ -74,14 +73,14 @@ class ProtosIdentityMapConformanceTest {
                 ProtosNumericHashKey.fromIdentity(equal),
                 map.keyedSnapshot().get(0).recordedIdentityHash());
         assertSame(
-                ProtosBooleanValue.FALSE,
+                Boolean.FALSE,
                 ProtosInvocation.invokeMessage(
                         map,
                         "containsKey",
                         List.of(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge.add(BigInteger.ONE), prelude)),
                         a));
         assertSame(
-                ProtosBooleanValue.FALSE,
+                Boolean.FALSE,
                 ProtosInvocation.invokeMessage(
                         map, "containsKey", List.of(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge.negate(), prelude)), a));
     }

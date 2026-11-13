@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -91,7 +90,7 @@ public final class ProtosStandardIpAddressProtocol {
         if (activation.receiver() != prototype || supplied.size() != 1) {
             throw invalid(activation);
         }
-        return ProtosBooleanValue.of(recognizesValue(supplied.get(0), prototype));
+        return Boolean.valueOf(recognizesValue(supplied.get(0), prototype));
     }
 
     static boolean recognizesValue(Object candidate, ProtosObjectValue prototype) {

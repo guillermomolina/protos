@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -38,7 +37,7 @@ class ProtosI143NamedSendSelectionTest {
     @Test
     void namedSendUsesActualReceiverAndMethodHome() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 base: {
                     read: (value) => this.marker + value
@@ -51,7 +50,7 @@ class ProtosI143NamedSendSelectionTest {
     @Test
     void sourceDefaultsRunOnlyForAbsentFormals() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 receiver: {
                     read: (a: 10, b: 20) => a * 10 + b
@@ -63,7 +62,7 @@ class ProtosI143NamedSendSelectionTest {
     @Test
     void superUsesTheInheritedMethodNotTheCurrentOverride() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 base: {
                     read: (value) => this.marker + value
@@ -79,7 +78,7 @@ class ProtosI143NamedSendSelectionTest {
     @Test
     void selectedCustomCallBindsItsOwnNames() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 receiver: { call: (arg) => arg + 1 }
                 receiver(arg: 41) == 42

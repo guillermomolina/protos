@@ -17,7 +17,6 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosComplexArithmetic;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
@@ -102,7 +101,7 @@ public final class ProtosStandardComplexProtocol {
             prototype.createLocalSlot(alias.getValue(), closure);
         }
         installNative(prototype, "recognizes", 1, (supplied, prelude) ->
-                ProtosBooleanValue.of(ProtosComplexNumericSupport.isComplex(supplied.get(0))));
+                Boolean.valueOf(ProtosComplexNumericSupport.isComplex(supplied.get(0))));
         // D198: the arguments become the components exactly; only an exact Integer zero
         // imaginary part collapses to the real part. No conversion or callback occurs.
         installNative(prototype, "construct", 2, (supplied, prelude) ->

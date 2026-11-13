@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.execution.ProtosDapTestSupport.DapClient;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.oracle.truffle.api.CallTarget;
@@ -986,7 +985,7 @@ final class ProtosI026FDapBehaviorTest {
     private static ProtosActivation activationWithRepresentativeValues() {
         ProtosObjectValue context = new ProtosObjectValue(ProtosObjectValue.rootObject());
         context.createLocalSlot("text", new ProtosStringValue("hello"));
-        context.createLocalSlot("flag", ProtosBooleanValue.TRUE);
+        context.createLocalSlot("flag", Boolean.TRUE);
         context.createLocalSlot("number", Long.valueOf(42));
         context.createLocalSlot(
                 "array",

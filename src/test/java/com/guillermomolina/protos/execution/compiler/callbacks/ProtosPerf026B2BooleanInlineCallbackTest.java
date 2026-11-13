@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -107,7 +106,7 @@ final class ProtosPerf026B2BooleanInlineCallbackTest {
                         }
                         run()
                         """);
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
         System.out.println("PERF026_B2_AND_LITERAL_CALLBACK_ROOT_REMOVED=YES");
     }
 
@@ -124,7 +123,7 @@ final class ProtosPerf026B2BooleanInlineCallbackTest {
                         }
                         run()
                         """);
-        assertSame(ProtosBooleanValue.FALSE, result);
+        assertSame(Boolean.FALSE, result);
         System.out.println("PERF026_B2_OR_LITERAL_CALLBACK_ROOT_REMOVED=YES");
     }
 
@@ -145,7 +144,7 @@ final class ProtosPerf026B2BooleanInlineCallbackTest {
         System.out.println("PERF026_B2_TRUE_IF_FALSE_CALLBACK_ENTERED=NO");
 
         assertSame(
-                ProtosBooleanValue.FALSE,
+                Boolean.FALSE,
                 assertCallbackNotEntered(
                         """
                         run: () => {
@@ -159,7 +158,7 @@ final class ProtosPerf026B2BooleanInlineCallbackTest {
         System.out.println("PERF026_B2_FALSE_AND_CALLBACK_ENTERED=NO");
 
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 assertCallbackNotEntered(
                         """
                         run: () => {
@@ -249,7 +248,7 @@ final class ProtosPerf026B2BooleanInlineCallbackTest {
                                 run()
                                 """);
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         callableRoot.getCallTarget().call(callable.module()));
                 assertPhysicalInvocationStack(callable.stack, callableRoot, "custom callable");
             } finally {
@@ -306,7 +305,7 @@ final class ProtosPerf026B2BooleanInlineCallbackTest {
 
                 Probe activation = new Probe();
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         lowerRoot(
                                         """
                                         run: () => {
@@ -431,7 +430,7 @@ final class ProtosPerf026B2BooleanInlineCallbackTest {
                         ProtosExecutionOutcome.State.COMPLETED,
                         outcome.state(),
                         () -> "error=" + outcome.error());
-                assertSame(ProtosBooleanValue.TRUE, outcome.value());
+                assertSame(Boolean.TRUE, outcome.value());
             }
         }
 

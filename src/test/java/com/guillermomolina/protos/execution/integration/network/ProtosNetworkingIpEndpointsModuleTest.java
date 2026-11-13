@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -154,7 +153,7 @@ final class ProtosNetworkingIpEndpointsModuleTest {
                     port);
         }
         // An IpAddress is not an IpEndpoint, nor the reverse.
-        assertSame(ProtosBooleanValue.TRUE, ProtosTestExecutionSupport.evaluate(
+        assertSame(Boolean.TRUE, ProtosTestExecutionSupport.evaluate(
                 FAMILIES
                         + "address: IpAddress(6, 1)\n"
                         + "endpoint: IpEndpoint(address, 1)\n"
@@ -172,7 +171,7 @@ final class ProtosNetworkingIpEndpointsModuleTest {
         ProtosObjectValue copy =
                 (ProtosObjectValue) ProtosActorValueTransfer.snapshotValue(endpoint, activation);
         assertNotSame(endpoint, copy);
-        assertSame(ProtosBooleanValue.TRUE,
+        assertSame(Boolean.TRUE,
                 invokeEntered(endpoint, "==", List.of(copy), activation));
         Object hash = invokeEntered(copy, "hash", List.of(), activation);
         assertTrue(ProtosNumericValueSupport.sameInteger(

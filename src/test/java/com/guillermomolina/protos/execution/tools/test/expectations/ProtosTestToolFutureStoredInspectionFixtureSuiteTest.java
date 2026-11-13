@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.IOException;
@@ -116,7 +115,7 @@ activation);
                                 + ", error="
                                 + outcome.error());
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 outcome.value(),
                 () -> testCase.caseId() + " Protos fixture must return canonical true");
     }

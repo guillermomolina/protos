@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -124,7 +123,7 @@ final class ProtosNioNetworkBackendConnectTest {
                         ProtosInvocation.invokeMessage(
                                 connection, "remoteEndpoint", List.of(), x.activation);
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         ProtosInvocation.invokeMessage(
                                 observedRemote, "==", List.of(remote), x.activation));
 
@@ -140,7 +139,7 @@ final class ProtosNioNetworkBackendConnectTest {
                         ProtosInvocation.invokeMessage(
                                 connection, "localEndpoint", List.of(), x.activation);
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         ProtosInvocation.invokeMessage(
                                 observedLocal, "==", List.of(expectedLocal), x.activation));
 
@@ -291,7 +290,7 @@ final class ProtosNioNetworkBackendConnectTest {
                         ProtosInvocation.invokeMessage(
                                 connection, "remoteEndpoint", List.of(), x.activation);
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         ProtosInvocation.invokeMessage(
                                 observedRemote, "==", List.of(remote), x.activation));
                 ProtosFutureValue close =

@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
@@ -213,12 +212,12 @@ final class ProtosStructuredEachCalls {
                         "Array.match child outcome accepted after terminal outcome");
             }
 
-            if (outcome == ProtosBooleanValue.FALSE) {
+            if (outcome == Boolean.FALSE) {
                 mismatch = true;
                 return;
             }
 
-            if (outcome == ProtosBooleanValue.TRUE) {
+            if (outcome == Boolean.TRUE) {
                 index++;
                 return;
             }
@@ -254,11 +253,11 @@ final class ProtosStructuredEachCalls {
             }
 
             if (mismatch) {
-                return ProtosBooleanValue.FALSE;
+                return Boolean.FALSE;
             }
 
             if (captures.isEmpty()) {
-                return ProtosBooleanValue.TRUE;
+                return Boolean.TRUE;
             }
 
             return activation

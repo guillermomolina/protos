@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -512,7 +511,7 @@ abstract class ProtosPackageToolProtosTestSupport {
                                 + (outcome.state() == ProtosExecutionOutcome.State.FAILED
                                         ? outcome.error().localSlotsSnapshot()
                                         : "<not failed>"));
-                assertSame(ProtosBooleanValue.TRUE, outcome.value(), label);
+                assertSame(Boolean.TRUE, outcome.value(), label);
             }
             case "error" ->
                     assertEquals(

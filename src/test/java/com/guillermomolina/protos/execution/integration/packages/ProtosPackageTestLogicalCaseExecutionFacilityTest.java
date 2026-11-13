@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -268,7 +267,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             // Package Tool bootstrap resolved RuntimeNames.protos and the selected
             // Test body actually executed exactly once.
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     assertCompletedObservationValue(future));
         }
     }
@@ -405,7 +404,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             // The body also requires a TOML 1.1-only inline-table trailing comma to be
             // rejected, proving the schema selects TOML 1.0.
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     assertCompletedObservationValue(future));
         }
     }
@@ -454,7 +453,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             // to pick the highest satisfying candidate. A "true" observation is reachable
             // only if the complete real chain resolved and executed.
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     assertCompletedObservationValue(future));
         }
     }
@@ -502,7 +501,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             // LockSyntax.parseStructural/parseHeader before returning it. The exact rendered
             // text is only reachable if the whole chain resolved and executed for real.
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     assertCompletedObservationValue(future));
         }
     }
@@ -553,7 +552,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             // sha256 digest is only reachable if the complete real graph resolved and
             // executed.
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     assertCompletedObservationValue(future));
         }
     }

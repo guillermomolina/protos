@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
@@ -33,9 +32,9 @@ class ProtosStandardPathProtocolTest {
     private static boolean truth(ProtosPrelude prelude, String source) {
         Object result = evaluate(prelude, source);
         assertTrue(
-                result == ProtosBooleanValue.TRUE || result == ProtosBooleanValue.FALSE,
+                result == Boolean.TRUE || result == Boolean.FALSE,
                 source);
-        return result == ProtosBooleanValue.TRUE;
+        return result == Boolean.TRUE;
     }
 
     // Deliberately Java-side: this verifies the represented Path component model

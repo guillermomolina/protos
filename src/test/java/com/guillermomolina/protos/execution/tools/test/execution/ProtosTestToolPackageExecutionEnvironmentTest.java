@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -121,7 +120,7 @@ activation);
                                     + outcome.state()
                                     + ", error="
                                     + outcome.error());
-            assertSame(ProtosBooleanValue.TRUE, outcome.value());
+            assertSame(Boolean.TRUE, outcome.value());
         }
     }
 

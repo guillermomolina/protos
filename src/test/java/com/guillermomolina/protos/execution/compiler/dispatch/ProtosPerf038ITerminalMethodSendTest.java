@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -180,9 +179,9 @@ final class ProtosPerf038ITerminalMethodSendTest {
             assertEquals("31", integerValue(results.get(1)));
             assertEquals("19", integerValue(results.get(2)));
             assertEquals("32", integerValue(results.get(3)));
-            assertSame(ProtosBooleanValue.TRUE, results.get(4));
-            assertSame(ProtosBooleanValue.TRUE, results.get(5));
-            assertSame(ProtosBooleanValue.TRUE, results.get(6));
+            assertSame(Boolean.TRUE, results.get(4));
+            assertSame(Boolean.TRUE, results.get(5));
+            assertSame(Boolean.TRUE, results.get(6));
         });
         System.out.println("PERF038_I_RECEIVER_AND_HOME=PASS");
     }
@@ -516,9 +515,9 @@ final class ProtosPerf038ITerminalMethodSendTest {
             // CALLABLES.md section 11: every extraction is a fresh Closure;
             // only an alias of one extraction keeps its identity.
             assertNotSame(first, assertInstanceOf(ProtosClosureValue.class, results.get(2)));
-            assertSame(ProtosBooleanValue.FALSE, results.get(3));
+            assertSame(Boolean.FALSE, results.get(3));
             assertEquals("9", integerValue(results.get(4)), "the extraction binds the receiver");
-            assertSame(ProtosBooleanValue.TRUE, results.get(5));
+            assertSame(Boolean.TRUE, results.get(5));
             assertEquals("9", integerValue(results.get(6)));
         });
         System.out.println("PERF038_I_EXPLICIT_EXTRACTION=PASS");

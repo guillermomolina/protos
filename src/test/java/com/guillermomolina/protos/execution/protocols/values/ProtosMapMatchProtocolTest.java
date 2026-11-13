@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 
@@ -48,7 +47,7 @@ class ProtosMapMatchProtocolTest {
         ProtosPrelude prelude = core();
 
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate(
                         prelude,
                         """
@@ -63,7 +62,7 @@ class ProtosMapMatchProtocolTest {
                         """));
 
         assertSame(
-                ProtosBooleanValue.FALSE,
+                Boolean.FALSE,
                 evaluate(
                         prelude,
                         """
@@ -77,11 +76,11 @@ class ProtosMapMatchProtocolTest {
                         """));
 
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate(prelude, "Map().match(Map())"));
 
         assertSame(
-                ProtosBooleanValue.FALSE,
+                Boolean.FALSE,
                 evaluate(prelude, "Map().match([])"));
     }
 
@@ -108,7 +107,7 @@ class ProtosMapMatchProtocolTest {
                         matcher.match(subject)
                         """);
 
-        assertSame(ProtosBooleanValue.FALSE, result);
+        assertSame(Boolean.FALSE, result);
     }
 
     @Test
@@ -149,7 +148,7 @@ class ProtosMapMatchProtocolTest {
                         matcher.match(subject)
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -188,7 +187,7 @@ class ProtosMapMatchProtocolTest {
                         matcher.match(subject)
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -220,7 +219,7 @@ class ProtosMapMatchProtocolTest {
                         matcher.match(subject)
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -266,7 +265,7 @@ class ProtosMapMatchProtocolTest {
                         matcher.match(subject)
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test

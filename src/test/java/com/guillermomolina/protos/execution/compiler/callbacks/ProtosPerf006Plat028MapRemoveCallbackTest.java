@@ -13,7 +13,6 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
@@ -75,7 +74,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
                                 assertSame(stored, supplied.get(0));
-                                return ProtosBooleanValue.TRUE;
+                                return Boolean.TRUE;
                             }));
 
             ProtosTask remove =
@@ -142,7 +141,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
                                 storedEqualityCalls.incrementAndGet();
-                                return ProtosBooleanValue.FALSE;
+                                return Boolean.FALSE;
                             }));
             map.append(skipped, ProtosNumericHashKey.ofLong(8), skippedValue);
             map.append(stored, ProtosNumericHashKey.ofLong(7), marker);
@@ -298,7 +297,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                             (activation, supplied) -> {
                                 equalityCalls.incrementAndGet();
                                 assertSame(stored, supplied.get(0));
-                                return ProtosBooleanValue.TRUE;
+                                return Boolean.TRUE;
                             }));
 
             ProtosTask remove =

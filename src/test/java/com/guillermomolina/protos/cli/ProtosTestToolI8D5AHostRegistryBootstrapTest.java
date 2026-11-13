@@ -29,7 +29,6 @@ import com.guillermomolina.protos.execution.ProtosRootTaskExecution;
 import com.guillermomolina.protos.execution.ProtosSourceCompiler;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -113,7 +112,7 @@ activation);
                                     + outcome.state()
                                     + ", error="
                                     + outcome.error());
-            assertSame(ProtosBooleanValue.TRUE, outcome.value());
+            assertSame(Boolean.TRUE, outcome.value());
         }
     }
 }

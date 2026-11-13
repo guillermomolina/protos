@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -104,7 +103,7 @@ final class ProtosA4B3ModuleProcessHostingTest {
                                 bootstrap.activation());
 
                 assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-                assertSame(ProtosBooleanValue.TRUE, outcome.value());
+                assertSame(Boolean.TRUE, outcome.value());
                 ProtosActorModuleState.ModuleRecord record =
                         bootstrap.activation().actorModuleState().lookup(MAIN).orElseThrow();
                 assertEquals(ProtosActorModuleState.InitializationState.READY, record.state());

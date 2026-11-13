@@ -28,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -743,7 +742,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                 ProtosBytecodeRootNode root = lowerRoot(characters);
 
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         root.getCallTarget().call(probe.module()),
                         characters);
 
@@ -826,7 +825,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                 Probe probe = new Probe();
                 ProtosBytecodeRootNode root = lowerRoot(characters);
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         root.getCallTarget().call(probe.module()),
                         characters);
                 assertNativeArrayProbeFrames(root, probe, expectedCalls);

@@ -903,9 +903,9 @@ final class ProtosRootActorServiceBootstrapIntegrationTest {
     }
 
     private static Object asJavaBoolean(Object value) {
-        return value == com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE
+        return value == Boolean.TRUE
                 ? Boolean.TRUE
-                : value == com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE
+                : value == Boolean.FALSE
                         ? Boolean.FALSE
                         : value;
     }

@@ -134,18 +134,18 @@ final class ProtosActorSendOperationTest {
         assertEquals(ProtosActorDeliveryAttempt.State.ACCEPTED, accepted.deliveryStateForTesting());
         assertEquals(ProtosActorDeliveryAttempt.State.PENDING, pending.deliveryStateForTesting());
         assertSame(
-                ProtosBooleanValue.FALSE,
+                Boolean.FALSE,
                 ProtosInvocation.invokeMessage(
                         accepted, "cancel", List.of(), fixture.creatorActivation));
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosInvocation.invokeMessage(
                         pending, "cancel", List.of(), fixture.creatorActivation));
         assertEquals(
                 ProtosActorDeliveryAttempt.State.CANCELLED_BEFORE_ACCEPTANCE,
                 pending.deliveryStateForTesting());
         assertSame(
-                ProtosBooleanValue.FALSE,
+                Boolean.FALSE,
                 ProtosInvocation.invokeMessage(
                         pending, "cancel", List.of(), fixture.creatorActivation));
     }

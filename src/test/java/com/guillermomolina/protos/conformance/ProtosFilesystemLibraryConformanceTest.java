@@ -32,7 +32,6 @@ import com.guillermomolina.protos.execution.ProtosSourceCompiler;
 import com.guillermomolina.protos.execution.ProtosStandardFilesystemProtocol;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
@@ -95,7 +94,7 @@ final class ProtosFilesystemLibraryConformanceTest {
 
         try (Fixture fixture = fixture()) {
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     execute("read-all-bytes-empty.protos", fixture.activation()));
         }
     }
@@ -110,7 +109,7 @@ final class ProtosFilesystemLibraryConformanceTest {
 
         try (Fixture fixture = fixture()) {
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     execute("read-all-bytes-multichunk.protos", fixture.activation()));
         }
     }
@@ -156,8 +155,8 @@ final class ProtosFilesystemLibraryConformanceTest {
             ProtosObjectValue result =
                     assertInstanceOf(ProtosObjectValue.class, execution.get(5, TimeUnit.SECONDS));
 
-            assertSame(ProtosBooleanValue.TRUE, result.readLocalSlot("sameCancelResult").orElseThrow());
-            assertSame(ProtosBooleanValue.TRUE, result.readLocalSlot("cancelled").orElseThrow());
+            assertSame(Boolean.TRUE, result.readLocalSlot("sameCancelResult").orElseThrow());
+            assertSame(Boolean.TRUE, result.readLocalSlot("cancelled").orElseThrow());
             assertSame(helperFuture, result.readLocalSlot("future").orElseThrow());
             assertEquals(ProtosFutureValue.State.CANCELLED, helperFuture.state());
             assertEquals(1, fixture.resource().readStarts());
@@ -278,10 +277,10 @@ final class ProtosFilesystemLibraryConformanceTest {
                             fixture.control().readLocalSlot("future").orElseThrow());
 
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     result.readLocalSlot("sameCancelResult").orElseThrow());
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     result.readLocalSlot("cancelled").orElseThrow());
             assertSame(helperFuture, result.readLocalSlot("future").orElseThrow());
             assertEquals(ProtosFutureValue.State.CANCELLED, helperFuture.state());
@@ -419,7 +418,7 @@ final class ProtosFilesystemLibraryConformanceTest {
 
             fixture.backend().completeCommittedOpen();
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     execution.get(5, TimeUnit.SECONDS));
 
             assertEquals(0, fixture.resource().writeStarts());
@@ -511,7 +510,7 @@ final class ProtosFilesystemLibraryConformanceTest {
         try {
             assertTrue(fixture.resource().awaitCloseStarted(), "File close did not start");
             fixture.resource().failClose();
-            assertSame(ProtosBooleanValue.TRUE, execution.get(5, TimeUnit.SECONDS));
+            assertSame(Boolean.TRUE, execution.get(5, TimeUnit.SECONDS));
         } finally {
             fixture.resource().succeedCloseIfPending();
             shutdown(executor);
@@ -592,7 +591,7 @@ final class ProtosFilesystemLibraryConformanceTest {
         WriteFixture fixture =
                 writeFixture(mode, initialContent, failurePrefix, injectedPayloadSize);
         try {
-            assertSame(ProtosBooleanValue.TRUE, execute(file, fixture.activation()), file);
+            assertSame(Boolean.TRUE, execute(file, fixture.activation()), file);
         } catch (ProtosSignalException signal) {
             throw new AssertionError("Protos conformance case signalled unexpectedly: " + file, signal);
         }
@@ -669,7 +668,7 @@ final class ProtosFilesystemLibraryConformanceTest {
             ControlledFixture fixture,
             ProtosObjectValue result,
             ProtosFutureValue helperFuture) {
-        assertSame(ProtosBooleanValue.TRUE, result.readLocalSlot("failed").orElseThrow());
+        assertSame(Boolean.TRUE, result.readLocalSlot("failed").orElseThrow());
         assertSame(helperFuture, result.readLocalSlot("future").orElseThrow());
         assertEquals(ProtosFutureValue.State.FAILED, helperFuture.state());
         ProtosObjectValue error = helperFuture.failedError().orElseThrow();

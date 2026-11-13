@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemNamespaceMutationFlow;
@@ -88,13 +87,13 @@ final class ProtosLinuxConfinedFilesystemTestSupport {
     static ProtosFilesystemOpenOptions options(
             boolean read, boolean write, String creation, boolean truncate) {
         ProtosObjectValue options = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        options.createLocalSlot("read", read ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE);
-        options.createLocalSlot("write", write ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE);
+        options.createLocalSlot("read", read ? Boolean.TRUE : Boolean.FALSE);
+        options.createLocalSlot("write", write ? Boolean.TRUE : Boolean.FALSE);
         if (creation != null) {
-            options.createLocalSlot(creation, ProtosBooleanValue.TRUE);
+            options.createLocalSlot(creation, Boolean.TRUE);
         }
         if (truncate) {
-            options.createLocalSlot("truncate", ProtosBooleanValue.TRUE);
+            options.createLocalSlot("truncate", Boolean.TRUE);
         }
         return ProtosFilesystemOpenOptions.capture(options);
     }

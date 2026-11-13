@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalCell;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
@@ -268,7 +267,7 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         run.assertCompleted();
         Stop stop = run.single();
         stop.assertLazy();
-        assertSame(ProtosBooleanValue.TRUE, stop.binding("same"));
+        assertSame(Boolean.TRUE, stop.binding("same"));
         // I115: the captured me is read through its cell; this needs no activation.
         stop.assertInstruction(stop.inlined() ? "load.local" : "LoadCell");
         assertEquals(stop.inlined() ? 2L : 1L, stop.instructions().stream()
@@ -323,7 +322,7 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         // The context intrinsic is what obtains the exact activation.
         stop.assertInstruction(stop.inlined()
                 ? "PublishInlineCallbackContext" : "PublishCurrentClosureContext");
-        assertSame(ProtosBooleanValue.TRUE, stop.binding("same"));
+        assertSame(Boolean.TRUE, stop.binding("same"));
         stop.assertNoRetired();
         System.out.println("PERF025_S3_CONTEXT_MATERIALIZES=YES");
     }
@@ -441,7 +440,7 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
                 () -> "outcome=" + outcome.state() + ", error=" + outcome.error());
-        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        assertSame(Boolean.TRUE, outcome.value());
     }
 
     private static void assertDistinctCarriers(List<Stop> stops) {

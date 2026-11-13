@@ -28,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -280,7 +279,7 @@ final class ProtosStandardIpFamilyPlacementTest {
     @Test
     void addressesSharingLowBitsAreDistinctAndRematerializedCopiesAreEqual() throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, new CountingResolver());
-        assertSame(ProtosBooleanValue.TRUE, ProtosTestExecutionSupport.evaluate(
+        assertSame(Boolean.TRUE, ProtosTestExecutionSupport.evaluate(
                 IP_ADDRESS
                         + "low: IpAddress(6, 1)\n"
                         + "wide: IpAddress(6, 18446744073709551617)\n"
@@ -295,7 +294,7 @@ final class ProtosStandardIpFamilyPlacementTest {
         ProtosObjectValue copy = (ProtosObjectValue)
                 ProtosActorValueTransfer.snapshotValue(address, activation);
         assertNotSame(address, copy);
-        assertSame(ProtosBooleanValue.TRUE,
+        assertSame(Boolean.TRUE,
                 ProtosInvocation.invokeMessage(address, "==", java.util.List.of(copy), activation));
         assertTrue(ProtosNumericValueSupport.sameInteger(
                 ProtosInvocation.invokeMessage(address, "hash", java.util.List.of(), activation),
@@ -349,7 +348,7 @@ final class ProtosStandardIpFamilyPlacementTest {
         assertSame(addressPrototype, copyAddress.parent().orElseThrow());
         ProtosActivation activation = prelude.newModuleActivation();
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosInvocation.invokeMessage(
                         sourceAddress, "==", java.util.List.of(copyAddress), activation));
         assertTrue(
@@ -359,7 +358,7 @@ final class ProtosStandardIpFamilyPlacementTest {
                         ProtosInvocation.invokeMessage(
                                 copyAddress, "hash", java.util.List.of(), activation)));
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosInvocation.invokeMessage(source, "==", java.util.List.of(copy), activation));
     }
 }

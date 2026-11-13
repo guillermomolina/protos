@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosStandardNumberOrderingProtocol.Relation;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -82,7 +81,7 @@ final class ProtosI115DirectNumericFallback {
                 || !ProtosNumericValueSupport.isCurrentRealNumber(right)) {
             return null;
         }
-        return ProtosBooleanValue.of(
+        return Boolean.valueOf(
                 relation.holds(ProtosStandardNumberOrderingProtocol.compare(left, right)));
     }
 

@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -66,7 +65,7 @@ class ProtosStandardMapProtocolTest {
 
     @Test
     void hashesBeyondSignedLongAreExactKeysFoundThroughEquivalentObjects() throws Exception {
-        assertSame(ProtosBooleanValue.TRUE, evaluate(
+        assertSame(Boolean.TRUE, evaluate(
                 "big: 1180591620717411303424\n"
                         + "m: Map()\n"
                         + "m[make(1, big)] = \"positive\"\n"
@@ -81,7 +80,7 @@ class ProtosStandardMapProtocolTest {
     @Test
     void largeHashesAreNeverTruncatedToTheirLowBits() throws Exception {
         // 2^64 + 5 and 5 share their low 64 bits; equal keys under distinct hashes never match.
-        assertSame(ProtosBooleanValue.TRUE, evaluate(
+        assertSame(Boolean.TRUE, evaluate(
                 "m: Map()\n"
                         + "m[make(1, 18446744073709551621)] = \"wide\"\n"
                         + "!m.containsKey(make(1, 5)) &&\n"
@@ -91,7 +90,7 @@ class ProtosStandardMapProtocolTest {
 
     @Test
     void legitimateLargeHashCollisionsKeepDistinctKeys() throws Exception {
-        assertSame(ProtosBooleanValue.TRUE, evaluate(
+        assertSame(Boolean.TRUE, evaluate(
                 "big: 0 - 340282366920938463463374607431768211455\n"
                         + "m: Map()\n"
                         + "m[make(1, big)] = \"one\"\n"
@@ -102,7 +101,7 @@ class ProtosStandardMapProtocolTest {
 
     @Test
     void recordedLargeHashSurvivesALaterObservableHashChange() throws Exception {
-        assertSame(ProtosBooleanValue.TRUE, evaluate(
+        assertSame(Boolean.TRUE, evaluate(
                 "key: make(1, 1180591620717411303424)\n"
                         + "m: Map()\n"
                         + "m[key] = 1\n"

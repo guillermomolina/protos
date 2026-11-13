@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -119,7 +118,7 @@ final class ProtosResolverAuthorityTest {
                     run(host, prelude, null, used,
                             "resolver.lookupAddresses(\"example.com\").value().size() == 1");
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, first.state(), String.valueOf(first.error()) + "; trace=" + first.failureDiagnosticTrace());
-            assertSame(ProtosBooleanValue.TRUE, first.value());
+            assertSame(Boolean.TRUE, first.value());
             ProtosProcessRuntime owner = used.ownerForRuntime().orElseThrow();
             assertTrue(used.retiredForRuntime());
             assertEquals(1, usedBackend.closes);
@@ -132,7 +131,7 @@ final class ProtosResolverAuthorityTest {
 
             // A granted but never used Resolver is retired by its Process too.
             ProtosExecutionOutcome idle = run(host, prelude, null, unused, "context.hasSlot(\"resolver\")");
-            assertSame(ProtosBooleanValue.TRUE, idle.value(), String.valueOf(idle.error()) + "; trace=" + idle.failureDiagnosticTrace());
+            assertSame(Boolean.TRUE, idle.value(), String.valueOf(idle.error()) + "; trace=" + idle.failureDiagnosticTrace());
             assertTrue(unused.retiredForRuntime());
             assertEquals(1, unusedBackend.closes);
             assertEquals(List.of(), unusedBackend.names);
@@ -146,7 +145,7 @@ final class ProtosResolverAuthorityTest {
             ProtosExecutionOutcome second =
                     run(host, prelude, null, separate,
                             "resolver.lookupAddresses(\"example.org\").value().size() == 1");
-            assertSame(ProtosBooleanValue.TRUE, second.value(), String.valueOf(second.error()) + "; trace=" + second.failureDiagnosticTrace());
+            assertSame(Boolean.TRUE, second.value(), String.valueOf(second.error()) + "; trace=" + second.failureDiagnosticTrace());
             assertNotSame(owner, separate.ownerForRuntime().orElseThrow());
             assertEquals(List.of("example.org."), separateBackend.names);
 
@@ -270,7 +269,7 @@ final class ProtosResolverAuthorityTest {
                             invalid(Resolvers.Resolver.lookupAddresses("example.com")) && invalid(child.lookupAddresses("example.com")) && invalid(Resolvers.Resolver.close()) && !context.hasSlot("resolver") && !context.hasSlot("network")
                             """);
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), String.valueOf(outcome.error()) + "; trace=" + outcome.failureDiagnosticTrace());
-            assertSame(ProtosBooleanValue.TRUE, outcome.value());
+            assertSame(Boolean.TRUE, outcome.value());
             assertEquals(0, host.provisionedResolverCountForTesting());
             assertFalse(host.networkHostInitializedForTesting());
         }
@@ -397,7 +396,7 @@ final class ProtosResolverAuthorityTest {
                             (addresses.size() == 1) && IpAddress.recognizes(addresses[0]) && (connectFailure.parent() === IOError) && (byName.parent() === InvalidIOArgument) && (originalHostname == "API.Example.com") && (reference.sni == "api.example.com") && (Identity.reference(asciiOnly, "localhost") === null)
                             """);
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), String.valueOf(outcome.error()) + "; trace=" + outcome.failureDiagnosticTrace());
-            assertSame(ProtosBooleanValue.TRUE, outcome.value());
+            assertSame(Boolean.TRUE, outcome.value());
         }
         assertEquals(List.of("api.example.com."), backend.names);
         assertEquals(1, connects.size());

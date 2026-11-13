@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -111,12 +110,12 @@ final class ProtosI101CComparisonBuilderOracleTest {
 
                 // Guest semantics are checked independently of the oracle.
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         invoke(prelude, literalModule, literal, "literal"),
                         "The Boolean literal must return canonical true");
 
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         invoke(prelude, comparisonModule, comparison, "comparison"),
                         "1 < 2 must return canonical true");
 
@@ -233,7 +232,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                             prelude, module, root, "family-invoke-" + index);
 
                     assertSame(
-                            ProtosBooleanValue.of(testCase.expected()),
+                            Boolean.valueOf(testCase.expected()),
                             value,
                             testCase.expression());
 
@@ -286,7 +285,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                             verifiedClosureRoot(module, program);
 
                     assertSame(
-                            ProtosBooleanValue.of(testCase.expected()),
+                            Boolean.valueOf(testCase.expected()),
                             invoke(prelude, module, root, "locals-invoke-" + index),
                             testCase.body());
 
@@ -411,7 +410,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                             "matrix-invoke-" + index);
 
                     assertSame(
-                            ProtosBooleanValue.of(testCase.expected()),
+                            Boolean.valueOf(testCase.expected()),
                             result,
                             "Incorrect guest result: "
                                     + testCase.expression());
@@ -484,7 +483,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                             "locals-invoke-" + index);
 
                     assertSame(
-                            ProtosBooleanValue.of(testCase.expected()),
+                            Boolean.valueOf(testCase.expected()),
                             result,
                             "Incorrect guest result: "
                                     + testCase.body());
@@ -540,7 +539,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                             builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.beginBlock();
                             builder.beginReturn();
-                            builder.emitLoadConstant(ProtosBooleanValue.TRUE);
+                            builder.emitLoadConstant(Boolean.TRUE);
                             builder.endReturn();
                             builder.endBlock();
                             builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
@@ -682,7 +681,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                                     + "a Boolean constant: " + entry.expression());
 
                     assertSame(
-                            ProtosBooleanValue.of(entry.firstResult()),
+                            Boolean.valueOf(entry.firstResult()),
                             i101C1InvokeCapturedSubject(
                                     prelude, module,
                                     ProtosNumericValueSupport.integer(
@@ -691,7 +690,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                             entry.expression());
 
                     assertSame(
-                            ProtosBooleanValue.of(entry.secondResult()),
+                            Boolean.valueOf(entry.secondResult()),
                             i101C1InvokeCapturedSubject(
                                     prelude, module,
                                     ProtosNumericValueSupport.integer(
@@ -745,7 +744,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                             ProtosClosureValue.nativeClosure(
                                     (activation, supplied) -> {
                                         calls[0]++;
-                                        return ProtosBooleanValue.of(
+                                        return Boolean.valueOf(
                                                 !"==".equals(selector));
                                     }));
                 }
@@ -763,7 +762,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                             "override-invoke-" + index);
 
                     assertSame(
-                            ProtosBooleanValue.of(entry.expected()),
+                            Boolean.valueOf(entry.expected()),
                             actual,
                             "Incorrect overridden comparison: "
                                     + entry.expression());
@@ -888,10 +887,10 @@ final class ProtosI101CComparisonBuilderOracleTest {
         if (value == ProtosNullValue.INSTANCE) {
             return "Protos(null)";
         }
-        if (value == ProtosBooleanValue.TRUE) {
+        if (value == Boolean.TRUE) {
             return "Protos(true)";
         }
-        if (value == ProtosBooleanValue.FALSE) {
+        if (value == Boolean.FALSE) {
             return "Protos(false)";
         }
         if (value instanceof Double number) {

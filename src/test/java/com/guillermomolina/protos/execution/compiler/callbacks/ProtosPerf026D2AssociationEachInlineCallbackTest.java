@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
@@ -421,7 +420,7 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
                     for (String receiver : RECEIVERS) {
                         Probe probe = new Probe();
                         assertSame(
-                                ProtosBooleanValue.TRUE,
+                                Boolean.TRUE,
                                 lowerRoot(
                                                 "run: () => {\n"
                                                         + "    m: " + receiver + "\n"
@@ -435,7 +434,7 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
 
                         Probe empty = new Probe();
                         assertSame(
-                                ProtosBooleanValue.TRUE,
+                                Boolean.TRUE,
                                 lowerRoot(
                                                 "run: () => {\n"
                                                         + "    m: " + receiver + "\n"
@@ -709,7 +708,7 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
                 Probe probe = new Probe();
                 ProtosBytecodeRootNode root = lowerRoot(characters);
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         root.getCallTarget().call(probe.module()),
                         characters);
                 /*

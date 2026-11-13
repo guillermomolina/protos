@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -78,13 +77,13 @@ final class ProtosPerf037EDirectTerminalReturnTest {
             assertEquals("23", integerValue(call(closure("() => { holder.value }", module), module)));
 
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     call(closure("() => { marker === holder.value }", module), module));
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     call(closure("() => { marker !== holder }", module), module));
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     call(
                             closure(
                                     "() => { (holder.value === marker) !== false }",

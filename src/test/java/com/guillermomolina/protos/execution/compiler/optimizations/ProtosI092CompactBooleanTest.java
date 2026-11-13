@@ -27,7 +27,6 @@ import com.oracle.truffle.api.debug.DebuggerSession;
 import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import java.nio.file.Path;
@@ -238,7 +237,7 @@ final class ProtosI092CompactBooleanTest {
                 names.toString());
 
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosTestExecutionSupport.evaluate(
                         "i095-identity-tree-run.protos",
                         "run()",

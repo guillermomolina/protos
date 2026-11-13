@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -48,7 +47,7 @@ class ProtosDerivedInequalityBackendTest {
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> {
                             equalityCalls.incrementAndGet();
-                            return ProtosBooleanValue.FALSE;
+                            return Boolean.FALSE;
                         }));
 
         receiver.createLocalSlot(
@@ -56,11 +55,11 @@ class ProtosDerivedInequalityBackendTest {
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> {
                             inequalityCalls.incrementAndGet();
-                            return ProtosBooleanValue.FALSE;
+                            return Boolean.FALSE;
                         }));
 
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate(prelude, receiver, receiver));
 
         assertEquals(1, equalityCalls.get());
@@ -77,14 +76,14 @@ class ProtosDerivedInequalityBackendTest {
         receiver.createLocalSlot(
                 "==",
                 ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> ProtosBooleanValue.FALSE));
+                        (activation, supplied) -> Boolean.FALSE));
 
         ProtosActivation activation = prelude.newModuleActivation();
         activation.context().createLocalSlot("left", receiver);
         activation.context().createLocalSlot("right", receiver);
 
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosTestExecutionSupport.evaluate(
                         "derived-inequality-default-test.protos",
                         "f: (value: left != right) => value\nf()",

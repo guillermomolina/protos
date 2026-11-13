@@ -25,7 +25,6 @@ import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.BytecodeTier;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumberLiteral;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -213,13 +212,13 @@ final class ProtosI091PrimitiveCarrierRootsTest {
 
                             builder.beginBlock();
                             builder.beginStoreLocal(result);
-                            builder.emitLoadConstant(ProtosBooleanValue.TRUE);
+                            builder.emitLoadConstant(Boolean.TRUE);
                             builder.endStoreLocal();
                             builder.endBlock();
 
                             builder.beginBlock();
                             builder.beginStoreLocal(result);
-                            builder.emitLoadConstant(ProtosBooleanValue.FALSE);
+                            builder.emitLoadConstant(Boolean.FALSE);
                             builder.endStoreLocal();
                             builder.endBlock();
 
@@ -236,9 +235,9 @@ final class ProtosI091PrimitiveCarrierRootsTest {
         root.getBytecodeNode().setUncachedThreshold(1);
 
         assertEquals(BytecodeTier.UNCACHED, root.getBytecodeNode().getTier());
-        assertSame(ProtosBooleanValue.TRUE, root.getCallTarget().call(true));
-        assertSame(ProtosBooleanValue.FALSE, root.getCallTarget().call(false));
-        assertSame(ProtosBooleanValue.TRUE, root.getCallTarget().call(true));
+        assertSame(Boolean.TRUE, root.getCallTarget().call(true));
+        assertSame(Boolean.FALSE, root.getCallTarget().call(false));
+        assertSame(Boolean.TRUE, root.getCallTarget().call(true));
         assertEquals(BytecodeTier.CACHED, root.getBytecodeNode().getTier());
     }
 
@@ -264,13 +263,13 @@ final class ProtosI091PrimitiveCarrierRootsTest {
 
                             builder.beginBlock();
                             builder.beginStoreLocal(result);
-                            builder.emitLoadConstant(ProtosBooleanValue.TRUE);
+                            builder.emitLoadConstant(Boolean.TRUE);
                             builder.endStoreLocal();
                             builder.endBlock();
 
                             builder.beginBlock();
                             builder.beginStoreLocal(result);
-                            builder.emitLoadConstant(ProtosBooleanValue.FALSE);
+                            builder.emitLoadConstant(Boolean.FALSE);
                             builder.endStoreLocal();
                             builder.endBlock();
 
@@ -287,9 +286,9 @@ final class ProtosI091PrimitiveCarrierRootsTest {
         root.getBytecodeNode().setUncachedThreshold(1);
 
         assertEquals(BytecodeTier.UNCACHED, root.getBytecodeNode().getTier());
-        assertSame(ProtosBooleanValue.TRUE, root.getCallTarget().call(true));
-        assertSame(ProtosBooleanValue.FALSE, root.getCallTarget().call(false));
-        assertSame(ProtosBooleanValue.TRUE, root.getCallTarget().call(true));
+        assertSame(Boolean.TRUE, root.getCallTarget().call(true));
+        assertSame(Boolean.FALSE, root.getCallTarget().call(false));
+        assertSame(Boolean.TRUE, root.getCallTarget().call(true));
         assertEquals(BytecodeTier.CACHED, root.getBytecodeNode().getTier());
     }
 

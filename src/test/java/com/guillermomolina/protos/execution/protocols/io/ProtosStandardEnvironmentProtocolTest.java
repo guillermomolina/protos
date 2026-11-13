@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -104,7 +103,7 @@ final class ProtosStandardEnvironmentProtocolTest {
                         "contains",
                         List.of(new ProtosStringValue("broken")),
                         activation);
-        assertSame(ProtosBooleanValue.TRUE, brokenPresent);
+        assertSame(Boolean.TRUE, brokenPresent);
 
         assertThrows(
                 ProtosSignalException.class,

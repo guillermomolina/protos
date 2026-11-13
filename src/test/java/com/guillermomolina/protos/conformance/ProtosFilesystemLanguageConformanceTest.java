@@ -28,7 +28,6 @@ import com.guillermomolina.protos.execution.ProtosNioConfinedFilesystemBackend;
 import com.guillermomolina.protos.execution.ProtosTestExecutionSupport;
 import com.guillermomolina.protos.execution.ProtosStandardFilesystemProtocol;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -58,7 +57,7 @@ final class ProtosFilesystemLanguageConformanceTest {
 
         try (Fixture fixture = fixture(Set.of("source", "target"))) {
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     execute("replace-resolves-exact-receiver.protos", fixture.activation()));
 
             assertTrue(Files.notExists(source, LinkOption.NOFOLLOW_LINKS));
@@ -73,7 +72,7 @@ final class ProtosFilesystemLanguageConformanceTest {
 
         try (Fixture fixture = fixture(Set.of("entry"))) {
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     execute("remove-resolves-exact-receiver.protos", fixture.activation()));
 
             assertTrue(Files.notExists(entry, LinkOption.NOFOLLOW_LINKS));
@@ -89,7 +88,7 @@ final class ProtosFilesystemLanguageConformanceTest {
 
         try (Fixture fixture = fixture(Set.of("first", "second"))) {
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     execute("fresh-namespace-futures.protos", fixture.activation()));
 
             assertTrue(Files.notExists(first, LinkOption.NOFOLLOW_LINKS));
@@ -129,7 +128,7 @@ final class ProtosFilesystemLanguageConformanceTest {
 
         try (Fixture fixture = fixture(Set.of("source", "target"))) {
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     execute("hardlink-alias-noop.protos", fixture.activation()));
 
             assertTrue(Files.exists(source, LinkOption.NOFOLLOW_LINKS));
@@ -153,7 +152,7 @@ final class ProtosFilesystemLanguageConformanceTest {
 
             try (Fixture fixture = fixture(Set.of("source", "target"))) {
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         execute("symlink-source-not-followed.protos", fixture.activation()));
 
                 assertTrue(Files.notExists(source, LinkOption.NOFOLLOW_LINKS));

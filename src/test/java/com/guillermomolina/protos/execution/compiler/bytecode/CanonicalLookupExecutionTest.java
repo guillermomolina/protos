@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosTestPrelude;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -50,7 +49,7 @@ class CanonicalLookupExecutionTest {
         Object lexicalValue = new ProtosStringValue("lexical");
 
         captured.createLocalSlot("name", lexicalValue);
-        receiver.createLocalSlot("name", ProtosBooleanValue.TRUE);
+        receiver.createLocalSlot("name", Boolean.TRUE);
 
         assertSame(
                 lexicalValue,

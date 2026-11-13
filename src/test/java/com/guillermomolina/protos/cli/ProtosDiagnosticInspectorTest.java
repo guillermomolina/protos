@@ -29,7 +29,6 @@ import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.io.ProtosFileValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -316,8 +315,8 @@ final class ProtosDiagnosticInspectorTest {
         String largeDigits = "18446744073709551616";
 
         assertEquals("null", inspector.render(ProtosNullValue.INSTANCE));
-        assertEquals("true", inspector.render(ProtosBooleanValue.TRUE));
-        assertEquals("false", inspector.render(ProtosBooleanValue.FALSE));
+        assertEquals("true", inspector.render(Boolean.TRUE));
+        assertEquals("false", inspector.render(Boolean.FALSE));
         assertEquals("42", inspector.render(integer(42)));
         assertEquals(largeDigits, inspector.render(bigInteger(largeDigits, prelude)));
         assertEquals("1.5", inspector.render(floating(1.5)));

@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -52,12 +51,12 @@ public final class ProtosStandardNumberEqualityProtocol {
 
                             Object argument = supplied.get(0);
                             if (!ProtosNumericValueSupport.isCurrentNumber(argument)) {
-                                return ProtosBooleanValue.FALSE;
+                                return Boolean.FALSE;
                             }
 
                             return numericEquals(receiver, argument)
-                                    ? ProtosBooleanValue.TRUE
-                                    : ProtosBooleanValue.FALSE;
+                                    ? Boolean.TRUE
+                                    : Boolean.FALSE;
                         }));
     }
 

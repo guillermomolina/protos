@@ -11,7 +11,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
@@ -92,11 +91,11 @@ final class ProtosCapturedFilesystemCustodyTest {
                                     "open",
                                     List.of(
                                             path(toolPrelude, "Payload.protos"),
-                                            com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE,
-                                            com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE,
-                                            com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE,
-                                            com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE,
-                                            com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE),
+                                            Boolean.FALSE,
+                                            Boolean.TRUE,
+                                            Boolean.FALSE,
+                                            Boolean.FALSE,
+                                            Boolean.FALSE),
                                     toolActivation);
             assertTrue(
                     writeOpen.state() != ProtosFutureValue.State.RESOLVED,
@@ -153,7 +152,7 @@ final class ProtosCapturedFilesystemCustodyTest {
                 ProtosActivation activation = core().newModuleActivation();
                 activation.context().createLocalSlot("captured", custody.materialize(activation));
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         ProtosTestExecutionSupport.executeFileValueWithFreshModuleActivation(
                                 Path.of("protos", "tests", "filesystem", "tree-capture-verify.protos"),
                                 activation));

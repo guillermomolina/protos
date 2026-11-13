@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -38,7 +37,7 @@ class ProtosI143NamedObjectCallBridgeTest {
     @Test
     void copiedStandardCallForwardsNamesToClosureDefaults() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 target: (a: true, b: false) => b
                 target.call: Object.call
@@ -49,7 +48,7 @@ class ProtosI143NamedObjectCallBridgeTest {
     @Test
     void namedInitEvaluatesArgumentExactlyOnce() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 trace: { count: 0 }
                 once: () => {
@@ -69,7 +68,7 @@ class ProtosI143NamedObjectCallBridgeTest {
     @Test
     void customCallBindsOwnFormalsWithoutForwarding() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 receiver: { call: (value) => value }
                 receiver(value: true) === true
@@ -89,7 +88,7 @@ class ProtosI143NamedObjectCallBridgeTest {
     @Test
     void copiedStandardCallForwardsToSelectedInit() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 Thing: {
                     init: (x: false, y: false) => {
@@ -106,7 +105,7 @@ class ProtosI143NamedObjectCallBridgeTest {
     @Test
     void copiedStandardCallWorksThroughDifferentSelector() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 Thing: {
                     init: (value) => {
@@ -142,7 +141,7 @@ class ProtosI143NamedObjectCallBridgeTest {
 
     @Test
     void namedReturnAndCapturedInitializerLeaveOuterHomeLive() throws Exception {
-        assertSame(ProtosBooleanValue.TRUE, evaluate("""
+        assertSame(Boolean.TRUE, evaluate("""
                 named: (value: false) => { ^value }
                 owner: () => {
                     Thing: {

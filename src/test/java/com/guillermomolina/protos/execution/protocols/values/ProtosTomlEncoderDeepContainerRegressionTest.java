@@ -7,7 +7,6 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeAll;
@@ -42,7 +41,7 @@ final class ProtosTomlEncoderDeepContainerRegressionTest {
                         encoded.size() == 289
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -62,7 +61,7 @@ final class ProtosTomlEncoderDeepContainerRegressionTest {
                         encoded.size() == 1147
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     private static Object evaluate(String body) throws Exception {

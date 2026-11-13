@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -69,8 +68,8 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                assertSame(ProtosBooleanValue.TRUE, executeBytecodeValue("true"));
-                assertSame(ProtosBooleanValue.FALSE, executeBytecodeValue("false"));
+                assertSame(Boolean.TRUE, executeBytecodeValue("true"));
+                assertSame(Boolean.FALSE, executeBytecodeValue("false"));
                 assertSame(ProtosNullValue.INSTANCE, executeBytecodeValue("null"));
 
                 assertEquals(

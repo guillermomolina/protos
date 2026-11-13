@@ -72,11 +72,11 @@ class ProtosFilesystemIntegratedConformanceTest {
                 open(
                         x,
                         path(x.prelude, "created.bin"),
-                        ProtosBooleanValue.TRUE,
-                        ProtosBooleanValue.TRUE,
-                        ProtosBooleanValue.TRUE,
-                        ProtosBooleanValue.FALSE,
-                        ProtosBooleanValue.FALSE);
+                        Boolean.TRUE,
+                        Boolean.TRUE,
+                        Boolean.TRUE,
+                        Boolean.FALSE,
+                        Boolean.FALSE);
         Invocation invocation = x.backend.invocations.remove();
 
         assertTrue(invocation.completion.commitPortableEffect());

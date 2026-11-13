@@ -485,8 +485,8 @@ class ProtosStandardFilesystemProtocolTest {
                 future.failedError().orElseThrow().parent().orElseThrow());
     }
 
-    private static final ProtosBooleanValue TRUE = ProtosBooleanValue.TRUE;
-    private static final ProtosBooleanValue FALSE = ProtosBooleanValue.FALSE;
+    private static final Boolean TRUE = Boolean.TRUE;
+    private static final Boolean FALSE = Boolean.FALSE;
 
     /** D241-B: positional open(path, read, write, create, createNew, truncate). */
     private static ProtosFutureValue open(Fixture x, Object... arguments) {

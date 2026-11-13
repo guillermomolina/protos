@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -286,7 +285,7 @@ final class ProtosHmacSha256IntegrationTest {
                         + "Assertions.signals(Error, () => { HMAC.verify(key, message) })\n"
                         + "true\n");
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -318,7 +317,7 @@ final class ProtosHmacSha256IntegrationTest {
                 "tag",
                 tag);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
         assertEquals(MAX_KEY + 1, key.indexedSize());
     }
 
@@ -353,7 +352,7 @@ final class ProtosHmacSha256IntegrationTest {
                 "tag",
                 tag);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
         assertEquals(MAX_MESSAGE + 1, message.indexedSize());
         assertEquals(32, tag.indexedSize());
     }
@@ -383,7 +382,7 @@ final class ProtosHmacSha256IntegrationTest {
                 assertInstanceOf(
                         ProtosBytesValue.class, values.indexedAt(0));
 
-        assertSame(ProtosBooleanValue.TRUE, values.indexedAt(1));
+        assertSame(Boolean.TRUE, values.indexedAt(1));
         assertTrue(result.isOpen());
         assertEquals(32, result.indexedSize());
         assertSame(
@@ -411,7 +410,7 @@ final class ProtosHmacSha256IntegrationTest {
                         activation,
                         IMPORT + "HMAC.verify(key, message, tag)");
 
-        assertSame(ProtosBooleanValue.of(expected), result);
+        assertSame(Boolean.valueOf(expected), result);
     }
 
     private static Object completed(

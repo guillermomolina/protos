@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -141,12 +140,12 @@ public final class ProtosTlsBackendFacility {
         boolean[] keyUsage = certificate.getKeyUsage();
         ProtosObjectValue facts = new ProtosObjectValue(ProtosObjectValue.rootObject());
         facts.createLocalSlot("der", frozenBytes(activation, der));
-        facts.createLocalSlot("ca", ProtosBooleanValue.of(certificate.getBasicConstraints() >= 0));
+        facts.createLocalSlot("ca", Boolean.valueOf(certificate.getBasicConstraints() >= 0));
         facts.createLocalSlot(
                 "keyCertSign",
                 keyUsage == null
                         ? ProtosNullValue.INSTANCE
-                        : ProtosBooleanValue.of(keyUsage.length > 5 && keyUsage[5]));
+                        : Boolean.valueOf(keyUsage.length > 5 && keyUsage[5]));
         return facts.freeze();
     }
 
@@ -188,8 +187,8 @@ public final class ProtosTlsBackendFacility {
                 || anchorArray.indexedSize() == 0
                 || !(supplied.get(1) instanceof ProtosStringValue
                         || supplied.get(1) == ProtosNullValue.INSTANCE)
-                || !(supplied.get(2) instanceof ProtosBooleanValue tls13Only)
-                || !(supplied.get(3) instanceof ProtosBooleanValue offerHttp11)) {
+                || !(supplied.get(2) instanceof Boolean tls13Only)
+                || !(supplied.get(3) instanceof Boolean offerHttp11)) {
             throw invalid(activation);
         }
         List<X509Certificate> certificates = new ArrayList<>();
@@ -209,8 +208,8 @@ public final class ProtosTlsBackendFacility {
                     ProtosTlsClientEngine.start(
                             ProtosTlsTrust.anchors(certificates),
                             sni,
-                            tls13Only == ProtosBooleanValue.TRUE,
-                            offerHttp11 == ProtosBooleanValue.TRUE);
+                            tls13Only == Boolean.TRUE,
+                            offerHttp11 == Boolean.TRUE);
         } catch (ProtosTlsFailure unavailable) {
             return fact(unavailable);
         } catch (IllegalArgumentException rejectedServerName) {
@@ -491,8 +490,8 @@ public final class ProtosTlsBackendFacility {
         return activation.prelude().orElseThrow(() -> invalid(activation));
     }
 
-    private static ProtosBooleanValue bool(boolean value) {
-        return ProtosBooleanValue.of(value);
+    private static Boolean bool(boolean value) {
+        return Boolean.valueOf(value);
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

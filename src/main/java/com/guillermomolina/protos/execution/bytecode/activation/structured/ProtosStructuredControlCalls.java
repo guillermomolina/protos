@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
@@ -91,12 +90,12 @@ final class ProtosStructuredControlCalls {
                         "Object.caseOf matcher outcome accepted after selection or exhaustion");
             }
 
-            if (outcome == ProtosBooleanValue.FALSE) {
+            if (outcome == Boolean.FALSE) {
                 index++;
                 return;
             }
 
-            if (outcome == ProtosBooleanValue.TRUE) {
+            if (outcome == Boolean.TRUE) {
                 selectedAction = cases.get(index).getValue();
                 selectedArguments = List.of();
                 return;
@@ -258,8 +257,8 @@ final class ProtosStructuredControlCalls {
             // construction site); re-copying it only re-enters List.copyOf's erased fallback in PE.
             this.supplied = java.util.Objects.requireNonNull(supplied, "supplied");
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
-            if (receiver != ProtosBooleanValue.TRUE
-                    && receiver != ProtosBooleanValue.FALSE) {
+            if (receiver != Boolean.TRUE
+                    && receiver != Boolean.FALSE) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
@@ -273,8 +272,8 @@ final class ProtosStructuredControlCalls {
 
         boolean hasCallback() {
             return switch (kind) {
-                case AND -> receiver == ProtosBooleanValue.TRUE;
-                case OR -> receiver == ProtosBooleanValue.FALSE;
+                case AND -> receiver == Boolean.TRUE;
+                case OR -> receiver == Boolean.FALSE;
             };
         }
 
@@ -295,8 +294,8 @@ final class ProtosStructuredControlCalls {
                         "selected Boolean callback has no immediate result");
             }
             return switch (kind) {
-                case AND -> ProtosBooleanValue.FALSE;
-                case OR -> ProtosBooleanValue.TRUE;
+                case AND -> Boolean.FALSE;
+                case OR -> Boolean.TRUE;
             };
         }
 
@@ -320,7 +319,7 @@ final class ProtosStructuredControlCalls {
     static final class PreparedLoopCall {
         private final ProtosClosureValue condition;
         private final ProtosClosureValue body;
-        private final ProtosBooleanValue exitValue;
+        private final Boolean exitValue;
         private final ProtosActivation activation;
         private boolean conditionNext;
         private boolean done;
@@ -328,7 +327,7 @@ final class ProtosStructuredControlCalls {
 
         PreparedLoopCall(
                 boolean postTest,
-                ProtosBooleanValue exitValue,
+                Boolean exitValue,
                 Object receiver,
                 List<?> supplied,
                 ProtosActivation activation) {
@@ -368,7 +367,7 @@ final class ProtosStructuredControlCalls {
                 done = true;
                 return;
             }
-            if (outcome != ProtosBooleanValue.TRUE && outcome != ProtosBooleanValue.FALSE) {
+            if (outcome != Boolean.TRUE && outcome != Boolean.FALSE) {
                 throw ProtosCoreErrors.signal(activation, ProtosCoreErrors.newError(activation));
             }
             conditionNext = false;

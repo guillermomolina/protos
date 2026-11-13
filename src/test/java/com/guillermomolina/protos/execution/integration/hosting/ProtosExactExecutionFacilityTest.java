@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
@@ -109,7 +108,7 @@ final class ProtosExactExecutionFacilityTest {
                                         FIXTURE,
                                         StandardCharsets.UTF_8));
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -177,7 +176,7 @@ final class ProtosExactExecutionFacilityTest {
                                         + "(observation.value === 42) && "
                                         + "(observation.error === null)");
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -208,7 +207,7 @@ final class ProtosExactExecutionFacilityTest {
 
         assertCompletedObservation(observation);
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 observation.readLocalSlot("value").orElseThrow());
     }
 

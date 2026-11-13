@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -59,7 +58,7 @@ final class ProtosTestToolSimpleExpectationsTest {
                 executeFixture(POSITIVE_FIXTURE, fixture.activation());
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        assertSame(Boolean.TRUE, outcome.value());
     }
 
     @Test

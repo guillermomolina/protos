@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -54,7 +53,7 @@ class ProtosCaseOfProtocolTest {
                         })
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -87,7 +86,7 @@ class ProtosCaseOfProtocolTest {
                         })
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -121,7 +120,7 @@ class ProtosCaseOfProtocolTest {
                         1.caseOf(cases)
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -153,7 +152,7 @@ class ProtosCaseOfProtocolTest {
                         })
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -171,7 +170,7 @@ class ProtosCaseOfProtocolTest {
                         1.caseOf(cases)
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -192,7 +191,7 @@ class ProtosCaseOfProtocolTest {
                         })
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test

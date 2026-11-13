@@ -13,7 +13,6 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
@@ -72,7 +71,7 @@ final class ProtosPerf006Plat028MapAtPutCallbackTest {
             query.createLocalSlot(
                     "==",
                     ProtosClosureValue.nativeClosure(
-                            (activation, supplied) -> ProtosBooleanValue.FALSE));
+                            (activation, supplied) -> Boolean.FALSE));
 
             ProtosTask put =
                     execute(
@@ -142,7 +141,7 @@ final class ProtosPerf006Plat028MapAtPutCallbackTest {
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
                                 storedEqualityCalls.incrementAndGet();
-                                return ProtosBooleanValue.FALSE;
+                                return Boolean.FALSE;
                             }));
             map.append(stored, ProtosNumericHashKey.ofLong(7), oldValue);
             map.close();

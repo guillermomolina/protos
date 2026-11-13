@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosTestPrelude;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -48,7 +47,7 @@ class CanonicalExplicitMemberMutationExecutionTest {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue prototype = new ProtosObjectValue(root);
         ProtosObjectValue receiver = new ProtosObjectValue(prototype);
-        prototype.createLocalSlot("alive", ProtosBooleanValue.TRUE);
+        prototype.createLocalSlot("alive", Boolean.TRUE);
         ProtosActivation activation =
                 ProtosTestPrelude.activation(new ProtosObjectValue(root), List.of(), receiver);
 
@@ -60,14 +59,14 @@ class CanonicalExplicitMemberMutationExecutionTest {
                                 activation));
 
         assertSame(ProtosTestPrelude.errorPrototype(), signal.error().parent().orElseThrow());
-        assertSame(ProtosBooleanValue.TRUE, prototype.readLocalSlot("alive").orElseThrow());
+        assertSame(Boolean.TRUE, prototype.readLocalSlot("alive").orElseThrow());
     }
 
     @Test
     void explicitAssignmentUpdatesLocalSlotAndReturnsRhs() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue receiver = new ProtosObjectValue(root);
-        receiver.createLocalSlot("name", ProtosBooleanValue.TRUE);
+        receiver.createLocalSlot("name", Boolean.TRUE);
         ProtosActivation activation =
                 ProtosTestPrelude.activation(new ProtosObjectValue(root), List.of(), receiver);
 
@@ -82,7 +81,7 @@ class CanonicalExplicitMemberMutationExecutionTest {
     void explicitMutationSignalsCoreErrorForNonOrdinaryRuntimeTargetInThisSlice() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue context = new ProtosObjectValue(root);
-        context.createLocalSlot("value", ProtosBooleanValue.TRUE);
+        context.createLocalSlot("value", Boolean.TRUE);
         ProtosActivation activation =
                 ProtosTestPrelude.activation(context, List.of(), new ProtosObjectValue(root));
 

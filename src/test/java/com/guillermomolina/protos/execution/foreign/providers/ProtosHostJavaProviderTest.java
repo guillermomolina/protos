@@ -30,7 +30,6 @@ import com.guillermomolina.protos.execution.ProtosHostJavaFixtureTypes.Lazy;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
@@ -135,7 +134,7 @@ class ProtosHostJavaProviderTest {
             assertEquals("5", integer(fixture.eval(G + "G.add(2, 3)")));
             assertEquals(1.5, ((ProtosFloatValue) fixture.eval(G + "G.half(3.0)")).value());
             assertEquals(0.25, ((ProtosFloatValue) fixture.eval(G + "G.widen(0.25)")).value());
-            assertSame(ProtosBooleanValue.FALSE, fixture.eval(G + "G.negate(true)"));
+            assertSame(Boolean.FALSE, fixture.eval(G + "G.negate(true)"));
             assertEquals(String.valueOf(BigInteger.TEN.pow(40)), integer(fixture.eval(G + "G.square(100000000000000000000)")));
             assertSame(ProtosNullValue.INSTANCE, fixture.eval(G + "G.nothing()"));
             assertEquals("-128", integer(fixture.eval(G + "G.tiny(-128)")));
@@ -162,10 +161,10 @@ class ProtosHostJavaProviderTest {
 
             // A raw Java reference returns to Java as its exact object; other values never cross.
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(G + "g: G(\"a\")\ng.sameAs(g)"));
             assertSame(
-                    ProtosBooleanValue.FALSE,
+                    Boolean.FALSE,
                     fixture.eval(G + "g: G(\"a\")\ng.sameAs(G(\"a\"))"));
             invocations = ProtosHostJavaFixtureTypes.INVOCATIONS.get();
             // No D189 callback and no ordinary object crosses into a Java member: pre-entry.
@@ -179,14 +178,14 @@ class ProtosHostJavaProviderTest {
     @Test
     void javaObjectsKeepRawIdentityAndJavaEqualityIsNeverImported() throws Exception {
         try (Fixture fixture = new Fixture()) {
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(G + "g: G(\"a\")\ng.self() === g"));
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(G + "g: G(\"a\")\ng.self() == g"));
+            assertSame(Boolean.TRUE, fixture.eval(G + "g: G(\"a\")\ng.self() === g"));
+            assertSame(Boolean.TRUE, fixture.eval(G + "g: G(\"a\")\ng.self() == g"));
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval(G + "g: G(\"a\")\ng.self().hash() == g.hash()"));
             // Greeter.equals is total; distinct objects still stay distinct.
-            assertSame(ProtosBooleanValue.FALSE, fixture.eval(G + "G(\"a\") === G(\"a\")"));
-            assertSame(ProtosBooleanValue.FALSE, fixture.eval(G + "G(\"a\") == G(\"a\")"));
+            assertSame(Boolean.FALSE, fixture.eval(G + "G(\"a\") === G(\"a\")"));
+            assertSame(Boolean.FALSE, fixture.eval(G + "G(\"a\") == G(\"a\")"));
             assertEquals("2", integer(
                             fixture.eval(
                                     G + "mp: Map()\nmp[G(\"a\")] = 1\nmp[G(\"a\")] = 2\nmp.size()")));

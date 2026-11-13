@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -74,8 +73,8 @@ final class ProtosI115StructuredControlSmokeTest {
     void conditionalExpressionsYieldExactResultOrNull() throws Exception {
         withCore(module -> {
             assertInteger(7, run(module, "true.ifTrue(() => { 7 })"));
-            assertSame(ProtosBooleanValue.TRUE, run(module, "false.ifTrue(() => { 7 }) === null"));
-            assertSame(ProtosBooleanValue.TRUE, run(module, "true.ifFalse(() => { 7 }) === null"));
+            assertSame(Boolean.TRUE, run(module, "false.ifTrue(() => { 7 }) === null"));
+            assertSame(Boolean.TRUE, run(module, "true.ifFalse(() => { 7 }) === null"));
             assertInteger(2, run(module, "false.ifTrueIfFalse(() => { 1 }, () => { 2 })"));
             assertInteger(5, run(module, """
                     value: true.ifTrue(() => { 5 })
@@ -131,7 +130,7 @@ final class ProtosI115StructuredControlSmokeTest {
                     (() => { true }).whileFalse() { n = n + 1 }
                     n
                     """));
-            assertSame(ProtosBooleanValue.TRUE, run(module, """
+            assertSame(Boolean.TRUE, run(module, """
                     value: (() => { false }).whileTrue() { 1 }
                     value === null
                     """));
@@ -225,7 +224,7 @@ final class ProtosI115StructuredControlSmokeTest {
     void genericSendsReachTheStandardConditionalBehavior() throws Exception {
         withCore(module -> {
             assertInteger(5, run(module, "true.ifTrue(...[() => { 5 }])"));
-            assertSame(ProtosBooleanValue.TRUE,
+            assertSame(Boolean.TRUE,
                     run(module, "false.ifTrue(...[() => { 5 }]) === null"));
             assertInteger(4, run(module, "false.ifFalse(...[() => { 4 }])"));
             assertInteger(1, run(module, "true.ifTrueIfFalse(...[() => { 1 }, () => { 2 }])"));
@@ -265,7 +264,7 @@ final class ProtosI115StructuredControlSmokeTest {
                     }
                     """, "i115-control-custom-define.protos", module);
             assertInteger(11, evaluate("count(true)\n", "i115-control-custom-true.protos", module));
-            assertSame(ProtosBooleanValue.TRUE,
+            assertSame(Boolean.TRUE,
                     evaluate("count(false) == 1\n", "i115-control-custom-false.protos", module));
             assertInteger(21, evaluate("count(twice)\n", "i115-control-custom-twice.protos", module));
             assertInteger(1, evaluate("count(later)\n", "i115-control-custom-later.protos", module));
@@ -294,7 +293,7 @@ final class ProtosI115StructuredControlSmokeTest {
                     "i115-control-apply-define.protos", module);
             assertInteger(5, evaluate("apply(true, () => { 5 })\n",
                     "i115-control-apply-true.protos", module));
-            assertSame(ProtosBooleanValue.TRUE, evaluate("apply(false, () => { 5 }) === null\n",
+            assertSame(Boolean.TRUE, evaluate("apply(false, () => { 5 }) === null\n",
                     "i115-control-apply-false.protos", module));
 
             ProtosClosureValue apply = assertInstanceOf(ProtosClosureValue.class,

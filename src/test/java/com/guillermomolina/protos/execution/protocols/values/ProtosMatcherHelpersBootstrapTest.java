@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.file.Path;
@@ -54,7 +53,7 @@ class ProtosMatcherHelpersBootstrapTest {
         ProtosObjectValue subject = prelude.newExecutionContext();
 
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosInvocation.invokeMessage(
                         any,
                         "match",

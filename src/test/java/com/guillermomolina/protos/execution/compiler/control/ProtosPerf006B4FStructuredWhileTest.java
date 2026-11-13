@@ -28,7 +28,6 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
@@ -70,8 +69,8 @@ final class ProtosPerf006B4FStructuredWhileTest {
                     nativeClosure(
                             (activation, supplied) ->
                                     conditionCalls.incrementAndGet() == 1
-                                            ? ProtosBooleanValue.TRUE
-                                            : ProtosBooleanValue.FALSE));
+                                            ? Boolean.TRUE
+                                            : Boolean.FALSE));
             module.context().createLocalSlot(
                     "condition",
                     sourceClosure(
@@ -130,8 +129,8 @@ final class ProtosPerf006B4FStructuredWhileTest {
                     nativeClosure(
                             (activation, supplied) ->
                                     conditionCalls.incrementAndGet() == 1
-                                            ? ProtosBooleanValue.TRUE
-                                            : ProtosBooleanValue.FALSE));
+                                            ? Boolean.TRUE
+                                            : Boolean.FALSE));
             module.context().createLocalSlot(
                     "bodyProbe",
                     nativeClosure(
@@ -245,7 +244,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
                     nativeClosure(
                             (activation, supplied) -> {
                                 conditionCalls.incrementAndGet();
-                                return ProtosBooleanValue.FALSE;
+                                return Boolean.FALSE;
                             }));
             module.context().createLocalSlot(
                     "notBody",
@@ -282,8 +281,8 @@ final class ProtosPerf006B4FStructuredWhileTest {
                     nativeClosure(
                             (activation, supplied) ->
                                     conditionCalls.incrementAndGet() == 1
-                                            ? ProtosBooleanValue.TRUE
-                                            : ProtosBooleanValue.FALSE));
+                                            ? Boolean.TRUE
+                                            : Boolean.FALSE));
             module.context().createLocalSlot(
                     "body",
                     nativeClosure(
@@ -405,7 +404,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
                     nativeClosure(
                             (activation, supplied) -> {
                                 conditionCalls.incrementAndGet();
-                                return ProtosBooleanValue.TRUE;
+                                return Boolean.TRUE;
                             }));
             module.context().createLocalSlot(
                     "body",
@@ -448,7 +447,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
                     nativeClosure(
                             (activation, supplied) -> {
                                 conditionCalls.incrementAndGet();
-                                return ProtosBooleanValue.FALSE;
+                                return Boolean.FALSE;
                             });
             ProtosClosureValue extracted =
                     assertInstanceOf(
@@ -527,8 +526,8 @@ final class ProtosPerf006B4FStructuredWhileTest {
                     nativeClosure(
                             (activation, supplied) ->
                                     conditionCalls.incrementAndGet() <= 2
-                                            ? ProtosBooleanValue.TRUE
-                                            : ProtosBooleanValue.FALSE));
+                                            ? Boolean.TRUE
+                                            : Boolean.FALSE));
             module.context().createLocalSlot(
                     "bodyProbe",
                     nativeClosure(
@@ -591,8 +590,8 @@ final class ProtosPerf006B4FStructuredWhileTest {
                     nativeClosure(
                             (activation, supplied) ->
                                     conditionCalls.incrementAndGet() % 3 != 0
-                                            ? ProtosBooleanValue.TRUE
-                                            : ProtosBooleanValue.FALSE);
+                                            ? Boolean.TRUE
+                                            : Boolean.FALSE);
             ProtosClosureValue body =
                     nativeClosure(
                             (activation, supplied) -> {
@@ -648,7 +647,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
                 nativeClosure(
                         (activation, supplied) -> {
                             conditions.incrementAndGet();
-                            return ProtosBooleanValue.TRUE;
+                            return Boolean.TRUE;
                         }));
         module.context().createLocalSlot(
                 "tick",

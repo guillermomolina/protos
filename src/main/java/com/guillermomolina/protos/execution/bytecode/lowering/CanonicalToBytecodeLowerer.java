@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumberLiteral;
@@ -1175,7 +1174,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         if (constant instanceof Long
-                || constant instanceof ProtosBooleanValue) {
+                || constant instanceof Boolean) {
             /*
              * PLAT067-B: the constant return is the surviving executable
              * location of the source statement, so it carries that
@@ -1547,8 +1546,8 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalLiteral literal) {
             return switch (literal.kind()) {
                 case NUMBER -> numberLiteralDescriptor(literal);
-                case TRUE -> ProtosBooleanValue.TRUE;
-                case FALSE -> ProtosBooleanValue.FALSE;
+                case TRUE -> Boolean.TRUE;
+                case FALSE -> Boolean.FALSE;
                 case NULL -> ProtosNullValue.INSTANCE;
                 default -> null;
             };
@@ -1574,22 +1573,22 @@ final class CanonicalToBytecodeLowerer {
             Object left = i101Constant(identity.left(), known, scope);
             Object right = i101Constant(identity.right(), known, scope);
             return left == null || right == null ? null
-                    : ProtosBooleanValue.of(i101Identity(left, right));
+                    : Boolean.valueOf(i101Identity(left, right));
         }
 
         if (expression instanceof CanonicalNotIdentity identity) {
             Object left = i101Constant(identity.left(), known, scope);
             Object right = i101Constant(identity.right(), known, scope);
             return left == null || right == null ? null
-                    : ProtosBooleanValue.of(!i101Identity(left, right));
+                    : Boolean.valueOf(!i101Identity(left, right));
         }
 
         if (expression instanceof CanonicalDerivedInequality inequality) {
             Object left = i101Constant(inequality.left(), known, scope);
             Object right = i101Constant(inequality.right(), known, scope);
             Object equal = i101Equality(left, right);
-            return equal instanceof ProtosBooleanValue booleanValue
-                    ? ProtosBooleanValue.of(!booleanValue.value()) : null;
+            return equal instanceof Boolean booleanValue
+                    ? Boolean.valueOf(!booleanValue.booleanValue()) : null;
         }
 
         if (!(expression instanceof CanonicalSend send)
@@ -1630,7 +1629,7 @@ final class CanonicalToBytecodeLowerer {
                 yield null;
             }
         };
-        return value == null ? null : ProtosBooleanValue.of(value);
+        return value == null ? null : Boolean.valueOf(value);
     }
 
     /*
@@ -1738,17 +1737,17 @@ final class CanonicalToBytecodeLowerer {
             return null;
         }
         if (i101Numeric(left) && i101Numeric(right)) {
-            return ProtosBooleanValue.of(i101Compare(left, right)
+            return Boolean.valueOf(i101Compare(left, right)
                     == ProtosStandardNumberOrderingProtocol
                             .Comparison.EQUAL);
         }
-        if (left instanceof ProtosBooleanValue
-                && right instanceof ProtosBooleanValue) {
-            return ProtosBooleanValue.of(left == right);
+        if (left instanceof Boolean
+                && right instanceof Boolean) {
+            return Boolean.valueOf(left == right);
         }
         if (left == ProtosNullValue.INSTANCE
                 || right == ProtosNullValue.INSTANCE) {
-            return ProtosBooleanValue.of(left == right);
+            return Boolean.valueOf(left == right);
         }
         return null;
     }
@@ -7536,16 +7535,16 @@ final class CanonicalToBytecodeLowerer {
         builder.endCanonicalControlCondition();
         switch (control) {
             case NOT -> {
-                builder.emitLoadConstant(ProtosBooleanValue.FALSE);
-                builder.emitLoadConstant(ProtosBooleanValue.TRUE);
+                builder.emitLoadConstant(Boolean.FALSE);
+                builder.emitLoadConstant(Boolean.TRUE);
             }
             case AND -> {
                 emitI115BooleanRhsValue(builder, (CanonicalClosure) arguments.get(0),
                         scratch, childResult, resumeValue);
-                builder.emitLoadConstant(ProtosBooleanValue.FALSE);
+                builder.emitLoadConstant(Boolean.FALSE);
             }
             case OR -> {
-                builder.emitLoadConstant(ProtosBooleanValue.TRUE);
+                builder.emitLoadConstant(Boolean.TRUE);
                 emitI115BooleanRhsValue(builder, (CanonicalClosure) arguments.get(0),
                         scratch, childResult, resumeValue);
             }
@@ -7597,7 +7596,7 @@ final class CanonicalToBytecodeLowerer {
         // Unselected: the receiver itself, as a canonical constant.
         builder.beginStoreLocal(result);
         builder.emitLoadConstant(control == NormalBooleanControl.AND
-                ? ProtosBooleanValue.FALSE : ProtosBooleanValue.TRUE);
+                ? Boolean.FALSE : Boolean.TRUE);
         builder.endStoreLocal();
 
         builder.endIfThenElse();
@@ -8726,7 +8725,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         static Object canonicalBoolean(boolean value) {
-            return value ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+            return value ? Boolean.TRUE : Boolean.FALSE;
         }
     }
 
@@ -9786,8 +9785,8 @@ final class CanonicalToBytecodeLowerer {
                     ? ProtosNumericValueSupport.integer(small)
                     : ProtosNumericValueSupport.floating((Double) numberLiteralDescriptor(literal));
             case STRING -> new ProtosStringValue(literal.value());
-            case TRUE -> ProtosBooleanValue.TRUE;
-            case FALSE -> ProtosBooleanValue.FALSE;
+            case TRUE -> Boolean.TRUE;
+            case FALSE -> Boolean.FALSE;
             case NULL -> ProtosNullValue.INSTANCE;
         };
     }

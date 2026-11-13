@@ -27,7 +27,6 @@ import com.guillermomolina.protos.execution.ProtosStandaloneProcessBootstrap;
 import com.guillermomolina.protos.execution.ProtosStandardFilesystemProtocol;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
@@ -219,7 +218,7 @@ activation);
                             throw new AssertionError(
                                     "LM006-E Protos case unexpectedly cancelled: " + sourceFile);
                 };
-        assertSame(ProtosBooleanValue.TRUE, result, sourceFile);
+        assertSame(Boolean.TRUE, result, sourceFile);
     }
 
     private static ProtosEnvironmentValue.NativeNameDomain exactEnvironmentDomain() {

@@ -19,7 +19,6 @@ package com.guillermomolina.protos.cli;
 import com.guillermomolina.protos.runtime.ProtosActorRefValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
@@ -100,11 +99,11 @@ final class ProtosDiagnosticInspector {
             state.append("null");
             return;
         }
-        if (value == ProtosBooleanValue.TRUE) {
+        if (value == Boolean.TRUE) {
             state.append("true");
             return;
         }
-        if (value == ProtosBooleanValue.FALSE) {
+        if (value == Boolean.FALSE) {
             state.append("false");
             return;
         }

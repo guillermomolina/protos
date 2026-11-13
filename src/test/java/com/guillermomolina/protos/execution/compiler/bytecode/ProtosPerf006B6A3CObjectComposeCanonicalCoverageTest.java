@@ -24,7 +24,6 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -61,7 +60,7 @@ final class ProtosPerf006B6A3CObjectComposeCanonicalCoverageTest {
                                     "{ local: true }",
                                     "b6a3c-bare-object.protos");
             assertSame(ProtosObjectValue.rootObject(), bare.parent().orElseThrow());
-            assertSame(ProtosBooleanValue.TRUE, bare.readLocalSlot("local").orElseThrow());
+            assertSame(Boolean.TRUE, bare.readLocalSlot("local").orElseThrow());
 
             ProtosObjectValue parent = new ProtosObjectValue(ProtosObjectValue.rootObject());
             module.context().createLocalSlot("parent", parent);
@@ -73,7 +72,7 @@ final class ProtosPerf006B6A3CObjectComposeCanonicalCoverageTest {
                                     "parent { local: false }",
                                     "b6a3c-explicit-parent.protos");
             assertSame(parent, child.parent().orElseThrow());
-            assertSame(ProtosBooleanValue.FALSE, child.readLocalSlot("local").orElseThrow());
+            assertSame(Boolean.FALSE, child.readLocalSlot("local").orElseThrow());
         }
 
         System.out.println("PERF006_B6A3C_OBJECT_PARENT_CONSTRUCTION=PASS");
@@ -88,7 +87,7 @@ final class ProtosPerf006B6A3CObjectComposeCanonicalCoverageTest {
             ProtosActivation module = activation(prelude, domain);
             ProtosObjectValue marker = new ProtosObjectValue(ProtosObjectValue.rootObject());
             ProtosObjectValue base = new ProtosObjectValue(ProtosObjectValue.rootObject());
-            base.createLocalSlot("x", ProtosBooleanValue.TRUE);
+            base.createLocalSlot("x", Boolean.TRUE);
             base.createLocalSlot("y", marker);
             module.context().createLocalSlot("base", base);
 
@@ -102,7 +101,7 @@ final class ProtosPerf006B6A3CObjectComposeCanonicalCoverageTest {
 
             assertSame(marker, object.readLocalSlot("y").orElseThrow());
             assertSame(marker, object.readLocalSlot("seen").orElseThrow());
-            assertSame(ProtosBooleanValue.FALSE, object.readLocalSlot("x").orElseThrow());
+            assertSame(Boolean.FALSE, object.readLocalSlot("x").orElseThrow());
 
             ProtosClosureValue method =
                     (ProtosClosureValue) object.readLocalSlot("method").orElseThrow();
@@ -138,7 +137,7 @@ final class ProtosPerf006B6A3CObjectComposeCanonicalCoverageTest {
                                     module,
                                     "entry()",
                                     "b6a3c-object-default-call.protos");
-            assertSame(ProtosBooleanValue.TRUE, result.readLocalSlot("local").orElseThrow());
+            assertSame(Boolean.TRUE, result.readLocalSlot("local").orElseThrow());
             assertSame(ProtosObjectValue.rootObject(), result.parent().orElseThrow());
         }
 
@@ -195,7 +194,7 @@ final class ProtosPerf006B6A3CObjectComposeCanonicalCoverageTest {
             assertEquals(1, probeCalls.get());
             ProtosObjectValue result = (ProtosObjectValue) task.result().orElseThrow();
             assertSame(marker, result.readLocalSlot("marker").orElseThrow());
-            assertSame(ProtosBooleanValue.TRUE, result.readLocalSlot("local").orElseThrow());
+            assertSame(Boolean.TRUE, result.readLocalSlot("local").orElseThrow());
         }
 
         System.out.println("PERF006_B6A3C_COMPOSE_SOURCE_SUSPENSION_RESUME=PASS");

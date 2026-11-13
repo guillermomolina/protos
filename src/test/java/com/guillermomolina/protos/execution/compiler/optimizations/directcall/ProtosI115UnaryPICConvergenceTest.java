@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.CallTarget;
@@ -96,7 +95,7 @@ final class ProtosI115UnaryPICConvergenceTest {
                     first.preparedExecutionPlanOrNullForRuntime(),
                     third.preparedExecutionPlanOrNullForRuntime());
             assertSame(
-                    ProtosBooleanValue.FALSE,
+                    Boolean.FALSE,
                     evaluate(
                             "a: make()\nb: make()\na === b\n",
                             "i115-pic-distinct-identity.protos",

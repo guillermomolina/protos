@@ -8,7 +8,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.nio.file.Path;
@@ -38,7 +37,7 @@ final class ProtosTomlParserLexicalStringTriviaRegressionTest {
                         (root.value["value"].kind === "string") &&
                             (root.value["value"].value.size() == 768)
                         """);
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -52,7 +51,7 @@ final class ProtosTomlParserLexicalStringTriviaRegressionTest {
                         (root.value["value"].kind === "string") &&
                             (root.value["value"].value.size() == 768)
                         """);
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -74,7 +73,7 @@ final class ProtosTomlParserLexicalStringTriviaRegressionTest {
                             (root.value["items"].value[1].value == 2)
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     private static Object evaluate(String input, String body) throws Exception {

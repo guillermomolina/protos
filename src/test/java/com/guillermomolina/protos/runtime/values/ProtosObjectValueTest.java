@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.runtime.values;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -55,12 +54,12 @@ class ProtosObjectValueTest {
         ProtosObjectValue stringChild = new ProtosObjectValue(new ProtosStringValue("parent"));
         ProtosObjectValue numberChild =
                 new ProtosObjectValue(Long.valueOf(42));
-        ProtosObjectValue booleanChild = new ProtosObjectValue(ProtosBooleanValue.TRUE);
+        ProtosObjectValue booleanChild = new ProtosObjectValue(Boolean.TRUE);
         ProtosObjectValue nullChild = new ProtosObjectValue(ProtosNullValue.INSTANCE);
 
         assertTrue(stringChild.parent().orElseThrow() instanceof ProtosStringValue);
         assertTrue(numberChild.parent().orElseThrow() instanceof Long);
-        assertSame(ProtosBooleanValue.TRUE, booleanChild.parent().orElseThrow());
+        assertSame(Boolean.TRUE, booleanChild.parent().orElseThrow());
         assertSame(ProtosNullValue.INSTANCE, nullChild.parent().orElseThrow());
     }
 
@@ -93,30 +92,30 @@ class ProtosObjectValueTest {
     @Test
     void closedObjectsRejectStructuralCreationButAllowExistingSlotAssignment() {
         ProtosObjectValue object = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        object.createLocalSlot("existing", ProtosBooleanValue.TRUE);
+        object.createLocalSlot("existing", Boolean.TRUE);
         object.close();
 
         assertThrows(
                 IllegalStateException.class,
-                () -> object.createLocalSlot("newSlot", ProtosBooleanValue.TRUE));
+                () -> object.createLocalSlot("newSlot", Boolean.TRUE));
 
-        object.assignLocalSlot("existing", ProtosBooleanValue.FALSE);
-        assertSame(ProtosBooleanValue.FALSE, object.readLocalSlot("existing").orElseThrow());
+        object.assignLocalSlot("existing", Boolean.FALSE);
+        assertSame(Boolean.FALSE, object.readLocalSlot("existing").orElseThrow());
     }
 
     @Test
     void frozenObjectsRejectCreationAndAssignment() {
         ProtosObjectValue object = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        object.createLocalSlot("existing", ProtosBooleanValue.TRUE);
+        object.createLocalSlot("existing", Boolean.TRUE);
         object.freeze();
 
         assertThrows(
                 IllegalStateException.class,
-                () -> object.createLocalSlot("newSlot", ProtosBooleanValue.TRUE));
+                () -> object.createLocalSlot("newSlot", Boolean.TRUE));
         assertThrows(
                 IllegalStateException.class,
-                () -> object.assignLocalSlot("existing", ProtosBooleanValue.FALSE));
-        assertSame(ProtosBooleanValue.TRUE, object.readLocalSlot("existing").orElseThrow());
+                () -> object.assignLocalSlot("existing", Boolean.FALSE));
+        assertSame(Boolean.TRUE, object.readLocalSlot("existing").orElseThrow());
     }
 
     @Test

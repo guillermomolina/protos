@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -137,9 +136,9 @@ public final class ProtosStandardBooleanProtocol {
 
     private static Object not(ProtosActivation activation, List<?> supplied) {
         Object receiver = requireReceiverAndArity(activation, supplied, 0);
-        return receiver == ProtosBooleanValue.TRUE
-                ? ProtosBooleanValue.FALSE
-                : ProtosBooleanValue.TRUE;
+        return receiver == Boolean.TRUE
+                ? Boolean.FALSE
+                : Boolean.TRUE;
     }
 
     /*
@@ -149,26 +148,26 @@ public final class ProtosStandardBooleanProtocol {
      */
     private static Object ifTrue(ProtosActivation activation, List<?> supplied) {
         Object receiver = requireReceiverAndArity(activation, supplied, 1);
-        if (receiver == ProtosBooleanValue.FALSE) return ProtosNullValue.INSTANCE;
+        if (receiver == Boolean.FALSE) return ProtosNullValue.INSTANCE;
         return ProtosInvocation.invoke(supplied.get(0), List.of(), activation);
     }
 
     private static Object ifFalse(ProtosActivation activation, List<?> supplied) {
         Object receiver = requireReceiverAndArity(activation, supplied, 1);
-        if (receiver == ProtosBooleanValue.TRUE) return ProtosNullValue.INSTANCE;
+        if (receiver == Boolean.TRUE) return ProtosNullValue.INSTANCE;
         return ProtosInvocation.invoke(supplied.get(0), List.of(), activation);
     }
 
     private static Object ifTrueIfFalse(ProtosActivation activation, List<?> supplied) {
         Object receiver = requireReceiverAndArity(activation, supplied, 2);
         Object selected =
-                receiver == ProtosBooleanValue.TRUE ? supplied.get(0) : supplied.get(1);
+                receiver == Boolean.TRUE ? supplied.get(0) : supplied.get(1);
         return ProtosInvocation.invoke(selected, List.of(), activation);
     }
 
     private static Object and(ProtosActivation activation, List<?> supplied) {
         Object receiver = requireReceiverAndArity(activation, supplied, 1);
-        if (receiver == ProtosBooleanValue.FALSE) return ProtosBooleanValue.FALSE;
+        if (receiver == Boolean.FALSE) return Boolean.FALSE;
         return requireBooleanResult(
                 ProtosInvocation.invoke(supplied.get(0), List.of(), activation),
                 activation);
@@ -176,7 +175,7 @@ public final class ProtosStandardBooleanProtocol {
 
     private static Object or(ProtosActivation activation, List<?> supplied) {
         Object receiver = requireReceiverAndArity(activation, supplied, 1);
-        if (receiver == ProtosBooleanValue.TRUE) return ProtosBooleanValue.TRUE;
+        if (receiver == Boolean.TRUE) return Boolean.TRUE;
         return requireBooleanResult(
                 ProtosInvocation.invoke(supplied.get(0), List.of(), activation),
                 activation);
@@ -188,14 +187,14 @@ public final class ProtosStandardBooleanProtocol {
             int arity) {
         if (supplied.size() != arity) throw invalid(activation);
         Object receiver = activation.receiver();
-        if (receiver != ProtosBooleanValue.TRUE && receiver != ProtosBooleanValue.FALSE) {
+        if (receiver != Boolean.TRUE && receiver != Boolean.FALSE) {
             throw invalid(activation);
         }
         return receiver;
     }
 
     static Object requireBooleanResult(Object result, ProtosActivation activation) {
-        if (result != ProtosBooleanValue.TRUE && result != ProtosBooleanValue.FALSE) {
+        if (result != Boolean.TRUE && result != Boolean.FALSE) {
             throw invalid(activation);
         }
         return result;

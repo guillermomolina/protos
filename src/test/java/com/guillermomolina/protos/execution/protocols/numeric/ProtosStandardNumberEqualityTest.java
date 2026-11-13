@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -131,7 +130,7 @@ class ProtosStandardNumberEqualityTest {
 
     private static void assertEquality(
             boolean expected, Object left, Object right, ProtosActivation a) {
-        Object expectedValue = expected ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        Object expectedValue = expected ? Boolean.TRUE : Boolean.FALSE;
         assertSame(expectedValue, ProtosInvocation.invokeMessage(left, "==", List.of(right), a));
         if (ProtosNumericValueSupport.isCurrentNumber(right)) {
             assertSame(expectedValue, ProtosInvocation.invokeMessage(right, "==", List.of(left), a));

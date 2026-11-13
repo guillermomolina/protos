@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -480,7 +479,7 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
     }
 
     private static boolean bool(Object value) {
-        return assertInstanceOf(ProtosBooleanValue.class, value).value();
+        return assertInstanceOf(Boolean.class, value).booleanValue();
     }
 
     private static long integer(Object value) {

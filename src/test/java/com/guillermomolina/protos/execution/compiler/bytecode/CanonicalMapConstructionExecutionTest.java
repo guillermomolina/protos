@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.nio.file.Path;
@@ -39,7 +38,7 @@ class CanonicalMapConstructionExecutionTest {
                         "%{ \"answer\": 42 }[\"answer\"] == 42",
                         activation);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -78,7 +77,7 @@ class CanonicalMapConstructionExecutionTest {
                                 + "(mapping[\"second\"] == 2)",
                         activation);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test

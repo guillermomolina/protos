@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -115,7 +114,7 @@ class ProtosModuleRuntimeTest {
                                 + "}",
                         actor);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
         assertEquals(java.util.List.of("<root>", "mid"), resolver.resolvedFrom);
     }
 
@@ -143,7 +142,7 @@ class ProtosModuleRuntimeTest {
                                 + "}",
                         actor);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
         assertEquals(
                 java.util.List.of("", "β/../A", "alias-a", "b"),
                 resolver.resolvedSpecifiers);
@@ -274,7 +273,7 @@ class ProtosModuleRuntimeTest {
     }
 
     private static void assertProtosTrue(String source, ProtosActivation activation) {
-        assertSame(ProtosBooleanValue.TRUE, eval(source, activation), source);
+        assertSame(Boolean.TRUE, eval(source, activation), source);
     }
 
     @Test
@@ -613,7 +612,7 @@ class ProtosModuleRuntimeTest {
         assertSame(partialA, spawned.moduleState().lookup(key).orElseThrow().instance());
         assertSame(partialA, behavior.readLocalSlot("sameA").orElseThrow());
         assertEquals("early", ((com.guillermomolina.protos.runtime.ProtosStringValue) behavior.readLocalSlot("sawSelf").orElseThrow()).value());
-        assertSame(com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE, behavior.readLocalSlot("sawSecret").orElseThrow());
+        assertSame(Boolean.FALSE, behavior.readLocalSlot("sawSecret").orElseThrow());
         assertFalse(partialA.hasLocalSlot("secret"));
         assertEquals("1", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(behavior.readLocalSlot("starts").orElseThrow()));
     }

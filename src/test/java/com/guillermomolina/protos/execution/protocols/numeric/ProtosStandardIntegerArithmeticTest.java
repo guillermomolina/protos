@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
@@ -215,7 +214,7 @@ class ProtosStandardIntegerArithmeticTest {
         assertNull(
                 direct(prelude, "+",
                         Long.valueOf(1L),
-                        ProtosBooleanValue.TRUE));
+                        Boolean.TRUE));
         assertNull(
                 direct(prelude, "div",
                         Long.valueOf(1L),

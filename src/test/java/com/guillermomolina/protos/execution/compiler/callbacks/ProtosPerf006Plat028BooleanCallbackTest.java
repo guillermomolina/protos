@@ -12,7 +12,6 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -113,10 +112,10 @@ final class ProtosPerf006Plat028BooleanCallbackTest {
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.SUSPENDED, task.state());
 
-            assertTrue(future.resolve(ProtosBooleanValue.TRUE, module));
+            assertTrue(future.resolve(Boolean.TRUE, module));
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.COMPLETED, task.state());
-            assertSame(ProtosBooleanValue.TRUE, task.result().orElseThrow());
+            assertSame(Boolean.TRUE, task.result().orElseThrow());
         }
 
         System.out.println("PERF006_PLAT028_BOOLEAN_AND_SUSPEND_RESUME=PASS");
@@ -153,7 +152,7 @@ final class ProtosPerf006Plat028BooleanCallbackTest {
                                     "perf006-plat028-boolean-short-or.protos"));
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.COMPLETED, orTask.state());
-            assertSame(ProtosBooleanValue.TRUE, orTask.result().orElseThrow());
+            assertSame(Boolean.TRUE, orTask.result().orElseThrow());
         }
 
         System.out.println("PERF006_PLAT028_BOOLEAN_SHORT_CIRCUIT_SELECTED_ONLY=PASS");

@@ -21,6 +21,7 @@ public final class ProtosIdentity {
     private ProtosIdentity() {}
     public static boolean identical(Object left,Object right) {
         if(left==right)return true;
+        if(left instanceof Boolean a && right instanceof Boolean b)return a.booleanValue()==b.booleanValue();
         if(ProtosNumericValueSupport.sameCurrentFamilyIdentity(left,right))return true;
         if(ProtosNumericValueSupport.sameRichNumericIdentity(left,right))return true;
         if(left instanceof ProtosStringValue a && right instanceof ProtosStringValue b)return a.value().equals(b.value());
@@ -38,7 +39,7 @@ public final class ProtosIdentity {
         if(value instanceof ProtosActorRefValue ref)return tagged(34,Long.hashCode(ref.incarnationIdentityForRuntime()));
         if(value instanceof ProtosGroupRefValue ref)return tagged(35,ref.semanticIdentityForRuntime().hashCode());
         if(value instanceof ProtosRawForeignValue raw)return raw.taggedIdentityHash();
-        if(value==ProtosBooleanValue.TRUE)return tagged(32,1); if(value==ProtosBooleanValue.FALSE)return tagged(32,0); if(value==ProtosNullValue.INSTANCE)return tagged(33,0);
+        if(value instanceof Boolean bool)return tagged(32,bool?1:0); if(value==ProtosNullValue.INSTANCE)return tagged(33,0);
         return Integer.toUnsignedLong(System.identityHashCode(value));
     }
     private static long tagged(int family,int hash){return (((long)family)<<32)^Integer.toUnsignedLong(hash);}

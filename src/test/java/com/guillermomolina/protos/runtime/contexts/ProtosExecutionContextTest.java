@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.runtime.contexts;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -192,10 +191,10 @@ class ProtosActivationTest {
         ProtosObjectValue lexical = new ProtosObjectValue(root);
         ProtosObjectValue current = new ProtosObjectValue(root);
 
-        prototype.createLocalSlot("inherited", ProtosBooleanValue.TRUE);
-        receiver.createLocalSlot("receiverLocal", ProtosBooleanValue.TRUE);
-        lexical.createLocalSlot("captured", ProtosBooleanValue.TRUE);
-        current.createLocalSlot("local", ProtosBooleanValue.TRUE);
+        prototype.createLocalSlot("inherited", Boolean.TRUE);
+        receiver.createLocalSlot("receiverLocal", Boolean.TRUE);
+        lexical.createLocalSlot("captured", Boolean.TRUE);
+        current.createLocalSlot("local", Boolean.TRUE);
 
         ProtosActivation activation =
                 new ProtosActivation(current, List.of(lexical), receiver);

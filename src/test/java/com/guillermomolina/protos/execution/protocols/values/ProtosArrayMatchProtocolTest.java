@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 
@@ -48,16 +47,16 @@ class ProtosArrayMatchProtocolTest {
         ProtosPrelude prelude = core();
 
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate(prelude, "[].match([])"));
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate(prelude, "[1, 2].match([1, 2])"));
         assertSame(
-                ProtosBooleanValue.FALSE,
+                Boolean.FALSE,
                 evaluate(prelude, "[1, 2].match([1])"));
         assertSame(
-                ProtosBooleanValue.FALSE,
+                Boolean.FALSE,
                 evaluate(prelude, "[1].match(1)"));
     }
 
@@ -76,7 +75,7 @@ class ProtosArrayMatchProtocolTest {
                         [Bad].match([])
                         """);
 
-        assertSame(ProtosBooleanValue.FALSE, result);
+        assertSame(Boolean.FALSE, result);
     }
 
     @Test
@@ -108,7 +107,7 @@ class ProtosArrayMatchProtocolTest {
                         [First, Second].match([0, 0])
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -126,7 +125,7 @@ class ProtosArrayMatchProtocolTest {
                         [1, Bad].match([2, 0])
                         """);
 
-        assertSame(ProtosBooleanValue.FALSE, result);
+        assertSame(Boolean.FALSE, result);
     }
 
     @Test
@@ -193,7 +192,7 @@ class ProtosArrayMatchProtocolTest {
                         matcher.match(subject)
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test

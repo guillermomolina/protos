@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -57,7 +56,7 @@ final class ProtosTcpConnectionEndpointObservationTest {
         assertRecognizedEndpoint(prelude, observedLocal);
         assertRecognizedEndpoint(prelude, observedRemote);
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosInvocation.invokeMessage(
                         observedRemote, "==", List.of(equalRemote), activation));
         assertEquals(0, backend.calls);

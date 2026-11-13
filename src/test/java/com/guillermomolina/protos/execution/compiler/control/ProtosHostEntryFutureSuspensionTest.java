@@ -18,8 +18,8 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -49,7 +49,7 @@ final class ProtosHostEntryFutureSuspensionTest {
             """
             sample: (() => 1).future()
             sample.value()
-            gate: 0
+            gateBox: { current: 0 }
             failure: Error()
             before: 0
             after: 0
@@ -91,7 +91,10 @@ final class ProtosHostEntryFutureSuspensionTest {
             gate =
                     new ProtosFutureValue(
                             (ProtosObjectValue) sample.parent().orElseThrow(), sample.domain());
-            module.assignLocalSlot("gate", gate);
+            // D179: publish through ordinary object state observed by guest code.
+            ProtosObjectValue gateBox =
+                    (ProtosObjectValue) module.readLocalSlot("gateBox").orElseThrow();
+            gateBox.assignLocalSlot("current", gate);
         }
 
         Value member(String name) {
@@ -179,7 +182,7 @@ final class ProtosHostEntryFutureSuspensionTest {
             """
             run: () => {
                 before = before + 1
-                v: gate.value()
+                v: gateBox.current.value()
                 after = after + 1
                 v + 1
             }
@@ -215,7 +218,7 @@ final class ProtosHostEntryFutureSuspensionTest {
                             """
                             trivial: () => { 1 }
                             identity: (value) => { value }
-                            suspending: () => { gate.value() }
+                            suspending: () => { gateBox.current.value() }
                             """);
 
             ProtosHostExecutableClosure trivial;
@@ -387,9 +390,9 @@ final class ProtosHostEntryFutureSuspensionTest {
                             }
                             suspendingArgument: () => {
                                 identity: (value) => { value }
-                                identity(gate.value())
+                                identity(gateBox.current.value())
                             }
-                            suspendingDefault: (value: gate.value()) => {
+                            suspendingDefault: (value: gateBox.current.value()) => {
                                 identity: (item) => { item }
                                 identity(1)
                             }
@@ -497,11 +500,10 @@ final class ProtosHostEntryFutureSuspensionTest {
     }
 
     /**
-     * I115-H6: the experimental source-backed entry makes no Process admission decision, so a
-     * retained executable still runs after the Process stopped.
+     * A retained executable cannot enter its Process after termination.
      */
     @Test
-    void terminatedProcessIsNotConsultedByExperimentalHostEntry() {
+    void terminatedProcessRejectsRetainedHostExecutable() {
         try (Context context = newContext()) {
             Fixture f = new Fixture(context, "trivial: () => { 1 }");
             Value trivial = f.member("trivial");
@@ -513,7 +515,8 @@ final class ProtosHostEntryFutureSuspensionTest {
             assertFalse(f.process.isLive());
             assertFalse(f.process.permitsUnadmittedNonSuspendingHostEntry());
 
-            assertEquals(1, trivial.execute().asInt(), "no Process admission decision");
+            assertThrows(org.graalvm.polyglot.PolyglotException.class, () -> trivial.execute());
+            assertFalse(f.process.isLive(), "rejected entry does not restart the Process");
         }
     }
 
@@ -530,21 +533,23 @@ final class ProtosHostEntryFutureSuspensionTest {
     }
 
     /**
-     * I115-H6: the source-backed host entry has no continuation driver. A pending Future
-     * observation returns to the host without waiting, and resolving the Future afterwards never
-     * resumes the abandoned body.
+     * A pending observation keeps the host entry synchronous and resumes its exact continuation
+     * after terminalization, without repeating effects before the observation.
      */
     @Test
-    void pendingFutureObservationIsNotDrivenByTheExperimentalHostEntry() throws Exception {
+    void pendingFutureObservationResumesWithoutRepeatingEffects() throws Exception {
         try (Context context = newContext()) {
             Fixture f = new Fixture(context, SUSPENDING_RUN);
             Entry entry = new Entry(f.member("run"));
-            Object outcome = entry.await();
+            entry.awaitSuspended(() -> f.gate.observerCountForTesting() == 1);
             assertEquals(1, f.slot("before"));
             assertEquals(0, f.slot("after"), "nothing after the observation point ran");
-            assertNotEquals(42L, outcome, "no resumed result");
             f.resolve(41);
-            assertEquals(0, f.slot("after"), "no later resumption");
+            assertEquals(42L, entry.await(), "host entry returns only its final result");
+            assertEquals(1, f.slot("before"), "effects before suspension are not repeated");
+            assertEquals(1, f.slot("after"));
+            assertEquals(0, f.gate.observerCountForTesting());
+            assertCompactState(f);
         }
     }
 
@@ -554,7 +559,7 @@ final class ProtosHostEntryFutureSuspensionTest {
             Fixture f =
                     new Fixture(
                             context,
-                            "run: () => { Error.handle(() => { gate.value() }, (caught) => { 9 }) }");
+                            "run: () => { Error.handle(() => { gateBox.current.value() }, (caught) => { 9 }) }");
             assertEquals(ProtosFutureValue.State.CANCELLED, cancelledBeforeEntry(f));
             assertEquals(9, f.member("run").execute().asInt(), "already cancelled");
         }
@@ -579,7 +584,7 @@ final class ProtosHostEntryFutureSuspensionTest {
                             cases: %{
                                 Capture: (subject) => {
                                     before = before + 1
-                                    gate.value() + 1
+                                    gateBox.current.value() + 1
                                 }
                             }
                             """,

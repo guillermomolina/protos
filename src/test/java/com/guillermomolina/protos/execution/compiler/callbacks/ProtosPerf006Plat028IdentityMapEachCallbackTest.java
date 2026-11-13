@@ -13,7 +13,6 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
@@ -174,7 +173,7 @@ final class ProtosPerf006Plat028IdentityMapEachCallbackTest {
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
                                 keyCallbacks.incrementAndGet();
-                                return ProtosBooleanValue.TRUE;
+                                return Boolean.TRUE;
                             }));
 
             module.context().createLocalSlot("identityMap", identityMap);

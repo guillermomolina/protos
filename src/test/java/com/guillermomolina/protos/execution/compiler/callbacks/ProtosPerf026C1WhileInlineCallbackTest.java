@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.semantic.Canonicalizer;
@@ -494,7 +493,7 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
 
                 Probe activation = new Probe();
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         lowerRoot(
                                         """
                                         run: () => {

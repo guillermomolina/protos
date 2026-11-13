@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -60,7 +59,7 @@ com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActiv
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
                 () -> "I8C root outcome=" + outcome.state() + ", error=" + outcome.error());
-        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        assertSame(Boolean.TRUE, outcome.value());
 
         String runner = Files.readString(RUNNER, StandardCharsets.UTF_8);
         assertTrue(runner.contains("runBoundedWithResourcesWithLoader: ("));

@@ -75,7 +75,7 @@ public final class ProtosStandardIdentityMapProtocol {
   for(String s:List.of("construct","at","atPut","containsKey","atIfAbsent","remove","size","each"))if(p.hasLocalSlot(s))throw new IllegalStateException("Core IdentityMap already defines "+s);
   p.createLocalSlot("construct",ProtosClosureValue.nativeClosure((a,x)->{arity(a,x,0);if(!(a.receiver() instanceof ProtosObjectValue r)||!delegatesTo(r,p))throw err(a);return new ProtosIdentityMapValue(r);}));
   p.createLocalSlot("at",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,1);var e=find(m,x.get(0));if(e==null)throw err(a);return e.value();}));
-  p.createLocalSlot("containsKey",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,1);return find(m,x.get(0))==null?ProtosBooleanValue.FALSE:ProtosBooleanValue.TRUE;}));
+  p.createLocalSlot("containsKey",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,1);return find(m,x.get(0))==null?Boolean.FALSE:Boolean.TRUE;}));
   p.createLocalSlot("atIfAbsent", STANDARD_AT_IF_ABSENT);
   p.createLocalSlot("atPut",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,2);if(m.isFrozen())throw err(a);Object k=x.get(0),v=x.get(1);ProtosNumericHashKey h=ProtosNumericHashKey.fromIdentity(k);var e=find(m,k,h);if(e!=null){m.replaceValue(e,v);return v;}if(!m.isOpen())throw err(a);m.append(k,h,v);return v;}));
   p.createLocalSlot("remove",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,1);if(!m.isOpen())throw err(a);var e=find(m,x.get(0));if(e==null)throw err(a);return m.remove(e);}));

@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
@@ -213,10 +212,10 @@ public final class ProtosPasswordArgon2Facility {
                         }));
     }
 
-    private static ProtosBooleanValue bool(boolean value) {
+    private static Boolean bool(boolean value) {
         return value
-                ? ProtosBooleanValue.TRUE
-                : ProtosBooleanValue.FALSE;
+                ? Boolean.TRUE
+                : Boolean.FALSE;
     }
 
     /**
@@ -230,9 +229,9 @@ public final class ProtosPasswordArgon2Facility {
 
         try {
             normalized = normalizePassword(supplied.get(0));
-            return ProtosBooleanValue.TRUE;
+            return Boolean.TRUE;
         } catch (IllegalArgumentException invalid) {
-            return ProtosBooleanValue.FALSE;
+            return Boolean.FALSE;
         } finally {
             wipe(normalized);
         }
@@ -247,21 +246,21 @@ public final class ProtosPasswordArgon2Facility {
 
         if (!(supplied.get(0) instanceof ProtosEntropyCapabilityValue entropy)
                 || entropy.retiredForRuntime()) {
-            return ProtosBooleanValue.FALSE;
+            return Boolean.FALSE;
         }
 
         Optional<ProtosActor> actor =
                 activation.executionDomain().currentActorForRuntime();
 
         if (actor.isEmpty()) {
-            return ProtosBooleanValue.FALSE;
+            return Boolean.FALSE;
         }
 
         Optional<ProtosProcessRuntime> process =
                 actor.orElseThrow().processForRuntime();
 
         if (process.isEmpty()) {
-            return ProtosBooleanValue.FALSE;
+            return Boolean.FALSE;
         }
 
         ProtosProcessRuntime owner = process.orElseThrow();

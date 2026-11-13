@@ -88,9 +88,9 @@ final class ProtosSemanticTransferMaterializationTest {
                     assertInstanceOf(
                             ProtosArrayValue.class, await(hosted, "worker.request(\"graph\", graph)"));
             List<Object> facts = observed.indexedSnapshot();
-            assertSame(ProtosBooleanValue.TRUE, facts.get(0), "aliases stay aliases");
-            assertSame(ProtosBooleanValue.TRUE, facts.get(1), "equal payloads stay distinct");
-            assertSame(ProtosBooleanValue.TRUE, facts.get(2), "surrounding cycles are preserved");
+            assertSame(Boolean.TRUE, facts.get(0), "aliases stay aliases");
+            assertSame(Boolean.TRUE, facts.get(1), "equal payloads stay distinct");
+            assertSame(Boolean.TRUE, facts.get(2), "surrounding cycles are preserved");
             assertEquals("a+b", string(facts.get(3)));
             assertEquals("a+b", string(facts.get(4)));
 

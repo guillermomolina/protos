@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -112,7 +111,7 @@ public final class ProtosLoggingFacility {
                 || !(supplied.get(2) instanceof ProtosObjectValue instantPrototype)) {
             throw invalid(activation);
         }
-        return ProtosBooleanValue.of(
+        return Boolean.valueOf(
                 recognizesEvent(activation, supplied.get(0), prototype, instantPrototype));
     }
 
@@ -121,7 +120,7 @@ public final class ProtosLoggingFacility {
         if (supplied.size() != 1) {
             throw invalid(activation);
         }
-        return ProtosBooleanValue.of(attachableError(activation, supplied.get(0)));
+        return Boolean.valueOf(attachableError(activation, supplied.get(0)));
     }
 
     /**
@@ -199,7 +198,7 @@ public final class ProtosLoggingFacility {
     private static boolean structured(
             Object value, ProtosPrelude prelude, IdentityHashMap<Object, Boolean> active) {
         if (value == ProtosNullValue.INSTANCE
-                || value instanceof ProtosBooleanValue
+                || value instanceof Boolean
                 || value instanceof ProtosStringValue
                 // The structured-data scalars stay Integer and Float; D197-C does not extend
                 // the logging data contract to Fraction.

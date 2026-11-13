@@ -46,7 +46,7 @@ final class ProtosActorValueTransferTest {
 
         List<Object> result =
                 ProtosActorValueTransfer.snapshotArguments(
-                        List.of(integer, string, ProtosBooleanValue.TRUE, ProtosNullValue.INSTANCE),
+                        List.of(integer, string, Boolean.TRUE, ProtosNullValue.INSTANCE),
                         source);
 
         // I094: a transfer without Path or other semantic records keeps the unwrapped fast path.
@@ -60,7 +60,7 @@ final class ProtosActorValueTransferTest {
         assertTrue(ProtosIdentity.identical(integer, result.get(0)));
         assertNotSame(string, result.get(1));
         assertTrue(ProtosIdentity.identical(string, result.get(1)));
-        assertSame(ProtosBooleanValue.TRUE, result.get(2));
+        assertSame(Boolean.TRUE, result.get(2));
         assertSame(ProtosNullValue.INSTANCE, result.get(3));
     }
 

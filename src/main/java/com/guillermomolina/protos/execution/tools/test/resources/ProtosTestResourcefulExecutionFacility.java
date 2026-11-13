@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -321,11 +320,11 @@ final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
         result.createLocalSlot("guestObservation", guestObservation);
         result.createLocalSlot(
                 "infrastructureFailed",
-                ProtosBooleanValue.of(completion.infrastructureFailed()));
+                Boolean.valueOf(completion.infrastructureFailed()));
         result.createLocalSlot("infrastructureFailures", failures);
         result.createLocalSlot(
                 "capacitySafe",
-                ProtosBooleanValue.of(
+                Boolean.valueOf(
                         completion.capacityDisposition()
                                 == ProtosTestResourceAttemptCompletion.CapacityDisposition.SAFE));
         result.freeze();

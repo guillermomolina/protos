@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.runtime.values;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -49,7 +48,7 @@ class ProtosArrayValueTest {
         ProtosArrayValue array =
                 new ProtosArrayValue(
                         ProtosObjectValue.rootObject(),
-                        List.of(ProtosBooleanValue.TRUE));
+                        List.of(Boolean.TRUE));
         Object replacement = new Object();
 
         assertSame(
@@ -64,17 +63,17 @@ class ProtosArrayValueTest {
         ProtosArrayValue closed =
                 new ProtosArrayValue(
                         ProtosObjectValue.rootObject(),
-                        List.of(ProtosBooleanValue.TRUE));
+                        List.of(Boolean.TRUE));
         closed.close();
-        closed.indexedPut(0, ProtosBooleanValue.FALSE);
+        closed.indexedPut(0, Boolean.FALSE);
         assertSame(
-                ProtosBooleanValue.FALSE,
+                Boolean.FALSE,
                 closed.indexedAt(0));
 
         ProtosArrayValue frozen =
                 new ProtosArrayValue(
                         ProtosObjectValue.rootObject(),
-                        List.of(ProtosBooleanValue.TRUE));
+                        List.of(Boolean.TRUE));
         frozen.freeze();
 
         assertThrows(
@@ -82,9 +81,9 @@ class ProtosArrayValueTest {
                 () ->
                         frozen.indexedPut(
                                 99,
-                                ProtosBooleanValue.FALSE));
+                                Boolean.FALSE));
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 frozen.indexedAt(0));
     }
 

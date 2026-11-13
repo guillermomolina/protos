@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorRefValue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -206,7 +205,7 @@ public final class ProtosInspectFacility {
         if (value == ProtosNullValue.INSTANCE) {
             return "null";
         }
-        if (value instanceof ProtosBooleanValue) {
+        if (value instanceof Boolean) {
             return "Boolean";
         }
         if (ProtosNumericValueSupport.isCurrentInteger(value)) {

@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -47,7 +46,7 @@ class ProtosI143NamedSourceExecutionTest {
                 f(c: false)
                 """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -69,7 +68,7 @@ class ProtosI143NamedSourceExecutionTest {
                 f(false, c: false)
                 """);
 
-        assertSame(ProtosBooleanValue.FALSE, result);
+        assertSame(Boolean.FALSE, result);
     }
 
     @Test
@@ -81,7 +80,7 @@ class ProtosI143NamedSourceExecutionTest {
                 f(...xs, c: true)
                 """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -95,7 +94,7 @@ class ProtosI143NamedSourceExecutionTest {
                 receiver.execute(value: false)
                 """);
 
-        assertSame(ProtosBooleanValue.FALSE, result);
+        assertSame(Boolean.FALSE, result);
     }
 
     @Test
@@ -108,7 +107,7 @@ class ProtosI143NamedSourceExecutionTest {
                 receiver(value: true)
                 """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test

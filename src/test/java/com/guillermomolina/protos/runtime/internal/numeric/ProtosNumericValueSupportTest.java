@@ -124,6 +124,6 @@ final class ProtosNumericValueSupportTest {
 
         assertEquals(Long.valueOf(12L), ProtosNumericValueSupport.copyCurrentNumberOrNull(12L, destination));
         assertNull(ProtosNumericValueSupport.copyCurrentNumberOrNull(
-                ProtosBooleanValue.TRUE, destination));
+                Boolean.TRUE, destination));
     }
 }

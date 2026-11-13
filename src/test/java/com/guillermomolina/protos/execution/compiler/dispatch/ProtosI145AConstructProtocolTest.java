@@ -31,7 +31,6 @@ import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -199,8 +198,8 @@ class ProtosI145AConstructProtocolTest {
         ProtosArrayValue values = assertInstanceOf(ProtosArrayValue.class, result);
         assertSame(ProtosNullValue.INSTANCE, values.indexedAt(0));
         assertEquals("5", ProtosNumericValueSupport.integerDecimalText(values.indexedAt(1)));
-        assertSame(ProtosBooleanValue.TRUE, values.indexedAt(2));
-        assertSame(ProtosBooleanValue.TRUE, values.indexedAt(3));
+        assertSame(Boolean.TRUE, values.indexedAt(2));
+        assertSame(Boolean.TRUE, values.indexedAt(3));
         assertEquals("0", ProtosNumericValueSupport.integerDecimalText(values.indexedAt(4)));
     }
 
@@ -228,8 +227,8 @@ class ProtosI145AConstructProtocolTest {
                         activation);
 
         ProtosArrayValue values = assertInstanceOf(ProtosArrayValue.class, result);
-        assertSame(ProtosBooleanValue.TRUE, values.indexedAt(0));
-        assertSame(ProtosBooleanValue.TRUE, values.indexedAt(1));
+        assertSame(Boolean.TRUE, values.indexedAt(0));
+        assertSame(Boolean.TRUE, values.indexedAt(1));
         assertEquals("3", ProtosNumericValueSupport.integerDecimalText(values.indexedAt(2)));
     }
 
@@ -252,9 +251,9 @@ class ProtosI145AConstructProtocolTest {
         assertSame(prelude.arrayPrototype(), array.parent().orElseThrow());
         ProtosMapValue map = assertInstanceOf(ProtosMapValue.class, values.indexedAt(1));
         assertSame(prelude.mapPrototype(), map.parent().orElseThrow());
-        assertSame(ProtosBooleanValue.TRUE, values.indexedAt(2));
-        assertSame(ProtosBooleanValue.FALSE, values.indexedAt(3));
-        assertSame(ProtosBooleanValue.TRUE, values.indexedAt(4));
+        assertSame(Boolean.TRUE, values.indexedAt(2));
+        assertSame(Boolean.FALSE, values.indexedAt(3));
+        assertSame(Boolean.TRUE, values.indexedAt(4));
     }
 
     @Test
@@ -348,7 +347,7 @@ class ProtosI145AConstructProtocolTest {
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         ProtosArrayValue values = assertInstanceOf(ProtosArrayValue.class, outcome.value());
         assertEquals("5", ProtosNumericValueSupport.integerDecimalText(values.indexedAt(0)));
-        assertSame(ProtosBooleanValue.TRUE, values.indexedAt(1));
+        assertSame(Boolean.TRUE, values.indexedAt(1));
         assertEquals("10", ProtosNumericValueSupport.integerDecimalText(values.indexedAt(2)));
         assertEquals("1", ProtosNumericValueSupport.integerDecimalText(values.indexedAt(3)));
         assertEquals("1", ProtosNumericValueSupport.integerDecimalText(values.indexedAt(4)));

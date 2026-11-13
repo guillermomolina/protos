@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -117,7 +116,7 @@ final class ProtosTestToolDiscoveryImportedModuleTest {
             assertEquals(
                     ProtosExecutionOutcome.State.COMPLETED,
                     discoveryImport.state());
-            assertSame(ProtosBooleanValue.TRUE, discoveryImport.value());
+            assertSame(Boolean.TRUE, discoveryImport.value());
 
             var suiteKey =
                     resolver.resolve(
@@ -155,7 +154,7 @@ final class ProtosTestToolDiscoveryImportedModuleTest {
             assertEquals(
                     ProtosExecutionOutcome.State.COMPLETED,
                     projection.state());
-            assertSame(ProtosBooleanValue.TRUE, projection.value());
+            assertSame(Boolean.TRUE, projection.value());
         }
     }
 }

@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -55,7 +54,7 @@ final class ProtosForeignValueAdmission {
         ProtosForeignAdmissionDescriptor descriptor =
                 Objects.requireNonNull(adapter.classify(live, foreign), "foreign classification");
         return switch (descriptor.kind()) {
-            case BOOLEAN -> ProtosBooleanValue.of((Boolean) descriptor.scalar());
+            case BOOLEAN -> Boolean.valueOf((Boolean) descriptor.scalar());
             case NULL -> ProtosNullValue.INSTANCE;
             case STRING -> unicodeOrRaw(session, adapter, foreign, (String) descriptor.scalar());
             case INTEGER -> ProtosNumericValueSupport.integerFromHost(descriptor.scalar(), prelude);
@@ -87,11 +86,11 @@ final class ProtosForeignValueAdmission {
      */
     static ProtosForeignArgument exportOrNull(ProtosForeignHandle origin, Object value) {
         ProtosForeignArgument argument;
-        if (value == ProtosBooleanValue.TRUE || value == ProtosBooleanValue.FALSE) {
+        if (value == Boolean.TRUE || value == Boolean.FALSE) {
             argument =
                     new ProtosForeignArgument(
                             ProtosForeignAdmissionDescriptor.Kind.BOOLEAN,
-                            value == ProtosBooleanValue.TRUE);
+                            value == Boolean.TRUE);
         } else if (value == ProtosNullValue.INSTANCE) {
             argument = new ProtosForeignArgument(ProtosForeignAdmissionDescriptor.Kind.NULL, null);
         } else if (value instanceof ProtosStringValue string) {

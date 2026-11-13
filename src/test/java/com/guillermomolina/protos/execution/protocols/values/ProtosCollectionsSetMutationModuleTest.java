@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -54,11 +53,11 @@ class ProtosCollectionsSetMutationModuleTest {
                             )
                             """);
 
-            assertSame(ProtosBooleanValue.TRUE, allowed.indexedAt(0), module);
+            assertSame(Boolean.TRUE, allowed.indexedAt(0), module);
             assertInteger(1L, allowed.indexedAt(1));
-            assertSame(ProtosBooleanValue.TRUE, allowed.indexedAt(2), module);
+            assertSame(Boolean.TRUE, allowed.indexedAt(2), module);
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     allowed.indexedAt(3),
                     module);
 
@@ -85,7 +84,7 @@ class ProtosCollectionsSetMutationModuleTest {
                 "atPut",
                 List.of(
                         Long.valueOf(1L),
-                        ProtosBooleanValue.TRUE),
+                        Boolean.TRUE),
                 activation);
         if (frozen) {
             values.freeze();

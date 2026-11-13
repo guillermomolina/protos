@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -319,7 +318,7 @@ final class ProtosHttpUrlClientIntegrationTest {
                     ProtosExecutionOutcome.State.COMPLETED,
                     outcome.state(),
                     () -> "snippet failed: " + describe(outcome.error()));
-            assertSame(ProtosBooleanValue.TRUE, outcome.value());
+            assertSame(Boolean.TRUE, outcome.value());
         }
     }
 

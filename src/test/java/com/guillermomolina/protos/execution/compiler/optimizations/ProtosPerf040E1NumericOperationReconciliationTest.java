@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -374,7 +373,7 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                     call(multiply, module, Long.MAX_VALUE, 2L)));
             assertEquals(2L, normalized(call(divide, module, 6L, 3L)));
             assertTrue(ProtosNumericValueSupport.isFraction(call(divide, module, 5L, 2L)));
-            assertSame(ProtosBooleanValue.TRUE, call(less, module, 1L, 2L));
+            assertSame(Boolean.TRUE, call(less, module, 1L, 2L));
             assertEquals(2.5d, call(add, module, 1.5d, 1.0d), "Float + is untouched");
         });
         System.out.println("PERF040_E1_ALTERNATIVE_CORE_PER_SELECTOR=PASS");
@@ -402,9 +401,9 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                 assertEquals(3L, normalized(call(add, module, 1L, 2L)));
                 assertEquals(17L, normalized(call(add, module, lookAlike, 1L)));
                 assertEquals(3L, normalized(call(add, module, 1L, 2L)));
-                assertSame(ProtosBooleanValue.TRUE, call(less, module, 1L, 2L));
-                assertSame(ProtosBooleanValue.FALSE, call(less, module, lookAlike, 2L));
-                assertSame(ProtosBooleanValue.TRUE, call(less, module, 1L, 2L));
+                assertSame(Boolean.TRUE, call(less, module, 1L, 2L));
+                assertSame(Boolean.FALSE, call(less, module, lookAlike, 2L));
+                assertSame(Boolean.TRUE, call(less, module, 1L, 2L));
             }
         });
         System.out.println("PERF040_E1_ORDINARY_DELEGATES=PASS");
@@ -422,7 +421,7 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             for (Map.Entry<String, Object[]> entry : Map.of(
                     "+", new Object[] {9L},
                     "/", new Object[] {2L},
-                    "<", new Object[] {ProtosBooleanValue.FALSE}).entrySet()) {
+                    "<", new Object[] {Boolean.FALSE}).entrySet()) {
                 String selector = entry.getKey();
                 ProtosClosureValue site = closure("(x, y) => x " + selector + " y", module);
                 ProtosObjectValue custom = new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -456,7 +455,7 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
     }
 
     private static ProtosClosureValue answeringFalse() {
-        return ProtosClosureValue.nativeClosure((activation, supplied) -> ProtosBooleanValue.FALSE);
+        return ProtosClosureValue.nativeClosure((activation, supplied) -> Boolean.FALSE);
     }
 
     /**
@@ -719,16 +718,16 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                     call(divide, module, call(multiply, module, big, 2L), big)));
             assertTrue(ProtosNumericValueSupport.isFraction(call(divide, module, 1L, big)));
 
-            assertSame(ProtosBooleanValue.TRUE, call(less, module, 1L, big));
-            assertSame(ProtosBooleanValue.FALSE, call(less, module, big, 1L));
-            assertSame(ProtosBooleanValue.FALSE,
+            assertSame(Boolean.TRUE, call(less, module, 1L, big));
+            assertSame(Boolean.FALSE, call(less, module, big, 1L));
+            assertSame(Boolean.FALSE,
                     call(less, module, big, 9.223372036854775808E18d));
-            assertSame(ProtosBooleanValue.TRUE,
+            assertSame(Boolean.TRUE,
                     call(less, module, 9.223372036854775808E18d, call(add, module, big, 1L)));
-            assertSame(ProtosBooleanValue.FALSE, call(less, module, big, Double.NaN));
-            assertSame(ProtosBooleanValue.TRUE,
+            assertSame(Boolean.FALSE, call(less, module, big, Double.NaN));
+            assertSame(Boolean.TRUE,
                     call(less, module, big, Double.POSITIVE_INFINITY));
-            assertSame(ProtosBooleanValue.TRUE, call(less, module, 1L, 2L));
+            assertSame(Boolean.TRUE, call(less, module, 1L, 2L));
         });
         System.out.println("PERF040_E2_LARGE_INTEGER_LANES=PASS");
     }

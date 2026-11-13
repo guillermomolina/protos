@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -104,7 +103,7 @@ class ProtosAPlusExecutionProjectionTest {
         receiver.createLocalSlot(
                 "==",
                 ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> ProtosBooleanValue.TRUE));
+                        (activation, supplied) -> Boolean.TRUE));
 
         ProtosObjectValue argument =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -130,7 +129,7 @@ class ProtosAPlusExecutionProjectionTest {
                                 return prepared.callUncached();
                             });
 
-            assertSame(ProtosBooleanValue.TRUE, result);
+            assertSame(Boolean.TRUE, result);
         }
 
         assertSame(match, rootClosure("match"));
@@ -183,8 +182,8 @@ class ProtosAPlusExecutionProjectionTest {
                     bothInEquality.await(10, TimeUnit.SECONDS),
                     "both Process Contexts must overlap inside the shared source-backed behavior");
             releaseEquality.countDown();
-            assertSame(ProtosBooleanValue.TRUE, first.get(10, TimeUnit.SECONDS));
-            assertSame(ProtosBooleanValue.TRUE, second.get(10, TimeUnit.SECONDS));
+            assertSame(Boolean.TRUE, first.get(10, TimeUnit.SECONDS));
+            assertSame(Boolean.TRUE, second.get(10, TimeUnit.SECONDS));
 
             assertEquals(
                     1,
@@ -327,7 +326,7 @@ class ProtosAPlusExecutionProjectionTest {
                                 Thread.currentThread().interrupt();
                                 throw new AssertionError(interrupted);
                             }
-                            return ProtosBooleanValue.TRUE;
+                            return Boolean.TRUE;
                         }));
         return receiver;
     }

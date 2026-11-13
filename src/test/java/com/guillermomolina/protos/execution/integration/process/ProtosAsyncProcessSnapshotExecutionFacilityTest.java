@@ -16,7 +16,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -116,7 +115,7 @@ final class ProtosAsyncProcessSnapshotExecutionFacilityTest {
 
             assertEquals("completed", state.value());
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     observation.readLocalSlot("value").orElseThrow());
         }
     }

@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
@@ -250,12 +249,12 @@ final class ProtosStructuredMapQueryCalls {
                         "Map.match child outcome accepted after terminal outcome");
             }
 
-            if (outcome == ProtosBooleanValue.FALSE) {
+            if (outcome == Boolean.FALSE) {
                 mismatch = true;
                 return;
             }
 
-            if (outcome == ProtosBooleanValue.TRUE) {
+            if (outcome == Boolean.TRUE) {
                 childIndex++;
                 return;
             }
@@ -299,11 +298,11 @@ final class ProtosStructuredMapQueryCalls {
             }
 
             if (mismatch) {
-                return ProtosBooleanValue.FALSE;
+                return Boolean.FALSE;
             }
 
             if (captures.isEmpty()) {
-                return ProtosBooleanValue.TRUE;
+                return Boolean.TRUE;
             }
 
             return activation
@@ -492,8 +491,8 @@ final class ProtosStructuredMapQueryCalls {
                 }
                 case CONTAINS_KEY ->
                         match == null
-                                ? ProtosBooleanValue.FALSE
-                                : ProtosBooleanValue.TRUE;
+                                ? Boolean.FALSE
+                                : Boolean.TRUE;
                 case AT_IF_ABSENT -> {
                     if (match == null) {
                         throw new IllegalStateException(

@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -65,7 +64,7 @@ com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActiv
                                 + outcome.state()
                                 + ", error="
                                 + outcome.error());
-        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        assertSame(Boolean.TRUE, outcome.value());
 
         String progress = Files.readString(PROGRESS, StandardCharsets.UTF_8);
         assertTrue(progress.contains("beginPlan: (phaseName, plan, emitLine) => {"));

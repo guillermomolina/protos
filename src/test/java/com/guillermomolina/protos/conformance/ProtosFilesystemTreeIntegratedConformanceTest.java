@@ -26,7 +26,6 @@ import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosNioReadOnlyTreeFilesystemBackend;
 import com.guillermomolina.protos.execution.ProtosStandardFilesystemProtocol;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemTreeObservationFlow;
@@ -67,7 +66,7 @@ final class ProtosFilesystemTreeIntegratedConformanceTest {
             createSymlinkOrSkip(authorityRoot.resolve("opaque-link"), outside);
             try (Fixture fixture = productionFixture()) {
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         execute("tree-entries-production.protos", fixture.activation()));
             }
         } finally {
@@ -83,7 +82,7 @@ final class ProtosFilesystemTreeIntegratedConformanceTest {
             socket.bind(UnixDomainSocketAddress.of(socketPath));
             try (Fixture fixture = productionFixture()) {
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         execute("tree-entries-other-production.protos", fixture.activation()));
             }
         } catch (UnsupportedOperationException | IOException unavailable) {
@@ -105,7 +104,7 @@ final class ProtosFilesystemTreeIntegratedConformanceTest {
             createSymlinkOrSkip(authorityRoot.resolve("alias"), outside);
             try (Fixture fixture = productionFixture()) {
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         execute(
                                 "tree-observation-final-link-failure.protos",
                                 fixture.activation()));
@@ -127,7 +126,7 @@ final class ProtosFilesystemTreeIntegratedConformanceTest {
                         ProtosObjectValue.class,
                         execute("tree-entries-cancellation.protos", fixture.activation()));
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 result.readLocalSlot("cancelled").orElseThrow());
         ProtosFutureValue future =
                 assertInstanceOf(

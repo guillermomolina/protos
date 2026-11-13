@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -122,7 +121,7 @@ final class ProtosCommandLineSpecModuleTest {
                             (positional.help == "Input files")
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
 
         ProtosObjectValue option =
                 assertInstanceOf(
@@ -272,7 +271,7 @@ final class ProtosCommandLineSpecModuleTest {
                             (first.subcommands[0].options.size() == 0)
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
 
         ProtosObjectValue command =
                 assertInstanceOf(
@@ -641,7 +640,7 @@ final class ProtosCommandLineSpecModuleTest {
                             (leftShared.subcommands !== rightShared.subcommands)
                         """);
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test

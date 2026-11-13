@@ -174,7 +174,7 @@ final class ProtosRuntimeMetadataFacilityTest {
                         })()
                         """,
                         caller);
-        assertSame(com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     // ---- 7.6 No accidental authority ----

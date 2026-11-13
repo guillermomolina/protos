@@ -59,8 +59,6 @@ import java.util.Objects;
  *
  * <p>PLAT054: an adapter produced by a standard-embedding binding read additionally carries its
  * {@link #embedding} Process. Conventional execution enters the RootActor with exclusive admission.
- * I115 temporarily bypasses this admission for proven non-suspending source roots, relaxing
- * concurrent-entry exclusion; its fallback keeps conventional RootActor semantics.
  * Host execution accepts Protos values
  * and exact Java integer and String scalars (PLAT054-3B) as arguments, which ordinary binding
  * applies with its defaults and rest (D203 flexible arity). A Closure
@@ -79,11 +77,10 @@ import java.util.Objects;
  * <p>I102 (PLAT060-B5): every execution on the compact path enters through the single ordinary
  * Closure-call ABI; no host configuration selects a different frame-argument layout.
  *
- * <p>I115-H6 (experimental, deliberate semantic divergence): a source-backed execution with zero
- * or one argument builds the compact no-home B5 frame and performs exactly one guest call, direct
- * or indirect. It performs no Context revalidation, Process admission, RootActor entry, host-entry
- * suspension, ReturnHome completion, failure mapping, or guest-result projection; the conventional
- * and PLAT054-3E2 descriptions above apply only to the target-null generic path.
+ * <p>A zero-argument source entry retains the compact no-home frame and cached function dispatch.
+ * An embedding entry also establishes RootActor admission and its host-entry extent around that
+ * call, and drives a pending continuation before returning to the host. Session adapters have no
+ * embedding Process and retain their direct call path.
  */
 @ExportLibrary(InteropLibrary.class)
 final class ProtosHostExecutableClosure implements TruffleObject {
@@ -218,12 +215,6 @@ final class ProtosHostExecutableClosure implements TruffleObject {
          * (GraalPy CallNode). The callee root owns its ReturnHome; a pending
          * outcome is driven by the host-entry suspension driver.
          */
-        /*
-         * I115: GraalPy PExecuteNode / CallDispatchers-inspired
-         * zero-argument source entry. The benchmark surface supplies
-         * no host arguments, so no conversion or host-entry protocol
-         * is required for this experimental call path.
-         */
         @Specialization(guards = {
                 "receiver.target != null",
                 "arguments.length == 0"
@@ -233,30 +224,41 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 Object[] arguments,
                 @Bind("$node") Node inliningTarget,
                 @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode callNode) {
-            // This host adapter has a prepared source-backed target; the
-            // generic CallNode source/native classification is redundant.
-            // Keep the entered Context, caller provenance and B5 ABI unchanged.
-            Object outcome = callNode.execute(
-                    null,
-                    inliningTarget,
-                    false,
-                    receiver.closure,
-                    ProtosFrameArguments.dispatchedCall0(
-                            null,
-                            ProtosFrameArguments.functionCallMarker(),
-                            null,
-                            null,
-                            null),
-                    receiver.caller,
-                    null,
-                    ProtosFunctionCallDispatchers.currentContext(inliningTarget));
-            /*
-             * I115 experimental zero-argument fast path:
-             * return the exact guest outcome without the general
-             * host Integer normalization. This keeps the Long
-             * carrier unchanged when return speculation is disabled.
-             */
-            return outcome;
+            ProtosEmbeddedProcess embedding = receiver.embedding;
+            Thread token = embedding == null ? null : embedding.enterRootActor();
+            HostEntryExtent previous =
+                    embedding == null ? null : embedding.beginHostEntryExtent(token);
+            try {
+                // The prepared source target retains the direct function-call specialization.
+                Object outcome = callNode.execute(
+                        null,
+                        inliningTarget,
+                        false,
+                        receiver.closure,
+                        ProtosFrameArguments.dispatchedCall0(
+                                null,
+                                ProtosFrameArguments.functionCallMarker(),
+                                null,
+                                null,
+                                null),
+                        receiver.caller,
+                        null,
+                        ProtosFunctionCallDispatchers.currentContext(inliningTarget));
+                if (ProtosTailCallContinuation.isPending(outcome)) {
+                    outcome = drivePending(embedding, outcome);
+                }
+                return outcome;
+            } catch (ProtosSignalException failure) {
+                if (embedding != null) {
+                    embedding.outermostEntryFailed(token, failure);
+                }
+                throw failure;
+            } finally {
+                if (embedding != null) {
+                    embedding.endHostEntryExtent(previous);
+                    embedding.exitRootActor(token);
+                }
+            }
         }
 
         /*

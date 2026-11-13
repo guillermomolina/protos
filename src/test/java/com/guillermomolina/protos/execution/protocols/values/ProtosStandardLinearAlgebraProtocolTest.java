@@ -29,7 +29,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosComplexArithmetic;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
@@ -680,10 +679,10 @@ final class ProtosStandardLinearAlgebraProtocolTest {
                         """,
                         a);
         List<Object> outcomes = elements(equal);
-        assertSame(ProtosBooleanValue.FALSE, outcomes.get(0));
-        assertSame(ProtosBooleanValue.FALSE, outcomes.get(1));
-        assertSame(ProtosBooleanValue.TRUE, outcomes.get(2));
-        assertSame(ProtosBooleanValue.FALSE, outcomes.get(3));
+        assertSame(Boolean.FALSE, outcomes.get(0));
+        assertSame(Boolean.FALSE, outcomes.get(1));
+        assertSame(Boolean.TRUE, outcomes.get(2));
+        assertSame(Boolean.FALSE, outcomes.get(3));
 
         ProtosVectorValue scaled = assertInstanceOf(ProtosVectorValue.class, invoke(first, "scale", a, integer(1)));
         invoke(scaled, "atPut", a, integer(0), integer(42));
@@ -974,8 +973,8 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         List<Object> outcomes = elements(evaluated);
         assertFloat(22.0d, List.of(outcomes.get(0)));
         assertTrue(ProtosIdentity.identical(integer(2), outcomes.get(1)));
-        assertSame(ProtosBooleanValue.TRUE, outcomes.get(2));
-        assertSame(ProtosBooleanValue.FALSE, outcomes.get(3));
+        assertSame(Boolean.TRUE, outcomes.get(2));
+        assertSame(Boolean.FALSE, outcomes.get(3));
     }
 
     @Test
@@ -1172,7 +1171,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
                 (ProtosObjectValue) prelude.bindings().readLocalSlot("Number").orElseThrow();
         return List.of(
                 ProtosNullValue.INSTANCE,
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 new ProtosStringValue("1"),
                 new ProtosObjectValue(ProtosObjectValue.rootObject()),
                 new ProtosObjectValue(number),

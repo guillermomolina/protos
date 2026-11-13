@@ -404,7 +404,7 @@ public final class ProtosParallelRuntime {
         private static Object allocateAndCopy(
                 Object v,ProtosActivation a,
                 IdentityHashMap<Object,Object> memo){
-            if(v==ProtosNullValue.INSTANCE||v==ProtosBooleanValue.TRUE||v==ProtosBooleanValue.FALSE)return v;
+            if(v==ProtosNullValue.INSTANCE||v==Boolean.TRUE||v==Boolean.FALSE)return v;
             // D188: raw foreign references, foreign module facades, and projected foreign Closures
             // carry provider-session state with no P transfer contract.
             if(v instanceof ProtosForeignProjectedReceiver||(v instanceof ProtosClosureValue c&&ProtosForeignProjectedOperations.isProjectionClosure(c)))throw new NonParallel();

@@ -29,7 +29,6 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
@@ -400,7 +399,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
                                 "(name, value, extra) => { probe() }")) {
                     Probe probe = new Probe();
                     assertSame(
-                            ProtosBooleanValue.TRUE,
+                            Boolean.TRUE,
                             lowerRoot(
                                             "run: () => {\n"
                                                     + "    environment.each(" + callback + ") === environment\n"
@@ -412,7 +411,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
 
                     Probe empty = new Probe();
                     assertSame(
-                            ProtosBooleanValue.TRUE,
+                            Boolean.TRUE,
                             lowerRoot(
                                             "run: () => {\n"
                                                     + "    environment.each(" + callback + ") === environment\n"
@@ -655,7 +654,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
                 Probe probe = new Probe();
                 ProtosBytecodeRootNode root = lowerRoot(characters);
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         root.getCallTarget().call(
                                 probe.module(prelude, standardEnvironment(prelude, entries))),
                         characters);

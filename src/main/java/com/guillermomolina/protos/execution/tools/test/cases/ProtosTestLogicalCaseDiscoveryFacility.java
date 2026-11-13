@@ -18,7 +18,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -467,8 +466,8 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
             ProtosPrelude callerPrelude,
             ProtosActivation caller) {
         if (value == ProtosNullValue.INSTANCE
-                || value == ProtosBooleanValue.TRUE
-                || value == ProtosBooleanValue.FALSE) {
+                || value == Boolean.TRUE
+                || value == Boolean.FALSE) {
             return value;
         }
 

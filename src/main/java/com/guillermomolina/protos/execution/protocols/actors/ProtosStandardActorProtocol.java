@@ -21,7 +21,6 @@ import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorRefValue;
 import com.guillermomolina.protos.runtime.ProtosActorRequest;
 import com.guillermomolina.protos.runtime.ProtosActorScheduler;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosSendOperationControl;
 import com.guillermomolina.protos.runtime.ProtosSendOperationValue;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
@@ -395,8 +394,8 @@ public final class ProtosStandardActorProtocol {
             throw error(activation);
         }
         return operation.cancelBeforeAcceptance()
-                ? ProtosBooleanValue.TRUE
-                : ProtosBooleanValue.FALSE;
+                ? Boolean.TRUE
+                : Boolean.FALSE;
     }
 
     private static Object retrySendOperation(

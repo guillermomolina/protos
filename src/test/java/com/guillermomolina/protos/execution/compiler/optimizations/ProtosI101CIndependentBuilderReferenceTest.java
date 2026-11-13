@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.oracle.truffle.api.debug.DebuggerSession;
 import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -648,8 +647,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
         if (value == ProtosNullValue.INSTANCE) {
             return "Protos(null)";
         }
-        if (value == ProtosBooleanValue.TRUE || value == ProtosBooleanValue.FALSE) {
-            return "Protos(" + (value == ProtosBooleanValue.TRUE) + ")";
+        if (value == Boolean.TRUE || value == Boolean.FALSE) {
+            return "Protos(" + (value == Boolean.TRUE) + ")";
         }
         if (value instanceof Class<?> type) {
             return "Class(" + type.getName() + ")";

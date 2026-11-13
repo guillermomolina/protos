@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -29,7 +28,7 @@ class ProtosMapConstructionFPrimeProtocolTest {
 
         ProtosObjectValue derivedMap =
                 new ProtosObjectValue(prelude.mapPrototype());
-        derivedMap.createLocalSlot("atPut", ProtosBooleanValue.FALSE);
+        derivedMap.createLocalSlot("atPut", Boolean.FALSE);
 
         ProtosMapValue result =
                 ProtosStandardMapProtocol.constructForMapConstruction(
@@ -40,11 +39,11 @@ class ProtosMapConstructionFPrimeProtocolTest {
         ProtosStandardMapProtocol.defineInitialAssociationForMapConstruction(
                 result,
                 new ProtosStringValue("answer"),
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 activation);
 
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosInvocation.invokeMessage(
                         result,
                         "at",
@@ -98,7 +97,7 @@ class ProtosMapConstructionFPrimeProtocolTest {
 
         ProtosObjectValue shadowedCall =
                 new ProtosObjectValue(prelude.mapPrototype());
-        shadowedCall.createLocalSlot("call", ProtosBooleanValue.TRUE);
+        shadowedCall.createLocalSlot("call", Boolean.TRUE);
         assertThrows(
                 ProtosSignalException.class,
                 () ->
@@ -134,7 +133,7 @@ class ProtosMapConstructionFPrimeProtocolTest {
 
         ProtosObjectValue shadowedConstruct =
                 new ProtosObjectValue(prelude.mapPrototype());
-        shadowedConstruct.createLocalSlot("construct", ProtosBooleanValue.TRUE);
+        shadowedConstruct.createLocalSlot("construct", Boolean.TRUE);
 
         assertThrows(
                 ProtosSignalException.class,
@@ -161,7 +160,7 @@ class ProtosMapConstructionFPrimeProtocolTest {
         ProtosStandardMapProtocol.defineInitialAssociationForMapConstruction(
                 result,
                 representative,
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 activation);
 
         assertThrows(
@@ -170,7 +169,7 @@ class ProtosMapConstructionFPrimeProtocolTest {
                         ProtosStandardMapProtocol.defineInitialAssociationForMapConstruction(
                                 result,
                                 new ProtosStringValue("key"),
-                                ProtosBooleanValue.FALSE,
+                                Boolean.FALSE,
                                 activation));
 
         assertEquals(1, result.keyedSize());
@@ -178,7 +177,7 @@ class ProtosMapConstructionFPrimeProtocolTest {
                 representative,
                 result.keyedSnapshot().get(0).key());
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 result.keyedSnapshot().get(0).value());
     }
 

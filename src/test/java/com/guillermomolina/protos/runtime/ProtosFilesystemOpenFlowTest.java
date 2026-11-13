@@ -62,20 +62,20 @@ class ProtosFilesystemOpenFlowTest {
     void localOptionsAreSnapshottedOnceAndDelegatedSlotsAreIgnored() throws Exception {
         Fixture x = fixture();
         ProtosObjectValue parent = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        parent.createLocalSlot("notAStandardOption", ProtosBooleanValue.TRUE);
+        parent.createLocalSlot("notAStandardOption", Boolean.TRUE);
 
         ProtosObjectValue options = new ProtosObjectValue(parent);
-        options.createLocalSlot("read", ProtosBooleanValue.FALSE);
-        options.createLocalSlot("write", ProtosBooleanValue.TRUE);
-        options.createLocalSlot("create", ProtosBooleanValue.TRUE);
+        options.createLocalSlot("read", Boolean.FALSE);
+        options.createLocalSlot("write", Boolean.TRUE);
+        options.createLocalSlot("create", Boolean.TRUE);
         ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude), options);
 
         assertEquals(ProtosFutureValue.State.PENDING, future.state());
         ProtosFilesystemOpenOptions captured = x.backend.invocations.get(0).options;
 
-        options.assignLocalSlot("read", ProtosBooleanValue.TRUE);
-        options.assignLocalSlot("write", ProtosBooleanValue.FALSE);
-        options.assignLocalSlot("create", ProtosBooleanValue.FALSE);
+        options.assignLocalSlot("read", Boolean.TRUE);
+        options.assignLocalSlot("write", Boolean.FALSE);
+        options.assignLocalSlot("create", Boolean.FALSE);
 
         assertFalse(captured.readAccess());
         assertTrue(captured.writeAccess());
@@ -88,26 +88,26 @@ class ProtosFilesystemOpenFlowTest {
         List<ProtosObjectValue> invalid = new ArrayList<>();
 
         ProtosObjectValue noAccess = options();
-        noAccess.createLocalSlot("read", ProtosBooleanValue.FALSE);
+        noAccess.createLocalSlot("read", Boolean.FALSE);
         invalid.add(noAccess);
 
         // append is not a standard open option; otherwise-valid writable options become invalid.
         ProtosObjectValue removedAppendOption = options();
-        removedAppendOption.createLocalSlot("write", ProtosBooleanValue.TRUE);
-        removedAppendOption.createLocalSlot("append", ProtosBooleanValue.TRUE);
+        removedAppendOption.createLocalSlot("write", Boolean.TRUE);
+        removedAppendOption.createLocalSlot("append", Boolean.TRUE);
         invalid.add(removedAppendOption);
 
         ProtosObjectValue truncateWithoutWrite = options();
-        truncateWithoutWrite.createLocalSlot("truncate", ProtosBooleanValue.TRUE);
+        truncateWithoutWrite.createLocalSlot("truncate", Boolean.TRUE);
         invalid.add(truncateWithoutWrite);
 
         ProtosObjectValue bothCreationModes = options();
-        bothCreationModes.createLocalSlot("create", ProtosBooleanValue.TRUE);
-        bothCreationModes.createLocalSlot("createNew", ProtosBooleanValue.TRUE);
+        bothCreationModes.createLocalSlot("create", Boolean.TRUE);
+        bothCreationModes.createLocalSlot("createNew", Boolean.TRUE);
         invalid.add(bothCreationModes);
 
         ProtosObjectValue unknownLocalSlot = options();
-        unknownLocalSlot.createLocalSlot("mode", ProtosBooleanValue.TRUE);
+        unknownLocalSlot.createLocalSlot("mode", Boolean.TRUE);
         invalid.add(unknownLocalSlot);
 
         ProtosObjectValue nonBoolean = options();
@@ -152,7 +152,7 @@ class ProtosFilesystemOpenFlowTest {
     void invalidPathWithInvalidOptionsNeverReachesBackend() throws Exception {
         Fixture x = fixture();
         ProtosObjectValue noAccess = options();
-        noAccess.createLocalSlot("read", ProtosBooleanValue.FALSE);
+        noAccess.createLocalSlot("read", Boolean.FALSE);
         ProtosFutureValue future =
                 x.flow.open(x.activation, new ProtosStringValue("not a Path"), noAccess);
         assertInvalidIoArgument(x.prelude, future);

@@ -325,7 +325,7 @@ final class ProtosGuardedLookupTest {
     @Test
     void booleanCallbacksUseGenericPreludeLookup() throws IOException {
         var prelude = corePrelude();
-        for (Object receiver : new Object[] {ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE}) {
+        for (Object receiver : new Object[] {Boolean.TRUE, Boolean.FALSE}) {
             assertFalse(ProtosValueLookup.isOrdinaryObject(receiver));
             for (String name : List.of("and", "or")) {
                 assertNull(ProtosValueLookup.selectStructural(receiver, name));
@@ -354,7 +354,7 @@ final class ProtosGuardedLookupTest {
     @Test
     void representedValuesAreNotOrdinaryObjects() {
         for (Object receiver : new Object[] {
-                ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE, 1L, 1.5d,
+                Boolean.TRUE, Boolean.FALSE, 1L, 1.5d,
                 new MutableRepresentedValue(ProtosObjectValue.rootObject())}) {
             assertFalse(ProtosValueLookup.isOrdinaryObject(receiver));
             assertNull(ProtosValueLookup.selectStructural(receiver, "pick"));
@@ -662,7 +662,7 @@ final class ProtosGuardedLookupTest {
         var first = ProtosClosureValue.nativeClosure(
                 (activation, supplied) -> ProtosNullValue.INSTANCE);
         var replacement = ProtosClosureValue.nativeClosure(
-                (activation, supplied) -> ProtosBooleanValue.TRUE);
+                (activation, supplied) -> Boolean.TRUE);
         parent.createLocalSlot("pick", first);
 
         var selection = ProtosValueLookup.selectStructural(receiver, "pick");

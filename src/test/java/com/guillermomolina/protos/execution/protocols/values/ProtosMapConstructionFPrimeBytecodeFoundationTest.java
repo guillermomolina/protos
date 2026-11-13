@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -53,7 +52,7 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
                                 .perform(
                                         true,
                                         activation,
-                                        ProtosBooleanValue.TRUE));
+                                        Boolean.TRUE));
 
         ProtosObjectValue copied =
                 new ProtosObjectValue(prelude.mapPrototype());
@@ -76,7 +75,7 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
          */
         ProtosObjectValue customCall =
                 new ProtosObjectValue(prelude.mapPrototype());
-        customCall.createLocalSlot("call", ProtosBooleanValue.TRUE);
+        customCall.createLocalSlot("call", Boolean.TRUE);
 
         assertThrows(
                 ProtosSignalException.class,
@@ -102,7 +101,7 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
         ProtosStandardMapProtocol.defineInitialAssociationForMapConstruction(
                 map,
                 representative,
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 activation);
 
         ProtosStringValue query =
@@ -114,7 +113,7 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
                                 activation,
                                 map,
                                 query,
-                                ProtosBooleanValue.FALSE);
+                                Boolean.FALSE);
 
         ProtosNumericHashKey hash =
                 ProtosStandardMapProtocol.queryHash(
@@ -127,7 +126,7 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
 
         assertTrue(prepared.needsEquality());
 
-        prepared.acceptEquality(ProtosBooleanValue.TRUE);
+        prepared.acceptEquality(Boolean.TRUE);
 
         assertThrows(
                 ProtosSignalException.class,
@@ -138,7 +137,7 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
                 representative,
                 map.keyedSnapshot().get(0).key());
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 map.keyedSnapshot().get(0).value());
     }
 
@@ -162,7 +161,7 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
                                 activation,
                                 map,
                                 key,
-                                ProtosBooleanValue.TRUE);
+                                Boolean.TRUE);
 
         ProtosNumericHashKey hash =
                 ProtosStandardMapProtocol.queryHash(
@@ -180,7 +179,7 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
                 hash,
                 map.keyedSnapshot().get(0).recordedHash());
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 map.keyedSnapshot().get(0).value());
     }
 

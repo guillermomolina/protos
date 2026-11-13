@@ -32,7 +32,6 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
@@ -498,7 +497,7 @@ final class ProtosI112TailContinuationTest {
             AtomicInteger after = new AtomicInteger();
             module.context().createLocalSlot("wait", wait);
             module.context().createLocalSlot("after", counter(after));
-            module.context().createLocalSlot("flag", ProtosBooleanValue.TRUE);
+            module.context().createLocalSlot("flag", Boolean.TRUE);
             module.context().createLocalSlot(
                     "waiter",
                     sourceClosure(scope.language(), module,

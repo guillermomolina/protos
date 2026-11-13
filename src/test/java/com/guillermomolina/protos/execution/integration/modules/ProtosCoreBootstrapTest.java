@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -269,7 +268,7 @@ class ProtosCoreBootstrapTest {
                         "Any.match(123)",
                         prelude.newModuleActivation());
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -286,7 +285,7 @@ class ProtosCoreBootstrapTest {
                                 + "blocked.and() { (Object == 7).and() { original !== Object } }",
                         prelude.newModuleActivation());
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
         assertSame(
                 ProtosObjectValue.MutationState.FROZEN,
                 prelude.bindings().mutationState());
@@ -366,7 +365,7 @@ class ProtosCoreBootstrapTest {
                                 + "(result === marker) && (calls.count == 1)",
                         prelude.newModuleActivation());
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
 

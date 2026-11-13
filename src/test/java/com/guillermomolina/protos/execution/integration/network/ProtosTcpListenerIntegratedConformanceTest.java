@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
@@ -271,7 +270,7 @@ final class ProtosTcpListenerIntegratedConformanceTest {
 
     private static void assertEndpointEquals(Fixture x, Object actual, Object expected) {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosInvocation.invokeMessage(actual, "==", List.of(expected), x.activation));
     }
 

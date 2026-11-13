@@ -113,7 +113,7 @@ final class ProtosNioReadOnlyTreeFilesystemBackendTest {
                     outcome.state(),
                     () -> "named write execution failed: " + outcome.error());
             assertSame(
-                    com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     outcome.value());
             assertEquals(
                     "kept",
@@ -162,7 +162,7 @@ final class ProtosNioReadOnlyTreeFilesystemBackendTest {
                             "multi-read execution failed: "
                                     + outcome.error());
             assertSame(
-                    com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     outcome.value());
         }
     }

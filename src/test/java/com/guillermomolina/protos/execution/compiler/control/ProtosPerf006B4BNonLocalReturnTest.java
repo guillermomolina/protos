@@ -250,8 +250,8 @@ final class ProtosPerf006B4BNonLocalReturnTest {
                 nativeClosure(
                         (activation, supplied) ->
                                 remaining[0]-- > 0
-                                        ? com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE
-                                        : com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE));
+                                        ? Boolean.TRUE
+                                        : Boolean.FALSE));
         module.context().createLocalSlot(
                 "record",
                 nativeClosure(

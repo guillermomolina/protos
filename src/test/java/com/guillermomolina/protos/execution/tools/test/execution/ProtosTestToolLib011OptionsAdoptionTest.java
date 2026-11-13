@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -59,7 +58,7 @@ source,
 com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test"));
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        assertSame(Boolean.TRUE, outcome.value());
     }
 
     @Test

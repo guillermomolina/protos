@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
@@ -79,8 +78,8 @@ final class ProtosI115PublishedLexicalContextTest {
             ProtosActivation activation = invocation(f, closure);
             Object result = closure.executionPlan().orElseThrow()
                     .executeBytecodeActivationForTesting(activation);
-            assertSame(ProtosBooleanValue.FALSE, result);
-            assertSame(ProtosBooleanValue.TRUE, local(activation.context(), "presentAfterCreation"));
+            assertSame(Boolean.FALSE, result);
+            assertSame(Boolean.TRUE, local(activation.context(), "presentAfterCreation"));
             assertEquals(7L, local(activation.context(), "x"));
         });
     }

@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
@@ -77,10 +76,10 @@ final class ProtosTcpConnectionIntegratedConformanceTest {
         Object observedRemote =
                 ProtosInvocation.invokeMessage(connection, "remoteEndpoint", List.of(), x.activation);
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosInvocation.invokeMessage(observedLocal, "==", List.of(local), x.activation));
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosInvocation.invokeMessage(observedRemote, "==", List.of(remote), x.activation));
         // Endpoint object identity remains deliberately unspecified by D052/C5.
 

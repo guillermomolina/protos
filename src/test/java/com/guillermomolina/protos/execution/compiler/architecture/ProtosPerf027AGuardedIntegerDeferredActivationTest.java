@@ -28,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -88,9 +87,9 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
                             com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(HUGE, prelude))));
             assertEquals(String.valueOf(HUGE.divide(BigInteger.valueOf(7))), integerValue(run(prelude, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(HUGE, prelude), "div", integer(7))));
             assertEquals(String.valueOf(HUGE.mod(BigInteger.valueOf(7))), integerValue(run(prelude, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(HUGE, prelude), "mod", integer(7))));
-            assertSame(ProtosBooleanValue.TRUE,
+            assertSame(Boolean.TRUE,
                     run(prelude, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(HUGE, prelude), ">", integer(0)));
-            assertSame(ProtosBooleanValue.FALSE, run(prelude, integer(0), ">", integer(0)));
+            assertSame(Boolean.FALSE, run(prelude, integer(0), ">", integer(0)));
         });
     }
 
@@ -164,7 +163,7 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
                     prelude.integerPrototype(),
                     ordering.methodHome(),
                     "inherited Number ordering remains outside this bounded slice");
-            assertSame(ProtosBooleanValue.TRUE, run(prelude, integer(7), ">", integer(2)));
+            assertSame(Boolean.TRUE, run(prelude, integer(7), ">", integer(2)));
         });
     }
 
@@ -190,7 +189,7 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
     void wrongDomainArgumentSignalsError() throws Exception {
         inEnteredContext(prelude -> {
             ProtosCallRequest prepared =
-                    send(prelude, integer(1), "+", ProtosBooleanValue.TRUE);
+                    send(prelude, integer(1), "+", Boolean.TRUE);
             ProtosSignalException signal =
                     assertThrows(ProtosSignalException.class, prepared::callUncached);
             assertSame(prelude.errorPrototype(), signal.error().parent().orElseThrow());
@@ -205,7 +204,7 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
             inEnteredContext(prelude -> {
                 ProtosCallRequest prepared =
                         send(prelude, integer(5), ">", integer(1));
-                assertSame(ProtosBooleanValue.TRUE, prepared.callUncached());
+                assertSame(Boolean.TRUE, prepared.callUncached());
                 ProtosActivation activation = ProtosFrameArguments.activation(prepared.arguments());
                 assertSame(prelude, activation.prelude().orElseThrow());
                 activations[slot] = activation;

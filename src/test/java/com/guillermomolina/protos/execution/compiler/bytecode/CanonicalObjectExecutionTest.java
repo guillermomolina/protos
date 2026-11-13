@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.util.List;
@@ -45,7 +44,7 @@ class CanonicalObjectExecutionTest {
                 ProtosObjectValue.rootObject(),
                 object.parent().orElseThrow());
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 object.readLocalSlot("local").orElseThrow());
     }
 
@@ -66,7 +65,7 @@ class CanonicalObjectExecutionTest {
 
         assertSame(parent, object.parent().orElseThrow());
         assertSame(
-                ProtosBooleanValue.FALSE,
+                Boolean.FALSE,
                 object.readLocalSlot("local").orElseThrow());
     }
 

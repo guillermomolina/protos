@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -186,8 +185,8 @@ final class ProtosPerf038BCompactMethodCallTest {
             // CALLABLES.md section 11: every extraction is a fresh Closure;
             // only an alias of one extraction keeps its identity.
             assertNotSame(first, assertInstanceOf(ProtosClosureValue.class, results.get(1)));
-            assertSame(ProtosBooleanValue.FALSE, results.get(2));
-            assertSame(ProtosBooleanValue.TRUE, results.get(4));
+            assertSame(Boolean.FALSE, results.get(2));
+            assertSame(Boolean.TRUE, results.get(4));
             assertEquals("9", integerValue(results.get(3)));
         });
         System.out.println("PERF038B_EXTRACTED_CLOSURE_IDENTITY=PASS");

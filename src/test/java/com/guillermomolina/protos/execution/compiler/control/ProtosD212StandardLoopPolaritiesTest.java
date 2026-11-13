@@ -26,7 +26,6 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -65,7 +64,7 @@ final class ProtosD212StandardLoopPolaritiesTest {
     private record Scenario(
             String selector,
             boolean postTest,
-            List<ProtosBooleanValue> conditions,
+            List<Boolean> conditions,
             String expectedTrace) {}
 
     private static final List<Scenario> SCENARIOS =
@@ -73,17 +72,17 @@ final class ProtosD212StandardLoopPolaritiesTest {
                     new Scenario(
                             "whileFalse",
                             false,
-                            List.of(ProtosBooleanValue.FALSE, ProtosBooleanValue.FALSE, ProtosBooleanValue.TRUE),
+                            List.of(Boolean.FALSE, Boolean.FALSE, Boolean.TRUE),
                             "CBCBC"),
                     new Scenario(
                             "untilTrue",
                             true,
-                            List.of(ProtosBooleanValue.FALSE, ProtosBooleanValue.FALSE, ProtosBooleanValue.TRUE),
+                            List.of(Boolean.FALSE, Boolean.FALSE, Boolean.TRUE),
                             "BCBCBC"),
                     new Scenario(
                             "untilFalse",
                             true,
-                            List.of(ProtosBooleanValue.TRUE, ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE),
+                            List.of(Boolean.TRUE, Boolean.TRUE, Boolean.FALSE),
                             "BCBCBC"));
 
     @Test
@@ -166,7 +165,7 @@ final class ProtosD212StandardLoopPolaritiesTest {
                     nativeClosure(
                             (activation, supplied) -> {
                                 conditionCalls.incrementAndGet();
-                                return ProtosBooleanValue.TRUE;
+                                return Boolean.TRUE;
                             }));
             module.context().createLocalSlot(
                     "bodyProbe",
@@ -278,7 +277,7 @@ final class ProtosD212StandardLoopPolaritiesTest {
                     nativeClosure(
                             (activation, supplied) -> {
                                 argumentCalls.incrementAndGet();
-                                return ProtosBooleanValue.TRUE;
+                                return Boolean.TRUE;
                             });
 
             for (String selector : List.of("whileFalse", "untilTrue", "untilFalse")) {

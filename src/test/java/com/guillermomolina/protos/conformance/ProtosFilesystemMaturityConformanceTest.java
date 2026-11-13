@@ -22,7 +22,6 @@ import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosTestExecutionSupport;
 import com.guillermomolina.protos.execution.ProtosStandardFilesystemProtocol;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
@@ -88,7 +87,7 @@ final class ProtosFilesystemMaturityConformanceTest {
         activation.context().createLocalSlot("filesystem", filesystem);
 
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosTestExecutionSupport.evaluateFile(CASE_ROOT.resolve(source), activation),
                 source);
     }

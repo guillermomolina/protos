@@ -32,7 +32,6 @@ import com.oracle.truffle.api.debug.DebuggerSession;
 import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
@@ -548,7 +547,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertNoRetired(instructionNames(observed));
             // Specified semantics (see report: I115 Context divergence).
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     enter(fastDirect(observed, module, a, b)));
 
             // A default capturing an earlier parameter makes it a CELL binding.
@@ -2044,8 +2043,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                     + "f(1)\n",
                             module);
             List<Object> presence = assertInstanceOf(ProtosArrayValue.class, observed).indexedSnapshot();
-            assertSame(ProtosBooleanValue.TRUE, presence.get(0));
-            assertSame(ProtosBooleanValue.FALSE, presence.get(1));
+            assertSame(Boolean.TRUE, presence.get(0));
+            assertSame(Boolean.FALSE, presence.get(1));
 
             ProtosExecutionContextValue late =
                     assertInstanceOf(
@@ -2094,7 +2093,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                                     + "f(1)\n",
                                             module))
                             .indexedSnapshot();
-            assertSame(ProtosBooleanValue.FALSE, removed.get(0));
+            assertSame(Boolean.FALSE, removed.get(0));
             assertEquals("5", integerValue(removed.get(1)));
         });
         System.out.println("D179_PRESENT_ABSENT=PASS");

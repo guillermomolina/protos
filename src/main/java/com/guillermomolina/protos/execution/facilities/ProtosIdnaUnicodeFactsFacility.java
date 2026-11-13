@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -131,12 +130,12 @@ public final class ProtosIdnaUnicodeFactsFacility {
         return new ProtosStringValue(UCharacter.getPropertyValueName(property, value, nameChoice));
     }
 
-    private static ProtosBooleanValue binary(int scalar, int property) {
+    private static Boolean binary(int scalar, int property) {
         return bool(UCharacter.hasBinaryProperty(scalar, property));
     }
 
-    private static ProtosBooleanValue bool(boolean value) {
-        return ProtosBooleanValue.of(value);
+    private static Boolean bool(boolean value) {
+        return Boolean.valueOf(value);
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

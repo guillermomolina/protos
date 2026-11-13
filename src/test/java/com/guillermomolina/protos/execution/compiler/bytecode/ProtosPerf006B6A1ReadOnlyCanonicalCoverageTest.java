@@ -25,7 +25,6 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -72,14 +71,14 @@ final class ProtosPerf006B6A1ReadOnlyCanonicalCoverageTest {
                             "obj.value",
                             "b6a1-member-bytecode.protos"));
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     executeBytecode(
                             scope.language(),
                             module,
                             "a === a",
                             "b6a1-id-bytecode.protos"));
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     executeBytecode(
                             scope.language(),
                             module,
@@ -190,7 +189,7 @@ final class ProtosPerf006B6A1ReadOnlyCanonicalCoverageTest {
             assertTrue(future.resolve(token, module));
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.COMPLETED, task.state());
-            assertSame(ProtosBooleanValue.TRUE, task.result().orElseThrow());
+            assertSame(Boolean.TRUE, task.result().orElseThrow());
             assertEquals(1, leftPrefix.get());
             assertEquals(1, rightCalls.get());
         }
@@ -221,7 +220,7 @@ final class ProtosPerf006B6A1ReadOnlyCanonicalCoverageTest {
                             module,
                             "entry()",
                             "b6a1-default-identity-top.protos");
-            assertSame(ProtosBooleanValue.TRUE, result);
+            assertSame(Boolean.TRUE, result);
         }
 
         System.out.println("PERF006_B6A1_READ_ONLY_DEFAULT_EXPRESSION=PASS");

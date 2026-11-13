@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
@@ -104,7 +103,7 @@ public final class ProtosStandardNumberOrderingProtocol {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));
             }
-            return ProtosBooleanValue.of(
+            return Boolean.valueOf(
                     relation.holds(compare(activation.receiver(), supplied.get(0))));
         }
     }

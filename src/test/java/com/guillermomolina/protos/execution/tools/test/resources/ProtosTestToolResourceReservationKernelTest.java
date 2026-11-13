@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 
@@ -54,7 +53,7 @@ final class ProtosTestToolResourceReservationKernelTest {
         assertEquals(0, held.indexedSize());
         assertTrue(held.isFrozen());
         assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 1)));
-        assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(2));
+        assertSame(Boolean.TRUE, observed.indexedAt(2));
     }
 
     @Test
@@ -119,7 +118,7 @@ final class ProtosTestToolResourceReservationKernelTest {
         ProtosArrayValue observed = completedArray(source);
         assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(0));
         assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(1));
-        assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(2));
+        assertSame(Boolean.TRUE, observed.indexedAt(2));
         assertInstanceOf(
                 ProtosArrayValue.class, observed.indexedAt(3));
         assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 4)));
@@ -166,7 +165,7 @@ final class ProtosTestToolResourceReservationKernelTest {
         ProtosArrayValue observed = completedArray(source);
         assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(0));
         assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 1)));
-        assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(2));
+        assertSame(Boolean.TRUE, observed.indexedAt(2));
         assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 3)));
     }
 
@@ -196,7 +195,7 @@ final class ProtosTestToolResourceReservationKernelTest {
                         + "second)\n";
 
         ProtosArrayValue observed = completedArray(source);
-        assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(0));
+        assertSame(Boolean.TRUE, observed.indexedAt(0));
         assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 1)));
         assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 2)));
         assertInstanceOf(

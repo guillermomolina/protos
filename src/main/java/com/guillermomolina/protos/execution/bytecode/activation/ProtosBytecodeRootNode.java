@@ -45,7 +45,6 @@ import com.guillermomolina.protos.execution.ProtosStructuredMapUpdateCalls.Prepa
 import com.guillermomolina.protos.execution.ProtosFrameLocalBindings.ResolvedLexicalWriteTarget;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 // PRUIBA DE I115, en algún momento esto volverá a funcionar
 // import com.guillermomolina.protos.runtime.ProtosIntegerValue;
@@ -751,7 +750,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecodeNode) {
-            return perform(ProtosBooleanValue.of(value), frame, root, bytecodeNode);
+            return perform(Boolean.valueOf(value), frame, root, bytecodeNode);
         }
 
         @Specialization(replaces = "doBoolean")
@@ -769,9 +768,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             // A suspended invocation retains its owned ReturnHome.
             // Normal completion closes only the home owned by this root.
-            if (value instanceof Boolean primitive) {
-                value = ProtosBooleanValue.of(primitive);
-            }
             if (root.needsPhysicalHomeCompletionInEpilogue()) {
                 closeOwnedReturnHome(frame, value);
             }
@@ -2819,22 +2815,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class Identity {
         @Specialization
         public static Object perform(boolean negated, Object left, Object right) {
-            return ProtosIdentity.identical(
-                    canonicalBooleanOperand(left),
-                    canonicalBooleanOperand(right)) != negated
-                    ? ProtosBooleanValue.TRUE
-                    : ProtosBooleanValue.FALSE;
-        }
-
-        /*
-         * I115: a primitive Boolean carrier of a native comparison denotes
-         * the canonical guest Boolean of the same value; every other operand
-         * keeps its existing identity rule unchanged.
-         */
-        private static Object canonicalBooleanOperand(Object value) {
-            return value instanceof Boolean primitive
-                    ? ProtosBooleanValue.of(primitive)
-                    : value;
+            return ProtosIdentity.identical(left, right) != negated
+                    ? Boolean.TRUE
+                    : Boolean.FALSE;
         }
     }
 
@@ -2846,9 +2829,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosStandardBooleanProtocol.requireBooleanResult(
                             equalityResult,
                             activation);
-            return validated == ProtosBooleanValue.TRUE
-                    ? ProtosBooleanValue.FALSE
-                    : ProtosBooleanValue.TRUE;
+            return validated == Boolean.TRUE
+                    ? Boolean.FALSE
+                    : Boolean.TRUE;
         }
     }
 
@@ -4058,19 +4041,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     @ConstantOperand(type = boolean.class, name = "polarity")
     public static final class CanonicalControlCondition {
-        /*
-         * I115: primitive relational results flow directly into
-         * control decisions without ProtosBooleanValue.of().
-         * This is an experimental internal boolean carrier.
-         */
+        /* A guest Boolean is a Java boolean: it is consumed directly. */
         @Specialization
-        public static boolean doPrimitive(boolean polarity, boolean value) {
+        public static boolean doBoolean(boolean polarity, boolean value) {
             return value == polarity;
-        }
-
-        @Specialization
-        public static boolean doBoolean(boolean polarity, ProtosBooleanValue value) {
-            return value.value() == polarity;
         }
 
         @Fallback
@@ -4096,12 +4070,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsCanonicalBooleanOperand {
         @Specialization
-        public static boolean doPrimitive(boolean value) {
-            return true;
-        }
-
-        @Specialization
-        public static boolean doBoolean(ProtosBooleanValue value) {
+        public static boolean doBoolean(boolean value) {
             return true;
         }
 
@@ -4169,12 +4138,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class RequireCanonicalBooleanResult {
         @Specialization
-        public static ProtosBooleanValue doPrimitive(boolean value) {
-            return ProtosBooleanValue.of(value);
-        }
-
-        @Specialization
-        public static ProtosBooleanValue doBoolean(ProtosBooleanValue value) {
+        public static boolean doBoolean(boolean value) {
             return value;
         }
 

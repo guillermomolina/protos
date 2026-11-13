@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -145,7 +144,7 @@ public final class ProtosHttpAsyncFacility {
     /** D121 provenance check for a first, non-suspending source close. */
     private static Object closeAllowed(ProtosActivation activation, List<?> supplied) {
         ProtosActor actor = activation.executionDomain().currentActorForRuntime().orElse(null);
-        if (actor == null) return ProtosBooleanValue.TRUE;
+        if (actor == null) return Boolean.TRUE;
         return bool(switch (actor.lifecycleState()) {
             case INITIALIZING, READY -> true;
             case TERMINATING -> activation.terminationCleanupAuthorizedForRuntime();
@@ -208,7 +207,7 @@ public final class ProtosHttpAsyncFacility {
                             .filter(result -> result.value() instanceof ProtosClosureValue)
                             .isPresent());
         } catch (UnsupportedOperationException unsupported) {
-            return ProtosBooleanValue.FALSE;
+            return Boolean.FALSE;
         }
     }
 
@@ -280,8 +279,8 @@ public final class ProtosHttpAsyncFacility {
         }
     }
 
-    private static ProtosBooleanValue bool(boolean value) {
-        return value ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+    private static Boolean bool(boolean value) {
+        return value ? Boolean.TRUE : Boolean.FALSE;
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

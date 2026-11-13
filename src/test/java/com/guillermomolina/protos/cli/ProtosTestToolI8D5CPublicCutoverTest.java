@@ -27,7 +27,6 @@ import com.guillermomolina.protos.execution.ProtosRootTaskExecution;
 import com.guillermomolina.protos.execution.ProtosSourceCompiler;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -75,7 +74,7 @@ com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActiv
                                 + outcome.state()
                                 + ", error="
                                 + outcome.error());
-        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        assertSame(Boolean.TRUE, outcome.value());
     }
 
     @Test

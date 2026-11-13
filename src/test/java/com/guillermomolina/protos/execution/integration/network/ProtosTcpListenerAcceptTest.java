@@ -262,7 +262,7 @@ final class ProtosTcpListenerAcceptTest {
     }
 
     private static Long integer(long v){ return Long.valueOf(v); }
-    private static void assertEndpointEquals(Fixture x,Object actual,Object expected){ assertSame(ProtosBooleanValue.TRUE,ProtosInvocation.invokeMessage(actual,"==",List.of(expected),x.activation)); }
+    private static void assertEndpointEquals(Fixture x,Object actual,Object expected){ assertSame(Boolean.TRUE,ProtosInvocation.invokeMessage(actual,"==",List.of(expected),x.activation)); }
     private static void assertFailedAs(ProtosFutureValue f,ProtosPrelude p,String name){ assertEquals(ProtosFutureValue.State.FAILED,f.state()); assertSame(p.bindings().readLocalSlot(name).orElseThrow(),f.failedError().orElseThrow().parent().orElseThrow()); }
 
     private record Fixture(ProtosPrelude prelude,ProtosActivation activation,ProtosTcpListenerValue listener,RecordingBackend backend) {}

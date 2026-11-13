@@ -26,7 +26,6 @@ import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.Entr
 import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClockCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -66,7 +65,7 @@ final class ProtosClockTransferTest {
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, session.initialOutcome().state());
             ProtosExecutionOutcome result = session.invokeTopLevel("parallelProbe");
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, result.state());
-            assertSame(ProtosBooleanValue.TRUE, result.value());
+            assertSame(Boolean.TRUE, result.value());
         }
     }
 

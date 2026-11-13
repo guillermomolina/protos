@@ -28,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
@@ -145,7 +144,7 @@ final class ProtosComplexSemanticsTest {
 
             // Guest reflection observes no fabricated backing slots.
             assertSame(
-                    ProtosBooleanValue.FALSE,
+                    Boolean.FALSE,
                     ProtosInvocation.invokeMessage(
                             value,
                             "hasSlot",
@@ -336,7 +335,7 @@ final class ProtosComplexSemanticsTest {
                 complex(new ProtosFloatValue(0x1p100), new ProtosFloatValue(0.5), prelude), caller);
 
         // Non-Number arguments are unequal; no guest behavior of an operand is consulted.
-        assertEquals(ProtosBooleanValue.FALSE, ProtosInvocation.invokeMessage(
+        assertEquals(Boolean.FALSE, ProtosInvocation.invokeMessage(
                 exactHalf, "==", List.of(new ProtosStringValue("x")), caller));
     }
 
@@ -425,9 +424,9 @@ final class ProtosComplexSemanticsTest {
         assertTrue(ProtosNumericValueSupport.isCurrentNumber(value));
 
         // Real ordering is unchanged.
-        assertEquals(ProtosBooleanValue.TRUE, ProtosInvocation.invokeMessage(
+        assertEquals(Boolean.TRUE, ProtosInvocation.invokeMessage(
                 divide(1, 3, prelude), "<", List.of(new ProtosFloatValue(0.5)), caller));
-        assertEquals(ProtosBooleanValue.TRUE, ProtosInvocation.invokeMessage(
+        assertEquals(Boolean.TRUE, ProtosInvocation.invokeMessage(
                 one, "<", List.of(Long.valueOf(2L)), caller));
     }
 
@@ -625,7 +624,7 @@ final class ProtosComplexSemanticsTest {
 
         ProtosInvocation.invokeMessage(map, "atPut", List.of(exact, first), caller);
 
-        assertSame(ProtosBooleanValue.TRUE, ProtosInvocation.invokeMessage(
+        assertSame(Boolean.TRUE, ProtosInvocation.invokeMessage(
                 map, "containsKey", List.of(mathematicallyEqual), caller));
         assertSame(first, ProtosInvocation.invokeMessage(
                 map, "at", List.of(mathematicallyEqual), caller));
@@ -654,7 +653,7 @@ final class ProtosComplexSemanticsTest {
                 identityMap, "atPut", List.of(exact, first), caller);
         assertSame(first, ProtosInvocation.invokeMessage(
                 identityMap, "at", List.of(identityTwin), caller));
-        assertSame(ProtosBooleanValue.FALSE, ProtosInvocation.invokeMessage(
+        assertSame(Boolean.FALSE, ProtosInvocation.invokeMessage(
                 identityMap, "containsKey", List.of(mathematicallyEqual), caller));
 
         ProtosInvocation.invokeMessage(
@@ -662,9 +661,9 @@ final class ProtosComplexSemanticsTest {
         ProtosInvocation.invokeMessage(
                 identityMap, "atPut", List.of(positiveZero, first), caller);
 
-        assertSame(ProtosBooleanValue.FALSE, ProtosInvocation.invokeMessage(
+        assertSame(Boolean.FALSE, ProtosInvocation.invokeMessage(
                 identityMap, "containsKey", List.of(negativeZero), caller));
-        assertSame(ProtosBooleanValue.FALSE, ProtosInvocation.invokeMessage(
+        assertSame(Boolean.FALSE, ProtosInvocation.invokeMessage(
                 identityMap, "containsKey", List.of(realOne), caller));
 
         ProtosInvocation.invokeMessage(
@@ -743,7 +742,7 @@ final class ProtosComplexSemanticsTest {
                 ((Long) ProtosInvocation.invokeMessage(
                         deliveredIdentityMap, "at", List.of(identityTwin), destination))
                         .longValue());
-        assertSame(ProtosBooleanValue.FALSE, ProtosInvocation.invokeMessage(
+        assertSame(Boolean.FALSE, ProtosInvocation.invokeMessage(
                 deliveredIdentityMap,
                 "containsKey",
                 List.of(mathematicalTwin),
@@ -768,7 +767,7 @@ final class ProtosComplexSemanticsTest {
     private static boolean recognizes(
             ProtosObjectValue prototype, Object candidate, ProtosActivation caller) {
         return ProtosInvocation.invokeMessage(prototype, "recognizes", List.of(candidate), caller)
-                == ProtosBooleanValue.TRUE;
+                == Boolean.TRUE;
     }
 
     private static void assertComplex(Object value, ProtosPrelude owner) {
@@ -783,9 +782,9 @@ final class ProtosComplexSemanticsTest {
             boolean expected, Object left, Object right, ProtosActivation caller) {
         assertEquals(expected, ProtosCurrentNumericRelations.numericEquals(left, right));
         assertEquals(expected, ProtosCurrentNumericRelations.numericEquals(right, left));
-        assertEquals(ProtosBooleanValue.of(expected),
+        assertEquals(Boolean.valueOf(expected),
                 ProtosInvocation.invokeMessage(left, "==", List.of(right), caller));
-        assertEquals(ProtosBooleanValue.of(expected),
+        assertEquals(Boolean.valueOf(expected),
                 ProtosInvocation.invokeMessage(right, "==", List.of(left), caller));
     }
 

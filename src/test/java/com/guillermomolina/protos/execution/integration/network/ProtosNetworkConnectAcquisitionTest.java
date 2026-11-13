@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
@@ -94,11 +93,11 @@ final class ProtosNetworkConnectAcquisitionTest {
                 ProtosInvocation.invokeMessage(
                         connectionA, "remoteEndpoint", List.of(), x.activation);
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosInvocation.invokeMessage(
                         observedLocal, "==", List.of(localA), x.activation));
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 ProtosInvocation.invokeMessage(
                         observedRemote, "==", List.of(remoteA), x.activation));
         // Endpoint object identity is deliberately not asserted by C4/D052.

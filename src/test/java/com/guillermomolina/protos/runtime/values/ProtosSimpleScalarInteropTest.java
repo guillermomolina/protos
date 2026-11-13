@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.runtime.values;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -49,15 +48,15 @@ final class ProtosSimpleScalarInteropTest {
 
     @Test
     void booleanExportsOnlyItsExactBooleanFacet() throws Exception {
-        assertTrue(InteropLibrary.isValidValue(ProtosBooleanValue.TRUE));
-        assertTrue(interop.isBoolean(ProtosBooleanValue.TRUE));
-        assertTrue(interop.asBoolean(ProtosBooleanValue.TRUE));
-        assertFalse(interop.asBoolean(ProtosBooleanValue.FALSE));
-        assertFalse(interop.isString(ProtosBooleanValue.TRUE));
-        assertFalse(interop.isNull(ProtosBooleanValue.TRUE));
-        assertFalse(interop.isNumber(ProtosBooleanValue.TRUE));
-        assertFalse(interop.hasMembers(ProtosBooleanValue.TRUE));
-        assertFalse(interop.isExecutable(ProtosBooleanValue.TRUE));
+        assertTrue(InteropLibrary.isValidValue(Boolean.TRUE));
+        assertTrue(interop.isBoolean(Boolean.TRUE));
+        assertTrue(interop.asBoolean(Boolean.TRUE));
+        assertFalse(interop.asBoolean(Boolean.FALSE));
+        assertFalse(interop.isString(Boolean.TRUE));
+        assertFalse(interop.isNull(Boolean.TRUE));
+        assertFalse(interop.isNumber(Boolean.TRUE));
+        assertFalse(interop.hasMembers(Boolean.TRUE));
+        assertFalse(interop.isExecutable(Boolean.TRUE));
     }
 
     @Test
@@ -81,7 +80,7 @@ final class ProtosSimpleScalarInteropTest {
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosStringValue text = new ProtosStringValue("value");
         object.createLocalSlot("text", text);
-        object.createLocalSlot("flag", ProtosBooleanValue.TRUE);
+        object.createLocalSlot("flag", Boolean.TRUE);
         object.createLocalSlot("nothing", ProtosNullValue.INSTANCE);
 
         Object readText = interop.readMember(object, "text");
@@ -89,7 +88,7 @@ final class ProtosSimpleScalarInteropTest {
         Object readNull = interop.readMember(object, "nothing");
 
         assertSame(text, readText);
-        assertSame(ProtosBooleanValue.TRUE, readFlag);
+        assertSame(Boolean.TRUE, readFlag);
         assertSame(ProtosNullValue.INSTANCE, readNull);
 
         assertEquals("value", interop.asString(readText));

@@ -13,7 +13,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -72,6 +71,6 @@ final class ProtosProcessSnapshotExecutionTest {
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 content.state());
-        assertSame(ProtosBooleanValue.TRUE, content.value());
+        assertSame(Boolean.TRUE, content.value());
     }
 }

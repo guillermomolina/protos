@@ -26,7 +26,6 @@ import com.guillermomolina.protos.execution.ProtosNioConfinedFilesystemBackend;
 import com.guillermomolina.protos.execution.ProtosTestExecutionSupport;
 import com.guillermomolina.protos.execution.ProtosStandardFilesystemProtocol;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -59,7 +58,7 @@ final class ProtosFilesystemTreeSurfaceConformanceTest {
     void captureTreeSelectorIsAbsentWhileEntriesRemainsProtosVisible() throws Exception {
         try (Fixture fixture = fixture()) {
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     execute("capture-tree-absent.protos", fixture.activation()));
         }
     }

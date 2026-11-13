@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
@@ -157,7 +156,7 @@ public final class ProtosStandardIntegerProtocol {
                                 throw new ProtosSignalException(
                                         ProtosCoreErrors.newError(activation));
                             }
-                            return ProtosBooleanValue.of(member.test(supplied.get(0)));
+                            return Boolean.valueOf(member.test(supplied.get(0)));
                         }));
     }
 

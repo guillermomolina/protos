@@ -366,8 +366,8 @@ public final class ProtosStandardMapProtocol {
   ProtosMapValue m = map(a);
   arity(a, x, 1);
   return find(m, x.get(0), a) == null
-          ? ProtosBooleanValue.FALSE
-          : ProtosBooleanValue.TRUE;
+          ? Boolean.FALSE
+          : Boolean.TRUE;
  }
  private static Object atIfAbsent(ProtosActivation a, List<?> x) {
   ProtosMapValue m = map(a);
@@ -395,7 +395,7 @@ public final class ProtosStandardMapProtocol {
 
   Object subjectValue = x.get(0);
   if (!(subjectValue instanceof ProtosMapValue subject)) {
-   return ProtosBooleanValue.FALSE;
+   return Boolean.FALSE;
   }
 
   List<StableAssociation> matcherSnapshot = stableSnapshot(matcher);
@@ -414,7 +414,7 @@ public final class ProtosStandardMapProtocol {
                    queryHash,
                    a);
    if (subjectIndex < 0) {
-    return ProtosBooleanValue.FALSE;
+    return Boolean.FALSE;
    }
 
    childMatchers.add(requirement.value());
@@ -431,11 +431,11 @@ public final class ProtosStandardMapProtocol {
                    List.of(selectedValues.get(index)),
                    a);
 
-   if (outcome == ProtosBooleanValue.FALSE) {
-    return ProtosBooleanValue.FALSE;
+   if (outcome == Boolean.FALSE) {
+    return Boolean.FALSE;
    }
 
-   if (outcome == ProtosBooleanValue.TRUE) {
+   if (outcome == Boolean.TRUE) {
     continue;
    }
 
@@ -454,7 +454,7 @@ public final class ProtosStandardMapProtocol {
   }
 
   if (captures.isEmpty()) {
-   return ProtosBooleanValue.TRUE;
+   return Boolean.TRUE;
   }
 
   return a.prelude()
@@ -502,10 +502,10 @@ public final class ProtosStandardMapProtocol {
   throw err(a);
  }
  static boolean requireEqualityResultForStructured(Object q, ProtosActivation a) {
-  if (q == ProtosBooleanValue.TRUE) {
+  if (q == Boolean.TRUE) {
    return true;
   }
-  if (q == ProtosBooleanValue.FALSE) {
+  if (q == Boolean.FALSE) {
    return false;
   }
   throw err(a);

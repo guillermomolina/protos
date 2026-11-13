@@ -243,7 +243,7 @@ final class ProtosProcessIntegratedConformanceTest {
                         "process-streams-explicit-process.protos")) {
             LibraryFixture fixture = libraryFixture();
             Object result = executeLibraryCase(file, fixture.activation());
-            assertSame(ProtosBooleanValue.TRUE, result, file);
+            assertSame(Boolean.TRUE, result, file);
         }
     }
 
@@ -259,12 +259,12 @@ final class ProtosProcessIntegratedConformanceTest {
                         "process-bootstrap-data-to-stdout.protos")) {
             MaturityFixture fixture = maturityFixture(true);
             Object result = executeMaturityCase(file, fixture.activation());
-            assertSame(ProtosBooleanValue.TRUE, result, file);
+            assertSame(Boolean.TRUE, result, file);
         }
 
         MaturityFixture unavailableStdin = maturityFixture(false);
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 executeMaturityCase(
                         "unavailable-stdin-independent-stdout.protos",
                         unavailableStdin.activation()));

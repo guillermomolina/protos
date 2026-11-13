@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.runtime.values;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.oracle.truffle.api.interop.InteropLibrary;
@@ -43,9 +42,9 @@ final class ProtosSimpleScalarInteropDisplayTest {
     @Test
     void booleanDisplayIsCanonicalAndHostOpaque() {
         String trueDisplay =
-                String.valueOf(interop.toDisplayString(ProtosBooleanValue.TRUE, false));
+                String.valueOf(interop.toDisplayString(Boolean.TRUE, false));
         String falseDisplay =
-                String.valueOf(interop.toDisplayString(ProtosBooleanValue.FALSE, false));
+                String.valueOf(interop.toDisplayString(Boolean.FALSE, false));
 
         assertEquals("true", trueDisplay);
         assertEquals("false", falseDisplay);
@@ -69,8 +68,8 @@ final class ProtosSimpleScalarInteropDisplayTest {
 
         assertEquals("x", interop.asString(string));
         assertEquals("x", interop.toDisplayString(string, true));
-        assertEquals(true, interop.asBoolean(ProtosBooleanValue.TRUE));
-        assertEquals("true", interop.toDisplayString(ProtosBooleanValue.TRUE, true));
+        assertEquals(true, interop.asBoolean(Boolean.TRUE));
+        assertEquals("true", interop.toDisplayString(Boolean.TRUE, true));
         assertEquals(true, interop.isNull(ProtosNullValue.INSTANCE));
         assertEquals("null", interop.toDisplayString(ProtosNullValue.INSTANCE, true));
     }

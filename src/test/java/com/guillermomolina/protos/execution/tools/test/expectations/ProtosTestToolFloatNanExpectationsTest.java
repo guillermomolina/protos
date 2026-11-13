@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -38,7 +37,7 @@ final class ProtosTestToolFloatNanExpectationsTest {
         ProtosExecutionOutcome outcome =
                 execute("numeric/tool002-d3c1-float-nan.protos", false);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        assertSame(Boolean.TRUE, outcome.value());
     }
 
     @Test
@@ -47,7 +46,7 @@ final class ProtosTestToolFloatNanExpectationsTest {
         ProtosExecutionOutcome outcome =
                 execute("numeric/tool002-d3c1-detached-float-nan.protos", true);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        assertSame(Boolean.TRUE, outcome.value());
     }
 
     @Test
@@ -65,7 +64,7 @@ final class ProtosTestToolFloatNanExpectationsTest {
         ProtosExecutionOutcome outcome =
                 execute("numeric/tool002-d3c1-runner-selection.protos", false);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        assertSame(Boolean.TRUE, outcome.value());
     }
 
     private static ProtosExecutionOutcome execute(

@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -38,7 +37,7 @@ class ProtosI143SelectedSourcePreparationTest {
     @Test
     void directSourcePreservesAbsentDefaults() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 f: (a: 1, b: 2, c: 3) => a * 100 + b * 10 + c
                 f(c: 7) == 127
@@ -48,7 +47,7 @@ class ProtosI143SelectedSourcePreparationTest {
     @Test
     void selectedMethodPreservesActualReceiverAndHome() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 base: {
                     read: (a, b: 20, c: 30) => this.marker + a + c
@@ -61,7 +60,7 @@ class ProtosI143SelectedSourcePreparationTest {
     @Test
     void explicitGuestNullIsPresent() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 f: (a: true, b: false) => a
                 f(a: null) === null
@@ -101,7 +100,7 @@ class ProtosI143SelectedSourcePreparationTest {
     @Test
     void namedFormalCanLeaveRestEmpty() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 f: (a, b, c, ...rest) => rest.size()
                 f(1, 2, c: 3) == 0
@@ -111,7 +110,7 @@ class ProtosI143SelectedSourcePreparationTest {
     @Test
     void selectedImplementationDeterminesItsFormalNames() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 receiver: { call: (oldName) => oldName }
                 receiver.call = (newName) => newName
@@ -122,7 +121,7 @@ class ProtosI143SelectedSourcePreparationTest {
     @Test
     void selectedSourceCanEnterPreparedBytecodeWithNamedValue() throws Exception {
         assertSame(
-                ProtosBooleanValue.TRUE,
+                Boolean.TRUE,
                 evaluate("""
                 f: (a: 10, b: 20, c: 30) => c
                 value: {}

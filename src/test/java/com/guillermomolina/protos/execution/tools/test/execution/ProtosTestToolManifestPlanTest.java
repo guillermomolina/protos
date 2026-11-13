@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -136,7 +135,7 @@ final class ProtosTestToolManifestPlanTest {
         Object result =
                 completed(source, fixture.activation());
 
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -563,7 +562,7 @@ fixture.activation());
                                                     FIXTURE,
                                                     StandardCharsets.UTF_8), fixture.activation());
 
-            assertSame(ProtosBooleanValue.TRUE, result);
+            assertSame(Boolean.TRUE, result);
         }
     }
 
@@ -590,7 +589,7 @@ fixture.activation());
                                                     PACKAGE_TOML_FIXTURE,
                                                     StandardCharsets.UTF_8), fixture.activation());
 
-            assertSame(ProtosBooleanValue.TRUE, result);
+            assertSame(Boolean.TRUE, result);
         }
     }
 
@@ -674,7 +673,7 @@ fixture.activation());
                                                     PACKAGE_TOML_FILESYSTEM_FIXTURE,
                                                     StandardCharsets.UTF_8), fixture.activation());
 
-            assertSame(ProtosBooleanValue.TRUE, result);
+            assertSame(Boolean.TRUE, result);
         }
     }
 
@@ -943,7 +942,7 @@ fixture.activation());
                 assertEquals(2, observed.indexedSize());
                 assertEquals(String.valueOf(expectedCounts[index]), String.valueOf(Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(observed.indexedAt(0)))));
                 assertSame(
-                        ProtosBooleanValue.TRUE,
+                        Boolean.TRUE,
                         observed.indexedAt(1));
             }
         }

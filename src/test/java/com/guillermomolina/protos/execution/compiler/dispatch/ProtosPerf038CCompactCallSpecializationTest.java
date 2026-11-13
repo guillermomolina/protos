@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.source.Source;
@@ -99,7 +98,7 @@ final class ProtosPerf038CCompactCallSpecializationTest {
                                     + " check(outer(\"c\"), \"c\")]\n",
                             "perf038c-captured.protos", module));
             for (Object result : results) {
-                assertSame(ProtosBooleanValue.TRUE, result);
+                assertSame(Boolean.TRUE, result);
             }
         });
         System.out.println("PERF038C_CAPTURED_READ_SPECIALIZATION=PASS");

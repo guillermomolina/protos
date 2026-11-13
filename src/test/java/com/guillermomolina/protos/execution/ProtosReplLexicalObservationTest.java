@@ -25,7 +25,6 @@ import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosActorScheduler;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosReplSelectorObservation;
@@ -303,7 +302,7 @@ final class ProtosReplLexicalObservationTest {
                     computed.length()).isEmpty());
 
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     hosted.evaluatePersistent("<d228-count>", "count == 0"));
         }
     }

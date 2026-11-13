@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.file.Path;
@@ -51,7 +50,7 @@ final class ProtosCanonicalInitialModuleExecutionTest {
                             prelude, resolver, MAIN, hosted.activation());
 
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-            assertSame(ProtosBooleanValue.TRUE, outcome.value());
+            assertSame(Boolean.TRUE, outcome.value());
             ProtosActorModuleState.ModuleRecord record =
                     hosted.activation().actorModuleState().lookup(MAIN).orElseThrow();
             assertEquals(ProtosActorModuleState.InitializationState.READY, record.state());
@@ -88,7 +87,7 @@ final class ProtosCanonicalInitialModuleExecutionTest {
                         activation);
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        assertSame(Boolean.TRUE, outcome.value());
         ProtosActorModuleState.ModuleRecord record =
                 activation.actorModuleState().lookup(MAIN).orElseThrow();
         assertEquals(ProtosActorModuleState.InitializationState.READY, record.state());

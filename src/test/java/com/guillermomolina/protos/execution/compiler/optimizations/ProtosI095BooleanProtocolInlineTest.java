@@ -25,7 +25,6 @@ import com.oracle.truffle.api.debug.DebuggerSession;
 import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.semantic.Canonicalizer;
@@ -378,7 +377,7 @@ final class ProtosI095BooleanProtocolInlineTest {
                 (run(true) === true) && (run(false) === false)
                 """;
         Execution and = execute(false, andSource);
-        assertEquals(ProtosBooleanValue.TRUE, and.value());
+        assertEquals(Boolean.TRUE, and.value());
         // The and of run(true) runs its body inline (both probes at the inline
         // depth). run(false) is reached through the right operand of the
         // module-level &&, which owns its return home and keeps its own root.
@@ -407,7 +406,7 @@ final class ProtosI095BooleanProtocolInlineTest {
                 (run(true) === true) && (run(false) === false)
                 """;
         Execution or = execute(false, orSource);
-        assertEquals(ProtosBooleanValue.TRUE, or.value());
+        assertEquals(Boolean.TRUE, or.value());
         Regions orRegions = regions(or.rootOfFirstProbe());
         assertAggressive(orRegions.onFalse());
         assertTrue(orRegions.onFalse().stream()

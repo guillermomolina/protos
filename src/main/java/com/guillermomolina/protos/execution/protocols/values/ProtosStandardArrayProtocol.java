@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -165,7 +164,7 @@ public final class ProtosStandardArrayProtocol {
                                     || supplied.size() != 1) {
                                 throw invalid(activation);
                             }
-                            return ProtosBooleanValue.of(
+                            return Boolean.valueOf(
                                     supplied.get(0) instanceof ProtosArrayValue);
                         }));
 
@@ -207,14 +206,14 @@ public final class ProtosStandardArrayProtocol {
 
         Object subjectValue = supplied.get(0);
         if (!(subjectValue instanceof ProtosArrayValue subject)) {
-            return ProtosBooleanValue.FALSE;
+            return Boolean.FALSE;
         }
 
         List<Object> matcherSnapshot = matcher.indexedSnapshot();
         List<Object> subjectSnapshot = subject.indexedSnapshot();
 
         if (matcherSnapshot.size() != subjectSnapshot.size()) {
-            return ProtosBooleanValue.FALSE;
+            return Boolean.FALSE;
         }
 
         List<Object> captures = new ArrayList<>();
@@ -227,11 +226,11 @@ public final class ProtosStandardArrayProtocol {
                             List.of(subjectSnapshot.get(index)),
                             activation);
 
-            if (outcome == ProtosBooleanValue.FALSE) {
-                return ProtosBooleanValue.FALSE;
+            if (outcome == Boolean.FALSE) {
+                return Boolean.FALSE;
             }
 
-            if (outcome == ProtosBooleanValue.TRUE) {
+            if (outcome == Boolean.TRUE) {
                 continue;
             }
 
@@ -251,7 +250,7 @@ public final class ProtosStandardArrayProtocol {
         }
 
         if (captures.isEmpty()) {
-            return ProtosBooleanValue.TRUE;
+            return Boolean.TRUE;
         }
 
         return activation.prelude()

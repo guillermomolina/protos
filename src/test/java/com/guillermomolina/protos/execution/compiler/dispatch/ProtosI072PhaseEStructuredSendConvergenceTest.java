@@ -31,7 +31,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
@@ -293,8 +292,8 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.AND,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.OR
             };
-            for (ProtosBooleanValue receiver :
-                    new ProtosBooleanValue[] {ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE}) {
+            for (Boolean receiver :
+                    new Boolean[] {Boolean.TRUE, Boolean.FALSE}) {
                 for (int i = 0; i < selectors.length; i++) {
                     // I115: GetMethod selects the standard behavior; its structured
                     // Boolean classification is the implementation's identity.
@@ -350,20 +349,20 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
             ProtosObjectValue root = ProtosObjectValue.rootObject();
             AtomicInteger callbackCalls = new AtomicInteger();
 
-            module.context().createLocalSlot("flag", ProtosBooleanValue.TRUE);
+            module.context().createLocalSlot("flag", Boolean.TRUE);
             module.context().createLocalSlot(
                     "callback",
                     nativeClosure(
                             (activation, supplied) -> {
                                 callbackCalls.incrementAndGet();
-                                return ProtosBooleanValue.TRUE;
+                                return Boolean.TRUE;
                             }));
             ProtosBytecodeRootNode site =
                     lowerRoot(scope.language(), "flag.and(callback)",
                             "perf015-boolean-warm.protos");
 
             for (int i = 0; i < 4; i++) {
-                assertSame(ProtosBooleanValue.TRUE, site.getCallTarget().call(module));
+                assertSame(Boolean.TRUE, site.getCallTarget().call(module));
             }
             assertEquals(4, callbackCalls.get());
 
@@ -371,7 +370,7 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
             ProtosBoundMethod warmed = assertInstanceOf(
                     ProtosBoundMethod.class,
                     ProtosExperimentalGetMethodNode.select(
-                            ProtosBooleanValue.TRUE, "and", null, module));
+                            Boolean.TRUE, "and", null, module));
             var guarded = ProtosValueLookup.selectStructural(root, "and");
             assertNotNull(guarded);
             var generic = ProtosValueLookup.lookup(root, "and", prelude).orElseThrow();
@@ -382,7 +381,7 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
                     IllegalStateException.class,
                     () -> root.assignLocalSlot("and", warmed.callable()));
             assertTrue(guarded.isValid());
-            assertSame(ProtosBooleanValue.TRUE, site.getCallTarget().call(module));
+            assertSame(Boolean.TRUE, site.getCallTarget().call(module));
             assertEquals(5, callbackCalls.get());
         }
         System.out.println("PERF015_BOOLEAN_FROZEN_SELECTION_STABLE=PASS");

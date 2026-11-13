@@ -17,7 +17,6 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
@@ -103,7 +102,7 @@ public final class ProtosStandardFractionProtocol {
                             if (activation.receiver() != prototype || supplied.size() != 1) {
                                 throw invalid(activation);
                             }
-                            return ProtosBooleanValue.of(
+                            return Boolean.valueOf(
                                     ProtosNumericValueSupport.isFraction(supplied.get(0)));
                         }));
 

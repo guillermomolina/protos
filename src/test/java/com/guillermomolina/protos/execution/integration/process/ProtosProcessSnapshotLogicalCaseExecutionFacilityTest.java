@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -180,7 +179,7 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
                 runOneCase(source, List.of("identity"), "identity");
 
         assertEquals("completed", stringSlot(observation, "state"));
-        assertSame(ProtosBooleanValue.TRUE, observation.readLocalSlot("value").orElseThrow());
+        assertSame(Boolean.TRUE, observation.readLocalSlot("value").orElseThrow());
     }
 
     @Test
@@ -194,7 +193,7 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
                 runOneCase(source, List.of("identity"), "identity");
 
         assertEquals("completed", stringSlot(observation, "state"));
-        assertSame(ProtosBooleanValue.TRUE, observation.readLocalSlot("value").orElseThrow());
+        assertSame(Boolean.TRUE, observation.readLocalSlot("value").orElseThrow());
     }
 
     @SuppressWarnings("try")
@@ -248,7 +247,7 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
                 // rematerialized Process.
                 assertEquals("completed", stringSlot(observation, "state"));
                 assertSame(
-                        ProtosBooleanValue.TRUE, observation.readLocalSlot("value").orElseThrow());
+                        Boolean.TRUE, observation.readLocalSlot("value").orElseThrow());
             }
         }
     }

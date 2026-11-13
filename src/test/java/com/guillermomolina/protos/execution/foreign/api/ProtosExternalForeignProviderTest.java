@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.cli.ProtosCli;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
@@ -262,7 +261,7 @@ class ProtosExternalForeignProviderTest {
                 assertEquals(String.valueOf(values[index]), integer(fixture.eval(
                                 DEMO + "lib.echo(lib.echo(" + spellings[index] + "))")), spellings[index]);
             }
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(
+            assertSame(Boolean.TRUE, fixture.eval(
                     DEMO + "lib.echo(9223372036854775808).parent() === BigInteger"));
             assertEquals(1, counter(fixture, "invented.Invented", "SESSIONS"));
 

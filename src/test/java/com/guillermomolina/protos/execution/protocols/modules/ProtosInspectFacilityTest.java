@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -155,7 +154,7 @@ final class ProtosInspectFacilityTest {
     @Test
     void representationClassifiesValueFamiliesShallowly() {
         assertFamily(ProtosNullValue.INSTANCE, "null");
-        assertFamily(ProtosBooleanValue.TRUE, "Boolean");
+        assertFamily(Boolean.TRUE, "Boolean");
         assertFamily(evaluate("1"), "Integer");
         assertFamily(evaluate("1.5"), "Float");
         assertFamily(text(SECRET), "String");
@@ -237,7 +236,7 @@ final class ProtosInspectFacilityTest {
                             calls == 0
                         })()
                         """);
-        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(Boolean.TRUE, result);
     }
 
     @Test
@@ -429,7 +428,7 @@ final class ProtosInspectFacilityTest {
                         })()
                         """,
                         caller);
-        assertSame(ProtosBooleanValue.TRUE, denied);
+        assertSame(Boolean.TRUE, denied);
     }
 
     // ---- Helpers ----

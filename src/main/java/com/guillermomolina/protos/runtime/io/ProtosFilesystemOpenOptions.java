@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.runtime.io;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.util.Map;
 import java.util.Objects;
@@ -130,10 +129,10 @@ public final class ProtosFilesystemOpenOptions {
             return defaultValue;
         }
         Object value = slots.get(name);
-        if (value == ProtosBooleanValue.TRUE) {
+        if (value == Boolean.TRUE) {
             return true;
         }
-        if (value == ProtosBooleanValue.FALSE) {
+        if (value == Boolean.FALSE) {
             return false;
         }
         throw new IllegalArgumentException(

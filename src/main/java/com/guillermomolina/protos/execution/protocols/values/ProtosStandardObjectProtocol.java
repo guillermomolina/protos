@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
@@ -75,18 +74,18 @@ public final class ProtosStandardObjectProtocol {
         UNTIL_FALSE(true, false);
 
         private final boolean postTest;
-        private final ProtosBooleanValue exitValue;
+        private final Boolean exitValue;
 
         StandardLoop(boolean postTest, boolean exitValue) {
             this.postTest = postTest;
-            this.exitValue = exitValue ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+            this.exitValue = exitValue ? Boolean.TRUE : Boolean.FALSE;
         }
 
         boolean postTest() {
             return postTest;
         }
 
-        ProtosBooleanValue exitValue() {
+        Boolean exitValue() {
             return exitValue;
         }
     }
@@ -448,9 +447,9 @@ public final class ProtosStandardObjectProtocol {
 
         Object receiver = activation.receiver();
         if (receiver instanceof ProtosObjectValue ordinary && ordinaryReceiver(receiver)) {
-            return ProtosBooleanValue.of(ordinary.hasLocalSlot(name.value()));
+            return Boolean.valueOf(ordinary.hasLocalSlot(name.value()));
         }
-        return ProtosBooleanValue.FALSE;
+        return Boolean.FALSE;
     }
 
     private static Object slotNames(ProtosActivation activation, List<?> supplied) {
@@ -607,11 +606,11 @@ public final class ProtosStandardObjectProtocol {
                             List.of(subject),
                             activation);
 
-            if (outcome == ProtosBooleanValue.FALSE) {
+            if (outcome == Boolean.FALSE) {
                 continue;
             }
 
-            if (outcome == ProtosBooleanValue.TRUE) {
+            if (outcome == Boolean.TRUE) {
                 return ProtosInvocation.invoke(
                         association.getValue(),
                         List.of(),
@@ -748,7 +747,7 @@ public final class ProtosStandardObjectProtocol {
             ProtosActivation activation,
             List<?> supplied) {
         boolean postTest = kind.postTest();
-        ProtosBooleanValue exitValue = kind.exitValue();
+        Boolean exitValue = kind.exitValue();
         if (!(activation.receiver() instanceof ProtosClosureValue receiver)) {
             throw invalid(activation);
         }
@@ -767,8 +766,8 @@ public final class ProtosStandardObjectProtocol {
             if (conditionResult == exitValue) {
                 return lastBodyResult;
             }
-            if (conditionResult != ProtosBooleanValue.TRUE
-                    && conditionResult != ProtosBooleanValue.FALSE) {
+            if (conditionResult != Boolean.TRUE
+                    && conditionResult != Boolean.FALSE) {
                 throw invalid(activation);
             }
             lastBodyResult = ProtosClosureInvoker.invoke(body, List.of(), activation);

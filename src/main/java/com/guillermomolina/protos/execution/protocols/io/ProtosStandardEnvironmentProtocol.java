@@ -18,7 +18,6 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
@@ -102,7 +101,7 @@ public final class ProtosStandardEnvironmentProtocol {
                             } catch (IllegalArgumentException invalidRepresentation) {
                                 throw error(activation);
                             }
-                            return present ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+                            return present ? Boolean.TRUE : Boolean.FALSE;
                         }));
 
         prototype.createLocalSlot("each", STANDARD_EACH);

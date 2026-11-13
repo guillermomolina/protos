@@ -66,7 +66,7 @@ class ProtosParallelExecutionTest{
    var f=assertInstanceOf(ProtosFutureValue.class,evalHosted(h,source));
    while(f.isPending()){dispatchHosted(h,d);Thread.onSpinWait();}
    assertEquals(ProtosFutureValue.State.RESOLVED,f.state());
-   assertSame(ProtosBooleanValue.TRUE,f.resolvedValue().orElseThrow());
+   assertSame(Boolean.TRUE,f.resolvedValue().orElseThrow());
    dispatchHosted(h,d);
    assertEquals(0,d.liveTaskCount());
   }
@@ -181,7 +181,7 @@ class ProtosParallelExecutionTest{
  @Test void parallelClosureSeesStandardPrelude()throws Exception{
   var p=core();
   try(var h=ProtosHostedExecutionTestFixture.open(p)){
-   assertSame(ProtosBooleanValue.TRUE,resolvedP(h,"((n) => { Integer.recognizes(n) }).parallel(84)"));
+   assertSame(Boolean.TRUE,resolvedP(h,"((n) => { Integer.recognizes(n) }).parallel(84)"));
    var pair=assertInstanceOf(ProtosArrayValue.class,resolvedP(h,"((n) => { Array(1, n) }).parallel(84)"));
    assertEquals(2,pair.indexedSize());
    assertEquals("1",integerText(pair.indexedAt(0)));
@@ -189,7 +189,7 @@ class ProtosParallelExecutionTest{
    var empty=assertInstanceOf(ProtosArrayValue.class,resolvedP(h,"(() => { [] }).parallel()"));
    assertEquals(0,empty.indexedSize());
    assertEquals("hello",assertInstanceOf(ProtosStringValue.class,resolvedP(h,"(() => { \"hello\" }).parallel()")).value());
-   assertSame(ProtosBooleanValue.TRUE,resolvedP(h,"(() => { true }).parallel()"));
+   assertSame(Boolean.TRUE,resolvedP(h,"(() => { true }).parallel()"));
    dispatchHosted(h,h.activation().executionDomain());
    assertEquals(0,h.activation().executionDomain().liveTaskCount());
   }

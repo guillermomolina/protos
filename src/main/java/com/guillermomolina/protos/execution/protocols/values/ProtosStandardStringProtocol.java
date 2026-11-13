@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -78,7 +77,7 @@ public final class ProtosStandardStringProtocol {
                                         ProtosCoreErrors.newError(activation));
                             }
                             requireArity(activation, supplied.size(), 1);
-                            return ProtosBooleanValue.of(
+                            return Boolean.valueOf(
                                     supplied.get(0) instanceof ProtosStringValue);
                         }));
 

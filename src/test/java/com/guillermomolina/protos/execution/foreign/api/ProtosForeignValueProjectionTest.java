@@ -28,7 +28,6 @@ import com.guillermomolina.protos.execution.ProtosForeignAdmissionDescriptor.Cap
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Fake;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Integral;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.TestForeignFailure;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosRawForeignValue;
@@ -87,7 +86,7 @@ class ProtosForeignValueProjectionTest {
                     com.guillermomolina.protos.runtime.ProtosClosureValue.class,
                     fixture.eval(h + "h.ifNull"));
             assertInstanceOf(ProtosRawForeignValue.class, fixture.eval(h + "h.child"));
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(h + "h == h"));
+            assertSame(Boolean.TRUE, fixture.eval(h + "h == h"));
             assertInstanceOf(Long.class, fixture.eval(h + "h.hash()"));
             for (String reserved : List.of("call", "at", "atPut", "each")) {
                 assertMissing(fixture, fixture.failure(h + "h." + reserved));
@@ -172,7 +171,7 @@ class ProtosForeignValueProjectionTest {
             assertEquals(BigInteger.valueOf(9), array.elements.get(0));
             assertMissing(fixture, fixture.failure(M + "b: m.both\nb[0]"));
             assertSame(ProtosObjectValue.rootObject(), fixture.eval(a + "a.parent()"));
-            assertSame(ProtosBooleanValue.FALSE, fixture.eval(a + "a.parent() === Array"));
+            assertSame(Boolean.FALSE, fixture.eval(a + "a.parent() === Array"));
             assertMissing(fixture, fixture.failure(a + "a.size()"));
         }
     }
@@ -270,9 +269,9 @@ class ProtosForeignValueProjectionTest {
                 }
             }
             // A provider-returned large Integer is owned by the admitting Prelude.
-            assertSame(ProtosBooleanValue.TRUE,
+            assertSame(Boolean.TRUE,
                     fixture.eval(M + "m.echo(9223372036854775808).parent() === BigInteger"));
-            assertSame(ProtosBooleanValue.TRUE,
+            assertSame(Boolean.TRUE,
                     fixture.eval(M + "m.echo(9223372036854775808) - 1 === 9223372036854775807"));
         }
     }
@@ -324,7 +323,7 @@ class ProtosForeignValueProjectionTest {
             // The callback receives the admitted large Integer and returns a large one.
             assertEquals((TWO_POW_63.add(BigInteger.ONE)).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                     fixture.eval(M + "m.viaCallback((x) => x + 1)")));
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(
+            assertSame(Boolean.TRUE, fixture.eval(
                     M + "m.viaCallback((x) => (x.parent() === BigInteger).ifTrue() { x })"
                             + ".parent() === BigInteger"));
             // A RAW handle keeps its exact identity next to Integer arguments.
@@ -383,7 +382,7 @@ class ProtosForeignValueProjectionTest {
             assertTrue(fixture.provider.executions.isEmpty());
             assertSame(session, ((ProtosForeignHandle) fn.handleForRuntime()).session());
             assertEquals(sessions, fixture.provider.sessions.size());
-            assertSame(ProtosBooleanValue.TRUE, fixture.eval(M + "m.saved === m.saved"));
+            assertSame(Boolean.TRUE, fixture.eval(M + "m.saved === m.saved"));
         }
     }
 
@@ -395,7 +394,7 @@ class ProtosForeignValueProjectionTest {
         try (ProtosForeignValueFixture fixture = fixture(new Fake(false))) {
             fixture.provider.modules.put("seq", seq);
             assertSame(
-                    ProtosBooleanValue.TRUE,
+                    Boolean.TRUE,
                     fixture.eval("import(\"test:seq\") === import(\"test:seq\")"));
             ProtosForeignModuleFacadeValue facade = fixture.facade("seq");
             assertSame(
