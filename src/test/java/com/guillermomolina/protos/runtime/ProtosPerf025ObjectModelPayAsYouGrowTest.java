@@ -135,11 +135,11 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
             ProtosValueLookup.StructuralSelection selection,
             String phase) {
         assertTrue(selection.isValid(), phase);
-        var property = selection.home().getShape().getProperty("value");
+        var property = selection.home().getShape().getProperty("primitiveLongStorage");
         assertNotNull(property, phase);
         long current = assertInstanceOf(Long.class, selection.read(), phase).longValue();
         try {
-            long stored = selection.home().getShape().makePropertyGetter("value")
+            long stored = selection.home().getShape().makePropertyGetter("primitiveLongStorage")
                     .getLong(selection.home());
             assertEquals(current, stored, phase);
             return stored;
@@ -154,10 +154,12 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         ProtosObjectValue object =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
 
+        // An independent property transition keeps another test's generalized
+        // "value" location from determining this first-insertion assertion.
         object.createLocalSlot(
-                "value", ProtosNumericValueSupport.integer(1L));
+                "primitiveLongStorage", ProtosNumericValueSupport.integer(1L));
 
-        var selected = ProtosValueLookup.selectStructural(object, "value");
+        var selected = ProtosValueLookup.selectStructural(object, "primitiveLongStorage");
 
         assertNotNull(selected);
         assertEquals(
@@ -167,12 +169,12 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
                 1L,
                 assertInstanceOf(
                         Long.class,
-                        object.readLocalSlot("value").orElseThrow())
+                        object.readLocalSlot("primitiveLongStorage").orElseThrow())
                         .longValue());
 
         long wide = 1L << 42;
         object.assignLocalSlot(
-                "value", ProtosNumericValueSupport.integer(wide));
+                "primitiveLongStorage", ProtosNumericValueSupport.integer(wide));
 
         assertEquals(
                 wide,
@@ -181,11 +183,11 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
                 wide,
                 assertInstanceOf(
                         Long.class,
-                        object.localSlotsSnapshot().get("value"))
+                        object.localSlotsSnapshot().get("primitiveLongStorage"))
                         .longValue());
 
         object.assignLocalSlot(
-                "value", ProtosNumericValueSupport.integer(Long.MIN_VALUE));
+                "primitiveLongStorage", ProtosNumericValueSupport.integer(Long.MIN_VALUE));
 
         assertEquals(
                 Long.MIN_VALUE,
@@ -193,19 +195,19 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
 
         object.createLocalSlot("other", 2L);
         assertFalse(selected.isValid());
-        selected = ProtosValueLookup.selectStructural(object, "value");
+        selected = ProtosValueLookup.selectStructural(object, "primitiveLongStorage");
         assertNotNull(selected);
         Object other = new Object();
-        object.assignLocalSlot("value", other);
-        assertSame(other, object.readLocalSlot("value").orElseThrow());
+        object.assignLocalSlot("primitiveLongStorage", other);
+        assertSame(other, object.readLocalSlot("primitiveLongStorage").orElseThrow());
 
-        assertSame(other, object.removeLocalSlot("value"));
+        assertSame(other, object.removeLocalSlot("primitiveLongStorage"));
         assertFalse(selected.isValid());
 
         object.createLocalSlot(
-                "value", ProtosNumericValueSupport.integer(Long.MAX_VALUE));
+                "primitiveLongStorage", ProtosNumericValueSupport.integer(Long.MAX_VALUE));
 
-        var recreated = ProtosValueLookup.selectStructural(object, "value");
+        var recreated = ProtosValueLookup.selectStructural(object, "primitiveLongStorage");
 
         assertNotNull(recreated);
         /*
@@ -224,13 +226,13 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
                 Long.MAX_VALUE,
                 assertInstanceOf(
                         Long.class,
-                        object.readLocalSlot("value").orElseThrow())
+                        object.readLocalSlot("primitiveLongStorage").orElseThrow())
                         .longValue());
 
         System.out.println(
                 "I115_H10_RECREATED_FALLBACK=PASS LOCATION="
                 + recreated.home().getShape()
-                        .getProperty("value")
+                        .getProperty("primitiveLongStorage")
                         .getLocation().getClass().getName());
     }
 

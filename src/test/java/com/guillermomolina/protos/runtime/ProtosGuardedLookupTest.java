@@ -281,14 +281,21 @@ final class ProtosGuardedLookupTest {
         assertThrows(IllegalStateException.class,
                 () -> receiver.composeLocalSlotsFrom(source, Set.of()));
         assertTrue(lookup.isValid());
+        Object original = lookup.read();
         receiver.close();
+        assertFalse(lookup.isValid());
+        var closed = selected(receiver);
         assertThrows(IllegalStateException.class,
                 () -> receiver.removeLocalSlot("pick"));
+        assertTrue(closed.isValid());
         receiver.freeze();
+        assertFalse(closed.isValid());
+        var frozen = selected(receiver);
         assertThrows(IllegalStateException.class,
                 () -> receiver.assignLocalSlot("pick", new Object()));
-        assertTrue(lookup.isValid());
-        assertTrue(selected(receiver).isValid());
+        assertTrue(frozen.isValid());
+        assertSame(original, frozen.read());
+        assertSame(receiver, frozen.home());
     }
 
     @Test
@@ -701,17 +708,22 @@ final class ProtosGuardedLookupTest {
         assertNotNull(selection);
 
         receiver.close();
+        assertFalse(selection.isValid());
+        var closed = ProtosValueLookup.selectStructural(receiver, "pick");
+        assertNotNull(closed);
         Object updated = new Object();
         receiver.assignLocalSlot("pick", updated);
-        assertTrue(selection.isValid());
-        assertSame(
-                updated,
-                read(receiver, selection));
+        assertTrue(closed.isValid());
+        assertSame(updated, read(receiver, closed));
 
         receiver.freeze();
+        assertFalse(closed.isValid());
+        var frozen = ProtosValueLookup.selectStructural(receiver, "pick");
+        assertNotNull(frozen);
         assertThrows(IllegalStateException.class,
                 () -> receiver.assignLocalSlot("pick", new Object()));
-        assertTrue(selection.isValid());
+        assertTrue(frozen.isValid());
+        assertSame(updated, read(receiver, frozen));
 
         var context =
                 new ProtosExecutionContextValue(ProtosObjectValue.rootObject());

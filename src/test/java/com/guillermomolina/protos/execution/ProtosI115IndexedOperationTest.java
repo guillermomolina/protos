@@ -57,6 +57,39 @@ final class ProtosI115IndexedOperationTest {
     }
 
     @Test
+    void explicitAtPutUsesSetItemAndPreservesSelectedResult() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("""
+                a: [1, 2]
+                run: () => { a.atPut(0, 7) }
+                """)) {
+            var prepared = session.prepareTopLevel("run");
+            ProtosBytecodeRootNode root = (ProtosBytecodeRootNode)
+                    prepared.hostExecutableForTesting().target.getRootNode();
+            List<String> instructions = names(root);
+            assertTrue(instructions.stream().anyMatch(name -> name.startsWith("c.SetItem")),
+                    instructions.toString());
+            assertEquals(7L, prepared.executable().execute().asLong());
+        }
+        assertEquals(999L, evalLong("box: { atPut: (index, value) => { 999 } }\nbox.atPut(0, 7)"));
+        assertEquals(7L, evalLong("box: { atPut: (index, value) => { 999 } }\n(box[0] = 7)"));
+    }
+
+    @Test
+    void rhsOverrideAndFreezeAreObservedBeforeIndexedSelection() {
+        assertEquals(99L, evalLong("""
+                a: [1, 2]
+                value: () => { a.atPut: (index, item) => { 99 }; 7 }
+                a.atPut(0, value())
+                """));
+        assertTrue(evalBoolean("""
+                a: [1, 2]
+                value: () => { a.freeze(); 7 }
+                rejected: Error.handle(() => { a.atPut(0, value()); false }, (caught) => true)
+                (rejected === true) && (a[0] == 1)
+                """));
+    }
+
+    @Test
     void largeSignedLongIndexesSignalGuestErrors() {
         for (String index : List.of(
                 "9223372036854775807",

@@ -18,10 +18,10 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -301,11 +301,12 @@ final class ProtosI091PrimitiveCarrierPropagationTest {
         Object integer = ProtosNumericValueSupport.guestValue(41L);
         Object floating = ProtosNumericValueSupport.guestValue(0.5d);
         assertEquals(41L, ((Long) integer).longValue());
-        assertEquals(0.5d, ((ProtosFloatValue) floating).value());
+        assertEquals(0.5d, assertInstanceOf(Double.class, floating).doubleValue());
         Object other = new Object();
         assertSame(other, ProtosNumericValueSupport.guestValue(other));
-        // A host Long is never itself a current Protos number.
-        assertFalse(ProtosNumericValueSupport.isCurrentNumber(41L));
+        // Long and Double are the guest scalar representations themselves.
+        assertTrue(ProtosNumericValueSupport.isCurrentNumber(integer));
+        assertTrue(ProtosNumericValueSupport.isCurrentNumber(floating));
     }
 
     private static org.graalvm.polyglot.Value eval(Context context, String source) {

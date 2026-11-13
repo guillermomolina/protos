@@ -90,6 +90,30 @@ class ProtosObjectValueTest {
     }
 
     @Test
+    void stateTransitionsChangeShapeWithoutChangingIdentityOrSlots() {
+        ProtosObjectValue parent = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue object = new ProtosObjectValue(parent);
+        Object marker = new Object();
+        object.createLocalSlot("value", marker);
+        var openShape = object.getShape();
+        object.close();
+        assertFalse(openShape.check(object));
+        var closedShape = object.getShape();
+        object.close();
+        assertSame(closedShape, object.getShape());
+        object.assignLocalSlot("value", marker);
+        object.freeze();
+        assertFalse(closedShape.check(object));
+        var frozenShape = object.getShape();
+        object.freeze();
+        object.close();
+        assertSame(frozenShape, object.getShape());
+        assertEquals(ProtosObjectValue.MutationState.FROZEN, object.mutationState());
+        assertSame(parent, object.parent().orElseThrow());
+        assertSame(marker, object.readLocalSlot("value").orElseThrow());
+    }
+
+    @Test
     void closedObjectsRejectStructuralCreationButAllowExistingSlotAssignment() {
         ProtosObjectValue object = new ProtosObjectValue(ProtosObjectValue.rootObject());
         object.createLocalSlot("existing", Boolean.TRUE);

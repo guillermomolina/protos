@@ -89,7 +89,7 @@ final class ProtosPrimitiveSlotWriteRegressionTest {
             assertEquals(
                     1L,
                     instructions.stream()
-                            .filter("c.ExperimentalSetAttribute"::equals)
+                            .filter("c.SetAttribute"::equals)
                             .count(),
                     "Exactly one direct SetAttribute is required");
 
@@ -103,9 +103,9 @@ final class ProtosPrimitiveSlotWriteRegressionTest {
             assertEquals(
                     1L,
                     instructions.stream()
-                            .filter("c.ExperimentalGetAttribute"::equals)
+                            .filter("c.GetAttribute"::equals)
                             .count(),
-                    "Read must use the experimental typed GetAttribute");
+                    "Read must use the compact typed GetAttribute");
 
             for (String forbidden : List.of(
                     "MutateLocalSlot",
@@ -126,7 +126,7 @@ final class ProtosPrimitiveSlotWriteRegressionTest {
              * shared EpilogForReturn and return, with no return-mode
              * specific carrier projection.
              */
-            int read = instructions.indexOf("c.ExperimentalGetAttribute");
+            int read = instructions.indexOf("c.GetAttribute");
             assertEquals(
                     List.of("c.EpilogForReturn", "return"),
                     instructions.subList(read + 1, instructions.size()),
@@ -224,7 +224,7 @@ final class ProtosPrimitiveSlotWriteRegressionTest {
             assertEquals(
                     1L,
                     instructions.stream()
-                            .filter("c.ExperimentalGetAttribute"::equals)
+                            .filter("c.GetAttribute"::equals)
                             .count());
 
             for (int iteration = 0; iteration < 48; iteration++) {
@@ -234,6 +234,120 @@ final class ProtosPrimitiveSlotWriteRegressionTest {
             }
 
             System.out.println("I115_GET_ATTRIBUTE_READ=PASS");
+        }
+    }
+
+    @Test
+    void explicitWritesSelectReceiverBeforeRhsEffects() {
+        assertGuestTrue("""
+                first: { value: 1 }
+                second: { value: 2 }
+                state: { selected: first; trace: 0 }
+                receiver: () => { state.trace = state.trace * 10 + 1; state.selected }
+                rhs: () => {
+                    state.trace = state.trace * 10 + 2
+                    state.selected = second
+                    9
+                }
+                result: (receiver().value = rhs())
+                (state.trace == 12) && (first.value == 9) &&
+                    (second.value == 2) && (result == 9)
+                """);
+    }
+
+    @Test
+    void explicitCreationAndDefaultWritesPreserveEvaluationOrder() {
+        assertGuestTrue("""
+                state: { trace: 0 }
+                holder: {}
+                receiver: () => { state.trace = state.trace * 10 + 1; holder }
+                rhs: () => { state.trace = state.trace * 10 + 2; 9 }
+                run: (value: (receiver().item: rhs())) => { value }
+                result: run()
+                (state.trace == 12) && (holder.item == 9) && (result == 9)
+                """);
+    }
+
+    @Test
+    void receiverFailurePreventsRhsEffects() {
+        assertGuestTrue("""
+                state: { touched: false }
+                receiver: () => { Error().signal() }
+                rhs: () => { state.touched = true; 9 }
+                Error.handle(() => { receiver().value = rhs() }, (caught) => null)
+                state.touched === false
+                """);
+    }
+
+    @Test
+    void warmedCompactWritesRejectFreezeAndMissingLocalSlots() {
+        assertGuestTrue("""
+                parent: { value: 1 }
+                holder: parent { value: 2 }
+                write: (value) => { holder.value = value; holder.value }
+                write(3)
+                write(4)
+                holder.removeSlot("value")
+                missing: Error.handle(() => { write(8); false }, (caught) => true)
+                holder.value: 4
+                holder.close()
+                write(5)
+                holder.freeze()
+                rejected: Error.handle(() => { write(9); false }, (caught) => true)
+                (missing === true) && (rejected === true) &&
+                    (holder.value == 5) && (parent.value == 1)
+                """);
+    }
+
+    @Test
+    void compactReadsTrackRemovalRecreationAndMethodExtraction() {
+        assertGuestTrue("""
+                parent: { value: 1; method: () => { this.value } }
+                holder: parent { value: 2 }
+                read: () => { holder.value }
+                read()
+                holder.removeSlot("value")
+                inherited: read()
+                holder.value: 4294967296
+                recreated: read()
+                extracted: holder.method
+                another: holder.method
+                holder.value = 7
+                (inherited == 1) && (recreated == 4294967296) &&
+                    (extracted() == 7) && !(extracted === another)
+                """);
+    }
+
+    @Test
+    void rhsFreezePreventsThePendingCompactWrite() {
+        assertGuestTrue("""
+                holder: { value: 1 }
+                rhs: () => { holder.freeze(); 9 }
+                rejected: Error.handle(() => { holder.value = rhs(); false }, (caught) => true)
+                (rejected === true) && (holder.value == 1)
+                """);
+    }
+
+    @Test
+    void compactSlotsPreserveLongDoubleBooleanAndObjectValues() {
+        assertGuestTrue("""
+                holder: { value: 1 }
+                write: (value) => { holder.value = value; holder.value }
+                integer: write(4294967296)
+                floating: write(1.5)
+                boolean: write(true)
+                marker: {}
+                object: write(marker)
+                (integer === 4294967296) && (floating === 1.5) &&
+                    (boolean === true) && (object === marker)
+                """);
+    }
+
+    private static void assertGuestTrue(String source) {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID)
+                .option("protos.CoreRoot", Path.of("protos", "lib", "core").toAbsolutePath().toString())
+                .build()) {
+            assertTrue(context.eval(ProtosLanguage.ID, source).asBoolean());
         }
     }
 

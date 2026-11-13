@@ -3093,7 +3093,7 @@ final class CanonicalToBytecodeLowerer {
                 || hasVectorArgument(send.arguments())
                 || primitiveNumericSendCandidate(send)
                 || i115AddSend(send)
-                || i115IndexedRead(send)
+                || indexedProtocolSend(send)
                 || I115Control.of(send.message(), send.arguments()) != null
                 || i115NativeBooleanControl(
                         send.message(), send.arguments()) != null) {
@@ -3358,18 +3358,11 @@ final class CanonicalToBytecodeLowerer {
         return false;
     }
 
-    /*
-     * I115: GraalPy ExprTy.Subscript -> BinarySubscript.
-     *
-     * The canonicalizer represents bracket reads through the 'at'
-     * selector. The read is lowered by emitI115IndexedSend: the direct
-     * BinarySubscript when the selected behavior is the standard
-     * Array/Bytes one, otherwise GetMethod and CallUnaryMethod.
-     */
-    private static boolean i115IndexedRead(CanonicalSend send) {
-        return "at".equals(send.message())
+    /** Direct indexed operations are admitted only after evaluating all operands. */
+    private static boolean indexedProtocolSend(CanonicalSend send) {
+        return (("at".equals(send.message()) && send.arguments().size() == 1)
+                        || ("atPut".equals(send.message()) && send.arguments().size() == 2))
                 && !send.contextual()
-                && send.arguments().size() == 1
                 && !hasVectorArgument(send.arguments());
     }
 
@@ -3381,10 +3374,8 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115 (GraalPy BinarySubscript / GetLen): an {@code at} or {@code size}
-     * send. The receiver and then the index are evaluated exactly once into
-     * locals; {@link #emitI115IndexedProtocolOfLocals} then selects the
-     * direct operation or the dispatched send.
+     * Stage the receiver and arguments exactly once in source order, then
+     * select either the standard indexed operation or its dynamic fallback.
      */
     private void emitI115IndexedSend(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -3438,8 +3429,8 @@ final class CanonicalToBytecodeLowerer {
      *       composed with {@code Yield}/{@code ResumeDispatchedContinuation},
      *       under its {@link StandardTags.CallTag}.
      * </ul>
-     * For {@code atPut} no result is stored: the indexed assignment yields
-     * its already evaluated RHS.
+     * An explicit {@code atPut} send retains the selected method's result.
+     * Indexed assignment passes no result local and yields its own RHS.
      */
     private void emitI115IndexedProtocolOfLocals(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -3450,8 +3441,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
-        boolean write = "atPut".equals(selector);
-        BytecodeLocal selectedResult = write ? null : result;
+        BytecodeLocal selectedResult = result;
 
         builder.beginIfThenElse();
 
@@ -3459,6 +3449,7 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadLocal(receiver);
         builder.endIsStandardIndexedSelection();
 
+        builder.beginBlock();
         switch (selector) {
             case "atPut" -> {
                 builder.beginSetItem();
@@ -3466,6 +3457,11 @@ final class CanonicalToBytecodeLowerer {
                 builder.emitLoadLocal(receiver);
                 builder.emitLoadLocal(operands.get(0));
                 builder.endSetItem();
+                if (selectedResult != null) {
+                    builder.beginStoreLocal(selectedResult);
+                    builder.emitLoadLocal(operands.get(1));
+                    builder.endStoreLocal();
+                }
             }
             case "at" -> {
                 beginMutationResult(builder, selectedResult);
@@ -3485,6 +3481,7 @@ final class CanonicalToBytecodeLowerer {
             default -> throw new AssertionError(
                     "Not an I115 indexed selector: " + selector);
         }
+        builder.endBlock();
 
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
@@ -3719,7 +3716,7 @@ final class CanonicalToBytecodeLowerer {
                     yield true;
                 }
                 // I115: at/size may dispatch a suspending selected behavior.
-                if (i115IndexedRead(send) || i115IndexedSize(send)) {
+                if (indexedProtocolSend(send) || i115IndexedSize(send)) {
                     yield true;
                 }
                 I115StaticControl staticControl = classifyI115StaticControl(send);
@@ -4930,17 +4927,9 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115 / GraalPy StoreVisitor: explicit physical attribute write.
-     *
-     * KNOWN I115 SEMANTIC DIVERGENCE: explicit attribute writes evaluate
-     * RHS before receiver during GraalPy lowering convergence.
-     *
-     * SetAttribute/CreateAttribute return void. A consumed assignment
-     * returns the exact RHS through its result local, never through
-     * another attribute read.
-     *
-     * A discarded synchronous write emits both operands directly.
-     * Suspendable operands complete before the physical operation opens.
+     * Evaluate the receiver before the RHS, retaining it across RHS effects or
+     * suspension. Physical writes consume value then receiver and return void;
+     * a consumed expression returns its exact RHS from the result local.
      */
     private void emitAttributeWrite(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -4968,18 +4957,14 @@ final class CanonicalToBytecodeLowerer {
                         || receiverValue.suspendable();
 
         BytecodeLocal rhsLocal = null;
-        BytecodeLocal receiverLocal = null;
+        BytecodeLocal receiverLocal = builder.createLocal("attributeReceiver", null);
+        emitBindingValueToLocal(builder, receiverValue, receiverLocal);
 
         if (stageRhs) {
             rhsLocal = result != null
                     ? result
                     : builder.createLocal("attributeRhs", null);
             emitBindingValueToLocal(builder, rhsValue, rhsLocal);
-        }
-
-        if (receiverValue.suspendable()) {
-            receiverLocal = builder.createLocal("attributeReceiver", null);
-            emitBindingValueToLocal(builder, receiverValue, receiverLocal);
         }
 
         if (creation) {
@@ -4994,11 +4979,7 @@ final class CanonicalToBytecodeLowerer {
             rhsValue.direct().run();
         }
 
-        if (receiverLocal != null) {
-            builder.emitLoadLocal(receiverLocal);
-        } else {
-            receiverValue.direct().run();
-        }
+        builder.emitLoadLocal(receiverLocal);
 
         if (creation) {
             builder.endCreateAttribute();
@@ -5980,7 +5961,7 @@ final class CanonicalToBytecodeLowerer {
                     scratch, childResult, resumeValue, false);
             return;
         }
-        if (i115IndexedRead(send) || i115IndexedSize(send)) {
+        if (indexedProtocolSend(send) || i115IndexedSize(send)) {
             emitI115IndexedSend(
                     builder, send, result, scratch, childResult, resumeValue,
                     this::emitDefaultExpressionToLocal, false);
@@ -9267,7 +9248,7 @@ final class CanonicalToBytecodeLowerer {
                     primitiveCarrierResult);
             return;
         }
-        if (i115IndexedRead(send) || i115IndexedSize(send)) {
+        if (indexedProtocolSend(send) || i115IndexedSize(send)) {
             emitI115IndexedSend(
                     builder, send, result, scratch, childResult, resumeValue,
                     this::emitBodyExpressionToLocal, primitiveCarrierResult);

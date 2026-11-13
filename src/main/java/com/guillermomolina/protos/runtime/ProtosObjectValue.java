@@ -154,7 +154,8 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
      * authority reference is switched.
      */
     private ProtosLexicalBindingAuthority lexicalBindingAuthority;
-    private MutationState mutationState = MutationState.OPEN;
+    private static final int CLOSED_FLAG = 1;
+    private static final int FROZEN_FLAG = 2;
 
     private ProtosObjectValue() {
         super(INITIAL_SHAPE);
@@ -226,30 +227,39 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
     }
 
     public MutationState mutationState() {
-        return mutationState;
+        if (isFrozen()) {
+            return MutationState.FROZEN;
+        }
+        return isClosed() ? MutationState.CLOSED : MutationState.OPEN;
     }
 
     public boolean isOpen() {
-        return mutationState == MutationState.OPEN;
+        return (getShape().getFlags() & (CLOSED_FLAG | FROZEN_FLAG)) == 0;
     }
 
     public boolean isClosed() {
-        return mutationState == MutationState.CLOSED;
+        return (getShape().getFlags() & CLOSED_FLAG) != 0;
     }
 
     public boolean isFrozen() {
-        return mutationState == MutationState.FROZEN;
+        return isFrozenShape(getShape());
+    }
+
+    /** A cached shape proves mutation admission until the receiver changes shape. */
+    public static boolean isFrozenShape(Shape shape) {
+        return (shape.getFlags() & FROZEN_FLAG) != 0;
     }
 
     public ProtosObjectValue close() {
-        if (mutationState == MutationState.OPEN) {
-            mutationState = MutationState.CLOSED;
+        if (isOpen()) {
+            DynamicObject.SetShapeFlagsNode.getUncached().executeAdd(this, CLOSED_FLAG);
         }
         return this;
     }
 
     public ProtosObjectValue freeze() {
-        mutationState = MutationState.FROZEN;
+        DynamicObject.SetShapeFlagsNode.getUncached()
+                .executeRemoveAndAdd(this, CLOSED_FLAG, FROZEN_FLAG);
         return this;
     }
 
@@ -469,10 +479,10 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(reservedNames, "reservedNames");
 
-        if (mutationState == MutationState.FROZEN) {
+        if (isFrozen()) {
             throw new IllegalStateException("object is frozen");
         }
-        if (mutationState == MutationState.CLOSED) {
+        if (isClosed()) {
             throw new IllegalStateException("object is closed");
         }
 
@@ -549,10 +559,10 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(value, "value");
 
-        if (mutationState == MutationState.FROZEN) {
+        if (isFrozen()) {
             throw new IllegalStateException("object is frozen");
         }
-        if (mutationState == MutationState.CLOSED) {
+        if (isClosed()) {
             throw new IllegalStateException("object is closed");
         }
         if (authorityContains(lexicalBindingAuthority, name)) {
@@ -567,7 +577,7 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(value, "value");
 
-        if (mutationState == MutationState.FROZEN) {
+        if (isFrozen()) {
             throw new IllegalStateException("object is frozen");
         }
         if (!authorityContains(lexicalBindingAuthority, name)) {
@@ -580,10 +590,10 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
     public Object removeLocalSlot(String name) {
         Objects.requireNonNull(name, "name");
 
-        if (mutationState == MutationState.FROZEN) {
+        if (isFrozen()) {
             throw new IllegalStateException("object is frozen");
         }
-        if (mutationState == MutationState.CLOSED) {
+        if (isClosed()) {
             throw new IllegalStateException("object is closed");
         }
         if (!authorityContains(lexicalBindingAuthority, name)) {

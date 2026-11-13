@@ -97,7 +97,7 @@ class ProtosRepresentedValueLookupTest {
         assertSame(prelude.floatPrototype(),
                 ProtosValueLookup.delegationParent(direct, prelude).orElseThrow());
         ProtosSlotLookupResult directSelected =
-                ProtosValueLookup.lookup(direct, "call", prelude).orElseThrow();
+                ProtosValueLookup.lookup(direct, "construct", prelude).orElseThrow();
         assertSame(floatCall, directSelected.value());
         assertSame(floatSelected.home(), directSelected.home());
         org.junit.jupiter.api.Assertions.assertTrue(ProtosValueLookup.isProtosValue(direct));

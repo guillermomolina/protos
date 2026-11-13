@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -192,12 +193,21 @@ final class ProtosPerf010APreparedTargetSpecializationTest {
                                 .build();
                 CanonicalClosure methodDefinition =
                         closureDefinition(methodCharacters);
+                ProtosClosureExecutionPlan sourcePlan =
+                        ProtosClosureExecutionPlan.bytecode(
+                                methodDefinition, language, methodSource);
+                assertTrue(sourcePlan.bytecodeActivationRootForTesting()
+                        .returnHomeProvenUnobservable());
+
                 ProtosBytecodeRootNode methodRoot =
                         yieldingMethodRoot(
                                 language,
                                 methodSource,
                                 methodDefinition.body().span(),
                                 marker);
+                // The replacement executable has no proof from source lowering.
+                // Dispatch must use its own metadata, not the definition's plan.
+                assertFalse(methodRoot.returnHomeProvenUnobservable());
                 ProtosClosureValue method =
                         semanticClosure(
                                 methodDefinition,
@@ -222,6 +232,9 @@ final class ProtosPerf010APreparedTargetSpecializationTest {
                         firstYield(callTarget, module, receiver, marker);
 
                 assertNotSame(firstActivation, secondActivation);
+                assertNotSame(
+                        firstActivation.returnHome().orElseThrow(),
+                        secondActivation.returnHome().orElseThrow());
             } finally {
                 context.leave();
             }
@@ -401,11 +414,15 @@ final class ProtosPerf010APreparedTargetSpecializationTest {
         ProtosActivation activation = activationOf(child);
         assertSame(receiver, activation.receiver());
         assertSame(receiver, activation.methodHome().orElseThrow());
-        // PERF025: the `() => { null }` plan is proven return-home unobservable.
+        // A synthetic executable without a no-home proof owns a physical home.
+        // Suspension preserves it; completing this invocation closes it.
         assertTrue(activation.ownsReturnHome());
-        assertTrue(!activation.returnHome().orElseThrow().isMaterialized());
+        var home = activation.returnHome().orElseThrow();
+        assertTrue(home.isMaterialized());
+        assertTrue(home.isActive());
         Object completed = parent.continueWith(ProtosNullValue.INSTANCE);
         assertSame(marker, completed);
+        assertFalse(home.isActive());
         return activation;
     }
 
@@ -454,12 +471,14 @@ final class ProtosPerf010APreparedTargetSpecializationTest {
                                     span.length());
                             builder.beginRoot();
                             builder.beginYield();
-                            builder.emitLoadArgument(0);
+                            builder.emitCurrentActivation(false);
                             builder.endYield();
                             builder.beginReturn();
                             builder.emitLoadConstant(finalValue);
                             builder.endReturn();
-                            builder.endRoot();
+                            // This root substitutes the source method body, so
+                            // retain the lowerer's semantic activation classification.
+                            builder.endRoot().markSemanticActivationRoot();
                             builder.endSourceSection();
                             builder.endSource();
                         });
@@ -467,9 +486,7 @@ final class ProtosPerf010APreparedTargetSpecializationTest {
     }
 
     private static ProtosActivation activationOf(ContinuationResult continuation) {
-        Object[] arguments = continuation.getFrame().getArguments();
-        assertTrue(arguments.length > 0);
-        return assertInstanceOf(ProtosActivation.class, arguments[0]);
+        return assertInstanceOf(ProtosActivation.class, continuation.getResult());
     }
 
     private static ProtosClosureValue semanticClosure(

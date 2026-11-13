@@ -120,17 +120,14 @@ final class ProtosPerf042IdentityBuilderOracleTest {
             // in ProtosI101ProfileSpecializedLoweringTest. Here we
             // separately pin the physical unary entry operations.
             /*
-             * I115-H7 EXPERIMENTAL: identity is an admitted non-dispatching
-             * compact unary root. Its prologue is the GraalPy-shaped
-             * CopyArguments and its body a plain LoadLocal (any quickened
-             * variant), replacing the I104-A BindUnaryFrameParameter and
-             * ReadRootFrameLocal shape. The return epilogue still owns the
-             * carrier projection.
+             * The compact identity root copies supplied arguments into frame
+             * locals, reads its parameter directly, and returns through the
+             * shared epilogue without adding an activation or a carrier box.
              */
             assertEquals(
                     List.of(
                             "c.EnterRoot",
-                            "c.CopyArguments",
+                            "c.CopySuppliedArguments",
                             "load.local",
                             "c.EpilogForReturn",
                             "return"),
@@ -140,7 +137,7 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                                     ? "load.local"
                                     : name)
                             .toList(),
-                    "I115-H7 compact unary entry: CopyArguments and a direct "
+                    "I115-H7 compact unary entry: CopySuppliedArguments and a direct "
                             + "local read; D203/I105 emits no excess-argument check");
 
             System.out.println("PERF042_BOUND_ARGUMENT_LOWER_BOUND=PASS");
@@ -439,8 +436,11 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                     .stream()
                     .map(com.oracle.truffle.api.bytecode.Instruction::getName)
                     .toList();
-            assertEquals(1, names.stream().filter("c.InvokeClosureOneTail"::equals).count(),
-                    () -> "one terminal call in run: " + names);
+            assertEquals(1, names.stream().filter("c.CallUnaryMethod"::equals).count(),
+                    () -> "one arity-specialized call in run: " + names);
+            assertEquals(List.of("c.EpilogForReturn", "return"),
+                    names.subList(names.indexOf("c.CallUnaryMethod") + 1, names.size()),
+                    () -> "the call result returns directly: " + names);
             assertTrue(!names.contains("c.InstallFrameLexicalAuthority"),
                     () -> "run installs frame authority: " + names);
             assertTrue(!names.contains("c.CurrentActivation"),
@@ -462,11 +462,9 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                     () -> "one Closure creation in run: " + names);
 
             /*
-             * The uncached tier executes InvokeClosureOneTail.generic, whose
-             * D013 fallback resolves the exact caller and therefore publishes
-             * run's activation. Only the cached tier, where the direct
-             * specializations pass the compact argument array as the caller,
-             * is the GraalPy-equivalent physical path asserted here.
+             * Warm the shared arity dispatcher before checking the compact
+             * caller header. The call result must return directly, and the
+             * cached path must preserve the absence of caller publication.
              */
             for (int i = 0; i < 128
                     && root.getBytecodeNode().getTier() != BytecodeTier.CACHED; i++) {

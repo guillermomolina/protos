@@ -2498,37 +2498,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115: physical attribute assignment (GraalPy
-     * {@code PBytecodeDSLRootNode.SetAttribute.doInstanceValue}, SimpleLanguage
-     * {@code SLWritePropertyNode.writeSLObject}).
-     *
-     * Operand order follows GraalPy StoreVisitor: value, then receiver.
-     * The instruction returns void; expression-result preservation belongs
-     * to the lowerer, not to the physical attribute write.
-     *
-     * {@link #direct} is shared by every exact ordinary object with the
-     * cached {@code Shape}; that {@code Shape} must already hold the property,
-     * so the {@code PutNode} assigns an existing slot and never creates one.
-     *
-     * KNOWN I115 SEMANTIC DIVERGENCE: the direct path bypasses frozen-state
-     * admission and stores the value as received, until semantic
-     * reconciliation.
+     * Physical assignment to an existing local slot. The shape guard proves
+     * both property presence and mutation admission. Expression-result and
+     * evaluation-order preservation belong to the lowerer.
      */
     @Operation
     @ConstantOperand(type = String.class, name = "name")
     public static final class SetAttribute {
-        /*
-         * A frozen object rejects every assignment. Its state is not part of
-         * the shape, so the direct write admits only an unfrozen receiver; a
-         * frozen one takes the generic path, which signals the Error.
-         */
         @ForceQuickening
         @Specialization(
                 guards = {
                     "isOrdinaryObject(receiver)",
                     "cachedShape.check(receiver)",
                     "propertyPresent",
-                    "!receiver.isFrozen()"
+                    "isWritableShape(cachedShape)"
                 },
                 limit = "3")
         public static void direct(
@@ -2569,6 +2552,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static boolean hasProperty(Shape shape, String name) {
             return ProtosValueLookup.hasProperty(shape, name);
+        }
+
+        static boolean isWritableShape(Shape shape) {
+            return !ProtosObjectValue.isFrozenShape(shape);
         }
     }
 
