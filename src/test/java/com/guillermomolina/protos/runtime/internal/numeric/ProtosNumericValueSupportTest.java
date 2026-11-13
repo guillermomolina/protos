@@ -38,15 +38,14 @@ final class ProtosNumericValueSupportTest {
                 Long.valueOf(42L)));
 
         assertTrue(ProtosNumericValueSupport.isCurrentNumber(42L));
-        assertFalse(ProtosNumericValueSupport.isCurrentNumber(42.0));
+        // I115: a Java double is the canonical guest Float (GraalPy PyFloatCheckNode).
+        assertTrue(ProtosNumericValueSupport.isCurrentNumber(42.0));
         assertFalse(ProtosNumericValueSupport.isCurrentNumber(BigInteger.TEN));
         assertFalse(ProtosNumericValueSupport.isCurrentNumber(
                 new ProtosObjectValue(ProtosObjectValue.rootObject())));
 
         assertEquals(Long.valueOf(42L), ProtosNumericValueSupport.requireCurrentInteger(42L));
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> ProtosNumericValueSupport.currentFloatValue(42.0));
+        assertEquals(42.0, ProtosNumericValueSupport.currentFloatValue(42.0));
     }
 
     @Test
@@ -108,7 +107,9 @@ final class ProtosNumericValueSupportTest {
 
         assertSame(small, smallCopy);
         assertNotSame(large, largeCopy);
-        assertNotSame(negativeZero, floatCopy);
+        // A Float is an immutable value: a copy may share it, bit for bit.
+        assertEquals(Double.doubleToRawLongBits(negativeZero.value()),
+                Double.doubleToRawLongBits(floatCopy.value()));
 
         assertEquals(Long.MIN_VALUE, smallCopy.longValue());
         assertEquals(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(large), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(largeCopy));

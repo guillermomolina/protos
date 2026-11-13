@@ -33,14 +33,21 @@ final class ProtosI115Long4H7ArithmeticTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path OUTPUT = Path.of("target", "i115-long4");
 
+    /*
+     * I115: literal operands of the frozen standard Integer fold to their
+     * constant (no operation remains); operands held in locals keep the direct
+     * operation.
+     */
     @Test
     void subtractUsesDirectNumberSubtract() throws Exception {
-        check("subtract", "run: () => { 9 - 4 }\n", "c.NumberSubtract", 5L);
+        check("subtract-literal", "run: () => { 9 - 4 }\n", null, 5L);
+        check("subtract", "run: () => {\n a: 9\n b: 4\n a - b\n}\n", "c.NumberSubtract", 5L);
     }
 
     @Test
     void multiplyUsesDirectNumberMultiply() throws Exception {
-        check("multiply", "run: () => { 9 * 4 }\n", "c.NumberMultiply", 36L);
+        check("multiply-literal", "run: () => { 9 * 4 }\n", null, 36L);
+        check("multiply", "run: () => {\n a: 9\n b: 4\n a * b\n}\n", "c.NumberMultiply", 36L);
     }
 
     private static void check(String name, String source, String opcode, long expected)
@@ -63,7 +70,12 @@ final class ProtosI115Long4H7ArithmeticTest {
                         int quickened = op.indexOf('$');
                         return quickened < 0 ? op : op.substring(0, quickened);
                     }).toList();
-            assertTrue(operations.contains(opcode), operations.toString());
+            if (opcode == null) {
+                assertTrue(operations.stream().noneMatch(op -> op.startsWith("c.Number")),
+                        operations.toString());
+            } else {
+                assertTrue(operations.contains(opcode), operations.toString());
+            }
             assertFalse(operations.stream().anyMatch(op ->
                     op.contains("TryPrimitiveNumeric")
                             || op.contains("PrimitiveNumericSendMiss")

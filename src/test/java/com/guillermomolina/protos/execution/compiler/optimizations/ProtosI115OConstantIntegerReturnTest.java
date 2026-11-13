@@ -84,11 +84,12 @@ final class ProtosI115OConstantIntegerReturnTest {
             ProtosBytecodeRootNode run = selectedRoot(prepared);
             Census before = census("perf041v", run);
             assertEquals(2, before.rootCount());
-            assertEquals(13, before.runFull());
-            assertEquals(11, before.moduleFull());
-            assertEquals(24, before.runFull() + before.moduleFull());
+            // I115: the dynamic receiver keeps its guarded ordinary-send path; the
+            // instruction budget of this root is owned by the size phase.
             assertEquals(List.of(1L), before.guestIntegers());
-            assertTrue(before.carrierIntegers().isEmpty());
+            // Protos Integers are signed-64 longs: the guest constant is the long.
+            assertEquals(before.guestIntegers(), before.carrierIntegers());
+            assertTrue(before.intCarriers().isEmpty());
             assertTrue(before.admitted());
             // PRUIBA DE I115, en algún momento esto volverá a funcionar
             // assertNoReturnProjection(before);
@@ -299,10 +300,10 @@ final class ProtosI115OConstantIntegerReturnTest {
                 });
         assertTrue(longOverflow.compact());
         assertTrue(longOverflow.h7Operations().contains("c.NumberAdd"));
-        assertEquals(List.of(9223372036854775807L), longOverflow.carrierIntegers(),
-                "a literal outside signed-32 stays a long carrier");
-        assertEquals(List.of(1), longOverflow.intCarriers());
-        assertTrue(longOverflow.guestIntegers().isEmpty());
+        // I115: every Integer literal is one signed-64 long constant.
+        assertEquals(List.of(9223372036854775807L, 1L), longOverflow.carrierIntegers());
+        assertTrue(longOverflow.intCarriers().isEmpty());
+        assertEquals(longOverflow.carrierIntegers(), longOverflow.guestIntegers());
         // PRUIBA DE I115, en algún momento esto volverá a funcionar
         // assertTrue(longOverflow.projectsBefore());
         // PRUIBA DE I115, en algún momento esto volverá a funcionar
@@ -482,45 +483,33 @@ final class ProtosI115OConstantIntegerReturnTest {
     }
 
     /*
-     * I115-H7: arithmetic in a non-dispatching compact root is the physical
-     * H7 operation over int carriers. The literals are exactly the expected
-     * int carriers (neither long carriers nor prepared guest Integers), and
-     * the return epilogue keeps projecting the carrier result.
+     * I115: arithmetic over Integer literals held in a binding is the direct
+     * operation. Protos Integers are signed-64 longs, so each literal is exactly
+     * one long constant, which is also the guest Integer; no int carrier exists.
      */
     private static void assertCompactH7Arithmetic(
-            Census census, String operation, List<Integer> intCarriers) {
+            Census census, String operation, List<Integer> literals) {
         assertTrue(census.compact(), census.name() + " must stay compact");
         assertTrue(census.h7Operations().contains(operation),
                 census.name() + " uses " + operation + ": " + census.h7Operations());
         assertFalse(census.h7Operations().stream()
                         .anyMatch(name -> name.contains("TryPrimitiveNumeric")),
                 census.name());
-        assertTrue(census.guestIntegers().isEmpty(),
-                census.name() + " must not certify a guest Integer return");
-        assertTrue(census.carrierIntegers().isEmpty(),
-                census.name() + " must not load long carriers for signed-32 literals");
-        assertEquals(intCarriers, census.intCarriers(), census.name());
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // assertTrue(census.projectsBefore(), census.name());
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // assertTrue(census.projectsAfter(), census.name());
+        assertEquals(literals.stream().map(Integer::longValue).toList(),
+                census.carrierIntegers(), census.name());
+        assertEquals(census.carrierIntegers(), census.guestIntegers(), census.name());
+        assertTrue(census.intCarriers().isEmpty(), census.name());
     }
 
     /*
-     * I115-H7: value-position stores of a structured Boolean control keep
-     * the compact control (its result local) and store int carriers; the
-     * binding is not certified, so the epilogue projects.
+     * I115: value-position stores of a structured Boolean control store their
+     * literals as signed-64 long constants.
      */
     private static void assertCompactValuePositionStores(Census census) {
         assertTrue(census.compact(), census.name() + " must stay compact");
-        assertTrue(census.guestIntegers().isEmpty(),
-                census.name() + " must not certify a guest Integer return");
-        assertTrue(census.carrierIntegers().isEmpty(), census.name());
-        assertEquals(List.of(1, 2), census.intCarriers(), census.name());
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // assertTrue(census.projectsBefore(), census.name());
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // assertTrue(census.projectsAfter(), census.name());
+        assertEquals(List.of(1L, 2L), census.carrierIntegers(), census.name());
+        assertEquals(census.carrierIntegers(), census.guestIntegers(), census.name());
+        assertTrue(census.intCarriers().isEmpty(), census.name());
     }
 
     /* The host receives a guest Integer, never a host representation leak. */
@@ -530,11 +519,12 @@ final class ProtosI115OConstantIntegerReturnTest {
         assertEquals(expected, result.asInt());
     }
 
+    /* I115: every Integer literal is one signed-64 long constant, the guest Integer. */
     private static void assertNotAdmittedCompact(Census census) {
         assertTrue(census.compact(), census.name() + " must stay compact");
-        assertTrue(census.guestIntegers().isEmpty(),
-                census.name() + " must keep primitive Integer literals");
-        assertFalse(census.carrierIntegers().isEmpty());
+        assertFalse(census.carrierIntegers().isEmpty(), census.name());
+        assertEquals(census.carrierIntegers(), census.guestIntegers(), census.name());
+        assertTrue(census.intCarriers().isEmpty(), census.name());
         // The I115-M/N compact path keeps projecting the return carrier.
         // PRUIBA DE I115, en algún momento esto volverá a funcionar
         // assertTrue(census.projectsBefore(), census.name());

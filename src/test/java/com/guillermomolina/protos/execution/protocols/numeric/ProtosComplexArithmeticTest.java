@@ -28,7 +28,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosComplexArithmetic;
 import com.guillermomolina.protos.runtime.ProtosComplexArithmetic.Operation;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -135,7 +134,7 @@ final class ProtosComplexArithmeticTest {
         Object mixed = add(construct(flt(1.0), flt(-0.0)), integer(3));
         assertComplexBits(mixed, flt(4.0), -0.0);
         Object exactImaginary = add(construct(integer(1), fraction(1, 3)), flt(0.5));
-        assertInstanceOf(ProtosFloatValue.class, ProtosComplexNumericSupport.real(exactImaginary));
+        assertInstanceOf(Double.class, ProtosComplexNumericSupport.real(exactImaginary));
         assertTrue(ProtosIdentity.identical(
                 fraction(1, 3), ProtosComplexNumericSupport.imaginary(exactImaginary)));
 
@@ -642,8 +641,9 @@ final class ProtosComplexArithmeticTest {
                 integer(numerator), integer(denominator), prelude);
     }
 
-    private static ProtosFloatValue flt(double value) {
-        return new ProtosFloatValue(value);
+    /* I115: a Java double is the canonical guest Float (GraalPy PyFloatCheckNode). */
+    private static Object flt(double value) {
+        return Double.valueOf(value);
     }
 
     private static BigDecimal exact(double value) {
@@ -651,7 +651,7 @@ final class ProtosComplexArithmeticTest {
     }
 
     private static double floatOf(Object value) {
-        return assertInstanceOf(ProtosFloatValue.class, value).value();
+        return assertInstanceOf(Double.class, value).doubleValue();
     }
 
     private static double realOf(Object complex) {
@@ -685,8 +685,8 @@ final class ProtosComplexArithmeticTest {
     private static void assertComplexBits(Object value, Object real, double imaginary) {
         assertTrue(ProtosComplexNumericSupport.isComplex(value));
         Object actualReal = ProtosComplexNumericSupport.real(value);
-        if (real instanceof ProtosFloatValue floating) {
-            assertBits(floating.value(), floatOf(actualReal), "real");
+        if (real instanceof Double floating) {
+            assertBits(floating.doubleValue(), floatOf(actualReal), "real");
         } else {
             assertExactComponent(real, actualReal);
         }

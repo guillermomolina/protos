@@ -231,34 +231,30 @@ class ProtosStandardIntegerArithmeticTest {
             throws IOException {
         ProtosPrelude prelude = corePrelude();
 
-        ProtosFloatValue rounded = assertInstanceOf(
-                ProtosFloatValue.class,
+        Double rounded = assertInstanceOf(Double.class,
                 direct(prelude, "+",
                         Long.valueOf(9007199254740993L),
                         new ProtosFloatValue(-9007199254740992.0)));
-        assertEquals(0.0d, rounded.value());
+        assertEquals(0.0d, rounded.doubleValue());
 
-        ProtosFloatValue subtraction = assertInstanceOf(
-                ProtosFloatValue.class,
+        Double subtraction = assertInstanceOf(Double.class,
                 direct(prelude, "-",
                         Long.valueOf(7L),
                         new ProtosFloatValue(2.5)));
-        assertEquals(4.5d, subtraction.value());
+        assertEquals(4.5d, subtraction.doubleValue());
 
-        ProtosFloatValue divideByFloatZero = assertInstanceOf(
-                ProtosFloatValue.class,
+        Double divideByFloatZero = assertInstanceOf(Double.class,
                 direct(prelude, "/",
                         Long.valueOf(1L),
                         new ProtosFloatValue(0.0)));
-        assertEquals(Double.POSITIVE_INFINITY, divideByFloatZero.value());
+        assertEquals(Double.POSITIVE_INFINITY, divideByFloatZero.doubleValue());
 
         BigInteger huge = BigInteger.ONE.shiftLeft(1024);
-        ProtosFloatValue invalidProduct = assertInstanceOf(
-                ProtosFloatValue.class,
+        Double invalidProduct = assertInstanceOf(Double.class,
                 direct(prelude, "*",
                         com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude),
                         new ProtosFloatValue(0.0)));
-        assertTrue(Double.isNaN(invalidProduct.value()));
+        assertTrue(Double.isNaN(invalidProduct.doubleValue()));
 
         assertNull(direct(prelude, "div",
                 Long.valueOf(7L),

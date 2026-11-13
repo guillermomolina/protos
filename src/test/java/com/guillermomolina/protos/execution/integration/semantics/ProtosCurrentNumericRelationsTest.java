@@ -183,10 +183,9 @@ final class ProtosCurrentNumericRelationsTest {
 
     @Test
     void javaHostNumbersRemainOutsideGuestNumericDomain() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> ProtosCurrentNumericRelations.compare(
-                        Long.valueOf(1), Long.valueOf(1L)));
+        // I115: a signed-64 Long is the guest Integer itself, so it is compared.
+        assertEquals(ProtosStandardNumberOrderingProtocol.Comparison.EQUAL,
+                ProtosCurrentNumericRelations.compare(Long.valueOf(1), Long.valueOf(1L)));
 
         assertThrows(
                 IllegalArgumentException.class,

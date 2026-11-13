@@ -227,6 +227,8 @@ final class ProtosI101CComparisonBuilderOracleTest {
                     ProtosBytecodeRootNode root =
                             verifiedClosureRoot(module, program);
 
+                    // Taken before execution, which quickens instructions.
+                    List<String> signature = completeSignature(root);
                     Object value = invoke(
                             prelude, module, root, "family-invoke-" + index);
 
@@ -238,7 +240,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                     assertEquals(
                             testCase.expected()
                                     ? trueSignature : falseSignature,
-                            completeSignature(root),
+                            signature,
                             "Comparison was not physically folded: "
                                     + testCase.expression());
 
@@ -400,6 +402,8 @@ final class ProtosI101CComparisonBuilderOracleTest {
                     ProtosBytecodeRootNode actual =
                             verifiedClosureRoot(module, program);
 
+                    // Taken before execution, which quickens instructions.
+                    List<String> signature = completeSignature(actual);
                     Object result = invoke(
                             prelude,
                             module,
@@ -415,7 +419,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                     assertEquals(
                             testCase.expected()
                                     ? trueSignature : falseSignature,
-                            completeSignature(actual),
+                            signature,
                             "Nonminimal Bytecode DSL: "
                                     + testCase.expression());
 
@@ -531,7 +535,6 @@ final class ProtosI101CComparisonBuilderOracleTest {
                             builder.beginSource(source);
                             builder.beginSourceSection(bodyStart, bodyLength);
                             builder.beginRoot();
-                            builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
                             builder.beginSourceSection(statementStart, statement.length());
                             builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
@@ -544,7 +547,6 @@ final class ProtosI101CComparisonBuilderOracleTest {
                             builder.endSourceSection();
 
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();

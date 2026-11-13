@@ -289,7 +289,7 @@ final class ProtosMathModuleTest {
         assertBits(1.4142135623730951, floatOf(call(integer(2))), "sqrt(2) oracle");
         assertBits(Math.sqrt(2.0 / 3.0), floatOf(call(fraction(2, 3))), "sqrt(2/3)");
         // 4 is a square but 4/3 is not: a square numerator alone is not enough.
-        assertInstanceOf(ProtosFloatValue.class, call(fraction(4, 3)));
+        assertInstanceOf(Double.class, call(fraction(4, 3)));
         double big = floatOf(call(large(BigInteger.TWO.pow(1200).add(BigInteger.ONE))));
         assertBits(Math.scalb(1.0, 600), big, "sqrt(2^1200 + 1)");
     }
@@ -329,12 +329,10 @@ final class ProtosMathModuleTest {
     void exactComplexIrrationalCoordinatesAreBothFloats() {
         // |z| = 5 is rational, but (5 + 4) / 2 is not a square.
         Object rationalModulus = call(complex(integer(4), integer(3)));
-        assertInstanceOf(ProtosFloatValue.class, ProtosComplexNumericSupport.real(rationalModulus));
-        assertInstanceOf(
-                ProtosFloatValue.class, ProtosComplexNumericSupport.imaginary(rationalModulus));
+        assertInstanceOf(Double.class, ProtosComplexNumericSupport.real(rationalModulus));
+        assertInstanceOf(Double.class, ProtosComplexNumericSupport.imaginary(rationalModulus));
         Object irrationalModulus = call(complex(integer(1), integer(-1)));
-        assertInstanceOf(
-                ProtosFloatValue.class, ProtosComplexNumericSupport.real(irrationalModulus));
+        assertInstanceOf(Double.class, ProtosComplexNumericSupport.real(irrationalModulus));
         assertTrue(imaginaryOf(irrationalModulus) < 0.0);
     }
 
@@ -460,8 +458,9 @@ final class ProtosMathModuleTest {
                 large(numerator), large(denominator), prelude);
     }
 
-    private static ProtosFloatValue flt(double value) {
-        return new ProtosFloatValue(value);
+    /* I115: a Java double is the canonical guest Float (GraalPy PyFloatCheckNode). */
+    private static Object flt(double value) {
+        return Double.valueOf(value);
     }
 
     private static Object complex(Object real, Object imaginary) {
@@ -469,7 +468,7 @@ final class ProtosMathModuleTest {
     }
 
     private static double floatOf(Object value) {
-        return assertInstanceOf(ProtosFloatValue.class, value).value();
+        return assertInstanceOf(Double.class, value).doubleValue();
     }
 
     private static double realOf(Object complex) {
@@ -497,7 +496,8 @@ final class ProtosMathModuleTest {
     }
 
     private static void assertExactComponent(Object expected, Object actual) {
-        assertFalse(actual instanceof ProtosFloatValue, "expected an exact component");
+        assertFalse(actual instanceof Double || actual instanceof ProtosFloatValue,
+                "expected an exact component");
         assertTrue(ProtosIdentity.identical(expected, actual),
                 () -> "expected the exact canonical value");
     }

@@ -72,16 +72,62 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                 ProtosI101BArithmeticBuilderOracleTest::handwrittenLiteralAdd);
     }
 
+    /*
+     * I115: a '+' over locals is not propagated as a constant; it is one
+     * NumberAdd behind its guarded standard selection (D237), whose other path
+     * is the ordinary send. The folded handwritten program stays the physical
+     * lower bound of that site.
+     */
     @Test
     void localPlusLiteralMatchesMinimalFoldedTwoOracle() throws Exception {
-        compare(LOCAL_AND_LITERAL, "LOCAL_PLUS_LITERAL", 2L,
+        compareGuarded(LOCAL_AND_LITERAL, "LOCAL_PLUS_LITERAL", 2L,
                 ProtosI101BArithmeticBuilderOracleTest::handwrittenLocalPlusLiteral);
     }
 
     @Test
     void localPlusLocalMatchesMinimalFoldedThreeOracle() throws Exception {
-        compare(TWO_LOCALS, "LOCAL_PLUS_LOCAL", 3L,
+        compareGuarded(TWO_LOCALS, "LOCAL_PLUS_LOCAL", 3L,
                 ProtosI101BArithmeticBuilderOracleTest::handwrittenLocalPlusLocal);
+    }
+
+    private static void compareGuarded(
+            String program, String caseName, long resultValue,
+            Supplier<ProtosBytecodeRootNode> manual) throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                ProtosBytecodeRootNode module = parse(program, caseName);
+                List<ProtosBytecodeRootNode> realRoots = roots(module);
+                assertEquals(2, realRoots.size(), "module and ordinary Closure root");
+                ProtosBytecodeRootNode actual = realRoots.get(1);
+                List<String> emitted = completeSignature(actual);
+                List<String> lowerBound = completeSignature(manual.get());
+
+                for (String operation : List.of(
+                        "c.IsStandardAddSelection", "c.NumberAdd",
+                        "c.GetMethod", "c.CallUnaryMethod")) {
+                    assertEquals(1, emitted.stream()
+                                    .filter(entry -> entry.split(" ", 2)[0].equals(operation))
+                                    .count(),
+                            () -> operation + " in " + emitted);
+                }
+                assertTrue(lowerBound.size() < emitted.size(), "physical lower bound");
+
+                ProtosClosureValue closure = assertInstanceOf(
+                        ProtosClosureValue.class,
+                        module.getCallTarget().call(prelude.newModuleActivation()));
+                ProtosActivation invocation = prelude.newModuleActivation();
+                invocation.context().createLocalSlot("candidate", closure);
+                Object value = parse("candidate()", caseName + "-invoke")
+                        .getCallTarget().call(invocation);
+                assertEquals(Long.toString(resultValue),
+                        ProtosNumericValueSupport.integerDecimalText(value));
+            } finally {
+                context.leave();
+            }
+        }
     }
 
     @Test
@@ -205,7 +251,6 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                             builder.beginSource(source);
                             builder.beginSourceSection(bodyStart, bodyLength);
                             builder.beginRoot();
-                            builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
                             builder.beginSourceSection(statementStart, statement.length());
                             builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
@@ -218,7 +263,6 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                             builder.endSourceSection();
 
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -244,7 +288,6 @@ final class ProtosI101BArithmeticBuilderOracleTest {
 
                             BytecodeLocal x = builder.createLocal("x", null);
                             BytecodeLocal y = builder.createLocal("y", null);
-                            builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
 
                             builder.beginSourceSection(xStart, "x: 1".length());
@@ -278,7 +321,6 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                             builder.endSourceSection();
 
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -306,7 +348,6 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                             BytecodeLocal x = builder.createLocal("x", null);
                             BytecodeLocal y = builder.createLocal("y", null);
                             BytecodeLocal z = builder.createLocal("z", null);
-                            builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
 
                             builder.beginSourceSection(xStart, "x: 1".length());
@@ -350,7 +391,6 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                             builder.endSourceSection();
 
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();

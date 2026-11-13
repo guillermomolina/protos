@@ -296,11 +296,11 @@ final class ProtosFractionSemanticsTest {
     @Test
     void floatConversionRoundsTheWholeQuotientOnce() throws IOException {
         ProtosPrelude prelude = corePrelude();
-        ProtosFloatValue third = assertInstanceOf(ProtosFloatValue.class,
+        Double third = assertInstanceOf(Double.class,
                 ProtosStandardNumericConversionProtocol.convert(
                         ProtosStandardNumericConversionProtocol.FactoryKind.FLOAT,
                         divide(1, 3, prelude), prelude));
-        assertEquals(1.0 / 3.0, third.value());
+        assertEquals(1.0 / 3.0, third.doubleValue());
         assertNull(ProtosStandardNumericConversionProtocol.convert(
                 ProtosStandardNumericConversionProtocol.FactoryKind.INTEGER,
                 divide(1, 3, prelude), prelude));

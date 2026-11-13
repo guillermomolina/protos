@@ -420,7 +420,7 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
     void replacedReceiverMethodInvalidatesTheNumericSite() throws Exception {
         withCore(module -> {
             for (Map.Entry<String, Object[]> entry : Map.of(
-                    "+", new Object[] {3L},
+                    "+", new Object[] {9L},
                     "/", new Object[] {2L},
                     "<", new Object[] {ProtosBooleanValue.FALSE}).entrySet()) {
                 String selector = entry.getKey();
@@ -781,8 +781,10 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                 () -> "only " + expected + " expected in " + names);
     }
 
+    /* The source without comments: only code declares routes. */
     private static String activeSource(Path path) throws Exception {
-        return String.join("\n", Files.readString(path).lines()
+        String withoutBlocks = Files.readString(path).replaceAll("(?s)/\\*.*?\\*/", "");
+        return String.join("\n", withoutBlocks.lines()
                 .filter(line -> !line.stripLeading().startsWith("//"))
                 .toList());
     }

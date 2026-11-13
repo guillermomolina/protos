@@ -132,8 +132,11 @@ public final class ProtosTestExecutionSupport {
                             Source.newBuilder(ProtosLanguage.ID, source, sourceName)
                                     .mimeType(ProtosLanguage.MIME_TYPE)
                                     .build();
-                    CallTarget target =
-                            ProtosLanguageContext.current().parsePublic(exactSource);
+                    ProtosLanguageContext context = ProtosLanguageContext.current();
+                    // As every production root entry: the Context's numeric
+                    // constructor is the entered activation's Core.
+                    activation.prelude().ifPresent(context::bindNumericFactoryPreludeForRuntime);
+                    CallTarget target = context.parsePublic(exactSource);
                     return target.call(activation);
                 });
     }
