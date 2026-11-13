@@ -30,28 +30,14 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * I115-H7 EXPERIMENTAL, proxied as the {@code NumberAdd} operation (GraalPy
- * {@code PyNumberAddNode}): an ordinary {@code +} of the compact subset. The
- * primitive fast paths are inherited from {@link
- * ProtosExperimentalNumberAddFastPathsBase}; every other operand pair takes
- * the single generic route inside this node, never a MISS result.
- *
- * <p>I115 String addition (GraalPy {@code PyNumberAddNode} TruffleString
- * specialization): {@code doStrings} concatenates two semantic Strings with
- * the canonical {@link ProtosStringValue#concatenateForRuntime}. A Java
- * receiver type never proves that the standard String {@code +} is the
- * selected behavior, so this operation is emitted only behind the {@code
- * IsStandardAddSelection} admission, which observes the receiver's actual
- * selection; a receiver whose selected {@code +} is not standard is
- * dispatched by the lowering through {@code GetMethod}/{@code
- * CallUnaryMethod} and never reaches this node. Under that admission a
- * String receiver with a non-String operand reaches the generic route and
- * signals the standard String {@code +} Error.
+ * The guarded standard addition operation. Primitive specializations and
+ * exact overflow promotion share the same node with semantic String concatenation.
+ * Remaining standard operand domains use the existing numeric kernels.
  */
 @GenerateUncached
 @GenerateInline(false)
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
-abstract class ProtosExperimentalNumberAddNode extends ProtosExperimentalNumberAddFastPathsBase {
+abstract class ProtosNumberAddNode extends ProtosNumberAddFastPathsBase {
 
     @Specialization(replaces = "doLL")
     static Object doLLOvf(VirtualFrame frame, long left, long right, @Bind Node node) {

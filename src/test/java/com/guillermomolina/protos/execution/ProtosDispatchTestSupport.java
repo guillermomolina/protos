@@ -107,8 +107,6 @@ public final class ProtosDispatchTestSupport {
                 : caller instanceof Object[] arguments
                         ? ProtosFrameArguments.admittedCompactTask(arguments) : null;
         ProtosFrameArguments.bindOwnedReturnHome(closure, home, task);
-        // Preserve the existing low-level primitive-result test convention.
-        return home == ProtosReturnHome.unobservable()
-                ? ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime() : home;
+        return home;
     }
 }

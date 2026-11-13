@@ -262,7 +262,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                 "2",
                 "RichCompareLt",
                 "CanonicalControlCondition",
-                "IsStandardAddSelection",
+                "IsStandardNumericSelection",
                 "NumberAdd",
                 "branch.backward");
 
@@ -321,29 +321,29 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                         () -> "native control must not dispatch nilary messages: "
                                 + names);
 
-                boolean guardedAddition = names.stream().anyMatch(
-                        name -> name.contains("c.IsStandardAddSelection"));
+                long guardedNumericSites = names.stream()
+                        .filter(name -> name.contains("c.IsStandardNumericSelection"))
+                        .count();
 
-                if (guardedAddition) {
+                if (guardedNumericSites > 0) {
                     assertOrdered(
                             names,
-                            "c.IsStandardAddSelection",
+                            "c.IsStandardNumericSelection",
                             "c.GetMethod",
-                            "c.NumberAdd",
                             "c.CallUnaryMethod");
 
                     assertTrue(
                             names.stream()
                                     .filter(name -> name.contains("c.GetMethod"))
-                                    .count() == 1L,
-                            () -> "only guarded addition may select a method: "
+                                    .count() == guardedNumericSites,
+                            () -> "each guarded numeric site owns one method selection: "
                                     + names);
 
                     assertTrue(
                             names.stream()
                                     .filter(name -> name.contains("c.CallUnaryMethod"))
-                                    .count() == 1L,
-                            () -> "only guarded addition may dispatch a message: "
+                                    .count() == guardedNumericSites,
+                            () -> "each guarded numeric site owns one custom-dispatch branch: "
                                     + names);
                 } else {
                     assertFalse(

@@ -26,24 +26,16 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.frame.VirtualFrame;
 
 /**
- * The synchronous cold paths shared by the direct numeric operations
- * ({@code RichCompare*}, {@code NumberDivide}, {@code NumberAdd},
- * {@code NumberSubtract}, {@code NumberMultiply}).
- *
- * <p>An operand pair that no specialization handles performs the ordinary
- * send of the operator selector (D013): a receiver that selects a redefined
- * operator receives that method, and a standard receiver receives the
- * standard method, whose behavior covers every remaining operand pair. The
- * operation is synchronous, so a suspension of the selected method is
- * rejected with the standard Error.
+ * Domain-complete execution shared by guarded numeric operations. Selection is
+ * owned by the lowering; these helpers never send an operator message.
  */
-final class ProtosI115DirectNumericFallback {
-    private ProtosI115DirectNumericFallback() {}
+final class ProtosNumericOperationSupport {
+    private ProtosNumericOperationSupport() {}
 
     /**
      * The result of {@code relation} for any two operands, cold: the canonical
-     * Boolean of two real Numbers, otherwise the ordinary send of the
-     * relation's selector.
+     * Boolean of two real Numbers. An invalid standard operand domain signals
+     * the ordinary guest Error using the authentic caller.
      */
     static Object compare(ProtosBytecodeRootNode root, VirtualFrame frame,
             Object left, Object right, Relation relation) {
@@ -52,27 +44,39 @@ final class ProtosI115DirectNumericFallback {
                 ProtosNumericValueSupport.guestValue(right),
                 relation);
         if (result == null) {
-            return send(root, frame, left, selector(relation), right);
+            throw unsupported(root, frame);
         }
         return result;
     }
 
-    private static String selector(Relation relation) {
-        return switch (relation) {
-            case LESS -> "<";
-            case LESS_EQUAL -> "<=";
-            case GREATER -> ">";
-            case GREATER_EQUAL -> ">=";
-        };
-    }
-
-    /** The ordinary synchronous send {@code left.selector(right)} made by this frame. */
-    static Object send(ProtosBytecodeRootNode root, VirtualFrame frame,
+    /** Execute the admitted standard arithmetic operation without a method activation. */
+    static Object arithmetic(ProtosBytecodeRootNode root, VirtualFrame frame,
             Object left, String selector, Object right) {
-        root.requestCallerNeed(
-                ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
-        return ProtosFunctionCallDispatchers.sendOne(
-                root, ProtosFrameArguments.activation(frame), false, left, selector, right);
+        var prelude = ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+        Object result = null;
+        try {
+            if (ProtosNumericValueSupport.isCurrentInteger(left)) {
+                var operation = switch (selector) {
+                    case "+" -> ProtosStandardIntegerProtocol.CanonicalIntegerOperation.ADD;
+                    case "-" -> ProtosStandardIntegerProtocol.CanonicalIntegerOperation.SUBTRACT;
+                    case "*" -> ProtosStandardIntegerProtocol.CanonicalIntegerOperation.MULTIPLY;
+                    case "/" -> ProtosStandardIntegerProtocol.CanonicalIntegerOperation.EXACT_DIVIDE;
+                    case "div" -> ProtosStandardIntegerProtocol.CanonicalIntegerOperation.QUOTIENT;
+                    case "mod" -> ProtosStandardIntegerProtocol.CanonicalIntegerOperation.REMAINDER;
+                    default -> throw new IllegalArgumentException("not an arithmetic selector");
+                };
+                result = ProtosStandardIntegerProtocol.tryExecuteCanonicalOperationOne(
+                        operation, left, right, prelude);
+            } else if (ProtosNumericValueSupport.isCurrentFloat(left)) {
+                result = ProtosStandardFloatProtocol.tryExecuteCanonicalOperationOne(
+                        ProtosStandardFloatProtocol.CanonicalFloatOperation.forSelector(selector),
+                        left, right, prelude);
+            }
+        } catch (ArithmeticException invalidArithmetic) {
+            throw unsupported(root, frame);
+        }
+        if (result == null) throw unsupported(root, frame);
+        return result;
     }
 
     @TruffleBoundary

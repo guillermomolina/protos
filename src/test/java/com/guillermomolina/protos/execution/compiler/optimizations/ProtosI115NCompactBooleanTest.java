@@ -311,17 +311,9 @@ final class ProtosI115NCompactBooleanTest {
                 "A discarded ifTrue must not allocate a result local");
     }
 
-    /**
-     * I115-H1-FIX: one guarded site, both paths. An Integer receiver makes
-     * the comparison a HIT whose canonical Boolean runs the callback inline
-     * (no Closure, no published activation). A receiver whose redefined '<'
-     * returns a non-Boolean object makes the comparison and the control
-     * MISS: that object's own ifTrue is selected dynamically and receives
-     * the callback as a guest Closure, whose invocations mutate the compact
-     * binding the root then returns.
-     */
+    /** A comparison override must produce a canonical Boolean before control dispatch. */
     @Test
-    void redefinedComparisonDispatchesIfTrueToItsResult() throws Exception {
+    void redefinedComparisonRejectsNonBooleanBeforeControlDispatch() throws Exception {
         withCore(module -> {
             ProtosClosureValue run = closure(
                     "(gate) => { hits: 0\n(gate < 2).ifTrue() {\nhits = hits + 1\n}\nhits }",
@@ -345,7 +337,7 @@ final class ProtosI115NCompactBooleanTest {
             assertEquals("0", integerValue(enter(skipped)));
             assertSame(run, skipped.targetArguments()[0]);
 
-            // MISS: the redefined '<' answers an object with its own ifTrue.
+            // An invalid comparison result must fail before invoking that object's ifTrue.
             List<Object> comparedWith = new ArrayList<>();
             List<Object> callbacks = new ArrayList<>();
             ProtosObjectValue decision =
@@ -367,17 +359,39 @@ final class ProtosI115NCompactBooleanTest {
                         return decision;
                     }));
 
-            assertEquals("2", integerValue(enter(fastDirect(run, module, gate))),
-                    "each callback invocation updated the root's own binding");
+            assertThrows(com.guillermomolina.protos.runtime.ProtosSignalException.class,
+                    () -> ProtosDispatchTestSupport.enter(fastDirect(run, module, gate)));
             assertEquals(1, comparedWith.size());
             assertEquals("2", integerValue(comparedWith.get(0)));
-            assertEquals(1, callbacks.size(), "ifTrue received exactly its callback");
+            assertTrue(callbacks.isEmpty(), "invalid comparison result cannot receive ifTrue");
 
             // The site still takes the inline path for a canonical result.
             assertEquals("1", integerValue(
                     enter(fastDirect(run, module, Long.valueOf(0)))));
         });
-        System.out.println("I115_N_REDEFINED_COMPARISON_DISPATCH=PASS");
+        System.out.println("I115_N_REDEFINED_COMPARISON_RESULT_VALIDATION=PASS");
+    }
+
+    @Test
+    void dynamicControlOverrideInvokesTheCapturedCallbackTwiceAtTheSameSite() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue run = closure(
+                    "(gate) => { hits: 0\ngate.ifTrue() { hits = hits + 1 }\nhits }", module);
+            List<Object> callbacks = new ArrayList<>();
+            ProtosObjectValue gate = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            gate.createLocalSlot("ifTrue", ProtosClosureValue.nativeClosure((activation, supplied) -> {
+                callbacks.addAll(supplied);
+                ProtosClosureValue callback = assertInstanceOf(ProtosClosureValue.class, supplied.get(0));
+                ProtosClosureInvoker.invoke(callback, List.of(), activation);
+                ProtosClosureInvoker.invoke(callback, List.of(), activation);
+                return Long.valueOf(42);
+            }));
+            assertEquals("1", integerValue(enter(fastDirect(run, module, Boolean.TRUE))));
+            assertEquals("0", integerValue(enter(fastDirect(run, module, Boolean.FALSE))));
+            assertEquals("2", integerValue(enter(fastDirect(run, module, gate))));
+            assertEquals(1, callbacks.size());
+            assertEquals("1", integerValue(enter(fastDirect(run, module, Boolean.TRUE))));
+        });
     }
 
     @Test

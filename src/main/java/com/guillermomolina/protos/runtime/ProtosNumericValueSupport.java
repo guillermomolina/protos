@@ -54,7 +54,7 @@ public final class ProtosNumericValueSupport {
         return value instanceof ProtosLargeIntegerValue;
     }
 
-    /** GraalPy PyFloatCheckNode: a Double itself is a semantic Float. */
+    /** A Double itself is a semantic Float. */
     public static boolean isCurrentFloat(Object value) {
         return value instanceof Double || value instanceof ProtosFloatValue;
     }
@@ -361,15 +361,9 @@ public final class ProtosNumericValueSupport {
     }
 
     /**
-     * I091 internal primitive carriers: a raw {@code Long} (signed-64 Integer) or
-     * {@code Double} (binary64 Float) produced by guarded lowered numeric execution and
-     * retained in operand and compact frame storage.
-     *
-     * <p>Such a carrier is never a guest value. It is unambiguous inside guest frames because
-     * no host scalar reaches them unconverted: host executable arguments are admitted as
-     * Protos values, and every other foreign value is wrapped. Every frame observer that can
-     * expose a binding outside the lowered carrier chain materializes through {@link
-     * #guestValue}.
+     * Primitive numeric values retained by lowered operations and compact frames.
+     * Long and Double already represent semantic Integer and Float values; observing
+     * either value requires no activation, Context, ReturnHome or replacement object.
      */
     public static boolean isPrimitiveCarrier(Object value) {
         return value instanceof Long || value instanceof Double;
@@ -378,19 +372,12 @@ public final class ProtosNumericValueSupport {
     /** The guest value denoted by {@code value}; identity for every non-carrier. */
     public static Object guestValue(Object value) {
         /*
-         * A Java Integer is never an I115 carrier (the compact lane carries
+         * A Java Integer is never a guest-frame carrier (the compact lane carries
          * signed-64 longs); one supplied by an external host API is
          * normalized to the guest Integer, like any other Java integer.
          */
         if (value instanceof Integer small) {
             return Long.valueOf(small.longValue());
-        }
-        if (value instanceof Long small) {
-            return small;
-        }
-        // GraalPy: double is already a semantic Float, not a carrier to box.
-        if (value instanceof Double) {
-            return value;
         }
         return value;
     }

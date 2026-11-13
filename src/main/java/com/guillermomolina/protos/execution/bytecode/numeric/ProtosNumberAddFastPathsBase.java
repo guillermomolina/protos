@@ -19,11 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 
-// PRUIBA DE I115, en algún momento esto volverá a funcionar
-// Signed-64 semantic Integers use Long directly, not ProtosIntegerValue.
-
-// PRUIBA DE I115, en algún momento esto volverá a funcionar
-// import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.dsl.GenerateCached;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -31,27 +26,11 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * I115-H7 EXPERIMENTAL (GraalPy {@code PyNumberAddFastPathsBase}): the
- * primitive fast paths shared by {@code NumberAdd} and {@code
- * NumberInPlaceAdd}. Each subclass declares its own generic fallback.
- *
- * <ul>
- *   <li>{@code doLL}: {@code long + long} with {@link Math#addExact};
- *       rewritten on overflow into {@code doLLOvf} (declared by each
- *       subclass), which promotes to the exact large Integer.</li>
- *   <li>{@code double} specializations.</li>
- * </ul>
- *
- * <p>DIFFERENCE FROM GRAALPY: the signed-64 Integer representation is a
- * Java {@code long} and the Float representation a Java {@code double};
- * there is no 32-bit primitive integer level, hence no {@code doII}/{@code
- * doIIOvf} and no implicit {@code int -> long} type-system cast.
- *
- * <p>RECORDED DIVERGENCE: no Prelude numeric-protocol admission certificate
- * is consulted; the standard Integer/Float {@code +} is assumed.
+ * Primitive long and double addition. Signed-64 overflow promotes exactly;
+ * selection is guarded by the lowering before this operation executes.
  */
 @GenerateCached(false)
-abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
+abstract class ProtosNumberAddFastPathsBase extends Node {
 
     abstract Object execute(VirtualFrame frame, Object left, Object right);
 
@@ -93,10 +72,10 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
     /**
      * The single generic route of both operations: two semantic Integers
      * (any representation, long carriers included) are added exactly
-     * without promotion loss; any other pair performs the ordinary
-     * {@code +} send, which selects the standard behavior.
+     * without promotion loss. Other admitted standard operand domains use
+     * the existing numeric kernels without sending a message.
      *
-     * <p>NumberAdd is emitted only behind the {@code IsStandardAddSelection}
+     * <p>NumberAdd is emitted only behind the {@code IsStandardNumericSelection}
      * admission; a receiver with any other selected {@code +} is dispatched
      * by the lowering.
      */
@@ -108,12 +87,12 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
                 && ProtosNumericValueSupport.isCurrentInteger(argument)) {
             return ProtosNumberFactory.add(ProtosNumberFactory.prelude(node, frame), receiver, argument);
         }
-        return ProtosI115DirectNumericFallback.send(root, frame, left, "+", right);
+        return ProtosNumericOperationSupport.arithmetic(root, frame, left, "+", right);
     }
 
 
     /*
-     * I115-H7-R1: the Protos root executing this operation. In a proxied
+     * the Protos root executing this operation. In a proxied
      * node the default root bind is typed Node, so it is resolved from the
      * enclosing BytecodeNode.
      */

@@ -30,10 +30,10 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * I115: direct synchronous comparison for '>='. It never returns a
+ * direct synchronous comparison for '>='. It never returns a
  * continuation.
- * Operand pairs without a specialization take the ordinary operator send
- * ({@link ProtosI115DirectNumericFallback}).
+ * Remaining standard operand domains use {@link ProtosNumericOperationSupport};
+ * dynamic method selection remains in the lowering.
  */
 @GenerateUncached
 @GenerateInline(false)
@@ -56,7 +56,7 @@ abstract class ProtosRichCompareGeNode extends Node {
     static Object doGeneric(
             VirtualFrame frame, Object left, Object right,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
-        return ProtosI115DirectNumericFallback.compare(
+        return ProtosNumericOperationSupport.compare(
                 root, frame, left, right, Relation.GREATER_EQUAL);
     }
 

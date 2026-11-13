@@ -19,6 +19,8 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.callables.ProtosSuspensionCapableNativeClosureBody;
@@ -32,14 +34,14 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * I115 (GraalPy builtin function roots): the Truffle root of one native
+ * The Truffle root of one native
  * Closure body. Entered with the same B5 header as a source function:
  * Closure, receiver or function marker, methodHome, caller and ReturnHome,
  * then the supplied arguments. One CallTarget per body and Context, cached
  * by {@link ProtosLanguageContext#builtinCallTarget}.
  *
- * <p>The activation is materialized from the header only because a native
- * body consumes one. A suspension-capable body running under a Task, a
+ * <p>Standard Integer arithmetic consumes the B5 operands directly. Other native
+ * bodies materialize their activation only when their body requires one. A suspension-capable body running under a Task, a
  * deferred I/O operation or a suspendible host entry may return a
  * suspension leaf; the leaf is returned in a terminal transport so the
  * caller composes it as any pending callee result. A structured standard
@@ -71,6 +73,15 @@ final class ProtosBuiltinCallRootNode extends RootNode {
             closure = (ProtosClosureValue) arguments[1];
         } else {
             closure = ProtosFrameArguments.compactClosure(arguments);
+            if (!ProtosFrameArguments.isFunctionCall(arguments)
+                    && ProtosStandardIntegerProtocol.isCanonicalArithmetic(closure)) {
+                ProtosPrelude prelude = ProtosFrameArguments.admittedPreludeOrNull(arguments);
+                var operation = ProtosStandardIntegerProtocol.canonicalOperationForSelection(
+                        closure, ProtosFrameArguments.compactMethodHome(arguments), prelude);
+                if (operation != null) {
+                    return executeInteger(arguments, operation, prelude);
+                }
+            }
             try {
                 activation = ProtosFrameArguments.activation(arguments);
             } catch (RuntimeException | Error failure) {
@@ -111,6 +122,31 @@ final class ProtosBuiltinCallRootNode extends RootNode {
 
         closeOwnedHome(activation);
         return result;
+    }
+
+    /** A proven native numeric body needs only its B5 operands and owning Core. */
+    private static Object executeInteger(Object[] arguments,
+            ProtosStandardIntegerProtocol.CanonicalIntegerOperation operation,
+            ProtosPrelude prelude) {
+        Object result = null;
+        try {
+            if (ProtosFrameArguments.compactSuppliedArgumentCount(arguments) == 1) {
+                result = ProtosStandardIntegerProtocol.tryExecuteCanonicalOperationOne(
+                        operation, ProtosFrameArguments.currentReceiver(arguments),
+                        ProtosFrameArguments.compactSuppliedArgumentWithinCount(arguments, 0), prelude);
+            }
+            if (result == null) {
+                ProtosActivation caller = ProtosFrameArguments.compactCaller(arguments);
+                throw ProtosCoreErrors.signal(caller, ProtosCoreErrors.newError(caller));
+            }
+            return result;
+        } catch (ArithmeticException invalidArithmetic) {
+            ProtosActivation caller = ProtosFrameArguments.compactCaller(arguments);
+            throw ProtosCoreErrors.signal(caller, ProtosCoreErrors.newError(caller));
+        } finally {
+            ProtosReturnHome owned = ProtosFrameArguments.ownedReturnHomeOrNull(arguments);
+            if (owned != null) owned.closeOwned();
+        }
     }
 
     private Object executeBody(ProtosClosureValue closure, ProtosActivation activation) {

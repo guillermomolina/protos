@@ -91,7 +91,7 @@ final class ProtosPerf006B6A2MutatingCanonicalCoverageTest {
     }
 
     @Test
-    void mutationValidationPrecedesRhsEvaluation() throws Exception {
+    void bareSelectionPrecedesRhsButExplicitMutationFollowsIt() throws Exception {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
@@ -124,7 +124,8 @@ final class ProtosPerf006B6A2MutatingCanonicalCoverageTest {
                             module,
                             "badTarget().value = rhs()",
                             "b6a2-target-before-rhs.protos"));
-            assertEquals(0, rhsCalls.get());
+            // Explicit mutation validates the prepared receiver after its RHS.
+            assertEquals(1, rhsCalls.get());
         }
 
         System.out.println("PERF006_B6A2_MUTATION_PREVALIDATION_ORDER=PASS");
@@ -299,6 +300,72 @@ final class ProtosPerf006B6A2MutatingCanonicalCoverageTest {
         }
 
         System.out.println("PERF006_B6A2_MUTATING_DEFAULT_EXPRESSION=PASS");
+    }
+
+    @Test
+    void rhsCannotRedirectTheSelectedDestinationByShadowing() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActivation module = activation(prelude, new ProtosActorExecutionDomain());
+            ProtosObjectValue token = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosObjectValue shadow = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            java.util.concurrent.atomic.AtomicReference<ProtosObjectValue> inner =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            module.context().createLocalSlot("x", ProtosNullValue.INSTANCE);
+            module.context().createLocalSlot("rhs", nativeClosure((activation, supplied) -> {
+                ProtosObjectValue context = (ProtosObjectValue) supplied.get(0);
+                context.createLocalSlot("x", shadow);
+                inner.set(context);
+                return token;
+            }));
+            assertSame(token, executeBytecode(scope.language(), module,
+                    "run: () => { x = rhs(context) }\nrun()",
+                    "selected-write-shadow.protos"));
+            assertSame(token, module.context().readLocalSlot("x").orElseThrow());
+            assertSame(shadow, inner.get().readLocalSlot("x").orElseThrow());
+        }
+    }
+
+    @Test
+    void removedOrFrozenDestinationFailsAfterRhsWithoutSelectingAnotherOwner() throws Exception {
+        for (boolean freeze : new boolean[] {false, true}) {
+            try (LanguageScope scope = languageScope()) {
+                ProtosPrelude prelude = core();
+                ProtosActivation module = activation(prelude, new ProtosActorExecutionDomain());
+                ProtosObjectValue old = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                AtomicInteger effects = new AtomicInteger();
+                module.context().createLocalSlot("x", old);
+                module.context().createLocalSlot("rhs", nativeClosure((activation, supplied) -> {
+                    effects.incrementAndGet();
+                    if (freeze) module.context().freeze();
+                    else module.context().removeLocalSlot("x");
+                    return ProtosNullValue.INSTANCE;
+                }));
+                assertThrows(ProtosSignalException.class, () -> executeBytecode(
+                        scope.language(), module, "x = rhs()", "selected-write-invalidated.protos"));
+                assertEquals(1, effects.get());
+                if (freeze) assertSame(old, module.context().readLocalSlot("x").orElseThrow());
+                else assertTrue(module.context().readLocalSlot("x").isEmpty());
+            }
+        }
+    }
+
+    @Test
+    void removalAndRecreationRetainTheSelectedContextAndExactRhs() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActivation module = activation(prelude, new ProtosActorExecutionDomain());
+            ProtosObjectValue token = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            module.context().createLocalSlot("x", ProtosNullValue.INSTANCE);
+            module.context().createLocalSlot("rhs", nativeClosure((activation, supplied) -> {
+                module.context().removeLocalSlot("x");
+                module.context().createLocalSlot("x", ProtosNullValue.INSTANCE);
+                return token;
+            }));
+            assertSame(token, executeBytecode(scope.language(), module,
+                    "x = rhs()", "selected-write-recreated.protos"));
+            assertSame(token, module.context().readLocalSlot("x").orElseThrow());
+        }
     }
 
     private static ProtosClosureValue nativeClosure(

@@ -202,9 +202,11 @@ final class ProtosFunctionCallDispatchers {
                 @Cached BuiltinMethodCachedCallNode cachedCall) {
             return cachedCall.execute(
                     frame, inliningTarget, terminal, callable, arguments,
-                    frame == null
+                    frame == null || callerReference instanceof ProtosActivation
                             ? callerReference
-                            : ProtosFrameArguments.activation(frame),
+                            : ProtosStandardIntegerProtocol.isCanonicalArithmetic(callable)
+                                    ? ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments())
+                                    : ProtosFrameArguments.activation(frame),
                     currentContext(inliningTarget));
         }
 
@@ -285,7 +287,7 @@ final class ProtosFunctionCallDispatchers {
     }
 
     /**
-     * D237 / I115: cold name-bearing entry to the shared dispatcher.
+     * D237 / cold name-bearing entry to the shared dispatcher.
      *
      * The caller's source expressions and spreads have already been
      * evaluated. Selection uses the actual callable, then association
@@ -457,7 +459,7 @@ final class ProtosFunctionCallDispatchers {
             activation.inheritDynamicControlState(caller);
         }
 
-        // The same Context-local source CallTarget used by I115,
+        // The same Context-local source CallTarget used by ,
         // entered with an already published exact activation.
         return callPublishedUncached(selected, activation);
     }
@@ -584,7 +586,7 @@ final class ProtosFunctionCallDispatchers {
                         ReturnHomeMode cachedHomeMode,
                 @Cached FunctionDirectInvokeNode invoke) {
             /*
-             * I115-A: the mode is a per-entry constant of this identity PIC,
+             * the mode is a per-entry constant of this identity PIC,
              * so partial evaluation keeps exactly one of the three routes.
              */
             if (cachedHomeMode == ReturnHomeMode.UNOBSERVABLE) {
@@ -614,7 +616,7 @@ final class ProtosFunctionCallDispatchers {
          * general resolver; a plan from another language/Context must not be
          * entered by this direct node. No rematerialization runs in a guard.
          *
-         * I115-A: Closures sharing this target may capture different homes,
+         * Closures sharing this target may capture different homes,
          * so no ReturnHome mode is cached here; the general invocation
          * selects the home per call.
          */
@@ -853,7 +855,7 @@ final class ProtosFunctionCallDispatchers {
     }
 
     /**
-     * I115: select only the caller state requested by the effective
+     * select only the caller state requested by the effective
      * callee root. The ordinary source-call case transports null.
      *
      * NEEDS_CALLER_PRELUDE transports a Prelude; NEEDS_EXACT_ACTIVATION
@@ -896,6 +898,10 @@ final class ProtosFunctionCallDispatchers {
     /** Select from the actual executable, never a cached Closure's plan. */
     private static ProtosReturnHome invocationHome(
             ProtosClosureValue closure, ProtosBytecodeRootNode effectiveRoot) {
+        if (closure.capturedReturnHomeOrNullForRuntime() == null
+                && ProtosStandardIntegerProtocol.isCanonicalArithmetic(closure)) {
+            return ProtosReturnHome.unobservable();
+        }
         return closure.invocationReturnHomeUnderTemplateProofForRuntime(
                 !closure.hasNativeBody()
                         && effectiveRoot != null
@@ -903,7 +909,7 @@ final class ProtosFunctionCallDispatchers {
     }
 
     /**
-     * I115-A: how the identity PIC entry of one exact Closure and its
+     * how the identity PIC entry of one exact Closure and its
      * effective callee root treats the invocation's ReturnHome. Only stable
      * data decides it: the Closure's final captured home and the proof the
      * lowering recorded once on the effective root. It is never derived from
@@ -919,7 +925,7 @@ final class ProtosFunctionCallDispatchers {
     }
 
     /**
-     * I115-A: pure classification, the same precedence as {@link
+     * pure classification, the same precedence as {@link
      * #invocationHome}: a captured canonical marker, then any other captured
      * home (exact identity retained), then the effective root's proof. It
      * never creates a home, prepares a plan or consults a Context; {@code
@@ -934,6 +940,9 @@ final class ProtosFunctionCallDispatchers {
         if (captured != null) {
             return ReturnHomeMode.CAPTURED;
         }
+        if (ProtosStandardIntegerProtocol.isCanonicalArithmetic(closure)) {
+            return ReturnHomeMode.UNOBSERVABLE;
+        }
         if (!closure.hasNativeBody()
                 && closure.definition() != null
                 && effectiveRoot != null
@@ -944,7 +953,7 @@ final class ProtosFunctionCallDispatchers {
     }
 
     /**
-     * I115-A UNOBSERVABLE route: no physical home exists, so nothing is bound,
+     * UNOBSERVABLE route: no physical home exists, so nothing is bound,
      * closed or consumed here and no non-local return handler is installed;
      * transfers crossing the CallTarget propagate unchanged. The Task is still
      * inherited, and a Task-free invocation may still suspend and is sealed.
@@ -965,7 +974,7 @@ final class ProtosFunctionCallDispatchers {
     }
 
     /**
-     * I115-A CAPTURED route: B5[4] carries the exact captured home. Its owner
+     * CAPTURED route: B5[4] carries the exact captured home. Its owner
      * invocation binds its Task and closes it; a return targeting it is
      * consumed only by that owner, after PLAT070 unwinds intermediate ensure
      * regions, so this boundary neither binds, closes nor catches anything.
@@ -1025,7 +1034,7 @@ final class ProtosFunctionCallDispatchers {
     }
 
     /**
-     * I115: a suspended outcome leaves this boundary with the callee's B5
+     * a suspended outcome leaves this boundary with the callee's B5
      * header retained by the pending continuation. The caller frame is still
      * live here, so its exact provenance is sealed into the callee's B5[3]
      * before the pending outcome is returned. Ordinary results and

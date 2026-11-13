@@ -28,7 +28,7 @@ import com.oracle.truffle.api.frame.FrameInstanceVisitor;
 import com.oracle.truffle.api.nodes.RootNode;
 
 /**
- * I115: GraalPy ReadFrameNode-style cold caller recovery.
+ * ReadFrameNode-style cold caller recovery.
  *
  * The ordinary dispatcher leaves the caller slot empty until the
  * effective callee requests it. On first demand, a Truffle stack walk
@@ -110,16 +110,12 @@ final class ProtosReadCallerFrameNode {
                                         semantic
                                         && semantic.isSemanticActivationRoot()) {
                                     calleeRoot = semantic;
-                                } else {
+                                } else if (!(root instanceof ProtosBuiltinCallRootNode)) {
                                     // Resumed continuation: outer frames are
                                     // its resumer, never its caller.
                                     return RESUMED_CALLEE;
                                 }
                             }
-                            return null;
-                        }
-
-                        if (calleeRoot == null) {
                             return null;
                         }
 
@@ -164,11 +160,11 @@ final class ProtosReadCallerFrameNode {
                 ProtosFrameArguments.activation(located.frame());
 
         /*
-         * GraalPy PRootNode.updateCallerFlags / ReadFrameNode:
+         * PRootNode.updateCallerFlags / ReadFrameNode:
          * register the missing caller dependency and invalidate
          * incoming direct-call assumptions for subsequent calls.
          */
-        if (registerCallerDemand) {
+        if (registerCallerDemand && located.calleeRoot() != null) {
             located.calleeRoot().requestCallerNeed(
                     ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
         }

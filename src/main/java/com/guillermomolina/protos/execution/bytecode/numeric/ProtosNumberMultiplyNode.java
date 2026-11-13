@@ -27,12 +27,14 @@ import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
-/** I115-LONG-4: direct GraalPy-shaped NumberMultiply with in-node fallback. */
+/**
+ * The guarded standard multiplication operation with exact overflow promotion.
+ */
 @GenerateUncached
 @GenerateInline(false)
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
-abstract class ProtosExperimentalNumberMultiplyNode
-        extends ProtosExperimentalNumberMultiplyFastPathsBase {
+abstract class ProtosNumberMultiplyNode
+        extends ProtosNumberMultiplyFastPathsBase {
 
     @Specialization(replaces = "doLL")
     static Object doLLOvf(VirtualFrame frame, long left, long right, @Bind Node node) {

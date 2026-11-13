@@ -25,53 +25,52 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * I115-LONG-4: GraalPy PyNumberSubtractFastPathsBase form without a 32-bit Integer
- * layer. There are no Protos numeric admission certificates or carrier flags.
- * On overflow the result is promoted to the exact large Integer, cold.
+ * Primitive long and double multiplication, with exact promotion on signed-64
+ * overflow. Only an admitted standard selection reaches these specializations.
  */
 @GenerateCached(false)
-abstract class ProtosExperimentalNumberSubtractFastPathsBase extends Node {
+abstract class ProtosNumberMultiplyFastPathsBase extends Node {
 
     abstract Object execute(VirtualFrame frame, Object left, Object right);
 
     @Specialization(rewriteOn = ArithmeticException.class)
     static long doLL(long left, long right) {
-        return Math.subtractExact(left, right);
+        return Math.multiplyExact(left, right);
     }
 
     @Specialization
     static double doDD(double left, double right) {
-        return left - right;
+        return left * right;
     }
 
     @Specialization
     static double doDL(double left, long right) {
-        return left - right;
+        return left * right;
     }
 
     @Specialization
     static double doLD(long left, double right) {
-        return left - right;
+        return left * right;
     }
 
-    static Object subtractOrPromote(VirtualFrame frame, Node node, long left, long right) {
-        long result = left - right;
-        if (((left ^ right) & (left ^ result)) < 0L) {
-            return ProtosNumberFactory.subtract(ProtosNumberFactory.prelude(node, frame), left, right);
+    static Object multiplyOrPromote(VirtualFrame frame, Node node, long left, long right) {
+        long result = left * right;
+        if (((Math.abs(left) | Math.abs(right)) >>> 31) != 0 && ((right != 0L && result / right != left) || (left == Long.MIN_VALUE && right == -1L))) {
+            return ProtosNumberFactory.multiply(ProtosNumberFactory.prelude(node, frame), left, right);
         }
         return result;
     }
 
-    /** The generic result: exact Integer arithmetic, else the ordinary operator send. */
-    static Object genericSubtract(ProtosBytecodeRootNode root, VirtualFrame frame,
+    /** Complete the admitted standard operand domains using exact numeric kernels. */
+    static Object genericMultiply(ProtosBytecodeRootNode root, VirtualFrame frame,
             Node node, Object left, Object right) {
         Object receiver = ProtosNumericValueSupport.guestValue(left);
         Object argument = ProtosNumericValueSupport.guestValue(right);
         if (ProtosNumericValueSupport.isCurrentInteger(receiver)
                 && ProtosNumericValueSupport.isCurrentInteger(argument)) {
-            return ProtosNumberFactory.subtract(ProtosNumberFactory.prelude(node, frame), receiver, argument);
+            return ProtosNumberFactory.multiply(ProtosNumberFactory.prelude(node, frame), receiver, argument);
         }
-        return ProtosI115DirectNumericFallback.send(root, frame, left, "-", right);
+        return ProtosNumericOperationSupport.arithmetic(root, frame, left, "*", right);
     }
 
 

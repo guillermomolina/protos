@@ -264,6 +264,21 @@ public final class ProtosStandardIntegerProtocol {
         return standard.operation;
     }
 
+    /** Stable proof that this exact installed native body cannot observe a return home. */
+    static boolean isCanonicalArithmetic(ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) instanceof StandardIntegerBody standard
+                && standard.owner == closure;
+    }
+
+    /** Classifies an already selected method without performing another lookup. */
+    static CanonicalIntegerOperation canonicalOperationForSelection(
+            ProtosClosureValue closure, ProtosObjectValue home, ProtosPrelude prelude) {
+        if (!(closure.nativeBody().orElse(null) instanceof StandardIntegerBody standard)) {
+            return null;
+        }
+        return canonicalOperationForSelection(closure, home, standard.operation.selector(), prelude);
+    }
+
     /**
      * Executes only a proven canonical operation whose current operands already
      * satisfy the standard native body's successful domain. Null means that the
@@ -305,7 +320,16 @@ public final class ProtosStandardIntegerProtocol {
             return null;
         }
 
-        // GraalPy: Double is a Float value, not merely a numeric carrier.
+        if (prelude != null && operation != CanonicalIntegerOperation.QUOTIENT
+                && operation != CanonicalIntegerOperation.REMAINDER) {
+            if (ProtosNumericValueSupport.isFraction(supplied0)) {
+                return executeWithFraction(operation, receiver, supplied0, prelude);
+            }
+            if (ProtosComplexNumericSupport.isComplex(supplied0)) {
+                return executeWithComplex(operation, receiver, supplied0, prelude);
+            }
+        }
+
         if (ProtosNumericValueSupport.isCurrentFloat(supplied0)) {
             return switch (operation) {
                 case ADD, SUBTRACT, MULTIPLY, EXACT_DIVIDE ->
@@ -335,12 +359,6 @@ public final class ProtosStandardIntegerProtocol {
         }
         ProtosPrelude prelude = activation.prelude().orElseThrow(
                 () -> new IllegalStateException("Integer arithmetic requires Core prelude"));
-        if (ProtosNumericValueSupport.isFraction(supplied.get(0))) {
-            return executeWithFraction(operation, receiver, supplied.get(0), activation);
-        }
-        if (ProtosComplexNumericSupport.isComplex(supplied.get(0))) {
-            return executeWithComplex(operation, receiver, supplied.get(0), activation, prelude);
-        }
         Object result = tryExecuteCanonicalOperationOne(
                 operation, receiver, supplied.get(0), prelude);
         if (result == null) {
@@ -360,9 +378,7 @@ public final class ProtosStandardIntegerProtocol {
             CanonicalIntegerOperation operation,
             Object integer,
             Object fraction,
-            ProtosActivation activation) {
-        ProtosPrelude prelude = activation.prelude().orElseThrow(
-                () -> new IllegalStateException("Integer arithmetic requires Core prelude"));
+            ProtosPrelude prelude) {
         Object n = ProtosNumericValueSupport.fractionNumerator(fraction);
         Object d = ProtosNumericValueSupport.fractionDenominator(fraction);
         Object scaled = ProtosNumericValueSupport.multiplyIntegers(integer, d, prelude);
@@ -376,7 +392,7 @@ public final class ProtosStandardIntegerProtocol {
             // n is never zero: a canonical Fraction is nonzero.
             case EXACT_DIVIDE -> ProtosNumericValueSupport.normalizeExactRational(scaled, n, prelude);
             case QUOTIENT, REMAINDER ->
-                    throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+                    throw new IllegalArgumentException("Integer-only operation requires an Integer operand");
         };
     }
 
@@ -388,7 +404,6 @@ public final class ProtosStandardIntegerProtocol {
             CanonicalIntegerOperation operation,
             Object integer,
             Object complex,
-            ProtosActivation activation,
             ProtosPrelude prelude) {
         ProtosComplexArithmetic.Operation complexOperation = switch (operation) {
             case ADD -> ProtosComplexArithmetic.Operation.ADD;
@@ -396,7 +411,7 @@ public final class ProtosStandardIntegerProtocol {
             case MULTIPLY -> ProtosComplexArithmetic.Operation.MULTIPLY;
             case EXACT_DIVIDE -> ProtosComplexArithmetic.Operation.DIVIDE;
             case QUOTIENT, REMAINDER ->
-                    throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+                    throw new IllegalArgumentException("Integer-only operation requires an Integer operand");
         };
         return ProtosComplexArithmetic.binary(complexOperation, integer, complex, prelude);
     }

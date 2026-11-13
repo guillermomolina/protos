@@ -1,7 +1,20 @@
 /*
  * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
  */
+
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -52,11 +65,8 @@ final class ProtosPerf006B6BFinalConformanceArchitectureTest {
         // PLAT054-3: public parse still compiles only Bytecode; the host Context.eval entry wraps
         // that exact target, and runtime parsing unwraps it back to the Bytecode root.
         String languageContext = readMain("execution/host/embedding/ProtosLanguageContext.java");
-        assertTrue(
-                language.contains(
-                        "new ProtosHostEvalRootNode(\n"
-                                + "                        this, sourceCompiler.compileBytecode("
-                                + "request.getSource(), this))"));
+        assertTrue(language.replaceAll("\\s+", " ").contains(
+                "new ProtosHostEvalRootNode( this, sourceCompiler.compileBytecode(request.getSource(), this))"));
         assertTrue(languageContext.contains("return hostEntry.bytecodeTarget();"));
         assertTrue(
                 rootTask.contains(
@@ -70,23 +80,18 @@ final class ProtosPerf006B6BFinalConformanceArchitectureTest {
         String closureInvoker = readMain("execution/bytecode/activation/ProtosClosureInvoker.java");
         String invocation = readMain("execution/bytecode/activation/ProtosInvocation.java");
 
-        assertTrue(closureInvoker.contains("prepareTaskOwnedDirectClosureIfBytecode("));
-        assertTrue(closureInvoker.contains("ProtosBytecodeTaskExecution.executePreparedClosure("));
-        assertTrue(closureInvoker.contains("prepareTaskOwnedDirectNativeForCPrime("));
-        assertTrue(closureInvoker.contains("ProtosTaskCPrimeEntryExecution.execute("));
-        assertTrue(
-                closureInvoker.contains(
-                        "synchronous Closure invocation cannot execute inside a Task; use C-prime"));
+        assertTrue(closureInvoker.contains("ProtosCallRequest.taskEntry("));
+        assertTrue(closureInvoker.contains("ProtosBytecodeTaskExecution.executeRequest("));
+        assertTrue(closureInvoker.contains("ProtosFunctionCallDispatchers.callFunctionUncached("));
+        assertTrue(closureInvoker.contains("requireOutsideTask(caller, \"synchronous Closure invocation\")"));
+        assertTrue(closureInvoker.contains("cannot execute inside a Task; use C-prime"));
 
-        assertTrue(invocation.contains("prepareTaskOwnedSelectedCallIfBytecode("));
-        assertTrue(invocation.contains("prepareTaskOwnedSelectedNativeForCPrime("));
-        assertTrue(invocation.contains("ProtosBytecodeTaskExecution.executePreparedClosure("));
-        assertTrue(invocation.contains("ProtosTaskCPrimeEntryExecution.execute("));
-        assertTrue(
-                invocation.contains("return ProtosClosureInvoker.invokeImmediateMethod("));
-        assertTrue(
-                closureInvoker.contains(
-                        "synchronous method invocation cannot execute inside a Task; use C-prime"));
+        assertTrue(invocation.contains("ProtosCallRequest.taskEntry("));
+        assertTrue(invocation.contains("ProtosBytecodeTaskExecution.executeRequest("));
+        assertTrue(invocation.contains("new ProtosBoundMethod(closure, receiver, selected.home())"));
+        assertTrue(invocation.contains("return ProtosClosureInvoker.invokeImmediateMethod("));
+        assertTrue(closureInvoker.contains("requireOutsideTask(caller, \"synchronous method invocation\")"));
+
     }
 
     @Test
@@ -97,13 +102,17 @@ final class ProtosPerf006B6BFinalConformanceArchitectureTest {
 
         assertTrue(objectProtocol.contains("isStandardCallImplementation("));
         assertTrue(objectProtocol.contains("isCanonicalStandardCallSelection("));
-        assertTrue(bytecodeRoot.contains("structuredObjectCall"));
+        assertTrue(bytecodeRoot.contains("prepareStructuredObjectCall"));
         assertTrue(
                 bytecodeRoot.contains(
                         "prepared Closure call has no PLAT032 Object.call capability"));
-        assertTrue(
-                bytecodeRoot.contains(
-                        "structured control native must execute through Bytecode control operations"));
+        assertTrue(bytecodeRoot.contains("ProtosCallRequest.selectedBody("));
+        String builtin = readMain("execution/bytecode/activation/ProtosBuiltinCallRootNode.java");
+        assertTrue(builtin.contains("StructuredNativeInvocation.forBodyOrNull("));
+        assertTrue(builtin.contains("structuredDispatchTargetForEnteredContext()"));
+        String structured = readMain("execution/bytecode/lowering/ProtosStructuredDispatchLowerer.java");
+        assertTrue(structured.contains("structuredBooleanChild"));
+        assertTrue(structured.contains("emitCallRequest"));
     }
 
     @Test

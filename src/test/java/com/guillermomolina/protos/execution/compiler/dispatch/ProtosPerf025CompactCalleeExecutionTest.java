@@ -284,7 +284,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertEquals(1, countOf(plusNames, "NumberAdd"));
             // The only selection is the guarded '+' message fallback (D237:
             // after the operand), entered for a non-standard receiver.
-            assertEquals(countOf(plusNames, "IsStandardAddSelection"),
+            assertEquals(countOf(plusNames, "IsStandardNumericSelection"),
                     countOf(plusNames, "GetMethod"));
             assertNone(plusNames, "IsResultKind");
             assertNoRetired(plusNames);
@@ -310,7 +310,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertEquals(1, countOf(plusNames, "NumberAdd"));
             // The only selection is the guarded '+' message fallback (D237:
             // after the operand), entered for a non-standard receiver.
-            assertEquals(countOf(plusNames, "IsStandardAddSelection"),
+            assertEquals(countOf(plusNames, "IsStandardNumericSelection"),
                     countOf(plusNames, "GetMethod"));
             assertNoRetired(plusNames);
             assertEquals("18", integerValue(enter(fastDirect(plus, module, value))));
@@ -618,10 +618,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertEquals(
                     // I112: every semantic root has the EnterRoot prologue and
                     // the EpilogForReturn epilogue.
-                    List.of("c.EnterRoot", "load.constant", "store.local", "load.local",
-                            "c.EpilogForReturn", "return"),
+                    List.of("c.EnterRoot", "load.constant", "c.CreateLexicalLocal",
+                            "store.local", "load.local", "c.EpilogForReturn", "return"),
                     instructions,
-                    "NORMAL must emit only the proven local Builder");
+                    "scalar creation checks Context state and retains frame-local storage");
             assertNone(instructions, "CurrentActivation");
             assertNone(instructions, RETIRED_ARCHITECTURE);
 
@@ -677,12 +677,12 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertEquals(
                     List.of(
                             "c.EnterRoot",
-                            "load.constant", "store.local",
-                            "load.constant", "store.local",
+                            "load.constant", "c.CreateLexicalLocal", "store.local",
+                            "load.constant", "c.CreateLexicalLocal", "store.local",
                             "load.local",
                             "c.EpilogForReturn", "return"),
                     instructions,
-                    "NORMAL emits the minimal two-binding Builder");
+                    "each scalar creation checks Context state before storing its binding");
             assertNone(instructions, "CurrentActivation");
             assertNone(instructions, RETIRED_ARCHITECTURE);
 
@@ -841,7 +841,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 assertEquals(1, countOf(instructions, "return"));
                 // I112: plus the EnterRoot prologue and EpilogForReturn epilogue.
                 assertEquals(
-                        body.created().size() * 2 + 4,
+                        body.created().size() * 3 + 4,
                         instructions.size(),
                         () -> body.characters() + ": " + instructions);
                 List<Object> locals = localNames(scalar);
@@ -881,8 +881,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     }
 
     @Test
-    void perf034eMaterializedEntryFabricatesNoEliminatedBinding() throws Exception {
-        // PLAT067-B: proven scalar bindings live only in Bytecode locals.
+    void perf034eMaterializedEntryExposesFrameBindings() throws Exception {
+        // Published Contexts project the same live Bytecode locals.
         withCoreAndDebugger(module -> {
             for (ScalarBody body : PERF034E_SCALAR_BODIES) {
                 ProtosClosureValue scalar = closure(body.characters(), module);
@@ -908,9 +908,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     assertSame(observed, published.context());
                     for (String name : body.created()) {
                         assertTrue(
-                                observed.readLocalSlot(name).isEmpty(),
-                                () -> body.characters()
-                                        + ": no eliminated binding " + name + " is fabricated");
+                                observed.readLocalSlot(name).isPresent(),
+                                () -> body.characters() + ": published binding " + name);
                     }
                 }
             }
@@ -1003,7 +1002,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
              * I115: two Integer literals select the standard '+' of the frozen
              * standard Integer, so the literal sum folds to its constant. The
              * local operands keep one NumberAdd behind its guarded standard
-             * selection (D237: IsStandardAddSelection after both operands), whose
+             * selection (D237: IsStandardNumericSelection after both operands), whose
              * other path is the ordinary send.
              */
             for (ProtosClosureValue candidate : List.of(direct, locals, aliases)) {
@@ -1016,7 +1015,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 List<String> names = instructionNames(candidate);
                 int sites = candidate == direct ? 0 : 1;
                 assertEquals(sites, countOf(names, "NumberAdd"), names.toString());
-                assertEquals(sites, countOf(names, "IsStandardAddSelection"), names.toString());
+                assertEquals(sites, countOf(names, "IsStandardNumericSelection"), names.toString());
                 assertNone(names, "ExperimentalInteger");
                 assertNone(names, RETIRED_ARCHITECTURE);
             }
@@ -1707,15 +1706,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         });
     }
 
-    /**
-     * I115-M frame-native entry with an already published activation.
-     *
-     * <p>EXPERIMENTAL D179 DIVERGENCE (I115 W11, accepted by the owner): a
-     * compact assignment body keeps every binding in Bytecode locals even when
-     * its Context already exists, so that Context receives no binding. The
-     * guest result, the activation identity and a fresh Context per invocation
-     * are preserved; the Context is not mutated by the execution.
-     */
+    /** A published Context projects updates from its authoritative frame storage. */
     @Test
     void perf036aObservedActivationUpdatesAuthoritativeBinding() throws Exception {
         withCore(module -> {
@@ -1730,16 +1721,14 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     ProtosActivation published =
                             ProtosFrameArguments.activation(arguments);
                     ProtosObjectValue observed = published.context();
-                    java.util.Map<String, Object> before = observed.localSlotsSnapshot();
                     assertEquals(Long.toString(body.expected()), integerValue(target(scalar).call(arguments)), body.characters());
                     assertSame(published, arguments[0]);
                     assertSame(observed, published.context());
-                    assertEquals(before, observed.localSlotsSnapshot(),
-                            () -> body.characters() + ": the execution does not mutate the Context");
-                    for (String name : List.of("first", "second")) {
-                        assertTrue(observed.readLocalSlot(name).isEmpty(),
-                                () -> body.characters() + ": no binding " + name
-                                        + " is fabricated (experimental D179 divergence)");
+                    assertEquals(body.assignedValue(),
+                            observed.readLocalSlot(body.assigned()).orElseThrow());
+                    assertTrue(observed.readLocalSlot("first").isPresent());
+                    if (body.creates() == 2) {
+                        assertTrue(observed.readLocalSlot("second").isPresent());
                     }
                     contexts.add(observed);
                 }
@@ -1750,15 +1739,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         });
     }
 
-    /**
-     * I115-M frame-native entry with a FROZEN or CLOSED published Context.
-     *
-     * <p>EXPERIMENTAL D179 DIVERGENCE (I115 W11, accepted by the owner): the
-     * ratified contract would reject the body's initial creation in a FROZEN
-     * or CLOSED execution context. The compact root creates its bindings only
-     * in Bytecode locals, so the current behavior is: no error, the exact guest
-     * result, and a Context left unchanged (same slots, same state).
-     */
+    /** Initial creation respects the state of an already published Context. */
     @Test
     void perf036aFrozenOrClosedEntryContextRejectsInitialCreation() throws Exception {
         withCore(module -> {
@@ -1778,8 +1759,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     observed.close();
                 }
                 java.util.Map<String, Object> before = observed.localSlotsSnapshot();
-                // Divergence: the ratified contract would signal here.
-                assertEquals("9", integerValue(target(scalar).call(arguments)));
+                assertThrows(ProtosSignalException.class, () -> target(scalar).call(arguments));
                 assertSame(published, arguments[0]);
                 assertSame(observed, published.context());
                 assertEquals(before, observed.localSlotsSnapshot());

@@ -37,7 +37,7 @@ import java.util.List;
 import java.util.Objects;
 
 final class ProtosFrameArguments {
-    /* I115 single B5 ordinary-call ABI:
+    /* single B5 ordinary-call ABI:
      * [0] invoked Closure or published activation
      * [1] receiver or direct-call marker
      * [2] method home or explicit Task
@@ -366,7 +366,7 @@ final class ProtosFrameArguments {
     }
 
     /*
-     * I115 (GraalPy PArguments.create): the single B5 construction of every
+     * (PArguments.create): the single B5 construction of every
      * call entered through ProtosFunctionCallDispatchers. A function call
      * writes the direct-call marker and no Task/methodHome; a selected method
      * writes its receiver and methodHome. The caller is transported as is
@@ -436,7 +436,7 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * I115: a Task-owned function call (GraalPy task entry): slot 2 carries
+     * a Task-owned function call (task entry): slot 2 carries
      * the exact owning Task.
      */
     static Object[] taskFunctionCallArguments(ProtosTask task, Object[] supplied) {
@@ -451,6 +451,15 @@ final class ProtosFrameArguments {
         return isDirectClosureCall(arguments)
                 ? compactClosure(arguments).capturedReceiver()
                 : arguments[RECEIVER_INDEX];
+    }
+
+    /** The selected method home, without publishing the invocation. */
+    static ProtosObjectValue compactMethodHome(Object[] arguments) {
+        if (hasPublishedActivation(arguments)) {
+            return publishedActivation(arguments).methodHomeOrNullForRuntime();
+        }
+        return isFunctionCall(arguments) ? compactClosure(arguments).methodHome().orElse(null)
+                : (ProtosObjectValue) arguments[METHOD_HOME_INDEX];
     }
 
     /** Whether a B5 array built for the dispatcher is an unbound function call. */
@@ -477,7 +486,7 @@ final class ProtosFrameArguments {
         return inherited;
     }
 
-    /** Writes the receiver and methodHome of a selected method (GraalPy PMethod). */
+    /** Writes the receiver and methodHome of a selected method (PMethod). */
     static void bindMethod(Object[] arguments, Object receiver, ProtosObjectValue methodHome) {
         arguments[RECEIVER_INDEX] = receiver;
         arguments[METHOD_HOME_INDEX] = methodHome;
@@ -500,7 +509,7 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * I115 (TruffleRuby RubyMethodRootNode): the materialized ReturnHome this
+     * (TruffleRuby RubyMethodRootNode): the materialized ReturnHome this
      * activation owns, or {@code null} when its home is captured from an
      * outer activation, is the unobservable marker, or the arguments are not
      * a B5 Closure header. Read from the header, so the identity is exactly
@@ -606,7 +615,7 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * I115 cold suspension-boundary caller seal.
+     * cold suspension-boundary caller seal.
      *
      * <p>Called by the dispatcher only after the invocation described by
      * {@code calleeArguments} returned a suspended outcome, while the caller
@@ -722,7 +731,7 @@ final class ProtosFrameArguments {
      * values reads the activation's deferred value list (or its existing
      * guest Array) and never creates the guest Array or the Context.
      *
-     * <p>I115-A4: preparation registers a published physical ReturnHome
+     * <p>preparation registers a published physical ReturnHome
      * owner with the root of {@code effectiveTarget} before the target may
      * execute, so a proven no-home root switches to owned-home completion.
      */
@@ -919,14 +928,14 @@ final class ProtosFrameArguments {
      * guest Context deferred. An inherited-only capture reuses the existing
      * lexical chain without publishing this root.
      *
-     * <p>I115-S1c-L: when this invocation's exact activation is already
+     * <p>when this invocation's exact activation is already
      * published (for example because its frame was bound to a frame-backed
      * lexical view), that activation is reused as the one owner: the Closure
      * captures its lexical environment node, so it reaches the same live
      * physical bindings as the creator, and keeps its receiver, method home,
      * ReturnHome, Prelude and module key. No second owner is reconstructed.
      *
-     * <p>I115 / PLAT066-C: when {@code capturesCreatorContext} is false the
+     * <p>PLAT066-C: when {@code capturesCreatorContext} is false the
      * lowering classified {@code definition} as not capturing its creator's
      * execution context, and the new Closure receives the creator's own
      * captured environment (the invoked Closure's, B5 argument 0) unchanged:
@@ -934,14 +943,14 @@ final class ProtosFrameArguments {
      * frame or its arguments. A recorded divergence from the unconditional
      * capture of {@code CALLABLES.md}, pending an owner decision.
      *
-     * <p>I115-H (EXPERIMENTAL): when the definition also cannot observe its
+     * <p>: when the definition also cannot observe its
      * ReturnHome and needs no inherited environment, such a Closure is the
      * lightweight {@link ProtosClosureValue#experimentalNonCapturing}
      * representation; it retains only the creator's admitted Prelude, and
      * the creator's environment, receiver, methodHome and ReturnHome are not
      * consulted. A definition that
      * may observe its ReturnHome (for example {@code (value) => { ^value }})
-     * keeps the I115-G construction with the creator's ReturnHome.
+     * keeps the construction with the creator's ReturnHome.
      */
     static ProtosClosureValue materializeCompactClosure(
             Object[] arguments,
@@ -1191,7 +1200,7 @@ final class ProtosFrameArguments {
 
 
     /*
-     * I115: recovery of an inherited prelude that was not transported (the
+     * recovery of an inherited prelude that was not transported (the
      * first invocations before the need was registered, or a producer that
      * cannot consult its callee's needs). The general walker validates every
      * link it follows, rejects cycles of any length and publishes nothing.
@@ -1250,7 +1259,7 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * I115: the number of supplied positional arguments of a B5 call, in
+     * the number of supplied positional arguments of a B5 call, in
      * either state (publication never changes the supplied suffix).
      */
     static int suppliedArgumentCount(Object[] arguments) {
@@ -1258,7 +1267,7 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * D237 / I115: presence of a supplied formal parameter.
+     * D237 / presence of a supplied formal parameter.
      *
      * Positional compact calls retain the B5 suffix-count test.
      * Published named calls use their association presence mask;
@@ -1280,7 +1289,7 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * I115: the value of a rest parameter, read from the B5 supplied suffix:
+     * the value of a rest parameter, read from the B5 supplied suffix:
      * the frozen Array of the supplied arguments after the first {@code
      * positionalParametersBeforeRest}, as guest values.
      */
@@ -1311,7 +1320,7 @@ final class ProtosFrameArguments {
 
     /** The callee Closure of a compact source call that is still unmaterialized. */
     /**
-     * I115: the captured cells of the invoked Closure, read once at root
+     * the captured cells of the invoked Closure, read once at root
      * entry from argument 0: the invoked Closure of a compact call, or the
      * published activation, which
      * refers to the same array. Called only by

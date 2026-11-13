@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.121-SNAPSHOT
+
+- **I115-V140 — historical replay.**
+  - Restore residual compiler semantics and reconcile Batch D regressions, including native arithmetic operand consumption, lazy builtin activation, instrumentation and root lexical layout.
+  - Intended semantic baseline: message syntax and selection/evaluation rules, signed-64 `long`/`Long` Integer carriers, live lexical capture and ordinary callable behavior. Internal specialized operations do not authorize new guest semantics.
+  - **Historical semantic limitations and divergences:** The original reconciliation claim is preserved without asserting compilation or regression success in this replay. D013, D179 C0, D197-C, dynamic selection, lexical captures, ReturnHome, suspension, cancellation, Futures, Task/C-prime and Actor transfer are not independently certified or declared closed by this replay. Historical code is preserved except for the explicitly authorized whitespace correction described below.
+  - Tests added or modified (not executed): `ProtosDispatchTestSupport.java`, `ProtosI115StringAdditionTest.java`, `ProtosPerf006B6BFinalConformanceArchitectureTest.java`, `ProtosPerf025H1LazyRootActivationTest.java`, `ProtosPerf027AGuardedIntegerDeferredActivationTest.java`, `ProtosPerf032G7MinimalDirectHeaderTest.java`, `ProtosPerf006B6A2MutatingCanonicalCoverageTest.java`, `ProtosPerf025InlineCallbackPreparationTest.java`, `ProtosPerf025CompactCalleeExecutionTest.java`, `ProtosI092CompactBooleanTest.java`, `ProtosI101BArithmeticBuilderOracleTest.java`, `ProtosI107ContinuationEmissionTest.java`, `ProtosI115H7MethodCallConvergenceTest.java`, `ProtosI115NCompactBooleanTest.java`, `ProtosI115QCompactLiteralReturnTest.java`, `ProtosPerf040E1NumericOperationReconciliationTest.java`, `ProtosI115UnaryPICConvergenceTest.java`. No Protos tests, builds, Maven commands or benchmarks were run during this replay.
+  - Historical file transitions: 7 added, 32 modified, 7 deleted (rename detection disabled for exact path accounting). All 46 historical path transitions preserve original modes and deletion state. Blob and parent identity checks allow only the explicitly authorized one-byte whitespace correction introduced in I115-V91: `tools/i115_gate_cases/primitive-if-true.protos:20`, original blob `b29428dbbee0f06243f105627c0a7ba472abea5a`, corrected blob `06420027434dabfae0edb537abfca37225e710aa`. All other payload blobs match exactly. Root `pom.xml` and `CHANGELOG.md` receive version/record metadata edits.
+  - Original implementation: `ed42cd50cb8be355e626c44612eb8e01174bcf33`.
+
 ## 0.4.120-SNAPSHOT
 
 - **I115-V139 — historical replay.**

@@ -14,6 +14,7 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
+
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,7 +33,7 @@ import org.junit.jupiter.api.Test;
  * I115: binary {@code +} over the GraalPy-shaped Bytecode DSL operations.
  * A numeric receiver, or a String receiver whose selected {@code +} is the
  * standard String concatenation, executes the native NumberAdd behind
- * IsStandardAddSelection; every other receiver uses GetMethod and
+ * IsStandardNumericSelection; every other receiver uses GetMethod and
  * CallUnaryMethod with composed continuations.
  */
 final class ProtosI115StringAdditionTest {
@@ -192,7 +193,7 @@ final class ProtosI115StringAdditionTest {
                             .target.getRootNode();
             List<String> names = names(run);
             for (String operation : List.of(
-                    "c.IsStandardAddSelection",
+                    "c.IsStandardNumericSelection",
                     "c.NumberAdd",
                     "c.GetMethod",
                     "c.CallUnaryMethod")) {
@@ -243,7 +244,7 @@ final class ProtosI115StringAdditionTest {
                     "a number-literal receiver needs no caller Prelude");
             List<String> addNames = names(add);
             for (String operation : List.of(
-                    "c.IsStandardAddSelection",
+                    "c.IsStandardNumericSelection",
                     "c.NumberAdd",
                     "c.GetMethod",
                     "c.CallUnaryMethod")) {

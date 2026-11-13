@@ -27,12 +27,14 @@ import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
-/** I115-LONG-4: direct GraalPy-shaped NumberSubtract with in-node fallback. */
+/**
+ * The guarded standard subtraction operation with exact overflow promotion.
+ */
 @GenerateUncached
 @GenerateInline(false)
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
-abstract class ProtosExperimentalNumberSubtractNode
-        extends ProtosExperimentalNumberSubtractFastPathsBase {
+abstract class ProtosNumberSubtractNode
+        extends ProtosNumberSubtractFastPathsBase {
 
     @Specialization(replaces = "doLL")
     static Object doLLOvf(VirtualFrame frame, long left, long right, @Bind Node node) {

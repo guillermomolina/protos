@@ -18,6 +18,8 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -233,7 +235,7 @@ final class ProtosI092CompactBooleanTest {
                 names.toString());
 
         assertTrue(
-                position(names, "NotIdentity") >= 0,
+                position(names, "Identity") >= 0,
                 names.toString());
 
         assertSame(
@@ -324,7 +326,7 @@ final class ProtosI092CompactBooleanTest {
                 names.toString());
 
         assertTrue(
-                position(names, "TryPrimitiveNumeric") >= 0,
+                position(names, "NumberAdd") >= 0,
                 names.toString());
 
         assertInteger(
@@ -417,7 +419,7 @@ final class ProtosI092CompactBooleanTest {
                 names.toString());
 
         assertTrue(
-                position(names, "ReadRootFrameLocal") >= 0,
+                hasLexicalRead(names),
                 names.toString());
 
         for (int index = 0; index < 3; index++) {
@@ -514,11 +516,11 @@ final class ProtosI092CompactBooleanTest {
                 names.toString());
 
         assertTrue(
-                position(names, "ResolveRootFrameLocalWriteTarget") >= 0,
+                hasLexicalWrite(names),
                 names.toString());
 
         assertTrue(
-                position(names, "AssignRootFrameLocal") >= 0,
+                hasLexicalWrite(names),
                 names.toString());
 
         for (int index = 0; index < 3; index++) {
@@ -699,9 +701,9 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(ProtosInstructionNames::of).toList();
         assertTrue(normalControlAdmitted(names), names.toString());
-        assertTrue(position(names, "ReadRootFrameLocal") >= 0, names.toString());
-        assertTrue(position(names, "ResolveRootFrameLocalWriteTarget") >= 0, names.toString());
-        assertTrue(position(names, "AssignRootFrameLocal") >= 0, names.toString());
+        assertTrue(hasLexicalRead(names), names.toString());
+        assertTrue(hasLexicalWrite(names), names.toString());
+        assertTrue(hasLexicalWrite(names), names.toString());
         for (int i = 0; i < 3; i++) {
             assertInteger(95, ProtosTestExecutionSupport.evaluate(
                     "i095-b6b-mixed-write-call.protos", "run()", module));
@@ -733,7 +735,7 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(ProtosInstructionNames::of).toList();
         assertTrue(normalControlAdmitted(names), names.toString());
-        assertTrue(position(names, "ReadRootFrameLocal") >= 0, names.toString());
+        assertTrue(hasLexicalRead(names), names.toString());
         for (int i = 0; i < 3; i++) {
             assertInteger(42, ProtosTestExecutionSupport.evaluate(
                     "i095-b6b-mixed-read-call.protos", "run()", module));
@@ -742,7 +744,7 @@ final class ProtosI092CompactBooleanTest {
     }
 
     @Test
-    void i095B6bCandidateCaptureKeepsBPrime() throws Exception {
+    void unresolvedCallbackNameKeepsLiveLookupAndFreshErrors() throws Exception {
         ProtosActivation module = new ProtosCoreBootstrap()
                 .bootstrap(CORE).newModuleActivation();
         ProtosClosureValue run = assertInstanceOf(
@@ -764,8 +766,14 @@ final class ProtosI092CompactBooleanTest {
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(ProtosInstructionNames::of).toList();
-        assertTrue(!normalControlAdmitted(names), names.toString());
-        System.out.println("I095_B6B_DYNAMIC_FALLBACK=B_PRIME");
+        assertTrue(position(names, "Lookup") >= 0, names.toString());
+        assertTrue(position(names, "CurrentActivation") >= 0, names.toString());
+        var first = assertThrows(com.guillermomolina.protos.runtime.ProtosSignalException.class,
+                () -> ProtosTestExecutionSupport.evaluate("unresolved-callback-first.protos", "run()", module));
+        var second = assertThrows(com.guillermomolina.protos.runtime.ProtosSignalException.class,
+                () -> ProtosTestExecutionSupport.evaluate("unresolved-callback-second.protos", "run()", module));
+        assertNotSame(first.error(), second.error());
+        System.out.println("I095_B6B_DYNAMIC_LOOKUP=PASS");
     }
 
     @Test
@@ -903,8 +911,20 @@ final class ProtosI092CompactBooleanTest {
      * PLAT044 B-prime callback admission of the ordinary send.
      */
     private static boolean normalControlAdmitted(List<String> names) {
-        return position(names, "IsCompactCanonicalBooleanMiss") < 0
-                && position(names, "AdmitsInlineLiteralCallback") < 0;
+        return position(names, "CallNilaryMethod") < 0
+                && position(names, "MaterializeClosure") < 0;
+    }
+
+    private static boolean hasLexicalRead(List<String> names) {
+        return names.stream().anyMatch(name -> name.toLowerCase().contains("load.local")
+                || name.contains("LoadLexicalLocal") || name.contains("LoadLexicalCell")
+                || name.contains("LoadCell"));
+    }
+
+    private static boolean hasLexicalWrite(List<String> names) {
+        return names.stream().anyMatch(name -> name.toLowerCase().contains("store.local")
+                || name.contains("AssignLexicalLocal") || name.contains("AssignLexicalCell")
+                || name.contains("StoreCell"));
     }
 
     private static int position(List<String> names, String operation) {
@@ -954,10 +974,10 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(ProtosInstructionNames::of).toList();
 
-        assertTrue(position(names, "TryCompactCanonicalBooleanOne") < 0);
-        assertTrue(position(names, "PrepareCanonicalIfTrueCallback") >= 0);
-        assertTrue(position(names, "IsCompactCanonicalBooleanNoCallback") >= 0);
-        assertTrue(position(names, "LoadInlineLiteralFallbackCall") >= 0, names.toString());
+        assertTrue(position(names, "CallNilaryMethod") >= 0, names.toString());
+        assertTrue(position(names, "GetMethod") < 0, names.toString());
+        assertTrue(names.contains("yield"), names.toString());
+        assertFalse(names.stream().anyMatch(name -> name.contains("PrepareCanonicalIfTrue")));
         assertNoSyntheticIfTrueActivation();
     }
 
@@ -1028,14 +1048,11 @@ final class ProtosI092CompactBooleanTest {
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(ProtosInstructionNames::of).toList();
-        assertTrue(position(names, "TryCompactCanonicalBooleanOne") < 0);
-        assertTrue(position(names, "PrepareCanonicalIfTrueCallback") >= 0);
-        assertTrue(position(names, "IsCompactCanonicalBooleanNoCallback") >= 0);
-        // Default-parameter sites have no B-prime region: ordinary callback invocation.
-        int nativeCheck = position(names, "IsCompactCanonicalBooleanNoCallback");
-        assertTrue(names.subList(nativeCheck, names.size()).stream()
-                .anyMatch(name -> name.contains("LoadInlineLiteralFallbackCall")),
-                names.toString());
+        assertTrue(position(names, "HasSuppliedArgument") >= 0
+                || position(names, "HasSuppliedParameter") >= 0, names.toString());
+        assertTrue(position(names, "GetMethod") < 0, names.toString());
+        assertTrue(position(names, "CallNilaryMethod") < 0, names.toString());
+        assertTrue(names.contains("load.constant"), names.toString());
         assertNoSyntheticIfTrueActivation();
     }
 
@@ -1083,15 +1100,13 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(ProtosInstructionNames::of).toList();
 
-        assertTrue(position(names, "TryCompactCanonicalBooleanVector") >= 0);
-        assertTrue(
-                position(names, "IsCanonicalIfTrueTrue")
-                        > position(names, "TryCompactCanonicalBooleanVector"));
-        assertTrue(
-                position(names, "PrepareCanonicalIfTrueVectorCallback")
-                        > position(names, "IsCanonicalIfTrueTrue"));
-        assertTrue(position(names, "IsCompactCanonicalBooleanMiss") >= 0);
-        assertTrue(position(names, "IsCompactCanonicalBooleanNoCallback") >= 0);
+        int packet = position(names, "AppendSpreadSuppliedArgument");
+        int selection = position(names, "GetMethod");
+        int call = position(names, "CallVarargsMethod");
+        assertTrue(packet >= 0 && selection > packet && call > selection, names.toString());
+        assertTrue(names.indexOf("yield") > call, names.toString());
+        assertNoSyntheticIfTrueActivation();
+
     }
 
 
@@ -1138,15 +1153,12 @@ final class ProtosI092CompactBooleanTest {
                 """,
                 false);
 
-        assertTrue(position(names, "TryCompactCanonicalBooleanInlineOne") >= 0);
-        assertTrue(position(names, "TryCompactCanonicalBooleanVector") >= 0);
-        assertTrue(
-                position(names, "PrepareCanonicalIfTrueInlineCallback")
-                        > position(names, "TryCompactCanonicalBooleanInlineOne"));
-        assertTrue(
-                position(names, "PrepareCanonicalIfTrueInlineVectorCallback")
-                        > position(names, "TryCompactCanonicalBooleanVector"));
-        assertTrue(position(names, "IsCompactCanonicalBooleanNoCallback") >= 0);
+        assertTrue(position(names, "IsCanonicalBooleanOperand") >= 0, names.toString());
+        assertTrue(position(names, "GetMethod") >= 0, names.toString());
+        assertTrue(names.contains("yield"), names.toString());
+        assertFalse(names.stream().anyMatch(name -> name.contains("PrepareCanonicalIfTrue")));
+        assertNoSyntheticIfTrueActivation();
+
     }
 
 
@@ -1194,55 +1206,31 @@ final class ProtosI092CompactBooleanTest {
 
         var instructions = root.getBytecodeNode().getInstructionsAsList();
         var names = instructions.stream().map(ProtosInstructionNames::of).toList();
-        assertEquals(
-                1L,
-                names.stream()
-                        .filter(name -> name.contains(
-                                "IsCompactCanonicalBooleanMiss"))
-                        .count(),
-                "Canonical/generic classification must occur once");
-
-        int candidate = position(names, "TryCompactCanonicalBooleanOne");
-        int primitiveBranch = position(names, "IsCanonicalIfTrueTrue");
-        int nativePreparation = position(names, "PrepareCanonicalIfTrueCallback");
-        assertTrue(
-                candidate >= 0
-                        && primitiveBranch > candidate
-                        && nativePreparation > primitiveBranch,
-                () -> "Primitive classification must precede callback preparation: "
-                        + names);
-        int miss = position(names, "IsCompactCanonicalBooleanMiss");
-        int generic = position(names, "PrepareSendOne");
-        int nativeCheck = position(names, "IsCompactCanonicalBooleanNoCallback");
-
-        assertTrue(candidate >= 0 && miss > candidate
-                        && generic > miss && nativeCheck > generic,
-                () -> "Native/generic bytecode ordering: " + names);
-
-        var branch = instructions.subList(miss + 1, generic).stream()
-                .filter(instruction ->
-                        instruction.getName().startsWith("branch.false"))
+        assertEquals(1L, names.stream().filter(name -> name.contains(
+                "IsCanonicalBooleanOperand")).count(), names.toString());
+        int classification = position(names, "IsCanonicalBooleanOperand");
+        int decision = position(names, "CanonicalControlCondition");
+        int materialization = position(names, "MaterializeSelectedCallback");
+        assertTrue(materialization > decision, names.toString());
+        int selectedSend = position(names.subList(materialization + 1, names.size()), "GetMethod");
+        assertTrue(selectedSend >= 0, names.toString());
+        int generic = materialization + 1 + selectedSend;
+        assertTrue(decision > classification && generic > materialization, names.toString());
+        assertTrue(names.stream().anyMatch(name -> name.contains("CallUnaryMethod")), names.toString());
+        var branch = instructions.subList(classification + 1, decision).stream()
+                .filter(instruction -> instruction.getName().startsWith("branch.false"))
                 .findFirst().orElseThrow();
-
         int target = branch.getArguments().stream()
-                .filter(argument -> argument.getKind()
-                        == Instruction.Argument.Kind.BYTECODE_INDEX)
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.BYTECODE_INDEX)
                 .findFirst().orElseThrow().asBytecodeIndex();
-
-        assertTrue(target > instructions.get(generic).getBytecodeIndex(),
-                "Canonical hit must skip generic send preparation");
-        assertTrue(target <= instructions.get(nativeCheck).getBytecodeIndex(),
-                "Canonical hit must enter the native Boolean branch");
-
+        assertTrue(target > instructions.get(decision).getBytecodeIndex());
+        assertTrue(target <= instructions.get(generic).getBytecodeIndex());
         var profile = branch.getArguments().stream()
-                .filter(argument -> argument.getKind()
-                        == Instruction.Argument.Kind.BRANCH_PROFILE)
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.BRANCH_PROFILE)
                 .findFirst().orElseThrow().asBranchProfile();
+        assertTrue(profile.falseCount() > 0, () -> "Canonical hit profile: " + profile);
+        assertTrue(profile.trueCount() > 0, () -> "Generic selection profile: " + profile);
 
-        assertTrue(profile.falseCount() > 0,
-                () -> "Canonical hit profile: " + profile);
-        assertTrue(profile.trueCount() > 0,
-                () -> "Generic fallback profile: " + profile);
     }
 
 
@@ -1359,6 +1347,45 @@ final class ProtosI092CompactBooleanTest {
                 () -> "Outcome: " + outcome.state()
                         + " error=" + outcome.error());
         return outcome.value();
+    }
+
+    @Test
+    void capturedCallbackAndChangingOverrideUseTheSameDynamicSite() throws Exception {
+        assertSame(Boolean.TRUE, evaluate("""
+                make: () => {
+                    x: 0
+                    (receiver) => receiver.ifTrue(() => {
+                        x = x + 1
+                        x
+                    })
+                }
+                run: make()
+                custom: { ifTrue: (callback) => callback() }
+                first: run(true)
+                second: run(custom)
+                skipped: run(false)
+                custom.ifTrue = (callback) => 77
+                replaced: run(custom)
+                last: run(true)
+                (first == 1) && (second == 2) && (skipped === null) && (replaced == 77) && (last == 3)
+                """));
+    }
+
+    @Test
+    void selectedPhysicalCallbackCanSuspendInsideTaskWithoutRepeatingItsPrefix() throws Exception {
+        assertInteger(142, evaluate("""
+                run: () => {
+                    effects: 0
+                    pending: (() => { 42 }).future()
+                    callback: () => {
+                        effects = effects + 1
+                        pending.value()
+                    }
+                    answer: true.ifTrue(callback)
+                    effects * 100 + answer
+                }
+                run()
+                """));
     }
 
     private static void assertInteger(long expected, Object value) {

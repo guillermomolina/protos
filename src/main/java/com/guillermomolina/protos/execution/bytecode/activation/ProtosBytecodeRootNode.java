@@ -46,8 +46,7 @@ import com.guillermomolina.protos.execution.ProtosFrameLocalBindings.ResolvedLex
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
-// PRUIBA DE I115, en algún momento esto volverá a funcionar
-// import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalCell;
 import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
@@ -182,9 +181,9 @@ import com.oracle.truffle.api.source.Source;
 @OperationProxy(value = ProtosCallTernaryMethodNode.class, name = "CallTernaryMethod")
 @OperationProxy(value = ProtosCallQuaternaryMethodNode.class, name = "CallQuaternaryMethod")
 @OperationProxy(value = ProtosCallVarargsMethodNode.class, name = "CallVarargsMethod")
-@OperationProxy(value = ProtosExperimentalNumberAddNode.class, name = "NumberAdd")
-@OperationProxy(value = ProtosExperimentalNumberSubtractNode.class, name = "NumberSubtract")
-@OperationProxy(value = ProtosExperimentalNumberMultiplyNode.class, name = "NumberMultiply")
+@OperationProxy(value = ProtosNumberAddNode.class, name = "NumberAdd")
+@OperationProxy(value = ProtosNumberSubtractNode.class, name = "NumberSubtract")
+@OperationProxy(value = ProtosNumberMultiplyNode.class, name = "NumberMultiply")
 abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNode {
     protected ProtosBytecodeRootNode(
             ProtosLanguage language,
@@ -211,7 +210,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115-H4-B EXPERIMENTAL (GraalPy needsTraceAndProfileInstrumentation):
+     * (needsTraceAndProfileInstrumentation):
      * whether the internal trace probe is enabled. The JVM-start value of
      * {@link ProtosExperimentalTraceHooks#ENABLED}; false by default.
      */
@@ -220,7 +219,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return ProtosExperimentalTraceHooks.ENABLED;
     }
 
-    /* I115-H4-B EXPERIMENTAL: records ROOT_RETURN; the value is unchanged. */
+    /*: records ROOT_RETURN; the value is unchanged. */
     @InliningCutoff
     private void traceOrProfileReturn(VirtualFrame frame, BytecodeNode location, Object value) {
         ProtosExperimentalTraceHooks.record(
@@ -230,7 +229,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 value);
     }
 
-    /* I115-H4-B EXPERIMENTAL: records ROOT_EXCEPTION; the exception is unchanged. */
+    /*: records ROOT_EXCEPTION; the exception is unchanged. */
     @InliningCutoff
     private void traceOrProfileException(
             VirtualFrame frame, BytecodeNode location, AbstractTruffleException exception) {
@@ -242,7 +241,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115-H4-B EXPERIMENTAL (GraalPy InstrumentCall): records CALL after the
+     * (InstrumentCall): records CALL after the
      * last argument of the experimental Call1 and returns it unchanged.
      * Present only in a BytecodeConfig that adds it.
      */
@@ -262,7 +261,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115-H4-B EXPERIMENTAL (GraalPy InstrumentCallReturn): records
+     * (InstrumentCallReturn): records
      * CALL_RETURN for the experimental Call1 result and returns it unchanged.
      * Present only in a BytecodeConfig that adds it.
      */
@@ -282,7 +281,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115-H4-B EXPERIMENTAL: the Bytecode DSL source content supplier. A
+     *: the Bytecode DSL source content supplier. A
      * Source that already has characters or bytes is returned unchanged.
      * ProtosLanguage provides no content-recovery mechanism, so a Source
      * without content is also returned unchanged; no content is invented.
@@ -346,7 +345,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115-S1c-L: the single immutable physical layout of a Closure root's
+     * the single immutable physical layout of a Closure root's
      * declared LOCAL/CELL bindings: each binding's name, the offset and
      * {@link LocalAccessor} of its Bytecode DSL local, and whether that local
      * holds a shared {@link ProtosLexicalCell} (the physical storage, so a
@@ -440,7 +439,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     /* PERF038-C: set once, when the first guest exception crosses this root. */
     @CompilationFinal private transient boolean guestExceptionCrossed;
 
-    /* I115 demand-driven caller transport. An effective callee root
+    /* demand-driven caller transport. An effective callee root
      * requests an optional direct caller payload (null, Prelude or
      * Activation), and its Assumption invalidates incoming PICs whenever
      * the monotonic needs change. No ancestral B5 array is retained.
@@ -451,19 +450,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     private final CallerNeeds callerNeeds = new CallerNeeds();
 
     /**
-     * I115: requests {@code need} for this root; see {@link CallerNeeds}.
+     * requests {@code need} for this root; see {@link CallerNeeds}.
      * Constant-folded to nothing once the need is registered.
      */
     final void requestCallerNeed(int need) {
         callerNeeds.request(need);
     }
 
-    /** I115 test and diagnostic access: whether {@code need} is registered. */
+    /** test and diagnostic access: whether {@code need} is registered. */
     final boolean hasCallerNeed(int need) {
         return callerNeeds.has(need);
     }
 
-    /** I115: the Assumption that the registered caller needs do not change. */
+    /** the Assumption that the registered caller needs do not change. */
     final Assumption callerNeedsStability() {
         return callerNeeds.stability();
     }
@@ -528,7 +527,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * I115: a closure's whole lexical subtree (including defaults and nested
+     * a closure's whole lexical subtree (including defaults and nested
      * closures) cannot target this invocation's return home. The lowering
      * records the proof once on the physical callee root, so a cached direct
      * call does not inspect a closure's execution plan at runtime.
@@ -536,7 +535,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @CompilationFinal private transient boolean returnHomeProvenUnobservable;
 
     /*
-     * I115-A4: valid while no published invocation owning a materialized
+     * valid while no published invocation owning a materialized
      * physical ReturnHome has been admitted to this proven no-home root.
      * Created once; invalidation is monotonic and the Assumption is never
      * recreated, so a reparse or repeated lowering cannot restore it.
@@ -557,7 +556,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115-A4: cold entry admission of a published invocation. When the
+     * cold entry admission of a published invocation. When the
      * activation owns a materialized physical ReturnHome, this proven no-home
      * root permanently switches its epilogues to the ordinary owned-home
      * completion. Never creates, binds, completes or closes a home.
@@ -580,7 +579,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115-A4: whether the epilogues must run the owned physical-home
+     * whether the epilogues must run the owned physical-home
      * completion. Missing state fails conservatively.
      */
     final boolean needsPhysicalHomeCompletionInEpilogue() {
@@ -591,11 +590,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return assumption == null || !assumption.isValid();
     }
 
-    // PRUIBA DE I115, en algún momento esto volverá a funcionar
     // Removed per-root numeric return-projection state.
 
     /**
-     * I115-S1c-L: records the physical layout of this genuine Closure root,
+     * records the physical layout of this genuine Closure root,
      * once per parse, before the root is published. A Closure root without
      * declared bindings records the empty layout, so its escaped frame still
      * has one frame-backed authority (for dynamically created names).
@@ -623,7 +621,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * I115: a Java/Truffle internal failure that leaves this activation without
+     * a Java/Truffle internal failure that leaves this activation without
      * crossing EpilogForException still definitively abandons it.
      */
     @Override
@@ -675,7 +673,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * returns it unchanged.
      */
     /**
-     * I115-E1: root entry does not install a materialized-frame
+     * root entry does not install a materialized-frame
      * lexical authority.
      *
      * Admitted module bindings use the existing frame-native creation
@@ -686,7 +684,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      *
      * Keeping the Prolog preserves the Bytecode DSL root shape.
      *
-     * I115 (GraalPy EnterCalleeContext): every source root is entered with
+     * (EnterCalleeContext): every source root is entered with
      * the same B5 invocation header and runs the same empty prologue. No
      * ProtosActivation is materialized and no Object.call, ReturnHome, Task
      * or suspension check runs.
@@ -703,7 +701,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @EpilogReturn(storeBytecodeIndex = true)
     public static final class EpilogForReturn {
         /*
-         * I115: the primitive Boolean carrier of a native comparison or
+         * the primitive Boolean carrier of a native comparison or
          * Boolean selection never escapes the physical root; the externally
          * observable result is canonical true/false.
          */
@@ -764,7 +762,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * I115 (TruffleRuby FrameOnStackMarker): closes the materialized ReturnHome
+     * (TruffleRuby FrameOnStackMarker): closes the materialized ReturnHome
      * this activation owns when it terminates. A pending result (Bytecode DSL
      * suspension or terminal transport) is not a termination; captured homes
      * and the unobservable marker are never owned; closing is idempotent.
@@ -801,7 +799,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * arguments instead of materializing; otherwise both specializations
          * return exactly what ProtosFrameArguments.activation returns.
          *
-         * I115: a resumed continuation frame reads the caller its
+         * a resumed continuation frame reads the caller its
          * dispatcher sealed into B5[3] at suspension; it never relies on
          * active-stack recovery of a returned caller frame.
          */
@@ -817,7 +815,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind ProtosBytecodeRootNode root) {
             if (callerReference) {
                 /*
-                 * I115: every caller-reference consumer is a send or call
+                 * every caller-reference consumer is a send or call
                  * selection that reads this root's prelude; an inherited one
                  * its caller did not transport is this root's caller need.
                  */
@@ -827,7 +825,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 }
                 return arguments;
             }
-            // I115: publishing this root's own activation is a caller need.
+            // publishing this root's own activation is a caller need.
             root.requestCallerNeed(NEEDS_EXACT_ACTIVATION);
             return ProtosFrameArguments.activation(frame);
         }
@@ -841,7 +839,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     // ---- Closure parameter binding -------------------------------------------------
 
     /*
-     * I115 parameter operations. Supplied positional values keep their B5
+     * parameter operations. Supplied positional values keep their B5
      * offsets after publication, so a parameter is read from the frame
      * arguments in every state and stored immediately in its local or cell by
      * the lowering; no activation is materialized to bind a parameter. D203:
@@ -861,7 +859,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
 
     /**
-     * I115 experimental grouped positional parameter initialization.
+     * experimental grouped positional parameter initialization.
      *
      * The supplied B5 argument suffix is copied directly into the
      * consecutively allocated parameter locals. Missing arguments
@@ -913,10 +911,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    // ---- I115 lexical cells --------------------------------------------------------
+    // ---- lexical cells --------------------------------------------------------
 
     /*
-     * I115 (GraalPy cell variables): a Closure binding captured by a nested
+     * (cell variables): a Closure binding captured by a nested
      * Closure is one ProtosLexicalCell held in a Bytecode DSL local of its
      * owning root. The owner creates the cell at entry; a capturing Closure
      * receives the same cell instance at creation and copies it into its own
@@ -995,10 +993,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    // ---- I115-S1c-L lexical frame publication and presence-aware access ------------
+    // ---- lexical frame publication and presence-aware access ------------
 
     /*
-     * I115-S1c-L (GraalPy fast locals versus frame-locals materialization).
+     * (fast locals versus frame-locals materialization).
      * The common unobserved path keeps LoadLocal/StoreLocal and the plain cell
      * operations. A root whose frame must survive (its Context is observed, or
      * a nested Closure may need to select one of its bindings by name) binds
@@ -1233,7 +1231,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * GraalPy DeleteLocal-style reset of a physical callback local.
+     * DeleteLocal-style reset of a physical callback local.
      * Root scoping remains enabled; a fresh semantic callback activation
      * must not inherit PRESENT bindings from an earlier invocation.
      */
@@ -1250,7 +1248,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * Presence-aware read of an owned LOCAL binding (GraalPy checked fast
+     * Presence-aware read of an owned LOCAL binding (checked fast
      * local load). Presence is the state of this activation's own local only:
      * a removal in one activation never affects another activation or the
      * specialization of this site. {@link #present} is the plain local read;
@@ -1484,7 +1482,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * I115: validated host index of a standard Bytes receiver; an index
+     * validated host index of a standard Bytes receiver; an index
      * outside 0..size-1 (including any outside the int range) signals
      * the standard guest Error.
      */
@@ -1497,7 +1495,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * I115: validated host index of an Array BinarySubscript receiver;
+     * validated host index of an Array BinarySubscript receiver;
      * an index outside 0..size-1 signals the standard guest Error.
      */
     private static int existingArrayIndex(
@@ -1509,7 +1507,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * I115: validated host index of a standard Array atPut: FROZEN first,
+     * validated host index of a standard Array atPut: FROZEN first,
      * then the signed long index against the current size, exactly as the
      * standard Array atPut behavior, before any narrowing to a host int.
      */
@@ -1531,9 +1529,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * I115: GraalPy BinarySubscript / SetItem / GetLen admission.
+     * BinarySubscript / SetItem / GetLen admission.
      *
-     * GraalPy executes its built-in subscript/length specializations only
+     * executes its built-in subscript/length specializations only
      * for receivers whose selected behavior is the built-in one, and calls
      * the selected __getitem__/__setitem__/__len__ otherwise. Protos is
      * prototype-based, so a Java receiver type alone never proves that: an
@@ -1649,30 +1647,31 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /** Guard the actual + selection; standard scalar hits retain NumberAdd. */
+    /** Guard the actual numeric selection after all operands have been evaluated. */
     @Operation(storeBytecodeIndex = false)
-    public static final class IsStandardAddSelection {
+    @ConstantOperand(type = String.class, name = "selector")
+    public static final class IsStandardNumericSelection {
         @Specialization(
                 guards = {"prototype != null", "prelude == cachedPrelude",
                     "prototype == cachedPrototype", "selection != null", "selection.isValid()"},
                 limit = "3")
         public static boolean cached(
-                Object receiver,
+                String selector, Object receiver,
                 @Bind VirtualFrame frame,
                 @Bind("prelude(frame)") ProtosPrelude prelude,
                 @Bind("prototype(receiver, prelude)") ProtosObjectValue prototype,
                 @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("prototype") ProtosObjectValue cachedPrototype,
-                @Cached("selectAdd(cachedPrototype)")
+                @Cached("selectNumeric(cachedPrototype, selector)")
                         ProtosValueLookup.StructuralSelection selection) {
-            return standard(receiver, selection.read(), selection.home(), cachedPrelude);
+            return standard(selector, receiver, selection.read(), selection.home(), cachedPrelude);
         }
 
         @Specialization(replaces = "cached")
-        public static boolean uncached(Object receiver, @Bind VirtualFrame frame) {
+        public static boolean uncached(String selector, Object receiver, @Bind VirtualFrame frame) {
             ProtosPrelude prelude = prelude(frame);
             if (prototype(receiver, prelude) == null) return false;
-            return selectStandard(receiver, prelude);
+            return selectStandard(selector, receiver, prelude);
         }
 
         static ProtosPrelude prelude(VirtualFrame frame) {
@@ -1682,37 +1681,75 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         static ProtosObjectValue prototype(Object receiver, ProtosPrelude prelude) {
             if (prelude == null || !(receiver instanceof ProtosStringValue
                     || ProtosNumericValueSupport.isCurrentRealNumber(receiver))) return null;
+            if (receiver instanceof ProtosObjectValue object) return object;
             return (ProtosObjectValue) ProtosValueLookup.delegationParent(receiver, prelude)
                     .orElse(null);
         }
 
         @TruffleBoundary
-        static ProtosValueLookup.StructuralSelection selectAdd(ProtosObjectValue prototype) {
-            return ProtosValueLookup.selectStructural(prototype, "+");
+        static ProtosValueLookup.StructuralSelection selectNumeric(ProtosObjectValue prototype, String selector) {
+            return ProtosValueLookup.selectStructural(prototype, selector);
         }
 
-        static boolean standard(Object receiver, Object behavior,
+        static boolean standard(String selector, Object receiver, Object behavior,
                 ProtosObjectValue home, ProtosPrelude prelude) {
             if (receiver instanceof ProtosStringValue) {
-                return ProtosStandardStringProtocol.isStandardConcatenationBehavior(behavior);
+                return "+".equals(selector)
+                        && ProtosStandardStringProtocol.isStandardConcatenationBehavior(behavior);
             }
             if (!(behavior instanceof ProtosClosureValue closure)) return false;
+            if (ProtosStandardNumberOrderingProtocol.canonicalRelationForSelection(
+                    closure, home, selector, prelude) != null) return true;
             if (ProtosNumericValueSupport.isCurrentInteger(receiver)) {
                 return ProtosStandardIntegerProtocol.canonicalOperationForSelection(
-                        closure, home, "+", prelude)
-                        == ProtosStandardIntegerProtocol.CanonicalIntegerOperation.ADD;
+                        closure, home, selector, prelude)
+                        != null;
             }
             return ProtosNumericValueSupport.isCurrentFloat(receiver)
                     && ProtosStandardFloatProtocol.canonicalOperationForSelection(
-                            closure, home, "+", prelude)
-                            == ProtosStandardFloatProtocol.CanonicalFloatOperation.ADD;
+                            closure, home, selector, prelude)
+                            != null;
         }
 
         @TruffleBoundary
-        static boolean selectStandard(Object receiver, ProtosPrelude prelude) {
-            return ProtosValueLookup.lookup(receiver, "+", prelude)
-                    .map(found -> standard(receiver, found.value(), found.home(), prelude))
+        static boolean selectStandard(String selector, Object receiver, ProtosPrelude prelude) {
+            return ProtosValueLookup.lookup(receiver, selector, prelude)
+                    .map(found -> standard(selector, receiver, found.value(), found.home(), prelude))
                     .orElse(false);
+        }
+    }
+
+    /** Exact truncating Integer quotient, admitted by numeric selection. */
+    @Operation
+    public static final class NumberQuotient {
+        static boolean fitsLong(long left, long right) {
+            return right != 0L && (left != Long.MIN_VALUE || right != -1L);
+        }
+
+        @Specialization(guards = "fitsLong(left, right)")
+        public static long small(long left, long right) {
+            return left / right;
+        }
+
+        @Fallback
+        public static Object exact(Object left, Object right,
+                @Bind VirtualFrame frame, @Bind ProtosBytecodeRootNode root) {
+            return ProtosNumericOperationSupport.arithmetic(root, frame, left, "div", right);
+        }
+    }
+
+    /** Exact truncating Integer remainder, admitted by numeric selection. */
+    @Operation
+    public static final class NumberRemainder {
+        @Specialization(guards = "right != 0")
+        public static long small(long left, long right) {
+            return left % right;
+        }
+
+        @Fallback
+        public static Object exact(Object left, Object right,
+                @Bind VirtualFrame frame, @Bind ProtosBytecodeRootNode root) {
+            return ProtosNumericOperationSupport.arithmetic(root, frame, left, "mod", right);
         }
     }
 
@@ -2081,7 +2118,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * I115: GraalPy BinarySubscript / SetItem model.
+     * BinarySubscript / SetItem model.
      *
      * The built-in Array path specializes primitive long storage. These
      * operations are emitted only behind IsStandardIndexedSelection, so the
@@ -2208,7 +2245,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * I115: GraalPy PBytecodeDSLRootNode.MakeConstantLongList.
+     * PBytecodeDSLRootNode.MakeConstantLongList.
      * The long[] constant is copied on every evaluation.
      */
     @Operation(storeBytecodeIndex = false)
@@ -2235,7 +2272,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
 
     /*
-     * I115: GraalPy PBytecodeDSLRootNode.GetLen.
+     * PBytecodeDSLRootNode.GetLen.
      * Direct Array/Bytes length, without method dispatch. Emitted only
      * behind IsStandardIndexedSelection("size"); every other receiver's
      * size is dispatched through GetMethod and CallNilaryMethod.
@@ -2269,7 +2306,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     // ---- Lexical lookup and frame-backed bindings ----------------------------------
 
     /**
-     * I113 / I115-S1c-L: a name-keyed lexical access, selected by the
+     * I113 / a name-keyed lexical access, selected by the
      * builder-fixed {@link ProtosNamedLexicalAccess}: read selection, or
      * write-target selection (which stays separate from its assignment).
      * Both are performed by the single {@link ProtosLexicalSelectionNode}.
@@ -2288,7 +2325,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115: the assignment of a statically classified module (ROOT) NAME
+     * the assignment of a statically classified module (ROOT) NAME
      * binding through the destination {@code SelectWriteGlobal} selected
      * before the right-hand side ran. The value is stored through the
      * module context's authoritative assignment and is the operation's
@@ -2296,7 +2333,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * removed binding) signals the assignment Error, exactly as the generic
      * NAME assignment does; no other owner is searched.
      *
-     * <p>I115-S1c-L: when the module binding was not the selected binding,
+     * <p>when the module binding was not the selected binding,
      * the destination is the one live lexical selection chose before the
      * right-hand side; it is assigned without selecting again.
      */
@@ -2334,7 +2371,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * PERF030-I / I115 multiple creation of LOCAL/CELL bindings. The lowerer
+     * PERF030-I / multiple creation of LOCAL/CELL bindings. The lowerer
      * splits it into one prefix observation, which observes the complete
      * fixed source prefix before any binding is created, followed by one
      * store per name, in source order, into that binding's own storage.
@@ -2497,7 +2534,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115: explicit creation of a local attribute on a receiver.
+     * explicit creation of a local attribute on a receiver.
      *
      * The creation is not an assignment: duplicate local slots must fail.
      * The slot is established through the authoritative creation path, as a
@@ -2541,7 +2578,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115: attribute read (GraalPy {@code GetAttribute.doInstanceValueInt} /
+     * attribute read ({@code GetAttribute.doInstanceValueInt} /
      * {@code doInstanceValue}, adapted to signed-64 {@code long}; SimpleLanguage
      * {@code SLReadPropertyNode.readSLObject}).
      *
@@ -2795,7 +2832,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosReturnHome target =
                     activation.returnHome().orElse(null);
             /*
-             * I115 (TruffleSqueak): a finished, unreachable or unobservable
+             * (TruffleSqueak): a finished, unreachable or unobservable
              * destination is an InvalidReturn Error; the target identity is
              * never replaced while propagating.
              */
@@ -2889,17 +2926,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * Context remains deferred; other roots use {@link CurrentActivation}
      * followed by {@link MaterializeClosure}.
      *
-     * <p>I115 / PLAT066-C: {@code capturesCreatorContext} is the lowering's
+     * <p>PLAT066-C: {@code capturesCreatorContext} is the lowering's
      * classification of this exact Closure ({@code
      * CanonicalCompilationFacts#capturesCreatorContext}). When it is false
-     * the operation is GraalPy's {@code MakeFunction} with empty {@code
+     * the operation is {@code MakeFunction} with empty {@code
      * freevars}: the Closure receives its creator's own captured environment
      * and the creator's activation is neither materialized nor published,
      * and no compact capture owner is created. That classification is a
      * recorded divergence from the unconditional capture of {@code
      * CALLABLES.md}, pending an owner decision.
      *
-     * <p>I115-H (EXPERIMENTAL): when {@code mayObserveReturnHome} (the
+     * <p>: when {@code mayObserveReturnHome} (the
      * lowering's {@code CanonicalCompilationFacts#mayObserveReturnHome}) is
      * also false and the complete lexical subtree is proven independent,
      * the {@code nonCapturing} specializations build the
@@ -2907,8 +2944,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * representation without binding the frame: the creator's activation is
      * not consulted, and its frame header is read only for the admitted
      * Prelude the new Closure retains. A
-     * definition that may observe its ReturnHome ({@code ^}) keeps the I115-G
-     * construction with the creator's ReturnHome. Inherited-only captures
+     * definition that may observe its ReturnHome ({@code ^}) keeps the * construction with the creator's ReturnHome. Inherited-only captures
      * retain the existing chain without creating a new creator context.
      */
     @Operation
@@ -2918,7 +2954,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @ConstantOperand(type = boolean.class, name = "mayObserveReturnHome")
     public static final class MaterializeCurrentClosure {
         /*
-         * I115: each source-literal plan cell is frozen before guest execution.
+         * each source-literal plan cell is frozen before guest execution.
          * Cache the plan by cell identity so a fresh non-capturing Closure does
          * not reload the cell at each invocation. This cache stores only the
          * plan, never the Closure or any lexical/caller state. Other cells,
@@ -3264,7 +3300,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
 
     /**
-     * D237 / I115: cold name-aware call after operand evaluation.
+     * D237 / cold name-aware call after operand evaluation.
      *
      * The argument vector retains both positional values and source
      * labels. Only this operation freezes the P,K packet. Ordinary
@@ -3953,7 +3989,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
 
     /**
-     * I115: the single validation of a canonical control condition
+     * the single validation of a canonical control condition
      * (ifTrue, ifFalse, ifTrueIfFalse and the standard loops). It accepts
      * exactly canonical {@code true} or {@code false} and yields the
      * primitive decision {@code value == polarity}, so the lowering inverts
@@ -3985,7 +4021,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115: whether a staged {@code not}/{@code and}/{@code or} receiver is
+     * whether a staged {@code not}/{@code and}/{@code or} receiver is
      * exactly canonical {@code true} or {@code false} (or the primitive
      * Boolean carrier of a native comparison), so the frozen standard
      * Boolean behavior is the one ordinary lookup selects. Any other
@@ -4051,7 +4087,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115: the strict result check of standard {@code and}/{@code or}
+     * the strict result check of standard {@code and}/{@code or}
      * (VALUES_AND_COLLECTIONS §16). A selected RHS result must be exactly
      * canonical {@code true} or {@code false}; the primitive carrier of a
      * native comparison is accepted and yields the canonical guest value,
@@ -4102,23 +4138,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    // PRUIBA DE I115, en algún momento esto volverá a funcionar
-    // /**
-     // * I091: the implicit final value of a source root. A primitive numeric
-     // * carrier is returned as is only to a fused direct source send that
-     // * accepts it; every other caller receives the guest value.
-     // */
-    // public static final class MaterializeReturnCarrier {
-        // public static Object perform(Object value, VirtualFrame frame) {
-            // if (ProtosNumericValueSupport.isPrimitiveCarrier(value)
-                    // && ProtosFrameArguments.acceptsPrimitiveResult(frame.getArguments())) {
-                // return value;
-            // }
-            // return ProtosNumericValueSupport.guestValue(value);
-        // }
-    // }
-
-
     /**
      * I113: the continuation classification shared by
      * {@code IsResultKind[CONTINUATION]}.
@@ -4146,7 +4165,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
 
-    // ---- Actor bootstrap using the shared I115 call paths ---------------------------
+    // ---- Actor bootstrap using the shared call paths ---------------------------
 
     @Operation
     public static final class PrepareActorBootstrapModule {
@@ -4175,7 +4194,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115: performs a {@link ProtosCallRequest} produced by a structured
+     * performs a {@link ProtosCallRequest} produced by a structured
      * protocol, Task or I/O state through the shared dispatcher. The request
      * already carries its callable, B5 arguments and calling activation.
      */
@@ -4270,7 +4289,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /** I115: the structured-protocol root is entered only for structured natives. */
+    /** the structured-protocol root is entered only for structured natives. */
     @Operation
     public static final class RejectUnstructuredInvocation {
         @Specialization
@@ -4301,7 +4320,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /** I115: runs the module body of a structured standard import. */
+    /** runs the module body of a structured standard import. */
     @Operation(storeBytecodeIndex = true)
     public static final class RunModuleInitialization {
         @Specialization
@@ -4313,7 +4332,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115 (GraalPy {@code super().method}): the super-send selection,
+     * ({@code super().method}): the super-send selection,
      * starting at the parent of the current methodHome; the result is a
      * {@link ProtosBoundMethod} on the current receiver.
      */

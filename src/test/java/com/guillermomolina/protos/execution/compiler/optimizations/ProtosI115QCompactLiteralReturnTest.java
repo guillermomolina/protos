@@ -14,6 +14,7 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
+
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -244,22 +245,23 @@ final class ProtosI115QCompactLiteralReturnTest {
                 }
                 """, result -> assertEquals(1L, result.asLong()));
         /*
-         * I115: one RichCompareLt whose result CanonicalControlCondition
-         * validates (a redefined '<' may answer any value) before the branch
-         * consumes it; i = i + 1 is one NumberAdd behind its guarded standard
-         * selection.
+         * Both numeric sites guard standard selection. RichCompareLt produces
+         * a canonical Boolean, and a custom comparison result is validated
+         * before CanonicalControlCondition feeds the branch.
          */
         List<String> names = census.names();
         assertEquals(1, names.stream().filter(name -> name.startsWith("c.RichCompareLt")).count());
         int lt = names.indexOf(names.stream()
                 .filter(name -> name.startsWith("c.RichCompareLt")).findFirst().orElseThrow());
-        assertTrue(names.get(lt + 1).startsWith("c." + BOOLEAN_CONDITION), names.toString());
-        assertTrue(names.get(lt + 2).startsWith("branch.false"),
+        int condition = java.util.stream.IntStream.range(lt + 1, names.size())
+                .filter(index -> names.get(index).startsWith("c." + BOOLEAN_CONDITION))
+                .findFirst().orElseThrow();
+        assertTrue(names.get(condition + 1).startsWith("branch.false"),
                 "the branch consumes the validated comparison: " + names);
         assertFalse(census.has("TryPrimitiveNumeric"));
         assertFalse(census.has("ExperimentalInteger"));
         assertEquals(1, names.stream().filter(name -> name.startsWith("c.NumberAdd")).count());
-        assertTrue(census.has("c.IsStandardAddSelection"));
+        assertTrue(census.has("c.IsStandardNumericSelection"));
         assertNoGenericDispatch(census);
         assertFalse(census.has("PromoteFrameLexicalAuthority"));
     }

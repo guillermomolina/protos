@@ -151,7 +151,7 @@ final class ProtosI107ContinuationEmissionTest {
                 // The '+' behavior is selected after its operands (D237) and keeps its
                 // guarded ordinary-send fallback with the continuation composition.
                 int selection = actual.indexOf(actual.stream()
-                        .filter(entry -> entry.startsWith("c.IsStandardAddSelection "))
+                        .filter(entry -> entry.startsWith("c.IsStandardNumericSelection "))
                         .findFirst().orElse("missing"));
                 assertTrue(selection >= 0 && selection < add, actual::toString);
                 assertHasContinuation(actual);
@@ -552,6 +552,7 @@ final class ProtosI107ContinuationEmissionTest {
                             builder.beginSourceSection(statementStart, statement.length());
                             builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             for (int level = 0; level < depth; level++) {
+                                builder.beginTag(StandardTags.CallTag.class);
                                 builder.beginTag(StandardTags.RootTag.class);
                                 builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             }
@@ -561,6 +562,7 @@ final class ProtosI107ContinuationEmissionTest {
                             for (int level = 0; level < depth; level++) {
                                 builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                                 builder.endTag(StandardTags.RootTag.class);
+                                builder.endTag(StandardTags.CallTag.class);
                             }
                             builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();

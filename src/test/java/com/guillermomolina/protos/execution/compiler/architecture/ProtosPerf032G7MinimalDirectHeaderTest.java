@@ -30,6 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
@@ -62,7 +64,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
 
     @Test
-    void variantAUsesTwoSlotsWithTheUnobservableMarker() throws Exception {
+    void variantAUsesB5WithTheUnobservableMarker() throws Exception {
         withCore(module -> {
             ProtosClosureValue literal = parsedClosure("() => { 1 }", "g7-a.protos", module);
             DirectEntry prepared = fastDirect(literal, module);
@@ -293,6 +295,70 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             assertSame(captured,
                     ProtosFrameArguments.activation(arguments).returnHome().orElseThrow());
         });
+    }
+
+    @Test
+    void normalNestedInvocationDoesNotCloseItsActiveCapturedHome() throws Exception {
+        withCore(module -> {
+            ProtosReturnHome home = new ProtosReturnHome();
+            ProtosClosureValue plain = parsedClosure("(value) => { value }", "g7-active-capture.protos", module);
+            ProtosClosureValue captured = new ProtosClosureValue(
+                    plain.definition(), module.lexicalContextsForClosureCapture(),
+                    module.receiver(), module.methodHome().orElse(null), home,
+                    module.prelude().orElseThrow(), plain.executionPlan().orElseThrow());
+            ProtosCallRequest request = ProtosCallRequest.call(captured, List.of(integer(23)), module);
+            assertEquals("23", integerValue(request.callUncached()));
+            Object[] arguments = request.arguments();
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, arguments.length);
+            assertSame(home, arguments[4]);
+            assertTrue(home.isActive());
+            assertFalse(ProtosFrameArguments.compactOwnsReturnHome(arguments));
+            ProtosActivation observed = ProtosFrameArguments.activation(arguments);
+            assertSame(home, observed.returnHome().orElseThrow());
+            assertSame(module, arguments[3]);
+            assertTrue(home.isActive());
+            home.closeOwned();
+        });
+    }
+
+    @Test
+    void suspendedB5KeepsItsCallerTaskAndOwnedHomeThroughCompletionOrCancellation() throws Exception {
+        for (boolean cancel : new boolean[] {false, true}) {
+            withCore(module -> {
+                var domain = module.executionDomain();
+                var prelude = module.prelude().orElseThrow();
+                ProtosFutureValue dependency = new ProtosFutureValue(prelude.futurePrototype(), domain);
+                module.context().createLocalSlot("dependency", dependency);
+                ProtosClosureValue closure = parsedClosure(
+                        "() => { dependency.value()\n ^17 }", "g7-pending-home.protos", module);
+                AtomicReference<ProtosCallRequest> saved = new AtomicReference<>();
+                ProtosTask task = domain.createTask(null, current -> {
+                    ProtosCallRequest request = ProtosCallRequest.taskEntry(closure, current, List.of(), module);
+                    saved.set(request);
+                    assertFalse(ProtosFrameArguments.hasPublishedActivation(request.arguments()));
+                    ProtosBytecodeTaskExecution.executeRequest(current, request);
+                });
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state());
+                Object[] arguments = saved.get().arguments();
+                ProtosReturnHome home = ProtosFrameArguments.compactReturnHome(arguments);
+                assertTrue(home.isMaterialized());
+                assertTrue(home.isActive());
+                assertSame(task, home.ownerTaskForRuntime());
+                assertSame(task, ProtosFrameArguments.compactTask(arguments));
+                assertSame(module, ProtosFrameArguments.compactCaller(arguments));
+                if (cancel) assertTrue(task.requestCancellation());
+                else assertTrue(dependency.resolve(ProtosNullValue.INSTANCE, module));
+                assertTrue(domain.dispatchOne());
+                assertEquals(cancel ? ProtosTask.State.CANCELLED : ProtosTask.State.COMPLETED, task.state());
+                if (!cancel) assertEquals("17", integerValue(task.result().orElseThrow()));
+                assertFalse(home.isActive());
+                assertSame(arguments, saved.get().arguments());
+                assertSame(home, ProtosFrameArguments.compactReturnHome(arguments));
+                assertSame(module, ProtosFrameArguments.compactCaller(arguments));
+                assertSame(task, ProtosFrameArguments.compactTask(arguments));
+            });
+        }
     }
 
     @Test

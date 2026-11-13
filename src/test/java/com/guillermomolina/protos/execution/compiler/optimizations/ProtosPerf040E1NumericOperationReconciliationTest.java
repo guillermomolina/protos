@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -74,9 +75,9 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
     /* The surviving node behind each canonical operation, in OPERATIONS order of meaning. */
     private static final Map<String, Class<?>> NODES =
             Map.of(
-                    "NumberAdd", ProtosExperimentalNumberAddNode.class,
-                    "NumberSubtract", ProtosExperimentalNumberSubtractNode.class,
-                    "NumberMultiply", ProtosExperimentalNumberMultiplyNode.class,
+                    "NumberAdd", ProtosNumberAddNode.class,
+                    "NumberSubtract", ProtosNumberSubtractNode.class,
+                    "NumberMultiply", ProtosNumberMultiplyNode.class,
                     "NumberDivide", ProtosNumberDivideNode.class,
                     "RichCompareLt", ProtosRichCompareLtNode.class,
                     "RichCompareLe", ProtosRichCompareLeNode.class,
@@ -418,20 +419,39 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
         withCore(module -> {
             for (Map.Entry<String, Object[]> entry : Map.of(
                     "+", new Object[] {9L},
+                    "-", new Object[] {3L},
+                    "*", new Object[] {18L},
                     "/", new Object[] {2L},
-                    "<", new Object[] {Boolean.FALSE}).entrySet()) {
+                    "div", new Object[] {2L},
+                    "mod", new Object[] {0L},
+                    "<", new Object[] {Boolean.FALSE},
+                    "<=", new Object[] {Boolean.FALSE},
+                    ">", new Object[] {Boolean.TRUE},
+                    ">=", new Object[] {Boolean.TRUE}).entrySet()) {
                 String selector = entry.getKey();
-                ProtosClosureValue site = closure("(x, y) => x " + selector + " y", module);
+                String expression = selector.equals("div") || selector.equals("mod")
+                        ? "x." + selector + "(y)" : "x " + selector + " y";
+                ProtosClosureValue site = closure("(x, y) => " + expression, module);
                 ProtosObjectValue custom = new ProtosObjectValue(ProtosObjectValue.rootObject());
-                custom.createLocalSlot(selector, answering(41L));
+                boolean ordering = List.of("<", "<=", ">", ">=").contains(selector);
+                Object first = ordering ? Boolean.FALSE : Long.valueOf(41L);
+                Object second = ordering ? Boolean.TRUE : Long.valueOf(42L);
+                custom.createLocalSlot(selector, ordering ? answeringFalse() : answering(41L));
 
                 Object standard = normalized(call(site, module, 6L, 3L));
                 assertEquals(entry.getValue()[0], standard, selector);
-                assertEquals(41L, normalized(call(site, module, custom, 1L)), selector);
-                custom.assignLocalSlot(selector, answering(42L));
-                assertEquals(42L, normalized(call(site, module, custom, 1L)),
+                assertEquals(first, normalized(call(site, module, custom, 1L)), selector);
+                custom.assignLocalSlot(selector, ordering
+                        ? ProtosClosureValue.nativeClosure((activation, supplied) -> Boolean.TRUE)
+                        : answering(42L));
+                assertEquals(second, normalized(call(site, module, custom, 1L)),
                         selector + ": the replaced selection is observed");
                 assertEquals(standard, normalized(call(site, module, 6L, 3L)), selector);
+                if (ordering) {
+                    custom.assignLocalSlot(selector, answering(41L));
+                    assertThrows(com.guillermomolina.protos.runtime.ProtosSignalException.class,
+                            () -> call(site, module, custom, 1L), selector);
+                }
             }
         });
         System.out.println("PERF040_E1_REPLACEMENT_INVALIDATION=PASS");
@@ -542,9 +562,9 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
     }
 
     private static boolean overflowGeneralizes(Class<?> node) {
-        return node == ProtosExperimentalNumberAddNode.class
-                || node == ProtosExperimentalNumberSubtractNode.class
-                || node == ProtosExperimentalNumberMultiplyNode.class;
+        return node == ProtosNumberAddNode.class
+                || node == ProtosNumberSubtractNode.class
+                || node == ProtosNumberMultiplyNode.class;
     }
 
     private static void assertOverflowGeneralizationOnly(

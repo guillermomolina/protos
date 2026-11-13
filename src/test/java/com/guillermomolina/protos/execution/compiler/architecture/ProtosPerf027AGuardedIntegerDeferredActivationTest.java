@@ -215,6 +215,35 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
                 activations[1].prelude().orElseThrow());
     }
 
+    @Test
+    void everyIntegerOperationKeepsTheCompactHeaderOnSuccessAndFailure() throws Exception {
+        inEnteredContext(prelude -> {
+            for (String selector : new String[] {"+", "-", "*", "/", "div", "mod"}) {
+                ProtosCallRequest success = send(prelude, integer(7), selector, integer(2));
+                assertNotNull(success.callUncached(), selector);
+                assertTrue(!ProtosFrameArguments.hasPublishedActivation(success.arguments()), selector);
+                assertSame(ProtosFrameArguments.compactMethodHome(success.arguments()),
+                        prelude.integerPrototype());
+                assertSame(com.guillermomolina.protos.runtime.control.ProtosReturnHome.unobservable(),
+                        ProtosFrameArguments.compactReturnHome(success.arguments()));
+                ProtosCallRequest failure = send(prelude, integer(7), selector, Boolean.TRUE);
+                assertThrows(ProtosSignalException.class, failure::callUncached, selector);
+                assertTrue(!ProtosFrameArguments.hasPublishedActivation(failure.arguments()), selector);
+            }
+        });
+    }
+
+    @Test
+    void truncatingDivisionPromotesOnlyTheOverflowingQuotient() throws Exception {
+        inEnteredContext(prelude -> {
+            assertEquals("9223372036854775808",
+                    integerValue(run(prelude, integer(Long.MIN_VALUE), "div", integer(-1))));
+            assertEquals("0", integerValue(run(prelude, integer(Long.MIN_VALUE), "mod", integer(-1))));
+            assertEquals("-2", integerValue(run(prelude, integer(-7), "div", integer(3))));
+            assertEquals("-1", integerValue(run(prelude, integer(-7), "mod", integer(3))));
+        });
+    }
+
     private interface EnteredBody {
         void run(ProtosPrelude prelude) throws Exception;
     }

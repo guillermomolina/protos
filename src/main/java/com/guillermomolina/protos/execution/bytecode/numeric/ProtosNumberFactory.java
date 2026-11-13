@@ -36,7 +36,9 @@ final class ProtosNumberFactory {
     static ProtosPrelude prelude(Node node, VirtualFrame frame) {
         ProtosBytecodeRootNode root =
                 (ProtosBytecodeRootNode) BytecodeNode.get(node).getBytecodeRootNode();
-        root.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE);
+        if (ProtosFrameArguments.inheritsUntransportedCallerPrelude(frame.getArguments())) {
+            root.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE);
+        }
         ProtosPrelude prelude = ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
         if (prelude == null) {
             throw new IllegalStateException("numeric construction requires the executing Core");
@@ -78,7 +80,7 @@ final class ProtosNumberFactory {
     }
 
     /**
-     * I115: the exact D197-C quotient of two semantic Integers (Integer or
+     * the exact D197-C quotient of two semantic Integers (Integer or
      * Fraction). Throws {@link ArithmeticException} for a zero divisor; the
      * caller signals the guest Error.
      */

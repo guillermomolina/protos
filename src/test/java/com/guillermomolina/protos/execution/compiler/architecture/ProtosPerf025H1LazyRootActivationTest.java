@@ -155,16 +155,25 @@ final class ProtosPerf025H1LazyRootActivationTest {
             assertSame(observed, arguments[0], "the root reuses the published activation");
             assertSame(supplied, observed.suppliedArgumentsForRuntime().get(0));
 
-            // PERF040-E1: a certified primitive '+' never observes the
-            // activation; the source-backed 'negated' send does.
+            // Numeric execution alone does not demand this caller's activation.
             ProtosClosureValue sending =
                     parsedClosure("(value) => { 1 - value.negated() }", "h1-send.protos", module);
             DirectEntry send =
                     fastDirect(sending, module, integer(1));
             assertEquals("2", integerValue(enter(send)));
-            ProtosActivation callee =
-                    assertInstanceOf(ProtosActivation.class, send.targetArguments()[0]);
-            assertSame(callee, ProtosFrameArguments.activation(send.targetArguments()));
+            assertSame(sending, send.targetArguments()[0]);
+
+            // A non-local return observes the actual invocation home, without
+            // demanding a guest Context or publishing another activation.
+            ProtosClosureValue returning = parsedClosure(
+                    "(value) => { ^(1 - value.negated()) }", "h1-return-demand.protos", module);
+            DirectEntry returned = fastDirect(returning, module, integer(1));
+            assertSame(returning, returned.targetArguments()[0]);
+            assertEquals("2", integerValue(enter(returned)));
+            ProtosActivation callee = assertInstanceOf(
+                    ProtosActivation.class, returned.targetArguments()[0]);
+            assertSame(callee, ProtosFrameArguments.activation(returned.targetArguments()));
+            assertSame(returned.targetArguments()[4], callee.returnHome().orElseThrow());
             assertNull(privateField(callee, "context"));
         });
         System.out.println("ON_DEMAND_ACTIVATION_MATERIALIZATION=PASS");

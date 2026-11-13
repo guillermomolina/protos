@@ -30,10 +30,10 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * I115: exact synchronous Protos '/'. It never returns a continuation.
+ * exact synchronous Protos '/'. It never returns a continuation.
  *
- * Operand pairs without a specialization take the ordinary operator send
- * ({@link ProtosI115DirectNumericFallback}).
+ * Remaining standard operand domains use {@link ProtosNumericOperationSupport};
+ * dynamic method selection remains in the lowering.
  */
 @GenerateUncached
 @GenerateInline(false)
@@ -84,7 +84,7 @@ abstract class ProtosNumberDivideNode extends Node {
                         || ProtosNumericValueSupport.isCurrentFloat(argument))) {
             return floatValue(receiver) / floatValue(argument);
         }
-        return ProtosI115DirectNumericFallback.send(root, frame, left, "/", right);
+        return ProtosNumericOperationSupport.arithmetic(root, frame, left, "/", right);
     }
 
     @InliningCutoff
@@ -93,7 +93,7 @@ abstract class ProtosNumberDivideNode extends Node {
         try {
             return ProtosNumberFactory.divide(ProtosNumberFactory.prelude(node, frame), left, right);
         } catch (ArithmeticException zeroDivisor) {
-            throw ProtosI115DirectNumericFallback.unsupported(root, frame);
+            throw ProtosNumericOperationSupport.unsupported(root, frame);
         }
     }
 

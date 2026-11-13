@@ -31,7 +31,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.DoubleBinaryOperator;
 
 public final class ProtosStandardFloatProtocol {
     private ProtosStandardFloatProtocol() {}
@@ -58,14 +57,10 @@ public final class ProtosStandardFloatProtocol {
                                             supplied.get(0)));
                         }));
 
-        installBinary(floatPrototype, "+", ProtosComplexArithmetic.Operation.ADD,
-                (left, right) -> left + right);
-        installBinary(floatPrototype, "-", ProtosComplexArithmetic.Operation.SUBTRACT,
-                (left, right) -> left - right);
-        installBinary(floatPrototype, "*", ProtosComplexArithmetic.Operation.MULTIPLY,
-                (left, right) -> left * right);
-        installBinary(floatPrototype, "/", ProtosComplexArithmetic.Operation.DIVIDE,
-                (left, right) -> left / right);
+        installBinary(floatPrototype, "+");
+        installBinary(floatPrototype, "-");
+        installBinary(floatPrototype, "*");
+        installBinary(floatPrototype, "/");
     }
 
     enum CanonicalFloatOperation {
@@ -148,11 +143,40 @@ public final class ProtosStandardFloatProtocol {
         return canonical.operation;
     }
 
+    /** Pure execution of a selected standard Float operation; null rejects its domain. */
+    static Object tryExecuteCanonicalOperationOne(CanonicalFloatOperation operation,
+            Object receiver, Object argument, ProtosPrelude prelude) {
+        if (!ProtosNumericValueSupport.isCurrentFloat(receiver)) return null;
+        double left = ProtosNumericValueSupport.currentFloatValue(receiver);
+        double right;
+        if (ProtosNumericValueSupport.isCurrentFloat(argument)) {
+            right = ProtosNumericValueSupport.currentFloatValue(argument);
+        } else if (ProtosNumericValueSupport.isCurrentInteger(argument)) {
+            right = ProtosBinary64Rounding.roundExactInteger(argument);
+        } else if (ProtosNumericValueSupport.isFraction(argument)) {
+            right = ProtosNumericValueSupport.roundFractionToBinary64(argument);
+        } else if (ProtosComplexNumericSupport.isComplex(argument) && prelude != null) {
+            ProtosComplexArithmetic.Operation complexOperation = switch (operation) {
+                case ADD -> ProtosComplexArithmetic.Operation.ADD;
+                case SUBTRACT -> ProtosComplexArithmetic.Operation.SUBTRACT;
+                case MULTIPLY -> ProtosComplexArithmetic.Operation.MULTIPLY;
+                case DIVIDE -> ProtosComplexArithmetic.Operation.DIVIDE;
+            };
+            return ProtosComplexArithmetic.binary(complexOperation, left, argument, prelude);
+        } else {
+            return null;
+        }
+        return switch (operation) {
+            case ADD -> left + right;
+            case SUBTRACT -> left - right;
+            case MULTIPLY -> left * right;
+            case DIVIDE -> left / right;
+        };
+    }
+
     private static void installBinary(
             ProtosObjectValue floatPrototype,
-            String selector,
-            ProtosComplexArithmetic.Operation complexOperation,
-            DoubleBinaryOperator operation) {
+            String selector) {
         if (floatPrototype.hasLocalSlot(selector)) {
             throw new IllegalStateException(
                     "Core Float already defines a local " + selector + " slot");
@@ -163,29 +187,13 @@ public final class ProtosStandardFloatProtocol {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));
             }
-            Object argument = supplied.get(0);
-            double right;
-            if (ProtosNumericValueSupport.isCurrentFloat(argument)) {
-                right = ProtosNumericValueSupport.currentFloatValue(argument);
-            } else if (ProtosNumericValueSupport.isCurrentInteger(argument)) {
-                right = ProtosBinary64Rounding.roundExactInteger(argument);
-            } else if (ProtosNumericValueSupport.isFraction(argument)) {
-                // D197: the whole exact quotient is rounded once, before the binary64 operation.
-                right = ProtosNumericValueSupport.roundFractionToBinary64(argument);
-            } else if (ProtosComplexNumericSupport.isComplex(argument)) {
-                // D198: Float op Complex is standard Complex arithmetic. A native body cannot
-                // call guest code, so the private Complex kernel computes it.
-                return ProtosComplexArithmetic.binary(
-                        complexOperation,
-                        receiver,
-                        argument,
-                        activation.prelude().orElseThrow(() -> new IllegalStateException(
-                                "Float arithmetic requires Core prelude")));
-            } else {
-                throw new ProtosSignalException(
-                        ProtosCoreErrors.newError(activation));
+            Object result = tryExecuteCanonicalOperationOne(
+                    CanonicalFloatOperation.forSelector(selector), receiver, supplied.get(0),
+                    activation.prelude().orElse(null));
+            if (result == null) {
+                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
             }
-            return operation.applyAsDouble(receiver, right);
+            return result;
         };
         CanonicalFloatBody canonical =
                 new CanonicalFloatBody(floatPrototype, selector, delegate);

@@ -190,8 +190,8 @@ final class CanonicalToBytecodeLowerer {
      */
     private boolean currentRootEmittedTerminalInvocation;
     /*
-     * I115: an emitted '+' site of the physical root being lowered (its
-     * inline Closure bodies included) whose IsStandardAddSelection may need
+     * an emitted '+' site of the physical root being lowered (its
+     * inline Closure bodies included) whose IsStandardNumericSelection may need
      * the observing Prelude to select the standard String behavior, and
      * whose demand is not yet discharged by a caller-need registration. A
      * nested capturing root propagates its undischarged demand to its
@@ -223,7 +223,7 @@ final class CanonicalToBytecodeLowerer {
     private CanonicalBindingAnalysis currentRootAnalysis;
     private CanonicalLexicalScope currentRootTopScope;
     /*
-     * I115: the Bytecode DSL locals of the genuine CLOSURE root being lowered,
+     * the Bytecode DSL locals of the genuine CLOSURE root being lowered,
      * keyed by declared name: the value of each LOCAL binding, or the cell
      * reference of each CELL binding. Empty for a module ROOT, whose
      * bindings live in its module context (NAME storage).
@@ -232,7 +232,7 @@ final class CanonicalToBytecodeLowerer {
             java.util.Map.of();
 
     /*
-     * I115: the cell references reachable from the root being lowered, keyed
+     * the cell references reachable from the root being lowered, keyed
      * by binding identity: the root's own CELL bindings and the free cells
      * its Closure carries, each copied once at entry into a root-scoped
      * Bytecode DSL local. Saved and restored with the other per-root state.
@@ -241,7 +241,7 @@ final class CanonicalToBytecodeLowerer {
             java.util.Map.of();
 
     /*
-     * I115: the root's own lexical CELL identities that I115InlineStoragePlan
+     * the root's own lexical CELL identities that InlineStoragePlan
      * represents physically as LOCAL, because only inline Closures of this
      * root capture them. Saved and restored with the other per-root state.
      */
@@ -259,8 +259,8 @@ final class CanonicalToBytecodeLowerer {
     private java.util.Set<CanonicalBindingIdentity> currentRootPromotedCells =
             java.util.Set.of();
 
-    /* I115: the inline decisions of this lowerer, as consulted at emission. */
-    private final I115InlineStoragePlan.InlinePolicy i115InlinePolicy = inlinePolicyUnder(null);
+    /* the inline decisions of this lowerer, as consulted at emission. */
+    private final I115InlineStoragePlan.InlinePolicy inlineStoragePolicy = inlinePolicyUnder(null);
 
     /**
      * The inline decisions under the admission {@code context} of the site
@@ -272,15 +272,18 @@ final class CanonicalToBytecodeLowerer {
                 @Override
                 public boolean admitsInline(CanonicalClosure closure) {
                     return context == null
-                            ? i115AdmitsInlineClosure(closure)
-                            : i115AdmitsInlineClosure(closure, context);
+                            ? admitsInlineControlClosure(closure)
+                            : admitsInlineControlClosure(closure, context);
                 }
 
                 @Override
                 public boolean inlineCallbackPosition(CanonicalSend send, int position) {
-                    I115Control control = I115Control.of(send.message(), send.arguments());
+                    ControlSelector control = ControlSelector.of(send.message(), send.arguments());
                     if (control != null) {
-                        return control.callbackPosition(position);
+                        return control.callbackPosition(position)
+                                && (send.receiver() instanceof CanonicalClosure
+                                        || canonicalBooleanLiteral(send.receiver()) != null
+                                        || admitsSelectedCallbacks(send.arguments()));
                     }
                     /*
                      * The right operand of and/or runs inline for a canonical
@@ -290,7 +293,7 @@ final class CanonicalToBytecodeLowerer {
                      */
                     return position == 1
                             && !send.contextual()
-                            && i115NativeBooleanControl(send.message(), send.arguments()) != null
+                            && nativeBooleanControl(send.message(), send.arguments()) != null
                             && admitsSelectedCallbacks(send.arguments());
                 }
             };
@@ -305,7 +308,7 @@ final class CanonicalToBytecodeLowerer {
             java.util.Set.of();
 
     /*
-     * I115-H4-B EXPERIMENTAL: the parse configuration selected only when the
+     *: the parse configuration selected only when the
      * internal trace probe is enabled at JVM start; it adds the experimental
      * Call1 instrumentations, which are otherwise absent from the bytecode.
      */
@@ -362,10 +365,10 @@ final class CanonicalToBytecodeLowerer {
      */
     // Physical storage is in the parent root; lexical ownership remains the callback.
     // Tooling uses this prefix to project a virtual callback scope on demand.
-    /* I115: root-level Closure creation never materializes its creator (see beginClosureCapture). */
+    /* root-level Closure creation never materializes its creator (see beginClosureCapture). */
     private static final boolean COMPACT_ROOT_CLOSURE_CAPTURE = true;
 
-    /* I115: the name prefix of the root local holding one free cell. */
+    /* the name prefix of the root local holding one free cell. */
     static final String FREE_CELL_LOCAL_PREFIX = "i115FreeCell:";
     static final String NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX =
             "i095CallbackScalar:";
@@ -606,13 +609,13 @@ final class CanonicalToBytecodeLowerer {
         }
         /*
          * A conditional control whose literal receiver decides it statically
-         * is emitted without a send ({@link #emitI115Control}): it evaluates
+         * is emitted without a send ({@link #emitControl}): it evaluates
          * no operand besides literal Closures and runs only the selected
          * callback inline.
          */
-        I115StaticControl staticControl = standardObjectPublished
-                ? classifyI115StaticControl(
-                        I115Control.of(send.message(), send.arguments()),
+        StaticControlSelection staticControl = standardObjectPublished
+                ? classifyStaticControlSelection(
+                        ControlSelector.of(send.message(), send.arguments()),
                         receiver, send.arguments(), rootContext)
                 : null;
         if (staticControl != null && !staticControl.control().loop()) {
@@ -692,7 +695,7 @@ final class CanonicalToBytecodeLowerer {
             return existing;
         }
 
-        // I115-R2: publish the pending cell before emitting its root.
+        // publish the pending cell before emitting its root.
         // Freezing the cell still happens after create() completes.
         ProtosClosureExecutionPlanCell cell = existing;
         if (cell == null) {
@@ -838,7 +841,7 @@ final class CanonicalToBytecodeLowerer {
                                 }
                             });
 
-            // I115: Truffle SimpleLanguage's immediate cached-tier admission.
+            // Truffle SimpleLanguage's immediate cached-tier admission.
             // Specialize source-root locals from the first invocation.
             for (ProtosBytecodeRootNode root : roots.getNodes()) {
                 if (root.isSemanticActivationRoot()) {
@@ -923,7 +926,7 @@ final class CanonicalToBytecodeLowerer {
         boolean savedTerminalInvocation = currentRootEmittedTerminalInvocation;
         boolean savedMayRequirePrelude = currentRootMayRequirePrelude;
         /*
-         * I115: exactly the MaterializeCurrentClosure flags its creator
+         * exactly the MaterializeCurrentClosure flags its creator
          * emits (with the creator's analysis, still current here). When all
          * three are false the Closure is the lightweight non-capturing
          * representation, which owns no Prelude: its root reads only a
@@ -1054,7 +1057,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginRoot();
 
         /*
-         * I115: the storage of every binding of this root is fixed here,
+         * the storage of every binding of this root is fixed here,
          * before its body is emitted, from the binding analysis. A module
          * ROOT allocates no local for its declarations: they are NAME
          * bindings created in its module context. A CLOSURE root allocates
@@ -1073,7 +1076,7 @@ final class CanonicalToBytecodeLowerer {
                 new java.util.LinkedHashMap<>();
         if (scopeForThisRoot.kind() == CanonicalLexicalScope.Kind.CLOSURE) {
             /*
-             * I115: allocate positional parameter locals first, in
+             * allocate positional parameter locals first, in
              * declaration order. LocalRangeAccessor requires a contiguous
              * allocation range. Other declared locals follow that range.
              */
@@ -1092,7 +1095,7 @@ final class CanonicalToBytecodeLowerer {
                 }
             }
             /*
-             * I115: the physical storage plan is fixed before the prologue,
+             * the physical storage plan is fixed before the prologue,
              * from this root's analysis and the same inline policy the
              * emission sites use. A promoted identity keeps its ordinary
              * local and gets no cell.
@@ -1100,7 +1103,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameLocals = java.util.Collections.unmodifiableMap(frameLocals);
             currentRootPromotedCells = I115InlineStoragePlan.promotedCells(
                     sequence, activationDefinition, scopeForThisRoot,
-                    currentRootAnalysis, i115InlinePolicy);
+                    currentRootAnalysis, inlineStoragePolicy);
             for (String name : scopeForThisRoot.declaredNames()) {
                 CanonicalBindingIdentity identity = scopeForThisRoot.identity(name);
                 if (scopeForThisRoot.needsCell(name)
@@ -1155,7 +1158,7 @@ final class CanonicalToBytecodeLowerer {
 
         if (activationDefinition != null) {
             /*
-             * I115: every Closure root binds its parameters through the one
+             * every Closure root binds its parameters through the one
              * parameter lowering: each supplied argument is stored directly
              * into its classified LOCAL or CELL storage.
              */
@@ -1290,12 +1293,12 @@ final class CanonicalToBytecodeLowerer {
                     builder.endReturn();
                 } else if (last instanceof CanonicalLiteral literal
                         && primitiveNumberLiteralOrNull(literal) != null) {
-                    // I115: numeric literals return directly.
+                    // numeric literals return directly.
                     builder.beginReturn();
                     builder.emitLoadConstant(primitiveNumberLiteralOrNull(literal));
                     builder.endReturn();
                 } else if (last instanceof CanonicalLookup terminalRead) {
-                    // I115: a terminal binding read returns directly.
+                    // a terminal binding read returns directly.
                     emitLookup(builder, terminalRead, true);
                 } else {
                     builder.beginReturn();
@@ -1307,7 +1310,7 @@ final class CanonicalToBytecodeLowerer {
                     builder.endReturn();
                 }
             } else if (admitsTerminalClosureCreate(last)) {
-                // I115: a final Closure creation returns the created Closure directly.
+                // a final Closure creation returns the created Closure directly.
                 if (expressions.size() > 1) {
                     emitDiscardedPrefix(
                             builder,
@@ -1315,7 +1318,7 @@ final class CanonicalToBytecodeLowerer {
                 }
                 emitTerminalClosureCreate(builder, (CanonicalCreate) last);
             } else if (admitsTerminalClosureCall(last)) {
-                // I115: Call0 and Call1 return directly.
+                // Call0 and Call1 return directly.
                 /*
                  * I112 / PLAT062-T: the final Closure call is the root's
                  * terminal invocation. No result or scratch local, no
@@ -1496,7 +1499,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I115-S1c-L: the single physical layout of a Closure root's LOCAL/CELL
+     * the single physical layout of a Closure root's LOCAL/CELL
      * bindings, shared by tooling scope projection and the lazy frame-backed
      * guest Context view. It records each binding's physical storage (a
      * capture promoted by the inline storage plan is a LOCAL of this root,
@@ -1980,7 +1983,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
 
-    /** PERF034-C / I115: an admitted scalar read stored into {@code result}. */
+    /** PERF034-C / an admitted scalar read stored into {@code result}. */
     private void emitScalarLocalReadToResult(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup,
@@ -1999,10 +2002,10 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115 / GraalPy load.local: a statically resolved current-root scalar
+     * load.local: a statically resolved current-root scalar
      * reads its Bytecode DSL local directly, with no compact/published switch.
      *
-     * <p>I115-S1c-L: an admitted scalar root contains no {@code context}
+     * <p>an admitted scalar root contains no {@code context}
      * intrinsic and no Closure literal, so its Context is never observed and
      * nothing can remove, recreate or shadow the binding: the direct read is
      * exactly the semantic read.
@@ -2100,7 +2103,7 @@ final class CanonicalToBytecodeLowerer {
                                 null)
                         : null;
 
-        // I115: only the last expression supplies the consumer's value; the
+        // only the last expression supplies the consumer's value; the
         // earlier ones are statements and never write the result local.
         DiscardSink sink = new DiscardSink();
         for (int index = 0; index < expressions.size(); index++) {
@@ -2337,7 +2340,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: binds every parameter of {@code definition}, left to right,
+     * binds every parameter of {@code definition}, left to right,
      * directly into its classified storage. Each supplied value is read from
      * the B5 call ABI, whose supplied positions keep their offsets after
      * publication, so no activation is materialized to bind a parameter.
@@ -2362,7 +2365,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal defaultChildResult,
             BytecodeLocal defaultResumeValue) {
         /*
-         * I115 experimental grouped-copy admission: only an entire
+         * experimental grouped-copy admission: only an entire
          * positional parameter list owned by this Closure root, with
          * physical LOCAL storage and no default or rest binding, can use
          * the contiguous local range.
@@ -2596,7 +2599,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I115: the root-scoped locals of the cells visible to a CLOSURE root are
+     * the root-scoped locals of the cells visible to a CLOSURE root are
      * established once at entry: a fresh cell for each own CELL binding
      * (uninitialized until its binding point) and the Closure's captured
      * cell for each free cell, at its constant captured-cell index.
@@ -2609,7 +2612,7 @@ final class CanonicalToBytecodeLowerer {
         }
         for (String name : scope.cellNamesInDeclarationOrder()) {
             if (currentRootPromotedCells.contains(scope.identity(name))) {
-                // I115: an inline-only capture is a plain local; no cell.
+                // an inline-only capture is a plain local; no cell.
                 continue;
             }
             builder.beginStoreLocal(currentRootCellLocals.get(scope.identity(name)));
@@ -2625,7 +2628,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the static binding identity of a classified site, or {@code null}
+     * the static binding identity of a classified site, or {@code null}
      * for a {@code Dynamic} (or unanalyzed) site, which is a name operation.
      */
     private static CanonicalBindingIdentity staticIdentityOrNull(
@@ -2634,7 +2637,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the cell local of {@code identity} when its storage is CELL, else
+     * the cell local of {@code identity} when its storage is CELL, else
      * {@code null}. A cell binding is always reachable from the root being
      * lowered (its owner, or a root carrying it as a free cell); anything
      * else is a lowering defect, never a reason to choose another storage.
@@ -2651,7 +2654,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the Bytecode DSL local of a LOCAL binding owned by the CLOSURE
+     * the Bytecode DSL local of a LOCAL binding owned by the CLOSURE
      * root being lowered, else {@code null} (NAME or MEMBER storage). A LOCAL
      * binding is only ever accessed from its own root; another owner is a
      * lowering defect.
@@ -2671,9 +2674,9 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the physical storage of {@code identity} in the root being
+     * the physical storage of {@code identity} in the root being
      * lowered: its lexical storage, except that a CELL identity promoted by
-     * {@link I115InlineStoragePlan} is a LOCAL of its owner root. A promoted
+     * {@link InlineStoragePlan} is a LOCAL of its owner root. A promoted
      * identity is only ever accessed from that root's inline region, so a
      * not-yet-established access executes in place, before its binding
      * point, exactly like a LOCAL one.
@@ -2713,7 +2716,7 @@ final class CanonicalToBytecodeLowerer {
      * prefix is observed once, before any binding is created, and each value
      * is then stored, in source order, directly into its own classified
      * storage; a failing observation creates nothing. When {@code
-     * presenceChecked} (I115-S1c-L), each creation applies the ordinary
+     * presenceChecked} (), each creation applies the ordinary
      * {@code :} rules (a PRESENT binding or a CLOSED/FROZEN Context signals
      * its Error) left to right, without rollback. The whole expression
      * yields {@code source} into {@code result}, unless that is {@code null}
@@ -2760,7 +2763,7 @@ final class CanonicalToBytecodeLowerer {
                 builder.endObservedMultipleCreateValue();
             };
             if (presenceChecked) {
-                // I115-S1c-L: ordinary ':' rules per name, left to right, no rollback.
+                // ordinary ':' rules per name, left to right, no rollback.
                 builder.beginDiscardValue();
                 emitPresenceCheckedCreateOperation(
                         builder, names.get(index), storages.get(index), element);
@@ -2886,13 +2889,13 @@ final class CanonicalToBytecodeLowerer {
                 endStatement(builder);
             } else {
                 /*
-                 * I115: every other expression is a statement: direct
+                 * every other expression is a statement: direct
                  * numeric operations and simple values are discarded on
                  * the stack, and a composed invocation writes at most the
                  * lazily created discard sink, never a staged result.
                  */
                 beginStatement(builder, expression);
-                if (sink == null && classifyI115StaticControl(expression) == null) {
+                if (sink == null && classifyStaticControlSelection(expression) == null) {
                     sink = new DiscardSink();
                 }
                 emitExpressionStatement(
@@ -2917,7 +2920,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: whether {@code last}, the final expression of the genuine root
+     * whether {@code last}, the final expression of the genuine root
      * being lowered, is a target-less creation whose value is a Closure
      * literal. Its value cannot suspend, so the root returns the created
      * Closure directly instead of staging it in a sequence result.
@@ -2933,7 +2936,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: one admitted {@link #admitsTerminalClosureCreate} statement. The
+     * one admitted {@link #admitsTerminalClosureCreate} statement. The
      * nested root and its plan cell are registered before the Return opens;
      * the Closure is created at the statement and stored once into the
      * binding's classified storage, which then yields the returned value:
@@ -2990,7 +2993,7 @@ final class CanonicalToBytecodeLowerer {
         boolean bindsFrame = requiresLexicalViewBeforeCapture(closure);
         if (bindsFrame) {
             /*
-             * I115-S1c-L: the first point where this root's frame must
+             * the first point where this root's frame must
              * survive. The block's value is the created Closure.
              */
             builder.beginBlock();
@@ -3006,7 +3009,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I115-S1c-L: a Closure root whose bindings a nested site may need to
+     * a Closure root whose bindings a nested site may need to
      * select by name binds its frame to the frame-backed view before creating
      * a Closure that captures it, so the captured lexical scope reaches the
      * live frame bindings even after this activation returns.
@@ -3019,7 +3022,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I115-S1c-L: an inline object construction whose body may select a
+     * an inline object construction whose body may select a
      * binding of this Closure root's frame by name binds the frame before
      * creating the construction activation. Only bodies the analysis recorded
      * pay for it; every other object literal keeps the compact frame.
@@ -3102,10 +3105,10 @@ final class CanonicalToBytecodeLowerer {
                 || send.arguments().size() != 1
                 || hasVectorArgument(send.arguments())
                 || primitiveNumericSendCandidate(send)
-                || i115AddSend(send)
+                || isAdditionSend(send)
                 || indexedProtocolSend(send)
-                || I115Control.of(send.message(), send.arguments()) != null
-                || i115NativeBooleanControl(
+                || ControlSelector.of(send.message(), send.arguments()) != null
+                || nativeBooleanControl(
                         send.message(), send.arguments()) != null) {
             return false;
         }
@@ -3145,7 +3148,7 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginTag(StandardTags.CallTag.class);
 
-        // GraalPy RootNodeCompiler.emitCall: emit unary operands directly.
+        // RootNodeCompiler.emitCall: emit unary operands directly.
         // No intermediate BytecodeLocal stores or reloads are required.
         if (expression instanceof CanonicalCall call
                 && call.arguments().size() == 1) {
@@ -3266,7 +3269,7 @@ final class CanonicalToBytecodeLowerer {
 
 
     /*
-     * I115 EXPERIMENTAL DIRECT-UNARY EMISSION.
+     * DIRECT-UNARY EMISSION.
      *
      * This is an emission category, not a proof of non-suspension.
      * The direct path deliberately does not compose a continuation
@@ -3320,14 +3323,12 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalSend send) {
             /*
-             * I115: at and size are never stack-only operands. Their
+             * at and size are never stack-only operands. Their
              * selected behavior may be program-defined and may suspend, so
              * they are staged by emitI115IndexedSend, which composes the
              * dispatched path with Yield/ResumeDispatchedContinuation.
              */
-            return primitiveNumericSendCandidate(send)
-                    && i115DirectUnaryOperand(send.receiver())
-                    && i115DirectUnaryOperand(send.arguments().get(0));
+            return false;
         }
         return false;
     }
@@ -3362,7 +3363,7 @@ final class CanonicalToBytecodeLowerer {
                     && !primitiveNumericSelector(selector)
                     && !"at".equals(selector)
                     && !i115StructuredSelector(selector)
-                    && I115Control.of(selector, arguments) == null
+                    && ControlSelector.of(selector, arguments) == null
                     && i115DirectUnaryOperand(receiver);
         }
         return false;
@@ -3376,7 +3377,7 @@ final class CanonicalToBytecodeLowerer {
                 && !hasVectorArgument(send.arguments());
     }
 
-    // I115: GraalPy GetLen, or the selected size behavior.
+    // GetLen, or the selected size behavior.
     private static boolean i115IndexedSize(CanonicalSend send) {
         return "size".equals(send.message())
                 && !send.contextual()
@@ -3426,7 +3427,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115 (GraalPy BinarySubscript / SetItem / GetLen over staged
+     * (BinarySubscript / SetItem / GetLen over staged
      * operands). {@code IsStandardIndexedSelection} observes the behavior
      * actually selected for {@code selector} on the receiver:
      * <ul>
@@ -3694,7 +3695,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: whether emitting {@code expression} can need the continuation
+     * whether emitting {@code expression} can need the continuation
      * scratch locals ({@code preparedClosureCall}, {@code childResult},
      * {@code resumeValue}) of a suspendable invocation, or must otherwise be
      * treated as able to suspend. Unlike {@link #requiresComposedInvocation},
@@ -3725,11 +3726,11 @@ final class CanonicalToBytecodeLowerer {
                     // The admitted inline path emits no such invocation.
                     yield true;
                 }
-                // I115: at/size may dispatch a suspending selected behavior.
+                // at/size may dispatch a suspending selected behavior.
                 if (indexedProtocolSend(send) || i115IndexedSize(send)) {
                     yield true;
                 }
-                I115StaticControl staticControl = classifyI115StaticControl(send);
+                StaticControlSelection staticControl = classifyStaticControlSelection(send);
                 if (staticControl != null) {
                     if (staticControl.eliminable()) {
                         yield false;
@@ -3739,9 +3740,7 @@ final class CanonicalToBytecodeLowerer {
                     yield callback.body().expressions().stream()
                             .anyMatch(this::requiresContinuationScratch);
                 }
-                yield !primitiveNumericSendCandidate(send)
-                        || requiresContinuationScratch(send.receiver())
-                        || requiresContinuationScratch(send.arguments().get(0));
+                yield true;
             }
             case CanonicalCreate create ->
                     create.target().map(this::requiresContinuationScratch)
@@ -3763,7 +3762,7 @@ final class CanonicalToBytecodeLowerer {
                     i115ConstantLongArray(call) == null;
             case CanonicalSuperSend ignored -> true;
             case CanonicalDerivedInequality ignored -> true;
-            // I115: a non-standard receiver dispatches atPut, which may suspend.
+            // a non-standard receiver dispatches atPut, which may suspend.
             case CanonicalIndexedAssign ignored -> true;
             case CanonicalCompose ignored -> true;
             case CanonicalObject ignored -> true;
@@ -3913,7 +3912,7 @@ final class CanonicalToBytecodeLowerer {
 
 
     /**
-     * I115: directly emit a synchronous member receiver when its
+     * directly emit a synchronous member receiver when its
      * expression is supported by ordinary value lowering.
      *
      * No continuation-local is necessary for these receivers.
@@ -4766,7 +4765,7 @@ final class CanonicalToBytecodeLowerer {
      * dynamic-control authority and homes; see {@link
      * com.guillermomolina.protos.runtime.ProtosActivation#forObjectConstruction}).
      *
-     * <p>The body is not a lexical capture scope. I115: it keeps the
+     * <p>The body is not a lexical capture scope. it keeps the
      * enclosing root's analysis and storage, so a reference to an enclosing
      * Closure binding uses that binding's own LOCAL or CELL storage, Closures
      * nested in the body capture cells from the enclosing root, and the
@@ -4790,7 +4789,7 @@ final class CanonicalToBytecodeLowerer {
 
         if (requiresLexicalViewBeforeConstruction(object)) {
             /*
-             * I115-S1c-L: a site of this body may select a binding of the
+             * a site of this body may select a binding of the
              * enclosing Closure frame by name (e.g. `name: name` while the
              * member is ABSENT), so the frame is bound to its frame-backed
              * view before the construction activation captures the
@@ -4832,23 +4831,23 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: one creation. A target-less creation of a binding with LOCAL or
+     * one creation. A target-less creation of a binding with LOCAL or
      * CELL physical storage (an admitted scalar binding, an inline callback
      * binding, an ordinary lexical binding or a cell promoted to LOCAL by
-     * {@link I115InlineStoragePlan}) is a single direct store of its RHS
-     * (GraalPy {@code StoreVisitor}). A NAME/MEMBER or explicitly targeted
+     * {@link InlineStoragePlan}) is a single direct store of its RHS
+     * ({@code StoreVisitor}). A NAME/MEMBER or explicitly targeted
      * creation keeps its destination selection and evaluation order. With
      * {@code result == null} the creation has no consumer: no value is
      * produced, materialized, stored or reloaded beyond the mutation itself.
      *
-     * <p>I115-S1c-L: a LOCAL/CELL creation whose binding may already be
+     * <p>a LOCAL/CELL creation whose binding may already be
      * PRESENT, or whose Context may be CLOSED/FROZEN, applies the ordinary
      * {@code :} rules through {@code CreateLexicalLocal}/{@code
      * CreateLexicalCell}; every other one is the direct store.
      */
 
     /**
-     * I115: a directly emitible physical attribute operand.
+     * a directly emitible physical attribute operand.
      *
      * Nested Closure roots must not be registered inside an already
      * opened attribute operation. Unsupported direct shapes are staged
@@ -5039,13 +5038,19 @@ final class CanonicalToBytecodeLowerer {
                 BytecodeLocal local = currentRootFrameLocals.get(create.name());
                 if (local == null) {
                     throw new AssertionError(
-                            "I115 missing scalar creation local: " + create.name());
+                            "missing scalar creation local: " + create.name());
+                }
+                BindingValue value = expressionBindingValue(
+                        builder, create.value(), false,
+                        preparedCall, childResult, resumeValue);
+                if (value.suspendable()) {
+                    throw new AssertionError("scalar creation must be synchronous");
                 }
                 emitBindingWrite(
                         builder, BindingStorage.ofLocal(local),
-                        expressionBindingValue(
-                                builder, create.value(), false,
-                                preparedCall, childResult, resumeValue),
+                        BindingValue.synchronous(() -> emitPresenceCheckedCreateOperation(
+                                builder, create.name(), BindingStorage.ofLocal(local),
+                                value.direct())),
                         result);
                 return;
             }
@@ -5175,9 +5180,9 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115 / GraalPy store.local: write an admitted scalar binding directly.
+     * store.local: write an admitted scalar binding directly.
      *
-     * <p>I115-S1c-L: an admitted scalar root never observes its Context, so
+     * <p>an admitted scalar root never observes its Context, so
      * the binding cannot be removed, recreated or shadowed: the direct write
      * is exactly the semantic write.
      */
@@ -5212,10 +5217,10 @@ final class CanonicalToBytecodeLowerer {
     /**
      * Emits a bare or member assignment outside the admitted scalar lane.
      *
-     * <p>I115 / I115-S1c-L: the destination is always selected before the RHS
+     * <p>the destination is always selected before the RHS
      * evaluates and is never selected again afterwards. A {@code DIRECT}
      * LOCAL or CELL destination (provably the PRESENT nearest binding) is
-     * written directly (GraalPy {@code store.local}/{@code store.cell}). A
+     * written directly ({@code store.local}/{@code store.cell}). A
      * {@code PRESENCE_CHECKED} LOCAL or CELL destination selects its own
      * storage while PRESENT, or the destination chosen by live lexical
      * selection, before the RHS. A module binding uses {@code
@@ -5270,7 +5275,7 @@ final class CanonicalToBytecodeLowerer {
         emitNamedOrMemberAssign(builder, assign, mutationTarget, value, result);
     }
 
-    /** I115-S1c-L: the run-time access of a bare assignment's destination. */
+    /** the run-time access of a bare assignment's destination. */
     private CanonicalBindingAnalysis.LexicalAccess assignmentAccess(
             CanonicalAssign assign, CanonicalBindingIdentity identity) {
         return identity == null
@@ -5279,7 +5284,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115-S1c-L: a bare assignment to a LOCAL or CELL binding whose
+     * a bare assignment to a LOCAL or CELL binding whose
      * membership must be validated, or whose nearest binding must be selected
      * live. The destination is selected into a fresh local before {@code
      * rhsToLocal} evaluates the RHS, and the assignment operation writes
@@ -5337,7 +5342,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115-S1c-L: a target-less creation of a LOCAL or CELL binding that may
+     * a target-less creation of a LOCAL or CELL binding that may
      * find its binding PRESENT or its Context CLOSED/FROZEN ({@link
      * CanonicalBindingAnalysis#requiresPresenceCheckedCreation}). The RHS
      * completes first, then the creation applies the ordinary {@code :}
@@ -5380,13 +5385,13 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
-    /* I115-S1c-L: whether a target-less creation must apply the ':' presence rules. */
+    /* whether a target-less creation must apply the ':' presence rules. */
     private boolean requiresPresenceCheckedCreation(CanonicalCreate create) {
         return currentRootAnalysis != null
                 && currentRootAnalysis.requiresPresenceCheckedCreation(create);
     }
 
-    /** I115: the static identity of a bare assignment, or {@code null}. */
+    /** the static identity of a bare assignment, or {@code null}. */
     private CanonicalBindingIdentity assignmentIdentityOrNull(CanonicalAssign assign) {
         if (assign.target().isPresent() || currentRootAnalysis == null) {
             return null;
@@ -5395,7 +5400,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the physical storage of a lexical binding write: exactly one of
+     * the physical storage of a lexical binding write: exactly one of
      * {@code cell} (a CELL binding's cell reference) and {@code local} (a
      * LOCAL binding's frame local) is non-null.
      */
@@ -5406,9 +5411,9 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the single selection of the physical storage of {@code identity}
+     * the single selection of the physical storage of {@code identity}
      * (through {@link #physicalStorageOf}, so a cell promoted by {@link
-     * I115InlineStoragePlan} is a LOCAL), or {@code null} for NAME and MEMBER
+     * InlineStoragePlan} is a LOCAL), or {@code null} for NAME and MEMBER
      * storage.
      */
     private BindingStorage bindingStorageOrNull(CanonicalBindingIdentity identity) {
@@ -5428,7 +5433,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the RHS of a binding write. {@code direct} emits exactly one
+     * the RHS of a binding write. {@code direct} emits exactly one
      * value onto the operand stack and is used only when no resumption can
      * occur; {@code staged} evaluates the RHS to completion into a given
      * local, owning the continuation protocol when the RHS may suspend
@@ -5447,7 +5452,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the RHS {@code value} of a creation or assignment. A Closure
+     * the RHS {@code value} of a creation or assignment. A Closure
      * literal's nested root and plan are registered now, before any
      * consuming store opens; only its materialization is deferred to the
      * producer. Whether the RHS may suspend is decided statically by {@link
@@ -5481,7 +5486,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115 (GraalPy {@code StoreVisitor}): the direct write of a classified
+     * ({@code StoreVisitor}): the direct write of a classified
      * lexical binding by a creation or an assignment of RHS {@code value}.
      * Returns {@code false}, emitting nothing, for NAME and MEMBER storage.
      * A LOCAL binding may keep a carrier when {@code carrierPermitted}; a
@@ -5513,7 +5518,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the single implementation of a lexical binding write.
+     * the single implementation of a lexical binding write.
      * {@code result == null} means the value has no consumer, so nothing
      * beyond the RHS and the store is emitted.
      *
@@ -5577,10 +5582,10 @@ final class CanonicalToBytecodeLowerer {
 
 
     /**
-     * I115: the fixed destination of a bare assignment statically resolved
+     * the fixed destination of a bare assignment statically resolved
      * to a module (ROOT) NAME binding at physical depth {@code moduleDepth}
      * ({@code 0}: the running module root's own context), selected before
-     * the RHS evaluates (GraalPy WriteGlobal). It is stored in a fresh
+     * the RHS evaluates (WriteGlobal). It is stored in a fresh
      * local consumed by {@link #emitModuleAssign}.
      */
     private BytecodeLocal emitSelectModuleWriteTarget(
@@ -5597,7 +5602,7 @@ final class CanonicalToBytecodeLowerer {
         return destination;
     }
 
-    /* I115: assigns the evaluated RHS through a selected module destination. */
+    /* assigns the evaluated RHS through a selected module destination. */
     private static void emitModuleAssign(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal destination,
@@ -5641,7 +5646,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: opens the consumer of a mutation operation's value: {@code
+     * opens the consumer of a mutation operation's value: {@code
      * result} when the value is consumed, or {@code DiscardValue} when the
      * mutation has no consumer ({@code result == null}).
      */
@@ -5666,18 +5671,12 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115 (GraalPy SetItem) indexed assignment {@code receiver[index] =
-     * value}, consumed or discarded. Protos order, not GraalPy's
-     * StoreVisitor order: the receiver, then the index, then the RHS are
-     * each evaluated exactly once into locals, and only then is the
-     * mutation performed, so a failing mutation still follows the
-     * evaluation of all three. The mutation is the direct {@code SetItem}
-     * when the selected atPut is the standard Array/Bytes behavior, and
-     * otherwise the dispatched atPut (GetMethod, CallBinaryMethod, composed
-     * continuation). Its return value is never observed: a consumed
-     * assignment yields the evaluated RHS.
+     * Evaluate receiver, index and RHS once into continuation locals, then select
+     * atPut. Standard indexed behavior executes internally; other selections use
+     * the shared dispatcher. Indexed-assignment syntax returns the prepared RHS
+     * regardless of the atPut result (VALUES_AND_COLLECTIONS, Indexed Access).
      */
-    private void emitI115DirectIndexedWrite(
+    private void emitIndexedWrite(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalIndexedAssign assign,
             BytecodeLocal result,
@@ -5731,7 +5730,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        emitI115DirectIndexedWrite(
+        emitIndexedWrite(
                 builder, indexedAssign, result,
                 preparedCall, childResult, resumeValue,
                 this::emitBodyExpressionToLocal);
@@ -5787,7 +5786,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: a parameter default RHS as a binding value. It keeps the
+     * a parameter default RHS as a binding value. It keeps the
      * default-expression lowering, which completes into a local, so it is
      * staged: it completes straight into the LOCAL binding, or into the
      * consumer's result or the cell-store local before {@code StoreCell}.
@@ -5837,9 +5836,9 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I115: the parameter default-expression counterpart of
+     * the parameter default-expression counterpart of
      * emitResolvedBodyAssign, with the same destination selection before the
-     * RHS (I115-S1c-L).
+     * RHS ().
      */
     private void emitDefaultAssign(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -5906,7 +5905,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        emitI115DirectIndexedWrite(
+        emitIndexedWrite(
                 builder, indexedAssign, result,
                 preparedCall, childResult, resumeValue,
                 this::emitDefaultExpressionToLocal);
@@ -5966,7 +5965,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         if (send.contextual() && !hasNamedArgument(send.arguments())) {
-            emitI115ContextualControl(
+            emitContextualControl(
                     builder, send, result,
                     scratch, childResult, resumeValue, false);
             return;
@@ -5987,7 +5986,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
 
-    /** I115: how an invocation operand is staged in the current lowering context. */
+    /** how an invocation operand is staged in the current lowering context. */
     @FunctionalInterface
     private interface OperandStager {
         void stage(
@@ -5999,7 +5998,7 @@ final class CanonicalToBytecodeLowerer {
                 BytecodeLocal resumeValue);
     }
 
-    /** I115: how a spread argument vector is staged in the current lowering context. */
+    /** how a spread argument vector is staged in the current lowering context. */
     @FunctionalInterface
     private interface SpreadStager {
         void stage(
@@ -6011,11 +6010,11 @@ final class CanonicalToBytecodeLowerer {
                 BytecodeLocal resumeValue);
     }
 
-    /** I115: the three invocation shapes of the canonical AST. */
+    /** the three invocation shapes of the canonical AST. */
     private enum InvocationShape { CALL, SEND, SUPER_SEND }
 
     /**
-     * I115 (GraalPy call lowering): the single lowering of every ordinary
+     * (call lowering): the single lowering of every ordinary
      * call, send and super send.
      *
      * <ol>
@@ -6071,12 +6070,12 @@ final class CanonicalToBytecodeLowerer {
         }
 
         boolean namedInvocation = hasNamedArgument(arguments);
-        I115Control control =
+        ControlSelector control =
                 shape == InvocationShape.SEND && !namedInvocation
-                        ? I115Control.of(selector, arguments)
+                        ? ControlSelector.of(selector, arguments)
                         : null;
-        I115StaticControl staticControl =
-                classifyI115StaticControl(control, receiver, arguments);
+        StaticControlSelection staticControl =
+                classifyStaticControlSelection(control, receiver, arguments);
         if (staticControl != null) {
             CanonicalSend discarded = discardedControlStatement;
             boolean matchesDiscarded =
@@ -6087,7 +6086,7 @@ final class CanonicalToBytecodeLowerer {
                 discardedControlStatement = null;
             }
             boolean valueUsed = result != null && !matchesDiscarded;
-            emitI115Control(
+            emitControl(
                     builder, control, receiver, arguments, valueUsed,
                     result, scratch, childResult, resumeValue,
                     stager, primitiveCarrierResult);
@@ -6099,10 +6098,10 @@ final class CanonicalToBytecodeLowerer {
         }
         if (shape == InvocationShape.CALL
                 && arguments.isEmpty()
-                && i115AdmitsInlineClosure(receiver)) {
+                && admitsInlineControlClosure(receiver)) {
             builder.beginTag(StandardTags.CallTag.class);
             builder.beginBlock();
-            emitI115InlineClosureBody(
+            emitInlineControlClosureBody(
                     builder, (CanonicalClosure) receiver, result,
                     scratch, childResult, resumeValue);
             builder.endBlock();
@@ -6115,7 +6114,7 @@ final class CanonicalToBytecodeLowerer {
             boolean valueUsed = discarded == null
                     || discarded.receiver() != receiver
                     || discarded.arguments() != arguments;
-            emitI115Control(
+            emitControl(
                     builder, control, receiver, arguments, valueUsed,
                     result, scratch, childResult, resumeValue,
                     stager, primitiveCarrierResult);
@@ -6123,10 +6122,10 @@ final class CanonicalToBytecodeLowerer {
         }
         NormalBooleanControl booleanControl =
                 shape == InvocationShape.SEND && !namedInvocation
-                        ? i115NativeBooleanControl(selector, arguments)
+                        ? nativeBooleanControl(selector, arguments)
                         : null;
         if (booleanControl != null) {
-            emitI115BooleanControl(
+            emitBooleanControl(
                     builder, booleanControl, receiver, selector, arguments,
                     result, scratch, childResult, resumeValue, stager);
             return;
@@ -6210,7 +6209,7 @@ final class CanonicalToBytecodeLowerer {
 
 
     /**
-     * I115: the standard control selectors are Bytecode DSL control flow,
+     * the standard control selectors are Bytecode DSL control flow,
      * not method sends. One compile-time row per selector fixes its arity,
      * its phase, the polarity of the primitive decision and, for loops, the
      * operand positions of the condition and of the body (0 is the receiver,
@@ -6222,7 +6221,7 @@ final class CanonicalToBytecodeLowerer {
      * A loop's decision is "continue": whileTrue and untilFalse continue on
      * true, whileFalse and untilTrue on false.
      */
-    private enum I115Control {
+    private enum ControlSelector {
         IF_TRUE("ifTrue", 1, Phase.CONDITIONAL, true, -1, -1),
         IF_FALSE("ifFalse", 1, Phase.CONDITIONAL, false, -1, -1),
         IF_TRUE_IF_FALSE("ifTrueIfFalse", 2, Phase.CONDITIONAL, true, -1, -1),
@@ -6240,7 +6239,7 @@ final class CanonicalToBytecodeLowerer {
         private final int conditionPosition;
         private final int bodyPosition;
 
-        I115Control(
+        ControlSelector(
                 String selector,
                 int arity,
                 Phase phase,
@@ -6256,12 +6255,12 @@ final class CanonicalToBytecodeLowerer {
         }
 
         /** The row of a structurally recognized control send, or {@code null}. */
-        static I115Control of(
+        static ControlSelector of(
                 String selector, java.util.List<CanonicalExpression> arguments) {
             if (selector == null || hasVectorArgument(arguments)) {
                 return null;
             }
-            for (I115Control control : values()) {
+            for (ControlSelector control : values()) {
                 if (control.selector.equals(selector)
                         && control.arity == arguments.size()) {
                     return control;
@@ -6281,13 +6280,13 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /** A statically decidable control; zero means that no callback executes. */
-    private record I115StaticControl(I115Control control, int selectedPosition) {
+    private record StaticControlSelection(ControlSelector control, int selectedPosition) {
         boolean eliminable() {
             return selectedPosition == 0;
         }
     }
 
-    private static Boolean i115LiteralClosureBoolean(CanonicalExpression expression) {
+    private static Boolean literalClosureBoolean(CanonicalExpression expression) {
         if (!(expression instanceof CanonicalClosure closure)
                 || !closure.parameters().isEmpty()
                 || closure.body().expressions().size() != 1) {
@@ -6296,17 +6295,17 @@ final class CanonicalToBytecodeLowerer {
         return canonicalBooleanLiteral(closure.body().expressions().get(0));
     }
 
-    private I115StaticControl classifyI115StaticControl(
-            I115Control control,
+    private StaticControlSelection classifyStaticControlSelection(
+            ControlSelector control,
             CanonicalExpression receiver,
             java.util.List<CanonicalExpression> arguments) {
-        return classifyI115StaticControl(
+        return classifyStaticControlSelection(
                 control, receiver, arguments, currentControlSiteContext());
     }
 
     /** The static classification of a control site under the given admission context. */
-    private I115StaticControl classifyI115StaticControl(
-            I115Control control,
+    private StaticControlSelection classifyStaticControlSelection(
+            ControlSelector control,
             CanonicalExpression receiver,
             java.util.List<CanonicalExpression> arguments,
             ControlSiteContext context) {
@@ -6314,16 +6313,16 @@ final class CanonicalToBytecodeLowerer {
             return null;
         }
 
-        if (control.phase == I115Control.Phase.PRE_TEST) {
-            Boolean condition = i115LiteralClosureBoolean(receiver);
+        if (control.phase == ControlSelector.Phase.PRE_TEST) {
+            Boolean condition = literalClosureBoolean(receiver);
             if (condition != null && condition != control.polarity
                     && arguments.get(0) instanceof CanonicalClosure) {
-                return new I115StaticControl(control, 0);
+                return new StaticControlSelection(control, 0);
             }
             return null;
         }
 
-        if (control.phase != I115Control.Phase.CONDITIONAL) {
+        if (control.phase != ControlSelector.Phase.CONDITIONAL) {
             return null;
         }
 
@@ -6338,7 +6337,7 @@ final class CanonicalToBytecodeLowerer {
 
         if (selected == 0) {
             return arguments.get(0) instanceof CanonicalClosure
-                    ? new I115StaticControl(control, 0) : null;
+                    ? new StaticControlSelection(control, 0) : null;
         }
 
         // Unselected arguments must also be literals: otherwise their
@@ -6349,28 +6348,28 @@ final class CanonicalToBytecodeLowerer {
             }
         }
 
-        return i115AdmitsInlineClosure(arguments.get(selected - 1), context)
-                ? new I115StaticControl(control, selected) : null;
+        return admitsInlineControlClosure(arguments.get(selected - 1), context)
+                ? new StaticControlSelection(control, selected) : null;
     }
 
-    private I115StaticControl classifyI115StaticControl(CanonicalExpression expression) {
+    private StaticControlSelection classifyStaticControlSelection(CanonicalExpression expression) {
         if (!(expression instanceof CanonicalSend send)) {
             return null;
         }
-        return classifyI115StaticControl(
-                I115Control.of(send.message(), send.arguments()),
+        return classifyStaticControlSelection(
+                ControlSelector.of(send.message(), send.arguments()),
                 send.receiver(), send.arguments());
     }
 
     private boolean isI115EliminableControl(CanonicalExpression expression) {
-        I115StaticControl control = classifyI115StaticControl(expression);
+        StaticControlSelection control = classifyStaticControlSelection(expression);
         return control != null && control.eliminable();
     }
 
     /**
-     * I115: the control send whose value its enclosing sequence discards, or
+     * the control send whose value its enclosing sequence discards, or
      * {@code null}. Set only around the emission of that statement and
-     * consumed (by operand identity) on entry of {@link #emitI115Control},
+     * consumed (by operand identity) on entry of {@link #emitControl},
      * so a nested control expression never inherits it.
      */
     private CanonicalSend discardedControlStatement;
@@ -6402,7 +6401,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the storage a discarded composed invocation still needs to
+     * the storage a discarded composed invocation still needs to
      * complete (its continuation protocol writes a result). Created lazily,
      * only when such an invocation occurs, and never the consumer's result.
      * Mutations (creations and assignments) never use it: their emitters
@@ -6420,7 +6419,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: emits {@code expression} leaving exactly one value on the
+     * emits {@code expression} leaving exactly one value on the
      * Bytecode DSL stack. Direct numeric operations and simple expressions
      * produce it directly; an invocation requiring composition completes
      * through its continuation storage, followed by a single load.
@@ -6473,7 +6472,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: emit an expression for its effects only. Static controls can
+     * emit an expression for its effects only. Static controls can
      * disappear entirely or execute the selected inline callback directly.
      * Direct numeric values are discarded; mutations keep no result;
      * remaining composed invocations use a lazily created discard sink.
@@ -6487,17 +6486,17 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue) {
         if (expression instanceof CanonicalSend contextual
                 && contextual.contextual()) {
-            emitI115ContextualControl(
+            emitContextualControl(
                     builder, contextual, null,
                     scratch, childResult, resumeValue, false);
             return;
         }
 
-        I115StaticControl staticControl = classifyI115StaticControl(expression);
+        StaticControlSelection staticControl = classifyStaticControlSelection(expression);
         if (staticControl != null) {
             if (!staticControl.eliminable()) {
                 CanonicalSend send = (CanonicalSend) expression;
-                emitI115Control(
+                emitControl(
                         builder, staticControl.control(),
                         send.receiver(), send.arguments(),
                         false, null, scratch, childResult, resumeValue,
@@ -6533,7 +6532,7 @@ final class CanonicalToBytecodeLowerer {
             builder.endDiscardValue();
             return;
         }
-        // I115: a discarded mutation has no consumer; its emitter receives a
+        // a discarded mutation has no consumer; its emitter receives a
         // null result and writes only the binding or slot it mutates.
         if (expression instanceof CanonicalCreate create) {
             emitBodyCreate(builder, create, null, scratch, childResult, resumeValue);
@@ -6562,24 +6561,24 @@ final class CanonicalToBytecodeLowerer {
                 builder, expression, sink.get(builder), scratch, childResult, resumeValue);
     }
 
-    /** I115: how an inline Closure body delivers its last expression. */
+    /** how an inline Closure body delivers its last expression. */
     private enum InlineBodyResult { STACK, STORE, DISCARD }
 
     /**
-     * I115: an immediately invoked Closure literal (a control callback or an
+     * an immediately invoked Closure literal (a control callback or an
      * ordinary Call0) whose activation I095 proved unobservable is emitted
      * in the caller, with its own bindings in plain locals of this root.
      * Nested invocations and statement tags reuse the ordinary body
      * expression lowerer.
      */
-    private void emitI115InlineClosureBody(
+    private void emitInlineControlClosureBody(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure closure,
             BytecodeLocal result,
             BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        emitI115InlineClosureBody(builder, closure, InlineBodyResult.STORE, result,
+        emitInlineControlClosureBody(builder, closure, InlineBodyResult.STORE, result,
                 scratch, childResult, resumeValue, false);
     }
 
@@ -6589,7 +6588,7 @@ final class CanonicalToBytecodeLowerer {
      * branch); {@code STORE} stores it once into {@code result};
      * {@code DISCARD} discards it. Earlier expressions are statements.
      */
-    private void emitI115InlineClosureBody(
+    private void emitInlineControlClosureBody(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure closure,
             InlineBodyResult mode,
@@ -6598,7 +6597,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
-        emitI115InlineClosureBody(builder, closure, mode, result,
+        emitInlineControlClosureBody(builder, closure, mode, result,
                 scratch, childResult, resumeValue, primitiveCarrierResult,
                 java.util.Map.of());
     }
@@ -6609,7 +6608,7 @@ final class CanonicalToBytecodeLowerer {
      * stored the supplied value into before this body. Those locals are
      * PRESENT on entry and are not reset; every other own binding is.
      */
-    private void emitI115InlineClosureBody(
+    private void emitInlineControlClosureBody(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure closure,
             InlineBodyResult mode,
@@ -6772,7 +6771,7 @@ final class CanonicalToBytecodeLowerer {
                 }
                 beginStatement(builder, expression);
                 if (!last || mode == InlineBodyResult.DISCARD) {
-                    if (sink == null && classifyI115StaticControl(expression) == null) {
+                    if (sink == null && classifyStaticControlSelection(expression) == null) {
                         sink = new DiscardSink();
                     }
                     emitExpressionStatement(
@@ -6803,24 +6802,24 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: one static admission policy for an immediately invoked Closure
+     * one static admission policy for an immediately invoked Closure
      * literal, whether invoked as a control callback or as an ordinary Call0.
      * Nonliteral/dynamic callables are never statically inlined here; they use
      * the ordinary callable dispatcher. In particular, a failed lexical or
      * ReturnHome proof does not authorize a syntactic inline.
      */
-    private boolean i115AdmitsInlineClosure(CanonicalExpression callable) {
-        return i115AdmitsInlineClosure(callable, currentControlSiteContext());
+    private boolean admitsInlineControlClosure(CanonicalExpression callable) {
+        return admitsInlineControlClosure(callable, currentControlSiteContext());
     }
 
-    private boolean i115AdmitsInlineClosure(
+    private boolean admitsInlineControlClosure(
             CanonicalExpression callable, ControlSiteContext context) {
         return callable instanceof CanonicalClosure closure
                 && admitsNormalInlineControlBody(closure, context);
     }
 
     /**
-     * I115: lower the seven control selectors. Static literal conditions
+     * lower the seven control selectors. Static literal conditions
      * with a selected inline callback execute it directly; known-empty
      * controls generate only canonical null when consumed. The remaining
      * controls stage dynamic operands in source order and use structured
@@ -6828,7 +6827,7 @@ final class CanonicalToBytecodeLowerer {
      * The selector itself is never sent.
      */
     /*
-     * I115: contextual syntax is the corresponding standard Closure-control
+     * contextual syntax is the corresponding standard Closure-control
      * send. Reuse the same native Bytecode DSL control lowering and the same
      * proof of whether each callback activation can be inlined.
      *
@@ -6836,7 +6835,7 @@ final class CanonicalToBytecodeLowerer {
      * invocation through Call*Method and Yield/ResumeDispatchedContinuation.
      * Canonical control itself never becomes a guest message send.
      */
-    private void emitI115ContextualControl(
+    private void emitContextualControl(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
@@ -6848,8 +6847,8 @@ final class CanonicalToBytecodeLowerer {
             throw new AssertionError("Not contextual control");
         }
 
-        I115Control control =
-                I115Control.of(send.message(), send.arguments());
+        ControlSelector control =
+                ControlSelector.of(send.message(), send.arguments());
         if (control == null) {
             throw new AssertionError(
                     "Unsupported contextual control: " + send.message());
@@ -6859,7 +6858,7 @@ final class CanonicalToBytecodeLowerer {
         discardedControlStatement = null;
         boolean valueUsed = result != null && discarded != send;
 
-        emitI115Control(
+        emitControl(
                 builder,
                 control,
                 send.receiver(),
@@ -6873,9 +6872,9 @@ final class CanonicalToBytecodeLowerer {
                 primitiveCarrierResult);
     }
 
-    private void emitI115Control(
+    private void emitControl(
             ProtosBytecodeRootNodeGen.Builder builder,
-            I115Control control,
+            ControlSelector control,
             CanonicalExpression receiver,
             java.util.List<CanonicalExpression> arguments,
             boolean valueUsed,
@@ -6885,8 +6884,8 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue,
             OperandStager stager,
             boolean primitiveCarrierResult) {
-        I115StaticControl staticControl =
-                classifyI115StaticControl(control, receiver, arguments);
+        StaticControlSelection staticControl =
+                classifyStaticControlSelection(control, receiver, arguments);
         if (staticControl != null) {
             if (staticControl.eliminable()) {
                 if (valueUsed) {
@@ -6914,9 +6913,9 @@ final class CanonicalToBytecodeLowerer {
             // even when selection and physical dispatch have been eliminated.
             builder.beginTag(StandardTags.CallTag.class);
             builder.beginBlock();
-            emitI115Conditional(
+            emitConditionalControl(
                     builder, control,
-                    new I115ControlOperands(
+                    new ControlOperands(
                             directOperands, noLocals, inline,
                             scratch, childResult, resumeValue),
                     staticControl, valueUsed, result, primitiveCarrierResult);
@@ -6934,8 +6933,7 @@ final class CanonicalToBytecodeLowerer {
          */
         boolean selectsCustomBehavior =
                 !control.loop()
-                        && canonicalBooleanLiteral(receiver) == null
-                        && admitsSelectedCallbacks(arguments);
+                        && canonicalBooleanLiteral(receiver) == null;
 
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
@@ -6958,13 +6956,13 @@ final class CanonicalToBytecodeLowerer {
         java.util.List<BytecodeLocal> staged = new java.util.ArrayList<>(operands.size());
         java.util.List<Boolean> inline = new java.util.ArrayList<>(operands.size());
         /*
-         * I115: when every callback of a conditional runs inline, nothing is
+         * when every callback of a conditional runs inline, nothing is
          * evaluated after the receiver, so a direct numeric receiver feeds
          * CanonicalControlCondition straight from the stack.
          */
         boolean allCallbacksInline = true;
         for (int position = 1; position < operands.size(); position++) {
-            allCallbacksInline &= i115AdmitsInlineClosure(operands.get(position));
+            allCallbacksInline &= admitsInlineControlClosure(operands.get(position));
         }
         for (int position = 0; position < operands.size(); position++) {
             if (selectsCustomBehavior && position == 0) {
@@ -6974,7 +6972,10 @@ final class CanonicalToBytecodeLowerer {
             }
             CanonicalExpression operand = operands.get(position);
             boolean callback = control.callbackPosition(position);
-            boolean admitted = callback && i115AdmitsInlineClosure(operand);
+            boolean admitted = callback && admitsInlineControlClosure(operand)
+                    && (receiver instanceof CanonicalClosure
+                            || canonicalBooleanLiteral(receiver) != null
+                            || admitsSelectedCallbacks(arguments));
             inline.add(admitted);
             boolean directDecision = !callback
                     && (canonicalBooleanLiteral(operand) != null
@@ -6984,19 +6985,19 @@ final class CanonicalToBytecodeLowerer {
             if (admitted || directDecision) {
                 staged.add(null);
             } else {
-                BytecodeLocal local = builder.createLocal("i115ControlOperand", null);
+                BytecodeLocal local = builder.createLocal("controlOperand", null);
                 stageOperand(builder, operand, local,
                         scratch, childResult, resumeValue, stager);
                 staged.add(local);
             }
         }
-        I115ControlOperands staging = new I115ControlOperands(
+        ControlOperands staging = new ControlOperands(
                 operands, staged, inline, scratch, childResult, resumeValue);
         if (control.loop()) {
             emitValidatedLoop(builder, control, staging, arguments, valueUsed, result,
                     scratch, childResult, resumeValue, stager, primitiveCarrierResult);
         } else {
-            emitI115Conditional(
+            emitConditionalControl(
                     builder, control, staging, null,
                     valueUsed, result, primitiveCarrierResult);
         }
@@ -7027,8 +7028,8 @@ final class CanonicalToBytecodeLowerer {
      */
     private void emitValidatedLoop(
             ProtosBytecodeRootNodeGen.Builder builder,
-            I115Control control,
-            I115ControlOperands staging,
+            ControlSelector control,
+            ControlOperands staging,
             java.util.List<CanonicalExpression> arguments,
             boolean valueUsed,
             BytecodeLocal result,
@@ -7041,7 +7042,7 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal argument = staging.staged().get(1);
         boolean receiverDynamic = !(staging.operands().get(0) instanceof CanonicalClosure);
         boolean argumentDynamic = !(staging.operands().get(1) instanceof CanonicalClosure);
-        boolean selectsCustomBehavior = receiverDynamic && admitsSelectedCallbacks(arguments);
+        boolean selectsCustomBehavior = receiverDynamic;
 
         if (selectsCustomBehavior) {
             builder.beginIfThenElse();
@@ -7056,7 +7057,7 @@ final class CanonicalToBytecodeLowerer {
         if (argumentDynamic) {
             emitRequireLoopClosure(builder, argument);
         }
-        emitI115Loop(builder, control, staging, valueUsed, result, primitiveCarrierResult);
+        emitLoop(builder, control, staging, valueUsed, result, primitiveCarrierResult);
         builder.endBlock();
         if (selectsCustomBehavior) {
             emitSelectedConditionalSend(
@@ -7144,7 +7145,8 @@ final class CanonicalToBytecodeLowerer {
                 continue;
             }
             BytecodeLocal value = builder.createLocal("conditionalArgument", null);
-            if (argument instanceof CanonicalClosure closure) {
+            if (argument instanceof CanonicalClosure closure
+                    && admitsSelectedCallbacks(arguments)) {
                 builder.beginStoreLocal(value);
                 builder.beginMaterializeSelectedCallback();
                 emitCurrentActivation(builder);
@@ -7163,8 +7165,8 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
     }
 
-    /** I115: the evaluated operands of one control site and the shared invocation scratch. */
-    private record I115ControlOperands(
+    /** the evaluated operands of one control site and the shared invocation scratch. */
+    private record ControlOperands(
             java.util.List<CanonicalExpression> operands,
             java.util.List<BytecodeLocal> staged,
             java.util.List<Boolean> inline,
@@ -7178,11 +7180,11 @@ final class CanonicalToBytecodeLowerer {
      * Dynamic consumed controls use {@code Conditional}; discarded ones use
      * {@code IfThen} or {@code IfThenElse}.
      */
-    private void emitI115Conditional(
+    private void emitConditionalControl(
             ProtosBytecodeRootNodeGen.Builder builder,
-            I115Control control,
-            I115ControlOperands staging,
-            I115StaticControl staticControl,
+            ControlSelector control,
+            ControlOperands staging,
+            StaticControlSelection staticControl,
             boolean valueUsed,
             BytecodeLocal result,
             boolean primitiveCarrierResult) {
@@ -7194,11 +7196,11 @@ final class CanonicalToBytecodeLowerer {
                     builder.endStoreLocal();
                 }
             } else if (valueUsed) {
-                emitI115ControlCallback(
+                emitControlCallback(
                         builder, staging, staticControl.selectedPosition(),
                         result, primitiveCarrierResult);
             } else {
-                emitI115ControlCallbackStatement(
+                emitControlCallbackStatement(
                         builder, staging, staticControl.selectedPosition());
             }
             return;
@@ -7208,10 +7210,10 @@ final class CanonicalToBytecodeLowerer {
         if (valueUsed) {
             builder.beginStoreLocal(result);
             builder.beginConditional();
-            emitI115ConditionalDecision(builder, control, staging);
-            emitI115ControlCallbackValue(builder, staging, 1, primitiveCarrierResult);
+            emitConditionalDecision(builder, control, staging);
+            emitControlCallbackValue(builder, staging, 1, primitiveCarrierResult);
             if (twoCallbacks) {
-                emitI115ControlCallbackValue(builder, staging, 2, primitiveCarrierResult);
+                emitControlCallbackValue(builder, staging, 2, primitiveCarrierResult);
             } else {
                 builder.emitLoadConstant(ProtosNullValue.INSTANCE);
             }
@@ -7219,22 +7221,22 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
         } else if (twoCallbacks) {
             builder.beginIfThenElse();
-            emitI115ConditionalDecision(builder, control, staging);
-            emitI115ControlCallbackStatement(builder, staging, 1);
-            emitI115ControlCallbackStatement(builder, staging, 2);
+            emitConditionalDecision(builder, control, staging);
+            emitControlCallbackStatement(builder, staging, 1);
+            emitControlCallbackStatement(builder, staging, 2);
             builder.endIfThenElse();
         } else {
             builder.beginIfThen();
-            emitI115ConditionalDecision(builder, control, staging);
-            emitI115ControlCallbackStatement(builder, staging, 1);
+            emitConditionalDecision(builder, control, staging);
+            emitControlCallbackStatement(builder, staging, 1);
             builder.endIfThen();
         }
     }
 
-    private void emitI115ConditionalDecision(
+    private void emitConditionalDecision(
             ProtosBytecodeRootNodeGen.Builder builder,
-            I115Control control,
-            I115ControlOperands staging) {
+            ControlSelector control,
+            ControlOperands staging) {
         BytecodeLocal receiver = staging.staged().get(0);
         CanonicalExpression operand = staging.operands().get(0);
         Boolean literal = receiver == null ? canonicalBooleanLiteral(operand) : null;
@@ -7266,10 +7268,10 @@ final class CanonicalToBytecodeLowerer {
      * completes normally, and returned unchanged after the loop. A
      * discarded loop neither initializes nor writes it.
      */
-    private void emitI115Loop(
+    private void emitLoop(
             ProtosBytecodeRootNodeGen.Builder builder,
-            I115Control control,
-            I115ControlOperands staging,
+            ControlSelector control,
+            ControlOperands staging,
             boolean valueUsed,
             BytecodeLocal result,
             boolean primitiveCarrierResult) {
@@ -7278,15 +7280,15 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
             builder.endStoreLocal();
         }
-        boolean postTest = control.phase == I115Control.Phase.POST_TEST;
+        boolean postTest = control.phase == ControlSelector.Phase.POST_TEST;
         builder.beginWhile();
         builder.beginBlock();
         if (postTest) {
-            emitI115LoopBody(builder, staging, control.bodyPosition,
+            emitLoopBody(builder, staging, control.bodyPosition,
                     valueUsed ? result : null, primitiveCarrierResult);
         }
         Boolean knownCondition = staging.inline().get(control.conditionPosition)
-                ? i115LiteralClosureBoolean(
+                ? literalClosureBoolean(
                         staging.operands().get(control.conditionPosition))
                 : null;
 
@@ -7294,53 +7296,53 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(knownCondition == control.polarity);
         } else {
             builder.beginCanonicalControlCondition(control.polarity);
-            emitI115ControlCallbackValue(
+            emitControlCallbackValue(
                     builder, staging, control.conditionPosition, false);
             builder.endCanonicalControlCondition();
         }
         builder.endBlock();
         builder.beginBlock();
         if (!postTest) {
-            emitI115LoopBody(builder, staging, control.bodyPosition,
+            emitLoopBody(builder, staging, control.bodyPosition,
                     valueUsed ? result : null, primitiveCarrierResult);
         }
         builder.endBlock();
         builder.endWhile();
     }
 
-    /* I115: a loop body stores its value only for a consumed loop. */
-    private void emitI115LoopBody(
+    /* a loop body stores its value only for a consumed loop. */
+    private void emitLoopBody(
             ProtosBytecodeRootNodeGen.Builder builder,
-            I115ControlOperands staging,
+            ControlOperands staging,
             int position,
             BytecodeLocal result,
             boolean primitiveCarrierResult) {
         if (result == null) {
-            emitI115ControlCallbackStatement(builder, staging, position);
+            emitControlCallbackStatement(builder, staging, position);
         } else {
-            emitI115ControlCallback(builder, staging, position, result, primitiveCarrierResult);
+            emitControlCallback(builder, staging, position, result, primitiveCarrierResult);
         }
     }
 
     /**
-     * I115: a selected callback whose value feeds its consumer directly on
+     * a selected callback whose value feeds its consumer directly on
      * the stack. An inline callback has no intermediate store; an ordinary
      * callback keeps only the storage its invocation needs.
      */
-    private void emitI115ControlCallbackValue(
+    private void emitControlCallbackValue(
             ProtosBytecodeRootNodeGen.Builder builder,
-            I115ControlOperands staging,
+            ControlOperands staging,
             int position,
             boolean primitiveCarrierResult) {
         if (staging.inline().get(position)) {
-            emitI115InlineClosureBody(
+            emitInlineControlClosureBody(
                     builder, (CanonicalClosure) staging.operands().get(position),
                     InlineBodyResult.STACK, null,
                     staging.scratch(), staging.childResult(), staging.resumeValue(),
                     primitiveCarrierResult);
             return;
         }
-        BytecodeLocal value = builder.createLocal("i115CallbackValue", null);
+        BytecodeLocal value = builder.createLocal("callbackValue", null);
         builder.beginBlock();
         emitDispatchedCall(builder, staging.staged().get(position), java.util.List.of(), null,
                 staging.childResult(), value, staging.resumeValue(), primitiveCarrierResult);
@@ -7348,14 +7350,14 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
     }
 
-    /** I115: a selected callback whose result is discarded; nothing is stored. */
-    private void emitI115ControlCallbackStatement(
+    /** a selected callback whose result is discarded; nothing is stored. */
+    private void emitControlCallbackStatement(
             ProtosBytecodeRootNodeGen.Builder builder,
-            I115ControlOperands staging,
+            ControlOperands staging,
             int position) {
         builder.beginBlock();
         if (staging.inline().get(position)) {
-            emitI115InlineClosureBody(
+            emitInlineControlClosureBody(
                     builder, (CanonicalClosure) staging.operands().get(position),
                     InlineBodyResult.DISCARD, null,
                     staging.scratch(), staging.childResult(), staging.resumeValue(), false);
@@ -7367,20 +7369,20 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the one execution of a selected control callback, storing its
+     * the one execution of a selected control callback, storing its
      * exact normal result once in {@code target}. An admitted literal runs
      * inline (no Closure, activation or ReturnHome is created); any other
      * callback is an ordinary nilary Closure call through the shared
      * dispatcher and its continuation composition.
      */
-    private void emitI115ControlCallback(
+    private void emitControlCallback(
             ProtosBytecodeRootNodeGen.Builder builder,
-            I115ControlOperands staging,
+            ControlOperands staging,
             int position,
             BytecodeLocal target,
             boolean primitiveCarrierResult) {
         if (staging.inline().get(position)) {
-            emitI115InlineClosureBody(
+            emitInlineControlClosureBody(
                     builder, (CanonicalClosure) staging.operands().get(position),
                     InlineBodyResult.STORE, target,
                     staging.scratch(), staging.childResult(), staging.resumeValue(),
@@ -7392,16 +7394,16 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the native Boolean selector row of an ordinary send of
+     * the native Boolean selector row of an ordinary send of
      * {@code not()}, {@code and(rhs)} or {@code or(rhs)}, or {@code null}.
      * Admitted only once the standard object (and thus the frozen standard
      * Boolean behavior) is published, with the exact standard arity and no
      * spread or named argument. Admission is independent of whether the RHS
-     * is an inline-admissible Closure literal: {@link #emitI115BooleanControl}
+     * is an inline-admissible Closure literal: {@link #emitBooleanControl}
      * chooses the RHS execution strategy. Any other site keeps the ordinary
      * GetMethod/Call*Method lowering unchanged.
      */
-    private NormalBooleanControl i115NativeBooleanControl(
+    private NormalBooleanControl nativeBooleanControl(
             String selector, java.util.List<CanonicalExpression> arguments) {
         NormalBooleanControl control =
                 selector == null ? null : NormalBooleanControl.of(selector);
@@ -7416,7 +7418,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: native short-circuit {@code not}/{@code and}/{@code or}.
+     * native short-circuit {@code not}/{@code and}/{@code or}.
      *
      * <p>The receiver is evaluated once into a local. When it is exactly a
      * canonical Boolean (or the primitive Boolean carrier of a native
@@ -7442,10 +7444,10 @@ final class CanonicalToBytecodeLowerer {
      * materialized as a genuine Closure argument, and {@code Call*Method}
      * dispatches, so redefinitions and RHS Closure observation are
      * preserved. The RHS Closure is never an inline callback position for
-     * {@link I115InlineStoragePlan}, so captured cells stay cells for that
+     * {@link InlineStoragePlan}, so captured cells stay cells for that
      * materialization.
      */
-    private void emitI115BooleanControl(
+    private void emitBooleanControl(
             ProtosBytecodeRootNodeGen.Builder builder,
             NormalBooleanControl control,
             CanonicalExpression receiver,
@@ -7459,7 +7461,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
 
-        BytecodeLocal receiverValue = builder.createLocal("i115BooleanReceiver", null);
+        BytecodeLocal receiverValue = builder.createLocal("booleanReceiver", null);
         stageOperand(builder, receiver, receiverValue,
                 scratch, childResult, resumeValue, stager);
 
@@ -7470,12 +7472,13 @@ final class CanonicalToBytecodeLowerer {
         builder.endIsCanonicalBooleanOperand();
 
         if (control != NormalBooleanControl.NOT
-                && !i115AdmitsInlineClosure(arguments.get(0))) {
-            emitI115MaterializedBooleanRhs(
+                && (!admitsInlineControlClosure(arguments.get(0))
+                        || !admitsSelectedCallbacks(arguments))) {
+            emitMaterializedBooleanRhs(
                     builder, control, receiverValue, arguments.get(0),
                     result, scratch, childResult, resumeValue, stager);
         } else {
-            emitI115InlineBooleanControl(
+            emitInlineBooleanControl(
                     builder, control, receiverValue, arguments,
                     result, scratch, childResult, resumeValue);
         }
@@ -7513,10 +7516,10 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the native branch of {@code not} and of an inline-admissible
+     * the native branch of {@code not} and of an inline-admissible
      * and/or RHS: one {@code Conditional} whose selected RHS runs inline.
      */
-    private void emitI115InlineBooleanControl(
+    private void emitInlineBooleanControl(
             ProtosBytecodeRootNodeGen.Builder builder,
             NormalBooleanControl control,
             BytecodeLocal receiverValue,
@@ -7536,13 +7539,13 @@ final class CanonicalToBytecodeLowerer {
                 builder.emitLoadConstant(Boolean.TRUE);
             }
             case AND -> {
-                emitI115BooleanRhsValue(builder, (CanonicalClosure) arguments.get(0),
+                emitBooleanRhsValue(builder, (CanonicalClosure) arguments.get(0),
                         scratch, childResult, resumeValue);
                 builder.emitLoadConstant(Boolean.FALSE);
             }
             case OR -> {
                 builder.emitLoadConstant(Boolean.TRUE);
-                emitI115BooleanRhsValue(builder, (CanonicalClosure) arguments.get(0),
+                emitBooleanRhsValue(builder, (CanonicalClosure) arguments.get(0),
                         scratch, childResult, resumeValue);
             }
         }
@@ -7551,7 +7554,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the native branch of and/or whose RHS is not inline-admissible.
+     * the native branch of and/or whose RHS is not inline-admissible.
      * The RHS argument is staged exactly once (materializing a literal
      * Closure with its captures), the canonical receiver selects natively,
      * and only a selected RHS is invoked by the zero-argument
@@ -7559,7 +7562,7 @@ final class CanonicalToBytecodeLowerer {
      * ordinary continuation composition. Its result must be exactly a
      * canonical Boolean; an unselected RHS yields the receiver's constant.
      */
-    private void emitI115MaterializedBooleanRhs(
+    private void emitMaterializedBooleanRhs(
             ProtosBytecodeRootNodeGen.Builder builder,
             NormalBooleanControl control,
             BytecodeLocal receiverValue,
@@ -7570,7 +7573,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue,
             OperandStager stager) {
         builder.beginBlock();
-        BytecodeLocal rhsValue = builder.createLocal("i115BooleanRhs", null);
+        BytecodeLocal rhsValue = builder.createLocal("booleanRhs", null);
         stageOperand(builder, rhs, rhsValue,
                 scratch, childResult, resumeValue, stager);
 
@@ -7600,8 +7603,8 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
     }
 
-    /** I115: a selected standard and/or RHS, inline once, strictly Boolean-checked. */
-    private void emitI115BooleanRhsValue(
+    /** a selected standard and/or RHS, inline once, strictly Boolean-checked. */
+    private void emitBooleanRhsValue(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure rhs,
             BytecodeLocal scratch,
@@ -7609,7 +7612,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue) {
         builder.beginRequireCanonicalBooleanResult();
         builder.beginBlock();
-        emitI115InlineClosureBody(
+        emitInlineControlClosureBody(
                 builder, rhs, InlineBodyResult.STACK, null,
                 scratch, childResult, resumeValue, false);
         builder.endBlock();
@@ -7662,7 +7665,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * D237 / I115: one cold, name-bearing invocation.
+     * D237 / one cold, name-bearing invocation.
      *
      * The selected callable and the complete P,K packet are passed to
      * the shared named dispatcher. It associates labels against the
@@ -7731,7 +7734,7 @@ final class CanonicalToBytecodeLowerer {
         emitDispatchedContinuationComposition(builder, outcome, resumeValue);
 
         if (result == null) {
-            // I115: a discarded invocation result is not copied anywhere.
+            // a discarded invocation result is not copied anywhere.
             return;
         }
         builder.beginStoreLocal(result);
@@ -7789,7 +7792,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: this physical root (its inline Closure bodies included) emits a
+     * this physical root (its inline Closure bodies included) emits a
      * dispatched invocation whose callee is selected at run time. Its
      * prepareCallerForCallee can forward only the Prelude this root itself
      * observes, so a root that may lack its own Prelude declares
@@ -7800,7 +7803,7 @@ final class CanonicalToBytecodeLowerer {
         currentRootMayRequirePrelude = true;
     }
 
-    /** I115: a send of already staged locals: GetMethod, then the dispatched call. */
+    /** a send of already staged locals: GetMethod, then the dispatched call. */
     private void emitDispatchedSendOfLocals(
             ProtosBytecodeRootNodeGen.Builder builder,
             String selector,
@@ -7816,7 +7819,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: a {@link ProtosCallRequest} produced by a protocol operation
+     * a {@link ProtosCallRequest} produced by a protocol operation
      * (Map construction factory, Map hashing/equality), made through the
      * shared dispatcher and composed like any call.
      */
@@ -8048,17 +8051,17 @@ final class CanonicalToBytecodeLowerer {
     /*
      * I112: at root level the creating activation is the root's own frame
      * argument 0, bound by MaterializeCurrentClosure itself rather than
-     * loaded as an operand. I115: a root's LOCAL and CELL bindings are never
+     * loaded as an operand. a root's LOCAL and CELL bindings are never
      * part of its context, so a still-compact root always captures without
      * materializing its activation. Inline object regions keep their
      * explicit activation operand.
      *
-     * I115 / PLAT066-C: the second constant operand carries the capture
+     * PLAT066-C: the second constant operand carries the capture
      * classification of this exact Closure under the root's analysis; a
      * Closure that does not capture its creator is created from the
-     * creator's own environment (GraalPy MakeFunction without freevars).
+     * creator's own environment (MakeFunction without freevars).
      *
-     * I115 (GraalPy MakeFunction closure tuple): a Closure whose scope
+     * (MakeFunction closure tuple): a Closure whose scope
      * carries free cells is wrapped by CaptureClosureCells, which installs
      * the creator's cell references, in the Closure scope's constant order,
      * before the Closure escapes. Returns those cells for endClosureCapture.
@@ -8077,21 +8080,21 @@ final class CanonicalToBytecodeLowerer {
         }
         if (currentActivationLocal == null) {
             /*
-             * I115 invariant of the compactCapture operand: it answers whether
+             * invariant of the compactCapture operand: it answers whether
              * capturing the creator may keep its guest Context deferred.
-             * Under the I115 storage model a captured context never needs
+             * Under the storage model a captured context never needs
              * a copy of the creator's frame: CELL bindings are transported
              * explicitly by CaptureClosureCells, NAME bindings already live
              * in the creator's context object, and a creator whose LOCAL/CELL
              * bindings may be selected by name has already bound its frame to
-             * a frame-backed view (I115-S1c-L, emitClosureCapture). A captured
+             * a frame-backed view (, emitClosureCapture). A captured
              * owner is resolved while its frame is live; its guest Context
              * remains deferred, so the answer is statically true
              * for every root-level creation; only an inline object region,
              * which has an explicit activation, uses MaterializeClosure. The
              * operation's other modes are thereby unreachable from lowering.
              *
-             * I115-H: both the ReturnHome and transitive inherited-environment
+             * both the ReturnHome and transitive inherited-environment
              * facts gate the lightweight representation.
              */
             builder.beginMaterializeCurrentClosure(
@@ -8182,7 +8185,7 @@ final class CanonicalToBytecodeLowerer {
             if (intrinsic.kind() == CanonicalIntrinsic.Kind.CONTEXT
                     && publishesOwnClosureContext()) {
                 /*
-                 * I115-S1c-L: the observed Context of a Closure activation is
+                 * the observed Context of a Closure activation is
                  * the live view of its frame, bound once at this point.
                  */
                 builder.emitPublishCurrentClosureContext();
@@ -8248,7 +8251,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115 / I115-S1c-L: emits exactly one access for a bare read, selected at
+     * emits exactly one access for a bare read, selected at
      * lowering time from the site's static resolution and its run-time access
      * ({@link CanonicalBindingAnalysis.LexicalAccess}):
      * <ul>
@@ -8301,7 +8304,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal cell = cellLocalOrNull(identity);
             if (cell != null) {
                 if (access == CanonicalBindingAnalysis.LexicalAccess.DIRECT) {
-                    // I115 / GraalPy load.deref of a provably PRESENT binding.
+                    // load.deref of a provably PRESENT binding.
                     builder.beginLoadCell();
                     builder.emitLoadLocal(cell);
                     builder.endLoadCell();
@@ -8317,7 +8320,7 @@ final class CanonicalToBytecodeLowerer {
                 BytecodeLocal local = ownLocalOrNull(identity);
                 if (local != null) {
                     if (access == CanonicalBindingAnalysis.LexicalAccess.DIRECT) {
-                        // I115 / GraalPy LoadLocal.
+                        // LoadLocal.
                         // Long and Double already use their guest representation.
                         builder.emitLoadLocal(local);
                     } else {
@@ -8328,8 +8331,8 @@ final class CanonicalToBytecodeLowerer {
                 if (access != CanonicalBindingAnalysis.LexicalAccess.SELECTED
                         && isStaticModuleBinding(resolution, identity)) {
                     /*
-                     * I115-R6: a module binding reads its module context
-                     * (GraalPy ReadGlobal) at its static physical depth: 0 in
+                     * a module binding reads its module context
+                     * (ReadGlobal) at its static physical depth: 0 in
                      * the module root itself, else the captured module of a
                      * Closure root. An absent binding continues with live
                      * lexical selection.
@@ -8350,7 +8353,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I115-S1c-L: whether a context intrinsic here observes the running
+     * whether a context intrinsic here observes the running
      * Closure root's own activation (not a module root, an inline object
      * body's construction activation, or an inline callback region).
      */
@@ -8363,7 +8366,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: whether a classified site is statically a module (ROOT) NAME
+     * whether a classified site is statically a module (ROOT) NAME
      * binding accessed with the module operations ({@code ReadGlobal},
      * {@code SelectWriteGlobal}/{@code WriteGlobal}). Inside an inline
      * object body (an explicit activation local) the access keeps the
@@ -8381,7 +8384,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the physical depth, from the running Bytecode root, of the module
+     * the physical depth, from the running Bytecode root, of the module
      * context owning a site accepted by {@link #isStaticModuleBinding}:
      * {@code 0} when the running root is the module root itself, else the
      * number of Closure roots crossed. Inside an inline callback the
@@ -8409,9 +8412,9 @@ final class CanonicalToBytecodeLowerer {
      * Ordering consumes carriers and always yields a guest Boolean.
      */
     /*
-     * I115: '+' is excluded. Its receiver may select a program-defined or
+     * '+' is excluded. Its receiver may select a program-defined or
      * String behavior that can suspend, so it is never a stack-only
-     * operand; every '+' send is lowered by emitI115AddSend.
+     * operand; every '+' send is lowered by emitGuardedNumericSend.
      */
     private static boolean primitiveNumericSendCandidate(CanonicalSend send) {
         return send.arguments().size() == 1
@@ -8420,8 +8423,8 @@ final class CanonicalToBytecodeLowerer {
                 && !hasVectorArgument(send.arguments());
     }
 
-    /* I115: a positional binary '+' send, lowered by emitI115AddSend. */
-    private static boolean i115AddSend(CanonicalSend send) {
+    /* a positional binary '+' send, lowered by emitGuardedNumericSend. */
+    private static boolean isAdditionSend(CanonicalSend send) {
         return "+".equals(send.message())
                 && !send.contextual()
                 && send.arguments().size() == 1
@@ -8455,9 +8458,14 @@ final class CanonicalToBytecodeLowerer {
                 && !hasVectorArgument(call.arguments());
     }
 
+    private static boolean isOrderingSelector(String selector) {
+        return "<".equals(selector) || "<=".equals(selector)
+                || ">".equals(selector) || ">=".equals(selector);
+    }
+
     private static boolean primitiveNumericSelector(String selector) {
         return switch (selector) {
-            case "+", "-", "*", "/", "<", "<=", ">", ">=" -> true;
+            case "+", "-", "*", "/", "div", "mod", "<", "<=", ">", ">=" -> true;
             default -> false;
         };
     }
@@ -8475,7 +8483,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: stores one primitive-numeric operand into {@code target}. The
+     * stores one primitive-numeric operand into {@code target}. The
      * value itself is produced by {@link #emitPrimitiveNumericOperandValue};
      * this adapter is used only where the value must survive between two
      * operations, a suspension, or two independent uses.
@@ -8498,14 +8506,14 @@ final class CanonicalToBytecodeLowerer {
                 builder, expression, target, preparedCall, childResult, resumeValue);
     }
 
-    /* I115: whether an operand is emitted straight onto the operand stack. */
+    /* whether an operand is emitted straight onto the operand stack. */
     private boolean isDirectNumericOperand(CanonicalExpression expression) {
         return i115DirectUnaryOperand(expression)
                 || i115DirectUnaryCall(expression);
     }
 
     /**
-     * I115 (GraalPy operand emission): emits exactly one value of a primitive
+     * (operand emission): emits exactly one value of a primitive
      * numeric operand directly onto the Bytecode DSL stack, with no
      * destination local. Literals load their carrier, lexical reads load
      * their binding, a nested numeric operator opens its own operation, and
@@ -8567,7 +8575,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
     }
 
-    /* I115: an operand that really needs composition (a call that may suspend). */
+    /* an operand that really needs composition (a call that may suspend). */
     private void emitComposedNumericOperandToLocal(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression,
@@ -8607,11 +8615,9 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: one synchronous numeric operation ({@code Number*} or
-     * {@code RichCompare*}) with both operands emitted directly, receiver
-     * first. Specialized comparisons yield a primitive boolean carrier;
-     * generic comparisons retain their guest Boolean result. Arithmetic may yield a
-     * {@code long}/{@code double} carrier. Never a continuation.
+     * Leave the result of one guarded numeric send on the operand stack.
+     * The standard branch retains its independent primitive operation; an override
+     * uses the shared callable dispatcher and continuation locals.
      */
     private void emitDirectNumericOperation(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -8619,29 +8625,45 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        switch (send.message()) {
+        BytecodeLocal value = builder.createLocal("numericResult", null);
+        builder.beginBlock();
+        emitGuardedNumericSend(builder, send, value,
+                preparedCall, childResult, resumeValue, true);
+        builder.emitLoadLocal(value);
+        builder.endBlock();
+    }
+
+    private static void beginNumericOperation(
+            ProtosBytecodeRootNodeGen.Builder builder, String selector) {
+        switch (selector) {
+            case "+" -> builder.beginNumberAdd();
             case "-" -> builder.beginNumberSubtract();
             case "*" -> builder.beginNumberMultiply();
             case "/" -> builder.beginNumberDivide();
+            case "div" -> builder.beginNumberQuotient();
+            case "mod" -> builder.beginNumberRemainder();
             case "<" -> builder.beginRichCompareLt();
             case "<=" -> builder.beginRichCompareLe();
             case ">" -> builder.beginRichCompareGt();
             case ">=" -> builder.beginRichCompareGe();
-            default -> throw new AssertionError("not a direct numeric selector");
+            default -> throw new AssertionError("not a numeric selector: " + selector);
         }
-        emitPrimitiveNumericOperandValue(
-                builder, send.receiver(), preparedCall, childResult, resumeValue);
-        emitPrimitiveNumericOperandValue(
-                builder, send.arguments().get(0), preparedCall, childResult, resumeValue);
-        switch (send.message()) {
+    }
+
+    private static void endNumericOperation(
+            ProtosBytecodeRootNodeGen.Builder builder, String selector) {
+        switch (selector) {
+            case "+" -> builder.endNumberAdd();
             case "-" -> builder.endNumberSubtract();
             case "*" -> builder.endNumberMultiply();
             case "/" -> builder.endNumberDivide();
+            case "div" -> builder.endNumberQuotient();
+            case "mod" -> builder.endNumberRemainder();
             case "<" -> builder.endRichCompareLt();
             case "<=" -> builder.endRichCompareLe();
             case ">" -> builder.endRichCompareGt();
             case ">=" -> builder.endRichCompareGe();
-            default -> throw new AssertionError("not a direct numeric selector");
+            default -> throw new AssertionError("not a numeric selector: " + selector);
         }
     }
 
@@ -8773,8 +8795,7 @@ final class CanonicalToBytecodeLowerer {
     /**
      * I107: the selection row of an admissible site, or {@code null}; the
      * precondition of admission ({@link #normalBooleanControlSite}). Only
-     * the native standard selectors not, and and or have rows; the I115
-     * control selectors ({@link I115Control}) are never classified here.
+     * the native standard selectors not, and and or have rows; the * control selectors ({@link ControlSelector}) are never classified here.
      */
     private NormalBooleanControl normalBooleanControlRow(
             CanonicalSend send, ControlSiteContext context) {
@@ -8875,7 +8896,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         /*
-         * I115: an inline callback keeps its own bindings in plain locals of
+         * an inline callback keeps its own bindings in plain locals of
          * the physical root. A callback owning a cell binding (captured by a
          * Closure nested in it) stays a genuine Closure, whose root creates
          * that cell.
@@ -9088,12 +9109,9 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115 GraalPy-shaped comparison and division: the operation is
-     * synchronous, so its value is delivered directly to {@code result}
-     * with no continuation composition. A comparison already yields a
-     * guest Boolean; a division is materialized only for a guest consumer.
+     * A guarded numeric send, including continuation composition for a selected override.
      */
-    private void emitI115UnifiedNumericSend(
+    private void emitNumericSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
@@ -9108,7 +9126,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the value of a direct numeric send left on the stack, with the
+     * the value of a direct numeric send left on the stack, with the
      * carrier materialized only when the consumer requires a guest value.
      */
     private void emitDirectNumericSendValue(
@@ -9123,12 +9141,9 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115 GraalPy-shaped arithmetic: no MISS branch for +, - or *. Each
-     * operand is evaluated exactly once, from left to right, directly on
-     * the stack. The operation owns its generic fallback, as in
-     * PyNumber{Add,Subtract,Multiply}; the carrier stays unmaterialized.
+     * Store one guarded arithmetic result without changing its semantic representation.
      */
-    private void emitGraalPyGeneralArithmeticSend(
+    private void emitArithmeticSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
@@ -9141,26 +9156,12 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * A binary {@code +} send.
-     *
-     * <ol>
-     *   <li>The receiver is evaluated exactly once into a local.
-     *   <li>The right operand is evaluated exactly once into a local.
-     *   <li>Once the argument packet is formed (D237), {@code
-     *       IsStandardAddSelection} observes, without invoking anything,
-     *       whether the behavior selected for {@code +} on the receiver is
-     *       the standard numeric one or exactly the standard String
-     *       concatenation. Otherwise {@code GetMethod} selects it now.
-     *   <li>Standard: the native {@code NumberAdd} (primitive {@code long}/
-     *       {@code double} specializations, overflow promotion, String
-     *       concatenation), with no message send. Otherwise: {@code
-     *       CallUnaryMethod} of the selected callable, composed with
-     *       {@code Yield}/{@code ResumeDispatchedContinuation} under its
-     *       {@link StandardTags.CallTag}, so suspension, Errors and
-     *       ReturnHome propagate as for every dispatched send.
-     * </ol>
+     * Evaluate receiver and operand once, then guard the actual selected behavior.
+     * Standard arithmetic and ordering execute their independent Bytecode operations.
+     * Other selections use GetMethod and CallUnaryMethod with continuation composition.
+     * Both branches consume the same prepared operands and preserve their exact result.
      */
-    private void emitI115AddSend(
+    private void emitGuardedNumericSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
@@ -9171,7 +9172,7 @@ final class CanonicalToBytecodeLowerer {
         // Both branches yield guest values; no carrier materialization.
         if (scratch == null || childResult == null || resumeValue == null) {
             throw new AssertionError(
-                    "I115 '+' send scratch locals were not allocated");
+                    "numeric send scratch locals were not allocated");
         }
         OperandStager stager = this::emitBodyExpressionToLocal;
         // Numeric and String admission both observe the invocation's Core.
@@ -9180,40 +9181,40 @@ final class CanonicalToBytecodeLowerer {
                 send.span().startOffset(), send.span().length());
         builder.beginBlock();
 
-        BytecodeLocal receiver = builder.createLocal("addReceiver", null);
+        BytecodeLocal receiver = builder.createLocal("numericReceiver", null);
         stageOperand(
                 builder, send.receiver(), receiver,
                 scratch, childResult, resumeValue, stager);
 
-        BytecodeLocal operand = builder.createLocal("addOperand", null);
+        BytecodeLocal operand = builder.createLocal("numericOperand", null);
         stageOperand(
                 builder, send.arguments().get(0), operand,
                 scratch, childResult, resumeValue, stager);
 
         // D237: the behavior is selected once both operands are evaluated.
-        BytecodeLocal standard = builder.createLocal("addStandard", null);
+        BytecodeLocal standard = builder.createLocal("numericStandard", null);
         builder.beginStoreLocal(standard);
-        builder.beginIsStandardAddSelection();
+        builder.beginIsStandardNumericSelection(send.message());
         builder.emitLoadLocal(receiver);
-        builder.endIsStandardAddSelection();
+        builder.endIsStandardNumericSelection();
         builder.endStoreLocal();
 
-        BytecodeLocal callable = builder.createLocal("addMethod", null);
+        BytecodeLocal callable = builder.createLocal("numericMethod", null);
         builder.beginIfThenElse();
         builder.emitLoadLocal(standard);
         builder.beginBlock();
         builder.endBlock();
-        emitGetMethod(builder, "+", receiver, callable);
+        emitGetMethod(builder, send.message(), receiver, callable);
         builder.endIfThenElse();
 
         builder.beginIfThenElse();
         builder.emitLoadLocal(standard);
 
         beginMutationResult(builder, result);
-        builder.beginNumberAdd();
+        beginNumericOperation(builder, send.message());
         builder.emitLoadLocal(receiver);
         builder.emitLoadLocal(operand);
-        builder.endNumberAdd();
+        endNumericOperation(builder, send.message());
         endMutationResult(builder, result);
 
         /*
@@ -9223,9 +9224,19 @@ final class CanonicalToBytecodeLowerer {
          */
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
+        boolean ordering = isOrderingSelector(send.message());
+        BytecodeLocal dispatchedResult = ordering && result == null
+                ? builder.createLocal("comparisonResult", null) : result;
         emitDispatchedCall(
                 builder, callable, java.util.List.of(operand), null,
-                childResult, result, resumeValue, true);
+                childResult, dispatchedResult, resumeValue, true);
+        if (ordering) {
+            beginMutationResult(builder, result);
+            builder.beginRequireCanonicalBooleanResult();
+            builder.emitLoadLocal(dispatchedResult);
+            builder.endRequireCanonicalBooleanResult();
+            endMutationResult(builder, result);
+        }
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
 
@@ -9236,11 +9247,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the one send lowering of every source root. A one-argument
-     * numeric operator send ({@code + - * / < <= > >=}) emits the single
-     * synchronous operation that owns its selector; every other send is the
-     * dispatched GraalPy send: GetMethod on the staged receiver, then the
-     * arity-selected Call*Method.
+     * Lower a send through the current specialized operations and shared callable dispatcher.
      */
     private void emitComposedSendUnfolded(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -9251,7 +9258,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
         if (send.contextual() && !hasNamedArgument(send.arguments())) {
-            emitI115ContextualControl(
+            emitContextualControl(
                     builder, send, result,
                     scratch, childResult, resumeValue,
                     primitiveCarrierResult);
@@ -9264,17 +9271,17 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
 
-        if (i115AddSend(send)) {
-            emitI115AddSend(
+        if (isAdditionSend(send)) {
+            emitGuardedNumericSend(
                     builder, send, result, scratch, childResult, resumeValue,
                     primitiveCarrierResult);
             return;
         }
         if (primitiveNumericSendCandidate(send)) {
             switch (send.message()) {
-                case "-", "*" -> emitGraalPyGeneralArithmeticSend(
+                case "-", "*" -> emitArithmeticSend(
                         builder, send, result, scratch, childResult, resumeValue);
-                default -> emitI115UnifiedNumericSend(
+                default -> emitNumericSend(
                         builder, send, result, scratch, childResult, resumeValue,
                         primitiveCarrierResult);
             }
@@ -9297,6 +9304,13 @@ final class CanonicalToBytecodeLowerer {
                 result, scratch, childResult, resumeValue,
                 this::emitBodyExpressionToLocal, this::emitBodySpreadArgumentVector,
                 primitiveCarrierResult);
+        if (isOrderingSelector(send.message()) && result != null) {
+            builder.beginStoreLocal(result);
+            builder.beginRequireCanonicalBooleanResult();
+            builder.emitLoadLocal(result);
+            builder.endRequireCanonicalBooleanResult();
+            builder.endStoreLocal();
+        }
     }
 
     /**
@@ -9484,7 +9498,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginArrayEachNext(element);
         builder.emitLoadLocal(snapshot);
         builder.endArrayEachNext();
-        emitI115InlineClosureBody(
+        emitInlineControlClosureBody(
                 builder, callback, InlineBodyResult.DISCARD, null,
                 scratch, childResult, resumeValue, false,
                 java.util.Map.of(parameter, element));
@@ -9577,7 +9591,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginAssociationEachNext(key, value);
         builder.emitLoadLocal(snapshot);
         builder.endAssociationEachNext();
-        emitI115InlineClosureBody(
+        emitInlineControlClosureBody(
                 builder, callback, InlineBodyResult.DISCARD, null,
                 scratch, childResult, resumeValue, false,
                 java.util.Map.of(keyName, key, valueName, value));
@@ -9718,7 +9732,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I115: GraalPy RootNodeCompiler constant collection selection.
+     * RootNodeCompiler constant collection selection.
      * Only literal Arrays containing signed-64 Integer constants
      * qualify for the direct primitive operation.
      */
@@ -9782,7 +9796,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I115: attribute names reach DynamicObject property nodes, whose caches
+     * attribute names reach DynamicObject property nodes, whose caches
      * compare keys by identity; canonicalize them once, at bytecode build
      * time, never per access.
      */
